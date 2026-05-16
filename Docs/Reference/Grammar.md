@@ -1991,6 +1991,19 @@ Supported tags: `@author`, `@version`, `@description`, or any custom `@key: valu
 
 `.rptsql` files are standard ETL-SQL scripts with the following additional statement types. For the full user guide see `Docs/Report_SQL_Guide.md`.
 
+Report-SQL uses these canonical object buckets:
+
+| Bucket | Syntax role |
+| :--- | :--- |
+| `SOURCE` | Data-producing query, table, or dataset reference. |
+| `MAPPINGS` | Visual data roles. |
+| `LAYOUT` | Placement, structure, maps, gaps, responsive behavior, and pinning. |
+| `STYLE` | Presentation/theme choices. |
+| `OPTIONS` | Renderer-specific settings and non-layout object state. |
+| `ACTIONS` | Events emitted by visuals, controls, and buttons. |
+| `INTERACTIONS` | Cross-visual selection/filter/highlight behavior. |
+| Portal commands | Administrative DDL/operations such as users, folders, grants, publishing, subscriptions, and refresh jobs. |
+
 ### A.1 `SET REPORT`
 ```sql
 SET REPORT TITLE       = 'Monthly Sales Dashboard';
@@ -2165,10 +2178,10 @@ CREATE CONTAINER <name> AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|MODAL|POPOVE
     STRUCTURE = '<css-grid-template-areas>',
     MAP ('<slot>' = <VisualOrContainerName> [, ...] )
     [, GAP = '<css-size>']
+    [, PINNABLE = ON|OFF]
     [, <layout_key> = <value> ...]
   ),
   [OPTIONS (
-    PINNABLE = ON|OFF,
     VISIBLE = ON|OFF,
     ICON = '<name>'
   )]

@@ -606,13 +606,13 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.LAYOUT))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after LAYOUT");
-                    ParseContainerLayout(ref structure, slotMap, styles);
+                    ParseContainerLayout(ref structure, slotMap, styles, ref isPinnable);
                     Consume(TokenType.RPAREN, "Expected ')' to close LAYOUT");
                 }
                 else if (Match(TokenType.OPTIONS))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after OPTIONS");
-                    ParseContainerOptions(ref isPinnable, ref visibility, ref icon);
+                    ParseContainerOptions(ref visibility, ref icon);
                     Consume(TokenType.RPAREN, "Expected ')' to close OPTIONS");
                 }
                 else
@@ -650,7 +650,11 @@ namespace ETL_SQL.Core.Parser.Components
             };
         }
 
-        private void ParseContainerLayout(ref string? structure, Dictionary<string, string> slotMap, Dictionary<string, string> styles)
+        private void ParseContainerLayout(
+            ref string? structure,
+            Dictionary<string, string> slotMap,
+            Dictionary<string, string> styles,
+            ref bool isPinnable)
         {
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
@@ -672,6 +676,11 @@ namespace ETL_SQL.Core.Parser.Components
                     }
                     Consume(TokenType.RPAREN, "Expected ')' to close MAP");
                 }
+                else if (Match(TokenType.PINNABLE))
+                {
+                    Consume(TokenType.EQUALS, "Expected '=' after PINNABLE");
+                    isPinnable = ParseOnOffValue() == "ON";
+                }
                 else
                 {
                     var key = ConsumeIdentifier("Expected layout option name").Value.ToUpperInvariant();
@@ -682,16 +691,11 @@ namespace ETL_SQL.Core.Parser.Components
             }
         }
 
-        private void ParseContainerOptions(ref bool isPinnable, ref string? visibility, ref string? icon)
+        private void ParseContainerOptions(ref string? visibility, ref string? icon)
         {
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
-                if (Match(TokenType.PINNABLE))
-                {
-                    Consume(TokenType.EQUALS, "Expected '=' after PINNABLE");
-                    isPinnable = ParseOnOffValue() == "ON";
-                }
-                else if (Match(TokenType.VISIBLE))
+                if (Match(TokenType.VISIBLE))
                 {
                     Match(TokenType.EQUALS);
                     visibility = ParseOnOffValue();

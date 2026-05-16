@@ -1,5 +1,5 @@
 -- Drawer & Pinnable Container Verification
--- This script tests the DRAWER container type with ICON and PINNABLE options.
+-- This script tests the DRAWER container type with ICON and PINNABLE layout.
 
 CREATE CONNECTION mock ON MOCKDB();
 
@@ -21,11 +21,11 @@ CREATE CONTAINER FilterPanel AS DRAWER (
     TITLE = 'Filters',
     LAYOUT (
         STRUCTURE = 'A',
-        MAP ('A' = RegionFilter)
+        MAP ('A' = RegionFilter),
+        PINNABLE = ON
     ),
     OPTIONS (
-        ICON = 'FILTER',
-        PINNABLE = ON
+        ICON = 'FILTER'
     )
 );
 

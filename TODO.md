@@ -4,7 +4,7 @@
 - [ ] **Reporting and portal language/feature streamlining**  Work this before launch as one cohesive pass. Goal: make Report-SQL feel like normal ETL-SQL, make portal administration feel like SQL DDL/admin commands, and add the missing baseline BI portal behaviors while breaking syntax is still cheap.
 
 ### Phase 0 — Lock the mental model and canonical syntax
-- [ ] Define the report object buckets and use them consistently everywhere:
+- [x] Define the report object buckets and use them consistently everywhere:
     - `SOURCE` = data-producing query, table, or dataset reference.
     - `MAPPINGS` = visual data roles.
     - `LAYOUT` = page/container placement, structure, maps, gaps, responsive behavior.
@@ -13,7 +13,7 @@
     - `ACTIONS` = outbound events emitted by visuals, controls, and buttons.
     - `INTERACTIONS` = cross-visual selection/filter/highlight behavior.
     - Portal commands = administrative DDL/operations such as users, folders, grants, publishing, subscriptions, and refresh jobs.
-- [ ] Decide the remaining final grammar contract in `Docs/Reference/Grammar.md` before implementation. Since the product has not gone live, prefer one canonical syntax over compatibility aliases.
+- [x] Decide the remaining final grammar contract in `Docs/Reference/Grammar.md` before implementation. Since the product has not gone live, prefer one canonical syntax over compatibility aliases.
 - [x] Page syntax decision: canonical syntax is `CREATE PAGE <name> AS (...)`.
 - [x] Lineage syntax decision: canonicalize lineage introspection to `SHOW LINEAGE ...`; remove or deprecate bare `LINEAGE` before launch so observational commands consistently use `SHOW <object/view>`.
 - [x] Update grammar, docs, help, samples, and tests together for `SHOW LINEAGE` forms such as:
@@ -23,7 +23,7 @@
   SHOW LINEAGE FOR DATASET &CustomerMart;
   SHOW LINEAGE INTO #lineage;
   ```
-- [ ] Update `Docs/Report_SQL_Guide.md`, editor help, samples, and tests after the remaining grammar direction is settled.
+- [x] Update `Docs/Report_SQL_Guide.md`, editor help, samples, and tests after the remaining grammar direction is settled.
 
 ### Phase 1 — Report layout syntax
 - [x] Make `LAYOUT (...)` an explicit bucket for containers; pages use the page body itself for layout placement.
@@ -61,8 +61,8 @@
   );
   ```
 - [x] Candidate container types: `BOX`, `SCROLL`, `DRAWER`, `SIDEBAR`, `TABS`, `ACCORDION`, `MODAL`, `POPOVER`. Avoid decorative/geometric container types unless there is a real reporting workflow need.
-- [ ] Move layout-related settings such as `GAP`, responsive breakpoints, pinned panels, drawer placement, tabs, modals, and maximize behavior into `LAYOUT (...)` where possible.
-- [ ] Update parser, AST, manifest builder, report runtime, VS Code preview, Report Portal renderer, docs, and samples together.
+- [x] Move layout-related settings such as `GAP`, responsive breakpoints, pinned panels, drawer placement, tabs, modals, and maximize behavior into `LAYOUT (...)` where possible.
+- [x] Update parser, AST, manifest builder, report runtime, VS Code preview, Report Portal renderer, docs, and samples together.
 
 ### Phase 2 — Actions, interactions, and buttons
 - [x] Replace `OPTIONS (CROSS_VISUAL_ACTION = HIGHLIGHT|FILTER|NONE)` with a dedicated interaction clause:

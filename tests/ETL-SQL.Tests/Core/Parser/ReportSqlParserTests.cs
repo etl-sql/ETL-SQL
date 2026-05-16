@@ -405,10 +405,10 @@ CREATE CONTAINER FilterDrawer AS DRAWER (
     LAYOUT (
         STRUCTURE = 'A / B',
         MAP ('A' = RegionFilter, 'B' = YearSlider),
-        GAP = '8px'
+        GAP = '8px',
+        PINNABLE = OFF
     ),
     OPTIONS (
-        PINNABLE = OFF,
         VISIBLE = ON,
         ICON = 'filter'
     )
@@ -435,6 +435,16 @@ CREATE CONTAINER FilterDrawer AS DRAWER (
             Assert.Contains(script.Diagnostics, d =>
                 d.Severity == DiagnosticSeverity.Error &&
                 d.Message.Contains("Unexpected token 'STRUCTURE'", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void ParseCreateContainer_PinnableInOptions_ReportsSyntaxError()
+        {
+            var script = Parse("CREATE CONTAINER OldDrawer AS DRAWER (LAYOUT (STRUCTURE = 'A', MAP ('A' = Visual1)), OPTIONS (PINNABLE = OFF));");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("PINNABLE", StringComparison.OrdinalIgnoreCase));
         }
 
         [Fact]

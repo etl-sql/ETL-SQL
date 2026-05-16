@@ -558,7 +558,7 @@ CREATE PAGE name AS ( ... ) [WITH ( ... )]
 | `MAP` | Page/Container | Mapping of grid slots to visuals/containers |
 | `LAYOUT` | Container | Inner layout configuration |
 | `GAP` | Page/Layout | Space between grid elements |
-| `PINNABLE` | Container | Enable/disable portal pinning |
+| `PINNABLE` | Container layout | Enable/disable portal pinning |
 | `ICON` | Container | Header icon identifier |
 | `REFRESH` | Page (WITH) | Auto-refresh interval in seconds |
 
@@ -825,6 +825,5 @@ Annotations used for lineage, security, and script behavior.
 | `@tag: val;` | Script Header | Script-level metadata (e.g. `@author: dev`) |
 | `ENC:...` | Literal | Prefix for engine-encrypted strings |
 | `BANG` / `!` | Session | Prefix for named Environment Sets (e.g. `!PROD`) |
-
 
 

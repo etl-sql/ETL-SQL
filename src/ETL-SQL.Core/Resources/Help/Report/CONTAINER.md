@@ -7,10 +7,11 @@ Syntax:
     [STYLE (KEY = value, ...),]
     LAYOUT (
       STRUCTURE = '<grid-template-areas>',
-      MAP ('<slot>' = <visual_name>, ...)
+      MAP ('<slot>' = <visual_name>, ...),
+      [GAP = '<css-size>',]
+      [PINNABLE = ON | OFF]
     ),
     [OPTIONS (
-      PINNABLE    = ON | OFF,
       VISIBLE     = ON | OFF,
       ICON        = '<name>'
     )]
@@ -49,10 +50,10 @@ CREATE CONTAINER FilterDrawer AS DRAWER (
   TITLE       = 'Filters',
   LAYOUT (
     STRUCTURE = 'A / B',
-    MAP ('A' = RegionSlicer, 'B' = YearSlider)
+    MAP ('A' = RegionSlicer, 'B' = YearSlider),
+    PINNABLE = ON
   ),
   OPTIONS (
-    PINNABLE = ON,
     ICON = 'filter'
   )
 );

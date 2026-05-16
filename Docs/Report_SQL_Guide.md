@@ -231,6 +231,19 @@ Syntax notes:
 - `STYLE = StyleName` applies a named style. `STYLE (key = value, ...)` applies inline overrides. A standalone `STYLE (...)` statement is not valid.
 - `SOURCE = #temp`, `SOURCE = &dataset`, and `SOURCE = (SELECT ...)` are the canonical source forms. `#temp` is engine memory; `&dataset` is a report dataset definition or portal-registered dataset.
 
+### Report object buckets
+
+| Bucket | Meaning |
+| :--- | :--- |
+| `SOURCE` | Data-producing query, table, or dataset reference. |
+| `MAPPINGS` | Visual data roles that bind source columns to renderer fields. |
+| `LAYOUT` | Page/container placement: structure, slot maps, gaps, responsive layout keys, and pinning behavior. |
+| `STYLE` | Presentation and theme choices. |
+| `OPTIONS` | Renderer-specific settings and non-layout object state. |
+| `ACTIONS` | Outbound events emitted by visuals, controls, and buttons. |
+| `INTERACTIONS` | Cross-visual selection, filtering, and highlighting behavior. |
+| Portal commands | Administrative DDL/operations such as users, folders, grants, publishing, subscriptions, and refresh jobs. |
+
 ### Report documentation roles
 
 Use each report document for a specific job:
@@ -1621,10 +1634,11 @@ CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|M
   [STYLE = <styleName> | STYLE (key = value, ...),]
   LAYOUT (
     STRUCTURE = '<grid-template-areas>',
-    MAP ('<slot>' = VisualOrContainerName, ...)
+    MAP ('<slot>' = VisualOrContainerName, ...),
+    [GAP = '<css-size>',]
+    [PINNABLE = ON|OFF]
   ),
   [OPTIONS (
-    PINNABLE = ON|OFF,
     VISIBLE = ON|OFF,
     ICON = '<name>'
   )]
@@ -1649,6 +1663,8 @@ CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|M
 ### Layout
 
 Containers use the same `STRUCTURE` and `MAP` logic as pages, but nested placement is always inside `LAYOUT (...)`. Every container with children must have a `STRUCTURE` and a `MAP`.
+
+Layout behavior belongs in `LAYOUT (...)`: grid structure, slot maps, gaps, responsive layout keys, and drawer pinning. `OPTIONS (...)` is reserved for non-layout container state such as visibility and trigger icon.
 
 ```sql
 -- Single visual (single-slot STRUCTURE)
@@ -1708,10 +1724,10 @@ CREATE CONTAINER FilterDrawer AS DRAWER (
       'A' = RegionFilter,
       'B' = YearSlider,
       'C' = CategoryFilter
-    )
+    ),
+    PINNABLE = ON
   ),
   OPTIONS (
-    PINNABLE = ON,
     ICON = 'filter'
   )
 );
