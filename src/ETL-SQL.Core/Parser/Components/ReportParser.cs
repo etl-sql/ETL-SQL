@@ -341,8 +341,8 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParseCreateDataset(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
         {
             var tableName = ConsumeIdentifier("Expected &datasetName after CREATE DATASET").Value;
-            // Only prepend '&' when the name has no sigil; '#'-prefixed temp-table names are kept as-is.
-            if (!tableName.StartsWith("&") && !tableName.StartsWith("#")) tableName = "&" + tableName;
+            if (!tableName.StartsWith("&"))
+                throw new SyntaxException("CREATE DATASET names must use the &dataset form", startToken.Line, startToken.Column);
 
             string? refreshInterval    = null;
             string? ttl                = null;

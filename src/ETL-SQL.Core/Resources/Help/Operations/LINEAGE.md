@@ -25,10 +25,10 @@ SHOW LINEAGE INTO #lineage;
 | Node type | Prefix in lineage | Text header | Mermaid shape |
 | :--- | :--- | :--- | :--- |
 | Temp table / DB table | `#temp` / `db.table` | `[Table: ...]` | Rectangle `[]` |
-| Dataset | `dataset:#name` | `[Dataset: ...]` | Cylinder `[()]` |
+| Dataset | `dataset:&name` | `[Dataset: ...]` | Cylinder `[()]` |
 | Report visual | `report:Name` | `[Visual: ...]` | Rounded rect `()` |
 
-This enables end-to-end tracing: `CRM.dbo.Orders → #orders → dataset:#daily_sales → report:SalesChart`.
+This enables end-to-end tracing: `CRM.dbo.Orders → #orders → dataset:&daily_sales → report:SalesChart`.
 
 ## Querying the LINEAGE Virtual Table
 

@@ -310,13 +310,13 @@ namespace ETL_SQL.Tests.Analysis.Lineage
         {
             var tracker = new LineageTracker(NullLogger.Instance);
             var analyzer = new LineageAnalyzer(tracker);
-            analyzer.Analyze(Parse("CREATE DATASET #sales AS (SELECT amount FROM orders);"));
+            analyzer.Analyze(Parse("CREATE DATASET &sales AS (SELECT amount FROM orders);"));
 
             var entries = tracker.GetFullLineage().ToList();
             var datasetEntry = entries.FirstOrDefault(e => e.Operation == "CREATE DATASET");
 
             Assert.NotNull(datasetEntry);
-            Assert.Equal("dataset:#sales", datasetEntry!.TargetTable);
+            Assert.Equal("dataset:&sales", datasetEntry!.TargetTable);
             Assert.Contains("orders", datasetEntry.SourceTables, StringComparer.OrdinalIgnoreCase);
         }
 
@@ -357,8 +357,8 @@ namespace ETL_SQL.Tests.Analysis.Lineage
             var analyzer = new LineageAnalyzer(tracker);
             var sql = @"
 SELECT amount INTO #orders FROM CRM.dbo.Orders;
-CREATE DATASET #daily_sales AS (SELECT amount FROM #orders);
-CREATE VISUAL SalesChart AS BAR (SOURCE = #daily_sales, MAPPINGS (x = day, y = amount));
+CREATE DATASET &daily_sales AS (SELECT amount FROM #orders);
+CREATE VISUAL SalesChart AS BAR (SOURCE = &daily_sales, MAPPINGS (x = day, y = amount));
 ";
             analyzer.Analyze(Parse(sql));
 
@@ -367,9 +367,9 @@ CREATE VISUAL SalesChart AS BAR (SOURCE = #daily_sales, MAPPINGS (x = day, y = a
             // Source table flows to #orders
             Assert.Contains(all, e => e.TargetTable == "#orders" && e.SourceTables.Contains("CRM.dbo.Orders", StringComparer.OrdinalIgnoreCase));
             // Dataset links #orders as source
-            Assert.Contains(all, e => e.Operation == "CREATE DATASET" && e.TargetTable == "dataset:#daily_sales" && e.SourceTables.Contains("#orders", StringComparer.OrdinalIgnoreCase));
+            Assert.Contains(all, e => e.Operation == "CREATE DATASET" && e.TargetTable == "dataset:&daily_sales" && e.SourceTables.Contains("#orders", StringComparer.OrdinalIgnoreCase));
             // Visual links dataset as source
-            Assert.Contains(all, e => e.Operation == "CREATE VISUAL" && e.TargetTable == "report:SalesChart" && e.SourceTables.Contains("#daily_sales", StringComparer.OrdinalIgnoreCase));
+            Assert.Contains(all, e => e.Operation == "CREATE VISUAL" && e.TargetTable == "report:SalesChart" && e.SourceTables.Contains("&daily_sales", StringComparer.OrdinalIgnoreCase));
         }
 
         [Fact]
@@ -389,13 +389,13 @@ CREATE VISUAL SalesChart AS BAR (SOURCE = #daily_sales, MAPPINGS (x = day, y = a
         public void Render_DatasetNode_UsesDatasetLabel()
         {
             var tracker = new LineageTracker(NullLogger.Instance);
-            tracker.Record("dataset:#sales", new[] { "#orders" }, "CREATE DATASET");
+            tracker.Record("dataset:&sales", new[] { "#orders" }, "CREATE DATASET");
 
             var renderer = new LineageGraphRenderer();
             var output = renderer.Render(tracker);
 
-            Assert.Contains("[Dataset: #sales]", output);
-            Assert.DoesNotContain("[Table: dataset:#sales]", output);
+            Assert.Contains("[Dataset: &sales]", output);
+            Assert.DoesNotContain("[Table: dataset:&sales]", output);
         }
 
         [Fact]
@@ -416,14 +416,14 @@ CREATE VISUAL SalesChart AS BAR (SOURCE = #daily_sales, MAPPINGS (x = day, y = a
         public void RenderMermaid_DatasetNode_UsesCylinderShape()
         {
             var tracker = new LineageTracker(NullLogger.Instance);
-            tracker.Record("dataset:#sales", new[] { "#orders" }, "CREATE DATASET");
+            tracker.Record("dataset:&sales", new[] { "#orders" }, "CREATE DATASET");
 
             var renderer = new LineageGraphRenderer();
             var mermaid = renderer.RenderMermaid(tracker);
 
             // dataset: node should use cylinder shape
-            Assert.Contains("[(\"dataset:#sales\")]", mermaid);
-            Assert.DoesNotContain("[\"dataset:#sales\"]", mermaid);
+            Assert.Contains("[(\"dataset:&sales\")]", mermaid);
+            Assert.DoesNotContain("[\"dataset:&sales\"]", mermaid);
         }
     }
 }

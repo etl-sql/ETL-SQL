@@ -35,7 +35,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new DatasetEncryptWithoutKeyRule();
             var results = await Lint(rule,
-                "CREATE DATASET #sales ENCRYPT = PASSWORD AS (SELECT 1 AS v);");
+                "CREATE DATASET &sales ENCRYPT = PASSWORD AS (SELECT 1 AS v);");
             Assert.NotEmpty(results);
             Assert.Equal("DatasetEncryptWithoutKey", results[0].RuleName);
             Assert.Equal(LintSeverity.Error, results[0].Severity);
@@ -46,7 +46,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new DatasetEncryptWithoutKeyRule();
             var results = await Lint(rule,
-                "CREATE DATASET #sales ENCRYPT = PASSWORD PASSWORD = 'secret' AS (SELECT 1 AS v);");
+                "CREATE DATASET &sales ENCRYPT = PASSWORD PASSWORD = 'secret' AS (SELECT 1 AS v);");
             Assert.Empty(results);
         }
 
@@ -55,7 +55,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new DatasetEncryptWithoutKeyRule();
             var results = await Lint(rule,
-                "CREATE DATASET #sales ENCRYPT = KEYFILE AS (SELECT 1 AS v);");
+                "CREATE DATASET &sales ENCRYPT = KEYFILE AS (SELECT 1 AS v);");
             Assert.NotEmpty(results);
             Assert.Equal("DatasetEncryptWithoutKey", results[0].RuleName);
         }
@@ -65,7 +65,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new DatasetEncryptWithoutKeyRule();
             var results = await Lint(rule,
-                "CREATE DATASET #sales ENCRYPT = KEYFILE KEYFILE = '/keys/k.pem' AS (SELECT 1 AS v);");
+                "CREATE DATASET &sales ENCRYPT = KEYFILE KEYFILE = '/keys/k.pem' AS (SELECT 1 AS v);");
             Assert.Empty(results);
         }
 
@@ -74,7 +74,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new DatasetEncryptWithoutKeyRule();
             var results = await Lint(rule,
-                "CREATE DATASET #sales ENCRYPT = MACHINE AS (SELECT 1 AS v);");
+                "CREATE DATASET &sales ENCRYPT = MACHINE AS (SELECT 1 AS v);");
             Assert.Empty(results);
         }
 
@@ -83,7 +83,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new DatasetEncryptWithoutKeyRule();
             var results = await Lint(rule,
-                "CREATE DATASET #sales AS (SELECT 1 AS v);");
+                "CREATE DATASET &sales AS (SELECT 1 AS v);");
             Assert.Empty(results);
         }
 
@@ -102,7 +102,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new VisualSourceExistsRule();
             var results = await Lint(rule,
-                "CREATE DATASET #sales AS (SELECT 1 AS v);" +
+                "CREATE DATASET &sales AS (SELECT 1 AS v);" +
                 "CREATE VISUAL mybar AS BAR (SOURCE = #sales, MAPPINGS (X = v, Y = v));");
             Assert.Empty(results);
         }
@@ -381,7 +381,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new DashboardKeywordConflictRule();
             var results = await Lint(rule,
-                "CREATE DATASET #Params AS (SELECT 1 AS v);");
+                "CREATE DATASET &Params AS (SELECT 1 AS v);");
             Assert.NotEmpty(results);
         }
 
@@ -399,7 +399,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new DashboardKeywordConflictRule();
             var results = await Lint(rule,
-                "CREATE DATASET #sales_data AS (SELECT 1 AS v);");
+                "CREATE DATASET &sales_data AS (SELECT 1 AS v);");
             Assert.Empty(results);
         }
 
@@ -430,7 +430,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new CreateDirectoryInReportRule();
             var results = await Lint(rule,
-                "CREATE DATASET #ds AS (SELECT 1 AS v);" +
+                "CREATE DATASET &ds AS (SELECT 1 AS v);" +
                 "CREATE DIRECTORY '/some/path';");
             Assert.NotEmpty(results);
         }
@@ -557,7 +557,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new ReportKeywordLintRule();
             var results = await Lint(rule,
-                "CREATE DATASET #revenue_data AS (SELECT 1 AS v);");
+                "CREATE DATASET &revenue_data AS (SELECT 1 AS v);");
             Assert.Empty(results);
         }
 

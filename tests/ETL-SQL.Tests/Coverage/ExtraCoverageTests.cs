@@ -657,7 +657,7 @@ namespace ETL_SQL.Tests.Coverage
         {
             var rule = new ReportKeywordLintRule();
             var results = await Lint(rule,
-                "CREATE DATASET #mydata AS (SELECT 1 AS n);");
+                "CREATE DATASET &mydata AS (SELECT 1 AS n);");
             Assert.Empty(results);
         }
 

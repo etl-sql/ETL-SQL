@@ -28,7 +28,7 @@ namespace ETL_SQL.Tests.Analysis
             var sql = @"
                 IF 1 = 1
                 BEGIN
-                    CREATE DATASET #nested_sales AS (SELECT 1 AS v);
+                    CREATE DATASET &nested_sales AS (SELECT 1 AS v);
                 END
                 CREATE VISUAL mybar AS BAR (SOURCE = #nested_sales, MAPPINGS (X = v, Y = v));
             ";
@@ -43,7 +43,7 @@ namespace ETL_SQL.Tests.Analysis
             var sql = @"
                 IF 1 = 1
                 BEGIN
-                    CREATE DATASET #nested_sales AS (SELECT 1 AS v);
+                    CREATE DATASET &nested_sales AS (SELECT 1 AS v);
                 END
                 CREATE VISUAL mybar AS BAR (SOURCE = #nested_sales, MAPPINGS (X = v, Y = v));
             ";
@@ -58,7 +58,7 @@ namespace ETL_SQL.Tests.Analysis
             var sql = @"
                 WHILE 1 = 0
                 BEGIN
-                    CREATE DATASET #loop_sales AS (SELECT 1 AS v);
+                    CREATE DATASET &loop_sales AS (SELECT 1 AS v);
                 END
                 CREATE VISUAL mybar AS BAR (SOURCE = #loop_sales, MAPPINGS (X = v, Y = v));
             ";

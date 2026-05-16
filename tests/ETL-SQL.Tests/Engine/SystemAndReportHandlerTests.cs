@@ -219,21 +219,21 @@ namespace ETL_SQL.Tests.Engine
         public async Task CreateDataset_PasswordMode_NoPassword_Throws()
         {
             await Assert.ThrowsAsync<ExecutionException>(() =>
-                Run("CREATE DATASET #enc ENCRYPT = PASSWORD AS (SELECT 1 AS v);"));
+                Run("CREATE DATASET &enc ENCRYPT = PASSWORD AS (SELECT 1 AS v);"));
         }
 
         [Fact]
         public async Task CreateDataset_KeyFileMode_NoKeyFile_Throws()
         {
             await Assert.ThrowsAsync<ExecutionException>(() =>
-                Run("CREATE DATASET #enc ENCRYPT = KEYFILE AS (SELECT 1 AS v);"));
+                Run("CREATE DATASET &enc ENCRYPT = KEYFILE AS (SELECT 1 AS v);"));
         }
 
         [Fact]
         public async Task CreateDataset_MachineMode_Executes()
         {
             var eval = await RunAndGet(
-                "CREATE DATASET #enc ENCRYPT = MACHINE AS (SELECT 1 AS v);" +
+                "CREATE DATASET &enc ENCRYPT = MACHINE AS (SELECT 1 AS v);" +
                 "SELECT * FROM #enc;");
             Assert.NotNull(eval.LastResult);
         }
@@ -291,7 +291,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task DropDataset_AfterCreate_RemovesConnection()
         {
             var eval = await RunAndGet(
-                "CREATE DATASET #myds AS (SELECT 1 AS v);" +
+                "CREATE DATASET &myds AS (SELECT 1 AS v);" +
                 "DROP DATASET IF EXISTS #myds;");
             Assert.NotNull(eval);
         }
@@ -325,7 +325,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task ShowDatasets_AfterCreateDataset_ShowsEntry()
         {
             var eval = await RunAndGet(
-                "CREATE DATASET #myds AS (SELECT 1 AS v);" +
+                "CREATE DATASET &myds AS (SELECT 1 AS v);" +
                 "SHOW DATASETS;");
             Assert.NotNull(eval.LastResult);
         }
@@ -334,7 +334,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task ShowDatasets_IntoTempTable_AfterCreate_ShowsEntry()
         {
             var eval = await RunAndGet(
-                "CREATE DATASET #myds AS (SELECT 1 AS v);" +
+                "CREATE DATASET &myds AS (SELECT 1 AS v);" +
                 "SHOW DATASETS INTO #dsList;" +
                 "SELECT * FROM #dsList;");
             Assert.NotNull(eval.LastResult);

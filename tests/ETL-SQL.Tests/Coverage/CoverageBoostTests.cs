@@ -353,14 +353,14 @@ namespace ETL_SQL.Tests.Coverage
         public async Task UseDataset_NonPortalMode_Throws()
         {
             await Assert.ThrowsAsync<ExecutionException>(() =>
-                Run("USE DATASET #somedata;"));
+                Run("USE DATASET &somedata;"));
         }
 
         [Fact]
         public async Task RefreshDataset_NonPortalMode_Throws()
         {
             await Assert.ThrowsAsync<ExecutionException>(() =>
-                Run("REFRESH DATASET #somedata;"));
+                Run("REFRESH DATASET &somedata;"));
         }
 
         // ── VisualSourceRequiredRule ──────────────────────────────────────────

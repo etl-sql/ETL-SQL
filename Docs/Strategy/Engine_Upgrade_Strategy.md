@@ -913,7 +913,7 @@ For deployed dashboards where the ETL prep is expensive, a `CREATE DATASET` stat
 -- Registered with the Orchestrator on first run.
 -- Subsequent loads read from the compressed/encrypted snapshot file.
 -- If no valid snapshot exists (first run or expired TTL), the SOURCE executes live.
-CREATE DATASET #SalesData
+CREATE DATASET &SalesData
     REFRESH EVERY '6 hours'
     TTL = '8 hours'          -- max age before snapshot is considered stale
     COMPRESS = ON
@@ -931,7 +931,7 @@ AS (
 - On first execution: run the `AS (...)` query, serialize the result to Parquet format, compress (LZ4 or GZip), optionally encrypt using the same key infrastructure as FLATFILE ENCRYPT. Store in a configurable snapshot directory (default: `%APPDATA%\ETL-SQL\snapshots\` on Windows).
 - On subsequent executions: check if a valid snapshot exists and is within TTL. If yes, load from snapshot and skip the query. If no, run the query and re-snapshot.
 - Register the `REFRESH EVERY` schedule with `SchedulerService` in Orchestrator exactly as a job registration. The refresh job re-runs only the `CREATE DATASET` statement, not the entire script.
-- The `#DatasetName` is available in the session's temp table store after `CREATE DATASET` completes, regardless of whether it was loaded from snapshot or live — callers don't need to know which path was taken.
+- The `&DatasetName` is available in the report dataset namespace after `CREATE DATASET` completes, regardless of whether it was loaded from snapshot or live — callers don't need to know which path was taken.
 - Staleness behavior: if snapshot exists but is beyond TTL, the dashboard player shows a staleness warning banner with the last-refresh timestamp and an optional manual refresh button. It does NOT block rendering — it shows the stale data with a warning.
 
 **Storage format:** Parquet is the target. It is compressed by design, columnar (efficient for aggregation queries), and can be read back using an existing or new Parquet connector. As an interim fallback, compressed JSON (GZip) is acceptable if Parquet is not yet in the connector library.

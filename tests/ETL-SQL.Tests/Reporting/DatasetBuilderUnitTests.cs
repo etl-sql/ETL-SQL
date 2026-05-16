@@ -26,11 +26,11 @@ namespace ETL_SQL.Tests.Reporting
         public void Build_SetsCorrectTempTableName()
         {
             var builder = new DatasetBuilder();
-            var stmt    = MakeStmt("#SalesData");
+            var stmt    = MakeStmt("&SalesData");
 
             var manifest = builder.Build(stmt);
 
-            Assert.Equal("#SalesData", manifest.TempTableName);
+            Assert.Equal("&SalesData", manifest.TempTableName);
         }
 
         [Fact]

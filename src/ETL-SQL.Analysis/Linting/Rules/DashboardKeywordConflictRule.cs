@@ -44,7 +44,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
 
         private void CheckConflict(string name, Statement stmt, List<LintResult> results, string type)
         {
-            var cleanName = name.TrimStart('@', '#');
+            var cleanName = name.TrimStart('@', '#', '&');
             if (ReservedKeywords.Any(k => string.Equals(k, cleanName, StringComparison.OrdinalIgnoreCase)))
             {
                 results.Add(new LintResult

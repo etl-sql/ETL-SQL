@@ -323,9 +323,9 @@ namespace ETL_SQL.Core.Parser.Components
         {
             Consume(TokenType.DATASET, "Expected DATASET after REFRESH");
             var tok = ConsumeIdentifier("Expected &datasetName after REFRESH DATASET");
-            var dsName = tok.Value.StartsWith("&") || tok.Value.StartsWith("#")
-                ? tok.Value
-                : "&" + tok.Value;
+            if (!tok.Value.StartsWith("&"))
+                throw new SyntaxException("REFRESH DATASET names must use the &dataset form", tok.Line, tok.Column);
+            var dsName = tok.Value;
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new RefreshDatasetStatement { DatasetName = dsName, Line = startToken.Line, Column = startToken.Column };
         }

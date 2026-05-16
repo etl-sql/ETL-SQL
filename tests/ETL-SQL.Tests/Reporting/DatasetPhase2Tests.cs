@@ -119,7 +119,7 @@ namespace ETL_SQL.Tests.Reporting
             var linter = new Linter();
             linter.AddRule(new DatasetEncryptionModeRule());
 
-            var sql = "CREATE DATASET #sales ENCRYPT = PASSWORD PASSWORD = 'secret' AS (SELECT 1 AS v FROM t);";
+            var sql = "CREATE DATASET &sales ENCRYPT = PASSWORD PASSWORD = 'secret' AS (SELECT 1 AS v FROM t);";
             var results = (await linter.AnalyzeAsync(Parse(sql), new DefaultLintContext())).ToList();
 
             Assert.Single(results);
@@ -134,7 +134,7 @@ namespace ETL_SQL.Tests.Reporting
             var linter = new Linter();
             linter.AddRule(new DatasetEncryptionModeRule());
 
-            var sql = "CREATE DATASET #sales ENCRYPT = KEYFILE KEYFILE = '/keys/k.pem' AS (SELECT 1 AS v FROM t);";
+            var sql = "CREATE DATASET &sales ENCRYPT = KEYFILE KEYFILE = '/keys/k.pem' AS (SELECT 1 AS v FROM t);";
             var results = (await linter.AnalyzeAsync(Parse(sql), new DefaultLintContext())).ToList();
 
             Assert.Single(results);
@@ -148,7 +148,7 @@ namespace ETL_SQL.Tests.Reporting
             var linter = new Linter();
             linter.AddRule(new DatasetEncryptionModeRule());
 
-            var sql = "CREATE DATASET #sales ENCRYPT = MACHINE AS (SELECT 1 AS v FROM t);";
+            var sql = "CREATE DATASET &sales ENCRYPT = MACHINE AS (SELECT 1 AS v FROM t);";
             var results = (await linter.AnalyzeAsync(Parse(sql), new DefaultLintContext())).ToList();
 
             Assert.Empty(results);
@@ -160,7 +160,7 @@ namespace ETL_SQL.Tests.Reporting
             var linter = new Linter();
             linter.AddRule(new DatasetEncryptionModeRule());
 
-            var sql = "CREATE DATASET #sales AS (SELECT 1 AS v FROM t);";
+            var sql = "CREATE DATASET &sales AS (SELECT 1 AS v FROM t);";
             var results = (await linter.AnalyzeAsync(Parse(sql), new DefaultLintContext())).ToList();
 
             Assert.Empty(results);
@@ -171,7 +171,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             // LinterFactory uses reflection — verify the new rule is picked up automatically
             var linter = LinterFactory.CreateWithAllRules();
-            var sql    = "CREATE DATASET #sales ENCRYPT = PASSWORD PASSWORD = 'x' AS (SELECT 1 AS v FROM t);";
+            var sql    = "CREATE DATASET &sales ENCRYPT = PASSWORD PASSWORD = 'x' AS (SELECT 1 AS v FROM t);";
             var results = (await linter.AnalyzeAsync(Parse(sql), new DefaultLintContext())).ToList();
 
             Assert.Contains(results, r => r.RuleName == "DatasetEncryptionMode" && r.Severity == LintSeverity.Warning);

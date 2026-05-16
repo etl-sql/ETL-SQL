@@ -279,7 +279,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var linter = new Linter();
             linter.AddRule(new DatasetRefreshIntervalRule());
-            var script = Parse("CREATE DATASET #sales FROM 'myConn' AS (SELECT 1 AS N) REFRESH EVERY '30m';");
+            var script = Parse("CREATE DATASET &sales FROM 'myConn' AS (SELECT 1 AS N) REFRESH EVERY '30m';");
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
             Assert.Empty(results);
         }
@@ -289,7 +289,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var linter = new Linter();
             linter.AddRule(new DatasetRefreshIntervalRule());
-            var script = Parse("CREATE DATASET #sales REFRESH EVERY 'daily' AS (SELECT 1 AS N);");
+            var script = Parse("CREATE DATASET &sales REFRESH EVERY 'daily' AS (SELECT 1 AS N);");
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
             Assert.Single(results);
             Assert.Equal(LintSeverity.Warning, results[0].Severity);
@@ -300,7 +300,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var linter = new Linter();
             linter.AddRule(new DatasetRefreshIntervalRule());
-            var script = Parse("CREATE DATASET #sales REFRESH EVERY '1h' AS (SELECT 1 AS N);");
+            var script = Parse("CREATE DATASET &sales REFRESH EVERY '1h' AS (SELECT 1 AS N);");
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
             Assert.Empty(results);
         }

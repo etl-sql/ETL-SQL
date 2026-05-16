@@ -191,7 +191,7 @@ CREATE PAGE SimplePage AS (
         public void ParseCreateDataset_AllOptions_ReturnsCreateDatasetStatement()
         {
             var sql = @"
-CREATE DATASET #daily_sales
+CREATE DATASET &daily_sales
     REFRESH EVERY '1h'
     TTL = '24h'
     COMPRESS = ON
@@ -202,7 +202,7 @@ AS (SELECT Date, SUM(Amount) AS Total FROM orders GROUP BY Date);";
             var stmt = script.Statements.OfType<CreateDatasetStatement>().FirstOrDefault();
 
             Assert.NotNull(stmt);
-            Assert.Equal("#daily_sales", stmt!.TempTableName);
+            Assert.Equal("&daily_sales", stmt!.TempTableName);
             Assert.Equal("1h", stmt.RefreshInterval);
             Assert.Equal("24h", stmt.Ttl);
             Assert.True(stmt.Compress);
@@ -214,12 +214,12 @@ AS (SELECT Date, SUM(Amount) AS Total FROM orders GROUP BY Date);";
         [Fact]
         public void ParseCreateDataset_Minimal_OnlyRequiresNameAndQuery()
         {
-            var sql = @"CREATE DATASET #summary AS (SELECT 1 AS Val FROM orders);";
+            var sql = @"CREATE DATASET &summary AS (SELECT 1 AS Val FROM orders);";
             var script = Parse(sql);
             var stmt = script.Statements.OfType<CreateDatasetStatement>().FirstOrDefault();
 
             Assert.NotNull(stmt);
-            Assert.Equal("#summary", stmt!.TempTableName);
+            Assert.Equal("&summary", stmt!.TempTableName);
             Assert.Null(stmt.RefreshInterval);
             Assert.False(stmt.Compress);
             Assert.Equal(DatasetEncryptionMode.None, stmt.EncryptionMode);

@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
 using Xunit;
 
@@ -32,21 +33,23 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
-        public void UseDataset_BareIdentifier_NormalisesToAmpersand()
+        public void UseDataset_BareIdentifier_ReportsSyntaxError()
         {
             var script = Parse("USE DATASET salesData;");
-            var stmt   = Assert.Single(script.Statements);
-            var use    = Assert.IsType<UseDatasetStatement>(stmt);
-            Assert.Equal("&salesData", use.DatasetName);
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("&dataset", System.StringComparison.OrdinalIgnoreCase));
         }
 
         [Fact]
-        public void UseDataset_HashPrefixed_KeepsPrefix()
+        public void UseDataset_HashPrefixed_ReportsSyntaxError()
         {
             var script = Parse("USE DATASET #sales;");
-            var stmt   = Assert.Single(script.Statements);
-            var use    = Assert.IsType<UseDatasetStatement>(stmt);
-            Assert.Equal("#sales", use.DatasetName);
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("&dataset", System.StringComparison.OrdinalIgnoreCase));
         }
 
         // ── Parser — SHOW DATASETS ────────────────────────────────────────────────
@@ -90,12 +93,13 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
-        public void RefreshDataset_BareIdentifier_NormalisesToAmpersand()
+        public void RefreshDataset_BareIdentifier_ReportsSyntaxError()
         {
             var script = Parse("REFRESH DATASET sales;");
-            var stmt   = Assert.Single(script.Statements);
-            var refresh = Assert.IsType<RefreshDatasetStatement>(stmt);
-            Assert.Equal("&sales", refresh.DatasetName);
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("&dataset", System.StringComparison.OrdinalIgnoreCase));
         }
 
         // ── UseDatasetRedundantRule ───────────────────────────────────────────────

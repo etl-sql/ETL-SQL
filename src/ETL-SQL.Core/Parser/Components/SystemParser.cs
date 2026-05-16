@@ -338,9 +338,9 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 // &name tokenised as a single IDENTIFIER (Lexer includes & in identifier reads)
                 var tok = ConsumeIdentifier("Expected &datasetName after USE DATASET");
-                var dsName = tok.Value.StartsWith("&") || tok.Value.StartsWith("#")
-                    ? tok.Value
-                    : "&" + tok.Value;
+                if (!tok.Value.StartsWith("&"))
+                    throw new SyntaxException("USE DATASET names must use the &dataset form", tok.Line, tok.Column);
+                var dsName = tok.Value;
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new UseDatasetStatement { DatasetName = dsName, Line = startToken.Line, Column = startToken.Column };
             }

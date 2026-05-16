@@ -963,7 +963,7 @@ namespace ETL_SQL.Tests.Coverage
         public async Task ReportKeywordLintRule_NormalDataset_NoWarning()
         {
             var rule = new ReportKeywordLintRule();
-            var results = await Lint(rule, "CREATE DATASET #salesdata AS (SELECT 1 AS v);");
+            var results = await Lint(rule, "CREATE DATASET &salesdata AS (SELECT 1 AS v);");
             Assert.Empty(results);
         }
 

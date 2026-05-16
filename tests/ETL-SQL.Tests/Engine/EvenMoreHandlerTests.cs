@@ -416,7 +416,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task CreateDataset_SimpleQuery_MaterializesTable()
         {
             var eval = await RunAndGet(
-                "CREATE DATASET #myds AS (SELECT 1 AS n);" +
+                "CREATE DATASET &myds AS (SELECT 1 AS n);" +
                 "SELECT * FROM #myds;");
             Assert.NotNull(eval.LastResult);
         }
@@ -425,7 +425,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task CreateDataset_WithRefreshInterval_MaterializesTable()
         {
             var eval = await RunAndGet(
-                "CREATE DATASET #myds2 REFRESH EVERY 'daily' AS (SELECT 1 AS n);" +
+                "CREATE DATASET &myds2 REFRESH EVERY 'daily' AS (SELECT 1 AS n);" +
                 "SELECT * FROM #myds2;");
             Assert.NotNull(eval.LastResult);
         }
@@ -434,9 +434,9 @@ namespace ETL_SQL.Tests.Engine
         public async Task CreateDatasetOrAlter_UpdatesTable()
         {
             var eval = await RunAndGet(
-                "CREATE DATASET #altds AS (SELECT 1 AS n);" +
-                "CREATE OR ALTER DATASET #altds AS (SELECT 2 AS n);" +
-                "SELECT * FROM #altds;");
+                "CREATE DATASET &altds AS (SELECT 1 AS n);" +
+                "CREATE OR ALTER DATASET &altds AS (SELECT 2 AS n);" +
+                "SELECT * FROM &altds;");
             Assert.NotNull(eval.LastResult);
         }
 

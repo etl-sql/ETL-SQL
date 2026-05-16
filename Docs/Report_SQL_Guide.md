@@ -227,9 +227,9 @@ CREATE PAGE Overview AS (
 Syntax notes:
 
 - `CREATE PAGE <name> AS (...)` defines a report page. Containers use `LAYOUT (...)` for nested placement.
-- `CREATE DATASET` accepts either `&dataset` or `#temp_style` names. Prefer `&dataset` for reusable report datasets and `#temp` for intermediate engine tables.
+- `CREATE DATASET` uses `&dataset` names only. Use `#temp` for intermediate engine tables created by `SELECT ... INTO #temp`; use `&dataset` for reusable report-owned datasets.
 - `STYLE = StyleName` applies a named style. `STYLE (key = value, ...)` applies inline overrides. A standalone `STYLE (...)` statement is not valid.
-- `SOURCE = #temp`, `SOURCE = &dataset`, and `SOURCE = (SELECT ...)` are the canonical source forms.
+- `SOURCE = #temp`, `SOURCE = &dataset`, and `SOURCE = (SELECT ...)` are the canonical source forms. `#temp` is engine memory; `&dataset` is a report dataset definition or portal-registered dataset.
 
 ### Report documentation roles
 
@@ -1311,7 +1311,7 @@ CREATE VISUAL SalesTable AS TABLE (
 
 ## CREATE DATASET
 
-Pre-computes a named temp table that can be independently refreshed and optionally encrypted or compressed. Use this when multiple visuals share the same expensive base query, or when you want separate refresh cadences.
+Pre-computes a named report dataset that can be independently refreshed and optionally encrypted or compressed. Use this when multiple visuals share the same expensive base query, or when you want separate refresh cadences.
 
 ```
 CREATE DATASET &<name>
@@ -1362,7 +1362,7 @@ CREATE DATASET &sales_keyfile
 
 | Clause | Required | Description |
 |--------|----------|-------------|
-| `&<name>` | Yes | Dataset name. The `&` prefix is automatically added if omitted. |
+| `&<name>` | Yes | Dataset name. The `&` prefix is required and distinguishes report datasets from engine `#temp` tables. |
 | `REFRESH EVERY '<interval>'` | No | Re-compute interval. Format: `<n>s`, `<n>m`, `<n>h`, or `<n>d` (e.g. `'30m'`, `'1h'`, `'7d'`). |
 | `TTL = '<duration>'` | No | How long a snapshot stays valid before `IsStale` returns true. Same interval format. |
 | `COMPRESS = ON` | No | Compress the snapshot file on disk. Default `OFF`. |

@@ -38,4 +38,4 @@ CREATE VISUAL CatPie AS PIE (
 );
 ```
 
-`CREATE DATASET` also accepts `#name` for compatibility, but `&name` is the preferred report-dataset form. Keep heavy preparation in ordinary `#temp` tables, then expose reusable report data through `&dataset` definitions.
+`&name` is the report-dataset form. Keep intermediate preparation in ordinary `#temp` tables, then expose reusable report data through `CREATE DATASET &dataset` definitions. `USE DATASET` and `REFRESH DATASET` also require the `&dataset` name.

@@ -726,13 +726,13 @@ The most powerful interactive pattern. It allows navigating from a high-level su
 ### Summary Report (`summary.rptsql`)
 ```sql
 -- 1. Data Source
-CREATE DATASET SalesSummary AS (
+CREATE DATASET &SalesSummary AS (
     SELECT Region, SUM(Sales) AS TotalSales FROM #raw GROUP BY Region
 );
 
 -- 2. Master Visual
 CREATE VISUAL RegionTable AS TABLE (
-    SOURCE = SalesSummary,
+    SOURCE = &SalesSummary,
     MAPPINGS (COLUMN Region = Region, COLUMN Sales = TotalSales),
     ACTIONS (
         -- Cross-report drill
@@ -752,13 +752,13 @@ CREATE PAGE Main AS (STRUCTURE = 'A', MAP ('A' = RegionTable));
 DECLARE @TargetRegion AS STRING INPUT = 'All';
 
 -- 2. Data Source filtered by input
-CREATE DATASET Transactions AS (
+CREATE DATASET &Transactions AS (
     SELECT * FROM #all_tx WHERE Region = @TargetRegion OR @TargetRegion = 'All'
 );
 
 -- 3. Detail Visual
 CREATE VISUAL TxTable AS TABLE (
-    SOURCE = Transactions,
+    SOURCE = &Transactions,
     TITLE  = ('Transactions for: ' + @TargetRegion)
 );
 
@@ -768,4 +768,3 @@ CREATE PAGE Main AS (STRUCTURE = 'A', MAP ('A' = TxTable));
 ---
 
 *Refer to [Reference/Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md) for function signatures, [Reference/Data_Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Data_Connectors.md) for connector options, and [User_Manual.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/User_Manual.md) for the mental model.*
-

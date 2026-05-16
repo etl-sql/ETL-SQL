@@ -184,7 +184,7 @@ Styles     — Dictionary<string, string> (THEME, BACKGROUND)
 #### `CreateDatasetStatement`
 
 ```
-TempTableName      — #name of the resulting temp table
+TempTableName      — &name of the report dataset
 RefreshInterval    — advisory interval string (e.g. '1h', '30m')
 Ttl                — time-to-live advisory
 Compress           — store compressed on disk
