@@ -241,7 +241,9 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
 
         // Write a dummy .rptsql file in the temp script root
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "dummy_report.rptsql");
-        await File.WriteAllTextAsync(scriptPath, "-- dummy report\n");
+        await File.WriteAllTextAsync(scriptPath,
+            "/* @owner: Finance BI; @contact: finance-bi@example.com; @tags: revenue,monthly; @category: Finance; @certification: trusted */\n" +
+            "-- dummy report\n");
 
         var publishRes = await AuthPost(token, "/api/reports", new
         {
@@ -254,12 +256,20 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
         Assert.True(reportId > 0);
+        Assert.Equal("Finance BI", report["owner"]!.GetValue<string>());
+        Assert.Equal("finance-bi@example.com", report["contact"]!.GetValue<string>());
+        Assert.Equal("revenue,monthly", report["tags"]!.GetValue<string>());
+        Assert.Equal("Finance", report["category"]!.GetValue<string>());
+        Assert.Equal("trusted", report["certification"]!.GetValue<string>());
+        Assert.Equal("Finance BI", report["metadata"]!["owner"]!.GetValue<string>());
 
         // Verify GET returns it
         var getRes = await AuthGet(token, $"/api/folders/{folderId}/reports");
         Assert.Equal(HttpStatusCode.OK, getRes.StatusCode);
         var reports = await getRes.Content.ReadFromJsonAsync<JsonArray>(_json);
-        Assert.Contains(reports!, r => r!["id"]!.GetValue<int>() == reportId);
+        var listed = reports!.Single(r => r!["id"]!.GetValue<int>() == reportId)!.AsObject();
+        Assert.Equal("Finance BI", listed["owner"]!.GetValue<string>());
+        Assert.Equal("revenue,monthly", listed["tags"]!.GetValue<string>());
     }
 
     [Fact]

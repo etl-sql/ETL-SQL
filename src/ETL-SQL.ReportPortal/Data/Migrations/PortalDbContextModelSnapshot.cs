@@ -380,7 +380,19 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Property<int>("CreatedBy")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Category")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Certification")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Contact")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Description")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Domain")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("FolderId")
@@ -389,8 +401,14 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Owner")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("PublishedScriptHash")
@@ -401,6 +419,12 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
 
                     b.Property<string>("ScriptPath")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Steward")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tags")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")

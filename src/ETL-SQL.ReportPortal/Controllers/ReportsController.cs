@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -71,7 +72,10 @@ public class ReportsController : ControllerBase
 
         return new ReportDto(
             r.Id, r.FolderId, r.Folder?.Path ?? "",
-            r.Name, r.Description, r.ScriptPath,
+            r.Name, r.Description,
+            r.Owner, r.Contact, r.Tags, r.Category, r.Domain, r.Steward, r.Certification,
+            DeserializeMetadata(r.MetadataJson),
+            r.ScriptPath,
             r.ScriptLastModified,
             snap is not null,
             snap?.BuiltAt,
@@ -117,15 +121,27 @@ public class ReportsController : ControllerBase
             : DateTime.UtcNow;
 
         string? publishedHash = null;
+        var scriptMetadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (System.IO.File.Exists(resolved))
+        {
             publishedHash = "sha256:" + Convert.ToHexString(
                 SHA256.HashData(System.IO.File.ReadAllBytes(resolved))).ToLowerInvariant();
+            scriptMetadata = await ReadScriptMetadataAsync(resolved);
+        }
 
         var report = new Report
         {
             FolderId            = req.FolderId,
             Name                = req.Name,
-            Description         = req.Description,
+            Description         = FirstNonBlank(req.Description, GetMetadata(scriptMetadata, "description", "d")),
+            Owner               = FirstNonBlank(req.Owner, GetMetadata(scriptMetadata, "owner")),
+            Contact             = FirstNonBlank(req.Contact, GetMetadata(scriptMetadata, "contact")),
+            Tags                = FirstNonBlank(req.Tags, GetMetadata(scriptMetadata, "tags")),
+            Category            = FirstNonBlank(req.Category, GetMetadata(scriptMetadata, "category")),
+            Domain              = FirstNonBlank(req.Domain, GetMetadata(scriptMetadata, "domain")),
+            Steward             = FirstNonBlank(req.Steward, GetMetadata(scriptMetadata, "steward")),
+            Certification       = FirstNonBlank(req.Certification, GetMetadata(scriptMetadata, "certification", "trusted")),
+            MetadataJson        = SerializeMetadata(scriptMetadata),
             ScriptPath          = resolved,
             ScriptLastModified  = lastModified,
             PublishedScriptHash = publishedHash,
@@ -172,6 +188,13 @@ public class ReportsController : ControllerBase
 
         if (req.Name is not null)        report.Name        = req.Name;
         if (req.Description is not null) report.Description = req.Description;
+        if (req.Owner is not null)         report.Owner         = req.Owner;
+        if (req.Contact is not null)       report.Contact       = req.Contact;
+        if (req.Tags is not null)          report.Tags          = req.Tags;
+        if (req.Category is not null)      report.Category      = req.Category;
+        if (req.Domain is not null)        report.Domain        = req.Domain;
+        if (req.Steward is not null)       report.Steward       = req.Steward;
+        if (req.Certification is not null) report.Certification = req.Certification;
         if (req.FolderId.HasValue)
         {
             var targetPerm = await GetEffectivePermissionAsync(req.FolderId.Value);
@@ -196,6 +219,16 @@ public class ReportsController : ControllerBase
             var bytes = await System.IO.File.ReadAllBytesAsync(resolved);
             report.PublishedScriptHash = "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
             report.ScriptLastModified  = System.IO.File.GetLastWriteTimeUtc(resolved);
+            var scriptMetadata = await ReadScriptMetadataAsync(resolved);
+            report.MetadataJson = SerializeMetadata(scriptMetadata);
+            report.Description   = FirstNonBlank(req.Description, GetMetadata(scriptMetadata, "description", "d"), report.Description);
+            report.Owner         = FirstNonBlank(req.Owner, GetMetadata(scriptMetadata, "owner"), report.Owner);
+            report.Contact       = FirstNonBlank(req.Contact, GetMetadata(scriptMetadata, "contact"), report.Contact);
+            report.Tags          = FirstNonBlank(req.Tags, GetMetadata(scriptMetadata, "tags"), report.Tags);
+            report.Category      = FirstNonBlank(req.Category, GetMetadata(scriptMetadata, "category"), report.Category);
+            report.Domain        = FirstNonBlank(req.Domain, GetMetadata(scriptMetadata, "domain"), report.Domain);
+            report.Steward       = FirstNonBlank(req.Steward, GetMetadata(scriptMetadata, "steward"), report.Steward);
+            report.Certification = FirstNonBlank(req.Certification, GetMetadata(scriptMetadata, "certification", "trusted"), report.Certification);
         }
 
         report.UpdatedAt = DateTime.UtcNow;
@@ -243,6 +276,47 @@ public class ReportsController : ControllerBase
             .ToList();
 
         return Ok(parameters);
+    }
+
+    private static string? FirstNonBlank(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+
+    private static string? GetMetadata(IReadOnlyDictionary<string, string> metadata, params string[] keys)
+    {
+        foreach (var key in keys)
+            if (metadata.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value))
+                return value;
+        return null;
+    }
+
+    private static string? SerializeMetadata(IReadOnlyDictionary<string, string> metadata) =>
+        metadata.Count == 0
+            ? null
+            : JsonSerializer.Serialize(metadata
+                .OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(kv => kv.Key, kv => kv.Value));
+
+    private static IReadOnlyDictionary<string, string> DeserializeMetadata(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var values = JsonSerializer.Deserialize<Dictionary<string, string>>(json)
+                ?? new Dictionary<string, string>();
+            return new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private static async Task<Dictionary<string, string>> ReadScriptMetadataAsync(string scriptPath)
+    {
+        var scriptText = await System.IO.File.ReadAllTextAsync(scriptPath);
+        var tokens = new Lexer(scriptText).Tokenize();
+        var script = new CoreParser(tokens, scriptText).Parse();
+        return new Dictionary<string, string>(script.Metadata, StringComparer.OrdinalIgnoreCase);
     }
 
     // ── DELETE /api/reports/{id} ──────────────────────────────────────────────

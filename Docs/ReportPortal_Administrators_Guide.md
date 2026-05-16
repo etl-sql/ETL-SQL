@@ -231,6 +231,30 @@ Publishing registers a `.rptsql` script file as a named report in a folder.
 
 The portal validates that the path stays within `ScriptRootPath` (path traversal attacks are blocked).
 
+Report catalog metadata can come directly from the script header. The portal recognizes these canonical tags:
+
+| Tag | Portal field |
+| :--- | :--- |
+| `@owner` | Report owner/team |
+| `@contact` | Support contact |
+| `@tags` | Search/category tags, comma-separated |
+| `@category` | Primary catalog category |
+| `@domain` | Business/data domain |
+| `@steward` | Data/report steward |
+| `@certification` or `@trusted` | Trust/certification marker |
+| `@description` or `@d` | Report description when no publish description is supplied |
+
+```sql
+/* @owner: Finance BI
+   @contact: finance-bi@example.com
+   @tags: revenue,monthly,kpi
+   @category: Finance
+   @certification: trusted */
+SET REPORT TITLE = 'Monthly Sales';
+```
+
+Publish request fields override script tags when both are supplied. On republish with a new script path, the portal refreshes the stored metadata from the new script while preserving explicit request values.
+
 ### 6.1 Script hash pinning
 
 When a report is published, the portal computes a SHA-256 hash of the `.rptsql` file and stores it as `PublishedScriptHash` in the database. This hash is the "known-good" fingerprint for that version of the report.

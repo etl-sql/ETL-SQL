@@ -105,7 +105,7 @@ namespace ETL_SQL.Common
             // Security & privacy
             "pii", "phi", "pci", "sensitive", "classification", "encrypted_at_rest",
             // Ownership
-            "owner", "domain", "steward", "contact",
+            "owner", "domain", "steward", "contact", "tags", "category", "certification", "trusted",
             // Quality
             "freshness", "sla", "quality", "nullable",
             // Documentation

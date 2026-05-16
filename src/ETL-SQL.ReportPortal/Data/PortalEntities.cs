@@ -83,6 +83,14 @@ public class Report
     public Folder    Folder             { get; set; } = null!;
     public string    Name               { get; set; } = "";
     public string?   Description        { get; set; }
+    public string?   Owner              { get; set; }
+    public string?   Contact            { get; set; }
+    public string?   Tags               { get; set; }
+    public string?   Category           { get; set; }
+    public string?   Domain             { get; set; }
+    public string?   Steward            { get; set; }
+    public string?   Certification      { get; set; }
+    public string?   MetadataJson       { get; set; }
     public string    ScriptPath           { get; set; } = "";
     public DateTime  ScriptLastModified   { get; set; }
     public string?   PublishedScriptHash  { get; set; }

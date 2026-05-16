@@ -386,6 +386,26 @@ secrets file.
 - `POST /api/admin/users` — create user (Admin)
 - `GET /api/admin/audit` — paginated audit log (Admin)
 
+### 1.4.1 Report metadata contract
+
+Report catalog metadata is script-first. The portal reads header metadata comments
+from the `.rptsql` file on publish and republish, then stores the recognized values
+as report catalog fields. Explicit REST or script-admin fields override script
+metadata when both are supplied.
+
+Canonical portal tags:
+
+| Tag | Catalog field |
+| :--- | :--- |
+| `@owner` | Owner/team |
+| `@contact` | Support contact |
+| `@tags` | Comma-separated search/category tags |
+| `@category` | Primary catalog category |
+| `@domain` | Business/data domain |
+| `@steward` | Steward |
+| `@certification` or `@trusted` | Trust/certification marker |
+| `@description` or `@d` | Description fallback |
+
 ### 1.5 Deliverable
 REST API with Swagger UI. Parser additions for the portal admin language. No
 frontend yet.
