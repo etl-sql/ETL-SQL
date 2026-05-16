@@ -316,7 +316,11 @@ Admins can inspect resolved portal access without mentally joining users, groups
 
 Reports inherit folder permissions. If a user belongs to multiple groups, the highest permission wins (`Read < Execute < Manage`) and the response lists the group or groups that supplied that winning level.
 
-### 6.6 Catalog Search
+### 6.6 Usage Metrics
+
+Admins can inspect operational usage with `GET /api/admin/metrics/usage?days=30`. The response includes total report views, unique viewers, reports viewed, refresh failure count, average refresh duration, subscription delivery failures, and per-report rows with view counts, unique viewers, last view time, refresh status/error/duration, and subscription failure counts.
+
+### 6.7 Catalog Search
 
 Use `GET /api/catalog/search?q=<term>` to search visible folders and reports. Search is permission-aware: admins search the full catalog, while other users only see folders granted through group ACLs and reports inside those folders.
 
@@ -326,7 +330,7 @@ Use `GET /api/catalog/recent?limit=20` to list the caller's recently viewed repo
 
 Use `POST /api/reports/{id}/favorite` and `DELETE /api/reports/{id}/favorite` to manage a user's favorite reports. Use `GET /api/catalog/favorites?limit=50` to list the caller's favorite reports. Favorite catalog results use the same shape as search and include `isFavorite = true`.
 
-### 6.7 Environment Promotion Pattern
+### 6.8 Environment Promotion Pattern
 
 Use ETL-SQL environment sets as the deployment boundary. Do not create a separate portal deployment language for dev/test/prod. Scripts should define or load the environment values first, activate the target set, then use the same portal admin commands for folders, grants, publishing, subscriptions, and refresh jobs.
 

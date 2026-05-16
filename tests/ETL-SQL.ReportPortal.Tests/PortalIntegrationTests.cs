@@ -903,6 +903,71 @@ CREATE VISUAL Total AS CARD (
         Assert.Equal("Execute", reportUser["permission"]!.GetValue<string>());
     }
 
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task AdminUsageMetrics_ReturnsViewsRefreshAndSubscriptionFailures()
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        int reportId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var user = new PortalUser { UserName = $"metric_user_{suffix}", Email = $"metric_user_{suffix}@test.local" };
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+
+            var folder = new Folder { Name = $"Metrics {suffix}", Path = $"/metrics-{suffix}", OwnerId = user.Id };
+            db.Folders.Add(folder);
+            await db.SaveChangesAsync();
+
+            var report = new Report
+            {
+                FolderId = folder.Id,
+                Name = $"Metric Report {suffix}",
+                ScriptPath = Path.Combine(_factory.TempDir, "scripts", $"metric_{suffix}.rptsql"),
+                ScriptLastModified = DateTime.UtcNow,
+                CreatedBy = user.Id,
+                LastRefreshStatus = "Failed",
+                LastRefreshDurationMs = 1250,
+                LastRefreshError = "Refresh failed"
+            };
+            db.Reports.Add(report);
+            await db.SaveChangesAsync();
+
+            db.AuditLogs.AddRange(
+                new AuditLog { UserId = user.Id, Action = "VIEW_SNAPSHOT", ResourceType = "Report", ResourceId = report.Id.ToString(), Timestamp = DateTime.UtcNow.AddMinutes(-5) },
+                new AuditLog { UserId = user.Id, Action = "VIEW_SNAPSHOT", ResourceType = "Report", ResourceId = report.Id.ToString(), Timestamp = DateTime.UtcNow.AddMinutes(-1) });
+            db.Subscriptions.Add(new Subscription
+            {
+                ReportId = report.Id,
+                UserId = user.Id,
+                Format = SubscriptionFormat.PDF,
+                SmtpAlias = "smtp",
+                Recipients = user.Email!,
+                FailCount = 3
+            });
+            await db.SaveChangesAsync();
+            reportId = report.Id;
+        }
+
+        var res = await AuthGet(token, "/api/admin/metrics/usage?days=7");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.True(body!["totalViews"]!.GetValue<int>() >= 2);
+        Assert.True(body["uniqueViewers"]!.GetValue<int>() >= 1);
+        Assert.True(body["refreshFailureCount"]!.GetValue<int>() >= 1);
+        Assert.True(body["subscriptionDeliveryFailureCount"]!.GetValue<int>() >= 3);
+
+        var reportMetric = body["reports"]!.AsArray().Single(r => r!["reportId"]!.GetValue<int>() == reportId)!.AsObject();
+        Assert.Equal(2, reportMetric["viewCount"]!.GetValue<int>());
+        Assert.Equal(1, reportMetric["uniqueViewers"]!.GetValue<int>());
+        Assert.Equal("Failed", reportMetric["lastRefreshStatus"]!.GetValue<string>());
+        Assert.Equal(1250, reportMetric["lastRefreshDurationMs"]!.GetValue<long>());
+        Assert.Equal(3, reportMetric["subscriptionFailureCount"]!.GetValue<int>());
+    }
+
     // ── 5. Subscription CRUD ──────────────────────────────────────────────────
 
     [Fact]

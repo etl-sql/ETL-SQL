@@ -399,6 +399,83 @@ public class AdminController(
             .ToList());
     }
 
+    // ── Usage metrics ────────────────────────────────────────────────────────
+
+    [HttpGet("metrics/usage")]
+    public async Task<IActionResult> GetUsageMetrics([FromQuery] int days = 30)
+    {
+        days = Math.Clamp(days, 1, 366);
+        var since = DateTime.UtcNow.AddDays(-days);
+
+        var viewLogs = await db.AuditLogs
+            .Where(a => a.Action == "VIEW_SNAPSHOT"
+                && a.ResourceType == "Report"
+                && a.ResourceId != null
+                && a.Timestamp >= since)
+            .ToListAsync();
+
+        var viewsByReport = viewLogs
+            .Select(a => new
+            {
+                Log = a,
+                Parsed = int.TryParse(a.ResourceId, out var id) ? id : (int?)null
+            })
+            .Where(x => x.Parsed.HasValue)
+            .GroupBy(x => x.Parsed!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => new
+                {
+                    ViewCount = g.Count(),
+                    UniqueViewers = g.Where(x => x.Log.UserId.HasValue).Select(x => x.Log.UserId!.Value).Distinct().Count(),
+                    LastViewedAt = g.Max(x => x.Log.Timestamp)
+                });
+
+        var subscriptionFailures = await db.Subscriptions
+            .Where(s => s.FailCount > 0)
+            .GroupBy(s => s.ReportId)
+            .Select(g => new { ReportId = g.Key, Failures = g.Sum(s => s.FailCount) })
+            .ToDictionaryAsync(x => x.ReportId, x => x.Failures);
+
+        var reports = await db.Reports
+            .Include(r => r.Folder)
+            .Where(r => !r.IsDeleted)
+            .OrderBy(r => r.Folder.Path)
+            .ThenBy(r => r.Name)
+            .ToListAsync();
+
+        var rows = reports.Select(r =>
+        {
+            viewsByReport.TryGetValue(r.Id, out var views);
+            subscriptionFailures.TryGetValue(r.Id, out var subFailures);
+            return new ReportUsageMetricDto(
+                r.Id,
+                r.Name,
+                r.Folder.Path,
+                views?.ViewCount ?? 0,
+                views?.UniqueViewers ?? 0,
+                views?.LastViewedAt,
+                r.LastRefreshStatus,
+                r.LastRefreshDurationMs,
+                r.LastRefreshError,
+                subFailures);
+        }).ToList();
+
+        var totalRefreshDurations = reports
+            .Where(r => r.LastRefreshDurationMs.HasValue)
+            .Select(r => r.LastRefreshDurationMs!.Value)
+            .ToList();
+
+        return Ok(new PortalUsageMetricsDto(
+            viewLogs.Count,
+            viewLogs.Where(a => a.UserId.HasValue).Select(a => a.UserId!.Value).Distinct().Count(),
+            viewsByReport.Count,
+            reports.Count(r => string.Equals(r.LastRefreshStatus, "Failed", StringComparison.OrdinalIgnoreCase)),
+            totalRefreshDurations.Count == 0 ? null : totalRefreshDurations.Average(),
+            subscriptionFailures.Values.Sum(),
+            rows));
+    }
+
     // ── Audit log ─────────────────────────────────────────────────────────────
 
     [HttpGet("audit")]

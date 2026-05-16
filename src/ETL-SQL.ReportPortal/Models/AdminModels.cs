@@ -69,3 +69,24 @@ public record EffectivePrincipalPermissionDto(
     IReadOnlyList<string> Groups,
     string Permission,
     IReadOnlyList<string> Sources);
+
+public record PortalUsageMetricsDto(
+    int TotalViews,
+    int UniqueViewers,
+    int ReportsViewed,
+    int RefreshFailureCount,
+    double? AverageRefreshDurationMs,
+    int SubscriptionDeliveryFailureCount,
+    IReadOnlyList<ReportUsageMetricDto> Reports);
+
+public record ReportUsageMetricDto(
+    int ReportId,
+    string ReportName,
+    string FolderPath,
+    int ViewCount,
+    int UniqueViewers,
+    DateTime? LastViewedAt,
+    string? LastRefreshStatus,
+    long? LastRefreshDurationMs,
+    string? LastRefreshError,
+    int SubscriptionFailureCount);
