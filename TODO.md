@@ -157,14 +157,18 @@
 - [ ] Update `AGENTS.md`, `Docs/Report_SQL_Guide.md`, `Docs/Reference/Grammar.md`, `Docs/Strategy/ReportPortal_Strategy.md`, editor help, and sample guide so all agents and users generate the same syntax.  Make sure very container type, action, style, etc is documented.
 - [ ] Remove old docs/examples for replaced syntax before launch unless a deliberate compatibility decision is made.
 
-- [ ] **Phase 6 — Advanced Visualization Capability Gaps (BI Parity)**
-    - [x] **GANTT Visual**: Port the existing Orchestrator Portal Gantt implementation (ECharts 'custom' series) into the reporting engine.
-    - [x] **Pivot/Matrix Visual**: Cross-tab representation with collapsible row/column headers (Industry Standard: Power BI Matrix).
-    - [x] **Sankey/Sunburst**: Relational/Flow visualizations using ECharts native types.
-    - [x] **Small Multiples (Trellis)**: Repeat a visual across a grid for each category value.
-    - [x] **Selection Primitives**: Brush/Lasso selection on Scatter/Scatter3D to drive parameter filters (Industry Standard: Tableau Brush).
-    - [x] **Network Graph**: Force-directed graphs for lineage and relationship exploration.
-    - [ ] **Maximize visual** Maximize the space of the visual to the full screen and the chart fills the space, provide a minimize button to return to previous size and show other visuals.
+### Phase 6 — Advanced Visualization Capability Gaps (BI Parity)
+- [x] **GANTT Visual**: Port the existing Orchestrator Portal Gantt implementation (ECharts 'custom' series) into the reporting engine.
+- [x] **Pivot/Matrix Visual**: Cross-tab representation with collapsible row/column headers (Industry Standard: Power BI Matrix).
+- [x] **Sankey/Sunburst**: Relational/Flow visualizations using ECharts native types.
+- [x] **Small Multiples (Trellis)**: Repeat a visual across a grid for each category value.
+- [x] **Selection Primitives**: Brush/Lasso selection on Scatter/Scatter3D to drive parameter filters (Industry Standard: Tableau Brush).
+- [x] **Network Graph**: Force-directed graphs for lineage and relationship exploration.
+- [ ] **Maximize visual**: Maximize the space of the visual to the full screen and the chart fills the space, provide a minimize button to return to previous size and show other visuals.
+
+### Phase 7 — SQL Dialect Parity (T-SQL Compatibility)
+- [ ] **VALUES as a standalone table constructor**: Support `SELECT * FROM (VALUES (1, 'A'), (2, 'B')) AS t(id, name)`.
+- [ ] **APPROX_COUNT_DISTINCT**: Implement HyperLogLog-based approximate distinct count for large-scale datasets.
 
 ---
 
