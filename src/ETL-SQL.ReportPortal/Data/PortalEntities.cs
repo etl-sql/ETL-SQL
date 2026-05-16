@@ -17,6 +17,7 @@ public class PortalUser : IdentityUser<int>
     public ICollection<UserGroup>    UserGroups    { get; set; } = [];
     public ICollection<Subscription> Subscriptions { get; set; } = [];
     public ICollection<RefreshToken> RefreshTokens { get; set; } = [];
+    public ICollection<ReportFavorite> ReportFavorites { get; set; } = [];
 }
 
 public class PortalRole : IdentityRole<int>
@@ -108,6 +109,17 @@ public class Report
     public ICollection<ReportSnapshot> Snapshots    { get; set; } = [];
     public ICollection<Subscription>   Subscriptions { get; set; } = [];
     public ICollection<DatasetJob>     DatasetJobs  { get; set; } = [];
+    public ICollection<ReportFavorite> Favorites    { get; set; } = [];
+}
+
+public class ReportFavorite
+{
+    public int        Id        { get; set; }
+    public int        UserId    { get; set; }
+    public PortalUser User      { get; set; } = null!;
+    public int        ReportId  { get; set; }
+    public Report     Report    { get; set; } = null!;
+    public DateTime   CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 public class ReportSnapshot

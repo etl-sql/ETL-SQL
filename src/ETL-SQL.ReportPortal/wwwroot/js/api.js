@@ -136,6 +136,8 @@ export const reportsApi = {
     create: (body)     => apiJson('/api/reports', { method: 'POST', body }),
     update: (id, body) => apiJson(`/api/reports/${id}`, { method: 'PUT', body }),
     delete: (id)       => apiJson(`/api/reports/${id}`, { method: 'DELETE' }),
+    favorite: (id)    => apiJson(`/api/reports/${id}/favorite`, { method: 'POST' }),
+    unfavorite: (id)  => apiJson(`/api/reports/${id}/favorite`, { method: 'DELETE' }),
 
     getSnapshot: (id, includeManifest = false) =>
         apiJson(`/api/reports/${id}/snapshot?includeManifest=${includeManifest}`),
@@ -193,7 +195,9 @@ export const catalogApi = {
     search: (q, limit = 50) =>
         apiJson(`/api/catalog/search?q=${encodeURIComponent(q)}&limit=${limit}`),
     recent: (limit = 20) =>
-        apiJson(`/api/catalog/recent?limit=${limit}`)
+        apiJson(`/api/catalog/recent?limit=${limit}`),
+    favorites: (limit = 50) =>
+        apiJson(`/api/catalog/favorites?limit=${limit}`)
 };
 
 // ── Admin — users ──────────────────────────────────────────────────────────────

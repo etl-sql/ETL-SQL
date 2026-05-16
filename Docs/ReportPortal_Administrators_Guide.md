@@ -324,6 +324,8 @@ The search matches folder name/path and report name, description, owner, contact
 
 Use `GET /api/catalog/recent?limit=20` to list the caller's recently viewed reports. This endpoint is also permission-aware and uses the same catalog result shape as search, including snapshot, stale, script-changed, and refresh status fields. A report enters the recent list when the caller opens a snapshot through `GET /api/reports/{id}/snapshot`.
 
+Use `POST /api/reports/{id}/favorite` and `DELETE /api/reports/{id}/favorite` to manage a user's favorite reports. Use `GET /api/catalog/favorites?limit=50` to list the caller's favorite reports. Favorite catalog results use the same shape as search and include `isFavorite = true`.
+
 ### 6.7 Environment Promotion Pattern
 
 Use ETL-SQL environment sets as the deployment boundary. Do not create a separate portal deployment language for dev/test/prod. Scripts should define or load the environment values first, activate the target set, then use the same portal admin commands for folders, grants, publishing, subscriptions, and refresh jobs.

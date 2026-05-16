@@ -164,6 +164,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .report-card:hover { border-color: var(--portal-accent); box-shadow: var(--portal-shadow-sm); transform: translateY(-1px); }
 .report-card-body { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 16px; min-height: 132px; }
 .report-card-title-row { display: flex; align-items: flex-start; gap: 8px; }
+.report-card-title-row h3 { flex: 1; min-width: 0; }
+.favorite-btn { width: 28px; height: 28px; flex: 0 0 28px; border: 1px solid var(--portal-border); border-radius: var(--portal-radius-sm);
+                background: var(--portal-surface); color: var(--portal-muted); cursor: pointer; font-size: 1.05em; line-height: 1; }
+.favorite-btn:hover, .favorite-btn.is-active { color: #8a5a00; background: var(--portal-warning-soft); border-color: #e4c678; }
+.favorite-btn:disabled { opacity: .6; cursor: wait; }
 .report-glyph { position: relative; width: 18px; height: 20px; flex: 0 0 18px; border: 1.6px solid var(--portal-accent);
                 border-radius: 4px; background: var(--portal-accent-soft); margin-top: 1px; }
 .report-glyph::before, .report-glyph::after { content: ""; position: absolute; left: 4px; right: 4px; height: 1.6px;

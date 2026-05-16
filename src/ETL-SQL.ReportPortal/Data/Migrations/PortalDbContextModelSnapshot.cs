@@ -490,6 +490,31 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.ToTable("ReportSnapshots");
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.ReportFavorite", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ReportId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportId");
+
+                    b.HasIndex("UserId", "ReportId")
+                        .IsUnique();
+
+                    b.ToTable("ReportFavorites");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SmtpConnection", b =>
                 {
                     b.Property<int>("Id")
@@ -801,6 +826,25 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Navigation("Report");
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.ReportFavorite", b =>
+                {
+                    b.HasOne("ETL_SQL.ReportPortal.Data.Report", "Report")
+                        .WithMany("Favorites")
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ETL_SQL.ReportPortal.Data.PortalUser", "User")
+                        .WithMany("ReportFavorites")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Report");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Subscription", b =>
                 {
                     b.HasOne("ETL_SQL.ReportPortal.Data.Report", "Report")
@@ -915,6 +959,8 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalUser", b =>
                 {
+                    b.Navigation("ReportFavorites");
+
                     b.Navigation("RefreshTokens");
 
                     b.Navigation("Subscriptions");
@@ -925,6 +971,8 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Report", b =>
                 {
                     b.Navigation("DatasetJobs");
+
+                    b.Navigation("Favorites");
 
                     b.Navigation("Snapshots");
 

@@ -52,7 +52,7 @@ public class ReportsController : ControllerBase
         return (FolderPermission)perms.Max(p => (int)p);
     }
 
-    private ReportDto ToDto(Report r, ReportSnapshot? snap)
+    private ReportDto ToDto(Report r, ReportSnapshot? snap, bool isFavorite = false)
     {
         bool isStale = false;
         if (snap is not null
@@ -85,6 +85,7 @@ public class ReportsController : ControllerBase
             r.LastRefreshStatus,
             r.LastRefreshError,
             r.LastRefreshDurationMs,
+            isFavorite,
             isStale,
             scriptChanged);
     }
@@ -102,8 +103,13 @@ public class ReportsController : ControllerBase
             .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
             .Where(r => r.FolderId == folderId && !r.IsDeleted)
             .ToListAsync();
+        var reportIds = reports.Select(r => r.Id).ToList();
+        var favoriteIds = await db.ReportFavorites
+            .Where(f => f.UserId == CurrentUserId && reportIds.Contains(f.ReportId))
+            .Select(f => f.ReportId)
+            .ToHashSetAsync();
 
-        return Ok(reports.Select(r => ToDto(r, r.Snapshots.FirstOrDefault())));
+        return Ok(reports.Select(r => ToDto(r, r.Snapshots.FirstOrDefault(), favoriteIds.Contains(r.Id))));
     }
 
     // ── POST /api/reports ─────────────────────────────────────────────────────
@@ -176,7 +182,8 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null) return Forbid();
 
-        return Ok(ToDto(report, report.Snapshots.FirstOrDefault()));
+        var isFavorite = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
+        return Ok(ToDto(report, report.Snapshots.FirstOrDefault(), isFavorite));
     }
 
     // ── PUT /api/reports/{id} ─────────────────────────────────────────────────
@@ -241,7 +248,45 @@ public class ReportsController : ControllerBase
         await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "UPDATE_REPORT", "Report", id.ToString());
 
-        return Ok(ToDto(report, null));
+        var isFavorite = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
+        return Ok(ToDto(report, null, isFavorite));
+    }
+
+    // ── POST /api/reports/{id}/favorite ──────────────────────────────────────
+
+    [HttpPost("reports/{id:int}/favorite")]
+    public async Task<IActionResult> AddFavorite(int id)
+    {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null) return Forbid();
+
+        var exists = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == id);
+        if (!exists)
+        {
+            db.ReportFavorites.Add(new ReportFavorite { UserId = CurrentUserId, ReportId = id });
+            await db.SaveChangesAsync();
+            await audit.LogAsync(CurrentUserId, "FAVORITE_REPORT", "Report", id.ToString(), report.Name);
+        }
+
+        return NoContent();
+    }
+
+    // ── DELETE /api/reports/{id}/favorite ────────────────────────────────────
+
+    [HttpDelete("reports/{id:int}/favorite")]
+    public async Task<IActionResult> RemoveFavorite(int id)
+    {
+        var favorite = await db.ReportFavorites
+            .FirstOrDefaultAsync(f => f.UserId == CurrentUserId && f.ReportId == id);
+        if (favorite is null) return NoContent();
+
+        db.ReportFavorites.Remove(favorite);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "UNFAVORITE_REPORT", "Report", id.ToString());
+        return NoContent();
     }
 
     // ── GET /api/reports/{id}/parameters ─────────────────────────────────────

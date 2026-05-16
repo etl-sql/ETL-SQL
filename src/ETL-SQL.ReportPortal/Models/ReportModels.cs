@@ -54,5 +54,6 @@ public record ReportDto(
     string? LastRefreshStatus,
     string? LastRefreshError,
     long? LastRefreshDurationMs,
+    bool IsFavorite,
     bool IsStale,
     bool ScriptChanged);

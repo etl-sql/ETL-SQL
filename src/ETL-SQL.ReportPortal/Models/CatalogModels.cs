@@ -18,4 +18,5 @@ public record CatalogSearchResultDto(
     long? LastRefreshDurationMs,
     bool? HasSnapshot,
     bool? IsStale,
-    bool? ScriptChanged);
+    bool? ScriptChanged,
+    bool? IsFavorite);

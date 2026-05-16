@@ -14,6 +14,7 @@
     <span class="topbar-brand"><span class="brand-mark">E</span> ETL-SQL <span>Portal</span></span>
     <nav class="topbar-nav">
       <a href="/index.html" class="active" id="navReports">Reports</a>
+      <a href="#" id="navFavorites">Favorites</a>
       <a href="#" id="navRecent">Recently Viewed</a>
       <a href="#" id="navSubscriptions">My Subscriptions</a>
     </nav>
@@ -237,6 +238,10 @@ async function init() {
     e.preventDefault();
     showRecentlyViewed();
   });
+  document.getElementById('navFavorites').addEventListener('click', e => {
+    e.preventDefault();
+    showFavorites();
+  });
 
   wireSubscribeModal();
   wireEditParamsModal();
@@ -359,6 +364,7 @@ function renderReportList(reports, folderName) {
           <div class="report-card-title-row">
             <span class="report-glyph" aria-hidden="true"></span>
             <h3>${esc(name)}</h3>
+            <button class="favorite-btn ${r.isFavorite ? 'is-active' : ''}" data-favorite-id="${r.id}" title="${r.isFavorite ? 'Remove favorite' : 'Add favorite'}" type="button">${r.isFavorite ? '★' : '☆'}</button>
           </div>
           <p>${esc(description)}</p>
           <div class="report-status-row">
@@ -385,6 +391,7 @@ function renderReportList(reports, folderName) {
         </div>`}`;
 
   wireLibraryToolbar();
+  wireFavoriteButtons($main);
   $main.querySelectorAll('.report-card').forEach(el =>
     el.addEventListener('click', () => openReport(+el.dataset.id)));
 }
@@ -439,7 +446,7 @@ async function showRecentlyViewed() {
 
   try {
     const reports = await catalogApi.recent(30);
-    renderCatalogReportList(reports);
+    renderCatalogReportList('Recently Viewed', reports, 'Open a report snapshot and it will appear here.');
   } catch {
     $main.innerHTML = `
       <div class="empty-state empty-state-panel empty-state-error">
@@ -450,7 +457,27 @@ async function showRecentlyViewed() {
   }
 }
 
-function renderCatalogReportList(reports) {
+async function showFavorites() {
+  document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
+  currentFolderId = null;
+  currentFolderName = 'Favorites';
+  const $main = document.getElementById('mainContent');
+  $main.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading favorite reports…</span></div>`;
+
+  try {
+    const reports = await catalogApi.favorites(50);
+    renderCatalogReportList('Favorites', reports, 'Mark reports as favorites and they will appear here.');
+  } catch {
+    $main.innerHTML = `
+      <div class="empty-state empty-state-panel empty-state-error">
+        <div class="empty-state-icon empty-state-icon-alert" aria-hidden="true"></div>
+        <h2>Favorites did not load</h2>
+        <p>Refresh the page or try again after checking the portal connection.</p>
+      </div>`;
+  }
+}
+
+function renderCatalogReportList(title, reports, emptyText) {
   const $main = document.getElementById('mainContent');
   const rows = reports.map(r => {
     const statusBadge = renderReportStatusBadge(r);
@@ -462,7 +489,10 @@ function renderCatalogReportList(reports) {
       <div class="catalog-report-row" data-id="${r.id}" data-folder-id="${r.folderId}" data-folder-path="${escAttr(folderPath)}">
         <span class="report-glyph" aria-hidden="true"></span>
         <div class="catalog-report-main">
-          <h3>${esc(r.name || '')}</h3>
+          <div class="report-card-title-row">
+            <h3>${esc(r.name || '')}</h3>
+            <button class="favorite-btn ${r.isFavorite ? 'is-active' : ''}" data-favorite-id="${r.id}" title="${r.isFavorite ? 'Remove favorite' : 'Add favorite'}" type="button">${r.isFavorite ? '★' : '☆'}</button>
+          </div>
           <p>${esc(r.description || r.path || 'No description provided.')}</p>
           <div class="report-status-row">
             ${statusBadge}
@@ -482,26 +512,58 @@ function renderCatalogReportList(reports) {
     <div class="library-toolbar">
       <div class="library-title">
         <span class="library-kicker">Catalog</span>
-        <h2>Recently Viewed</h2>
+        <h2>${esc(title)}</h2>
       </div>
       <span class="badge badge-refresh">${reports.length} report${reports.length === 1 ? '' : 's'}</span>
       <div class="library-toolbar-spacer"></div>
-      <button class="btn btn-outline" id="refreshRecentBtn" type="button">Refresh</button>
+      <button class="btn btn-outline" id="refreshCatalogBtn" type="button">Refresh</button>
     </div>
     ${reports.length
       ? `<div class="catalog-report-list">${rows}</div>`
       : `<div class="empty-state empty-state-panel">
           <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
-          <h2>No recently viewed reports</h2>
-          <p>Open a report snapshot and it will appear here.</p>
+          <h2>No ${esc(title.toLowerCase())} reports</h2>
+          <p>${esc(emptyText)}</p>
         </div>`}`;
 
-  document.getElementById('refreshRecentBtn')?.addEventListener('click', () => showRecentlyViewed());
+  document.getElementById('refreshCatalogBtn')?.addEventListener('click', () =>
+    title === 'Favorites' ? showFavorites() : showRecentlyViewed());
+  wireFavoriteButtons($main, () => title === 'Favorites' ? showFavorites() : showRecentlyViewed());
   $main.querySelectorAll('.catalog-report-row').forEach(el => {
     el.addEventListener('click', () => {
       currentFolderId = +el.dataset.folderId;
       currentFolderName = el.dataset.folderPath || 'Reports';
       openReport(+el.dataset.id);
+    });
+  });
+}
+
+function wireFavoriteButtons(root, onChanged = null) {
+  root.querySelectorAll('[data-favorite-id]').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = +btn.dataset.favoriteId;
+      const isActive = btn.classList.contains('is-active');
+      btn.disabled = true;
+      try {
+        if (isActive) {
+          await reportsApi.unfavorite(id);
+          btn.classList.remove('is-active');
+          btn.textContent = '☆';
+          btn.title = 'Add favorite';
+        } else {
+          await reportsApi.favorite(id);
+          btn.classList.add('is-active');
+          btn.textContent = '★';
+          btn.title = 'Remove favorite';
+        }
+        onChanged?.();
+      } catch (err) {
+        alert(err.message || 'Favorite update failed.');
+      } finally {
+        btn.disabled = false;
+      }
     });
   });
 }

@@ -459,6 +459,22 @@ CREATE VISUAL Total AS CARD (
         Assert.Equal("Executable Report", recentHit["name"]!.GetValue<string>());
         Assert.True(recentHit["hasSnapshot"]!.GetValue<bool>());
         Assert.False(recentHit["isStale"]!.GetValue<bool>());
+
+        var favoriteRes = await AuthPost(token, $"/api/reports/{reportId}/favorite", new { });
+        Assert.Equal(HttpStatusCode.NoContent, favoriteRes.StatusCode);
+        var favoriteReportRes = await AuthGet(token, $"/api/reports/{reportId}");
+        Assert.Equal(HttpStatusCode.OK, favoriteReportRes.StatusCode);
+        var favoriteReport = await favoriteReportRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.True(favoriteReport!["isFavorite"]!.GetValue<bool>());
+
+        var favoritesRes = await AuthGet(token, "/api/catalog/favorites?limit=5");
+        Assert.Equal(HttpStatusCode.OK, favoritesRes.StatusCode);
+        var favorites = await favoritesRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        var favoriteHit = favorites!.Single(r => r!["id"]!.GetValue<int>() == reportId)!.AsObject();
+        Assert.True(favoriteHit["isFavorite"]!.GetValue<bool>());
+
+        var unfavoriteRes = await AuthDelete(token, $"/api/reports/{reportId}/favorite");
+        Assert.Equal(HttpStatusCode.NoContent, unfavoriteRes.StatusCode);
     }
 
     [Fact]

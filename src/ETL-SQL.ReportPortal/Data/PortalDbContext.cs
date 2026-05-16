@@ -22,6 +22,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<RefreshToken>   RefreshTokens   => Set<RefreshToken>();
     public DbSet<Dataset>        Datasets        => Set<Dataset>();
     public DbSet<DatasetAcl>     DatasetAcls     => Set<DatasetAcl>();
+    public DbSet<ReportFavorite> ReportFavorites => Set<ReportFavorite>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -56,6 +57,13 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<RefreshToken>(e =>
         {
             e.HasOne(x => x.User).WithMany(u => u.RefreshTokens).HasForeignKey(x => x.UserId);
+        });
+
+        builder.Entity<ReportFavorite>(e =>
+        {
+            e.HasIndex(x => new { x.UserId, x.ReportId }).IsUnique();
+            e.HasOne(x => x.User).WithMany(u => u.ReportFavorites).HasForeignKey(x => x.UserId);
+            e.HasOne(x => x.Report).WithMany(r => r.Favorites).HasForeignKey(x => x.ReportId);
         });
 
         builder.Entity<SmtpConnection>(e =>

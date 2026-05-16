@@ -40,15 +40,16 @@ public class CatalogController(PortalDbContext db) : ControllerBase
             .OrderBy(r => r.Folder.Path)
             .ThenBy(r => r.Name)
             .ToListAsync();
+        var favoriteIds = await GetFavoriteReportIdsAsync();
 
         var results = folders
             .Where(f => Matches(q, f.Name, f.Path))
             .Select(f => new CatalogSearchResultDto(
                 "Folder", f.Id, f.Name, f.Path, f.Id, null, null, null, null, null,
-                null, null, null, null, null, null, null, null))
+                null, null, null, null, null, null, null, null, null))
             .Concat(reports
                 .Where(r => Matches(q, r.Name, r.Description, r.Folder.Path, r.Tags, r.Category, r.Owner, r.Contact, r.Domain, r.Steward, r.Certification))
-                .Select(ToCatalogResult))
+                .Select(r => ToCatalogResult(r, favoriteIds)))
             .Take(limit)
             .ToList();
 
@@ -69,8 +70,28 @@ public class CatalogController(PortalDbContext db) : ControllerBase
             .ThenBy(r => r.Name)
             .Take(limit)
             .ToListAsync();
+        var favoriteIds = await GetFavoriteReportIdsAsync();
 
-        return Ok(reports.Select(ToCatalogResult).ToList());
+        return Ok(reports.Select(r => ToCatalogResult(r, favoriteIds)).ToList());
+    }
+
+    [HttpGet("favorites")]
+    public async Task<IActionResult> Favorites([FromQuery] int limit = 50)
+    {
+        limit = Math.Clamp(limit, 1, 100);
+        var visibleFolderIds = await GetVisibleFolderIdsAsync();
+
+        var reports = await db.ReportFavorites
+            .Include(f => f.Report).ThenInclude(r => r.Folder)
+            .Include(f => f.Report).ThenInclude(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
+            .Where(f => f.UserId == CurrentUserId && !f.Report.IsDeleted && visibleFolderIds.Contains(f.Report.FolderId))
+            .OrderByDescending(f => f.CreatedAt)
+            .Take(limit)
+            .Select(f => f.Report)
+            .ToListAsync();
+
+        var favoriteIds = reports.Select(r => r.Id).ToHashSet();
+        return Ok(reports.Select(r => ToCatalogResult(r, favoriteIds)).ToList());
     }
 
     private async Task<HashSet<int>> GetVisibleFolderIdsAsync()
@@ -95,7 +116,13 @@ public class CatalogController(PortalDbContext db) : ControllerBase
     private static string CombinePath(string folderPath, string reportName) =>
         folderPath.EndsWith('/') ? folderPath + reportName : $"{folderPath}/{reportName}";
 
-    private static CatalogSearchResultDto ToCatalogResult(Report r)
+    private async Task<HashSet<int>> GetFavoriteReportIdsAsync() =>
+        await db.ReportFavorites
+            .Where(f => f.UserId == CurrentUserId)
+            .Select(f => f.ReportId)
+            .ToHashSetAsync();
+
+    private static CatalogSearchResultDto ToCatalogResult(Report r, ISet<int> favoriteIds)
     {
         var snapshot = r.Snapshots.OrderByDescending(s => s.BuiltAt).FirstOrDefault();
         var isStale = snapshot is not null
@@ -128,6 +155,7 @@ public class CatalogController(PortalDbContext db) : ControllerBase
             r.LastRefreshDurationMs,
             snapshot is not null,
             isStale,
-            scriptChanged);
+            scriptChanged,
+            favoriteIds.Contains(r.Id));
     }
 }
