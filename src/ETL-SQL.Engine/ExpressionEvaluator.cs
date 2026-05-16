@@ -338,8 +338,18 @@ namespace ETL_SQL.Engine
                 TrimExpression trim => await EvaluateTrim(trim, context, decryptSensitive),
                 FunctionCallExpression f => await EvaluateFunction(f, context, decryptSensitive),
                 SubqueryExpression subq => await EvaluateSubquery(subq, context),
+                UnaryExpression un => await EvaluateUnary(un, context, decryptSensitive),
                 _ => null
             };
+        }
+
+        private async ValueTask<object?> EvaluateUnary(UnaryExpression un, Row context, bool decryptSensitive)
+        {
+            if (un.Operator != TokenType.NOT) return null;
+            var inner = await EvaluateInternal(un.Expression, context, decryptSensitive);
+            if (inner == null || inner == DBNull.Value) return null;
+            if (inner is bool b) return (object?)!b;
+            try { return (object?)!Convert.ToBoolean(inner); } catch { return null; }
         }
 
         /// <summary>Evaluates an IN expression (list or subquery).</summary>
@@ -910,12 +920,13 @@ namespace ETL_SQL.Engine
 
             return bin.Operator switch
             {
-                TokenType.EQUALS => (!leftVal.IsNull() && !rightVal.IsNull()) && IsSoftEqual(leftVal, rightVal),
-                TokenType.NOT_EQUALS => (!leftVal.IsNull() && !rightVal.IsNull()) && !IsSoftEqual(leftVal, rightVal),
-                TokenType.GREATER_THAN => (!leftVal.IsNull() && !rightVal.IsNull()) && CompareConstants(leftVal, rightVal) > 0,
-                TokenType.LESS_THAN => (!leftVal.IsNull() && !rightVal.IsNull()) && CompareConstants(leftVal, rightVal) < 0,
-                TokenType.GREATER_EQUALS => (!leftVal.IsNull() && !rightVal.IsNull()) && CompareConstants(leftVal, rightVal) >= 0,
-                TokenType.LESS_EQUALS => (!leftVal.IsNull() && !rightVal.IsNull()) && CompareConstants(leftVal, rightVal) <= 0,
+                // SQL 3VL: comparison with NULL operand yields NULL (UNKNOWN), not false.
+                TokenType.EQUALS => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)IsSoftEqual(leftVal, rightVal),
+                TokenType.NOT_EQUALS => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)!IsSoftEqual(leftVal, rightVal),
+                TokenType.GREATER_THAN => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)(CompareConstants(leftVal, rightVal) > 0),
+                TokenType.LESS_THAN => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)(CompareConstants(leftVal, rightVal) < 0),
+                TokenType.GREATER_EQUALS => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)(CompareConstants(leftVal, rightVal) >= 0),
+                TokenType.LESS_EQUALS => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)(CompareConstants(leftVal, rightVal) <= 0),
                 TokenType.LIKE => EvaluateLike(leftVal, rightVal),
                 _ => IsSoftEqual(leftVal, rightVal)
             };

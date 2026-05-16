@@ -24,10 +24,11 @@ namespace ETL_SQL.Tests.Engine
             var sql = "SELECT * FROM local_table WHERE col = outer_table.id";
             var stmt = Parse(sql);
             var refs = _analyzer.GetOuterReferences(stmt);
-            
+
+            // Only qualified identifiers (table.column form) with non-local qualifiers are outer refs.
+            // Unqualified identifiers resolve against the current row and are never treated as outer refs.
             Assert.Contains("outer_table.id", refs);
-            Assert.Contains("col", refs); // col is unqualified and not a local table name, so it is treated as a potential outer ref
-            Assert.Equal(2, refs.Count);
+            Assert.Single(refs);
         }
 
         [Fact]
@@ -36,35 +37,33 @@ namespace ETL_SQL.Tests.Engine
             var sql = "SELECT * FROM local_table AS l WHERE col = l.id";
             var stmt = Parse(sql);
             var refs = _analyzer.GetOuterReferences(stmt);
-            
-            // l.id is ignored because l is a local table alias
-            // col is detected as potential outer ref
-            Assert.Contains("col", refs);
-            Assert.Single(refs);
+
+            // l.id is ignored because l is a local table alias.
+            // Unqualified col is not an outer ref.
+            Assert.Empty(refs);
         }
 
         [Fact]
         public void DetectsUnqualifiedOuterReference()
         {
-            // Statically, if it's not a local table alias, we treat it as a potential outer ref.
+            // Unqualified identifiers cannot be statically classified as outer refs —
+            // they resolve against the current row at runtime, never the outer row stack.
             var sql = "SELECT * FROM local_table WHERE col = outer_col";
             var stmt = Parse(sql);
             var refs = _analyzer.GetOuterReferences(stmt);
-            
-            Assert.Contains("outer_col", refs);
-            Assert.Contains("col", refs);
-            Assert.Equal(2, refs.Count);
+
+            Assert.Empty(refs);
         }
-        
+
         [Fact]
         public void DetectsCorrelationInJoins()
         {
             var sql = "SELECT * FROM local_table JOIN other_local ON local_table.id = other_local.id WHERE other_local.val = outer_table.val";
             var stmt = Parse(sql);
             var refs = _analyzer.GetOuterReferences(stmt);
-            
+
             Assert.Contains("outer_table.val", refs);
-            // We don't care about local_table.id or other_local.id because they are qualified with local aliases
+            // local_table.id and other_local.id are qualified with local aliases — not outer refs
             Assert.Single(refs);
         }
 
@@ -74,11 +73,9 @@ namespace ETL_SQL.Tests.Engine
             var sql = "SELECT col FROM t WHERE y > o_y";
             var stmt = Parse(sql);
             var refs = _analyzer.GetOuterReferences(stmt);
-            
-            Assert.Contains("col", refs);
-            Assert.Contains("y", refs);
-            Assert.Contains("o_y", refs);
-            Assert.Equal(3, refs.Count);
+
+            // All identifiers here are unqualified — none are outer refs
+            Assert.Empty(refs);
         }
     }
 }

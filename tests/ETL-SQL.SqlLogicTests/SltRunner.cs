@@ -29,7 +29,6 @@ namespace ETL_SQL.SqlLogicTests
     {
         private readonly ILogger _logger;
         private readonly Evaluator _evaluator;
-        public DataTable? LastResult => _evaluator.LastResult;
         private int _queryCount;
 
         public SltRunner(ILogger? logger = null)
@@ -55,11 +54,6 @@ SET TELEMETRY = OFF;";
         private const string OurEngineName = "etlsql";
 
         public string? CurrentFile { get; set; }
-
-        public async Task RunStatementDirectly(ETL_SQL.Core.Script script)
-        {
-            await _evaluator.Evaluate(script);
-        }
 
         public async Task RunTestAsync(SltRecord record)
         {
