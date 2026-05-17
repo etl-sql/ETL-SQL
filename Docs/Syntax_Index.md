@@ -1,4 +1,4 @@
-# ETL-SQL Syntax Index
+﻿# ETL-SQL Syntax Index
 
 This document provides a comprehensive index of every keyword, command, function, and configuration option available in the ETL-SQL language. Use this as a central map to find definitions, examples, and help documentation.
 
@@ -10,54 +10,54 @@ Statements are the top-level actions in an ETL-SQL script.
 
 | Command | Category | Documentation | Help File |
 | :--- | :--- | :--- | :--- |
-| `SELECT` | DML / Query | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L339) | [SELECT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT.md) |
-| `INSERT` | DML | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [INSERT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/INSERT.md) |
-| `UPDATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [UPDATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/UPDATE.md) |
-| `DELETE` | DML | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [DELETE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
-| `MERGE` | DML | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [MERGE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/MERGE.md) |
-| `TRUNCATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [TRUNCATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRUNCATE.md) |
-| `CREATE CONNECTION` | DDL / Conn | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L513) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `ALTER CONNECTION` | DDL / Conn | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L655) | [ALTER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/ALTER.md) |
-| `DROP CONNECTION` | DDL / Conn | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L667) | [DROP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
-| `CREATE TABLE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `ALTER TABLE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [ALTER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/ALTER.md) |
-| `DROP TABLE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [DROP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
-| `DECLARE` | Variables | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L11) | [DECLARE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DECLARE.md) |
-| `SET @var` | Variables | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L263) | [SET.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SET.md) |
-| `IF / ELSE` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L709) | [IF.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/IF.md) |
-| `WHILE` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L726) | [WHILE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WHILE.md) |
-| `FOR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L739) | [FOR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/FOR.md) |
-| `FOREACH` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L766) | [FOREACH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/FOREACH.md) |
-| `TRY / CATCH` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [TRY.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRY.md) |
-| `WAITFOR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [WAITFOR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WAITFOR.md) |
-| `BREAK` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L796) | [BREAK.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/BREAK.md) |
-| `CONTINUE` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L796) | [CONTINUE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CONTINUE.md) |
-| `RETURN` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L796) | [RETURN.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RETURN.md) |
-| `THROW` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [THROW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/THROW.md) |
-| `BEGIN TRANSACTION` | Session | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [TRANSACTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
-| `COMMIT` | Session | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [TRANSACTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
-| `ROLLBACK` | Session | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [TRANSACTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
-| `PRINT` | IO | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [PRINT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PRINT.md) |
-| `EXECUTE` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [EXECUTE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/EXECUTE.md) |
-| `RUN SCRIPT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L302) | [RUN.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RUN.md) |
-| `PARALLEL` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [PARALLEL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PARALLEL.md) |
-| `GO` | Scripting | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [GO.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/GO.md) |
-| `ASSERT` | Validation | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [ASSERT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/ASSERT.md) |
-| `EXPECT SCHEMA` | Validation | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | - |
-| `LINT` | Validation | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [LINT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/LINT.md) |
-| `EXPLAIN` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | - |
-| `SHOW PROFILE` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L408) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
-| `SHOW VARIABLES` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L375) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
-| `SHOW LOCAL VARIABLES`| Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L375) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
-| `SHOW CONNECTION` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L674) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
-| `SHOW CONNECTIONS` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L674) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
-| `CLEAR SESSION` | Session | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L335) | [CLEAR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CLEAR.md) |
-| `USE PASSWORD` | Session / Security | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L327) | [USE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
-| `USE SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L345) | [USE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
-| `CREATE SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L345) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `DROP SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L345) | [DROP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
-| `REQUIRE VERSION` | Session | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L366) | [REQUIRE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/REQUIRE.md) |
-| `BULK INSERT` | File IO | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [BULK.INSERT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/BULK.INSERT.md) |
+| `SELECT` | DML / Query | [Grammar.md](../Docs/Reference/Grammar.md) | [SELECT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT.md) |
+| `INSERT` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [INSERT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/INSERT.md) |
+| `UPDATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [UPDATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/UPDATE.md) |
+| `DELETE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [DELETE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
+| `MERGE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [MERGE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/MERGE.md) |
+| `TRUNCATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [TRUNCATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRUNCATE.md) |
+| `CREATE CONNECTION` | DDL / Conn | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `ALTER CONNECTION` | DDL / Conn | [Grammar.md](../Docs/Reference/Grammar.md) | [ALTER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/ALTER.md) |
+| `DROP CONNECTION` | DDL / Conn | [Grammar.md](../Docs/Reference/Grammar.md) | [DROP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
+| `CREATE TABLE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `ALTER TABLE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [ALTER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/ALTER.md) |
+| `DROP TABLE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [DROP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
+| `DECLARE` | Variables | [Grammar.md](../Docs/Reference/Grammar.md) | [DECLARE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DECLARE.md) |
+| `SET @var` | Variables | [Grammar.md](../Docs/Reference/Grammar.md) | [SET.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SET.md) |
+| `IF / ELSE` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [IF.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/IF.md) |
+| `WHILE` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [WHILE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WHILE.md) |
+| `FOR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [FOR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/FOR.md) |
+| `FOREACH` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [FOREACH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/FOREACH.md) |
+| `TRY / CATCH` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [TRY.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRY.md) |
+| `WAITFOR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [WAITFOR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WAITFOR.md) |
+| `BREAK` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [BREAK.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/BREAK.md) |
+| `CONTINUE` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [CONTINUE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CONTINUE.md) |
+| `RETURN` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [RETURN.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RETURN.md) |
+| `THROW` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [THROW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/THROW.md) |
+| `BEGIN TRANSACTION` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [TRANSACTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
+| `COMMIT` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [TRANSACTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
+| `ROLLBACK` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [TRANSACTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
+| `PRINT` | IO | [Grammar.md](../Docs/Reference/Grammar.md) | [PRINT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PRINT.md) |
+| `EXECUTE` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [EXECUTE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/EXECUTE.md) |
+| `RUN SCRIPT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [RUN.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RUN.md) |
+| `PARALLEL` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [PARALLEL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PARALLEL.md) |
+| `GO` | Scripting | [Grammar.md](../Docs/Reference/Grammar.md) | [GO.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/GO.md) |
+| `ASSERT` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | [ASSERT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/ASSERT.md) |
+| `EXPECT SCHEMA` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `LINT` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | [LINT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/LINT.md) |
+| `EXPLAIN` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `SHOW PROFILE` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `SHOW VARIABLES` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `SHOW LOCAL VARIABLES`| Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `SHOW CONNECTION` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `SHOW CONNECTIONS` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `CLEAR SESSION` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [CLEAR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CLEAR.md) |
+| `USE PASSWORD` | Session / Security | [Grammar.md](../Docs/Reference/Grammar.md) | [USE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
+| `USE SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [USE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
+| `CREATE SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `DROP SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [DROP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
+| `REQUIRE VERSION` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [REQUIRE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/REQUIRE.md) |
+| `BULK INSERT` | File IO | [Grammar.md](../Docs/Reference/Grammar.md) | [BULK.INSERT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/BULK.INSERT.md) |
 | `COPY FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [COPY.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/COPY.md) |
 | `MOVE FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [MOVE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/MOVE.md) |
 | `DELETE FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DELETE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
@@ -66,23 +66,23 @@ Statements are the top-level actions in an ETL-SQL script.
 | `RECEIVE FILE` | File IO / Conn | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [RECEIVE/FILE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/RECEIVE/FILE.md) |
 | `SEND EMAIL` | Notifications | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [SEND/EMAIL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/SEND/EMAIL.md) |
 | `DOCKER` | Containers | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DOCKER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
-| `CREATE JOB` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [SCHEDULE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SCHEDULE.md) |
-| `KILL JOB` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | - |
-| `CREATE INDEX` | DDL | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `CREATE PROCEDURE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `CREATE FUNCTION` | DDL | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `GENERATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [GENERATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/GENERATE.md) |
-| `CASE` | Expressions | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [CASE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CASE.md) |
-| `WITH` | CTE | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [WITH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
-| `WITH RECURSIVE` | CTE | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [WITH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
-| `PIVOT` / `UNPIVOT` | DML / Transform | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [PIVOT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
+| `CREATE JOB` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [SCHEDULE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SCHEDULE.md) |
+| `KILL JOB` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `CREATE INDEX` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `CREATE PROCEDURE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `CREATE FUNCTION` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `GENERATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [GENERATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/GENERATE.md) |
+| `CASE` | Expressions | [Grammar.md](../Docs/Reference/Grammar.md) | [CASE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CASE.md) |
+| `WITH` | CTE | [Grammar.md](../Docs/Reference/Grammar.md) | [WITH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
+| `WITH RECURSIVE` | CTE | [Grammar.md](../Docs/Reference/Grammar.md) | [WITH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
+| `PIVOT` / `UNPIVOT` | DML / Transform | [Grammar.md](../Docs/Reference/Grammar.md) | [PIVOT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
 | `MATCH_RECOGNIZE` | DML / Pattern Matching | [Grammar.md](../Docs/Reference/Grammar.md#59-match_recognize) | - |
-| `EXPORT REPORT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [EXPORT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/EXPORT.md) |
-| `SUBSCRIPTION` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [SUBSCRIPTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SUBSCRIPTION.md) |
-| `RELDATE` | Variables | [RelativeDate_Parameters.md](../Docs/Reference/RelativeDate_Parameters.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/RelativeDate_Parameters.md) | [RELDATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RELDATE.md) |
-| `RAISEERROR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | - |
-| `HELP` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | - |
-| `ANALYZE` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | - |
+| `EXPORT REPORT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [EXPORT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/EXPORT.md) |
+| `SUBSCRIPTION` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [SUBSCRIPTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SUBSCRIPTION.md) |
+| `RELDATE` | Variables | [RelativeDate_Parameters.md](../Docs/Reference/RelativeDate_Parameters.md) | [RELDATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RELDATE.md) |
+| `RAISEERROR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `HELP` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `ANALYZE` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `RENAME FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [RENAME.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RENAME.md) |
 | `COMPRESS FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [COMPRESS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/COMPRESS.md) |
 | `DECOMPRESS FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DECOMPRESS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DECOMPRESS.md) |
@@ -955,16 +955,16 @@ Standard clauses available within a `SELECT` statement.
 | `HAVING` | Filters aggregated groups | [Grammar.md](../Docs/Reference/Grammar.md) |
 | `ORDER BY` | Sorts the final result set | [Grammar.md](../Docs/Reference/Grammar.md) |
 | `ASC` / `DESC` | Sorting direction | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `ROLLUP` | Grouping set extension for hierarchies | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
-| `CUBE` | Grouping set extension for all permutations| [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
-| `GROUPING SETS` | Explicit grouping set list | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
-| `QUALIFY` | Filters results of window functions | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
-| `FILTER (WHERE ...)` | Per-aggregate conditional filter | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
+| `ROLLUP` | Grouping set extension for hierarchies | [Grammar.md](../Docs/Reference/Grammar.md) |
+| `CUBE` | Grouping set extension for all permutations| [Grammar.md](../Docs/Reference/Grammar.md) |
+| `GROUPING SETS` | Explicit grouping set list | [Grammar.md](../Docs/Reference/Grammar.md) |
+| `QUALIFY` | Filters results of window functions | [Grammar.md](../Docs/Reference/Grammar.md) |
+| `FILTER (WHERE ...)` | Per-aggregate conditional filter | [Grammar.md](../Docs/Reference/Grammar.md) |
 | `ILIKE` | Case-insensitive pattern match | [Grammar.md](../Docs/Reference/Grammar.md) |
 | `~` / `~*` | Regex match / case-insensitive regex match | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `OUTPUT` | Returns modified rows (DML only) | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
-| `FOR JSON` | Formats output as JSON (PATH/AUTO/RAW) | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
-| `FOR XML` | Formats output as XML (PATH/AUTO/RAW) | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
+| `OUTPUT` | Returns modified rows (DML only) | [Grammar.md](../Docs/Reference/Grammar.md) |
+| `FOR JSON` | Formats output as JSON (PATH/AUTO/RAW) | [Grammar.md](../Docs/Reference/Grammar.md) |
+| `FOR XML` | Formats output as XML (PATH/AUTO/RAW) | [Grammar.md](../Docs/Reference/Grammar.md) |
 | `CASE` | Start of conditional expression | [Grammar.md](../Docs/Reference/Grammar.md) |
 | `WHEN / THEN` | Conditional branch | [Grammar.md](../Docs/Reference/Grammar.md) |
 | `ELSE / END` | Fallback and termination of CASE | [Grammar.md](../Docs/Reference/Grammar.md) |
@@ -993,6 +993,7 @@ Annotations used for lineage, security, and script behavior.
 | `@tag: val;` | Script Header | Script-level metadata (e.g. `@author: dev`) |
 | `ENC:...` | Literal | Prefix for engine-encrypted strings |
 | `BANG` / `!` | Session | Prefix for named Environment Sets (e.g. `!PROD`) |
+
 
 
 
