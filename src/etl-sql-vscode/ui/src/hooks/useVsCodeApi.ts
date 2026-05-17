@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useCallback, useMemo, useReducer, useState } from 'react';
 import type { ProtocolMessage } from '../types';
 import { mockTrace } from '../mock_protocol';
 declare global {
@@ -9,21 +9,44 @@ declare global {
     }
 }
 
+type MsgState = { messages: ProtocolMessage[]; runHistory: ProtocolMessage[][] };
+type MsgAction =
+    | { type: 'append'; message: ProtocolMessage }
+    | { type: 'clear' }
+    | { type: 'reset' };
+
+function msgReducer(state: MsgState, action: MsgAction): MsgState {
+    switch (action.type) {
+        case 'append':
+            return { ...state, messages: [...state.messages, action.message] };
+        case 'clear':
+            return {
+                messages: [],
+                runHistory: state.messages.length > 0
+                    ? [...state.runHistory, state.messages]
+                    : state.runHistory,
+            };
+        case 'reset':
+            return { messages: [], runHistory: state.runHistory };
+    }
+}
+
 /**
  * Hook to handle communication with VS Code webview or use mock data in dev mode.
  */
 export function useVsCodeApi() {
-    const [messages, setMessages] = useState<ProtocolMessage[]>(() => {
-        if (typeof window !== 'undefined' && window.__INITIAL_STATE__?.messages) {
-            return window.__INITIAL_STATE__.messages;
-        }
-        return [];
+    const [{ messages, runHistory }, dispatch] = useReducer(msgReducer, {
+        messages: (() => {
+            if (typeof window !== 'undefined' && window.__INITIAL_STATE__?.messages) {
+                return window.__INITIAL_STATE__.messages;
+            }
+            return [];
+        })(),
+        runHistory: [],
     });
-    const [runHistory, setRunHistory] = useState<ProtocolMessage[][]>([]);
-    const messagesRef = useRef<ProtocolMessage[]>([]);
     const [status, setStatus] = useState<'ready' | 'running' | 'finished' | 'error'>('ready');
     const [isDev] = useState(import.meta.env.DEV);
-    
+
     // acquireVsCodeApi can only be called once
     const vscode = useMemo(() => {
         if (typeof acquireVsCodeApi !== 'undefined') {
@@ -31,11 +54,6 @@ export function useVsCodeApi() {
         }
         return null;
     }, []);
-
-    // Keep ref in sync so the clear handler can snapshot current messages
-    useEffect(() => {
-        messagesRef.current = messages;
-    }, [messages]);
 
     const postMessage = useCallback((message: any) => {
         if (vscode) {
@@ -59,10 +77,10 @@ export function useVsCodeApi() {
 
             if (view === 'sidebar') {
                 // For sidebar, send metadata immediately
-                const metaMessages = mockTrace.filter(m => 
+                const metaMessages = mockTrace.filter(m =>
                     ['connections', 'scriptConnections', 'variables', 'activeEditorChanged'].includes(m.type)
                 );
-                setMessages(metaMessages);
+                metaMessages.forEach(m => dispatch({ type: 'append', message: m }));
                 setStatus('ready');
                 return;
             }
@@ -71,8 +89,7 @@ export function useVsCodeApi() {
             let index = 0;
             const interval = setInterval(() => {
                 if (index < mockTrace.length) {
-                    const msg = mockTrace[index];
-                    setMessages(prev => [...prev, msg]);
+                    dispatch({ type: 'append', message: mockTrace[index] });
                     index++;
                 } else {
                     setStatus('finished');
@@ -84,17 +101,14 @@ export function useVsCodeApi() {
             const handler = (event: MessageEvent) => {
                 const message = event.data as ProtocolMessage;
                 if (message.type === 'clear') {
-                    if (messagesRef.current.length > 0) {
-                        setRunHistory(h => [...h, messagesRef.current]);
-                    }
-                    setMessages([]);
+                    dispatch({ type: 'clear' });
                     setStatus('ready');
                 } else if (message.type === 'status') {
                     setStatus(message.status);
                 } else if (message.type === 'done') {
                     setStatus(message.exitCode === 0 ? 'finished' : 'error');
                 } else {
-                    setMessages(prev => [...prev, message]);
+                    dispatch({ type: 'append', message });
                 }
             };
             window.addEventListener('message', handler);
@@ -103,12 +117,9 @@ export function useVsCodeApi() {
     }, [isDev]);
 
     const rerun = useCallback(() => {
-        if (isDev) {
-            setMessages([]);
-            setStatus('running');
-        } else {
-            setMessages([]);
-            setStatus('running');
+        dispatch({ type: 'reset' });
+        setStatus('running');
+        if (!isDev) {
             postMessage({ type: 'ready' });
         }
     }, [isDev, postMessage]);
