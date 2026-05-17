@@ -48,6 +48,7 @@ export interface PerformanceMessage {
 export interface ClearMessage {
     type: 'clear';
     resetHistory?: boolean;
+    scriptUri?: string;
 }
 
 export interface StatusMessage {

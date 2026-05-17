@@ -9,28 +9,32 @@ declare global {
     }
 }
 
-type MsgState = { messages: ProtocolMessage[]; runHistory: ProtocolMessage[][] };
+type MsgState = { messages: ProtocolMessage[]; runHistory: ProtocolMessage[][]; scriptUri?: string };
 type MsgAction =
     | { type: 'append'; message: ProtocolMessage }
-    | { type: 'clear'; resetHistory?: boolean }
+    | { type: 'clear'; resetHistory?: boolean; scriptUri?: string }
     | { type: 'reset' };
 
 function msgReducer(state: MsgState, action: MsgAction): MsgState {
     switch (action.type) {
         case 'append':
             return { ...state, messages: [...state.messages, action.message] };
-        case 'clear':
+        case 'clear': {
             if (action.resetHistory) {
-                return { messages: [], runHistory: [] };
+                return { messages: [], runHistory: [], scriptUri: state.scriptUri };
             }
+            // If the executing script changed, discard history from the old script.
+            const scriptChanged = action.scriptUri !== undefined && action.scriptUri !== state.scriptUri;
             return {
                 messages: [],
-                runHistory: state.messages.length > 0
+                scriptUri: action.scriptUri ?? state.scriptUri,
+                runHistory: (!scriptChanged && state.messages.length > 0)
                     ? [...state.runHistory, state.messages]
-                    : state.runHistory,
+                    : [],
             };
+        }
         case 'reset':
-            return { messages: [], runHistory: state.runHistory };
+            return { messages: [], runHistory: state.runHistory, scriptUri: state.scriptUri };
     }
 }
 
@@ -104,7 +108,7 @@ export function useVsCodeApi() {
             const handler = (event: MessageEvent) => {
                 const message = event.data as ProtocolMessage;
                 if (message.type === 'clear') {
-                    dispatch({ type: 'clear', resetHistory: message.resetHistory });
+                    dispatch({ type: 'clear', resetHistory: message.resetHistory, scriptUri: message.scriptUri });
                     setStatus('ready');
                 } else if (message.type === 'status') {
                     setStatus(message.status);

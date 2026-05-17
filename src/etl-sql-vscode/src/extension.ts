@@ -513,7 +513,7 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     }
 
     if (runMethod === 'Webview (Grid)') {
-        ResultsPanel.postMessage({ type: 'clear' });
+        ResultsPanel.postMessage({ type: 'clear', scriptUri: document.uri.toString() });
         ResultsPanel.postMessage({ type: 'status', status: 'running' });
         connectionsProvider.clearVariables();
         sidebarProvider.postMessage({ type: 'variables', variables: [] });
