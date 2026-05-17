@@ -66,20 +66,22 @@ Statements are the top-level actions in an ETL-SQL script.
 | `RECEIVE FILE` | File IO / Conn | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [RECEIVE/FILE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/RECEIVE/FILE.md) |
 | `SEND EMAIL` | Notifications | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [SEND/EMAIL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/SEND/EMAIL.md) |
 | `DOCKER` | Containers | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DOCKER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
-| `CREATE JOB` | Orchestration | [Grammar.md] | [SCHEDULE.md] |
-| `KILL JOB` | Orchestration | [Grammar.md] | - |
-| `CREATE INDEX` | DDL | [Grammar.md] | [CREATE.md] |
-| `CREATE PROCEDURE` | DDL | [Grammar.md] | [CREATE.md] |
-| `CREATE FUNCTION` | DDL | [Grammar.md] | [CREATE.md] |
-| `GENERATE` | DML | [Grammar.md] | [GENERATE.md] |
-| `WITH` | CTE | [Grammar.md] | - |
-| `WITH RECURSIVE` | CTE | [Grammar.md] | - |
-| `PIVOT` / `UNPIVOT` | DML / Transform | [Grammar.md] | - |
-| `EXPORT REPORT` | Orchestration | [Grammar.md] | - |
-| `RAISEERROR` | Flow Control | [Grammar.md] | - |
-| `HELP` | Diagnostics | [Grammar.md] | - |
-| `EXPLAIN` | Diagnostics | [Grammar.md] | - |
-| `ANALYZE` | Diagnostics | [Grammar.md] | - |
+| `CREATE JOB` | Orchestration | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [SCHEDULE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SCHEDULE.md) |
+| `KILL JOB` | Orchestration | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | - |
+| `CREATE INDEX` | DDL | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `CREATE PROCEDURE` | DDL | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `CREATE FUNCTION` | DDL | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `GENERATE` | DML | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [GENERATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/GENERATE.md) |
+| `CASE` | Expressions | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [CASE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CASE.md) |
+| `WITH` | CTE | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [WITH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
+| `WITH RECURSIVE` | CTE | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [WITH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
+| `PIVOT` / `UNPIVOT` | DML / Transform | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [PIVOT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
+| `EXPORT REPORT` | Orchestration | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [EXPORT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/EXPORT.md) |
+| `SUBSCRIPTION` | Orchestration | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [SUBSCRIPTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SUBSCRIPTION.md) |
+| `RELDATE` | Variables | [RelativeDate_Parameters.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/RelativeDate_Parameters.md) | [RELDATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RELDATE.md) |
+| `RAISEERROR` | Flow Control | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | - |
+| `HELP` | Diagnostics | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | - |
+| `ANALYZE` | Diagnostics | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | - |
 | `RENAME FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [RENAME.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RENAME.md) |
 | `COMPRESS FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [COMPRESS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/COMPRESS.md) |
 | `DECOMPRESS FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DECOMPRESS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DECOMPRESS.md) |
@@ -129,8 +131,11 @@ Connectors define how to communicate with external data sources.
 | `DIRECTORY` | Service | [DIRECTORY.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/DIRECTORY.md) | PATH, RECURSIVE, ... |
 | `MOCKDB` | Testing | [MOCKDB.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/MOCKDB.md) | - |
 
-### 3.1 File based table name
-FILE - Default name of the "table" for any file based connections
+### 2.1 File-Based Table Alias
+`FILE` is the default table name used when querying any file-based connection (e.g. `SELECT * FROM src` where `src` is a FLATFILE connection).
+
+### 2.2 Connector Aliases
+`CSV` is an accepted alias for `FLATFILE` in `CREATE CONNECTION` statements.
 
 ---
 
@@ -297,22 +302,40 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `SIGN(n)` | Math | [SIGN.md] | Returns -1, 0, or 1 |
 | `STUFF(s, b, l, r)` | String | [STUFF.md] | Deletes part of string and inserts new |
 | `STR(n, [l], [d])` | String | [STR.md] | Formats number as string |
-| `PATINDEX(p, s)` | String | [PATINDEX.md] | Position of first match of pattern |
-| `REPLICATE(s, n)` | String | [REPLICATE.md] | Repeats string n times |
-| `QUOTENAME(s, [c])` | String | [QUOTENAME.md] | Adds delimiters to identifier |
-| `TRANSLATE(s, f, t)`| String | [TRANSLATE.md] | Replaces characters 1-to-1 |
-| `ASCII(s)` | String | [ASCII.md] | ASCII code of first character |
-| `UNICODE(s)` | String | [UNICODE.md] | Unicode code of first character |
-| `CHAR(n)` | String | [CHAR.md] | Character for ASCII/Unicode code |
-| `DATETIMEFROMPARTS` | Date | [DATE_PARTS.md] | Builds date from integers |
-| `TIMEFROMPARTS` | Date | [TIME_PARTS.md] | Builds time from integers |
-| `SYSDATE()` | Date | [SYSDATE.md] | Current server datetime |
-| `CHECKSUM(...)` | System | [CHECKSUM.md] | Computed hash of values |
-| `BINARY_CHECKSUM(...)`| System | [BINARY_CHECKSUM.md] | Binary-aware hash |
-| `NEWSEQUENTIALID()` | System | [GUID.md] | Generates a time-ordered GUID |
 | `FORMAT(v, f)` | System | [FORMAT.md] | Formats value using string pattern |
+| `CEIL(n)` | Math | [CEIL.md] | Alias for CEILING |
+| `CHAR_LENGTH(s)` | String | [CHAR_LENGTH.md] | String length (SQL standard alias) |
+| `CONVERT(t, v)` | System | [CONVERT.md] | Converts value to type |
+| `CURRENT_DATE()` | Date | [CURRENT_DATE.md] | Current date (no time) |
+| `CURRENT_TIME()` | Date | [CURRENT_TIME.md] | Current time |
+| `CURRENT_TIMESTAMP()` | Date | [CURRENT_TIMESTAMP.md] | Current datetime (UTC) |
+| `DATETRUNC(u, d)` | Date | [DATETRUNC.md] | Truncates date to unit boundary |
+| `DAY(d)` | Date | [DAY.md] | Day-of-month component |
+| `MONTH(d)` | Date | [MONTH.md] | Month component |
+| `YEAR(d)` | Date | [YEAR.md] | Year component |
+| `HOUR(d)` | Date | [HOUR.md] | Hour component |
+| `MINUTE(d)` | Date | [MINUTE.md] | Minute component |
+| `SECOND(d)` | Date | [SECOND.md] | Second component |
+| `DEGREES(n)` | Math | [DEGREES.md] | Converts radians to degrees |
+| `RADIANS(n)` | Math | [RADIANS.md] | Converts degrees to radians |
+| `PI()` | Math | [PI.md] | Mathematical constant π |
+| `POW(b, e)` | Math | [POW.md] | Alias for POWER |
+| `QUOTIENT(n, d)` | Math | [QUOTIENT.md] | Integer quotient of division |
+| `RANDOM()` | Math | [RANDOM.md] | Alias for RAND() |
+| `RANDOM_INT(min, max)` | Math | [RANDOM_INT.md] | Random integer in range |
+| `RANDOM_DECIMAL(min, max)` | Math | [RANDOM_DECIMAL.md] | Random decimal in range |
+| `MEDIAN(v)` | Aggregate | [MEDIAN.md] | Median (50th percentile) |
+| `DIFFERENCE(s1, s2)` | Fuzzy | [DIFFERENCE.md] | SOUNDEX difference score (0-4) |
+| `OVERLAY(s, r, b, l)` | String | [OVERLAY.md] | Replaces substring at position |
+| `PARSE(s, t)` | System | [PARSE.md] | Culture-aware string to type |
+| `POSITION(f IN s)` | String | [POSITION.md] | Position of substring (SQL standard) |
+| `SUBSTR(s, b, l)` | String | [SUBSTR.md] | Alias for SUBSTRING |
+| `TRUNCATE(n, d)` | Math | [TRUNCATE.md] | Truncates number to d decimals |
+| `TRY_CONVERT(t, v)` | System | [TRY_CONVERT.md] | CONVERT with NULL on failure |
+| `TRY_PARSE(s, t)` | System | [TRY_PARSE.md] | PARSE with NULL on failure |
+| `DIRECTORY(p)` | File | [DIRECTORY.md] | Returns directory metadata |
 
-*Note: Over 159 functions are registered. See [Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md) for the full list of signatures.*
+*Note: Over 190 functions are registered. See [Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md) for full signatures. Functions without help file links (fuzzy matching, XML builders, JSON builders, covariance, lineage helpers) are documented in Standard_Library.md only.*
 
 ---
 
@@ -367,7 +390,7 @@ Any standard aggregate function can be used as a window function by appending th
 
 ## 5. Variables
 
-### 4.1 System Variables (`@@`)
+### 5.1 System Variables (`@@`)
 Read-only counters tracking session state.
 
 | Variable | Description | Help File |
@@ -385,10 +408,10 @@ Read-only counters tracking session state.
 | `@@SUBQUERY_CACHE_MISSES` | Subquery cache miss count | [@@SUBQUERY_CACHE_MISSES.md] |
 | `@@RESULTSETS` | Count of result sets from last stmt | [@@RESULTSETS.md] |
 | `@@PARTITIONS_COUNT` | External spill partition count | [@@PARTITIONS_COUNT.md] |
-| `@@FILE_EXISTS(p)` | Helper for script existence checks | [@@FILE_EXISTS.md] |
-| `@@DIRECTORY_EXISTS(p)`| Helper for script existence checks | [@@DIRECTORY_EXISTS.md] |
+| `@@FILE_EXISTS(p)` | File existence check (also available as function `FILE_EXISTS()`) | - |
+| `@@DIRECTORY_EXISTS(p)` | Directory existence check (also available as function `DIRECTORY_EXISTS()`) | - |
 
-### 4.2 Specialty Variable Types
+### 5.2 Specialty Variable Types
 Used in `DECLARE` to define behavior.
 
 | Type | Purpose | Documentation |
@@ -405,7 +428,7 @@ Used in `DECLARE` to define behavior.
 
 ---
 
-## 5. SET Options (Configuration)
+## 6. SET Options (Configuration)
 
 Options configured via `SET <Option> = <Value>` or `SET <Option> ON|OFF`.
 
@@ -452,7 +475,7 @@ Options configured via `SET <Option> = <Value>` or `SET <Option> ON|OFF`.
 
 ---
 
-## 6. Object Creation Options (WITH Clauses)
+## 7. Object Creation Options (WITH Clauses)
 
 Options available when creating or altering engine and report objects.
 
@@ -574,57 +597,64 @@ CREATE NAVIGATION name AS <Type> ( ... )
 
 ---
 
-## 7. Report-SQL (Object Summary)
+## 8. Report-SQL (Object Summary)
 
 Specific to `.rptsql` files and the reporting engine.
 
-### 6.1 Report Objects
+### 8.1 Report Objects
 | Command | Purpose | Help File |
 | :--- | :--- | :--- |
-| `CREATE VISUAL` | Defines a chart or filter | [Report/VISUAL.md] |
-| `CREATE DATASET` | Defines a data source for visuals | [Report/DATASET.md] |
-| `CREATE PAGE` | Defines a dashboard page layout | [Report/PAGE.md] |
-| `CREATE CONTAINER` | Groups visuals in a layout | [Report/CONTAINER.md] |
-| `CREATE NAVIGATION` | Defines sidebar/top-nav links | [Report/NAVIGATION.md] |
-| `CREATE STYLE` | Defines CSS/Theme overrides | [Report/STYLE.md] |
+| `CREATE VISUAL` | Defines a chart or filter | [VISUAL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/VISUAL.md) |
+| `CREATE DATASET` | Defines a data source for visuals | [DATASET.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/DATASET.md) |
+| `CREATE PAGE` | Defines a dashboard page layout | [PAGE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/PAGE.md) |
+| `CREATE CONTAINER` | Groups visuals in a layout | [CONTAINER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/CONTAINER.md) |
+| `CREATE NAVIGATION` | Defines sidebar/top-nav links | [NAVIGATION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/NAVIGATION.md) |
+| `CREATE STYLE` | Defines CSS/Theme overrides | [STYLE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/STYLE.md) |
+| `CREATE BUTTON` | Defines a clickable button | [BUTTON.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/BUTTON.md) |
+| `ACTIONS` block | Interactive event bindings | [ACTIONS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/ACTIONS.md) |
+| `INTERACTIONS` block | Cross-visual filtering rules | [INTERACTIONS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/INTERACTIONS.md) |
 
-### 6.2 Visual Types
+### 8.2 Visual Types
 | Type | Category | Help File |
 | :--- | :--- | :--- |
-| `BAR` / `HBAR` | Chart | [Visuals/BAR.md] |
-| `LINE` | Chart | [Visuals/LINE.md] |
-| `PIE` / `DONUT` | Chart | [Visuals/PIE.md] |
-| `GAUGE` | Chart | [Visuals/GAUGE.md] |
-| `HEATMAP` | Chart | [Visuals/HEATMAP.md] |
-| `SCATTER` | Chart | [Visuals/SCATTER.md] |
-| `GANTT` | Chart | [Visuals/GANTT.md] |
-| `TABLE` | Data | [Visuals/TABLE.md] |
-| `CARD` | KPI | [Visuals/CARD.md] |
-| `SLICER` | Filter | [Visuals/SLICER.md] |
-| `DATEPICKER` | Filter | [Visuals/DATEPICKER.md] |
-| `RELDATEPICKER` | Filter | [Visuals/RELDATEPICKER.md] |
-| `SEARCH` | Filter | [Visuals/SEARCH.md] |
-| `SLIDER` | Filter | [Visuals/SLIDER.md] |
-| `TREEMAP` | Chart | [Visuals/TREEMAP.md] |
-| `WATERFALL` | Chart | [Visuals/WATERFALL.md] |
-| `MATRIX` | Data | [Visuals/MATRIX.md] |
-| `MULTISELECT` | Filter | [Visuals/MULTISELECT.md] |
-| `RADAR` | Chart | [Visuals/RADAR.md] |
-| `TEXT` | Static | [Visuals/TEXT.md] |
-| `IMAGE` | Static | [Visuals/IMAGE.md] |
-| `FUNNEL` | Chart | [Visuals/FUNNEL.md] |
-| `BOXPLOT` | Chart | [Visuals/BOXPLOT.md] |
-| `BUBBLE` | Chart | [Visuals/BUBBLE.md] |
-| `CANDLESTICK` | Chart | [Visuals/CANDLESTICK.md] |
-| `SANKEY` | Chart | [Visuals/SANKEY.md] |
-| `SUNBURST` | Chart | [Visuals/SUNBURST.md] |
-| `NETWORK` | Chart | [Visuals/NETWORK.md] |
-| `TRELLIS` | Chart | [Visuals/TRELLIS.md] |
-| `CREATE DASHBOARD` | Report Obj | [Report/DASHBOARD.md] |
+| `BAR` / `HBAR` | Chart | [BAR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/BAR.md) / [HBAR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/HBAR.md) |
+| `LINE` | Chart | [LINE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/LINE.md) |
+| `PIE` / `DONUT` | Chart | [PIE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/PIE.md) / [DONUT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/DONUT.md) |
+| `GAUGE` | Chart | [GAUGE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/GAUGE.md) |
+| `HEATMAP` | Chart | [HEATMAP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/HEATMAP.md) |
+| `SCATTER` | Chart | [SCATTER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/SCATTER.md) |
+| `GANTT` | Chart | [GANTT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/GANTT.md) |
+| `WATERFALL` | Chart | [WATERFALL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/WATERFALL.md) |
+| `FUNNEL` | Chart | [FUNNEL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/FUNNEL.md) |
+| `BOXPLOT` | Chart | [BOXPLOT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/BOXPLOT.md) |
+| `BUBBLE` | Chart | [BUBBLE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/BUBBLE.md) |
+| `CANDLESTICK` | Chart | [CANDLESTICK.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/CANDLESTICK.md) |
+| `COMBO` | Chart | [COMBO.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/COMBO.md) |
+| `TREEMAP` | Chart | [TREEMAP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TREEMAP.md) |
+| `RADAR` | Chart | [RADAR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/RADAR.md) |
+| `SANKEY` | Chart | [SANKEY.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/SANKEY.md) |
+| `SUNBURST` | Chart | [SUNBURST.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/SUNBURST.md) |
+| `NETWORK` | Chart | [NETWORK.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/NETWORK.md) |
+| `TRELLIS` | Chart | [TRELLIS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TRELLIS.md) |
+| `MATRIX` | Data | [MATRIX.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/MATRIX.md) |
+| `TABLE` | Data | [TABLE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TABLE.md) |
+| `CARD` | KPI | [CARD.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/CARD.md) |
+| `MAP` | Chart | [MAP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/MAP.md) |
+| `TEXT` | Static | [TEXT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TEXT.md) |
+| `IMAGE` | Static | [IMAGE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/IMAGE.md) |
+| `SLICER` | Filter | [SLICER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/SLICER.md) |
+| `DATEPICKER` | Filter | [DATEPICKER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/DATEPICKER.md) |
+| `RELDATEPICKER` | Filter | [RELDATEPICKER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/RELDATEPICKER.md) |
+| `SEARCH` | Filter | [SEARCH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/SEARCH.md) |
+| `SLIDER` | Filter | [SLIDER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/SLIDER.md) |
+| `MULTISELECT` | Filter | [MULTISELECT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/MULTISELECT.md) |
+| `CHECKBOX` | Control | [CHECKBOX.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/CHECKBOX.md) |
+| `TEXTBOX` | Control | [TEXTBOX.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TEXTBOX.md) |
+| `NUMBERBOX` | Control | [NUMBERBOX.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/NUMBERBOX.md) |
 
 ---
 
-## 7. Portal & Orchestrator Admin
+## 9. Portal & Orchestrator Admin
 
 Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... END`.
 
@@ -674,7 +704,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 
 ---
 
-## 9. Visual Action Commands
+## 10. Visual Action Commands
 
 Used inside `ACTIONS ( ... )` blocks for interactive reports.
 
@@ -698,7 +728,7 @@ Used inside `ACTIONS ( ... )` blocks for interactive reports.
 
 ---
 
-## 10. Operators & Symbols
+## 11. Operators & Symbols
 
 | Symbol | Name | Usage |
 | :--- | :--- : | :--- |
@@ -724,7 +754,7 @@ Used inside `ACTIONS ( ... )` blocks for interactive reports.
 
 ---
 
-## 11. Data Types
+## 12. Data Types
 
 Supported types for `DECLARE`, `CREATE TABLE`, and `CAST`.
 
@@ -744,7 +774,7 @@ Supported types for `DECLARE`, `CREATE TABLE`, and `CAST`.
 
 ---
 
-## 12. Join Syntax
+## 13. Join Syntax
 
 Used in the `FROM` clause to combine rows from multiple sources.
 
@@ -764,7 +794,7 @@ Used in the `FROM` clause to combine rows from multiple sources.
 
 ---
 
-## 13. Set Operations
+## 14. Set Operations
 
 Combine result sets from multiple `SELECT` statements.
 
@@ -777,7 +807,7 @@ Combine result sets from multiple `SELECT` statements.
 
 ---
 
-## 14. Query Clauses & Modifiers
+## 15. Query Clauses & Modifiers
 
 Standard clauses available within a `SELECT` statement.
 
@@ -791,20 +821,21 @@ Standard clauses available within a `SELECT` statement.
 | `HAVING` | Filters aggregated groups | [Grammar.md] |
 | `ORDER BY` | Sorts the final result set | [Grammar.md] |
 | `ASC` / `DESC` | Sorting direction | [Grammar.md] |
-| `ROLLUP` | Grouping set extension for hierarchies | [Grammar.md] |
-| `CUBE` | Grouping set extension for all permutations| [Grammar.md] |
-| `GROUPING SETS` | Explicit grouping set list | [Grammar.md] |
-| `QUALIFY` | Filters results of window functions | [Grammar.md] |
-| `OUTPUT` | Returns modified rows (DML only) | [Grammar.md] |
-| `FOR JSON` | Formats output as JSON (PATH/AUTO/RAW) | [Grammar.md] |
-| `FOR XML` | Formats output as XML (PATH/AUTO/RAW) | [Grammar.md] |
+| `ROLLUP` | Grouping set extension for hierarchies | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
+| `CUBE` | Grouping set extension for all permutations| [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
+| `GROUPING SETS` | Explicit grouping set list | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
+| `QUALIFY` | Filters results of window functions | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
+| `FILTER (WHERE ...)` | Per-aggregate conditional filter | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
+| `OUTPUT` | Returns modified rows (DML only) | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
+| `FOR JSON` | Formats output as JSON (PATH/AUTO/RAW) | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
+| `FOR XML` | Formats output as XML (PATH/AUTO/RAW) | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
 | `CASE` | Start of conditional expression | [Grammar.md] |
 | `WHEN / THEN` | Conditional branch | [Grammar.md] |
 | `ELSE / END` | Fallback and termination of CASE | [Grammar.md] |
 
 ---
 
-## 15. Table Operators
+## 16. Table Operators
 
 Operators that transform the shape of a table in the `FROM` clause.
 
@@ -815,7 +846,7 @@ Operators that transform the shape of a table in the `FROM` clause.
 
 ---
 
-## 16. Metadata & Script Tags
+## 17. Metadata & Script Tags
 
 Annotations used for lineage, security, and script behavior.
 
