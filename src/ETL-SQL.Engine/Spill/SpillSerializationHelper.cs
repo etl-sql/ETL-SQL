@@ -1,5 +1,3 @@
-using System;
-using System.Globalization;
 using System.Text.Json;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Data;
@@ -38,14 +36,6 @@ namespace ETL_SQL.Engine.Spill
             return CompoundKey.NormalizeValue(val);
         }
 
-        private static object? TryParseString(string? s)
-        {
-            if (s == null) return null;
-            if (decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var dec))
-                return dec;
-            if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
-                return dt;
-            return s;
-        }
+        private static object? TryParseString(string? s) => s;
     }
 }

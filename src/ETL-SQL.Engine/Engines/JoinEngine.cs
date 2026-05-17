@@ -99,7 +99,9 @@ namespace ETL_SQL.Engine.Engines
                     var rightAlias = effectiveJoin.Table.Alias ?? effectiveJoin.Table.TableName;
                     var hashKeysLeft = new List<string>();
                     var hashKeysRight = new List<string>();
-                    bool hasEquality = TryExtractEqualityKeys(effectiveJoin.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight);
+                    var leftColSet = allBufferedRows.Count > 0 ? BuildBareColumnSet(allBufferedRows[0]) : null;
+                    var rightColSet = joinRows.Count > 0 ? BuildBareColumnSet(joinRows[0]) : null;
+                    bool hasEquality = TryExtractEqualityKeys(effectiveJoin.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight, leftColSet, rightColSet);
 
                     // HYPER-SCALE: Check for disk-spilling threshold
                     if (hasEquality && (allBufferedRows.Count > _context.JoinSpillThreshold || joinRows.Count > _context.JoinSpillThreshold))
@@ -140,8 +142,9 @@ namespace ETL_SQL.Engine.Engines
 
         /// <summary>
         /// For a CROSS JOIN with a literal-true condition, finds WHERE predicates whose referenced columns
-        /// are all available in the combined left+right row, and returns a new INNER JOIN using those
-        /// predicates as the condition. Falls back to the original join if no predicates are applicable.
+        /// are all available in the combined left+right row, promotes them to the join condition (converting
+        /// the CROSS to an INNER), and removes them from <paramref name="wherePredicates"/> so they are
+        /// not re-evaluated by subsequent steps. Falls back to the original join if none are applicable.
         /// </summary>
         private JoinClause TryEnrichCrossJoin(JoinClause join, List<Row> leftRows, List<Row> rightRows, List<Expression> wherePredicates)
         {
@@ -166,6 +169,10 @@ namespace ETL_SQL.Engine.Engines
                     (acc, p) => (Expression)new BinaryExpression(acc, TokenType.AND, p));
 
             _logger.Debug("[JOIN] Progressive WHERE pushdown: {Count} predicate(s) applied to CROSS JOIN on {Table}", applicable.Count, join.Table.TableName ?? "");
+
+            // Remove promoted predicates — they're now the join condition and won't need re-filtering.
+            foreach (var p in applicable) wherePredicates.Remove(p);
+
             return new JoinClause("INNER JOIN", join.Table, cond, join.Hint, join.KeepBest);
         }
 
@@ -184,11 +191,9 @@ namespace ETL_SQL.Engine.Engines
         }
 
         /// <summary>
-        /// Applies WHERE predicates that are fully resolvable against the current row set.
-        /// Called after each join step so non-equality predicates (e.g., IN expressions) filter
-        /// rows as early as possible rather than waiting until the outer pipeline WHERE pass.
-        /// Predicates remain in <paramref name="wherePredicates"/> so the outer WHERE re-applies them
-        /// (idempotent). Skips outer-join join steps to avoid incorrectly discarding null-extended rows.
+        /// Applies WHERE predicates that are fully resolvable against the current row set,
+        /// then removes them from <paramref name="wherePredicates"/> so they are not re-evaluated
+        /// in subsequent join steps. Skips outer-join steps to avoid discarding null-extended rows.
         /// </summary>
         private async Task<List<Row>> ApplyResolvablePredicates(List<Row> rows, List<Expression> wherePredicates, string joinType)
         {
@@ -220,6 +225,9 @@ namespace ETL_SQL.Engine.Engines
             if (filtered.Count < rows.Count)
                 _logger.Debug("[JOIN] Post-join filter: {Predicates} predicate(s) reduced {Before} → {After} rows",
                     applicable.Count, rows.Count, filtered.Count);
+
+            // Remove applied predicates so subsequent join steps don't re-evaluate them.
+            foreach (var p in applicable) wherePredicates.Remove(p);
 
             return filtered;
         }
@@ -626,7 +634,14 @@ namespace ETL_SQL.Engine.Engines
         private bool IsLeftOuter(string type) => type.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || type.Contains("FULL", StringComparison.OrdinalIgnoreCase) || type.Contains("OUTER", StringComparison.OrdinalIgnoreCase);
         private bool IsRightOuter(string type) => type.Contains("RIGHT", StringComparison.OrdinalIgnoreCase) || type.Contains("FULL", StringComparison.OrdinalIgnoreCase);
 
-        public bool TryExtractEqualityKeys(Expression? cond, string leftAlias, string rightAlias, List<string> leftKeys, List<string> rightKeys)
+        public bool TryExtractEqualityKeys(
+            Expression? cond,
+            string leftAlias,
+            string rightAlias,
+            List<string> leftKeys,
+            List<string> rightKeys,
+            IReadOnlySet<string>? leftCols = null,
+            IReadOnlySet<string>? rightCols = null)
         {
             if (cond is BinaryExpression bin)
             {
@@ -660,12 +675,33 @@ namespace ETL_SQL.Engine.Engines
                             leftKeys.Add(rid.Name); rightKeys.Add(lid.Name);
                             return true;
                         }
+                        // Unqualified identifiers: use bare column sets to determine which side each belongs to.
+                        // This handles WHERE col1 = col2 without table-qualifier prefixes.
+                        if (!lid.Name.Contains('.') && !rid.Name.Contains('.') && leftCols != null && rightCols != null)
+                        {
+                            bool lidInLeft = leftCols.Contains(lid.Name);
+                            bool lidInRight = rightCols.Contains(lid.Name);
+                            bool ridInLeft = leftCols.Contains(rid.Name);
+                            bool ridInRight = rightCols.Contains(rid.Name);
+                            if (lidInLeft && ridInRight && !lidInRight && !ridInLeft)
+                            {
+                                leftKeys.Add($"{leftAlias}.{lid.Name}");
+                                rightKeys.Add($"{rightAlias}.{rid.Name}");
+                                return true;
+                            }
+                            if (ridInLeft && lidInRight && !ridInRight && !lidInLeft)
+                            {
+                                leftKeys.Add($"{leftAlias}.{rid.Name}");
+                                rightKeys.Add($"{rightAlias}.{lid.Name}");
+                                return true;
+                            }
+                        }
                     }
                 }
                 else if (bin.Operator == TokenType.AND)
                 {
-                    bool left = TryExtractEqualityKeys(bin.Left, leftAlias, rightAlias, leftKeys, rightKeys);
-                    bool right = TryExtractEqualityKeys(bin.Right, leftAlias, rightAlias, leftKeys, rightKeys);
+                    bool left = TryExtractEqualityKeys(bin.Left, leftAlias, rightAlias, leftKeys, rightKeys, leftCols, rightCols);
+                    bool right = TryExtractEqualityKeys(bin.Right, leftAlias, rightAlias, leftKeys, rightKeys, leftCols, rightCols);
                     return left || right;
                 }
             }

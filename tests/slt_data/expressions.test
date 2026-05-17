@@ -15,7 +15,7 @@ SELECT a + b, a * b FROM t1 ORDER BY a;
 30
 0
 
-query I
+query T
 SELECT UPPER(s) FROM t1 ORDER BY s;
 ----
 ETL-SQL
@@ -29,14 +29,14 @@ SELECT LEN(s) FROM t1 ORDER BY s;
 5
 5
 
-query I
+query T
 SELECT CASE WHEN a > 15 THEN 'High' ELSE 'Low' END FROM t1 ORDER BY a;
 ----
 Low
 High
 High
 
-query I
+query T
 SELECT CAST(a AS STRING) + '!' FROM t1 ORDER BY a;
 ----
 10!

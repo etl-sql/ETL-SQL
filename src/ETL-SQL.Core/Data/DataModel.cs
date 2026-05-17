@@ -60,10 +60,26 @@ namespace ETL_SQL.Data
 
         public void RemoveColumn(string name)
         {
-            if (!_columnToIndex.Remove(name, out var index)) return;
-            _columnNames.RemoveAt(index);
-            // Rebuild the index map because indices have shifted
-            _columnToIndex.Clear();
+            if (!_columnToIndex.Remove(name, out var removedAt)) return;
+            _columnNames.RemoveAt(removedAt);
+            // Only update indices for columns that came after the removed one — avoids full clear+rebuild.
+            foreach (var key in _columnToIndex.Keys.ToList())
+            {
+                if (_columnToIndex[key] > removedAt)
+                    _columnToIndex[key]--;
+            }
+        }
+
+        /// <summary>
+        /// Removes multiple columns in one pass, rebuilding the index a single time.
+        /// Prefer this over repeated <see cref="RemoveColumn"/> calls when dropping many columns.
+        /// </summary>
+        public void RemoveColumns(IReadOnlyCollection<string> names)
+        {
+            if (names.Count == 0) return;
+            var nameSet = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            foreach (var n in nameSet) _columnToIndex.Remove(n);
+            _columnNames.RemoveAll(n => nameSet.Contains(n));
             for (int i = 0; i < _columnNames.Count; i++) _columnToIndex[_columnNames[i]] = i;
         }
 
@@ -346,6 +362,11 @@ namespace ETL_SQL.Data
         public void RemoveColumn(string columnName)
         {
             Schema.RemoveColumn(columnName);
+        }
+
+        public void RemoveColumns(IReadOnlyCollection<string> columnNames)
+        {
+            Schema.RemoveColumns(columnNames);
         }
 
         public void RenameColumn(string oldName, string newName)
