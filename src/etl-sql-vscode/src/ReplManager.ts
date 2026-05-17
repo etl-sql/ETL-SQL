@@ -44,6 +44,9 @@ export class ReplManager {
     public readonly onVariablesChange: vscode.Event<unknown[]> = this._onVariablesChange.event;
     private _isRunning: boolean = false;
     private _startPromise: Promise<void> | undefined;
+    // Incremented on every stop() so close handlers for old processes don't
+    // clear commands that were queued for the new process.
+    private _generation: number = 0;
 
     public static getInstance(): ReplManager {
         if (!ReplManager._instance) {
@@ -77,15 +80,21 @@ export class ReplManager {
             this._commandQueue.push({ script, scriptPath, workspaceRoot, interactiveMode, onMessage, resolve, reject });
             
             const startExecution = async () => {
-                if (this._startPromise) {
-                    await this._startPromise;
-                } else if (!this._process) {
-                    this._currentSessionId = sessionId;
-                    this._startPromise = this._start(exePath, args, launchOptions);
-                    await this._startPromise;
+                try {
+                    if (this._startPromise) {
+                        await this._startPromise;
+                    } else if (!this._process) {
+                        this._currentSessionId = sessionId;
+                        this._startPromise = this._start(exePath, args, launchOptions);
+                        await this._startPromise;
+                        this._startPromise = undefined;
+                    }
+                    this._processNext();
+                } catch {
+                    // _start() rejected (process exited before ready).
+                    // The close handler already rejected all queued commands.
                     this._startPromise = undefined;
                 }
-                this._processNext();
             };
 
             startExecution();
@@ -106,15 +115,22 @@ export class ReplManager {
         }
     }
     private async _start(exePath: string, args: string[], launchOptions?: ReplLaunchOptions): Promise<void> {
-        return new Promise((resolve) => {
+        return new Promise<void>((resolve, reject) => {
             const absoluteExePath = path.resolve(exePath);
             const startMsg = `Starting ETL-SQL REPL: "${absoluteExePath}" ui repl ${this._redactArgs(args).join(' ')}`;
             this._outputChannel?.appendLine(startMsg);
+
+            // Snapshot the generation at spawn time. If stop() is called before
+            // this process closes, _generation increments and the close handler
+            // knows not to touch commands that belong to the newer session.
+            const myGeneration = this._generation;
 
             const child = cp.spawn(absoluteExePath, ["ui", "repl", ...args], {
                 env: { ...process.env, ...launchOptions?.env, "FORCE_COLOR": "0" }
             });
             this._process = child;
+
+            let becameReady = false;
 
             // All JSON protocol messages (status, message, results, done) come on stdout.
             let buffer = '';
@@ -133,6 +149,7 @@ export class ReplManager {
                         this._handleMessage(msg);
                         if (msg.type === 'status' && msg.status === 'ready') {
                             this._outputChannel?.appendLine(`[ENGINE] Ready. Build: ${msg.buildId || 'v1.0'}`);
+                            becameReady = true;
                             this._isReady = true;
                             resolve();
                             this._processNext();
@@ -156,10 +173,23 @@ export class ReplManager {
 
             child.on('close', (code) => {
                 this._outputChannel?.appendLine(`REPL process exited (code ${code}).`);
+
+                // If stop() was called and a new session has since started, don't
+                // touch state or commands that belong to the newer process.
+                if (this._generation !== myGeneration) {
+                    return;
+                }
+
                 this._startPromise = undefined;
                 this._process = undefined;
                 this._isReady = false;
-                
+
+                // If the process exited before ever becoming ready, reject the
+                // start promise so startExecution() doesn't hang indefinitely.
+                if (!becameReady) {
+                    reject(new Error(`REPL process exited with code ${code ?? 1} before becoming ready`));
+                }
+
                 // Reject any in-flight command so the caller's promise doesn't hang.
                 if (this._currentHandler) {
                     const handler = this._currentHandler;
@@ -269,6 +299,7 @@ export class ReplManager {
         this._isReady = false;
         this._startPromise = undefined;
 
+        this._generation++;
         const p = this._process;
         this._process = undefined;
 

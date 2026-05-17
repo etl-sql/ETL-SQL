@@ -9,6 +9,7 @@
  SELECT m.FILE.id, m.FILE.category_name FROM m.FILE;
 ```
 -[ ] Getting an intermittent ETL-SQL Error: REPL process exited unexpectedly issue when first executing, after the first one it seems fine.
+-[ ] Execution tree has arrows to allow you to scroll back to see what previously happened, first can that move to the bottom, second it needs to be session specific it showed all executions even though 1/2 came from another script.
 
 ### Reporting
  Using "C:\Users\chuck\scratch\ETL-SQL\samples\10_Kitchen_Sinks\report_kitchen_sink.rptsql"
