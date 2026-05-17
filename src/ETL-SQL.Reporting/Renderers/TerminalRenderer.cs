@@ -1007,11 +1007,11 @@ namespace ETL_SQL.Reporting.Renderers
                         {
                             var parts = cell.Split('>');
                             string indent = new string(' ', (parts.Length - 1) * 3);
-                            displayRow.Add(new Markup($"{indent}[grey][[+][/] {Markup.Escape(parts.Last().Trim())}"));
+                            displayRow.Add(new Markup($"{indent}[grey][[+]] [/]{Markup.Escape(parts.Last().Trim())}"));
                         }
                         else
                         {
-                            displayRow.Add(new Markup($"[bold green][[-][/] {Markup.Escape(cell)}"));
+                            displayRow.Add(new Markup($"[bold green][[-]] [/]{Markup.Escape(cell)}"));
                         }
                     }
                     else
@@ -1045,7 +1045,7 @@ namespace ETL_SQL.Reporting.Renderers
                 }
             }
 
-            var checkMarkup = isChecked ? "[bold green][[X][/]" : "[grey][[ ][/]";
+            var checkMarkup = isChecked ? "[bold green][[X]][/]" : "[grey][[ ]][/]";
             var content = new Markup($"{checkMarkup} [white]{Markup.Escape(title)}[/]");
 
             return new Panel(content)
