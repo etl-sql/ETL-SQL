@@ -412,13 +412,36 @@ namespace ETL_SQL.Engine.Engines
         {
             var joinBatches = _context.ResolveAndApplyOperators(join.Table);
             string joinName = join.Table.Alias ?? join.Table.TableName;
+            TableSchema? joinSchema = null;
+
             await foreach (var jb in joinBatches)
             {
                 foreach (var jr in jb.Rows)
                 {
-                    var r = jr.Clone();
-                    jr.ForEachColumn((k, v) => r[$"{joinName}.{k}"] = v);
-                    yield return r;
+                    if (jr.Schema != null)
+                    {
+                        // Build schema once per join: bare names are canonical, qualified names are
+                        // aliases pointing to the same slot. All rows in this join table share this
+                        // schema — no per-row duplication of qualified column entries.
+                        if (joinSchema == null)
+                        {
+                            joinSchema = new TableSchema(jr.Schema.ColumnNames);
+                            for (int i = 0; i < jr.Schema.ColumnCount; i++)
+                                joinSchema.AddAlias($"{joinName}.{jr.Schema.GetName(i)}", i);
+                        }
+
+                        var vals = new object?[joinSchema.ColumnCount];
+                        for (int i = 0; i < Math.Min(jr.Schema.ColumnCount, vals.Length); i++)
+                            vals[i] = jr[jr.Schema.GetName(i)];
+                        yield return new Row(joinSchema, vals);
+                    }
+                    else
+                    {
+                        // Fallback for schema-less rows: use original clone-and-qualify approach.
+                        var r = jr.Clone();
+                        jr.ForEachColumn((k, v) => r[$"{joinName}.{k}"] = v);
+                        yield return r;
+                    }
                 }
             }
         }
@@ -668,7 +691,14 @@ namespace ETL_SQL.Engine.Engines
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             leftSample.ForEachColumn((k, _) => { if (seen.Add(k)) cols.Add(k); });
             rightSample.ForEachColumn((k, _) => { if (seen.Add(k)) cols.Add(k); });
-            return cols.Count > 0 ? new TableSchema(cols) : null;
+            if (cols.Count == 0) return null;
+
+            var schema = new TableSchema(cols);
+            // Propagate qualified-name aliases from both sides so lookups like t6.d6
+            // resolve correctly in the combined row even when the canonical name is the bare d6.
+            leftSample.Schema?.CopyAliasesTo(schema);
+            rightSample.Schema?.CopyAliasesTo(schema);
+            return schema;
         }
 
         /// <summary>

@@ -83,6 +83,37 @@ namespace ETL_SQL.Data
             for (int i = 0; i < _columnNames.Count; i++) _columnToIndex[_columnNames[i]] = i;
         }
 
+        /// <summary>
+        /// Adds a secondary name for an existing column slot without allocating a new value position.
+        /// The alias is visible to <see cref="GetIndex"/> but not to <see cref="ColumnCount"/>,
+        /// <see cref="GetName"/>, or row iteration. Used to expose qualified names (e.g. <c>t6.d6</c>)
+        /// alongside bare canonical names so lookups succeed without duplicating values.
+        /// </summary>
+        public void AddAlias(string aliasName, int canonicalIndex)
+        {
+            if (canonicalIndex >= 0 && canonicalIndex < _columnNames.Count)
+                _columnToIndex.TryAdd(aliasName, canonicalIndex);
+        }
+
+        /// <summary>
+        /// Copies alias entries (names that map to a different canonical name at the same index)
+        /// into <paramref name="target"/>, remapping by canonical name. Call after canonical columns
+        /// are added to the target so qualified lookups continue to resolve in combined rows.
+        /// </summary>
+        public void CopyAliasesTo(TableSchema target)
+        {
+            foreach (var kvp in _columnToIndex)
+            {
+                string name = kvp.Key;
+                int idx = kvp.Value;
+                if (!string.Equals(_columnNames[idx], name, StringComparison.OrdinalIgnoreCase))
+                {
+                    int targetIdx = target.GetIndex(_columnNames[idx]);
+                    if (targetIdx >= 0) target.AddAlias(name, targetIdx);
+                }
+            }
+        }
+
         public void RenameColumn(string oldName, string newName)
         {
             if (!_columnToIndex.Remove(oldName, out var index)) return;

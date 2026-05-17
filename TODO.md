@@ -169,17 +169,15 @@
 - [x] **Maximize visual**: Maximize the space of the visual to the full screen and the chart fills the space, provide a minimize button to return to previous size and show other visuals.
 
 - [ ] **Phase 7 — SQL Dialect Parity & Modern Standards (Cross-Engine Compatibility)**
-    - [ ] **VALUES as a standalone table constructor**: Support `SELECT * FROM (VALUES (1, 'A'), (2, 'B')) AS t(id, name)`.
+    - [x] **VALUES as a standalone table constructor**: Support `SELECT * FROM (VALUES (1, 'A'), (2, 'B')) AS t(id, name)`.
     - [ ] **APPROX_COUNT_DISTINCT**: Implement HyperLogLog-based approximate distinct count for large-scale datasets.
-    - [ ] **PostgreSQL Operators**: Support `ILIKE` (case-insensitive LIKE), `~` (regex match), and `~*` (regex case-insensitive match).
+    - [x] **PostgreSQL Operators**: Support `ILIKE` (case-insensitive LIKE), `~` (regex match), and `~*` (regex case-insensitive match).
     - [ ] **Filtered Aggregates**: Fully implement the `FILTER (WHERE ...)` clause in `AggregateEngine` (currently parsed but ignored).
     - [ ] **Standard JSON_TABLE**: Implement the full SQL:2016 `JSON_TABLE` with `COLUMNS` clause (currently supports a simplified 2-arg TVF).
-    - [ ] **Standard SQL:2008 OFFSET/FETCH**: Support `FETCH FIRST n ROWS ONLY` as an alternative to `LIMIT`.
+    - [x] **Standard SQL:2008 OFFSET/FETCH**: Support `FETCH FIRST n ROWS ONLY` as an alternative to `LIMIT`.
     - [ ] **Advanced Window Frames**: Support `GROUPS` mode and frame exclusion clauses (`EXCLUDE CURRENT ROW`, etc.).
-    - [ ] **Temporal Queries**: Support `FOR SYSTEM_TIME AS OF` for system-versioned tables.
     - [ ] **Row Pattern Matching**: Implement `MATCH_RECOGNIZE` for pattern matching in sequences.
-    - [ ] **Generated Columns**: Support `GENERATED ALWAYS AS (expr)` in `CREATE TABLE`.
-    - [ ] **Standard Aggregates**: Support `EVERY`, `ANY`, and `SOME` as aggregate functions.
+    - [x] **Standard Aggregates**: Support `EVERY`, `ANY`, and `SOME` as aggregate functions.
 
 ---
 
@@ -251,16 +249,16 @@ These were identified when writing the dark-path SLT files. Each has a failing o
     - [x] **Implement Join Predicate Pushdown**: Done — `CrossJoinPredicatePushdown.cs` in `ETL_SQL.Engine.Engines`. Handles chain joins, star joins, mixed explicit+comma joins, and unqualified predicates (conservative: stays in WHERE).
     - [x] **Progressive WHERE Pushdown for Unqualified Predicates**: `JoinEngine.ApplyJoins` now flattens the WHERE clause and, for each CROSS JOIN step, finds predicates whose `GetSourceColumns()` are all present in the combined left+right column set — then uses them as the join condition. This handles the `select4.test L29188` pattern (`WHERE a3=b9 AND c9=688 AND a1=d9`) where `CrossJoinPredicatePushdown` was helpless (unqualified names → `GetSourceTables()` returns empty). Validated by `TestCommaJoin_FiveTable_UnqualifiedPredicates`.
     - [ ] **Spill-to-Disk for Nested Loops**: Still open. Comma-joins with complex non-equality predicates (OR conditions, subqueries) still use nested-loop and do not spill. Hash-join path already spills via `ExternalJoinEngine`.
-    - [ ] **Fix Comma-Join Exponential Slowdown / Hang for Unqualified Predicates** (discovered in `select4.test` L29467):
+    - [x] **Fix Comma-Join Exponential Slowdown / Hang for Unqualified Predicates** (discovered in `select4.test` L29467 and L32930):
         - [ ] **Early Identifier Qualification**: Enhance the `SelectExecutionEngine` pipeline (or compile phase) to automatically qualify unqualified identifiers (e.g. `e8` -> `t8.e8`) against active connection/table schemas before running optimizer passes. This will enable `CrossJoinPredicatePushdown` to optimize the comma-joins correctly.
-        - [ ] **Filter Pushdown Optimization**: Implement an AST optimization pass to push single-table filter predicates (e.g. `a1=553` on `t1`) down to table scans/reads before any joins are executed, reducing initial row-cardinality and making Cartesian product evaluation extremely fast.
+        - [x] **Filter Pushdown Optimization**: `JoinEngine.ApplyJoins` now pre-filters `allBufferedRows` (the FROM table) before the join loop and calls `PreFilterJoinTable` after `GetJoinRows` for each join table, applying predicates that reference only that table's own columns. Prevents single-table predicates like `765=b4` or `d6 IN (...)` from ever participating in a Cartesian product. Also fixed `TryExtractEqualityKeys` to use bare column names for unqualified hash keys (`c5=a9` → hash join in multi-join contexts).
         - [x] **Prune Resolved Progressive Predicates**: In `JoinEngine.ApplyJoins`, `ApplyResolvablePredicates` now removes applied predicates from `wherePredicates` after filtering; `TryEnrichCrossJoin` removes promoted predicates from the list when converting CROSS to INNER. Prevents redundant re-evaluation in subsequent join steps.
     - [x] **Correct Type-Checking Annotations in expressions.test**:
         - [x] Changed expected query types from `query I` (Integer) to `query T` (Text) in `tests/slt_data/expressions.test` on lines 18 (UPPER(s)), 32 (CASE returning High/Low), and 39 (CAST to string + '!').
 - [x] **Optimize `Row` Materialization and Allocation Patterns**
     - [x] **Eliminate Redundant Dictionary Copies**: Added `Row.ForEachColumn(Action<string,object?>)` — iterates schema array then dynamic dict without allocating a `Dictionary`. Updated `JoinEngine.CombineRows`, the base-table qualification loop, and `GetJoinRowsAsyncEnumerable` to use `ForEachColumn` instead of `.Columns`. Eliminates 2 dict allocs per `CombineRows` call and 1 per right-side row setup.
     - [x] **Schema-based Combined Rows**: Added `JoinEngine.BuildCombinedSchema(leftSample, rightSample)` — called once per join step, shared across all `CombineRows` calls in that step. Combined rows now use array-based `Row(schema)` instead of `new Row()` with dynamic dict, reducing per-row storage ~5×. Applied to hash, merge, and nested-loop join paths.
-    - [ ] **Qualified Column Expansion**: Qualified names (e.g., `t1.col`) are still added as dynamic columns on each right-side row clone. A `SchemaMapping` approach that strips the qualifier at expression-eval time instead of pre-expanding would eliminate this overhead.
+    - [x] **Qualified Column Expansion**: `GetJoinRowsAsyncEnumerable` now builds a `TableSchema` once per join with bare names as canonical slots and qualified names (e.g. `t6.d6`) as aliases via `TableSchema.AddAlias` — pointing to the same value slot. `BuildCombinedSchema` calls `CopyAliasesTo` from both sides so qualified lookups continue to resolve in combined rows. Eliminates the per-row clone-and-add-dynamic pattern, halving value storage for each right-side table in a multi-join.
 - [x] **Intermediate Pipeline Streaming (join-level)**
     - [x] `JoinEngine.ApplyResolvablePredicates`: after each join step, applies AND-flattened WHERE predicates whose columns are all present in the current result (e.g., `d6 IN (885,924,...)` is applied right after the join that introduces `d6`, before the next step). Skips outer-join steps. `InExpression.GetSourceColumns()` now delegates to `Left` so IN-list predicates are visible to the column detector.
     - [ ] **True streaming from pipeline to final projection**: `ExecuteHeavyPipeline` still buffers all rows into `allRows` after joins. For queries without ORDER BY or window functions, the final projection could stream directly from the join output without a full in-memory list.
@@ -281,3 +279,6 @@ These were identified when writing the dark-path SLT files. Each has a failing o
 - [ ] **Dynamic Target Framework Detection** — Remove hardcoded `net10.0` paths in `extension.ts`; detect the target framework folder dynamically to support future .NET upgrades.
 - [ ] **Granular UI Updates in Report Runtime** — Investigate replacing `root.innerHTML = ''` in `report-runtime.js` with a lightweight diffing approach (e.g., Preact or manual DOM patching) to preserve UI state and prevent flickering.
 - [ ] **Cryptographic Nonces for CSP** — Update `ReportPreviewPanel` to use `crypto.getRandomValues()` for generating CSP nonces instead of `Math.random()`.
+
+## Missing ASCII charts
+- [ ] **We added a lot of new chart objects do they work in ascii mode**  TUI has a ascii chart mode which allows you to have chart and graphs in the terminal.  This also has the benefit of allowing you to print a plain text file with charts and graphs (aka research paper).  We added a lot of new charts can we check if we can implement them in ascii.  If not then we need to put a placeholder in that says cannot display this chart in ascii mode or whatever the phrase was we were using for map charts.

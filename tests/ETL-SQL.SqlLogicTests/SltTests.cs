@@ -7,6 +7,7 @@ using Xunit;
 
 namespace ETL_SQL.SqlLogicTests
 {
+    [Trait("Category", "SLT")]
     public class SltTests
     {
         [Theory]
