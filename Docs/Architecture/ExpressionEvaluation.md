@@ -291,6 +291,76 @@ For interval arithmetic (`DATEADD`, `DATEDIFF`) use the built-in functions rathe
 
 ---
 
+## 15. Known Behaviors and Engine Quirks
+
+These behaviors were discovered during SLT corpus authoring and are tested by the SLT suite. They match SQL standard semantics but may surprise readers expecting C#/Java arithmetic defaults.
+
+### Division Semantics
+
+ETL-SQL implements SQL integer division (truncation toward zero) when both operands are integer-valued:
+
+| Expression | Result | Notes |
+|------------|--------|-------|
+| `7 / 2` | `3` | Both integer-valued → truncate |
+| `7.0 / 2` | `3.5` | Left has fractional scale → decimal |
+| `7 / 2.0` | `3.5` | Right has fractional scale → decimal |
+| `-7 / 2` | `-3` | Truncation is toward zero, not floor |
+
+**Implementation:** `BinaryOperatorFactory.MathOp` checks whether both operands convert to `decimal` with zero fractional scale. If so, it applies `Math.Truncate` before dividing. A literal `2` becomes `decimal` with scale 0; a literal `2.0` has scale 1 and stays real.
+
+### CAST Truncation
+
+`CAST(expr AS INT)` (and `TINYINT`, `SMALLINT`, `BIGINT`) truncates toward zero — it does not round:
+
+```sql
+SELECT CAST(3.9 AS INT)   -- 3  (truncated, not rounded to 4)
+SELECT CAST(-3.9 AS INT)  -- -3 (toward zero, not floor to -4)
+```
+
+**Implementation:** `TypeConverter.Cast` applies `Math.Truncate(d)` before `Convert.ToDecimal(long)` for integer target types.
+
+### Aggregates Nested Inside CASE / Scalar Functions
+
+The engine correctly handles aggregates that appear inside `CASE` expressions, `COALESCE`, or other scalar wrappers:
+
+```sql
+-- All of these are correctly computed in GROUP BY context:
+SELECT CASE WHEN SUM(amount) > 100 THEN 'high' ELSE 'low' END FROM t GROUP BY dept
+SELECT COALESCE(AVG(score), 0) FROM t GROUP BY category
+SELECT SUM(amount) * 1.1 FROM t GROUP BY region
+```
+
+**Implementation:** `AggregateEngine.ApplyAggregation` calls `CollectAggregates` recursively on each SELECT column expression, not just on top-level aggregate calls. Nested aggregate states are pre-computed and stored under the `AGG_<expr>` key; the outer expression then reads them during re-evaluation.
+
+> **Limitation:** Aggregates inside scalar *user-defined functions* (UDFs registered via `CREATE FUNCTION`) are not pre-collected and will return NULL if used in a GROUP BY query. Only built-in expression types (CASE, COALESCE, arithmetic operators) are traversed by `CollectAggregates`.
+
+### Three-Valued Logic and NULL Comparison
+
+Comparison operators (`=`, `<>`, `<`, `>`, `<=`, `>=`) return `NULL` — not `false` — when either operand is `NULL`. This propagates through `AND`/`OR` per SQL three-valued logic:
+
+| Expression | Result |
+|------------|--------|
+| `NULL = 1` | NULL |
+| `NULL <> 1` | NULL |
+| `NULL = NULL` | NULL |
+| `1 = 1 AND NULL = 1` | NULL |
+| `1 = 1 OR NULL = 1` | TRUE |
+
+Use `IS NULL` / `IS NOT NULL` to test for null. `NULLIF(a, b)` returns NULL if `a = b`, otherwise `a`. Both are correctly implemented and tested in `null_edge_cases.test`.
+
+### String Case Sensitivity
+
+By default string comparisons (in `=`, `LIKE`, `IN`, and `ORDER BY`) are **case-insensitive**. This can be changed per-session:
+
+```sql
+SET CASE_SENSITIVE = ON;   -- comparisons become case-sensitive
+SET CASE_SENSITIVE = OFF;  -- restore default
+```
+
+See the Administrators Guide §8.1 for the full interaction with connectors and `ORDER BY` collation.
+
+---
+
 ## 14. Adding a New Built-in Function
 
 1. Open `ETL-SQL.Engine/Functions/StandardFunctions.cs`

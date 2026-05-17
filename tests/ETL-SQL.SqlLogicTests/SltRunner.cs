@@ -99,11 +99,15 @@ SET TELEMETRY = OFF;";
             var tokens = new Lexer(record.Sql).Tokenize();
             var script = new Parser(tokens, record.Sql).Parse();
 
+            // A record is query-like if it has an expected result payload (covers plain Query records
+            // AND query records wrapped inside skipif/onlyif directives).
+            bool isQueryLike = record.Type == SltRecordType.Query || record.ExpectedResult != null;
+
             try
             {
                 await _evaluator.Evaluate(script);
 
-                if (record.Type == SltRecordType.Query)
+                if (isQueryLike)
                 {
                     VerifyResults(record, _evaluator.LastResult);
                 }
@@ -115,7 +119,7 @@ SET TELEMETRY = OFF;";
                 if (_queryCount % 500 == 0)
                     GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
 
-                if (!record.ExpectSuccess && record.Type == SltRecordType.Statement)
+                if (!record.ExpectSuccess && !isQueryLike)
                 {
                     throw new Exception($"Line {record.LineNumber}: Expected failure, but statement succeeded.");
                 }
@@ -183,6 +187,32 @@ SET TELEMETRY = OFF;";
             var rows = actual.Rows
                 .Select(r => actual.ColumnNames.Select(c => FormatSltValue(r[c])).ToArray())
                 .ToList();
+
+            // Column-type verification: validate each cell's runtime type against the declared
+            // type character (I=integer, R=real, T=text). NULL passes any type.
+            if (!string.IsNullOrEmpty(record.ColumnTypes))
+            {
+                foreach (var row in rows)
+                {
+                    for (int c = 0; c < row.Length; c++)
+                    {
+                        if (row[c] == "NULL") continue;
+                        char typeChar = c < record.ColumnTypes.Length
+                            ? char.ToUpperInvariant(record.ColumnTypes[c])
+                            : 'T';
+                        if (typeChar == 'I' && !long.TryParse(row[c], out _))
+                            throw new Exception(
+                                $"Line {record.LineNumber}: Column {c + 1} declared as integer (I) " +
+                                $"but got non-integer value '{row[c]}'.");
+                        if (typeChar == 'R' && !decimal.TryParse(row[c],
+                            System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out _))
+                            throw new Exception(
+                                $"Line {record.LineNumber}: Column {c + 1} declared as real (R) " +
+                                $"but got non-numeric value '{row[c]}'.");
+                    }
+                }
+            }
 
             // Apply sort mode
             IEnumerable<string[]> sortedRows = record.SortMode switch
