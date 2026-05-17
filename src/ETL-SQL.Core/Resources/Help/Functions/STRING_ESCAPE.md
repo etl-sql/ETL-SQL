@@ -1,9 +1,36 @@
 # STRING_ESCAPE
-Escapes characters for formats like JSON.
+Escapes special characters in a string for safe embedding in a target format.
 
-Syntax:
-  STRING_ESCAPE(s, 'json')
+**Category:** String
 
+## Syntax
 ```sql
-SELECT STRING_ESCAPE('Line1\nLine2', 'json');
+STRING_ESCAPE(text, type)
 ```
+
+## Parameters
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `text` | `STRING` | The string to escape |
+| `type` | `STRING` | The target format — see Accepted Values |
+
+## Returns
+`STRING` — The input string with special characters escaped for the specified format.
+
+## Accepted Values
+| `type` | Description |
+| :--- | :--- |
+| `'json'` | Escapes `"`, `\`, and control characters (U+0000–U+001F) for embedding in JSON strings |
+
+## Example
+```sql
+SELECT STRING_ESCAPE('Line1\nLine2', 'json');  -- → 'Line1\\nLine2'
+SELECT STRING_ESCAPE(notes, 'json') AS safe_notes FROM #records;
+
+-- Build a JSON string manually
+SELECT '{"message": "' + STRING_ESCAPE(body, 'json') + '"}' FROM #messages;
+```
+
+## See Also
+- [Standard Library — §3.6 Translation & Escaping](../../../../../Docs/Reference/Standard_Library.md#36-translation--escaping)
+- Related: [`QUOTENAME`](QUOTENAME.md), [`JSON_MODIFY`](JSON_MODIFY.md)

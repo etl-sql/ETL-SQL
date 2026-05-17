@@ -1,9 +1,29 @@
 # QUOTENAME
-Wraps a string in brackets or another delimiter.
+Returns a string wrapped in delimiters to make it a valid identifier.
 
-Syntax:
-  QUOTENAME(s [, delim])
+**Category:** String
 
+## Syntax
 ```sql
-SELECT QUOTENAME('My Table');
+QUOTENAME(string, [delimiter])
 ```
+
+## Parameters
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `string` | `STRING` | The identifier to delimit |
+| `delimiter` | `STRING` | Optional: delimiting character — `[` (default), `"`, or `'` |
+
+## Returns
+`STRING` — The identifier wrapped in the specified delimiter pair. Embedded delimiters inside the string are escaped by doubling them.
+
+## Example
+```sql
+SELECT QUOTENAME('my column');        -- → '[my column]'
+SELECT QUOTENAME('my column', '"');   -- → '"my column"'
+SELECT QUOTENAME('it''s here', ''''); -- → '''it''''s here'''
+```
+
+## See Also
+- [Standard Library — §3.4 Formatting & Padding](../../../../../Docs/Reference/Standard_Library.md#34-formatting--padding)
+- Related: [`STRING_ESCAPE`](STRING_ESCAPE.md)

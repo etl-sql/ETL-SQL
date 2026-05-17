@@ -1,9 +1,28 @@
 # RIGHT
-Returns the last N characters of a string.
+Returns the rightmost N characters of a string.
 
-Syntax:
-  RIGHT(s, n)
+**Category:** String
 
+## Syntax
 ```sql
-SELECT RIGHT('abcdef', 3);
+RIGHT(string, count)
 ```
+
+## Parameters
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `string` | `STRING` | The source string |
+| `count` | `INT` | Number of characters to return from the right |
+
+## Returns
+`STRING` — The last `count` characters. If `count` exceeds the string length, the full string is returned.
+
+## Example
+```sql
+SELECT RIGHT('Hello World', 5);    -- → 'World'
+SELECT RIGHT('00' + TO_STR(id), 4) AS padded_id FROM #orders;
+```
+
+## See Also
+- [Standard Library — §3.2 Substrings & Search](../../../../../Docs/Reference/Standard_Library.md#32-substrings--search)
+- Related: [`LEFT`](LEFT.md), [`SUBSTRING`](SUBSTRING.md)

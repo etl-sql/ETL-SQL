@@ -1,9 +1,27 @@
 # LTRIM
-Removes leading spaces from a string.
+Removes leading (left-side) whitespace from a string.
 
-Syntax:
-  LTRIM(s)
+**Category:** String
 
+## Syntax
 ```sql
-SELECT LTRIM('  hi');
+LTRIM(string)
 ```
+
+## Parameters
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `string` | `STRING` | The string to left-trim |
+
+## Returns
+`STRING` — The input string with leading whitespace removed.
+
+## Example
+```sql
+SELECT LTRIM('  hello');   -- → 'hello'
+SELECT LTRIM('  ' + name) FROM #data;
+```
+
+## See Also
+- [Standard Library — §3.1 Case & Whitespace](../../../../../Docs/Reference/Standard_Library.md#31-case--whitespace)
+- Related: [`RTRIM`](RTRIM.md), [`TRIM`](TRIM.md)
