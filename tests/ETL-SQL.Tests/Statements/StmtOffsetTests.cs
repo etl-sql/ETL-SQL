@@ -58,6 +58,36 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public async Task TestFetchFirstRowsOnly()
+        {
+            var ev = GetEvaluator();
+            await ev.Evaluate(Parse(@"
+                CREATE TABLE #data (ID INT);
+                INSERT INTO #data VALUES (1), (2), (3), (4), (5);
+            "));
+
+            var res = await ev.ExecuteQuery(Parse("SELECT ID FROM #data ORDER BY ID FETCH FIRST 3 ROWS ONLY;").Statements[0]).FirstAsync();
+            Assert.Equal(3, res.Rows.Count);
+            Assert.Equal(1m, res.Rows[0]["ID"]);
+            Assert.Equal(3m, res.Rows[2]["ID"]);
+        }
+
+        [Fact]
+        public async Task TestOffsetFetchNextRowsOnly()
+        {
+            var ev = GetEvaluator();
+            await ev.Evaluate(Parse(@"
+                CREATE TABLE #data (ID INT);
+                INSERT INTO #data VALUES (1), (2), (3), (4), (5);
+            "));
+
+            var res = await ev.ExecuteQuery(Parse("SELECT ID FROM #data ORDER BY ID OFFSET 2 ROWS FETCH NEXT 2 ROWS ONLY;").Statements[0]).FirstAsync();
+            Assert.Equal(2, res.Rows.Count);
+            Assert.Equal(3m, res.Rows[0]["ID"]);
+            Assert.Equal(4m, res.Rows[1]["ID"]);
+        }
+
+        [Fact]
         public async Task TestOffsetRowsSyntax()
         {
             var ev = GetEvaluator();

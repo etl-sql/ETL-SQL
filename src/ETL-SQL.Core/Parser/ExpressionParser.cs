@@ -99,14 +99,17 @@ namespace ETL_SQL.Core.Parser
             while (_parser.Current.Type == TokenType.EQUALS || _parser.Current.Type == TokenType.NOT_EQUALS ||
                    _parser.Current.Type == TokenType.LESS_THAN || _parser.Current.Type == TokenType.GREATER_THAN ||
                    _parser.Current.Type == TokenType.LESS_EQUALS || _parser.Current.Type == TokenType.GREATER_EQUALS ||
-                   _parser.Current.Type == TokenType.IN || _parser.Current.Type == TokenType.LIKE || _parser.Current.Type == TokenType.IS || _parser.Current.Type == TokenType.NOT ||
+                   _parser.Current.Type == TokenType.IN || _parser.Current.Type == TokenType.LIKE || _parser.Current.Type == TokenType.ILIKE ||
+                   _parser.Current.Type == TokenType.REGEX_MATCH || _parser.Current.Type == TokenType.REGEX_IMATCH ||
+                   _parser.Current.Type == TokenType.IS || _parser.Current.Type == TokenType.NOT ||
                    _parser.Current.Type == TokenType.BETWEEN)
             {
                 bool isNot = false;
                 if (_parser.Match(TokenType.NOT))
                 {
                     isNot = true;
-                    if (_parser.Current.Type != TokenType.IN && _parser.Current.Type != TokenType.LIKE && _parser.Current.Type != TokenType.BETWEEN) 
+                    if (_parser.Current.Type != TokenType.IN && _parser.Current.Type != TokenType.LIKE &&
+                        _parser.Current.Type != TokenType.ILIKE && _parser.Current.Type != TokenType.BETWEEN) 
                     {
                         _parser.Backtrack();
                         break; 
@@ -161,7 +164,7 @@ namespace ETL_SQL.Core.Parser
                     }
                     left = new InExpression(left, rightExpr, isNot) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
                 }
-                else if (op == TokenType.LIKE)
+                else if (op == TokenType.LIKE || op == TokenType.ILIKE)
                 {
                     var right = ParseTerm();
                     Expression? escapeChar = null;
@@ -169,7 +172,7 @@ namespace ETL_SQL.Core.Parser
                     {
                         escapeChar = ParseTerm();
                     }
-                    left = new LikeExpression(left, right, isNot, escapeChar) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                    left = new LikeExpression(left, right, isNot, escapeChar, op == TokenType.ILIKE) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
                 }
                 else if (op == TokenType.BETWEEN)
                 {

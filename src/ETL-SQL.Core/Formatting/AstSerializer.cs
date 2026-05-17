@@ -635,6 +635,8 @@ namespace ETL_SQL.Core.Formatting
                 TokenType.LESS_EQUALS   => "<=",
                 TokenType.GREATER_THAN  => ">",
                 TokenType.GREATER_EQUALS=> ">=",
+                TokenType.REGEX_MATCH   => "~",
+                TokenType.REGEX_IMATCH  => "~*",
                 TokenType.AND           => "AND",
                 TokenType.OR            => "OR",
                 _                       => e.Operator.ToString()
@@ -665,7 +667,7 @@ namespace ETL_SQL.Core.Formatting
         }
 
         private static string FormatLike(LikeExpression e)
-            => $"{e.Left.ToSql()} {(e.IsNot ? "NOT " : "")}LIKE {e.Pattern.ToSql()}{(e.EscapeChar != null ? " ESCAPE " + e.EscapeChar.ToSql() : "")}";
+            => $"{e.Left.ToSql()} {(e.IsNot ? "NOT " : "")}{(e.IsCaseInsensitive ? "ILIKE" : "LIKE")} {e.Pattern.ToSql()}{(e.EscapeChar != null ? " ESCAPE " + e.EscapeChar.ToSql() : "")}";
 
         private static string FormatBetween(BetweenExpression e)
             => $"{e.Left.ToSql()} {(e.IsNot ? "NOT " : "")}BETWEEN {e.Start.ToSql()} AND {e.End.ToSql()}";
@@ -694,6 +696,8 @@ namespace ETL_SQL.Core.Formatting
             string sql;
             if (n.Subquery != null)
                 sql = $"({n.Subquery.ToSql().TrimEnd(';')})";
+            else if (n.ValuesRows != null)
+                sql = $"(VALUES {string.Join(", ", n.ValuesRows.Select(row => $"({string.Join(", ", row.Select(v => v.ToSql()))})"))})";
             else if (n.FunctionCall != null)
                 sql = n.FunctionCall.ToSql();
             else
@@ -706,6 +710,7 @@ namespace ETL_SQL.Core.Formatting
                 sql = string.Join(".", parts);
             }
             if (n.Alias != null) sql += " AS " + n.Alias;
+            if (n.ColumnAliases != null && n.ColumnAliases.Count > 0) sql += $"({string.Join(", ", n.ColumnAliases)})";
             foreach (var op in n.TableOperators)
             {
                 if (op is PivotClause   p) sql += " " + p.ToSql();

@@ -324,6 +324,7 @@ namespace ETL_SQL.Engine.Engines
                 if (f.Window != null) return false;
                 var name = f.FunctionName.ToUpperInvariant();
                 if (name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX"
+                    || name == "EVERY" || name == "ANY" || name == "SOME"
                     || name == "STRING_AGG" || name == "LIST_AGG"
                     || name == "PERCENTILE_CONT" || name == "PERCENTILE_DISC"
                     || name == "VAR" || name == "VARP" || name == "VAR_SAMP" || name == "VAR_POP"
@@ -364,6 +365,7 @@ namespace ETL_SQL.Engine.Engines
             {
                 var name = f.FunctionName.ToUpperInvariant();
                 bool isAgg = name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX"
+                    || name == "EVERY" || name == "ANY" || name == "SOME"
                     || name == "STRING_AGG" || name == "LIST_AGG"
                     || name == "PERCENTILE_CONT" || name == "PERCENTILE_DISC"
                     || name == "VAR" || name == "VARP" || name == "VAR_SAMP" || name == "VAR_POP"
@@ -452,6 +454,11 @@ namespace ETL_SQL.Engine.Engines
                         return valsByArg[0].Where(v => v != null).Min();
                     case "MAX":
                         return valsByArg[0].Where(v => v != null).Max();
+                    case "EVERY":
+                        return EvaluateBooleanAggregate(valsByArg[0], requireAll: true);
+                    case "ANY":
+                    case "SOME":
+                        return EvaluateBooleanAggregate(valsByArg[0], requireAll: false);
                     case "STRING_AGG":
                         return string.Join(f.Arguments.Count >= 2 ? (await _context.EvaluateValue(f.Arguments[1], new Row()))?.ToString() ?? "" : ",",
                             f.WithinGroupOrderBy != null ? await SortRows(rows, f.WithinGroupOrderBy) : valsByArg[0].Select(v => v?.ToString() ?? ""));
@@ -494,6 +501,25 @@ namespace ETL_SQL.Engine.Engines
             decimal avg = numbers.Average();
             decimal sumSqDiff = numbers.Sum(x => (x - avg) * (x - avg));
             return sumSqDiff / (population ? n : n - 1);
+        }
+
+        private static bool? EvaluateBooleanAggregate(IEnumerable<object?> vals, bool requireAll)
+        {
+            bool hasValue = false;
+            bool result = requireAll;
+            foreach (var val in vals)
+            {
+                if (val == null || val == DBNull.Value) continue;
+                hasValue = true;
+                bool boolVal;
+                try { boolVal = Convert.ToBoolean(val); }
+                catch { boolVal = !string.IsNullOrEmpty(val.ToString()); }
+
+                if (requireAll && !boolVal) return false;
+                if (!requireAll && boolVal) return true;
+                result = boolVal;
+            }
+            return hasValue ? result : null;
         }
 
         private decimal? CalculateStDev(List<object?> vals, bool population)
@@ -677,6 +703,9 @@ namespace ETL_SQL.Engine.Engines
                 "AVG" => new AvgState(f.IsDistinct),
                 "MIN" => new MinState(),
                 "MAX" => new MaxState(),
+                "EVERY" => new BooleanAggregateState(requireAll: true),
+                "ANY" => new BooleanAggregateState(requireAll: false),
+                "SOME" => new BooleanAggregateState(requireAll: false),
                 _ => new GenericState(f)
             };
         }
@@ -816,6 +845,35 @@ namespace ETL_SQL.Engine.Engines
             }
 
             public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_max);
+        }
+
+        private class BooleanAggregateState : IAggregateState
+        {
+            private readonly bool _requireAll;
+            private bool _hasValue;
+            private bool _result;
+
+            public BooleanAggregateState(bool requireAll)
+            {
+                _requireAll = requireAll;
+                _result = requireAll;
+            }
+
+            public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+            {
+                var val = await context.EvaluateValue(f.Arguments[0], row);
+                if (val == null || val == DBNull.Value) return;
+                _hasValue = true;
+                bool boolVal;
+                try { boolVal = Convert.ToBoolean(val); }
+                catch { boolVal = !string.IsNullOrEmpty(val.ToString()); }
+
+                if (_requireAll && !boolVal) _result = false;
+                else if (!_requireAll && boolVal) _result = true;
+                else if (!_requireAll && !_result) _result = false;
+            }
+
+            public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_hasValue ? _result : null);
         }
 
         private class GenericState : IAggregateState

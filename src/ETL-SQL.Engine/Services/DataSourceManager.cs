@@ -76,6 +76,10 @@ namespace ETL_SQL.Engine.Services
             {
                 return new StreamingSubqueryDataSource(_evaluator.ExecuteQuery(table.Subquery));
             }
+            else if (table.ValuesRows != null)
+            {
+                return await BuildValuesDataSourceAsync(table);
+            }
             else if (table.FunctionCall != null)
             {
                 if (table.FunctionCall.FunctionName.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
@@ -169,6 +173,57 @@ namespace ETL_SQL.Engine.Services
 
             if (table.ConnectionName != null) return source.WithTable(table.TableName);
             return source;
+        }
+
+        private async Task<IDataSource> BuildValuesDataSourceAsync(TableReference table)
+        {
+            var rows = table.ValuesRows ?? new List<List<Expression>>();
+            if (rows.Count == 0)
+            {
+                throw new ExecutionException("VALUES table constructor requires at least one row.");
+            }
+
+            int columnCount = rows[0].Count;
+            if (columnCount == 0)
+            {
+                throw new ExecutionException("VALUES table constructor rows must contain at least one expression.");
+            }
+
+            foreach (var row in rows)
+            {
+                if (row.Count != columnCount)
+                {
+                    throw new ExecutionException("All VALUES table constructor rows must have the same number of expressions.");
+                }
+            }
+
+            var columnNames = table.ColumnAliases != null && table.ColumnAliases.Count > 0
+                ? table.ColumnAliases
+                : Enumerable.Range(1, columnCount).Select(i => $"column{i}").ToList();
+
+            if (columnNames.Count != columnCount)
+            {
+                throw new ExecutionException("VALUES table constructor column alias count must match the row value count.");
+            }
+
+            var result = new DataTable();
+            result.SetColumns(columnNames);
+            foreach (var valueRow in rows)
+            {
+                var dataRow = new Row(result.Schema);
+                for (int i = 0; i < valueRow.Count; i++)
+                {
+                    dataRow[columnNames[i]] = await _expressionEvaluator.EvaluateInternal(valueRow[i], new Row());
+                }
+                await result.AddRowAsync(dataRow);
+            }
+
+            var mem = new InMemoryDataSource();
+            mem.Validator = _evaluator;
+            mem.ExecutionContext = _evaluator;
+            mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
+            await mem.WriteBatches(new[] { result }.ToAsyncEnumerable());
+            return mem;
         }
 
         /// <summary>Restores a temporary table from a session data store (SQLite/Chunks or Legacy JSON).</summary>

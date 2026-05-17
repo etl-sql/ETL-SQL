@@ -13,10 +13,10 @@ namespace ETL_SQL.Core.Parser
         DOCKER, CLOSE,
         DECLARE,
         AND, OR, NOT, AS, IS,
-        IN, LIKE, ESCAPE,
+        IN, LIKE, ILIKE, ESCAPE,
         CASE, WHEN, THEN, ELSE, END,
         TABLE, IF, EXISTS, IDENTITY, DEFAULT, DROP, WITH, WITHIN,
-        DISTINCT, TOP, PERCENT, TIES, LIMIT, OFFSET, ROWS, ROW,
+        DISTINCT, TOP, PERCENT, TIES, LIMIT, OFFSET, FETCH, FIRST, NEXT, ONLY, ROWS, ROW,
         BEGIN, WHILE, FOR, FOREACH, EACH, TO, STEP, ZONE, TIME,
         TRY, CATCH, THROW,
         PRINT, RAISEERROR, ASSERT, EXEC, EXECUTE,
@@ -106,6 +106,8 @@ namespace ETL_SQL.Core.Parser
         LESS_EQUALS, // <=
         GREATER_EQUALS, // >=
         NOT_EQUALS, // != or <>
+        REGEX_MATCH, // ~
+        REGEX_IMATCH, // ~*
  
         PLUS,       // +
         MINUS,      // -

@@ -980,9 +980,23 @@ SELECT * FROM #sales
 ORDER BY amount DESC
 OFFSET 20 ROWS
 FETCH NEXT 10 ROWS ONLY;
+SELECT * FROM #sales ORDER BY amount DESC FETCH FIRST 10 ROWS ONLY;
 ```
 
-### 5.4 JOIN Types
+### 5.4 `VALUES` Table Constructor
+Use `VALUES` as a standalone derived table in a `FROM` or `JOIN` clause. A table alias is required; column aliases are optional and default to `column1`, `column2`, etc.
+
+```sql
+SELECT *
+FROM (VALUES (1, 'A'), (2, 'B')) AS t(id, name);
+
+SELECT t.name, x.label
+FROM (VALUES (1, 'A'), (2, 'B')) AS t(id, name)
+JOIN (VALUES (2, 'Two')) AS x(id, label)
+    ON t.id = x.id;
+```
+
+### 5.5 JOIN Types
 
 | Syntax | Returns |
 | :--- | :--- |
@@ -1083,7 +1097,7 @@ FUZZY JOIN #reference b
 
 > See `Docs/Reference/Standard_Library.md §16` for `NORMALIZE`, `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `METAPHONE`, and `NGRAMS/NGRAM_TOKENS` — the building blocks used in `FUZZY JOIN` expressions.
 
-### 5.5 `CROSS APPLY` / `OUTER APPLY`
+### 5.6 `CROSS APPLY` / `OUTER APPLY`
 ```sql
 SELECT o.OrderId, t.LineItem
 FROM Orders AS o
@@ -1109,7 +1123,7 @@ FROM   #reference r
 CROSS APPLY (SELECT Value AS gram FROM NGRAM_TOKENS(r.name)) t;
 ```
 
-### 5.6 Hierarchical Aggregation
+### 5.7 Hierarchical Aggregation
 ```sql
 SELECT Region, Product, SUM(Amount) AS Total
 FROM #sales
@@ -1124,7 +1138,7 @@ FROM #sales
 GROUP BY GROUPING SETS((Region, Product), (Region), ());
 ```
 
-### 5.7 `PIVOT` / `UNPIVOT`
+### 5.8 `PIVOT` / `UNPIVOT`
 ```sql
 SELECT category, [Q1], [Q2], [Q3], [Q4]
 FROM (SELECT category, quarter, amount FROM #sales) AS src
@@ -1135,7 +1149,7 @@ FROM #quarterly_sales
 UNPIVOT (amount FOR quarter IN ([Q1], [Q2], [Q3], [Q4])) AS unpvt;
 ```
 
-### 5.8 `FOR JSON` / `FOR XML`
+### 5.9 `FOR JSON` / `FOR XML`
 ```sql
 SELECT id, name, amount FROM #sales
 FOR JSON PATH, ROOT('Sales'), INCLUDE_NULL_VALUES;
@@ -1144,7 +1158,7 @@ SELECT id, name FROM #sales
 FOR XML PATH, ROOT('Employees'), ELEMENTS;
 ```
 
-### 5.9 Window Functions
+### 5.10 Window Functions
 Window functions compute a value across a set of rows related to the current row without collapsing them into a single group. They appear in the `SELECT` column list and require an `OVER` clause.
 
 ```sql
@@ -1177,7 +1191,7 @@ SELECT
 FROM #sales;
 ```
 
-### 5.9.1 `FILTER` â€” Conditional Aggregation
+### 5.10.1 `FILTER` â€” Conditional Aggregation
 The `FILTER` clause restricts the rows that an aggregate window function considers. It is evaluated within the window frame but only includes rows that satisfy the condition.
 
 ```sql
@@ -1194,7 +1208,7 @@ FROM sales_data;
 | `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` | Current row and one row on either side |
 | `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` | All rows in the partition |
 
-### 5.10 `QUALIFY` â€” Filter Window Results
+### 5.11 `QUALIFY` â€” Filter Window Results
 The `QUALIFY` clause filters results based on window function values. It is evaluated after window functions are calculated, avoiding the need for a subquery to filter by a ranked or aggregated window value.
 
 ```sql
@@ -1274,6 +1288,10 @@ WHERE category IN ('Electronics', 'Apparel')
 
 WHERE email LIKE '%@company.com'
   AND code  LIKE 'US\_%' ESCAPE '\'
+
+WHERE email ILIKE '%@company.com'
+  AND notes ~  '^[A-Z]{3}-\d+$'
+  AND notes ~* '^abc'
 
 WHERE EXISTS     (SELECT 1 FROM #approved WHERE id = t.id)
 WHERE NOT EXISTS (SELECT 1 FROM #blocked  WHERE id = t.id)
@@ -1605,7 +1623,7 @@ ROLLBACK;            -- or ROLLBACK TRAN
 `AND`, `OR`, `NOT`
 
 ### 14.3 Comparison Operators
-`=`, `<>`, `!=`, `<`, `<=`, `>`, `>=`, `IN`, `LIKE`, `BETWEEN`
+`=`, `<>`, `!=`, `<`, `<=`, `>`, `>=`, `IN`, `LIKE`, `ILIKE`, `~`, `~*`, `BETWEEN`
 
 #### `BETWEEN`
 Checks if a value is within an inclusive range (equivalent to `val >= start AND val <= end`).

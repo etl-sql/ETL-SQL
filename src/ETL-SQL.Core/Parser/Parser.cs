@@ -33,6 +33,7 @@ namespace ETL_SQL.Core.Parser
             TokenType.ALGORITHM, TokenType.PASSPHRASE, TokenType.COMMENT, TokenType.DATE,
             TokenType.GETDATE, TokenType.RETURNS, TokenType.CONFIG, TokenType.CLOSE,
             TokenType.MIN, TokenType.MAX, TokenType.SUM, TokenType.AVG, TokenType.COUNT,
+            TokenType.EVERY,
             TokenType.STEP, TokenType.TOP, TokenType.BOTTOM, TokenType.LEFT, TokenType.RIGHT,
             TokenType.ASC, TokenType.DESC
         };
@@ -539,6 +540,17 @@ namespace ETL_SQL.Core.Parser
                 if (!Match(TokenType.ROWS)) Match(TokenType.ROW);
             }
 
+            if (Match(TokenType.FETCH))
+            {
+                if (limitCount != null)
+                    throw new SyntaxException("Cannot combine LIMIT and FETCH in the same SELECT", Current.Line, Current.Column);
+
+                if (!Match(TokenType.FIRST)) Consume(TokenType.NEXT, "Expected FIRST or NEXT after FETCH");
+                limitCount = ParseExpression();
+                if (!Match(TokenType.ROWS)) Consume(TokenType.ROW, "Expected ROW or ROWS after FETCH count");
+                Consume(TokenType.ONLY, "Expected ONLY after FETCH ROWS");
+            }
+
             var selectStmt = new SelectStatement(columns, intoTable, fromTable, joins, whereClause, groupBy, havingClause, orderBy)
             {
                 Line = startToken.Line,
@@ -736,9 +748,56 @@ namespace ETL_SQL.Core.Parser
                     
                     tableRef = new TableReference("SUBQUERY", null, null, null, alias, subquery);
                 }
+                else if (Current.Type == TokenType.VALUES)
+                {
+                    Advance();
+                    var rows = new List<List<Expression>>();
+                    do
+                    {
+                        Consume(TokenType.LPAREN, "Expected '(' before VALUES row");
+                        var values = new List<Expression>();
+                        values.Add(ParseExpression());
+                        while (Match(TokenType.COMMA))
+                        {
+                            values.Add(ParseExpression());
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' after VALUES row");
+                        rows.Add(values);
+                    } while (Match(TokenType.COMMA));
+
+                    Consume(TokenType.RPAREN, "Expected ')' after VALUES table constructor");
+
+                    string alias;
+                    if (Match(TokenType.AS))
+                    {
+                        alias = ConsumeIdentifier("Expected alias after AS for VALUES table constructor").Value;
+                    }
+                    else if (IsIdentifier(Current))
+                    {
+                        alias = Advance().Value;
+                    }
+                    else
+                    {
+                        throw new SyntaxException("Expected alias after VALUES table constructor", Current.Line, Current.Column);
+                    }
+
+                    List<string>? columnAliases = null;
+                    if (Match(TokenType.LPAREN))
+                    {
+                        columnAliases = new List<string>();
+                        columnAliases.Add(ConsumeIdentifier("Expected column alias in VALUES table constructor").Value);
+                        while (Match(TokenType.COMMA))
+                        {
+                            columnAliases.Add(ConsumeIdentifier("Expected column alias in VALUES table constructor").Value);
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' after VALUES column aliases");
+                    }
+
+                    tableRef = new TableReference("VALUES", null, null, null, alias, valuesRows: rows, columnAliases: columnAliases);
+                }
                 else
                 {
-                    throw new SyntaxException("Expected SELECT after '(' in FROM/JOIN table reference", Current.Line, Current.Column);
+                    throw new SyntaxException("Expected SELECT or VALUES after '(' in FROM/JOIN table reference", Current.Line, Current.Column);
                 }
             }
             else

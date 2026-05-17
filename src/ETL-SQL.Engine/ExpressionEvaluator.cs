@@ -942,8 +942,16 @@ namespace ETL_SQL.Engine
                 TokenType.GREATER_EQUALS => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)(CompareConstants(leftVal, rightVal) >= 0),
                 TokenType.LESS_EQUALS => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)(CompareConstants(leftVal, rightVal) <= 0),
                 TokenType.LIKE => EvaluateLike(leftVal, rightVal),
+                TokenType.REGEX_MATCH => EvaluateRegexMatch(leftVal, rightVal, RegexOptions.None),
+                TokenType.REGEX_IMATCH => EvaluateRegexMatch(leftVal, rightVal, RegexOptions.IgnoreCase),
                 _ => IsSoftEqual(leftVal, rightVal)
             };
+        }
+
+        private static object? EvaluateRegexMatch(object? input, object? pattern, RegexOptions options)
+        {
+            if (input.IsNull() || pattern.IsNull()) return null;
+            return Regex.IsMatch(input?.ToString() ?? "", pattern?.ToString() ?? "", options);
         }
 
         /// <summary>Evaluates a LIKE expression.</summary>

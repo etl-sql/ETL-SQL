@@ -92,11 +92,13 @@ namespace ETL_SQL.Core
         public string? Alias { get; }
         public Statement? Subquery { get; }
         public FunctionCallExpression? FunctionCall { get; }
+        public List<List<Expression>>? ValuesRows { get; }
+        public List<string>? ColumnAliases { get; }
         public List<AstNode> TableOperators { get; } = new();
         public Dictionary<string, string> Metadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, Expression> Options { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-        public TableReference(string tableName, string? schemaName = null, string? databaseName = null, string? connectionName = null, string? alias = null, Statement? subquery = null, FunctionCallExpression? functionCall = null)
+        public TableReference(string tableName, string? schemaName = null, string? databaseName = null, string? connectionName = null, string? alias = null, Statement? subquery = null, FunctionCallExpression? functionCall = null, List<List<Expression>>? valuesRows = null, List<string>? columnAliases = null)
         {
             TableName = tableName;
             SchemaName = schemaName;
@@ -105,6 +107,8 @@ namespace ETL_SQL.Core
             Alias = alias;
             Subquery = subquery;
             FunctionCall = functionCall;
+            ValuesRows = valuesRows;
+            ColumnAliases = columnAliases;
         }
 
         public override string ToSql() => AstSerializer.Format(this);
@@ -113,6 +117,7 @@ namespace ETL_SQL.Core
         {
             if (Subquery is SelectStatement sel) return sel.GetSourceTables();
             if (Subquery is SetOperationStatement setOp) return setOp.GetSourceTables();
+            if (ValuesRows != null) return Enumerable.Empty<string>();
             if (!string.IsNullOrEmpty(TableName) && TableName != "SUBQUERY" && TableName != "DUAL")
             {
                 string fullPath = (ConnectionName != null ? ConnectionName + "." : "") + (DatabaseName != null ? DatabaseName + "." : "") + (SchemaName != null ? SchemaName + "." : "") + TableName;
@@ -1648,13 +1653,15 @@ namespace ETL_SQL.Core
         public Expression Pattern { get; }
         public bool IsNot { get; }
         public Expression? EscapeChar { get; }
+        public bool IsCaseInsensitive { get; }
 
-        public LikeExpression(Expression left, Expression pattern, bool isNot = false, Expression? escapeChar = null)
+        public LikeExpression(Expression left, Expression pattern, bool isNot = false, Expression? escapeChar = null, bool isCaseInsensitive = false)
         {
             Left = left;
             Pattern = pattern;
             IsNot = isNot;
             EscapeChar = escapeChar;
+            IsCaseInsensitive = isCaseInsensitive;
         }
     }
 

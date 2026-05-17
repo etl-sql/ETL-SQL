@@ -462,6 +462,19 @@ namespace ETL_SQL.Core.Parser
                         }
                         Advance();
                         break;
+                    case '~':
+                        if (Peek() == '*')
+                        {
+                            Advance();
+                            tokens.Add(new Token(TokenType.REGEX_IMATCH, "~*", startLine, startColumn, _line, _column, startOffset, _position + 1));
+                            Advance();
+                        }
+                        else
+                        {
+                            tokens.Add(new Token(TokenType.REGEX_MATCH, "~", startLine, startColumn, startLine, startColumn + 1, startOffset, startOffset + 1));
+                            Advance();
+                        }
+                        break;
                     case '!':
                         if (Peek() == '=')
                         {

@@ -11,7 +11,7 @@ namespace ETL_SQL.Common
         {
             "SELECT", "FROM", "WHERE", "GROUP", "BY", "HAVING", "QUALIFY", "ORDER", "ASC", "DESC",
             "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE", "TRUNCATE", "PIVOT", "UNPIVOT", "MERGE", "USING", "MATCHED", "SOURCE", "TARGET",
-            "DISTINCT", "TOP", "PERCENT", "TIES", "LIMIT", "OFFSET", "ROWS", "ROW", "FETCH", "NEXT", "ONLY", "AS",
+            "DISTINCT", "TOP", "PERCENT", "TIES", "LIMIT", "OFFSET", "ROWS", "ROW", "FETCH", "FIRST", "NEXT", "ONLY", "AS",
             "ROLLUP", "CUBE", "GROUPING"
         };
 
@@ -38,7 +38,7 @@ namespace ETL_SQL.Common
 
         public static readonly HashSet<string> OperatorKeywords = new(StringComparer.OrdinalIgnoreCase)
         {
-            "AND", "OR", "NOT", "LIKE", "ESCAPE", "IN", "EXISTS", "BETWEEN", "IS", "NULL"
+            "AND", "OR", "NOT", "LIKE", "ILIKE", "ESCAPE", "IN", "EXISTS", "BETWEEN", "IS", "NULL"
         };
 
         /// <summary>

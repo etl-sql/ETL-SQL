@@ -25,6 +25,24 @@ namespace ETL_SQL.Tests.Functions
         }
 
         [Fact]
+        public async Task TestPostgresRegexOperators()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await AssertEval(ev, "'Hello World' ~ '^Hello'", true);
+            await AssertEval(ev, "'Hello World' ~ 'world$'", false);
+            await AssertEval(ev, "'Hello World' ~* 'world$'", true);
+            await AssertEval(ev, "NULL ~ '.*'", null);
+        }
+
+        [Fact]
+        public async Task TestPostgresIlikeOperator()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await AssertEval(ev, "'Hello World' ILIKE 'hello%'", true);
+            await AssertEval(ev, "'Hello World' NOT ILIKE 'goodbye%'", true);
+        }
+
+        [Fact]
         public async Task TestRegexpSubstr()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

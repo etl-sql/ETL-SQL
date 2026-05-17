@@ -315,6 +315,8 @@ For paired functions (`CORR`, `COVAR_*`), rows where either input is `NULL` are 
 | `COVAR_SAMP(x, y)` | Sample covariance |
 | `COVAR_POP(x, y)` | Population covariance |
 | `CORR(x, y)` | Pearson correlation coefficient (−1.0 to 1.0) |
+| `EVERY(expr)` | `TRUE` when every non-null boolean input is true; `NULL` when there are no non-null inputs |
+| `ANY(expr)` / `SOME(expr)` | `TRUE` when any non-null boolean input is true; `NULL` when there are no non-null inputs |
 | `STRING_AGG(col, sep) [WITHIN GROUP (ORDER BY col)]` | Rows concatenated into one string |
 
 *Example:*
@@ -323,6 +325,8 @@ SELECT
     AVG(Price)           AS AvgPrice,
     STDEV(Price)         AS PriceVolatility,
     CORR(Price, Qty)     AS PriceQtyCorrelation,
+    EVERY(InStock)       AS AllInStock,
+    ANY(Backordered)     AS HasBackorders,
     STRING_AGG(SKU, ', ') WITHIN GROUP (ORDER BY SKU ASC) AS AllSKUs
 FROM #products;
 ```
