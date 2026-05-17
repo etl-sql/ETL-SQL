@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Spill;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -135,7 +136,10 @@ namespace ETL_SQL.Engine.Engines
                                 allBufferedRows = await PerformMergeJoin(allBufferedRows, joinRows, effectiveJoin, hashKeysLeft, hashKeysRight);
                                 break;
                             default:
-                                allBufferedRows = await PerformNestedLoopJoin(allBufferedRows, joinRows, effectiveJoin);
+                                if (allBufferedRows.Count > _context.JoinSpillThreshold)
+                                    allBufferedRows = await PerformNestedLoopJoinSpilled(allBufferedRows, joinRows, effectiveJoin);
+                                else
+                                    allBufferedRows = await PerformNestedLoopJoin(allBufferedRows, joinRows, effectiveJoin);
                                 break;
                         }
                     }
@@ -525,6 +529,71 @@ namespace ETL_SQL.Engine.Engines
             var results = new List<Row>();
             await foreach (var r in PerformNestedLoopJoinStream(leftRows.ToAsyncEnumerable(), rightRows, join, schema)) results.Add(r);
             return results;
+        }
+
+        /// <summary>
+        /// Block nested-loop join for large left sides: spills left rows to disk and processes them
+        /// one page at a time against the in-memory right side. Prevents OOM when no equality keys
+        /// are available for hash join but the left side exceeds the spill threshold.
+        /// </summary>
+        private async Task<List<Row>> PerformNestedLoopJoinSpilled(List<Row> leftRows, List<Row> rightRows, JoinClause join)
+        {
+            _logger.WriteLine($"[yellow]HYPER-SCALE: Left side ({leftRows.Count} rows) exceeds threshold for nested-loop join. Spilling left side to disk.[/]");
+
+            string spillName = $"{Guid.NewGuid():N}_nl_left.tmp";
+            try
+            {
+                await using (var writer = await _context.SpillStore.CreateWriterAsync(spillName))
+                    await writer.WriteRowsAsync(leftRows);
+
+                TableSchema? schema = leftRows.Count > 0 && rightRows.Count > 0
+                    ? BuildCombinedSchema(leftRows[0], rightRows[0]) : null;
+
+                var results = new List<Row>();
+                var matchedRightIndices = IsRightOuter(join.JoinType) ? new HashSet<int>() : null;
+
+                await using var reader = await _context.SpillStore.CreateReaderAsync(spillName);
+                await foreach (var left in reader.AsEnumerableAsync())
+                {
+                    if (schema == null && rightRows.Count > 0)
+                        schema = BuildCombinedSchema(left, rightRows[0]);
+
+                    bool foundMatch = false;
+                    for (int ri = 0; ri < rightRows.Count; ri++)
+                    {
+                        var combined = CombineRows(left, rightRows[ri], schema);
+                        if (await _context.EvaluateCondition(join.Condition, combined))
+                        {
+                            foundMatch = true;
+                            if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase) ||
+                                join.JoinType.Equals("ANTI", StringComparison.OrdinalIgnoreCase)) break;
+                            results.Add(combined);
+                            matchedRightIndices?.Add(ri);
+                        }
+                    }
+
+                    if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase) && foundMatch) results.Add(left.Clone());
+                    else if (join.JoinType.Equals("ANTI", StringComparison.OrdinalIgnoreCase) && !foundMatch) results.Add(left.Clone());
+                    else if (!foundMatch && IsLeftOuter(join.JoinType)) results.Add(left.Clone());
+                }
+
+                if (IsRightOuter(join.JoinType) && matchedRightIndices != null)
+                {
+                    for (int ri = 0; ri < rightRows.Count; ri++)
+                    {
+                        if (!matchedRightIndices.Contains(ri))
+                            results.Add(schema != null
+                                ? CombineRows(new Row(schema), rightRows[ri], schema)
+                                : rightRows[ri].Clone());
+                    }
+                }
+
+                return results;
+            }
+            finally
+            {
+                _context.SpillStore.DeleteChunk(spillName);
+            }
         }
 
         private async IAsyncEnumerable<Row> PerformNestedLoopJoinStream(IAsyncEnumerable<Row> leftStream, List<Row> rightRows, JoinClause join, TableSchema? combinedSchema = null)

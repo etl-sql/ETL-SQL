@@ -39,6 +39,10 @@ namespace ETL_SQL.Engine.Engines
             List<SelectColumn> finalColumns,
             List<string> colNames)
         {
+            // Qualify bare identifiers in the WHERE clause (e.g. e8 → t8.e8) so the pushdown
+            // optimizer can recognize column ownership in unqualified comma-join predicates.
+            stmt = await IdentifierQualifier.QualifyAsync(stmt, _context);
+
             // Convert comma-join CROSS JOINs to INNER JOINs where WHERE predicates match,
             // preventing O(n^k) Cartesian-product materialization.
             stmt = CrossJoinPredicatePushdown.Optimize(stmt);
@@ -144,7 +148,18 @@ namespace ETL_SQL.Engine.Engines
             }
 
             // 1. WHERE
-            if (!whereApplied && stmt.WhereClause != null)
+            // When no post-WHERE stage needs all rows upfront (no GROUP BY, WINDOW, QUALIFY,
+            // ORDER BY, LIMIT, or DISTINCT), defer the filter to the projection loop so we avoid
+            // allocating a second List<Row> copy of the join output.
+            bool canDeferWhere = !whereApplied && stmt.WhereClause != null
+                && !(stmt.GroupBy != null || stmt.GroupingSet != null || hasAggInColumns)
+                && !hasWindowInColumns
+                && stmt.QualifyClause == null
+                && (stmt.OrderBy == null || stmt.OrderBy.Count == 0)
+                && stmt.Offset == null && stmt.LimitCount == null && stmt.TopCount == null
+                && !stmt.IsDistinct;
+
+            if (!whereApplied && !canDeferWhere && stmt.WhereClause != null)
             {
                 var filtered = new List<Row>();
                 foreach (var r in allRows) if (await _context.EvaluateCondition(stmt.WhereClause, r)) filtered.Add(r);
@@ -238,6 +253,7 @@ namespace ETL_SQL.Engine.Engines
             bool yielded = false;
             foreach (var row in allRows)
             {
+                if (canDeferWhere && !await _context.EvaluateCondition(stmt.WhereClause!, row)) continue;
                 var resRow = batch.NewRow();
                 for (int i = 0; i < finalColumns.Count; i++)
                 {
