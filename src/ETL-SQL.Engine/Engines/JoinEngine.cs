@@ -39,6 +39,11 @@ namespace ETL_SQL.Engine.Engines
                 }
             }
 
+            // Flatten WHERE predicates for progressive pushdown into CROSS JOINs whose predicates use
+            // unqualified column names (which CrossJoinPredicatePushdown cannot handle via GetSourceTables).
+            var wherePredicates = new List<Expression>();
+            if (stmt.WhereClause != null) FlattenAnds(stmt.WhereClause, wherePredicates);
+
             foreach (var join in joins)
             {
                 if (join.IsApply)
@@ -50,42 +55,46 @@ namespace ETL_SQL.Engine.Engines
                 _logger.Debug("Joining table {TableName}{Alias} ({JoinType})", join.Table.TableName, join.Table.Alias != null ? $" AS {join.Table.Alias}" : "", join.JoinType);
                 var joinRows = await GetJoinRows(join);
 
-                if (join.IsFuzzy)
+                // For CROSS JOINs still carrying a literal-true condition, find WHERE predicates whose
+                // referenced columns are all present in the combined left+right row — and use them as
+                // the join condition. This prevents O(n^k) Cartesian materialization for queries that
+                // use unqualified column names (e.g., WHERE a3=b9 AND c9=688).
+                var effectiveJoin = wherePredicates.Count > 0
+                    ? TryEnrichCrossJoin(join, allBufferedRows, joinRows, wherePredicates)
+                    : join;
+
+                if (effectiveJoin.IsFuzzy)
                 {
                     var fuzzyEngine = new FuzzyJoinEngine(_context, _logger);
-                    allBufferedRows = await fuzzyEngine.PerformFuzzyJoin(allBufferedRows, joinRows, join);
+                    allBufferedRows = await fuzzyEngine.PerformFuzzyJoin(allBufferedRows, joinRows, effectiveJoin);
                     continue;
                 }
-                else if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase))
+                else if (effectiveJoin.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase))
                 {
-                    var rightAlias = join.Table.Alias ?? join.Table.TableName;
+                    var rightAlias = effectiveJoin.Table.Alias ?? effectiveJoin.Table.TableName;
                     var hashKeysLeft = new List<string>();
                     var hashKeysRight = new List<string>();
-                    if (TryExtractEqualityKeys(join.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight))
+                    if (TryExtractEqualityKeys(effectiveJoin.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight))
                         allBufferedRows = PerformHashSemiAntiJoin(allBufferedRows, joinRows, hashKeysLeft, hashKeysRight, semi: true);
                     else
-                        allBufferedRows = await PerformSemiJoin(allBufferedRows, joinRows, join);
+                        allBufferedRows = await PerformSemiJoin(allBufferedRows, joinRows, effectiveJoin);
                 }
-                else if (join.JoinType.Equals("ANTI", StringComparison.OrdinalIgnoreCase))
+                else if (effectiveJoin.JoinType.Equals("ANTI", StringComparison.OrdinalIgnoreCase))
                 {
-                    var rightAlias = join.Table.Alias ?? join.Table.TableName;
+                    var rightAlias = effectiveJoin.Table.Alias ?? effectiveJoin.Table.TableName;
                     var hashKeysLeft = new List<string>();
                     var hashKeysRight = new List<string>();
-                    if (TryExtractEqualityKeys(join.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight))
+                    if (TryExtractEqualityKeys(effectiveJoin.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight))
                         allBufferedRows = PerformHashSemiAntiJoin(allBufferedRows, joinRows, hashKeysLeft, hashKeysRight, semi: false);
                     else
-                        allBufferedRows = await PerformAntiJoin(allBufferedRows, joinRows, join);
+                        allBufferedRows = await PerformAntiJoin(allBufferedRows, joinRows, effectiveJoin);
                 }
                 else // INNER, LEFT, RIGHT, FULL
                 {
-                    var rightAlias = join.Table.Alias ?? join.Table.TableName;
+                    var rightAlias = effectiveJoin.Table.Alias ?? effectiveJoin.Table.TableName;
                     var hashKeysLeft = new List<string>();
                     var hashKeysRight = new List<string>();
-                    bool hasEquality = TryExtractEqualityKeys(join.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight);
-                    
-                    // Note: baseAlias is what we've been building up as the Left side
-                    // Update: In multi-joins, TryExtractEqualityKeys needs the specific left-side table mentioned in the ON clause.
-                    // But for simplicity in many cases, we check prefixes in TryExtractEqualityKeys.
+                    bool hasEquality = TryExtractEqualityKeys(effectiveJoin.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight);
 
                     // HYPER-SCALE: Check for disk-spilling threshold
                     if (hasEquality && (allBufferedRows.Count > _context.JoinSpillThreshold || joinRows.Count > _context.JoinSpillThreshold))
@@ -93,28 +102,82 @@ namespace ETL_SQL.Engine.Engines
                         _logger.WriteLine($"[yellow]HYPER-SCALE: Memory threshold exceeded ({Math.Max(allBufferedRows.Count, joinRows.Count)} rows). Triggering External Disk-Spilling Join.[/]");
 
                         var externalEngine = new ExternalJoinEngine(_context, _logger);
-                        allBufferedRows = await externalEngine.ApplyHashJoinExternal(allBufferedRows.ToAsyncEnumerable(), joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight).ToListAsync();
+                        allBufferedRows = await externalEngine.ApplyHashJoinExternal(allBufferedRows.ToAsyncEnumerable(), joinRows.ToAsyncEnumerable(), effectiveJoin, hashKeysLeft, hashKeysRight).ToListAsync();
                     }
                     else
                     {
-                        JoinHint algorithm = GetBestAlgorithm(join, allBufferedRows.Count, joinRows.Count, hasEquality);
-                        
+                        JoinHint algorithm = GetBestAlgorithm(effectiveJoin, allBufferedRows.Count, joinRows.Count, hasEquality);
+
                         switch (algorithm)
                         {
                             case JoinHint.Hash:
-                                allBufferedRows = await PerformHashJoin(allBufferedRows, joinRows, join, hashKeysLeft, hashKeysRight);
+                                allBufferedRows = await PerformHashJoin(allBufferedRows, joinRows, effectiveJoin, hashKeysLeft, hashKeysRight);
                                 break;
                             case JoinHint.Merge:
-                                allBufferedRows = await PerformMergeJoin(allBufferedRows, joinRows, join, hashKeysLeft, hashKeysRight);
+                                allBufferedRows = await PerformMergeJoin(allBufferedRows, joinRows, effectiveJoin, hashKeysLeft, hashKeysRight);
                                 break;
                             default:
-                                allBufferedRows = await PerformNestedLoopJoin(allBufferedRows, joinRows, join);
+                                allBufferedRows = await PerformNestedLoopJoin(allBufferedRows, joinRows, effectiveJoin);
                                 break;
                         }
                     }
                 }
             }
             return allBufferedRows;
+        }
+
+        /// <summary>
+        /// For a CROSS JOIN with a literal-true condition, finds WHERE predicates whose referenced columns
+        /// are all available in the combined left+right row, and returns a new INNER JOIN using those
+        /// predicates as the condition. Falls back to the original join if no predicates are applicable.
+        /// </summary>
+        private JoinClause TryEnrichCrossJoin(JoinClause join, List<Row> leftRows, List<Row> rightRows, List<Expression> wherePredicates)
+        {
+            if (join.Condition is not LiteralExpression lit || !true.Equals(lit.Value)) return join;
+            if (!string.Equals(join.JoinType, "CROSS JOIN", StringComparison.OrdinalIgnoreCase)) return join;
+            if (leftRows.Count == 0 || rightRows.Count == 0) return join;
+
+            var combinedBareCols = BuildBareColumnSet(leftRows[0], rightRows[0]);
+            var applicable = new List<Expression>();
+            foreach (var p in wherePredicates)
+            {
+                var cols = p.GetSourceColumns().ToList();
+                if (cols.Count > 0 && cols.All(c => combinedBareCols.Contains(c)))
+                    applicable.Add(p);
+            }
+
+            if (applicable.Count == 0) return join;
+
+            Expression cond = applicable.Count == 1
+                ? applicable[0]
+                : applicable.Skip(1).Aggregate(applicable[0],
+                    (acc, p) => (Expression)new BinaryExpression(acc, TokenType.AND, p));
+
+            _logger.Debug("[JOIN] Progressive WHERE pushdown: {Count} predicate(s) applied to CROSS JOIN on {Table}", applicable.Count, join.Table.TableName ?? "");
+            return new JoinClause("INNER JOIN", join.Table, cond, join.Hint, join.KeepBest);
+        }
+
+        private static HashSet<string> BuildBareColumnSet(Row leftSample, Row rightSample)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var name in leftSample.GetColumnNames())
+                set.Add(name.Contains('.') ? name[(name.IndexOf('.') + 1)..] : name);
+            foreach (var name in rightSample.GetColumnNames())
+                set.Add(name.Contains('.') ? name[(name.IndexOf('.') + 1)..] : name);
+            return set;
+        }
+
+        private static void FlattenAnds(Expression expr, List<Expression> list)
+        {
+            if (expr is BinaryExpression bin && bin.Operator == TokenType.AND)
+            {
+                FlattenAnds(bin.Left, list);
+                FlattenAnds(bin.Right, list);
+            }
+            else
+            {
+                list.Add(expr);
+            }
         }
 
         public async IAsyncEnumerable<Row> ApplyJoinsStreaming(IAsyncEnumerable<Row> leftStream, List<JoinClause> joins, SelectStatement stmt)

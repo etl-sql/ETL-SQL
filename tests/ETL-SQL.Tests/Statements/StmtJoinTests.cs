@@ -276,6 +276,41 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public async Task TestCommaJoin_FiveTable_UnqualifiedPredicates()
+        {
+            // Regression: 5-table comma join with unqualified WHERE predicates previously OOMed
+            // because CrossJoinPredicatePushdown requires qualified names (t1.col = t2.col).
+            // Progressive WHERE pushdown in JoinEngine handles unqualified names via column availability.
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+            await ev.Evaluate(Parse("CREATE TABLE ptA(a1 INT, z1 INT)"));
+            await ev.Evaluate(Parse("CREATE TABLE ptB(a2 INT, z2 INT)"));
+            await ev.Evaluate(Parse("CREATE TABLE ptC(a3 INT, z3 INT)"));
+            await ev.Evaluate(Parse("CREATE TABLE ptD(a4 INT, z4 INT)"));
+            await ev.Evaluate(Parse("CREATE TABLE ptE(a5 INT, z5 INT)"));
+
+            await ev.Evaluate(Parse("INSERT INTO ptA VALUES(1, 10), (2, 20), (3, 30)"));
+            await ev.Evaluate(Parse("INSERT INTO ptB VALUES(1, 100), (2, 200), (3, 300)"));
+            await ev.Evaluate(Parse("INSERT INTO ptC VALUES(1, 1000), (2, 2000), (3, 3000)"));
+            await ev.Evaluate(Parse("INSERT INTO ptD VALUES(1, 10000), (2, 20000), (3, 30000)"));
+            await ev.Evaluate(Parse("INSERT INTO ptE VALUES(1, 100000), (2, 200000), (3, 300000)"));
+
+            // Unqualified predicates — no table prefixes. Without progressive pushdown this would
+            // build a 3^5=243-row Cartesian product before WHERE. With pushdown, each join step
+            // filters immediately, keeping the intermediate result to 1 row.
+            var sql = "SELECT z1, z2, z3, z4, z5 FROM ptA, ptB, ptC, ptD, ptE WHERE a1=1 AND a2=a1 AND a3=a2 AND a4=a3 AND a5=a4";
+            var res = await ev.ExecuteQuery(Parse(sql).Statements[0]).ToListAsync();
+            var rows = res.SelectMany(b => b.Rows).ToList();
+
+            Assert.Single(rows);
+            Assert.Equal("10", rows[0]["z1"]?.ToString());
+            Assert.Equal("100", rows[0]["z2"]?.ToString());
+            Assert.Equal("1000", rows[0]["z3"]?.ToString());
+            Assert.Equal("10000", rows[0]["z4"]?.ToString());
+            Assert.Equal("100000", rows[0]["z5"]?.ToString());
+        }
+
+        [Fact]
         public async Task TestSubqueryInJoin()
         {
             string testDir = Path.Combine(Path.GetTempPath(), "ETL_SQL_Tests", Guid.NewGuid().ToString("N"));
