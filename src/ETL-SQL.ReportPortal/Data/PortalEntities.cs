@@ -18,6 +18,8 @@ public class PortalUser : IdentityUser<int>
     public ICollection<Subscription> Subscriptions { get; set; } = [];
     public ICollection<RefreshToken> RefreshTokens { get; set; } = [];
     public ICollection<ReportFavorite> ReportFavorites { get; set; } = [];
+    public ICollection<SavedReportView> SavedViews { get; set; } = [];
+    public ICollection<ReportAlert> ReportAlerts { get; set; } = [];
 }
 
 public class PortalRole : IdentityRole<int>
@@ -111,6 +113,9 @@ public class Report
     public ICollection<DatasetJob>     DatasetJobs  { get; set; } = [];
     public ICollection<ReportFavorite> Favorites    { get; set; } = [];
     public ICollection<ReportShareLink> ShareLinks   { get; set; } = [];
+    public ICollection<ReportEmbedToken> EmbedTokens { get; set; } = [];
+    public ICollection<SavedReportView> SavedViews   { get; set; } = [];
+    public ICollection<ReportAlert> Alerts           { get; set; } = [];
 }
 
 public class ReportFavorite
@@ -134,6 +139,55 @@ public class ReportShareLink
     public DateTime   CreatedAt   { get; set; } = DateTime.UtcNow;
     public DateTime?  ExpiresAt   { get; set; }
     public DateTime?  RevokedAt   { get; set; }
+}
+
+public class ReportEmbedToken
+{
+    public int        Id        { get; set; }
+    public int        ReportId  { get; set; }
+    public Report     Report    { get; set; } = null!;
+    public int        CreatedBy { get; set; }
+    public PortalUser Creator   { get; set; } = null!;
+    public string     Name      { get; set; } = "";
+    public string     Token     { get; set; } = "";
+    public DateTime   CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime?  ExpiresAt { get; set; }
+    public DateTime?  RevokedAt { get; set; }
+}
+
+public class SavedReportView
+{
+    public int        Id             { get; set; }
+    public int        ReportId       { get; set; }
+    public Report     Report         { get; set; } = null!;
+    public int        UserId         { get; set; }
+    public PortalUser User           { get; set; } = null!;
+    public string     Name           { get; set; } = "";
+    public string?    ParametersJson { get; set; }
+    public string?    FiltersJson    { get; set; }
+    public bool       IsDefault      { get; set; }
+    public DateTime   CreatedAt      { get; set; } = DateTime.UtcNow;
+    public DateTime   UpdatedAt      { get; set; } = DateTime.UtcNow;
+}
+
+public class ReportAlert
+{
+    public int        Id          { get; set; }
+    public int        ReportId    { get; set; }
+    public Report     Report      { get; set; } = null!;
+    public int        OwnerId     { get; set; }
+    public PortalUser Owner       { get; set; } = null!;
+    public string     Name        { get; set; } = "";
+    public string     VisualName  { get; set; } = "";
+    public string     Operator    { get; set; } = ">=";
+    public decimal    Threshold   { get; set; }
+    public string?    Recipient   { get; set; }
+    public string?    SmtpAlias   { get; set; }
+    public bool       IsActive    { get; set; } = true;
+    public DateTime   CreatedAt   { get; set; } = DateTime.UtcNow;
+    public DateTime   UpdatedAt   { get; set; } = DateTime.UtcNow;
+    public DateTime?  LastCheckedAt { get; set; }
+    public DateTime?  LastTriggeredAt { get; set; }
 }
 
 public class ReportSnapshot

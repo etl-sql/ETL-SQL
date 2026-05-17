@@ -112,12 +112,12 @@
 - [x] Review subscription and refresh-job syntax for clarity. `CREATE REFRESH JOB FOR REPORT ... SCHEDULE ... AT ...` and `CREATE SUBSCRIPTION FOR REPORT ... DELIVER TO ...` are readable, but should be documented as portal commands rather than report-definition syntax.
 
 ### Phase 4 — Portal scriptability and baseline UX gaps
-- [ ] Add Active Directory / LDAP / Windows-integrated identity support, or clearly define the first supported enterprise identity path.
-- [ ] Treat every portal capability as script-first. If it can be done in the UI, it must have a SQL-like administrative syntax, and if the engine already has a primitive, prefer exposing that primitive coherently instead of inventing a second model.
+- [x] Add Active Directory / LDAP / Windows-integrated identity support, or clearly define the first supported enterprise identity path.
+- [x] Treat every portal capability as script-first. If it can be done in the UI, it must have a SQL-like administrative syntax, and if the engine already has a primitive, prefer exposing that primitive coherently instead of inventing a second model.
     - [x] Add script syntax for portal dataset registry refresh, metadata updates, deletion, and dataset ACL grants/revokes.
     - [x] Add script syntax for favorites, report history, report dependencies, catalog search/recent lists, effective permissions, usage metrics, and report-script validation.
-    - [ ] Add script syntax for share links, embed tokens, saved parameter/filter views, and alerts as those capabilities land.
-- [ ] Polish and surface capabilities that already exist so they feel complete in the portal UI, docs, and scripting surface:
+    - [x] Add script syntax for share links, embed tokens, saved parameter/filter views, and alerts as those capabilities land.
+- [x] Polish and surface capabilities that already exist so they feel complete in the portal UI, docs, and scripting surface:
     - [x] Group-based permissions and folder ACLs.
     - [x] Publishing and republishing reports.
     - [x] Subscriptions and subscription history.
@@ -126,30 +126,30 @@
     - [x] Lineage/dependency data where available.
 - [x] Standardize report metadata. Owner/contact/tags can already come from script metadata comments such as `/* @owner: TeamName */`; define the canonical portal tags and decide how they flow into catalog fields.
 - [x] Standardize environment/deployment conventions. Dev/test/prod can already be handled with `CREATE SETS !DEV`, `CREATE SETS !TEST`, `CREATE SETS !PROD`, and `USE SETS !...`; define the portal/admin scripting pattern instead of adding a parallel deployment model too early.
-- [ ] Fill catalog quality-of-life gaps expected in BI portals, with scriptable equivalents where useful:
+- [x] Fill catalog quality-of-life gaps expected in BI portals, with scriptable equivalents where useful:
     - [x] Search reports/folders.
     - [x] Favorites.
     - [x] Recently viewed.
     - [x] Tags/categories.
     - [x] Last refreshed, last viewed, and failure status badges.
-- [ ] Fill governance/admin gaps:
+- [x] Fill governance/admin gaps:
     - [x] Effective permissions view for a user/report/folder.
     - [x] Admin-facing usage metrics: views, unique viewers, refresh duration/failures, subscription delivery failures.
     - [x] Content endorsement/certification or "trusted" marker.
-- [ ] Fill lifecycle/publishing gaps:
+- [x] Fill lifecycle/publishing gaps:
     - [x] Report version/history metadata.
     - [x] Replace/republish flow with validation before publish.
     - [x] Scripted promotion/deployment pattern built on `CREATE SETS` and portal `PUBLISH`/`ALTER REPORT` commands.
     - [x] Dependency/lineage view showing report -> datasets -> source connections if the raw lineage is already available but not exposed as a portal experience.
-- [ ] Fill sharing/consumption gaps:
+- [x] Fill sharing/consumption gaps:
     - [x] Share link with permissions check.
-    - Embed link/token story for internal apps.
-    - Per-user saved parameter/filter views, similar to bookmarks.
+    - [x] Embed link/token story for internal apps.
+    - [x] Per-user saved parameter/filter views, similar to bookmarks.
     - Comments/annotations can wait unless collaboration becomes a target v1 feature.
-- [ ] Add alerting after subscriptions are solid:
-    - Threshold alerts on KPI/card/gauge visuals.
-    - Alert ownership and visibility rules.
-    - Alert delivery through the same notification/subscription infrastructure.
+- [x] Add alerting after subscriptions are solid:
+    - [x] Threshold alerts on KPI/card/gauge visuals.
+    - [x] Alert ownership and visibility rules.
+    - [x] Alert delivery through the same notification/subscription infrastructure.
 
 ### Phase 5 — Documentation, samples, and release readiness
 - [ ] Update the golden workflow and kitchen sink reports to the new canonical syntax.

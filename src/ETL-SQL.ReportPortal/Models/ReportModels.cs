@@ -62,6 +62,74 @@ public record ReportShareResolutionDto(
     string Url,
     DateTime? ExpiresAt);
 
+public record CreateReportEmbedTokenRequest(string? Name, DateTime? ExpiresAt);
+
+public record ReportEmbedTokenDto(
+    int Id,
+    int ReportId,
+    string ReportName,
+    string Name,
+    string Token,
+    string Url,
+    int CreatedBy,
+    DateTime CreatedAt,
+    DateTime? ExpiresAt,
+    DateTime? RevokedAt);
+
+public record CreateSavedReportViewRequest(
+    string Name,
+    Dictionary<string, string>? Parameters,
+    Dictionary<string, string>? Filters,
+    bool IsDefault = false);
+
+public record UpdateSavedReportViewRequest(
+    string? Name,
+    Dictionary<string, string>? Parameters,
+    Dictionary<string, string>? Filters,
+    bool? IsDefault);
+
+public record SavedReportViewDto(
+    int Id,
+    int ReportId,
+    string Name,
+    Dictionary<string, string>? Parameters,
+    Dictionary<string, string>? Filters,
+    bool IsDefault,
+    DateTime CreatedAt,
+    DateTime UpdatedAt);
+
+public record CreateReportAlertRequest(
+    string Name,
+    string VisualName,
+    string Operator,
+    decimal Threshold,
+    string? Recipient,
+    string? SmtpAlias);
+
+public record UpdateReportAlertRequest(
+    string? Name,
+    string? VisualName,
+    string? Operator,
+    decimal? Threshold,
+    string? Recipient,
+    string? SmtpAlias,
+    bool? IsActive);
+
+public record ReportAlertDto(
+    int Id,
+    int ReportId,
+    string Name,
+    string VisualName,
+    string Operator,
+    decimal Threshold,
+    string? Recipient,
+    string? SmtpAlias,
+    bool IsActive,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    DateTime? LastCheckedAt,
+    DateTime? LastTriggeredAt);
+
 public record ReportDto(
     int Id,
     int FolderId,

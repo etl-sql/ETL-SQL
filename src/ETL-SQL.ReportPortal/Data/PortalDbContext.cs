@@ -24,6 +24,9 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<DatasetAcl>     DatasetAcls     => Set<DatasetAcl>();
     public DbSet<ReportFavorite> ReportFavorites => Set<ReportFavorite>();
     public DbSet<ReportShareLink> ReportShareLinks => Set<ReportShareLink>();
+    public DbSet<ReportEmbedToken> ReportEmbedTokens => Set<ReportEmbedToken>();
+    public DbSet<SavedReportView> SavedReportViews => Set<SavedReportView>();
+    public DbSet<ReportAlert> ReportAlerts => Set<ReportAlert>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -54,6 +57,9 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasMany(x => x.Subscriptions).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
             e.HasMany(x => x.DatasetJobs).WithOne(j => j.Report).HasForeignKey(j => j.ReportId);
             e.HasMany(x => x.ShareLinks).WithOne(l => l.Report).HasForeignKey(l => l.ReportId);
+            e.HasMany(x => x.EmbedTokens).WithOne(t => t.Report).HasForeignKey(t => t.ReportId);
+            e.HasMany(x => x.SavedViews).WithOne(v => v.Report).HasForeignKey(v => v.ReportId);
+            e.HasMany(x => x.Alerts).WithOne(a => a.Report).HasForeignKey(a => a.ReportId);
         });
 
         builder.Entity<RefreshToken>(e =>
@@ -73,6 +79,26 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasIndex(x => x.Token).IsUnique();
             e.HasOne(x => x.Report).WithMany(r => r.ShareLinks).HasForeignKey(x => x.ReportId);
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
+        });
+
+        builder.Entity<ReportEmbedToken>(e =>
+        {
+            e.HasIndex(x => x.Token).IsUnique();
+            e.HasOne(x => x.Report).WithMany(r => r.EmbedTokens).HasForeignKey(x => x.ReportId);
+            e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
+        });
+
+        builder.Entity<SavedReportView>(e =>
+        {
+            e.HasIndex(x => new { x.UserId, x.ReportId, x.Name }).IsUnique();
+            e.HasOne(x => x.User).WithMany(u => u.SavedViews).HasForeignKey(x => x.UserId);
+            e.HasOne(x => x.Report).WithMany(r => r.SavedViews).HasForeignKey(x => x.ReportId);
+        });
+
+        builder.Entity<ReportAlert>(e =>
+        {
+            e.HasOne(x => x.Owner).WithMany(u => u.ReportAlerts).HasForeignKey(x => x.OwnerId);
+            e.HasOne(x => x.Report).WithMany(r => r.Alerts).HasForeignKey(x => x.ReportId);
         });
 
         builder.Entity<SmtpConnection>(e =>

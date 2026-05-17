@@ -107,6 +107,15 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
       "ExpiryMinutes":     60,
       "RefreshExpiryDays": 7
     },
+    "Identity": {
+      "Provider": "Local",
+      "Oidc": {
+        "Authority": "",
+        "ClientId": "",
+        "TenantId": "",
+        "GroupClaimTypes": [ "groups", "roles" ]
+      }
+    },
     "FirstRun": {
       "AdminUsername": "admin"
     },
@@ -129,6 +138,10 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Jwt.Secret` | *(required)* | HMAC-SHA256 signing secret. **Must be at least 32 characters.** The portal will refuse to start without it. |
 | `Jwt.ExpiryMinutes` | `60` | How long an access token is valid. |
 | `Jwt.RefreshExpiryDays` | `7` | How long a refresh token is valid. |
+| `Identity.Provider` | `Local` | Authentication provider. `Local` is active today. The first enterprise provider path is OIDC, with Microsoft Entra ID as the reference implementation. |
+| `Identity.Oidc.Authority` | *(empty)* | Future OIDC authority URL, for example `https://login.microsoftonline.com/<tenant-id>/v2.0`. |
+| `Identity.Oidc.ClientId` | *(empty)* | Future OIDC client/application id. |
+| `Identity.Oidc.GroupClaimTypes` | `groups`, `roles` | Claims the portal will map into portal groups for folder and dataset ACLs. |
 | `FirstRun.AdminUsername` | `admin` | Username created on first start if no users exist yet. |
 | `Engine.StartOfWeek` | `Monday` | Day used as the start of week when resolving `RELDATE` week-boundary expressions (`W`, `W-1`, etc.). Accepted values: `Monday`–`Sunday`. Can be overridden per-script with `SET WEEK_START_DAY = '<day>'`. |
 
@@ -156,7 +169,31 @@ On first start the portal:
 
 Open **Admin → Users** to manage accounts.
 
-### 4.1 Roles
+### 4.1 Enterprise Identity Path
+
+The first supported enterprise identity path is **OpenID Connect**, with Microsoft Entra ID as the reference provider. LDAP bind and Windows Integrated Authentication are intentionally not the v1 enterprise path because they are host/network specific and do not map cleanly to browser, API, and embed-token workflows.
+
+The portal keeps its existing `Admin`, `Publisher`, and `Viewer` roles plus folder/dataset ACL groups. OIDC users will be provisioned into the portal identity store on first login, and configured OIDC group claims (`groups` or `roles`) will map to portal groups for ACL resolution. Until the OIDC login handler is enabled, use local portal users and groups as the active implementation.
+
+```json
+{
+  "Portal": {
+    "Identity": {
+      "Provider": "Oidc",
+      "Oidc": {
+        "Authority": "https://login.microsoftonline.com/<tenant-id>/v2.0",
+        "ClientId": "<application-client-id>",
+        "TenantId": "<tenant-id>",
+        "GroupClaimTypes": [ "groups", "roles" ]
+      }
+    }
+  }
+}
+```
+
+Scripted user and group administration remains the canonical bootstrap and fallback path. Enterprise group membership should flow into the same portal group model rather than creating a second ACL system.
+
+### 4.2 Roles
 
 | Role | What they can do |
 | :--- | :--- |
@@ -168,7 +205,7 @@ Open **Admin → Users** to manage accounts.
 <a name="orchestrator-manager-role"></a>
 Assign `OrchestratorManager` to operations staff who need to manage the ETL-SQL Orchestrator from the web UI without needing full admin rights. A user with only this role can see and use the Orchestrator tab but has no access to user management, groups, folders, audit logs, or report publishing.
 
-### 4.2 Creating a User
+### 4.3 Creating a User
 
 Click **New User** and fill in:
 
@@ -179,15 +216,15 @@ Click **New User** and fill in:
 
 New users created by an administrator always have `MustChangePassword = true`. They will be prompted to set their own password on first login.
 
-### 4.3 Editing a User
+### 4.4 Editing a User
 
 Click a user row to open their profile. You can change their name, email, role, and active status. **Deactivating a user** (`IsActive = false`) prevents login and blocks all API calls using their tokens.
 
-### 4.4 Resetting a Password
+### 4.5 Resetting a Password
 
 Use **Reset Password** on the user's profile to force a new temporary password and set `MustChangePassword = true`. The user will be prompted to change it on their next login.
 
-### 4.5 Revoking Sessions
+### 4.6 Revoking Sessions
 
 **Revoke Tokens** immediately invalidates all refresh tokens for that user, ending all active sessions. Use this if an account is believed to be compromised.
 
@@ -394,7 +431,49 @@ SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;
 REVOKE SHARE LINK 'share-token';
 ```
 
-### 6.10 Environment Promotion Pattern
+### 6.10 Embed Tokens
+
+Embed tokens are scoped report tokens intended for trusted internal applications. They are created by users with manage permission on the report and resolve through `GET /api/embed/{token}`. They do not grant portal administration rights and can be expired or revoked independently.
+
+```sql
+CREATE EMBED TOKEN FOR REPORT 'Monthly Sales'
+    NAME 'Finance Intranet'
+    EXPIRES '2026-12-31T23:59:59Z'
+    INTO #embed;
+
+SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' INTO #embed_tokens;
+REVOKE EMBED TOKEN 'embed-token';
+```
+
+### 6.11 Saved Views
+
+Saved views store a user's report parameter/filter state so common slices can be reopened without re-entering parameters. They are per-user by default; admins should treat shared curated variants as separate reports or publish-time defaults rather than hidden shared state.
+
+```sql
+CREATE SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales'
+    DEFAULT
+    PARAMETERS (@region = 'West', @year = '2026')
+    INTO #view;
+
+SHOW SAVED VIEWS FOR REPORT 'Monthly Sales' INTO #views;
+DROP SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales';
+```
+
+### 6.12 Alerts
+
+Alerts track threshold rules for KPI-style visuals such as cards and gauges. Alert ownership follows the creating user; admins can see all alerts. Delivery uses the same notification direction as subscriptions: a recipient and SMTP alias can be attached to the alert definition, and the evaluation runner can use that metadata when scheduled alert checks are enabled.
+
+```sql
+CREATE ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales'
+    WHEN VISUAL 'Revenue' >= 1000
+    DELIVER TO 'ops@example.com'
+    AT smtp;
+
+SHOW ALERTS FOR REPORT 'Monthly Sales' INTO #alerts;
+DROP ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales';
+```
+
+### 6.13 Environment Promotion Pattern
 
 Use ETL-SQL environment sets as the deployment boundary. Do not create a separate portal deployment language for dev/test/prod. Scripts should define or load the environment values first, activate the target set, then use the same portal admin commands for folders, grants, publishing, subscriptions, and refresh jobs.
 

@@ -533,6 +533,31 @@ namespace ETL_SQL.Core.Parser.Components
                 var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal").Value;
                 stmt = new ShowPortalShareLinksStatement(reportName);
             }
+            else if (Match(TokenType.EMBED))
+            {
+                if (!Match(TokenType.TOKEN) && !Match(TokenType.TOKENS) && !MatchIdentifier("TOKENS"))
+                    throw new SyntaxException("Expected TOKEN or TOKENS after SHOW EMBED", _parser.Current.Line, _parser.Current.Column);
+                Consume(TokenType.FOR, "Expected FOR after SHOW EMBED TOKENS");
+                Consume(TokenType.REPORT, "Expected REPORT");
+                var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal").Value;
+                stmt = new ShowPortalEmbedTokensStatement(reportName);
+            }
+            else if (Match(TokenType.SAVED))
+            {
+                if (!Match(TokenType.VIEW) && !MatchIdentifier("VIEWS"))
+                    throw new SyntaxException("Expected VIEW or VIEWS after SHOW SAVED", _parser.Current.Line, _parser.Current.Column);
+                Consume(TokenType.FOR, "Expected FOR after SHOW SAVED VIEWS");
+                Consume(TokenType.REPORT, "Expected REPORT");
+                var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal").Value;
+                stmt = new ShowPortalSavedViewsStatement(reportName);
+            }
+            else if (Match(TokenType.ALERT) || MatchIdentifier("ALERTS"))
+            {
+                Consume(TokenType.FOR, "Expected FOR after SHOW ALERTS");
+                Consume(TokenType.REPORT, "Expected REPORT");
+                var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal").Value;
+                stmt = new ShowPortalAlertsStatement(reportName);
+            }
             else if (MatchIdentifier("RECENT"))
             {
                 ConsumeIdentifierValue("REPORTS", "Expected REPORTS after SHOW RECENT");
@@ -617,6 +642,9 @@ namespace ETL_SQL.Core.Parser.Components
                     ShowPortalReportHistoryStatement sprh => sprh with { IntoTable = tempTable },
                     ShowPortalReportDependenciesStatement sprd => sprd with { IntoTable = tempTable },
                     ShowPortalShareLinksStatement spsl => spsl with { IntoTable = tempTable },
+                    ShowPortalEmbedTokensStatement spet => spet with { IntoTable = tempTable },
+                    ShowPortalSavedViewsStatement spsv => spsv with { IntoTable = tempTable },
+                    ShowPortalAlertsStatement spa => spa with { IntoTable = tempTable },
                     ShowPortalFavoritesStatement spf => spf with { IntoTable = tempTable },
                     ShowPortalRecentReportsStatement sprr => sprr with { IntoTable = tempTable },
                     SearchPortalCatalogStatement spc => spc with { IntoTable = tempTable },

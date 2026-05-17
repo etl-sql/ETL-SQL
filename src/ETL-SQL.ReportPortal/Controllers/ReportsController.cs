@@ -122,6 +122,91 @@ public class ReportsController : ControllerBase
             link.RevokedAt);
     }
 
+    private async Task<string> GenerateUniqueEmbedTokenAsync()
+    {
+        while (true)
+        {
+            var bytes = RandomNumberGenerator.GetBytes(32);
+            var token = Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            if (!await db.ReportEmbedTokens.AnyAsync(t => t.Token == token))
+                return token;
+        }
+    }
+
+    private ReportEmbedTokenDto ToEmbedTokenDto(ReportEmbedToken token)
+    {
+        var report = token.Report;
+        return new ReportEmbedTokenDto(
+            token.Id,
+            token.ReportId,
+            report.Name,
+            token.Name,
+            token.Token,
+            $"{Request.Scheme}://{Request.Host}/api/embed/{token.Token}",
+            token.CreatedBy,
+            token.CreatedAt,
+            token.ExpiresAt,
+            token.RevokedAt);
+    }
+
+    private static SavedReportViewDto ToSavedViewDto(SavedReportView view) =>
+        new(
+            view.Id,
+            view.ReportId,
+            view.Name,
+            DeserializeDictionary(view.ParametersJson),
+            DeserializeDictionary(view.FiltersJson),
+            view.IsDefault,
+            view.CreatedAt,
+            view.UpdatedAt);
+
+    private static ReportAlertDto ToAlertDto(ReportAlert alert) =>
+        new(
+            alert.Id,
+            alert.ReportId,
+            alert.Name,
+            alert.VisualName,
+            alert.Operator,
+            alert.Threshold,
+            alert.Recipient,
+            alert.SmtpAlias,
+            alert.IsActive,
+            alert.CreatedAt,
+            alert.UpdatedAt,
+            alert.LastCheckedAt,
+            alert.LastTriggeredAt);
+
+    private async Task ClearDefaultSavedViewsAsync(int reportId)
+    {
+        var defaults = await db.SavedReportViews
+            .Where(v => v.ReportId == reportId && v.UserId == CurrentUserId && v.IsDefault)
+            .ToListAsync();
+        foreach (var view in defaults)
+            view.IsDefault = false;
+    }
+
+    private static bool IsSupportedAlertOperator(string op) =>
+        op is ">" or ">=" or "<" or "<=" or "=" or "!=";
+
+    private static string? SerializeDictionary(Dictionary<string, string>? values) =>
+        values is null || values.Count == 0
+            ? null
+            : JsonSerializer.Serialize(values.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(kv => kv.Key, kv => kv.Value));
+
+    private static Dictionary<string, string>? DeserializeDictionary(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     // ── GET /api/folders/{id}/reports ─────────────────────────────────────────
 
     [HttpGet("folders/{folderId:int}/reports")]
@@ -551,6 +636,220 @@ public class ReportsController : ControllerBase
             link.Report.Folder.Path,
             $"/reports/{link.ReportId}",
             link.ExpiresAt));
+    }
+
+    // ── Embed tokens ────────────────────────────────────────────────────────
+
+    [HttpPost("reports/{id:int}/embed-tokens")]
+    public async Task<IActionResult> CreateEmbedToken(int id, [FromBody] CreateReportEmbedTokenRequest? req)
+    {
+        var report = await db.Reports.Include(r => r.Folder).FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+        if (req?.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow)
+            return BadRequest(new { error = "Embed token expiration must be in the future." });
+
+        var token = new ReportEmbedToken
+        {
+            ReportId = id,
+            CreatedBy = CurrentUserId,
+            Name = string.IsNullOrWhiteSpace(req?.Name) ? "Embed token" : req!.Name!,
+            Token = await GenerateUniqueEmbedTokenAsync(),
+            ExpiresAt = req?.ExpiresAt
+        };
+        db.ReportEmbedTokens.Add(token);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "CREATE_REPORT_EMBED_TOKEN", "Report", id.ToString(), report.Name);
+        token.Report = report;
+        return CreatedAtAction(nameof(ResolveEmbedToken), new { token = token.Token }, ToEmbedTokenDto(token));
+    }
+
+    [HttpGet("reports/{id:int}/embed-tokens")]
+    public async Task<IActionResult> GetEmbedTokens(int id)
+    {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+
+        var tokens = await db.ReportEmbedTokens
+            .Include(t => t.Report).ThenInclude(r => r.Folder)
+            .Where(t => t.ReportId == id)
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+        return Ok(tokens.Select(ToEmbedTokenDto));
+    }
+
+    [HttpDelete("reports/{id:int}/embed-tokens/{token}")]
+    public async Task<IActionResult> RevokeEmbedToken(int id, string token)
+    {
+        var embed = await db.ReportEmbedTokens.Include(t => t.Report).FirstOrDefaultAsync(t => t.ReportId == id && t.Token == token);
+        if (embed is null) return NoContent();
+        var perm = await GetEffectivePermissionAsync(embed.Report.FolderId);
+        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+        if (embed.RevokedAt is null)
+        {
+            embed.RevokedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            await audit.LogAsync(CurrentUserId, "REVOKE_REPORT_EMBED_TOKEN", "Report", id.ToString(), token);
+        }
+        return NoContent();
+    }
+
+    [AllowAnonymous]
+    [HttpGet("embed/{token}")]
+    public async Task<IActionResult> ResolveEmbedToken(string token)
+    {
+        var embed = await db.ReportEmbedTokens.Include(t => t.Report).ThenInclude(r => r.Folder).FirstOrDefaultAsync(t => t.Token == token);
+        if (embed is null || embed.Report.IsDeleted) return NotFound();
+        if (embed.RevokedAt is not null) return NotFound();
+        if (embed.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow) return NotFound();
+        return Ok(new ReportShareResolutionDto(embed.ReportId, embed.Report.Name, embed.Report.Folder.Path, $"/reports/{embed.ReportId}", embed.ExpiresAt));
+    }
+
+    // ── Saved parameter/filter views ────────────────────────────────────────
+
+    [HttpGet("reports/{id:int}/saved-views")]
+    public async Task<IActionResult> GetSavedViews(int id)
+    {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null) return Forbid();
+        var views = await db.SavedReportViews.Where(v => v.ReportId == id && v.UserId == CurrentUserId).OrderBy(v => v.Name).ToListAsync();
+        return Ok(views.Select(ToSavedViewDto));
+    }
+
+    [HttpPost("reports/{id:int}/saved-views")]
+    public async Task<IActionResult> CreateSavedView(int id, [FromBody] CreateSavedReportViewRequest req)
+    {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null) return Forbid();
+        if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { error = "Saved view name is required." });
+        if (req.IsDefault) await ClearDefaultSavedViewsAsync(id);
+
+        var view = new SavedReportView
+        {
+            ReportId = id,
+            UserId = CurrentUserId,
+            Name = req.Name,
+            ParametersJson = SerializeDictionary(req.Parameters),
+            FiltersJson = SerializeDictionary(req.Filters),
+            IsDefault = req.IsDefault
+        };
+        db.SavedReportViews.Add(view);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "CREATE_SAVED_REPORT_VIEW", "Report", id.ToString(), req.Name);
+        return CreatedAtAction(nameof(GetSavedViews), new { id }, ToSavedViewDto(view));
+    }
+
+    [HttpPut("reports/{id:int}/saved-views/{viewId:int}")]
+    public async Task<IActionResult> UpdateSavedView(int id, int viewId, [FromBody] UpdateSavedReportViewRequest req)
+    {
+        var view = await db.SavedReportViews.FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
+        if (view is null) return NotFound();
+        if (req.Name is not null) view.Name = req.Name;
+        if (req.Parameters is not null) view.ParametersJson = SerializeDictionary(req.Parameters);
+        if (req.Filters is not null) view.FiltersJson = SerializeDictionary(req.Filters);
+        if (req.IsDefault.HasValue)
+        {
+            if (req.IsDefault.Value) await ClearDefaultSavedViewsAsync(id);
+            view.IsDefault = req.IsDefault.Value;
+        }
+        view.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "UPDATE_SAVED_REPORT_VIEW", "Report", id.ToString(), view.Name);
+        return Ok(ToSavedViewDto(view));
+    }
+
+    [HttpDelete("reports/{id:int}/saved-views/{viewId:int}")]
+    public async Task<IActionResult> DeleteSavedView(int id, int viewId)
+    {
+        var view = await db.SavedReportViews.FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
+        if (view is null) return NoContent();
+        db.SavedReportViews.Remove(view);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "DELETE_SAVED_REPORT_VIEW", "Report", id.ToString(), view.Name);
+        return NoContent();
+    }
+
+    // ── Alerts ───────────────────────────────────────────────────────────────
+
+    [HttpGet("reports/{id:int}/alerts")]
+    public async Task<IActionResult> GetAlerts(int id)
+    {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null) return Forbid();
+        var alerts = await db.ReportAlerts.Where(a => a.ReportId == id && (IsAdmin || a.OwnerId == CurrentUserId)).OrderBy(a => a.Name).ToListAsync();
+        return Ok(alerts.Select(ToAlertDto));
+    }
+
+    [HttpPost("reports/{id:int}/alerts")]
+    public async Task<IActionResult> CreateAlert(int id, [FromBody] CreateReportAlertRequest req)
+    {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null || perm < FolderPermission.Execute) return Forbid();
+        if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.VisualName))
+            return BadRequest(new { error = "Alert name and visualName are required." });
+        if (!IsSupportedAlertOperator(req.Operator)) return BadRequest(new { error = "Unsupported alert operator." });
+
+        var alert = new ReportAlert
+        {
+            ReportId = id,
+            OwnerId = CurrentUserId,
+            Name = req.Name,
+            VisualName = req.VisualName,
+            Operator = req.Operator,
+            Threshold = req.Threshold,
+            Recipient = req.Recipient,
+            SmtpAlias = req.SmtpAlias
+        };
+        db.ReportAlerts.Add(alert);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "CREATE_REPORT_ALERT", "Report", id.ToString(), req.Name);
+        return CreatedAtAction(nameof(GetAlerts), new { id }, ToAlertDto(alert));
+    }
+
+    [HttpPut("reports/{id:int}/alerts/{alertId:int}")]
+    public async Task<IActionResult> UpdateAlert(int id, int alertId, [FromBody] UpdateReportAlertRequest req)
+    {
+        var alert = await db.ReportAlerts.FirstOrDefaultAsync(a => a.Id == alertId && a.ReportId == id);
+        if (alert is null) return NotFound();
+        if (!IsAdmin && alert.OwnerId != CurrentUserId) return Forbid();
+        if (req.Name is not null) alert.Name = req.Name;
+        if (req.VisualName is not null) alert.VisualName = req.VisualName;
+        if (req.Operator is not null)
+        {
+            if (!IsSupportedAlertOperator(req.Operator)) return BadRequest(new { error = "Unsupported alert operator." });
+            alert.Operator = req.Operator;
+        }
+        if (req.Threshold.HasValue) alert.Threshold = req.Threshold.Value;
+        if (req.Recipient is not null) alert.Recipient = req.Recipient;
+        if (req.SmtpAlias is not null) alert.SmtpAlias = req.SmtpAlias;
+        if (req.IsActive.HasValue) alert.IsActive = req.IsActive.Value;
+        alert.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "UPDATE_REPORT_ALERT", "Report", id.ToString(), alert.Name);
+        return Ok(ToAlertDto(alert));
+    }
+
+    [HttpDelete("reports/{id:int}/alerts/{alertId:int}")]
+    public async Task<IActionResult> DeleteAlert(int id, int alertId)
+    {
+        var alert = await db.ReportAlerts.FirstOrDefaultAsync(a => a.Id == alertId && a.ReportId == id);
+        if (alert is null) return NoContent();
+        if (!IsAdmin && alert.OwnerId != CurrentUserId) return Forbid();
+        db.ReportAlerts.Remove(alert);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "DELETE_REPORT_ALERT", "Report", id.ToString(), alert.Name);
+        return NoContent();
     }
 
     // ── GET /api/reports/{id}/parameters ─────────────────────────────────────

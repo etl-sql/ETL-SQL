@@ -142,6 +142,9 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.REFRESH))    return _parent.PortalParser.ParseCreateRefreshJob(startToken);
             if (Match(TokenType.SUBSCRIPTION)) return _parent.PortalParser.ParseCreateSubscription(startToken);
             if (Match(TokenType.SHARE))      return _parent.PortalParser.ParseCreateShareLink(startToken);
+            if (Match(TokenType.EMBED))      return _parent.PortalParser.ParseCreateEmbedToken(startToken);
+            if (Match(TokenType.SAVED))      return _parent.PortalParser.ParseCreateSavedView(startToken);
+            if (Match(TokenType.ALERT))      return _parent.PortalParser.ParseCreateAlert(startToken);
 
             throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, TEMPLATE, or THEME after CREATE", _parser.Current.Line, _parser.Current.Column);
         }
@@ -312,6 +315,10 @@ namespace ETL_SQL.Core.Parser.Components
                 return _parent.PortalParser.ParseDropRefreshJob(startToken);
             if (Match(TokenType.SUBSCRIPTION))
                 return _parent.PortalParser.ParseDropSubscription(startToken);
+            if (Match(TokenType.SAVED))
+                return _parent.PortalParser.ParseDropSavedView(startToken);
+            if (Match(TokenType.ALERT))
+                return _parent.PortalParser.ParseDropAlert(startToken);
             if (_parser.Current.Type == TokenType.IDENTIFIER &&
                 _parser.Current.Value.Equals("SNAPSHOT", StringComparison.OrdinalIgnoreCase))
                 return _parent.PortalParser.ParseDropSnapshot(startToken);

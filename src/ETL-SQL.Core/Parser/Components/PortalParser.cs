@@ -198,6 +198,15 @@ namespace ETL_SQL.Core.Parser.Components
                 { Line = start.Line, Column = start.Column };
             }
 
+            if (Match(TokenType.EMBED))
+            {
+                Consume(TokenType.TOKEN, "Expected TOKEN after REVOKE EMBED");
+                string token = ConsumeStringLiteral("Expected embed token string literal");
+                Match(TokenType.SEMICOLON);
+                return new RevokePortalEmbedTokenStatement(token)
+                { Line = start.Line, Column = start.Column };
+            }
+
             var permissionToken = _parser.Advance();
             Consume(TokenType.ON, "Expected ON");
 
@@ -386,6 +395,100 @@ namespace ETL_SQL.Core.Parser.Components
 
             Match(TokenType.SEMICOLON);
             return new CreatePortalShareLinkStatement(report, expiresAt, intoTable)
+            { Line = start.Line, Column = start.Column };
+        }
+
+        // CREATE EMBED TOKEN FOR REPORT 'name' [NAME 'label'] [EXPIRES 'timestamp'] [INTO #embed]
+        public Statement ParseCreateEmbedToken(Token start)
+        {
+            Consume(TokenType.TOKEN, "Expected TOKEN after CREATE EMBED");
+            Consume(TokenType.FOR, "Expected FOR");
+            Consume(TokenType.REPORT, "Expected REPORT");
+            string report = ConsumeStringLiteral("Expected report name string literal");
+            string? name = null;
+            string? expiresAt = null;
+            if (MatchIdentifier("NAME"))
+                name = ConsumeStringLiteral("Expected embed token name string literal");
+            if (Match(TokenType.EXPIRES))
+                expiresAt = ConsumeStringLiteral("Expected expiration timestamp string literal");
+            string? intoTable = null;
+            if (Match(TokenType.INTO))
+                intoTable = ConsumeTempTableName("CREATE EMBED TOKEN ... INTO target must be a temporary table starting with '#'");
+            Match(TokenType.SEMICOLON);
+            return new CreatePortalEmbedTokenStatement(report, name, expiresAt, intoTable)
+            { Line = start.Line, Column = start.Column };
+        }
+
+        // CREATE SAVED VIEW 'name' FOR REPORT 'report' [DEFAULT] [PARAMETERS (...)] [INTO #view]
+        public Statement ParseCreateSavedView(Token start)
+        {
+            Consume(TokenType.VIEW, "Expected VIEW after CREATE SAVED");
+            string name = ConsumeStringLiteral("Expected saved view name string literal");
+            Consume(TokenType.FOR, "Expected FOR");
+            Consume(TokenType.REPORT, "Expected REPORT");
+            string report = ConsumeStringLiteral("Expected report name string literal");
+            bool isDefault = Match(TokenType.DEFAULT);
+            var parameters = MatchIdentifier("PARAMETERS")
+                ? ParseSubscriptionParameterList()
+                : new List<SubscriptionParameter>();
+            string? intoTable = null;
+            if (Match(TokenType.INTO))
+                intoTable = ConsumeTempTableName("CREATE SAVED VIEW ... INTO target must be a temporary table starting with '#'");
+            Match(TokenType.SEMICOLON);
+            return new CreatePortalSavedViewStatement(report, name, parameters, isDefault, intoTable)
+            { Line = start.Line, Column = start.Column };
+        }
+
+        // CREATE ALERT 'name' FOR REPORT 'report' WHEN VISUAL 'Card' >= 100 [DELIVER TO 'addr'] [AT smtp]
+        public Statement ParseCreateAlert(Token start)
+        {
+            string name = ConsumeStringLiteral("Expected alert name string literal");
+            Consume(TokenType.FOR, "Expected FOR");
+            Consume(TokenType.REPORT, "Expected REPORT");
+            string report = ConsumeStringLiteral("Expected report name string literal");
+            Consume(TokenType.WHEN, "Expected WHEN");
+            Consume(TokenType.VISUAL, "Expected VISUAL");
+            string visual = ConsumeStringLiteral("Expected visual name string literal");
+            string op = Advance().Value;
+            if (op is not (">" or ">=" or "<" or "<=" or "=" or "!=" or "<>"))
+                throw new SyntaxException("Expected alert comparison operator", _parser.Previous.Line, _parser.Previous.Column);
+            decimal threshold = ParseDecimalLiteral("Expected numeric alert threshold");
+            string? recipient = null;
+            string? smtpAlias = null;
+            if (MatchIdentifier("DELIVER"))
+            {
+                Consume(TokenType.TO, "Expected TO");
+                recipient = ConsumeStringLiteral("Expected alert recipient string literal");
+            }
+            if (Match(TokenType.AT))
+                smtpAlias = Advance().Value;
+            Match(TokenType.SEMICOLON);
+            return new CreatePortalAlertStatement(report, name, visual, op == "<>" ? "!=" : op, threshold, recipient, smtpAlias)
+            { Line = start.Line, Column = start.Column };
+        }
+
+        // DROP SAVED VIEW 'name' FOR REPORT 'report'
+        public Statement ParseDropSavedView(Token start)
+        {
+            Consume(TokenType.VIEW, "Expected VIEW after DROP SAVED");
+            string name = ConsumeStringLiteral("Expected saved view name string literal");
+            Consume(TokenType.FOR, "Expected FOR");
+            Consume(TokenType.REPORT, "Expected REPORT");
+            string report = ConsumeStringLiteral("Expected report name string literal");
+            Match(TokenType.SEMICOLON);
+            return new DropPortalSavedViewStatement(report, name)
+            { Line = start.Line, Column = start.Column };
+        }
+
+        // DROP ALERT 'name' FOR REPORT 'report'
+        public Statement ParseDropAlert(Token start)
+        {
+            string name = ConsumeStringLiteral("Expected alert name string literal");
+            Consume(TokenType.FOR, "Expected FOR");
+            Consume(TokenType.REPORT, "Expected REPORT");
+            string report = ConsumeStringLiteral("Expected report name string literal");
+            Match(TokenType.SEMICOLON);
+            return new DropPortalAlertStatement(report, name)
             { Line = start.Line, Column = start.Column };
         }
 
@@ -718,6 +821,17 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 _parser.Advance();
                 return id;
+            }
+            throw new SyntaxException(message, tok.Line, tok.Column);
+        }
+
+        private decimal ParseDecimalLiteral(string message)
+        {
+            var tok = _parser.Current;
+            if (tok.Type == TokenType.NUMBER && decimal.TryParse(tok.Value, out var value))
+            {
+                _parser.Advance();
+                return value;
             }
             throw new SyntaxException(message, tok.Line, tok.Column);
         }

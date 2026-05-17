@@ -154,6 +154,7 @@ namespace ETL_SQL.Core.Parser
         ENABLE, DISABLE, PDF, CSV,
         FAVORITE, UNFAVORITE, CATALOG, PERMISSIONS, EFFECTIVE, USAGE, METRICS, VALIDATE,
         SHARE, LINK, EXPIRES,
+        EMBED, TOKEN, SAVED, VIEW, ALERT,
 
         // ── Overlay tokens (Phase 9F) ──────────────────────────────────────
         OVERLAYS, GOAL, AVERAGE, MOVING_AVG, LINEAR, EXPONENTIAL, LOGARITHMIC, POLYNOMIAL, POWER,

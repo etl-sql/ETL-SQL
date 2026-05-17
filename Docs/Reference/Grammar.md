@@ -2383,6 +2383,24 @@ EXECUTE portal BEGIN
     SHOW SHARE LINKS FOR REPORT 'Monthly Sales' [INTO #shares];
     REVOKE SHARE LINK 'share-token';
 
+    CREATE EMBED TOKEN FOR REPORT 'Monthly Sales' [NAME 'Intranet'] [EXPIRES '2026-12-31T23:59:59Z'] [INTO #embed];
+    SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' [INTO #embed];
+    REVOKE EMBED TOKEN 'embed-token';
+
+    CREATE SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales'
+        [DEFAULT]
+        [PARAMETERS (@region = 'West', @year = '2026')]
+        [INTO #view];
+    SHOW SAVED VIEWS FOR REPORT 'Monthly Sales' [INTO #views];
+    DROP SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales';
+
+    CREATE ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales'
+        WHEN VISUAL 'Revenue' >= 1000
+        [DELIVER TO 'ops@example.com']
+        [AT smtp];
+    SHOW ALERTS FOR REPORT 'Monthly Sales' [INTO #alerts];
+    DROP ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales';
+
     SHOW REPORTS                         [INTO #reports];
     SHOW REPORTS IN FOLDER '/Finance'    [INTO #reports];
     SHOW REPORT  'Monthly Sales'         [INTO #detail];

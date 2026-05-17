@@ -219,6 +219,11 @@ namespace ETL_SQL.Core.Parser
             dict["SHARE"]        = TokenType.SHARE;
             dict["LINK"]         = TokenType.LINK;
             dict["EXPIRES"]      = TokenType.EXPIRES;
+            dict["EMBED"]        = TokenType.EMBED;
+            dict["TOKEN"]        = TokenType.TOKEN;
+            dict["SAVED"]        = TokenType.SAVED;
+            dict["VIEW"]         = TokenType.VIEW;
+            dict["ALERT"]        = TokenType.ALERT;
              
 
             return dict;

@@ -9,8 +9,23 @@ public class PortalConfig
     public string DatasetRootPath { get; set; } = "./data/datasets";
     public ResourcesConfig Resources { get; set; } = new();
     public JwtConfig       Jwt       { get; set; } = new();
+    public IdentityConfig  Identity  { get; set; } = new();
     public FirstRunConfig  FirstRun  { get; set; } = new();
     public OrchestratorConfig Orchestrator { get; set; } = new();
+}
+
+public class IdentityConfig
+{
+    public string Provider { get; set; } = "Local";
+    public OidcIdentityConfig Oidc { get; set; } = new();
+}
+
+public class OidcIdentityConfig
+{
+    public string? Authority { get; set; }
+    public string? ClientId { get; set; }
+    public string? TenantId { get; set; }
+    public string[] GroupClaimTypes { get; set; } = ["groups", "roles"];
 }
 
 public class OrchestratorConfig

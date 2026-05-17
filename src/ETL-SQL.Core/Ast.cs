@@ -2119,6 +2119,18 @@ namespace ETL_SQL.Core
 
     public record RevokePortalShareLinkStatement(string Token) : Statement;
 
+    public record CreatePortalEmbedTokenStatement(string ReportName, string? Name, string? ExpiresAt, string? IntoTable = null) : Statement;
+
+    public record RevokePortalEmbedTokenStatement(string Token) : Statement;
+
+    public record CreatePortalSavedViewStatement(string ReportName, string Name, IReadOnlyList<SubscriptionParameter> Parameters, bool IsDefault, string? IntoTable = null) : Statement;
+
+    public record DropPortalSavedViewStatement(string ReportName, string Name) : Statement;
+
+    public record CreatePortalAlertStatement(string ReportName, string Name, string VisualName, string Operator, decimal Threshold, string? Recipient, string? SmtpAlias) : Statement;
+
+    public record DropPortalAlertStatement(string ReportName, string Name) : Statement;
+
     public record CreatePortalRefreshJobStatement(
         string ReportName, string Schedule, string OrchestratorAlias) : Statement;
 
@@ -2179,6 +2191,12 @@ namespace ETL_SQL.Core
     public record ShowPortalReportDependenciesStatement(string ReportName, string? IntoTable = null) : Statement;
 
     public record ShowPortalShareLinksStatement(string ReportName, string? IntoTable = null) : Statement;
+
+    public record ShowPortalEmbedTokensStatement(string ReportName, string? IntoTable = null) : Statement;
+
+    public record ShowPortalSavedViewsStatement(string ReportName, string? IntoTable = null) : Statement;
+
+    public record ShowPortalAlertsStatement(string ReportName, string? IntoTable = null) : Statement;
 
     public record ShowPortalFavoritesStatement(string? Username, int? Limit, string? IntoTable = null) : Statement;
 

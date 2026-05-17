@@ -222,6 +222,64 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
+        public void PortalEmbedTokensSavedViewsAndAlerts_ParseScriptCommands()
+        {
+            var embedScript = TestHelpers.Parse(
+                "CREATE EMBED TOKEN FOR REPORT 'Monthly Sales' NAME 'Intranet' EXPIRES '2026-12-31T23:59:59Z' INTO #embed;");
+            var embed = Assert.IsType<CreatePortalEmbedTokenStatement>(Assert.Single(embedScript.Statements));
+            Assert.Equal("Monthly Sales", embed.ReportName);
+            Assert.Equal("Intranet", embed.Name);
+            Assert.Equal("#embed", embed.IntoTable);
+
+            var savedScript = TestHelpers.Parse(
+                "CREATE SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales' DEFAULT PARAMETERS (@region = 'West') INTO #view;");
+            var saved = Assert.IsType<CreatePortalSavedViewStatement>(Assert.Single(savedScript.Statements));
+            Assert.Equal("Monthly Sales", saved.ReportName);
+            Assert.Equal("West Coast", saved.Name);
+            Assert.True(saved.IsDefault);
+            Assert.Single(saved.Parameters);
+
+            var alertScript = TestHelpers.Parse(
+                "CREATE ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales' WHEN VISUAL 'Revenue' >= 1000 DELIVER TO 'ops@example.com' AT smtp;");
+            var alert = Assert.IsType<CreatePortalAlertStatement>(Assert.Single(alertScript.Statements));
+            Assert.Equal("Monthly Sales", alert.ReportName);
+            Assert.Equal("Revenue Floor", alert.Name);
+            Assert.Equal("Revenue", alert.VisualName);
+            Assert.Equal(">=", alert.Operator);
+            Assert.Equal(1000m, alert.Threshold);
+            Assert.Equal("ops@example.com", alert.Recipient);
+            Assert.Equal("smtp", alert.SmtpAlias);
+        }
+
+        [Fact]
+        public void PortalEmbedTokensSavedViewsAndAlerts_ParseShowDropAndRevoke()
+        {
+            var showEmbedScript = TestHelpers.Parse("SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' INTO #embed;");
+            var showEmbed = Assert.IsType<ShowPortalEmbedTokensStatement>(Assert.Single(showEmbedScript.Statements));
+            Assert.Equal("#embed", showEmbed.IntoTable);
+
+            var showViewsScript = TestHelpers.Parse("SHOW SAVED VIEWS FOR REPORT 'Monthly Sales' INTO #views;");
+            var showViews = Assert.IsType<ShowPortalSavedViewsStatement>(Assert.Single(showViewsScript.Statements));
+            Assert.Equal("#views", showViews.IntoTable);
+
+            var showAlertsScript = TestHelpers.Parse("SHOW ALERTS FOR REPORT 'Monthly Sales' INTO #alerts;");
+            var showAlerts = Assert.IsType<ShowPortalAlertsStatement>(Assert.Single(showAlertsScript.Statements));
+            Assert.Equal("#alerts", showAlerts.IntoTable);
+
+            var revokeEmbedScript = TestHelpers.Parse("REVOKE EMBED TOKEN 'embed123';");
+            var revokeEmbed = Assert.IsType<RevokePortalEmbedTokenStatement>(Assert.Single(revokeEmbedScript.Statements));
+            Assert.Equal("embed123", revokeEmbed.Token);
+
+            var dropViewScript = TestHelpers.Parse("DROP SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales';");
+            var dropView = Assert.IsType<DropPortalSavedViewStatement>(Assert.Single(dropViewScript.Statements));
+            Assert.Equal("West Coast", dropView.Name);
+
+            var dropAlertScript = TestHelpers.Parse("DROP ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales';");
+            var dropAlert = Assert.IsType<DropPortalAlertStatement>(Assert.Single(dropAlertScript.Statements));
+            Assert.Equal("Revenue Floor", dropAlert.Name);
+        }
+
+        [Fact]
         public void PortalPromotionPattern_ParsesSetsPublishAlterGrantsAndRefresh()
         {
             var script = TestHelpers.Parse(@"

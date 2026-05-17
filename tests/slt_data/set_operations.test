@@ -1,0 +1,178 @@
+# Set operations: UNION, UNION ALL, INTERSECT, EXCEPT
+
+statement ok
+CREATE TABLE sa(v INT);
+
+statement ok
+INSERT INTO sa VALUES(1), (2), (3), (4);
+
+statement ok
+CREATE TABLE sb(v INT);
+
+statement ok
+INSERT INTO sb VALUES(3), (4), (5), (6);
+
+# UNION eliminates duplicates
+query I rowsort
+SELECT v FROM sa UNION SELECT v FROM sb;
+----
+1
+2
+3
+4
+5
+6
+
+# UNION ALL keeps duplicates (3 and 4 appear twice)
+query I rowsort
+SELECT v FROM sa UNION ALL SELECT v FROM sb;
+----
+1
+2
+3
+3
+4
+4
+5
+6
+
+# EXCEPT: sa minus sb
+query I rowsort
+SELECT v FROM sa EXCEPT SELECT v FROM sb;
+----
+1
+2
+
+# EXCEPT reversed: sb minus sa
+query I rowsort
+SELECT v FROM sb EXCEPT SELECT v FROM sa;
+----
+5
+6
+
+# INTERSECT: common values
+query I rowsort
+SELECT v FROM sa INTERSECT SELECT v FROM sb;
+----
+3
+4
+
+# UNION with NULLs — NULL is treated as a distinct value
+statement ok
+CREATE TABLE snull(v INT);
+
+statement ok
+INSERT INTO snull VALUES(1), (NULL), (NULL), (2);
+
+query I rowsort
+SELECT v FROM snull UNION SELECT v FROM snull;
+----
+1
+2
+NULL
+
+# UNION ALL with NULLs preserves duplicates
+query I rowsort
+SELECT v FROM snull UNION ALL SELECT v FROM snull;
+----
+1
+1
+2
+2
+NULL
+NULL
+NULL
+NULL
+
+# EXCEPT with NULLs — NULL on left, NULL on right → removed
+statement ok
+CREATE TABLE s_nonull(v INT);
+
+statement ok
+INSERT INTO s_nonull VALUES(1), (2);
+
+query I rowsort
+SELECT v FROM snull EXCEPT SELECT v FROM s_nonull;
+----
+NULL
+
+# INTERSECT with NULLs — NULL matches NULL in set semantics
+query I rowsort
+SELECT v FROM snull INTERSECT SELECT v FROM snull;
+----
+1
+2
+NULL
+
+# UNION deduplicates when left and right overlap completely
+query I rowsort
+SELECT v FROM sa UNION SELECT v FROM sa;
+----
+1
+2
+3
+4
+
+# EXCEPT when result is empty
+query I rowsort
+SELECT v FROM sa EXCEPT SELECT v FROM sa;
+----
+
+# INTERSECT when no common values
+statement ok
+CREATE TABLE sc(v INT);
+
+statement ok
+INSERT INTO sc VALUES(10), (20);
+
+query I rowsort
+SELECT v FROM sa INTERSECT SELECT v FROM sc;
+----
+
+# UNION ALL with ORDER BY on outer query
+query I
+SELECT v FROM (SELECT v FROM sa UNION ALL SELECT v FROM sb) sub ORDER BY v;
+----
+1
+2
+3
+3
+4
+4
+5
+6
+
+# Multi-column UNION
+statement ok
+CREATE TABLE sp(x INT, y INT);
+
+statement ok
+INSERT INTO sp VALUES(1, 10), (2, 20);
+
+statement ok
+CREATE TABLE sq(x INT, y INT);
+
+statement ok
+INSERT INTO sq VALUES(2, 20), (3, 30);
+
+query II rowsort
+SELECT x, y FROM sp UNION SELECT x, y FROM sq;
+----
+1
+10
+2
+20
+3
+30
+
+query II rowsort
+SELECT x, y FROM sp INTERSECT SELECT x, y FROM sq;
+----
+2
+20
+
+query II rowsort
+SELECT x, y FROM sp EXCEPT SELECT x, y FROM sq;
+----
+1
+10
