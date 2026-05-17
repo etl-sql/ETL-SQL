@@ -1,20 +1,31 @@
 # FORMAT
-Converts a value to a string using a .NET format pattern.
+Formats a value using a .NET format string, returning a locale-aware string.
 
-Syntax:
-  FORMAT(value, 'format_string')
+**Category:** System
 
-Parameters:
-  value         — the date, numeric, or other value to format
-  format_string — a standard or custom .NET format string (e.g., 'yyyy-MM-dd', 'N2', 'P1')
-
+## Syntax
 ```sql
--- Format a date
-SELECT FORMAT(GETDATE(), 'yyyy-MM-dd');    -- '2025-03-15'
-
--- Format a number with thousands separators and 2 decimals
-SELECT FORMAT(1234567.89, 'N2');           -- '1,234,567.89'
-
--- Format as percentage
-SELECT FORMAT(0.175, 'P1');                -- '17.5%'
+FORMAT(value, format_string)
 ```
+
+## Parameters
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `value` | `ANY` | The value to format (numeric, date, or string) |
+| `format_string` | `STRING` | A .NET standard or custom format string |
+
+## Returns
+`STRING` — The formatted string.
+
+## Example
+```sql
+SELECT FORMAT(1234567.89, 'N2');         -- → '1,234,567.89'
+SELECT FORMAT(0.1234, 'P1');             -- → '12.3%'
+SELECT FORMAT(GETDATE(), 'yyyy-MM-dd');  -- → '2026-05-17'
+SELECT FORMAT(GETDATE(), 'MMMM d, yyyy'); -- → 'May 17, 2026'
+SELECT FORMAT(order_total, 'C2') AS total FROM #orders;
+```
+
+## See Also
+- [Standard Library — §3.4 Formatting & Padding](../../../../../Docs/Reference/Standard_Library.md#34-formatting--padding)
+- Related: [`TO_STR`](TO_STR.md), [`STR`](STR.md), [`CAST`](CAST.md)

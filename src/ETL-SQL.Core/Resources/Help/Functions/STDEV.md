@@ -1,9 +1,31 @@
 # STDEV
-Returns the sample standard deviation.
+Returns the sample standard deviation of values in a group.
 
-Syntax:
-  STDEV(expr)
+**Category:** Aggregate
 
+## Syntax
 ```sql
-SELECT STDEV(amount) FROM #sales;
+STDEV(expression)
+STDDEV_SAMP(expression)
+STDEV(expression) OVER (...)
 ```
+
+## Parameters
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `expression` | `DECIMAL` / `FLOAT` | Numeric column to compute standard deviation for |
+
+## Returns
+`FLOAT` — Sample standard deviation. `STDDEV_SAMP` is an alias. Returns `NULL` if fewer than 2 rows.
+
+## Example
+```sql
+SELECT STDEV(score) AS score_stddev FROM #exams;
+SELECT region, AVG(revenue) AS avg, STDEV(revenue) AS volatility
+  FROM #sales GROUP BY region;
+SELECT STDEV(price) OVER (PARTITION BY category) AS category_spread FROM #products;
+```
+
+## See Also
+- [Standard Library — §6. Statistical Aggregates](../../../../../Docs/Reference/Standard_Library.md#6-statistical-aggregates)
+- Related: [`STDEVP`](STDEVP.md), [`VAR`](VAR.md), [`AVG`](AVG.md)
