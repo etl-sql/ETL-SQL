@@ -1545,6 +1545,10 @@ namespace ETL_SQL.Core
             IsNot = isNot;
             Subquery = subquery;
         }
+
+        // Subquery RHS has its own scope; only Left's columns belong to the outer query.
+        public override IEnumerable<string> GetSourceColumns() => Left.GetSourceColumns();
+        public override IEnumerable<string> GetSourceTables() => Left.GetSourceTables();
     }
 
     public record BetweenExpression : Expression

@@ -101,16 +101,30 @@ namespace ETL_SQL.Engine
             if (string.IsNullOrEmpty(name)) return null;
             if (context.HasColumn(name)) return context[name];
 
-            var cacheKey = (context.Schema, name);
+            var schema = context.Schema;
+
+            // Schema-less rows have no stable identity — skip the cache to prevent stale cross-step
+            // hits where (null, "col") resolves a key from a previous dynamic row shape.
+            if (schema == null)
+            {
+                var colNames = context.GetColumnNames();
+                var allNamesUncached = colNames as IReadOnlyList<string> ?? colNames.ToList();
+                var matchUncached = ColumnMatcher.FindMatch(name, allNamesUncached);
+                if (matchUncached.IsAmbiguous)
+                    throw new ExecutionException($"Ambiguous identifier '{name}'. Matches: {string.Join(", ", matchUncached.Candidates)}");
+                return matchUncached.ResolvedKey != null ? context[matchUncached.ResolvedKey] : null;
+            }
+
+            var cacheKey = (schema, name);
             if (_identifierCache.TryGetValue(cacheKey, out var resolvedKey))
             {
                 return resolvedKey != null ? context[resolvedKey] : null;
             }
 
-            var colNames = context.GetColumnNames();
-            var allNames = colNames as IReadOnlyList<string> ?? colNames.ToList();
-            var match = ColumnMatcher.FindMatch(name, allNames);
-            
+            var allNames = context.GetColumnNames();
+            var nameList = allNames as IReadOnlyList<string> ?? allNames.ToList();
+            var match = ColumnMatcher.FindMatch(name, nameList);
+
             if (match.IsAmbiguous)
                 throw new ExecutionException($"Ambiguous identifier '{name}'. Matches: {string.Join(", ", match.Candidates)}");
 
@@ -438,12 +452,12 @@ namespace ETL_SQL.Engine
             if (f.Window != null) 
             {
                 var winKey = $"WINDOW_{f.ToSql().ToUpperInvariant()}";
-                return context.Columns.ContainsKey(winKey) ? context[winKey] : null;
+                return context.HasColumn(winKey) ? context[winKey] : null;
             }
-            
+
             // Check for pre-calculated aggregate results (used in HAVING clause)
             var aggKey = $"AGG_{f.ToSql().ToUpperInvariant()}";
-            if (context != null && context.Columns.TryGetValue(aggKey, out var aggVal)) return aggVal;
+            if (context != null && context.TryGetValue(aggKey, out var aggVal)) return aggVal;
 
             var fn = f.FunctionName.ToUpperInvariant();
             
@@ -806,8 +820,8 @@ namespace ETL_SQL.Engine
                 var r = row[ma.MemberName];
                 if (r != null) return r;
                 
-                // Fallback: Check if it's explicitly null in the Columns dictionary or a dynamic column
-                if (row.Columns.TryGetValue(ma.MemberName, out var dynamicVal)) return dynamicVal;
+                // Fallback: Check if it's explicitly null (HasColumn distinguishes null-stored vs missing)
+                if (row.TryGetValue(ma.MemberName, out var dynamicVal)) return dynamicVal;
                 
                 return null;
             }

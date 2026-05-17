@@ -180,6 +180,27 @@ namespace ETL_SQL.Data
         }
 
         /// <summary>
+        /// Gets the value of a column by name without allocating a dictionary.
+        /// Returns <see langword="false"/> if the column does not exist.
+        /// </summary>
+        public bool TryGetValue(string columnName, out object? value)
+        {
+            if (_schema != null)
+            {
+                int index = _schema.GetIndex(columnName);
+                if (index >= 0)
+                {
+                    value = _values != null && index < _values.Length ? _values[index] : null;
+                    return true;
+                }
+            }
+            if (_dynamicColumns != null && _dynamicColumns.TryGetValue(columnName, out value))
+                return true;
+            value = null;
+            return false;
+        }
+
+        /// <summary>
         /// Returns an enumerable of all column names (both schema-defined and dynamic).
         /// Optimized to avoid creating a full dictionary copy.
         /// </summary>
@@ -193,6 +214,24 @@ namespace ETL_SQL.Data
             if (_dynamicColumns != null)
             {
                 foreach (var name in _dynamicColumns.Keys) yield return name;
+            }
+        }
+
+        /// <summary>
+        /// Invokes <paramref name="action"/> for each column name/value pair without allocating a dictionary.
+        /// Prefer this over <see cref="Columns"/> in hot-path code (joins, projections).
+        /// </summary>
+        public void ForEachColumn(Action<string, object?> action)
+        {
+            if (_schema != null && _values != null)
+            {
+                int count = Math.Min(_schema.ColumnCount, _values.Length);
+                for (int i = 0; i < count; i++)
+                    action(_schema.GetName(i), _values[i]);
+            }
+            if (_dynamicColumns != null)
+            {
+                foreach (var kvp in _dynamicColumns) action(kvp.Key, kvp.Value);
             }
         }
 

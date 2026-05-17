@@ -334,10 +334,7 @@ namespace ETL_SQL.Engine.Engines
             await foreach (var row in reader.AsEnumerableAsync())
             {
                 var unwrapped = new Row();
-                foreach (var kvp in row.Columns)
-                {
-                    unwrapped[kvp.Key] = kvp.Value is JsonElement je ? SpillSerializationHelper.UnwrapJsonElement(je) : kvp.Value;
-                }
+                row.ForEachColumn((k, v) => unwrapped[k] = v is JsonElement je ? SpillSerializationHelper.UnwrapJsonElement(je) : v);
                 yield return unwrapped;
             }
         }

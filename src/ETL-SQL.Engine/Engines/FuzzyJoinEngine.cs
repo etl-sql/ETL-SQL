@@ -147,8 +147,7 @@ namespace ETL_SQL.Engine.Engines
         private static Row CombineRows(Row left, Row right)
         {
             var r = left.Clone();
-            foreach (var kv in right.Columns)
-                r[kv.Key] = kv.Value;
+            right.ForEachColumn((k, v) => r[k] = v);
             return r;
         }
 
