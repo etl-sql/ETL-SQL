@@ -32,7 +32,7 @@ declare global {
 type TabId = 'pipeline' | 'results' | 'performance' | 'report';
 
 function App() {
-  const { messages, status, postMessage } = useVsCodeApi();
+  const { messages, runHistory, status, postMessage } = useVsCodeApi();
   const [activeTab, setActiveTab] = useState<TabId>('pipeline');
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
   const [isCompareMode, setIsCompareMode] = useState(false);
@@ -174,7 +174,7 @@ function App() {
               <div className="h-full w-2/5 bg-[var(--vscode-progressBar-background,#0e70c0)] animate-loading-bar" />
             </div>
           )}
-          {activeTab === 'pipeline' && <PipelineTab nodes={pipeline} messages={messages} isFinished={status === 'finished'} status={status} />}
+          {activeTab === 'pipeline' && <PipelineTab nodes={pipeline} messages={messages} isFinished={status === 'finished'} status={status} runHistory={runHistory} />}
           {activeTab === 'results' && (
              <div className="flex-1 min-h-0 p-2 flex flex-col overflow-hidden">
                 {isCompareMode ? (

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.CompilerServices;
 using Xunit;
 
 namespace ETL_SQL.Tests.Reporting
@@ -21,6 +22,7 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("renderNavBar", js);
             Assert.Contains("applyPageCrossFilter", js);
             Assert.Contains("ON_SELECT", js);
+            Assert.Contains("visualCanReflectSelections", js);
             Assert.Contains("toggleVisualMaximize", js);
             Assert.Contains("closeMaximizedVisual", js);
             Assert.Contains("keydown", js);
@@ -37,18 +39,21 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains(".matrix-group-row", css);
         }
 
-        private static string FindRepoRoot()
+        private static string FindRepoRoot([CallerFilePath] string sourceFilePath = "")
         {
-            var current = new DirectoryInfo(AppContext.BaseDirectory);
-            while (current != null)
+            foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory(), Path.GetDirectoryName(sourceFilePath) ?? "" })
             {
-                if (Directory.Exists(Path.Combine(current.FullName, "src", "ETL-SQL.ReportRuntime"))
-                    && Directory.Exists(Path.Combine(current.FullName, "tests", "ETL-SQL.Tests")))
+                var current = new DirectoryInfo(start);
+                while (current != null)
                 {
-                    return current.FullName;
-                }
+                    if (Directory.Exists(Path.Combine(current.FullName, "src", "ETL-SQL.ReportRuntime"))
+                        && Directory.Exists(Path.Combine(current.FullName, "tests", "ETL-SQL.Tests")))
+                    {
+                        return current.FullName;
+                    }
 
-                current = current.Parent;
+                    current = current.Parent;
+                }
             }
 
             throw new DirectoryNotFoundException("Could not locate repository root from test output directory.");

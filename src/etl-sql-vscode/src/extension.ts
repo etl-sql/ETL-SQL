@@ -336,6 +336,9 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(doc => {
         if (doc.languageId === 'etlsql' || doc.uri.fsPath.endsWith('.rptsql')) {
             connectionsProvider.removeScriptConnections(doc.uri.toString());
+            if (lastActiveUri === doc.uri.toString()) {
+                lastActiveUri = undefined;
+            }
         }
     }));
 

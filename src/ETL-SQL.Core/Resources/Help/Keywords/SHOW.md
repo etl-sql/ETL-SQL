@@ -5,6 +5,7 @@ Syntax:
 
 Subjects:
   CONNECTIONS          — all registered data sources and their status
+  CONNECTION <conn> CONFIG — configuration options for a specific connection (redacted)
   VARIABLES            — all declared variables in scope (SECRET vars masked)
   PROFILE              — per-statement timing (requires SET PROFILING = ON)
   JOBS                 — active and pending background or scheduled jobs

@@ -1,4 +1,4 @@
-﻿# ETL-SQL Syntax Index
+# ETL-SQL Syntax Index
 
 This document provides a comprehensive index of every keyword, command, function, and configuration option available in the ETL-SQL language. Use this as a central map to find definitions, examples, and help documentation.
 
@@ -49,7 +49,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `SHOW PROFILE` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
 | `SHOW VARIABLES` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
 | `SHOW LOCAL VARIABLES`| Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
-| `SHOW CONNECTION` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `SHOW CONNECTION <conn> CONFIG` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [CONFIG.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CONFIG.md) |
 | `SHOW CONNECTIONS` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
 | `CLEAR SESSION` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [CLEAR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CLEAR.md) |
 | `USE PASSWORD` | Session / Security | [Grammar.md](../Docs/Reference/Grammar.md) | [USE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
@@ -829,7 +829,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW TABLES` | Diagnostics | Lists tables in a connection |
 | `SHOW COLUMNS` | Diagnostics | Lists columns in a table |
 | `SHOW TAGS` | Lineage | Lists tags on a table/column |
-| `SHOW CONNECTION` | Diagnostics | Lists all active connections |
+| `SHOW CONNECTION <conn> CONFIG` | Diagnostics | Lists configuration options for a specific connection |
 | `SHOW CONNECTIONS` | Diagnostics | Lists all active connections |
 | `SHOW SESSIONS` | Portal | Lists active web/CLI sessions |
 | `SHOW ZONES` | Diagnostics | Lists security zones and policies |

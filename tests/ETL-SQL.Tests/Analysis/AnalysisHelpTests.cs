@@ -39,6 +39,13 @@ namespace ETL_SQL.Tests.Analysis
             output = string.Join("\n", evaluator.Messages);
             Assert.Contains("VERBOSE:", output);
             Assert.Contains("SHORTHAND:", output);
+
+            evaluator.Messages.Clear();
+            await evaluator.Evaluate(Parse("HELP CONFIG;"));
+            output = string.Join("\n", evaluator.Messages);
+            Assert.Contains("HELP: CONFIG", output);
+            Assert.Contains("inspect the configuration options", output);
+            Assert.Contains("redacted", output);
         }
 
         private static Script Parse(string source)

@@ -503,7 +503,12 @@ CREATE VISUAL DrillRegionDetail AS BAR (
 
 -- BAR — Revenue by region (cross-filter source + DRILL_DOWN source + Y axis label + COLORS map)
 CREATE VISUAL BarByRegion AS BAR (
-    SOURCE   = (SELECT Region, Revenue FROM #by_region),
+    SOURCE   = (
+        SELECT Region, SUM(Revenue) AS Revenue
+        FROM #sales
+        WHERE @category = 'All' OR Category IN (SELECT value FROM STRING_SPLIT(@category, ','))
+        GROUP BY Region
+    ),
     TITLE    = 'Revenue by Region',
     SUBTITLE = 'Click a bar to drill into category breakdown • Highlights detail table',
     MAPPINGS (X = Region, Y = Revenue),

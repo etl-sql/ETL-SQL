@@ -94,7 +94,7 @@ namespace ETL_SQL.Engine.Engines
             // via the AGG_<expr> key written into the result row during finalization.
             for (int i = 0; i < finalColumns.Count; i++)
             {
-                if (finalColumns[i].Expression is FunctionCallExpression f && IsAggregate(f))
+                if (finalColumns[i].Expression is FunctionCallExpression f && IsAggregateFunction(f))
                 {
                     aggregateSpecs.Add((i, f, CreateState(f)));
                 }
@@ -236,6 +236,10 @@ namespace ETL_SQL.Engine.Engines
                         resRow[colNames[i]] = key[groupIdx];
                     }
                     else if (IsWindowFunction(finalColumns[i].Expression)) { /* Handled later */ }
+                    else if (IsAggregate(finalColumns[i].Expression))
+                    {
+                        resRow[colNames[i]] = await _context.EvaluateValue(finalColumns[i].Expression, resRow);
+                    }
                     else
                     {
                         // For columns that are neither aggregate nor grouping, just use null or first value (though this is strictly invalid SQL without grouping)
@@ -324,17 +328,7 @@ namespace ETL_SQL.Engine.Engines
             if (expr == null) return false;
             if (expr is FunctionCallExpression f)
             {
-                if (f.Window != null) return false;
-                var name = f.FunctionName.ToUpperInvariant();
-                if (name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX"
-                    || name == "EVERY" || name == "ANY" || name == "SOME"
-                    || name == "APPROX_COUNT_DISTINCT"
-                    || name == "STRING_AGG" || name == "LIST_AGG"
-                    || name == "PERCENTILE_CONT" || name == "PERCENTILE_DISC"
-                    || name == "VAR" || name == "VARP" || name == "VAR_SAMP" || name == "VAR_POP"
-                    || name == "STDEV" || name == "STDEVP" || name == "STDDEV" || name == "STDDEV_SAMP" || name == "STDDEV_POP"
-                    || name == "CORR" || name == "COVAR_SAMP" || name == "COVAR_POP")
-                    return true;
+                if (IsAggregateFunction(f)) return true;
                 
                 return f.Arguments.Any(a => IsAggregate(a));
             }
@@ -362,22 +356,30 @@ namespace ETL_SQL.Engine.Engines
 
         public bool IsWindowFunction(Expression expr) => WindowEngine.ContainsWindowFunction(expr);
 
+        private static bool IsAggregateFunction(FunctionCallExpression f)
+        {
+            return f.Window == null && IsAggregateFunctionName(f.FunctionName);
+        }
+
+        private static bool IsAggregateFunctionName(string functionName)
+        {
+            var name = functionName.ToUpperInvariant();
+            return name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX"
+                || name == "EVERY" || name == "ANY" || name == "SOME"
+                || name == "APPROX_COUNT_DISTINCT"
+                || name == "STRING_AGG" || name == "LIST_AGG"
+                || name == "PERCENTILE_CONT" || name == "PERCENTILE_DISC"
+                || name == "VAR" || name == "VARP" || name == "VAR_SAMP" || name == "VAR_POP"
+                || name == "STDEV" || name == "STDEVP" || name == "STDDEV" || name == "STDDEV_SAMP" || name == "STDDEV_POP"
+                || name == "CORR" || name == "COVAR_SAMP" || name == "COVAR_POP";
+        }
+
         private void CollectAggregates(Expression expr, List<FunctionCallExpression> aggs)
         {
             if (expr == null) return;
             if (expr is FunctionCallExpression f)
             {
-                var name = f.FunctionName.ToUpperInvariant();
-                bool isAgg = name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX"
-                    || name == "EVERY" || name == "ANY" || name == "SOME"
-                    || name == "APPROX_COUNT_DISTINCT"
-                    || name == "STRING_AGG" || name == "LIST_AGG"
-                    || name == "PERCENTILE_CONT" || name == "PERCENTILE_DISC"
-                    || name == "VAR" || name == "VARP" || name == "VAR_SAMP" || name == "VAR_POP"
-                    || name == "STDEV" || name == "STDEVP" || name == "STDDEV" || name == "STDDEV_SAMP" || name == "STDDEV_POP"
-                    || name == "CORR" || name == "COVAR_SAMP" || name == "COVAR_POP";
-
-                if (isAgg && f.Window == null)
+                if (IsAggregateFunction(f))
                 {
                     var fSql = f.ToSql();
                     if (!aggs.Any(a => a.ToSql().Equals(fSql, StringComparison.OrdinalIgnoreCase))) 

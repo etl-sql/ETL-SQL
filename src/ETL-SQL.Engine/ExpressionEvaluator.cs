@@ -189,6 +189,14 @@ namespace ETL_SQL.Engine
                         {
                             strongMatches.Add(k);
                         }
+                        else if (k.Contains('.') && qualifier.Contains('.'))
+                        {
+                            // Three-part name: m.FILE.id → FILE.id — the column qualifier ("FILE") is a
+                            // trailing segment of the requested qualifier ("m.FILE"). Match as strong.
+                            var kQualifier = k[..k.LastIndexOf('.')];
+                            if (qualifier.EndsWith("." + kQualifier, StringComparison.OrdinalIgnoreCase))
+                                strongMatches.Add(k);
+                        }
                         else if (!k.Contains('.'))
                         {
                             // Include an unqualified column only if no other qualifier owns it.

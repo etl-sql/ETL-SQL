@@ -501,6 +501,26 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task CastWrappedSum_AggregatesValues()
+        {
+            var eval = Eval();
+            await eval.Evaluate(Parse(@"
+                SELECT 'A' AS Category, 10 AS Revenue INTO #T;
+                INSERT INTO #T VALUES ('A', 15), ('B', 7);
+                SELECT Category, CAST(SUM(Revenue) AS DECIMAL) AS Revenue
+                FROM #T
+                GROUP BY Category
+                ORDER BY Category;
+            "));
+
+            Assert.Equal(2, eval.LastResult?.Rows.Count);
+            Assert.Equal("A", eval.LastResult?.Rows[0]["Category"]);
+            Assert.Equal(25m, Convert.ToDecimal(eval.LastResult?.Rows[0]["Revenue"]));
+            Assert.Equal("B", eval.LastResult?.Rows[1]["Category"]);
+            Assert.Equal(7m, Convert.ToDecimal(eval.LastResult?.Rows[1]["Revenue"]));
+        }
+
+        [Fact]
         public async Task Avg_ComputesAverage()
         {
             var eval = Eval();

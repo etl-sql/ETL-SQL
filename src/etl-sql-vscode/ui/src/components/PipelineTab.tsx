@@ -1,12 +1,14 @@
-import React, { useEffect, useRef, useMemo } from 'react';
-import { PlayCircle } from 'lucide-react';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
+import { PlayCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ExecutionNode, LogMessage, ProtocolMessage } from '../types';
+import { extractPipelineNodes } from '../utils/pipeline_utils';
 
 interface PipelineTabProps {
   nodes: ExecutionNode[];
   messages: ProtocolMessage[];
   isFinished?: boolean;
   status?: string;
+  runHistory?: ProtocolMessage[][];
 }
 
 type NodeStatus = 'Waiting' | 'Running' | 'Completed' | 'Faulted';
@@ -146,9 +148,30 @@ function msgLevelClass(level: string): string {
   }
 }
 
-export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFinished, status }) => {
+export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFinished, status, runHistory }) => {
   const logRef = useRef<HTMLDivElement>(null);
-  const logs = useMemo(() => messages.filter(m => m.type === 'message') as LogMessage[], [messages]);
+  // 'current' = live run; numeric index = into runHistory array
+  const [selectedRun, setSelectedRun] = useState<'current' | number>('current');
+
+  // Jump back to current whenever a new run starts
+  useEffect(() => {
+    if (status === 'running') setSelectedRun('current');
+  }, [status]);
+
+  const historyLen = runHistory?.length ?? 0;
+  const isBrowsingHistory = selectedRun !== 'current';
+
+  const displayMessages = isBrowsingHistory && runHistory
+    ? runHistory[selectedRun as number]
+    : messages;
+
+  const displayNodes = isBrowsingHistory && runHistory
+    ? extractPipelineNodes(runHistory[selectedRun as number])
+    : nodes;
+
+  const displayIsFinished = isBrowsingHistory ? true : isFinished;
+
+  const logs = useMemo(() => displayMessages.filter(m => m.type === 'message') as LogMessage[], [displayMessages]);
 
   useEffect(() => {
     if (logRef.current) {
@@ -157,18 +180,18 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
   }, [logs.length]);
 
   const normalizedNodes = useMemo(() => {
-    if (!isFinished) return nodes;
+    if (!displayIsFinished) return displayNodes;
     const fix = (n: ExecutionNode): ExecutionNode => ({
       ...n,
       status: (n.status === 'Running' || n.status === 'Waiting') ? 'Completed' : n.status,
       children: n.children?.map(fix),
     });
-    return nodes.map(fix);
-  }, [nodes, isFinished]);
+    return displayNodes.map(fix);
+  }, [displayNodes, displayIsFinished]);
 
   const lines = useMemo(() => renderTree(normalizedNodes), [normalizedNodes]);
 
-  const isEmpty = nodes.length === 0 && logs.length === 0;
+  const isEmpty = displayNodes.length === 0 && logs.length === 0;
 
   if (isEmpty) {
     if (status === 'running') {
@@ -187,8 +210,42 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
     );
   }
 
+  const runLabel = selectedRun === 'current'
+    ? `Current${historyLen > 0 ? ` (Run ${historyLen + 1})` : ''}`
+    : `Run ${(selectedRun as number) + 1} of ${historyLen}`;
+
   return (
-    <div className="flex flex-row h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Run history navigation — only visible when there is history */}
+      {historyLen > 0 && (
+        <div className="flex items-center justify-center gap-2 px-2 py-0.5 border-b border-[var(--border)] bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))] shrink-0">
+          <button
+            onClick={() => setSelectedRun(r => r === 'current' ? historyLen - 1 : Math.max(0, (r as number) - 1))}
+            disabled={selectedRun !== 'current' && (selectedRun as number) === 0}
+            className="p-0.5 text-[var(--muted)] hover:text-[var(--text)] disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Older run"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span className="text-[11px] text-[var(--muted)] min-w-[120px] text-center select-none">
+            {runLabel}
+          </span>
+          <button
+            onClick={() => setSelectedRun(r => {
+              if (r === 'current') return 'current';
+              const next = (r as number) + 1;
+              return next >= historyLen ? 'current' : next;
+            })}
+            disabled={selectedRun === 'current'}
+            className="p-0.5 text-[var(--muted)] hover:text-[var(--text)] disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Newer run"
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
+
+    <div className="flex flex-row flex-1 overflow-hidden">
       {/* Left: Execution tree (~40%) */}
       <div className="w-[40%] min-w-[180px] flex flex-col border-r border-[var(--border)] overflow-hidden">
         <div className="px-2 py-1 border-b border-[var(--border)] shrink-0 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))]">
@@ -244,6 +301,7 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 };

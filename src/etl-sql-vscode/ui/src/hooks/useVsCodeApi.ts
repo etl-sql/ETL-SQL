@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { ProtocolMessage } from '../types';
 import { mockTrace } from '../mock_protocol';
 declare global {
@@ -19,6 +19,8 @@ export function useVsCodeApi() {
         }
         return [];
     });
+    const [runHistory, setRunHistory] = useState<ProtocolMessage[][]>([]);
+    const messagesRef = useRef<ProtocolMessage[]>([]);
     const [status, setStatus] = useState<'ready' | 'running' | 'finished' | 'error'>('ready');
     const [isDev] = useState(import.meta.env.DEV);
     
@@ -29,6 +31,11 @@ export function useVsCodeApi() {
         }
         return null;
     }, []);
+
+    // Keep ref in sync so the clear handler can snapshot current messages
+    useEffect(() => {
+        messagesRef.current = messages;
+    }, [messages]);
 
     const postMessage = useCallback((message: any) => {
         if (vscode) {
@@ -77,6 +84,9 @@ export function useVsCodeApi() {
             const handler = (event: MessageEvent) => {
                 const message = event.data as ProtocolMessage;
                 if (message.type === 'clear') {
+                    if (messagesRef.current.length > 0) {
+                        setRunHistory(h => [...h, messagesRef.current]);
+                    }
                     setMessages([]);
                     setStatus('ready');
                 } else if (message.type === 'status') {
@@ -103,7 +113,7 @@ export function useVsCodeApi() {
         }
     }, [isDev, postMessage]);
 
-    return { messages, status, postMessage, isDev, rerun };
+    return { messages, runHistory, status, postMessage, isDev, rerun };
 }
 
 // VS Code API type definition

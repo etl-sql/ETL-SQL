@@ -1341,7 +1341,7 @@
                     applySourceChartOpacity(option, cfState.selections);
                 } else if (visual.highlightRows && visual.highlightRows.length > 0) {
                     mergeHighlightData(visual, option);
-                } else if (cfState && cfState.selections.length > 0 && !visual.highlightRows) {
+                } else if (cfState && cfState.selections.length > 0 && !visual.highlightRows && visualCanReflectSelections(visual, cfState.selections)) {
                     // Cross-filter active but server returned no highlight (dimension mismatch):
                     // ghost all bars to show the filter is active on this visual too.
                     applySourceChartOpacity(option, []);
@@ -2099,6 +2099,17 @@
             }
             return { value: item, itemStyle: { opacity } };
         });
+    }
+
+    function visualCanReflectSelections(visual, selections) {
+        if (!visual || !selections || selections.length === 0) return false;
+        const names = new Set((visual.columns || []).map(c => String(c || '').toLowerCase()));
+        for (const key in (visual.options || {})) {
+            if (key.toLowerCase().startsWith('mapping:')) {
+                names.add(String(visual.options[key] || '').toLowerCase());
+            }
+        }
+        return selections.some(s => names.has(String(s.column || '').toLowerCase()));
     }
 
     // ── Card ────────────────────────────────────────────────────────────────
