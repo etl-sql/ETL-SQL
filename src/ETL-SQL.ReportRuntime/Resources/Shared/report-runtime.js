@@ -540,15 +540,17 @@
                     if (s) s.style.display = 'none';
                 });
                 const target = pageSections[pageName];
-                if (target) {
-                    target.style.display = 'block';
-                    resizeChartsIn(target);
-                }
+                if (target) target.style.display = 'block';
 
-                // Update active class
+                // Set active state BEFORE resize so it is never racing against
+                // event callbacks (e.g. ECharts force-layout rendering) that fire
+                // during chart.resize() and may themselves trigger re-renders.
                 nav.querySelectorAll('.' + itemClass).forEach(e => e.classList.remove('active'));
                 el.classList.add('active');
                 _lastActivePage = pageName;
+
+                // Defer resize to the next frame so the active class renders first.
+                if (target) requestAnimationFrame(() => resizeChartsIn(target));
 
                 // Notify portal of user-driven tab change so it can push a history entry
                 if (window.parent && window.parent !== window) {

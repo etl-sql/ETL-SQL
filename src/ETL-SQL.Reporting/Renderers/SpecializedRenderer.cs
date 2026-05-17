@@ -635,7 +635,7 @@ namespace ETL_SQL.Reporting.Renderers
                 ["label"]      = new { show = true, position = "right" },
                 ["edgeSymbol"] = new[] { "circle", "arrow" },
                 ["lineStyle"]  = new { color = "source", curveness = 0.3 },
-                ["force"]      = new { repulsion = repulsion, edgeLength = new[] { 80, 200 } }
+                ["force"]      = new { repulsion = repulsion, edgeLength = new[] { 80, 200 }, layoutAnimation = false }
             };
             if (categories.Length > 0)
             {
