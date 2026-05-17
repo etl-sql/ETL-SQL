@@ -147,6 +147,55 @@ namespace ETL_SQL.Tests.Hardening
             // 100 total rows... 20 are null. So 80 matching.
             Assert.Equal(80, result.Count);
         }
+
+        [Fact]
+        public async Task ExternalJoinEngine_RecursivelyPartitionsOversizedPartitions()
+        {
+            var e = NewEvaluator(externalPartitions: 4);
+            e.JoinSpillThreshold = 2;
+            var engine = new ExternalJoinEngine(e, NullLogger.Instance);
+            var schema = new TableSchema(new[] { "Id", "Val" });
+
+            var result = await engine.ApplyHashJoinExternal(
+                Stream(schema, 0, 32),
+                Stream(schema, 0, 32),
+                CreateJoin("INNER"),
+                new List<string> { "Id" },
+                new List<string> { "Id" }).ToListAsync();
+
+            Assert.Equal(32, result.Count);
+            Assert.True(
+                e.Telemetry.PartitionsCount > e.ExternalHashPartitions * 2,
+                "Expected recursive partitioning to create additional spill partitions beyond the initial left/right pass.");
+        }
+
+        [Fact]
+        public async Task ExternalJoinEngine_SkewedPartitionFallsBackWhenItCannotSplit()
+        {
+            var e = NewEvaluator(externalPartitions: 4);
+            e.JoinSpillThreshold = 1;
+            var engine = new ExternalJoinEngine(e, NullLogger.Instance);
+
+            static async IAsyncEnumerable<Row> DuplicateIdRows(int count, string valueColumn)
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    yield return new Row { ["Id"] = 1, [valueColumn] = i };
+                }
+
+                await Task.CompletedTask;
+            }
+
+            var result = await engine.ApplyHashJoinExternal(
+                DuplicateIdRows(3, "LeftVal"),
+                DuplicateIdRows(5, "RightVal"),
+                CreateJoin("INNER"),
+                new List<string> { "Id" },
+                new List<string> { "Id" }).ToListAsync();
+
+            Assert.Equal(15, result.Count);
+        }
+
         [Fact]
         public async Task ExternalAggregateEngine_PartitionIndexOverflow()
         {

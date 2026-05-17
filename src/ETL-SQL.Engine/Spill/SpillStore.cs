@@ -274,7 +274,18 @@ namespace ETL_SQL.Engine.Spill
 
             public async Task WriteRowAsync(Row row)
             {
-                var json = JsonSerializer.Serialize(row.Columns);
+                var dict = row.Columns;
+                // Expand schema aliases into real entries so qualified names survive JSON round-trip.
+                if (row.Schema != null)
+                {
+                    for (int i = 0; i < row.Schema.ColumnCount; i++)
+                    {
+                        var canon = row.Schema.GetName(i);
+                        foreach (var alias in row.Schema.EnumerateAliasesOf(canon))
+                            dict.TryAdd(alias, row[i]);
+                    }
+                }
+                var json = JsonSerializer.Serialize(dict);
                 if (_context.Telemetry?.TelemetryEnabled ?? false)
                 {
                     // Fast approximation (+2 for newline)
@@ -473,6 +484,19 @@ namespace ETL_SQL.Engine.Spill
             {
                 var copy = new Row();
                 foreach (var kvp in row.Columns) copy[kvp.Key] = kvp.Value;
+                // Expand schema aliases (e.g. "R.Id" → slot 0) into real dynamic entries so they
+                // survive Arrow serialization. row.Columns only returns canonical names; aliases are
+                // lost on round-trip, breaking join conditions that reference qualified names.
+                if (row.Schema != null)
+                {
+                    for (int i = 0; i < row.Schema.ColumnCount; i++)
+                    {
+                        var canon = row.Schema.GetName(i);
+                        foreach (var alias in row.Schema.EnumerateAliasesOf(canon))
+                            if (!copy.HasColumn(alias))
+                                copy[alias] = row[i];
+                    }
+                }
                 return copy;
             }
 

@@ -559,7 +559,10 @@ namespace ETL_SQL.Engine.Engines
             {
                 foreach (var right in rightRows)
                 {
-                    if (!matchedRight.Contains(right)) yield return right.Clone();
+                    if (!matchedRight.Contains(right))
+                        yield return combinedSchema != null
+                            ? CombineRows(new Row(combinedSchema), right, combinedSchema)
+                            : right.Clone();
                 }
             }
         }
@@ -620,7 +623,10 @@ namespace ETL_SQL.Engine.Engines
             {
                 foreach (var right in rightRows)
                 {
-                    if (!matchedRight.Contains(right)) yield return right.Clone();
+                    if (!matchedRight.Contains(right))
+                        yield return combinedSchema != null
+                            ? CombineRows(new Row(combinedSchema), right, combinedSchema)
+                            : right.Clone();
                 }
             }
         }
@@ -675,7 +681,11 @@ namespace ETL_SQL.Engine.Engines
             }
             if (IsRightOuter(join.JoinType))
             {
-                foreach (var right in rightRows) if (!matchedRight.Contains(right)) nextRows.Add(right.Clone());
+                foreach (var right in rightRows)
+                    if (!matchedRight.Contains(right))
+                        nextRows.Add(combinedSchema != null
+                            ? CombineRows(new Row(combinedSchema), right, combinedSchema)
+                            : right.Clone());
             }
 
             return nextRows;

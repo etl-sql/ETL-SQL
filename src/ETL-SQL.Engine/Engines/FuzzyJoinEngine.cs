@@ -148,6 +148,18 @@ namespace ETL_SQL.Engine.Engines
         {
             var r = left.Clone();
             right.ForEachColumn((k, v) => r[k] = v);
+            // Expand schema aliases (e.g. "b.name") so qualified column references in the ON
+            // condition resolve correctly. ForEachColumn only visits canonical names.
+            if (right.Schema != null)
+            {
+                for (int i = 0; i < right.Schema.ColumnCount; i++)
+                {
+                    var canon = right.Schema.GetName(i);
+                    foreach (var alias in right.Schema.EnumerateAliasesOf(canon))
+                        if (!r.HasColumn(alias))
+                            r[alias] = right[i];
+                }
+            }
             return r;
         }
 
