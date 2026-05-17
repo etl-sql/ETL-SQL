@@ -997,7 +997,7 @@ namespace ETL_SQL.Reporting.Renderers
 
             foreach (var row in rows)
             {
-                var displayRow = new List<string>();
+                var displayRow = new List<IRenderable>();
                 for (int i = 0; i < row.Count; i++)
                 {
                     var cell = row[i] ?? "";
@@ -1007,14 +1007,17 @@ namespace ETL_SQL.Reporting.Renderers
                         {
                             var parts = cell.Split('>');
                             string indent = new string(' ', (parts.Length - 1) * 3);
-                            cell = $"{indent}[grey][+][/] {parts.Last().Trim()}";
+                            displayRow.Add(new Markup($"{indent}[grey][[+][/] {Markup.Escape(parts.Last().Trim())}"));
                         }
                         else
                         {
-                            cell = $"[bold green][-][/] {cell}";
+                            displayRow.Add(new Markup($"[bold green][[-][/] {Markup.Escape(cell)}"));
                         }
                     }
-                    displayRow.Add(cell);
+                    else
+                    {
+                        displayRow.Add(new Text(cell));
+                    }
                 }
                 table.AddRow(displayRow.ToArray());
             }
@@ -1042,7 +1045,7 @@ namespace ETL_SQL.Reporting.Renderers
                 }
             }
 
-            var checkMarkup = isChecked ? "[bold green][X][/]" : "[grey][ ][/]";
+            var checkMarkup = isChecked ? "[bold green][[X][/]" : "[grey][[ ][/]";
             var content = new Markup($"{checkMarkup} [white]{Markup.Escape(title)}[/]");
 
             return new Panel(content)
@@ -1068,7 +1071,7 @@ namespace ETL_SQL.Reporting.Renderers
                 }
             }
 
-            var content = new Markup($"[blue]{Markup.Escape(title)}:[/] [grey]\\[[/] {Markup.Escape(currentVal.PadRight(20))} [grey]\\][/]");
+            var content = new Markup($"[blue]{Markup.Escape(title)}:[/] [grey][[[/] {Markup.Escape(currentVal.PadRight(20))} [grey]]][/]");
             return new Panel(content)
             {
                 Border = BoxBorder.Rounded,
@@ -1095,7 +1098,7 @@ namespace ETL_SQL.Reporting.Renderers
             double min = visual.Min ?? 0;
             double max = visual.Max ?? 100;
 
-            var content = new Markup($"[blue]{Markup.Escape(title)}:[/] [grey]\\[[/] {currentVal.PadRight(10)} [grey]\\][/] [grey](Min: {min}, Max: {max})[/]");
+            var content = new Markup($"[blue]{Markup.Escape(title)}:[/] [grey][[[/] {currentVal.PadRight(10)} [grey]]][/] [grey](Min: {min}, Max: {max})[/]");
             return new Panel(content)
             {
                 Border = BoxBorder.Rounded,
