@@ -47,6 +47,7 @@ export interface PerformanceMessage {
 
 export interface ClearMessage {
     type: 'clear';
+    resetHistory?: boolean;
 }
 
 export interface StatusMessage {

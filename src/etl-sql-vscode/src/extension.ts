@@ -107,8 +107,8 @@ export async function activate(context: vscode.ExtensionContext) {
         if (editor && (editor.document.languageId === 'etlsql' || editor.document.fileName.endsWith('.rptsql'))) {
             const currentUri = editor.document.uri.toString();
             if (currentUri !== lastActiveUri) {
-                // Clear UI on script switch to ensure clean state
-                ResultsPanel.postMessage({ type: 'clear' });
+                // Clear UI on script switch — reset history so prior script's runs don't bleed in.
+                ResultsPanel.postMessage({ type: 'clear', resetHistory: true });
                 connectionsProvider.clearVariables();
                 sidebarProvider.postMessage({ type: 'variables', variables: [] });
                 lastActiveUri = currentUri;

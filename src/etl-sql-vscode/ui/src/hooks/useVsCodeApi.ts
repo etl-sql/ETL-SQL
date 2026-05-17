@@ -12,7 +12,7 @@ declare global {
 type MsgState = { messages: ProtocolMessage[]; runHistory: ProtocolMessage[][] };
 type MsgAction =
     | { type: 'append'; message: ProtocolMessage }
-    | { type: 'clear' }
+    | { type: 'clear'; resetHistory?: boolean }
     | { type: 'reset' };
 
 function msgReducer(state: MsgState, action: MsgAction): MsgState {
@@ -20,6 +20,9 @@ function msgReducer(state: MsgState, action: MsgAction): MsgState {
         case 'append':
             return { ...state, messages: [...state.messages, action.message] };
         case 'clear':
+            if (action.resetHistory) {
+                return { messages: [], runHistory: [] };
+            }
             return {
                 messages: [],
                 runHistory: state.messages.length > 0
@@ -101,7 +104,7 @@ export function useVsCodeApi() {
             const handler = (event: MessageEvent) => {
                 const message = event.data as ProtocolMessage;
                 if (message.type === 'clear') {
-                    dispatch({ type: 'clear' });
+                    dispatch({ type: 'clear', resetHistory: message.resetHistory });
                     setStatus('ready');
                 } else if (message.type === 'status') {
                     setStatus(message.status);
