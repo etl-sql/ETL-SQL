@@ -307,6 +307,7 @@ For paired functions (`CORR`, `COVAR_*`), rows where either input is `NULL` are 
 | `SUM(col)` | Total sum |
 | `AVG(col)` | Arithmetic mean |
 | `COUNT([DISTINCT] col)` | Non-null count (or distinct count) |
+| `APPROX_COUNT_DISTINCT(col)` | HyperLogLog-based approximate count of distinct non-null values |
 | `MIN(col)` / `MAX(col)` | Minimum / maximum value |
 | `VAR(col)` / `VAR_SAMP(col)` | Sample variance |
 | `VARP(col)` / `VAR_POP(col)` | Population variance |
@@ -323,6 +324,7 @@ For paired functions (`CORR`, `COVAR_*`), rows where either input is `NULL` are 
 ```sql
 SELECT
     AVG(Price)           AS AvgPrice,
+    APPROX_COUNT_DISTINCT(CustomerId) AS ApproxCustomers,
     STDEV(Price)         AS PriceVolatility,
     CORR(Price, Qty)     AS PriceQtyCorrelation,
     EVERY(InStock)       AS AllInStock,
@@ -455,8 +457,20 @@ END
 | `JSON_EXISTS` | `JSON_EXISTS(json, path)` | `1` if path exists |
 | `JSON_OBJECT` | `JSON_OBJECT(k1, v1, k2, v2, ...)` | JSON object from key/value pairs |
 | `JSON_ARRAY` | `JSON_ARRAY(v1, v2, ...)` | JSON array from values |
-| `JSON_TABLE` | `JSON_TABLE(json, path)` | Table from JSON array or object |
+| `JSON_TABLE` | `JSON_TABLE(json, path COLUMNS (...))` | Table projected from JSON rows |
 | `OPENJSON` | `OPENJSON(json [, path])` | SQL Server-style JSON expansion |
+
+`JSON_TABLE` supports the SQL-style `COLUMNS` clause for typed projection, ordinality, existence checks, and missing-value defaults:
+
+```sql
+SELECT *
+FROM JSON_TABLE(@payload, '$.items[*]' COLUMNS (
+    ord FOR ORDINALITY,
+    id INT PATH '$.id',
+    name STRING PATH '$.name' DEFAULT 'Unknown' ON EMPTY,
+    has_discount EXISTS PATH '$.discount'
+));
+```
 
 ---
 

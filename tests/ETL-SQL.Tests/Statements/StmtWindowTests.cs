@@ -153,6 +153,55 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public async Task TestWindowGroupsFrame()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("CREATE TABLE #G (K INT, Val INT); INSERT INTO #G VALUES (1, 10), (1, 20), (2, 30), (3, 40), (3, 50);"));
+
+            var res = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT K, Val, SUM(Val) OVER(ORDER BY K GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) AS GSum FROM #G;")
+                .Statements[0]).FirstAsync();
+
+            Assert.Equal(30m, res.Rows[0]["GSum"]);
+            Assert.Equal(30m, res.Rows[1]["GSum"]);
+            Assert.Equal(60m, res.Rows[2]["GSum"]);
+            Assert.Equal(120m, res.Rows[3]["GSum"]);
+            Assert.Equal(120m, res.Rows[4]["GSum"]);
+        }
+
+        [Fact]
+        public async Task TestWindowFrameExclusion()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("CREATE TABLE #E (K INT, Val INT); INSERT INTO #E VALUES (1, 10), (1, 20), (2, 30), (3, 40), (3, 50);"));
+
+            var currentRow = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT Val, SUM(Val) OVER(ORDER BY K ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW) AS S FROM #E;")
+                .Statements[0]).FirstAsync();
+            Assert.Equal(0m, currentRow.Rows[0]["S"]);
+            Assert.Equal(10m, currentRow.Rows[1]["S"]);
+            Assert.Equal(30m, currentRow.Rows[2]["S"]);
+
+            var group = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT Val, SUM(Val) OVER(ORDER BY K RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE GROUP) AS S FROM #E;")
+                .Statements[0]).FirstAsync();
+            Assert.Equal(0m, group.Rows[0]["S"]);
+            Assert.Equal(0m, group.Rows[1]["S"]);
+            Assert.Equal(30m, group.Rows[2]["S"]);
+            Assert.Equal(60m, group.Rows[3]["S"]);
+            Assert.Equal(60m, group.Rows[4]["S"]);
+
+            var ties = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT Val, SUM(Val) OVER(ORDER BY K RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE TIES) AS S FROM #E;")
+                .Statements[0]).FirstAsync();
+            Assert.Equal(10m, ties.Rows[0]["S"]);
+            Assert.Equal(20m, ties.Rows[1]["S"]);
+            Assert.Equal(60m, ties.Rows[2]["S"]);
+            Assert.Equal(100m, ties.Rows[3]["S"]);
+            Assert.Equal(110m, ties.Rows[4]["S"]);
+        }
+
+        [Fact]
         public async Task TestPercentRankAndCumeDist()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

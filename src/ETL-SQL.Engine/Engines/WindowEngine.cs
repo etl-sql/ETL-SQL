@@ -164,8 +164,7 @@ namespace ETL_SQL.Engine.Engines
                                     var nthFrame = partitionRows;
                                     if (window.Frame != null)
                                     {
-                                        var nthRange = await ResolveFrameRange(i, partitionRows, window);
-                                        nthFrame = partitionRows.GetRange(nthRange.Start, nthRange.End - nthRange.Start + 1);
+                                        nthFrame = await ResolveFrameRows(i, partitionRows, window);
                                     }
                                     winVal = (nth >= 1 && nth <= nthFrame.Count)
                                         ? await _context.EvaluateValue(f.Arguments[0], nthFrame[nth - 1])
@@ -217,8 +216,7 @@ namespace ETL_SQL.Engine.Engines
                                 var frameRows = partitionRows;
                                 if (window.Frame != null)
                                 {
-                                    var range = await ResolveFrameRange(i, partitionRows, window);
-                                    frameRows = partitionRows.GetRange(range.Start, range.End - range.Start + 1);
+                                    frameRows = await ResolveFrameRows(i, partitionRows, window);
                                 }
                                 
                                 if (f.Filter != null)
@@ -298,6 +296,29 @@ namespace ETL_SQL.Engine.Engines
             if (expr is LikeExpression lk) { CollectWindowCallsInner(lk.Left, result); CollectWindowCallsInner(lk.Pattern, result); return; }
         }
 
+        private async Task<List<Row>> ResolveFrameRows(int currentIndex, List<Row> partitionRows, WindowClause window)
+        {
+            var range = await ResolveFrameRange(currentIndex, partitionRows, window);
+            if (range.End < range.Start) return new List<Row>();
+
+            var frameRows = partitionRows.GetRange(range.Start, range.End - range.Start + 1);
+            var exclusion = window.Frame?.Exclusion ?? WindowFrameExclusion.NoOthers;
+            if (exclusion == WindowFrameExclusion.NoOthers) return frameRows;
+
+            var currentRow = partitionRows[currentIndex];
+            var filtered = new List<Row>(frameRows.Count);
+            foreach (var row in frameRows)
+            {
+                bool isCurrent = ReferenceEquals(row, currentRow);
+                bool isPeer = await ArePeers(currentRow, row, window.OrderBy);
+                if (exclusion == WindowFrameExclusion.CurrentRow && isCurrent) continue;
+                if (exclusion == WindowFrameExclusion.Group && isPeer) continue;
+                if (exclusion == WindowFrameExclusion.Ties && isPeer && !isCurrent) continue;
+                filtered.Add(row);
+            }
+            return filtered;
+        }
+
         private async Task<(int Start, int End)> ResolveFrameRange(int currentIndex, List<Row> partitionRows, WindowClause window)
         {
             var frame = window.Frame!;
@@ -310,6 +331,17 @@ namespace ETL_SQL.Engine.Engines
                 end = frame.EndBound.HasValue
                     ? await ResolveRowsBound(frame.EndBound.Value, frame.EndValue, currentIndex, partitionRows.Count)
                     : currentIndex;
+            }
+            else if (frame.Type == WindowFrameType.GROUPS)
+            {
+                var groups = await BuildPeerGroups(partitionRows, window.OrderBy);
+                int currentGroup = groups.FindIndex(g => currentIndex >= g.Start && currentIndex <= g.End);
+                start = await ResolveGroupBound(frame.StartBound, frame.StartValue, currentGroup, groups.Count, startBound: true);
+                end = frame.EndBound.HasValue
+                    ? await ResolveGroupBound(frame.EndBound.Value, frame.EndValue, currentGroup, groups.Count, startBound: false)
+                    : currentGroup;
+                start = groups[Math.Max(0, Math.Min(groups.Count - 1, start))].Start;
+                end = groups[Math.Max(0, Math.Min(groups.Count - 1, end))].End;
             }
             else // RANGE
             {
@@ -329,6 +361,41 @@ namespace ETL_SQL.Engine.Engines
             }
 
             return (Math.Max(0, start), Math.Min(partitionRows.Count - 1, end));
+        }
+
+        private async Task<int> ResolveGroupBound(WindowFrameBoundType bound, Expression? value, int currentGroup, int groupCount, bool startBound)
+        {
+            switch (bound)
+            {
+                case WindowFrameBoundType.UNBOUNDED_PRECEDING: return 0;
+                case WindowFrameBoundType.UNBOUNDED_FOLLOWING: return groupCount - 1;
+                case WindowFrameBoundType.CURRENT_ROW: return currentGroup;
+                case WindowFrameBoundType.PRECEDING:
+                    int offsetP = Convert.ToInt32(await _context.EvaluateValue(value, new Row()));
+                    return currentGroup - offsetP;
+                case WindowFrameBoundType.FOLLOWING:
+                    int offsetF = Convert.ToInt32(await _context.EvaluateValue(value, new Row()));
+                    return currentGroup + offsetF;
+                default: return startBound ? 0 : currentGroup;
+            }
+        }
+
+        private async Task<List<(int Start, int End)>> BuildPeerGroups(List<Row> partitionRows, List<OrderByClause> orderBy)
+        {
+            var groups = new List<(int Start, int End)>();
+            if (partitionRows.Count == 0) return groups;
+
+            int start = 0;
+            for (int i = 1; i < partitionRows.Count; i++)
+            {
+                if (!await ArePeers(partitionRows[start], partitionRows[i], orderBy))
+                {
+                    groups.Add((start, i - 1));
+                    start = i;
+                }
+            }
+            groups.Add((start, partitionRows.Count - 1));
+            return groups;
         }
 
         private async Task<int> ResolveRowsBound(WindowFrameBoundType bound, Expression? value, int currentIndex, int rowCount)

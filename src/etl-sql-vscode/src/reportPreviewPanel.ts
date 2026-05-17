@@ -13,6 +13,7 @@ import * as cp from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as nodeCrypto from 'crypto';
 
 export class ReportPreviewPanel {
     public static readonly viewType = 'etlsql.reportPreview';
@@ -407,12 +408,7 @@ export class ReportPreviewPanel {
     }
 
     private _nonce(): string {
-        let text = '';
-        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        for (let i = 0; i < 32; i++) {
-            text += possible.charAt(Math.floor(Math.random() * possible.length));
-        }
-        return text;
+        return nodeCrypto.randomBytes(16).toString('base64url');
     }
 
     public dispose(): void {

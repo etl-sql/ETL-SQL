@@ -7,6 +7,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Engine.Storage;
+using ETL_SQL.Engine.Functions;
 using System.Text.Json;
 using ETL_SQL.Core.Data;
 
@@ -87,6 +88,12 @@ namespace ETL_SQL.Engine.Services
                     string? targetTbl = table.FunctionCall.Arguments.Count > 0 ? (await _expressionEvaluator.EvaluateInternal(table.FunctionCall.Arguments[0], new Row()))?.ToString() : null;
                     string? targetCol = table.FunctionCall.Arguments.Count > 1 ? (await _expressionEvaluator.EvaluateInternal(table.FunctionCall.Arguments[1], new Row()))?.ToString() : null;
                     return new LineageDataSource(_evaluator.LineageTracker, targetTbl, targetCol);
+                }
+
+                if (table.FunctionCall.FunctionName.Equals("JSON_TABLE", StringComparison.OrdinalIgnoreCase) &&
+                    table.FunctionCall.JsonTable != null)
+                {
+                    return await BuildJsonTableDataSourceAsync(table.FunctionCall);
                 }
 
                 var result = await _expressionEvaluator.EvaluateInternal(table.FunctionCall, new Row());
@@ -223,6 +230,47 @@ namespace ETL_SQL.Engine.Services
             mem.ExecutionContext = _evaluator;
             mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
             await mem.WriteBatches(new[] { result }.ToAsyncEnumerable());
+            return mem;
+        }
+
+        private async Task<IDataSource> BuildJsonTableDataSourceAsync(FunctionCallExpression functionCall)
+        {
+            string? json = functionCall.Arguments.Count > 0
+                ? (await _expressionEvaluator.EvaluateInternal(functionCall.Arguments[0], new Row()))?.ToString()
+                : null;
+            string? rowPath = functionCall.Arguments.Count > 1
+                ? (await _expressionEvaluator.EvaluateInternal(functionCall.Arguments[1], new Row()))?.ToString()
+                : "$";
+
+            var columns = new List<JsonFunctions.JsonTableColumn>();
+            foreach (var column in functionCall.JsonTable?.Columns ?? new List<JsonTableColumnSpec>())
+            {
+                string? path = column.Path != null
+                    ? (await _expressionEvaluator.EvaluateInternal(column.Path, new Row()))?.ToString()
+                    : null;
+                object? defaultOnEmpty = column.DefaultOnEmpty != null
+                    ? await _expressionEvaluator.EvaluateInternal(column.DefaultOnEmpty, new Row())
+                    : null;
+                object? defaultOnError = column.DefaultOnError != null
+                    ? await _expressionEvaluator.EvaluateInternal(column.DefaultOnError, new Row())
+                    : null;
+
+                columns.Add(new JsonFunctions.JsonTableColumn(
+                    column.Name,
+                    column.TypeName,
+                    path,
+                    column.ForOrdinality,
+                    column.Exists,
+                    defaultOnEmpty,
+                    defaultOnError));
+            }
+
+            var dt = await JsonFunctions.BuildJsonTableWithColumns(json, rowPath, columns);
+            var mem = new InMemoryDataSource();
+            mem.Validator = _evaluator;
+            mem.ExecutionContext = _evaluator;
+            mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
+            await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
             return mem;
         }
 
@@ -382,10 +430,12 @@ namespace ETL_SQL.Engine.Services
             }
 
             var pivotEngine = new Engines.PivotEngine(_evaluator, _logger);
+            var matchRecognizeEngine = new Engines.MatchRecognizeEngine(_evaluator);
             foreach (var op in table.TableOperators)
             {
                 if (op is PivotClause pivot) allRows = await pivotEngine.ApplyPivot(allRows, pivot);
                 else if (op is UnpivotClause unpivot) allRows = await pivotEngine.ApplyUnpivot(allRows, unpivot);
+                else if (op is MatchRecognizeClause matchRecognize) allRows = await matchRecognizeEngine.Apply(allRows, matchRecognize);
             }
 
             var resultTable = new DataTable();

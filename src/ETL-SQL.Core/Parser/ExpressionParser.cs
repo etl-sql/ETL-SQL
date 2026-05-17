@@ -470,9 +470,14 @@ namespace ETL_SQL.Core.Parser
                         
                         // Parse Framing
                         WindowFrame? frame = null;
-                        if (_parser.Match(TokenType.ROWS) || _parser.Match(TokenType.RANGE))
+                        if (_parser.Match(TokenType.ROWS) || _parser.Match(TokenType.RANGE) || _parser.Match(TokenType.GROUPS))
                         {
-                            var frameType = _parser.Previous.Type == TokenType.ROWS ? WindowFrameType.ROWS : WindowFrameType.RANGE;
+                            var frameType = _parser.Previous.Type switch
+                            {
+                                TokenType.ROWS => WindowFrameType.ROWS,
+                                TokenType.GROUPS => WindowFrameType.GROUPS,
+                                _ => WindowFrameType.RANGE
+                            };
                             if (_parser.Match(TokenType.BETWEEN))
                             {
                                 var startBound = ParseFrameBound();
@@ -484,6 +489,11 @@ namespace ETL_SQL.Core.Parser
                             {
                                 var bound = ParseFrameBound();
                                 frame = new WindowFrame(frameType, bound.Type, bound.Value);
+                            }
+
+                            if (_parser.Match(TokenType.EXCLUDE))
+                            {
+                                frame = frame with { Exclusion = ParseFrameExclusion() };
                             }
                         }
                         else if (orderBy.Count > 0)
@@ -740,6 +750,25 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.FOLLOWING)) return new WindowFrameBound(WindowFrameBoundType.FOLLOWING, val);
             
             throw new SyntaxException("Expected PRECEDING, FOLLOWING, CURRENT ROW, or UNBOUNDED", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private WindowFrameExclusion ParseFrameExclusion()
+        {
+            if (_parser.Match(TokenType.CURRENT))
+            {
+                _parser.Consume(TokenType.ROW, "Expected ROW after EXCLUDE CURRENT");
+                return WindowFrameExclusion.CurrentRow;
+            }
+
+            if (_parser.Match(TokenType.GROUP)) return WindowFrameExclusion.Group;
+            if (_parser.Match(TokenType.TIES)) return WindowFrameExclusion.Ties;
+            if (_parser.Match(TokenType.NO))
+            {
+                _parser.Consume(TokenType.OTHERS, "Expected OTHERS after EXCLUDE NO");
+                return WindowFrameExclusion.NoOthers;
+            }
+
+            throw new SyntaxException("Expected CURRENT ROW, GROUP, TIES, or NO OTHERS after EXCLUDE", _parser.Current.Line, _parser.Current.Column);
         }
 
         private struct WindowFrameBound

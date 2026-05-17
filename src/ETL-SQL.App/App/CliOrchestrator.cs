@@ -159,7 +159,9 @@ namespace ETL_SQL.App
                 IsSilentMode = res.FindResultFor(SilentOption) != null && res.GetValueForOption(SilentOption),
                 EstimatedRows = res.FindResultFor(EstimateOption) != null ? res.GetValueForOption(EstimateOption) : 1000000,
                 PreviewVal = res.FindResultFor(PreviewOption) != null ? res.GetValueForOption(PreviewOption) : null,
-                Password = res.FindResultFor(PassOption) != null ? res.GetValueForOption(PassOption) : null,
+                Password = res.FindResultFor(PassOption) != null
+                    ? res.GetValueForOption(PassOption)
+                    : Environment.GetEnvironmentVariable("ETL_SQL_MASTER_PASSWORD"),
                 LogPath = res.FindResultFor(LogOption)?.GetValueOrDefault<string?>() ?? "logs/",
                 IsLogMode = res.FindResultFor(LogOption) != null,
                 IsJsonMode = res.FindResultFor(JsonOption) != null && res.GetValueForOption(JsonOption),

@@ -27,6 +27,10 @@ interface CommandRequest {
     reject: (err?: unknown) => void;
 }
 
+export interface ReplLaunchOptions {
+    env?: NodeJS.ProcessEnv;
+}
+
 export class ReplManager {
     private static _instance: ReplManager;
     private _process: cp.ChildProcess | undefined;
@@ -56,7 +60,7 @@ export class ReplManager {
         this._debugMode = debug;
     }
 
-    public async execute(script: string, exePath: string, args: string[], scriptPath?: string, workspaceRoot?: string, interactiveMode?: boolean, onMessage?: (msg: EngineMessage) => void): Promise<void> {
+    public async execute(script: string, exePath: string, args: string[], scriptPath?: string, workspaceRoot?: string, interactiveMode?: boolean, onMessage?: (msg: EngineMessage) => void, launchOptions?: ReplLaunchOptions): Promise<void> {
         // Extract sessionId from args for tracking
         let sessionId: string | undefined;
         const sessionIdx = args.indexOf('--session');
@@ -77,7 +81,7 @@ export class ReplManager {
                     await this._startPromise;
                 } else if (!this._process) {
                     this._currentSessionId = sessionId;
-                    this._startPromise = this._start(exePath, args);
+                    this._startPromise = this._start(exePath, args, launchOptions);
                     await this._startPromise;
                     this._startPromise = undefined;
                 }
@@ -101,14 +105,14 @@ export class ReplManager {
             this._process.stdin?.write(JSON.stringify({ Action: "run", Script: "ROLLBACK;" }) + "\r\n");
         }
     }
-    private async _start(exePath: string, args: string[]): Promise<void> {
+    private async _start(exePath: string, args: string[], launchOptions?: ReplLaunchOptions): Promise<void> {
         return new Promise((resolve) => {
             const absoluteExePath = path.resolve(exePath);
-            const startMsg = `Starting ETL-SQL REPL: "${absoluteExePath}" ui repl ${args.join(' ')}`;
+            const startMsg = `Starting ETL-SQL REPL: "${absoluteExePath}" ui repl ${this._redactArgs(args).join(' ')}`;
             this._outputChannel?.appendLine(startMsg);
 
             const child = cp.spawn(absoluteExePath, ["ui", "repl", ...args], {
-                env: { ...process.env, "FORCE_COLOR": "0" }
+                env: { ...process.env, ...launchOptions?.env, "FORCE_COLOR": "0" }
             });
             this._process = child;
 
@@ -278,7 +282,7 @@ export class ReplManager {
         return this._isRunning;
     }
 
-    public warmup(exePath: string, args: string[]): void {
+    public warmup(exePath: string, args: string[], launchOptions?: ReplLaunchOptions): void {
         if (this._process) {
             return;
         }
@@ -286,11 +290,20 @@ export class ReplManager {
         if (sessionIdx !== -1 && sessionIdx + 1 < args.length) {
             this._currentSessionId = args[sessionIdx + 1];
         }
-        this._start(exePath, args).catch(() => {
+        this._start(exePath, args, launchOptions).catch(() => {
             // Warmup failures are silent; execute() will retry when the user runs.
             this._process = undefined;
             this._isReady = false;
             this._currentSessionId = undefined;
         });
+    }
+
+    private _redactArgs(args: string[]): string[] {
+        const redacted = [...args];
+        const passIdx = redacted.indexOf('--pass');
+        if (passIdx !== -1 && passIdx + 1 < redacted.length) {
+            redacted[passIdx + 1] = '********';
+        }
+        return redacted;
     }
 }

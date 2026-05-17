@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Functions;
 using JNode = System.Text.Json.Nodes.JsonNode;
@@ -21,6 +22,15 @@ namespace ETL_SQL.Engine.Functions
     /// </summary>
     public static class JsonFunctions
     {
+        public sealed record JsonTableColumn(
+            string Name,
+            string? TypeName,
+            string? Path,
+            bool ForOrdinality,
+            bool Exists,
+            object? DefaultOnEmpty,
+            object? DefaultOnError);
+
         /// <summary>Registers all JSON functions into the global function registry.</summary>
         public static void Register(IFunctionRegistry registry)
         {
@@ -209,6 +219,37 @@ namespace ETL_SQL.Engine.Functions
             catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException) { return new DataTable(); }
         }
 
+        public static async Task<DataTable> BuildJsonTableWithColumns(string? json, string? rowPath, IReadOnlyList<JsonTableColumn> columns)
+        {
+            var result = new DataTable();
+            result.SetColumns(columns.Select(c => c.Name));
+
+            if (string.IsNullOrEmpty(json) || columns.Count == 0) return result;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var rowElements = ResolveRowElements(doc.RootElement, rowPath ?? "$");
+                int ordinal = 1;
+                foreach (var rowElement in rowElements)
+                {
+                    var row = new Row(result.Schema);
+                    foreach (var column in columns)
+                    {
+                        row[column.Name] = ResolveJsonTableColumnValue(rowElement, column, ordinal);
+                    }
+                    await result.AddRowAsync(row);
+                    ordinal++;
+                }
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException)
+            {
+                return new DataTable();
+            }
+
+            return result;
+        }
+
         /// <summary>
         /// SQL Server-compatible OPENJSON — expands a JSON string into key/value/type rows,
         /// or (when the JSON is an array of objects) into a multi-column table.
@@ -249,6 +290,44 @@ namespace ETL_SQL.Engine.Functions
         }
 
         // ── Table-building helpers ────────────────────────────────────────────
+
+        private static object? ResolveJsonTableColumnValue(JsonElement rowElement, JsonTableColumn column, int ordinal)
+        {
+            if (column.ForOrdinality) return (decimal)ordinal;
+
+            try
+            {
+                var target = NavigatePath(rowElement, column.Path ?? "$");
+                if (column.Exists) return target != null ? 1m : 0m;
+                if (target == null) return column.DefaultOnEmpty;
+
+                object? value = ScalarFromElement(target.Value);
+                if (!string.IsNullOrWhiteSpace(column.TypeName))
+                {
+                    value = EvaluationUtils.CastToType(value, column.TypeName);
+                }
+                return value;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException)
+            {
+                return column.DefaultOnError;
+            }
+        }
+
+        private static List<JsonElement> ResolveRowElements(JsonElement root, string path)
+        {
+            if (path.EndsWith("[*]", StringComparison.Ordinal))
+            {
+                var array = NavigatePath(root, path[..^3]);
+                if (array?.ValueKind == JsonValueKind.Array) return array.Value.EnumerateArray().ToList();
+                return new List<JsonElement>();
+            }
+
+            var element = NavigatePath(root, path);
+            if (element == null) return new List<JsonElement>();
+            if (element.Value.ValueKind == JsonValueKind.Array) return element.Value.EnumerateArray().ToList();
+            return new List<JsonElement> { element.Value };
+        }
 
         private static async Task<DataTable> BuildTableFromArray(JsonElement array)
         {

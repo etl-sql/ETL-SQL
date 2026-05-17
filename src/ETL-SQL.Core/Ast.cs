@@ -173,6 +173,17 @@ namespace ETL_SQL.Core
         }
     }
 
+    public record MatchRecognizeClause : AstNode
+    {
+        public List<Expression> PartitionBy { get; } = new();
+        public List<OrderByClause> OrderBy { get; } = new();
+        public List<SelectColumn> Measures { get; } = new();
+        public string Pattern { get; set; } = "";
+        public Dictionary<string, Expression> Definitions { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public bool AllRowsPerMatch { get; set; }
+        public string? Alias { get; set; }
+    }
+
     public enum JoinHint { None, Hash, Loop, Merge }
     
     public record JoinClause : AstNode
@@ -1468,6 +1479,7 @@ namespace ETL_SQL.Core
         public WindowClause? Window { get; set; }
         public List<OrderByClause>? WithinGroupOrderBy { get; set; }
         public Expression? Filter { get; set; }
+        public JsonTableSpec? JsonTable { get; set; }
 
         public FunctionCallExpression(string functionName, List<Expression> arguments)
         {
@@ -1477,6 +1489,17 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceTables() => Arguments.SelectMany(a => a.GetSourceTables()).Distinct(StringComparer.OrdinalIgnoreCase);
         public override IEnumerable<string> GetSourceColumns() => Arguments.SelectMany(a => a.GetSourceColumns()).Distinct(StringComparer.OrdinalIgnoreCase);
     }
+
+    public record JsonTableSpec(List<JsonTableColumnSpec> Columns);
+
+    public record JsonTableColumnSpec(
+        string Name,
+        string? TypeName,
+        Expression? Path,
+        bool ForOrdinality = false,
+        bool Exists = false,
+        Expression? DefaultOnEmpty = null,
+        Expression? DefaultOnError = null);
 
     public record ListExpression : Expression
     {
@@ -1787,8 +1810,9 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns().Concat(Characters?.GetSourceColumns() ?? Enumerable.Empty<string>());
     }
 
-    public enum WindowFrameType { ROWS, RANGE }
+    public enum WindowFrameType { ROWS, RANGE, GROUPS }
     public enum WindowFrameBoundType { PRECEDING, FOLLOWING, CURRENT_ROW, UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING }
+    public enum WindowFrameExclusion { NoOthers, CurrentRow, Group, Ties }
 
     public record WindowFrame : AstNode
     {
@@ -1797,14 +1821,16 @@ namespace ETL_SQL.Core
         public Expression? StartValue { get; }
         public WindowFrameBoundType? EndBound { get; }
         public Expression? EndValue { get; }
+        public WindowFrameExclusion Exclusion { get; init; }
 
-        public WindowFrame(WindowFrameType type, WindowFrameBoundType startBound, Expression? startValue = null, WindowFrameBoundType? endBound = null, Expression? endValue = null)
+        public WindowFrame(WindowFrameType type, WindowFrameBoundType startBound, Expression? startValue = null, WindowFrameBoundType? endBound = null, Expression? endValue = null, WindowFrameExclusion exclusion = WindowFrameExclusion.NoOthers)
         {
             Type = type;
             StartBound = startBound;
             StartValue = startValue;
             EndBound = endBound;
             EndValue = endValue;
+            Exclusion = exclusion;
         }
     }
 

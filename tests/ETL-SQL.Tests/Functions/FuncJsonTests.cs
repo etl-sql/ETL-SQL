@@ -171,6 +171,46 @@ namespace ETL_SQL.Tests.Functions
             Assert.Equal(20m, Convert.ToDecimal(rows[1]["VALUE"]));
         }
 
+        [Fact]
+        public async Task JSON_TABLE_ColumnsClause_ProjectsTypedColumns()
+        {
+            var ev = Build();
+            var script = @"
+                SELECT ord, id, name
+                FROM JSON_TABLE('{""items"":[{""id"":1,""name"":""A""},{""id"":2,""name"":""B""}]}', '$.items[*]' COLUMNS (
+                    ord FOR ORDINALITY,
+                    id INT PATH '$.id',
+                    name STRING PATH '$.name'
+                ));";
+
+            var rows = await CollectRows(ev, script);
+
+            Assert.Equal(2, rows.Count);
+            Assert.Equal(1m, Convert.ToDecimal(rows[0]["ord"]));
+            Assert.Equal(2m, Convert.ToDecimal(rows[1]["id"]));
+            Assert.Equal("B", rows[1]["name"]?.ToString());
+        }
+
+        [Fact]
+        public async Task JSON_TABLE_ColumnsClause_AppliesDefaultsAndExistsPath()
+        {
+            var ev = Build();
+            var script = @"
+                SELECT sku, discount_present, qty
+                FROM JSON_TABLE('{""items"":[{""sku"":""A"",""qty"":3},{""sku"":""B"",""discount"":true}]}', '$.items[*]' COLUMNS (
+                    sku STRING PATH '$.sku',
+                    discount_present EXISTS PATH '$.discount',
+                    qty INT PATH '$.qty' DEFAULT 0 ON EMPTY
+                ));";
+
+            var rows = await CollectRows(ev, script);
+
+            Assert.Equal(2, rows.Count);
+            Assert.Equal(0m, Convert.ToDecimal(rows[0]["discount_present"]));
+            Assert.Equal(1m, Convert.ToDecimal(rows[1]["discount_present"]));
+            Assert.Equal(0m, Convert.ToDecimal(rows[1]["qty"]));
+        }
+
         // ── OPENJSON ──────────────────────────────────────────────────────────
 
         [Fact]

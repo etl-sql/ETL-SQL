@@ -252,7 +252,7 @@
 
         const root = document.getElementById('root');
         if (!root) return;
-        root.innerHTML = ''; // Clear for full rebuild
+        root.replaceChildren(); // Clear without reparsing HTML.
         renderHeader(root, manifest);
 
         // Register custom themes before any echarts.init() calls

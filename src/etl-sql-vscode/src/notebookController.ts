@@ -50,7 +50,7 @@ export class ETLNotebookController {
             
             // Get current configuration
             const config = vscode.workspace.getConfiguration('etlsql');
-            const exePath = this._getExecutablePath(config);
+            const exePath = await this._getExecutablePath(config);
             const sessionId = this._getSessionId(cell.notebook);
             const args = ['--verbose', '--perf', '--json', '--session', sessionId];
             
@@ -120,39 +120,67 @@ export class ETLNotebookController {
         return html;
     }
 
-    private _getExecutablePath(config: vscode.WorkspaceConfiguration): string {
+    private async _getExecutablePath(config: vscode.WorkspaceConfiguration): Promise<string> {
         const exePath = (config.get<string>('executable.path') || '').trim();
         if (exePath) {
             return exePath;
         }
 
         // 1. Try System PATH first
-        const platform = process.platform;
-        const cmd = platform === 'win32' ? `where ETL-SQL` : `which ETL-SQL`;
-        try {
-            const out = cp.execSync(cmd, { stdio: [] }).toString().trim();
-            if (out) {
-                return out.split(/\r?\n/)[0].trim();
-            }
-        } catch {
-            // ignore
+        const inPath = await this._findInPath('ETL-SQL');
+        if (inPath) {
+            return inPath;
         }
 
         // 2. Search in common build folders
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (workspaceFolder) {
-            const searchPaths = [
-                path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Debug', 'net10.0', 'ETL-SQL.exe'),
-                path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Release', 'net10.0', 'ETL-SQL.exe')
-            ];
-            for (const p of searchPaths) {
-                if (fs.existsSync(p)) {
-                    return p;
+            const projectRoot = path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin');
+            for (const configuration of ['Debug', 'Release']) {
+                const configRoot = path.join(projectRoot, configuration);
+                let frameworks: string[];
+                try {
+                    frameworks = (await fs.promises.readdir(configRoot, { withFileTypes: true }))
+                        .filter(entry => entry.isDirectory() && /^net\d/.test(entry.name))
+                        .map(entry => entry.name)
+                        .sort()
+                        .reverse();
+                } catch {
+                    continue;
+                }
+
+                for (const framework of frameworks) {
+                    const candidate = path.join(configRoot, framework, 'ETL-SQL.exe');
+                    if (await this._fileExists(candidate)) {
+                        return candidate;
+                    }
                 }
             }
         }
 
         return 'ETL-SQL.exe';
+    }
+
+    private async _findInPath(command: string): Promise<string | undefined> {
+        const tool = process.platform === 'win32' ? 'where' : 'which';
+        return new Promise(resolve => {
+            cp.execFile(tool, [command], { windowsHide: true }, (err, stdout) => {
+                if (err) {
+                    resolve(undefined);
+                    return;
+                }
+                resolve(stdout.split(/\r?\n/).map(line => line.trim()).find(Boolean));
+            });
+        });
+    }
+
+    private async _fileExists(filePath: string): Promise<boolean> {
+        try {
+            await fs.promises.access(filePath, fs.constants.F_OK);
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     private _getSessionId(notebook: vscode.NotebookDocument): string {

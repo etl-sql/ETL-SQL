@@ -53,7 +53,7 @@ function syncNotebookContext(document: vscode.TextDocument) {
     });
 }
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel("ETL-SQL");
     outputChannel.appendLine("ETL-SQL extension activated.");
     
@@ -120,14 +120,14 @@ export function activate(context: vscode.ExtensionContext) {
 
             // Pre-warm the REPL process so first execution has no startup lag.
             if (editor.document.languageId === 'etlsql') {
-                warmupRepl(context, editor.document);
+                void warmupRepl(context, editor.document);
             }
         }
     }));
 
     // Also warm up if an etlsql file is already open when the extension activates.
     if (vscode.window.activeTextEditor?.document.languageId === 'etlsql') {
-        warmupRepl(context, vscode.window.activeTextEditor.document);
+        void warmupRepl(context, vscode.window.activeTextEditor.document);
     }
 
     // Register Results Panel (Bottom Panel)
@@ -142,7 +142,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     if (!serverPath) {
         // 1. Try System PATH first (User-installed SDK)
-        const inPath = findInPath(os.platform() === 'win32' ? 'ETL-SQL-LSP' : 'ETL-SQL-LSP');
+        const inPath = await findInPath(os.platform() === 'win32' ? 'ETL-SQL-LSP' : 'ETL-SQL-LSP');
         if (inPath) {
             serverPath = inPath;
             outputChannel.appendLine(`Using Language Server from PATH: ${serverPath}`);
@@ -152,7 +152,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (!serverPath) {
         // 2. Try bundled path
         const bundledServer = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL-LSP.exe' : 'ETL-SQL-LSP');
-        if (fs.existsSync(bundledServer)) {
+        if (await fileExists(bundledServer)) {
             serverPath = bundledServer;
             outputChannel.appendLine(`Using bundled Language Server: ${serverPath}`);
         }
@@ -163,8 +163,12 @@ export function activate(context: vscode.ExtensionContext) {
         outputChannel.appendLine("Server path not configured. Searching in build folder...");
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (workspaceFolder) {
-            const possibleServerPath = path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.LanguageServer', 'bin', 'Debug', 'net10.0', 'ETL-SQL-LSP.exe');
-            if (fs.existsSync(possibleServerPath)) {
+            const possibleServerPath = await findBuildExecutable(
+                workspaceFolder.uri.fsPath,
+                path.join('src', 'ETL-SQL.LanguageServer'),
+                'ETL-SQL-LSP.exe'
+            );
+            if (possibleServerPath) {
                 serverPath = possibleServerPath;
                 outputChannel.appendLine(`Found server at: ${serverPath}`);
             }
@@ -175,7 +179,7 @@ export function activate(context: vscode.ExtensionContext) {
         outputChannel.appendLine("Language Server disabled (not found or not configured).");
         vscode.window.showWarningMessage("ETL-SQL Language Server not found. Features like IntelliSense and Linting will be limited.");
     } else {
-        if (!fs.existsSync(serverPath)) {
+        if (!await fileExists(serverPath)) {
             const msg = `Language Server executable not found at: ${serverPath}`;
             outputChannel.appendLine(`ERROR: ${msg}`);
             vscode.window.showErrorMessage(msg);
@@ -478,7 +482,7 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     }
 
     const config = vscode.workspace.getConfiguration('etlsql');
-    const exePath = getExecutablePath(context, config);
+    const exePath = await getExecutablePath(context, config);
     
     // Defaulting previously user-facing settings to standard defaults for cleaner UI
     const runMethod = 'Webview (Grid)'; 
@@ -486,7 +490,7 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     const enableLogging = false;
     const logPath = '.etlsql_logs';
     
-    if (exePath !== 'ETL-SQL.exe' && !fs.existsSync(exePath)) {
+    if (exePath !== 'ETL-SQL.exe' && !await fileExists(exePath)) {
         const msg = `ETL-SQL Engine executable not found at: ${exePath}. Please check your etlsql.executable.path setting.`;
         outputChannel.appendLine(`ERROR: ${msg}`);
         vscode.window.showErrorMessage(msg);
@@ -522,16 +526,22 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
             replArgs.push(logPath);
         }
         replArgs.push('--perf', '--json', '--session', sessionId);
-        if (masterPassword) {
-            replArgs.push('--pass', masterPassword);
-        }
  
         try {
             const scriptPath = document.isUntitled ? undefined : document.fileName;
             const workspaceRoot = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath
                 ?? (scriptPath ? path.dirname(scriptPath) : undefined);
             vscode.commands.executeCommand('setContext', 'etlsql.isRunning', true);
-            await ReplManager.getInstance().execute(scriptText, exePath, replArgs, scriptPath, workspaceRoot);
+            await ReplManager.getInstance().execute(
+                scriptText,
+                exePath,
+                replArgs,
+                scriptPath,
+                workspaceRoot,
+                undefined,
+                undefined,
+                masterPassword ? { env: { ETL_SQL_MASTER_PASSWORD: masterPassword } } : undefined
+            );
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             vscode.window.showErrorMessage(`ETL-SQL Error: ${message}`);
@@ -544,65 +554,61 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
         }
     } else {
         // Fallback for non-grid runs if specialized by user commands (retained for architectural consistency)
-        const terminal = vscode.window.activeTerminal || vscode.window.createTerminal('ETL-SQL');
+        const terminal = masterPassword
+            ? vscode.window.createTerminal({ name: 'ETL-SQL', env: { ETL_SQL_MASTER_PASSWORD: masterPassword } })
+            : (vscode.window.activeTerminal || vscode.window.createTerminal('ETL-SQL'));
         terminal.show();
         let scriptPath = document.fileName;
         if (selectionOnly || document.isDirty || document.isUntitled) {
             const tempDir = path.join(os.tmpdir(), 'etlsql_temp');
-            if (!fs.existsSync(tempDir)) {
-                fs.mkdirSync(tempDir, { recursive: true });
-            }
+            await fs.promises.mkdir(tempDir, { recursive: true });
             scriptPath = path.join(tempDir, `temp_${Date.now()}.etlsql`);
-            fs.writeFileSync(scriptPath, scriptText);
+            await fs.promises.writeFile(scriptPath, scriptText, 'utf8');
         }
-        let command = `& "${exePath}" run "${scriptPath}"`;
-        if (masterPassword) {
-            command += ` --pass "${masterPassword}"`;
-        }
+        const command = `& "${exePath}" run "${scriptPath}"`;
         terminal.sendText(command);
     }
 }
 
-function warmupRepl(context: vscode.ExtensionContext, document: vscode.TextDocument) {
+async function warmupRepl(context: vscode.ExtensionContext, document: vscode.TextDocument) {
     if (ReplManager.getInstance().isRunning()) {
         return;
     }
     const config = vscode.workspace.getConfiguration('etlsql');
-    const exePath = getExecutablePath(context, config);
+    const exePath = await getExecutablePath(context, config);
     const sessionId = getSessionId(document);
     const args = ['--verbose', '--perf', '--json', '--session', sessionId];
     ReplManager.getInstance().warmup(exePath, args);
 }
 
-function getExecutablePath(context: vscode.ExtensionContext, config: vscode.WorkspaceConfiguration): string {
+async function getExecutablePath(context: vscode.ExtensionContext, config: vscode.WorkspaceConfiguration): Promise<string> {
     const exePath = (config.get<string>('executable.path') || '').trim();
     if (exePath) {
         return exePath;
     }
 
     // 1. Try System PATH first (User-installed SDK)
-    const inPath = findInPath(os.platform() === 'win32' ? 'ETL-SQL' : 'ETL-SQL');
+    const inPath = await findInPath(os.platform() === 'win32' ? 'ETL-SQL' : 'ETL-SQL');
     if (inPath) {
         return inPath;
     }
 
     // 2. Try bundled path
     const bundledPath = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL.exe' : 'ETL-SQL');
-    if (fs.existsSync(bundledPath)) {
+    if (await fileExists(bundledPath)) {
         return bundledPath;
     }
 
     // 3. Search in common build folders
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (workspaceFolder) {
-        const searchPaths = [
-            path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Debug', 'net10.0', 'ETL-SQL.exe'),
-            path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Release', 'net10.0', 'ETL-SQL.exe')
-        ];
-        for (const p of searchPaths) {
-            if (fs.existsSync(p)) {
-                return p;
-            }
+        const appPath = await findBuildExecutable(
+            workspaceFolder.uri.fsPath,
+            path.join('src', 'ETL-SQL.App'),
+            'ETL-SQL.exe'
+        );
+        if (appPath) {
+            return appPath;
         }
     }
 
@@ -626,18 +632,55 @@ export function deactivate(): Thenable<void> | undefined {
     return client.stop();
 }
 
-function findInPath(command: string): string | undefined {
+async function findInPath(command: string): Promise<string | undefined> {
+    const tool = os.platform() === 'win32' ? 'where' : 'which';
+    return new Promise(resolve => {
+        cp.execFile(tool, [command], { windowsHide: true }, (err, stdout) => {
+            if (err) {
+                resolve(undefined);
+                return;
+            }
+            const first = stdout.split(/\r?\n/).map(line => line.trim()).find(Boolean);
+            resolve(first);
+        });
+    });
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
     try {
-        const platform = os.platform();
-        const cmd = platform === 'win32' ? `where ${command}` : `which ${command}`;
-        const out = cp.execSync(cmd, { stdio: [] }).toString().trim();
-        if (out) {
-            const lines = out.split(/\r?\n/);
-            return lines[0].trim();
-        }
-    } catch (e) {
-        // ignore
+        await fs.promises.access(filePath, fs.constants.F_OK);
+        return true;
+    } catch {
+        return false;
     }
+}
+
+async function findBuildExecutable(workspaceRoot: string, projectRelativePath: string, executableName: string): Promise<string | undefined> {
+    const projectRoot = path.join(workspaceRoot, projectRelativePath);
+    const binRoot = path.join(projectRoot, 'bin');
+    const configurations = ['Debug', 'Release'];
+
+    for (const configuration of configurations) {
+        const configRoot = path.join(binRoot, configuration);
+        let frameworks: string[];
+        try {
+            frameworks = (await fs.promises.readdir(configRoot, { withFileTypes: true }))
+                .filter(entry => entry.isDirectory() && /^net\d/.test(entry.name))
+                .map(entry => entry.name)
+                .sort()
+                .reverse();
+        } catch {
+            continue;
+        }
+
+        for (const framework of frameworks) {
+            const candidate = path.join(configRoot, framework, executableName);
+            if (await fileExists(candidate)) {
+                return candidate;
+            }
+        }
+    }
+
     return undefined;
 }
 

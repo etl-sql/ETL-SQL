@@ -5,6 +5,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using System.Buffers.Binary;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -325,6 +328,7 @@ namespace ETL_SQL.Engine.Engines
                 var name = f.FunctionName.ToUpperInvariant();
                 if (name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX"
                     || name == "EVERY" || name == "ANY" || name == "SOME"
+                    || name == "APPROX_COUNT_DISTINCT"
                     || name == "STRING_AGG" || name == "LIST_AGG"
                     || name == "PERCENTILE_CONT" || name == "PERCENTILE_DISC"
                     || name == "VAR" || name == "VARP" || name == "VAR_SAMP" || name == "VAR_POP"
@@ -366,6 +370,7 @@ namespace ETL_SQL.Engine.Engines
                 var name = f.FunctionName.ToUpperInvariant();
                 bool isAgg = name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX"
                     || name == "EVERY" || name == "ANY" || name == "SOME"
+                    || name == "APPROX_COUNT_DISTINCT"
                     || name == "STRING_AGG" || name == "LIST_AGG"
                     || name == "PERCENTILE_CONT" || name == "PERCENTILE_DISC"
                     || name == "VAR" || name == "VARP" || name == "VAR_SAMP" || name == "VAR_POP"
@@ -428,6 +433,16 @@ namespace ETL_SQL.Engine.Engines
             if (expr is FunctionCallExpression f)
             {
                 var name = f.FunctionName.ToUpperInvariant();
+                if (f.Filter != null)
+                {
+                    var filteredRows = new List<Row>();
+                    foreach (var row in rows)
+                    {
+                        if (await _context.EvaluateCondition(f.Filter, row))
+                            filteredRows.Add(row);
+                    }
+                    rows = filteredRows;
+                }
                 
                 // Collect results for all arguments
                 var valsByArg = new List<List<object?>>();
@@ -444,6 +459,11 @@ namespace ETL_SQL.Engine.Engines
                         if (f.Arguments.Count == 0) return (decimal)rows.Count;
                         var countVals = f.IsDistinct ? valsByArg[0].Distinct() : valsByArg[0];
                         return (decimal)countVals.Count(v => v != null || (f.Arguments[0] is IdentifierExpression id && id.Name == "*"));
+                    case "APPROX_COUNT_DISTINCT":
+                        var approxState = new HyperLogLogState();
+                        foreach (var val in valsByArg[0])
+                            approxState.Add(val);
+                        return approxState.Estimate();
                     case "SUM":
                         var sumVals = f.IsDistinct ? valsByArg[0].Distinct() : valsByArg[0];
                         return (decimal)sumVals.Where(v => v != null).Sum(v => SafeToDecimal(v));
@@ -706,6 +726,7 @@ namespace ETL_SQL.Engine.Engines
                 "EVERY" => new BooleanAggregateState(requireAll: true),
                 "ANY" => new BooleanAggregateState(requireAll: false),
                 "SOME" => new BooleanAggregateState(requireAll: false),
+                "APPROX_COUNT_DISTINCT" => new ApproxCountDistinctState(),
                 _ => new GenericState(f)
             };
         }
@@ -715,6 +736,9 @@ namespace ETL_SQL.Engine.Engines
             ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context);
             ValueTask<object?> Finalize(AggregateEngine engine);
         }
+
+        private static async ValueTask<bool> PassesFilter(Row row, FunctionCallExpression f, IExecutionContext context)
+            => f.Filter == null || await context.EvaluateCondition(f.Filter, row);
 
         private class SumState : IAggregateState
         {
@@ -727,6 +751,7 @@ namespace ETL_SQL.Engine.Engines
 
             public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
             {
+                if (!await PassesFilter(row, f, context)) return;
                 var val = await context.EvaluateValue(f.Arguments[0], row);
                 if (val != null)
                 {
@@ -760,6 +785,7 @@ namespace ETL_SQL.Engine.Engines
 
             public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
             {
+                if (!await PassesFilter(row, f, context)) return;
                 if (_isStar)
                 {
                     _count++;
@@ -791,6 +817,7 @@ namespace ETL_SQL.Engine.Engines
 
             public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
             {
+                if (!await PassesFilter(row, f, context)) return;
                 var val = await context.EvaluateValue(f.Arguments[0], row);
                 if (val != null)
                 {
@@ -819,6 +846,7 @@ namespace ETL_SQL.Engine.Engines
 
             public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
             {
+                if (!await PassesFilter(row, f, context)) return;
                 var val = await context.EvaluateValue(f.Arguments[0], row);
                 if (val != null)
                 {
@@ -836,6 +864,7 @@ namespace ETL_SQL.Engine.Engines
 
             public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
             {
+                if (!await PassesFilter(row, f, context)) return;
                 var val = await context.EvaluateValue(f.Arguments[0], row);
                 if (val != null)
                 {
@@ -861,6 +890,7 @@ namespace ETL_SQL.Engine.Engines
 
             public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
             {
+                if (!await PassesFilter(row, f, context)) return;
                 var val = await context.EvaluateValue(f.Arguments[0], row);
                 if (val == null || val == DBNull.Value) return;
                 _hasValue = true;
@@ -876,6 +906,79 @@ namespace ETL_SQL.Engine.Engines
             public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_hasValue ? _result : null);
         }
 
+        private sealed class ApproxCountDistinctState : IAggregateState
+        {
+            private readonly HyperLogLogState _state = new();
+
+            public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+            {
+                if (!await PassesFilter(row, f, context)) return;
+                var val = await context.EvaluateValue(f.Arguments[0], row);
+                _state.Add(val);
+            }
+
+            public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_state.Estimate());
+        }
+
+        private sealed class HyperLogLogState
+        {
+            private const int Precision = 14;
+            private const int RegisterCount = 1 << Precision;
+            private readonly byte[] _registers = new byte[RegisterCount];
+
+            public void Add(object? value)
+            {
+                if (value == null || value == DBNull.Value) return;
+
+                ulong hash = HashValue(value);
+                int index = (int)(hash >> (64 - Precision));
+                ulong remaining = hash << Precision;
+                int rank = CountLeadingZeros(remaining, 64 - Precision) + 1;
+                if (rank > _registers[index]) _registers[index] = (byte)rank;
+            }
+
+            public decimal Estimate()
+            {
+                double sum = 0;
+                int zeros = 0;
+                foreach (var register in _registers)
+                {
+                    sum += Math.Pow(2.0, -register);
+                    if (register == 0) zeros++;
+                }
+
+                const double alpha = 0.7213 / (1.0 + 1.079 / RegisterCount);
+                double estimate = alpha * RegisterCount * RegisterCount / sum;
+
+                if (estimate <= 2.5 * RegisterCount && zeros > 0)
+                    estimate = RegisterCount * Math.Log((double)RegisterCount / zeros);
+
+                return (decimal)Math.Round(estimate, 2);
+            }
+
+            private static ulong HashValue(object value)
+            {
+                string stableValue = $"{value.GetType().FullName}:{Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)}";
+                Span<byte> hash = stackalloc byte[32];
+                SHA256.HashData(Encoding.UTF8.GetBytes(stableValue), hash);
+                return BinaryPrimitives.ReadUInt64BigEndian(hash[..8]);
+            }
+
+            private static int CountLeadingZeros(ulong value, int width)
+            {
+                if (value == 0) return width;
+                int count = 0;
+                ulong mask = 1UL << 63;
+                for (int i = 0; i < width; i++)
+                {
+                    if ((value & mask) != 0) break;
+                    count++;
+                    mask >>= 1;
+                }
+                return count;
+            }
+        }
+
         private class GenericState : IAggregateState
         {
             private readonly FunctionCallExpression _f;
@@ -883,10 +986,10 @@ namespace ETL_SQL.Engine.Engines
 
             public GenericState(FunctionCallExpression f) { _f = f; }
 
-            public ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+            public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
             {
+                if (!await PassesFilter(row, f, context)) return;
                 _rows.Add(row);
-                return default;
             }
 
             public async ValueTask<object?> Finalize(AggregateEngine engine)

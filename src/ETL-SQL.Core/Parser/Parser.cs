@@ -35,7 +35,8 @@ namespace ETL_SQL.Core.Parser
             TokenType.MIN, TokenType.MAX, TokenType.SUM, TokenType.AVG, TokenType.COUNT,
             TokenType.EVERY,
             TokenType.STEP, TokenType.TOP, TokenType.BOTTOM, TokenType.LEFT, TokenType.RIGHT,
-            TokenType.ASC, TokenType.DESC
+            TokenType.ASC, TokenType.DESC, TokenType.FIRST, TokenType.NEXT, TokenType.ONLY,
+            TokenType.NO, TokenType.OTHERS
         };
 
         private static readonly HashSet<TokenType> DataTypeTokens = new()
@@ -772,7 +773,7 @@ namespace ETL_SQL.Core.Parser
                     {
                         alias = ConsumeIdentifier("Expected alias after AS for VALUES table constructor").Value;
                     }
-                    else if (IsIdentifier(Current))
+                    else if (IsIdentifier(Current) && !Current.Value.Equals("MATCH_RECOGNIZE", StringComparison.OrdinalIgnoreCase))
                     {
                         alias = Advance().Value;
                     }
@@ -832,18 +833,10 @@ namespace ETL_SQL.Core.Parser
 
                 if (allowFunction && Match(TokenType.LPAREN))
                 {
-                    var args = new List<Expression>();
-                    if (!Match(TokenType.RPAREN))
-                    {
-                        args.Add(_expressionParser.ParseExpression());
-                        while (Match(TokenType.COMMA))
-                        {
-                            args.Add(_expressionParser.ParseExpression());
-                        }
-                        Consume(TokenType.RPAREN, "Expected ')' after function arguments");
-                    }
                     var funcName = parts[^1];
-                    var funcCall = new FunctionCallExpression(funcName, args) { Line = t.Line, Column = t.Column };
+                    var funcCall = funcName.Equals("JSON_TABLE", StringComparison.OrdinalIgnoreCase)
+                        ? ParseJsonTableFunctionCall(funcName, t)
+                        : ParseTableFunctionCall(funcName, t);
                     
                     if (parts.Count == 4) tableRef = new TableReference(parts[3], parts[2], parts[1], parts[0], functionCall: funcCall);
                     else if (parts.Count == 3) tableRef = new TableReference(parts[2], parts[1], null, parts[0], functionCall: funcCall);
@@ -901,11 +894,12 @@ namespace ETL_SQL.Core.Parser
                 EndColumn = LastTokenEndColumn 
             };
 
-            // Handle PIVOT/UNPIVOT operators
-            while (Current.Type == TokenType.PIVOT || Current.Type == TokenType.UNPIVOT)
+            // Handle table-level operators
+            while (Current.Type == TokenType.PIVOT || Current.Type == TokenType.UNPIVOT || Current.Value.Equals("MATCH_RECOGNIZE", StringComparison.OrdinalIgnoreCase))
             {
                 if (Match(TokenType.PIVOT)) tableRef.TableOperators.Add(ParsePivotClause());
                 else if (Match(TokenType.UNPIVOT)) tableRef.TableOperators.Add(ParseUnpivotClause());
+                else if (MatchWord("MATCH_RECOGNIZE")) tableRef.TableOperators.Add(ParseMatchRecognizeClause());
                 tableRef = tableRef with 
                 { 
                     EndLine = LastTokenEndLine, 
@@ -939,6 +933,123 @@ namespace ETL_SQL.Core.Parser
             }
 
             return tableRef;
+        }
+
+        private FunctionCallExpression ParseTableFunctionCall(string funcName, Token startToken)
+        {
+            var args = new List<Expression>();
+            if (!Match(TokenType.RPAREN))
+            {
+                args.Add(_expressionParser.ParseExpression());
+                while (Match(TokenType.COMMA))
+                {
+                    args.Add(_expressionParser.ParseExpression());
+                }
+                Consume(TokenType.RPAREN, "Expected ')' after function arguments");
+            }
+            return new FunctionCallExpression(funcName, args) { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        private FunctionCallExpression ParseJsonTableFunctionCall(string funcName, Token startToken)
+        {
+            var args = new List<Expression>();
+            JsonTableSpec? spec = null;
+
+            if (!Match(TokenType.RPAREN))
+            {
+                args.Add(_expressionParser.ParseExpression());
+                if (Match(TokenType.COMMA))
+                {
+                    args.Add(_expressionParser.ParseExpression());
+                }
+
+                if (Match(TokenType.COLUMNS))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after JSON_TABLE COLUMNS");
+                    var columns = new List<JsonTableColumnSpec>();
+                    if (Current.Type != TokenType.RPAREN)
+                    {
+                        columns.Add(ParseJsonTableColumnSpec());
+                        while (Match(TokenType.COMMA))
+                        {
+                            columns.Add(ParseJsonTableColumnSpec());
+                        }
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' after JSON_TABLE COLUMNS list");
+                    spec = new JsonTableSpec(columns);
+                }
+                else
+                {
+                    while (Match(TokenType.COMMA))
+                    {
+                        args.Add(_expressionParser.ParseExpression());
+                    }
+                }
+
+                Consume(TokenType.RPAREN, "Expected ')' after JSON_TABLE arguments");
+            }
+
+            return new FunctionCallExpression(funcName, args) { Line = startToken.Line, Column = startToken.Column, JsonTable = spec };
+        }
+
+        private JsonTableColumnSpec ParseJsonTableColumnSpec()
+        {
+            string name = ConsumeIdentifier("Expected JSON_TABLE column name").Value;
+
+            if (Match(TokenType.FOR))
+            {
+                ConsumeWord("ORDINALITY", "Expected ORDINALITY after FOR in JSON_TABLE column");
+                return new JsonTableColumnSpec(name, "INT", null, ForOrdinality: true);
+            }
+
+            string? typeName = null;
+            if (Current.Type != TokenType.PATH && Current.Type != TokenType.EXISTS)
+            {
+                typeName = ConsumeIdentifier("Expected JSON_TABLE column type").Value;
+                if (Match(TokenType.LPAREN))
+                {
+                    var parts = new List<string>();
+                    if (Current.Type != TokenType.RPAREN)
+                    {
+                        parts.Add(Advance().Value);
+                        while (Match(TokenType.COMMA)) parts.Add(Advance().Value);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' after JSON_TABLE type arguments");
+                    typeName += $"({string.Join(", ", parts)})";
+                }
+            }
+
+            bool exists = Match(TokenType.EXISTS);
+            Consume(TokenType.PATH, "Expected PATH in JSON_TABLE column");
+            var path = _expressionParser.ParseExpression();
+
+            Expression? defaultOnEmpty = null;
+            Expression? defaultOnError = null;
+            while (Match(TokenType.DEFAULT))
+            {
+                var defaultValue = _expressionParser.ParseExpression();
+                Consume(TokenType.ON, "Expected ON after JSON_TABLE DEFAULT value");
+                if (MatchWord("EMPTY")) defaultOnEmpty = defaultValue;
+                else if (MatchWord("ERROR")) defaultOnError = defaultValue;
+                else throw new SyntaxException("Expected EMPTY or ERROR after JSON_TABLE DEFAULT ... ON", Current.Line, Current.Column);
+            }
+
+            return new JsonTableColumnSpec(name, typeName, path, Exists: exists, DefaultOnEmpty: defaultOnEmpty, DefaultOnError: defaultOnError);
+        }
+
+        private bool MatchWord(string word)
+        {
+            if (Current.Value.Equals(word, StringComparison.OrdinalIgnoreCase))
+            {
+                Advance();
+                return true;
+            }
+            return false;
+        }
+
+        private void ConsumeWord(string word, string message)
+        {
+            if (!MatchWord(word)) throw new SyntaxException(message, Current.Line, Current.Column);
         }
 
         private PivotClause ParsePivotClause()
@@ -995,6 +1106,132 @@ namespace ETL_SQL.Core.Parser
             else if (Current.Type == TokenType.IDENTIFIER && !IsKeyword(Current.Value)) alias = Advance().Value;
             
             return new UnpivotClause(valCol, nameCol, cols) { Alias = alias };
+        }
+
+        private MatchRecognizeClause ParseMatchRecognizeClause()
+        {
+            var clause = new MatchRecognizeClause();
+            Consume(TokenType.LPAREN, "Expected '(' after MATCH_RECOGNIZE");
+
+            while (Current.Type != TokenType.RPAREN && Current.Type != TokenType.EOF)
+            {
+                if (Match(TokenType.PARTITION))
+                {
+                    Consume(TokenType.BY, "Expected BY after PARTITION in MATCH_RECOGNIZE");
+                    clause.PartitionBy.Add(ParseExpression());
+                    while (Match(TokenType.COMMA)) clause.PartitionBy.Add(ParseExpression());
+                }
+                else if (Match(TokenType.ORDER))
+                {
+                    Consume(TokenType.BY, "Expected BY after ORDER in MATCH_RECOGNIZE");
+                    clause.OrderBy.AddRange(ParseOrderByList());
+                }
+                else if (MatchWord("MEASURES"))
+                {
+                    clause.Measures.Add(ParseMeasureColumn());
+                    while (Match(TokenType.COMMA)) clause.Measures.Add(ParseMeasureColumn());
+                }
+                else if (MatchWord("ONE"))
+                {
+                    Consume(TokenType.ROW, "Expected ROW after ONE in MATCH_RECOGNIZE");
+                    ConsumeWord("PER", "Expected PER after ONE ROW in MATCH_RECOGNIZE");
+                    ConsumeWord("MATCH", "Expected MATCH after ONE ROW PER in MATCH_RECOGNIZE");
+                    clause.AllRowsPerMatch = false;
+                }
+                else if (Match(TokenType.ALL))
+                {
+                    Consume(TokenType.ROWS, "Expected ROWS after ALL in MATCH_RECOGNIZE");
+                    ConsumeWord("PER", "Expected PER after ALL ROWS in MATCH_RECOGNIZE");
+                    ConsumeWord("MATCH", "Expected MATCH after ALL ROWS PER in MATCH_RECOGNIZE");
+                    clause.AllRowsPerMatch = true;
+                }
+                else if (MatchWord("AFTER"))
+                {
+                    ConsumeWord("MATCH", "Expected MATCH after AFTER in MATCH_RECOGNIZE");
+                    ConsumeWord("SKIP", "Expected SKIP after AFTER MATCH in MATCH_RECOGNIZE");
+                    while (!Current.Value.Equals("PATTERN", StringComparison.OrdinalIgnoreCase) && !Current.Value.Equals("DEFINE", StringComparison.OrdinalIgnoreCase) && Current.Type != TokenType.RPAREN && Current.Type != TokenType.EOF)
+                    {
+                        Advance();
+                    }
+                }
+                else if (MatchWord("PATTERN"))
+                {
+                    clause.Pattern = ParsePatternText();
+                }
+                else if (MatchWord("DEFINE"))
+                {
+                    ParseMatchDefinitions(clause);
+                }
+                else
+                {
+                    throw new SyntaxException("Unexpected token in MATCH_RECOGNIZE clause", Current.Line, Current.Column);
+                }
+            }
+
+            Consume(TokenType.RPAREN, "Expected ')' after MATCH_RECOGNIZE");
+            if (Match(TokenType.AS)) clause.Alias = ConsumeIdentifier("Expected alias after MATCH_RECOGNIZE AS").Value;
+            else if (IsIdentifier(Current)) clause.Alias = Advance().Value;
+            return clause;
+        }
+
+        private List<OrderByClause> ParseOrderByList()
+        {
+            var orderBy = new List<OrderByClause>();
+            do
+            {
+                var orderExpr = ParseExpression();
+                bool descending = false;
+                if (Match(TokenType.DESC)) descending = true;
+                else Match(TokenType.ASC);
+                orderBy.Add(new OrderByClause(orderExpr, descending));
+            }
+            while (Match(TokenType.COMMA));
+            return orderBy;
+        }
+
+        private SelectColumn ParseMeasureColumn()
+        {
+            var expr = ParseExpression();
+            string? alias = null;
+            if (Match(TokenType.AS)) alias = ConsumeIdentifier("Expected alias after MATCH_RECOGNIZE measure").Value;
+            return new SelectColumn(expr, alias);
+        }
+
+        private string ParsePatternText()
+        {
+            Consume(TokenType.LPAREN, "Expected '(' after PATTERN");
+            var parts = new List<string>();
+            int depth = 1;
+            while (depth > 0 && Current.Type != TokenType.EOF)
+            {
+                if (Current.Type == TokenType.LPAREN)
+                {
+                    depth++;
+                    parts.Add(Advance().Value);
+                }
+                else if (Current.Type == TokenType.RPAREN)
+                {
+                    depth--;
+                    if (depth > 0) parts.Add(Advance().Value);
+                    else Advance();
+                }
+                else
+                {
+                    parts.Add(Advance().Value);
+                }
+            }
+            return string.Join(" ", parts);
+        }
+
+        private void ParseMatchDefinitions(MatchRecognizeClause clause)
+        {
+            do
+            {
+                string name = ConsumeIdentifier("Expected pattern variable in MATCH_RECOGNIZE DEFINE").Value;
+                Consume(TokenType.AS, "Expected AS in MATCH_RECOGNIZE DEFINE");
+                clause.Definitions[name] = ParseExpression();
+            }
+            while (Match(TokenType.COMMA));
         }
 
         public OutputClause ParseOutputClause()

@@ -158,6 +158,7 @@ namespace ETL_SQL.Core.Formatting
             TableReference             n => FormatTableReference(n),
             PivotClause                n => $"PIVOT ({n.AggregateFunction}({n.AggregateColumn}) FOR {n.PivotColumn} IN ({string.Join(", ", n.PivotValues.Select(v => v.ToSql()))}))" + (n.Alias != null ? $" AS {n.Alias}" : ""),
             UnpivotClause              n => $"UNPIVOT ({n.ValueColumn} FOR {n.NameColumn} IN ({string.Join(", ", n.UnpivotColumns)}))" + (n.Alias != null ? $" AS {n.Alias}" : ""),
+            MatchRecognizeClause        n => FormatMatchRecognize(n),
             OutputClause               n => $"OUTPUT {string.Join(", ", n.Columns.Select(c => c.ToSql()))}{(n.IntoTable != null ? $" INTO {n.IntoTable.ToSql()}" : "")}",
             ForClause                  n => FormatForClause(n),
             ForeignKeyReference        n => $"REFERENCES {n.Table.ToSql()}({string.Join(", ", n.Columns)})",
@@ -658,11 +659,27 @@ namespace ETL_SQL.Core.Formatting
         {
             var distinct = e.IsDistinct ? "DISTINCT " : "";
             var args     = string.Join(", ", e.Arguments.Select(a => a.ToSql()));
-            var sql      = $"{e.FunctionName}({distinct}{args})";
+            var sql      = e.JsonTable != null
+                ? $"{e.FunctionName}({distinct}{args} COLUMNS ({string.Join(", ", e.JsonTable.Columns.Select(FormatJsonTableColumn))}))"
+                : $"{e.FunctionName}({distinct}{args})";
             if (e.WithinGroupOrderBy != null)
                 sql += $" WITHIN GROUP (ORDER BY {string.Join(", ", e.WithinGroupOrderBy.Select(o => o.ToSql()))})";
+            if (e.Filter != null)
+                sql += $" FILTER (WHERE {e.Filter.ToSql()})";
             if (e.Window != null)
                 sql += $" OVER ({e.Window.ToSql()})";
+            return sql;
+        }
+
+        private static string FormatJsonTableColumn(JsonTableColumnSpec c)
+        {
+            if (c.ForOrdinality) return $"{c.Name} FOR ORDINALITY";
+            var sql = c.Name;
+            if (!string.IsNullOrWhiteSpace(c.TypeName)) sql += $" {c.TypeName}";
+            if (c.Exists) sql += " EXISTS";
+            if (c.Path != null) sql += $" PATH {c.Path.ToSql()}";
+            if (c.DefaultOnEmpty != null) sql += $" DEFAULT {c.DefaultOnEmpty.ToSql()} ON EMPTY";
+            if (c.DefaultOnError != null) sql += $" DEFAULT {c.DefaultOnError.ToSql()} ON ERROR";
             return sql;
         }
 
@@ -715,8 +732,27 @@ namespace ETL_SQL.Core.Formatting
             {
                 if (op is PivotClause   p) sql += " " + p.ToSql();
                 else if (op is UnpivotClause u) sql += " " + u.ToSql();
+                else if (op is MatchRecognizeClause m) sql += " " + m.ToSql();
             }
             return sql;
+        }
+
+        private static string FormatMatchRecognize(MatchRecognizeClause n)
+        {
+            var parts = new List<string>();
+            if (n.PartitionBy.Count > 0) parts.Add($"PARTITION BY {string.Join(", ", n.PartitionBy.Select(e => e.ToSql()))}");
+            if (n.OrderBy.Count > 0) parts.Add($"ORDER BY {string.Join(", ", n.OrderBy.Select(o => o.ToSql()))}");
+            if (n.Measures.Count > 0)
+            {
+                parts.Add($"MEASURES {string.Join(", ", n.Measures.Select(c => c.Expression.ToSql() + (c.Alias != null ? $" AS {c.Alias}" : "")))}");
+            }
+            parts.Add(n.AllRowsPerMatch ? "ALL ROWS PER MATCH" : "ONE ROW PER MATCH");
+            parts.Add($"PATTERN ({n.Pattern})");
+            if (n.Definitions.Count > 0)
+            {
+                parts.Add($"DEFINE {string.Join(", ", n.Definitions.Select(kv => $"{kv.Key} AS {kv.Value.ToSql()}"))}");
+            }
+            return $"MATCH_RECOGNIZE ({string.Join(" ", parts)})" + (n.Alias != null ? $" AS {n.Alias}" : "");
         }
 
         private static string FormatForClause(ForClause n)
@@ -734,9 +770,19 @@ namespace ETL_SQL.Core.Formatting
         private static string FormatWindowFrame(WindowFrame n)
         {
             string start = BoundToSql(n.StartBound, n.StartValue);
-            if (n.EndBound == null) return $"{n.Type} {start}";
-            return $"{n.Type} BETWEEN {start} AND {BoundToSql(n.EndBound.Value, n.EndValue)}";
+            string frame = n.EndBound == null
+                ? $"{n.Type} {start}"
+                : $"{n.Type} BETWEEN {start} AND {BoundToSql(n.EndBound.Value, n.EndValue)}";
+            return frame + ExclusionToSql(n.Exclusion);
         }
+
+        private static string ExclusionToSql(WindowFrameExclusion exclusion) => exclusion switch
+        {
+            WindowFrameExclusion.CurrentRow => " EXCLUDE CURRENT ROW",
+            WindowFrameExclusion.Group      => " EXCLUDE GROUP",
+            WindowFrameExclusion.Ties       => " EXCLUDE TIES",
+            _                               => ""
+        };
 
         private static string BoundToSql(WindowFrameBoundType bound, Expression? value) => bound switch
         {

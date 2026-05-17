@@ -76,6 +76,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `WITH` | CTE | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [WITH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
 | `WITH RECURSIVE` | CTE | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [WITH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
 | `PIVOT` / `UNPIVOT` | DML / Transform | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [PIVOT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
+| `MATCH_RECOGNIZE` | DML / Pattern Matching | [Grammar.md](../Docs/Reference/Grammar.md#59-match_recognize) | - |
 | `EXPORT REPORT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [EXPORT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/EXPORT.md) |
 | `SUBSCRIPTION` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [SUBSCRIPTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SUBSCRIPTION.md) |
 | `RELDATE` | Variables | [RelativeDate_Parameters.md](../Docs/Reference/RelativeDate_Parameters.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/RelativeDate_Parameters.md) | [RELDATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RELDATE.md) |
@@ -269,7 +270,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `JSON_EXISTS(json, path)` | JSON | [JSON_EXISTS.md](../Docs/Reference/Standard_Library.md#11-json-functions) | 1 if path exists |
 | `JSON_OBJECT(key, value, ...)` | JSON | [JSON_OBJECT.md](../Docs/Reference/Standard_Library.md#11-json-functions) | Builds JSON object |
 | `JSON_ARRAY(value1, ...)` | JSON | [JSON_ARRAY.md](../Docs/Reference/Standard_Library.md#11-json-functions) | Builds JSON array |
-| `JSON_TABLE(json, path)` | JSON | [JSON_TABLE.md](../Docs/Reference/Standard_Library.md#11-json-functions) | Table from JSON |
+| `JSON_TABLE(json, path COLUMNS (...))` | JSON | [JSON_TABLE.md](../Docs/Reference/Standard_Library.md#11-json-functions) | Table projected from JSON rows |
 | `OPENJSON(json, [path])` | JSON | [OPENJSON.md](../Docs/Reference/Standard_Library.md#11-json-functions) | SQL Server-style JSON expansion |
 | `XMLVALUE(xml, xpath)` | XML | [XMLVALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLVALUE.md) | Extracts scalar from XML |
 | `XMLEXISTS(xml, xpath)` | XML | [XMLEXISTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLEXISTS.md) | 1 if XPath exists |
@@ -288,6 +289,8 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `AVG(expression)` | Aggregate | [AVG.md](../src/ETL-SQL.Core/Resources/Help/Functions/AVG.md) | Average of values |
 | `MAX(expression)` | Aggregate | [MAX.md](../src/ETL-SQL.Core/Resources/Help/Functions/MAX.md) | Maximum value |
 | `MIN(expression)` | Aggregate | [MIN.md](../src/ETL-SQL.Core/Resources/Help/Functions/MIN.md) | Minimum value |
+| `APPROX_COUNT_DISTINCT(expression)` | Aggregate | [Standard_Library.md](../Docs/Reference/Standard_Library.md#5-aggregate-functions) | HyperLogLog approximate distinct count |
+| `EVERY(expression)` / `ANY(expression)` / `SOME(expression)` | Aggregate | [Standard_Library.md](../Docs/Reference/Standard_Library.md#5-aggregate-functions) | Standard boolean aggregates |
 | `MEDIAN(expression)` | Aggregate | [MEDIAN.md](../src/ETL-SQL.Core/Resources/Help/Functions/MEDIAN.md) | Median (50th percentile) |
 | `VAR(expression)` / `VAR_SAMP` | Aggregate | [VAR.md](../src/ETL-SQL.Core/Resources/Help/Functions/VAR.md) | Sample variance |
 | `VARP(expression)` / `VAR_POP` | Aggregate | [VARP.md](../src/ETL-SQL.Core/Resources/Help/Functions/VARP.md) | Population variance |
@@ -426,7 +429,8 @@ Window functions perform calculations across a set of table rows that are someho
 FUNCTION_NAME(args) OVER (
   [PARTITION BY col1, col2, ...]
   [ORDER BY colA [ASC|DESC], ...]
-  [ROWS|RANGE BETWEEN <bound> AND <bound>]
+  [ROWS|RANGE|GROUPS BETWEEN <bound> AND <bound>]
+  [EXCLUDE CURRENT ROW|GROUP|TIES|NO OTHERS]
 )
 ```
 
@@ -436,6 +440,12 @@ FUNCTION_NAME(args) OVER (
 - `CURRENT ROW`
 - `<n> FOLLOWING`
 - `UNBOUNDED FOLLOWING`
+
+**Frame Modes and Exclusions:**
+- `ROWS` counts physical rows.
+- `RANGE` groups rows by ordering value range.
+- `GROUPS` counts peer groups with equal `ORDER BY` values.
+- `EXCLUDE CURRENT ROW`, `EXCLUDE GROUP`, `EXCLUDE TIES`, and `EXCLUDE NO OTHERS` remove rows from the resolved frame.
 
 ### 4.2 Dedicated Window Functions
 | Function | Help File | Description |
@@ -463,7 +473,8 @@ Window functions perform calculations across a set of table rows that are someho
 FUNCTION_NAME(args) OVER (
   [PARTITION BY col1, col2, ...]
   [ORDER BY colA [ASC|DESC], ...]
-  [ROWS|RANGE BETWEEN <bound> AND <bound>]
+  [ROWS|RANGE|GROUPS BETWEEN <bound> AND <bound>]
+  [EXCLUDE CURRENT ROW|GROUP|TIES|NO OTHERS]
 )
 ```
 
@@ -473,6 +484,12 @@ FUNCTION_NAME(args) OVER (
 - `CURRENT ROW`
 - `<n> FOLLOWING`
 - `UNBOUNDED FOLLOWING`
+
+**Frame Modes and Exclusions:**
+- `ROWS` counts physical rows.
+- `RANGE` groups rows by ordering value range.
+- `GROUPS` counts peer groups with equal `ORDER BY` values.
+- `EXCLUDE CURRENT ROW`, `EXCLUDE GROUP`, `EXCLUDE TIES`, and `EXCLUDE NO OTHERS` remove rows from the resolved frame.
 
 ### 4.2 Dedicated Window Functions
 | Function | Help File | Description |
@@ -932,6 +949,8 @@ Standard clauses available within a `SELECT` statement.
 | `TOP (n)` | Limits results (MSSQL style) | [Grammar.md](../Docs/Reference/Grammar.md) |
 | `LIMIT n` | Limits results (Postgres style) | [Grammar.md](../Docs/Reference/Grammar.md) |
 | `OFFSET n` | Skips first N rows | [Grammar.md](../Docs/Reference/Grammar.md) |
+| `FETCH FIRST/NEXT n ROWS ONLY` | SQL:2008 result limiting | [Grammar.md](../Docs/Reference/Grammar.md#53-top--limit--offset-fetch) |
+| `VALUES (...) AS alias(...)` | Standalone table constructor in `FROM`/`JOIN` | [Grammar.md](../Docs/Reference/Grammar.md#54-values-table-constructor) |
 | `GROUP BY` | Aggregates rows by column values | [Grammar.md](../Docs/Reference/Grammar.md) |
 | `HAVING` | Filters aggregated groups | [Grammar.md](../Docs/Reference/Grammar.md) |
 | `ORDER BY` | Sorts the final result set | [Grammar.md](../Docs/Reference/Grammar.md) |
@@ -941,6 +960,8 @@ Standard clauses available within a `SELECT` statement.
 | `GROUPING SETS` | Explicit grouping set list | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
 | `QUALIFY` | Filters results of window functions | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
 | `FILTER (WHERE ...)` | Per-aggregate conditional filter | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
+| `ILIKE` | Case-insensitive pattern match | [Grammar.md](../Docs/Reference/Grammar.md) |
+| `~` / `~*` | Regex match / case-insensitive regex match | [Grammar.md](../Docs/Reference/Grammar.md) |
 | `OUTPUT` | Returns modified rows (DML only) | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
 | `FOR JSON` | Formats output as JSON (PATH/AUTO/RAW) | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
 | `FOR XML` | Formats output as XML (PATH/AUTO/RAW) | [Grammar.md](../Docs/Reference/Grammar.md)(file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) |
@@ -958,6 +979,7 @@ Operators that transform the shape of a table in the `FROM` clause.
 | :--- | :--- | :--- |
 | `PIVOT` | `PIVOT ( agg(col) FOR pivot_col IN (...) )` | Rotates rows into columns |
 | `UNPIVOT` | `UNPIVOT ( val_col FOR name_col IN (...) )` | Rotates columns into rows |
+| `MATCH_RECOGNIZE` | `MATCH_RECOGNIZE (PARTITION BY ... ORDER BY ... MEASURES ... PATTERN (...) DEFINE ...)` | Finds row patterns in ordered sequences |
 
 ---
 

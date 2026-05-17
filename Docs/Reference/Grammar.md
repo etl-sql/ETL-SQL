@@ -92,13 +92,23 @@ Declaring a variable as `JSON` unlocks the full JSON function set on that value:
 | `JSON_MODIFY(@v, '$.path', val)` | Return a copy with a value updated or inserted |
 | `ISJSON(@v)` | Returns `1` if the string is valid JSON, `0` otherwise |
 | `JSON_EXISTS(@v, '$.path')` | Returns `1` if the path exists |
-| `JSON_TABLE(@v, '$.path')` | Expand a JSON array into a table |
+| `JSON_TABLE(@v, '$.path' COLUMNS (...))` | Expand and project JSON rows into a table |
 | `OPENJSON(@v)` | SQL-Server-style JSON rowset expansion |
 
 ```sql
 DECLARE @payload JSON = '{"order":{"id":42,"total":99.95}}';
 SELECT JSON_VALUE(@payload, '$.order.id')    AS id,
        JSON_VALUE(@payload, '$.order.total') AS total;
+```
+
+```sql
+SELECT *
+FROM JSON_TABLE(@payload, '$.order.items[*]' COLUMNS (
+    item_no FOR ORDINALITY,
+    sku STRING PATH '$.sku',
+    qty INT PATH '$.quantity' DEFAULT 0 ON EMPTY,
+    has_discount EXISTS PATH '$.discount'
+));
 ```
 
 ---
@@ -955,6 +965,14 @@ FROM <source> [AS alias]
 [QUALIFY <condition>]
 [PIVOT  (<agg> FOR <col> IN (<vals>)) AS <alias>]
 [UNPIVOT (<val_col> FOR <name_col> IN (<cols>)) AS <alias>]
+[MATCH_RECOGNIZE (
+    [PARTITION BY <expr> [, ...]]
+    [ORDER BY <expr> [ASC|DESC] [, ...]]
+    [MEASURES <expr> AS <alias> [, ...]]
+    [ONE ROW PER MATCH | ALL ROWS PER MATCH]
+    PATTERN (<pattern>)
+    DEFINE <var> AS <condition> [, ...]
+) AS <alias>]
 [ORDER BY <col> [ASC|DESC] [, ...]]
 [OFFSET n ROWS]
 [FETCH NEXT n ROWS ONLY]
@@ -1149,7 +1167,28 @@ FROM #quarterly_sales
 UNPIVOT (amount FOR quarter IN ([Q1], [Q2], [Q3], [Q4])) AS unpvt;
 ```
 
-### 5.9 `FOR JSON` / `FOR XML`
+### 5.9 `MATCH_RECOGNIZE`
+
+`MATCH_RECOGNIZE` scans an ordered row sequence for named pattern variables. ETL-SQL supports partitioning, ordering, `MEASURES`, `ONE ROW PER MATCH`, `ALL ROWS PER MATCH`, linear `PATTERN` variables, and the `+`, `*`, and `?` quantifiers.
+
+```sql
+SELECT start_ts, end_ts
+FROM #events
+MATCH_RECOGNIZE (
+    PARTITION BY account_id
+    ORDER BY event_ts
+    MEASURES FIRST(A.event_ts) AS start_ts,
+             LAST(B.event_ts)  AS end_ts
+    ONE ROW PER MATCH
+    PATTERN (A B+)
+    DEFINE A AS A.amount < 50,
+           B AS B.amount >= 80
+) AS mr;
+```
+
+`ALL ROWS PER MATCH` emits one row for each source row in the match and adds `MATCH_NUMBER` plus `CLASSIFIER` columns.
+
+### 5.10 `FOR JSON` / `FOR XML`
 ```sql
 SELECT id, name, amount FROM #sales
 FOR JSON PATH, ROOT('Sales'), INCLUDE_NULL_VALUES;
@@ -1158,7 +1197,7 @@ SELECT id, name FROM #sales
 FOR XML PATH, ROOT('Employees'), ELEMENTS;
 ```
 
-### 5.10 Window Functions
+### 5.11 Window Functions
 Window functions compute a value across a set of rows related to the current row without collapsing them into a single group. They appear in the `SELECT` column list and require an `OVER` clause.
 
 ```sql
@@ -1186,7 +1225,10 @@ SELECT
     AVG(amount)   OVER (PARTITION BY region)                  AS region_avg,
     COUNT(*)      OVER (PARTITION BY region)                  AS region_count,
     SUM(amount)   OVER (ORDER BY created_at
-                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total,
+    SUM(amount)   OVER (ORDER BY created_at
+                        GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW
+                        EXCLUDE CURRENT ROW) AS peer_group_total
 
 FROM #sales;
 ```
@@ -1207,6 +1249,8 @@ FROM sales_data;
 | `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` | All rows from the partition start to the current row |
 | `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` | Current row and one row on either side |
 | `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` | All rows in the partition |
+| `GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW` | Current peer group and one prior peer group |
+| `EXCLUDE CURRENT ROW` / `EXCLUDE GROUP` / `EXCLUDE TIES` | Removes the current row, current peer group, or peer ties from the frame |
 
 ### 5.11 `QUALIFY` â€” Filter Window Results
 The `QUALIFY` clause filters results based on window function values. It is evaluated after window functions are calculated, avoiding the need for a subquery to filter by a ranked or aggregated window value.
@@ -1322,6 +1366,12 @@ Access columns of a row variable, fields of a JSON object, or properties of a sy
 INSERT INTO sales_db.archive (category, TotalSales)
 OUTPUT INSERTED.category, INSERTED.TotalSales INTO #AuditLog
 SELECT category, SUM(amount) FROM #daily WHERE processed = 1
+GROUP BY category;
+
+SELECT category,
+       SUM(amount) FILTER (WHERE amount > 100) AS LargeAmount,
+       COUNT(*)    FILTER (WHERE status = 'Open') AS OpenRows
+FROM #daily
 GROUP BY category;
 ```
 
