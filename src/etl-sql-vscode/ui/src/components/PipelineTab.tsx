@@ -158,15 +158,21 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
     if (status === 'running') setSelectedRun('current');
   }, [status]);
 
-  const historyLen = runHistory?.length ?? 0;
+  // Filter out blank history entries (pre-execute snapshots with no renderable content).
+  const visibleHistory = useMemo(() =>
+    (runHistory ?? []).filter(msgs =>
+      msgs.some(m => m.type === 'progress' || m.type === 'message' || m.type === 'results')
+    ), [runHistory]);
+
+  const historyLen = visibleHistory.length;
   const isBrowsingHistory = selectedRun !== 'current';
 
-  const displayMessages = isBrowsingHistory && runHistory
-    ? runHistory[selectedRun as number]
+  const displayMessages = isBrowsingHistory
+    ? visibleHistory[selectedRun as number]
     : messages;
 
-  const displayNodes = isBrowsingHistory && runHistory
-    ? extractPipelineNodes(runHistory[selectedRun as number])
+  const displayNodes = isBrowsingHistory
+    ? extractPipelineNodes(visibleHistory[selectedRun as number])
     : nodes;
 
   const displayIsFinished = isBrowsingHistory ? true : isFinished;
