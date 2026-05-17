@@ -7,12 +7,20 @@ export function extractPipelineNodes(messages: any[]): any[] {
   const last = progressMessages[progressMessages.length - 1];
   if (!last.data) return [];
 
+  let roots: any[];
+
   // Real engine sends data as a direct array (ToSnapshot returns List<object>)
-  if (Array.isArray(last.data)) return last.data;
+  if (Array.isArray(last.data)) {
+    roots = last.data;
+  } else {
+    // Fallback: search all keys for an array (legacy/mock formats)
+    const firstArray = Object.values(last.data as Record<string, unknown>).find(val => Array.isArray(val));
+    roots = firstArray ? (firstArray as any[]) : [];
+  }
 
-  // Fallback: search all keys for an array (legacy/mock formats)
-  const firstArray = Object.values(last.data as Record<string, unknown>).find(val => Array.isArray(val));
-  if (firstArray) return firstArray as any[];
+  if (roots.length === 0) return [];
 
-  return [];
+  // The REPL engine accumulates all script executions across the session in a
+  // single snapshot. Return only the last root node (the current/most-recent run).
+  return [roots[roots.length - 1]];
 }
