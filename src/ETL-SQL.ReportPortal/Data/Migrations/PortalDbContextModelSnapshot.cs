@@ -515,6 +515,43 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.ToTable("ReportFavorites");
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.ReportShareLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ReportId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ReportId");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.ToTable("ReportShareLinks");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SmtpConnection", b =>
                 {
                     b.Property<int>("Id")
@@ -845,6 +882,25 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.ReportShareLink", b =>
+                {
+                    b.HasOne("ETL_SQL.ReportPortal.Data.PortalUser", "Creator")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ETL_SQL.ReportPortal.Data.Report", "Report")
+                        .WithMany("ShareLinks")
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Creator");
+
+                    b.Navigation("Report");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Subscription", b =>
                 {
                     b.HasOne("ETL_SQL.ReportPortal.Data.Report", "Report")
@@ -973,6 +1029,8 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Navigation("DatasetJobs");
 
                     b.Navigation("Favorites");
+
+                    b.Navigation("ShareLinks");
 
                     b.Navigation("Snapshots");
 

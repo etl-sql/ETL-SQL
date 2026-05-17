@@ -479,6 +479,61 @@ CREATE VISUAL Total AS CARD (
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
+    public async Task ReportShareLinks_ResolveOnlyWhenCallerHasPermission()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Share Folder", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"share_{Guid.NewGuid():N}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "SET REPORT TITLE = 'Shared';");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = "Shared Report",
+            description = "Share-link smoke test",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var createShareRes = await AuthPost(token, $"/api/reports/{reportId}/share-links", new
+        {
+            expiresAt = DateTime.UtcNow.AddDays(1)
+        });
+        Assert.Equal(HttpStatusCode.Created, createShareRes.StatusCode);
+        var share = await createShareRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var shareToken = share!["token"]!.GetValue<string>();
+        Assert.Contains($"/api/share/{shareToken}", share["url"]!.GetValue<string>());
+
+        var adminResolve = await AuthGet(token, $"/api/share/{shareToken}");
+        Assert.Equal(HttpStatusCode.OK, adminResolve.StatusCode);
+        var resolved = await adminResolve.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal(reportId, resolved!["reportId"]!.GetValue<int>());
+
+        var viewerToken = await GetFreshViewerTokenAsync();
+        var viewerResolve = await AuthGet(viewerToken, $"/api/share/{shareToken}");
+        Assert.Equal(HttpStatusCode.Forbidden, viewerResolve.StatusCode);
+
+        var listRes = await AuthGet(token, $"/api/reports/{reportId}/share-links");
+        Assert.Equal(HttpStatusCode.OK, listRes.StatusCode);
+        var links = await listRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        Assert.Contains(links!, l => l!["token"]!.GetValue<string>() == shareToken);
+
+        var revokeRes = await AuthDelete(token, $"/api/reports/{reportId}/share-links/{shareToken}");
+        Assert.Equal(HttpStatusCode.NoContent, revokeRes.StatusCode);
+
+        var revokedResolve = await AuthGet(token, $"/api/share/{shareToken}");
+        Assert.Equal(HttpStatusCode.NotFound, revokedResolve.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task ReportDependencies_ReturnsDatasetsJobsAndSources()
     {
         var token = await GetAdminTokenAsync();
@@ -1442,6 +1497,51 @@ CREATE VISUAL Total AS CARD (
         {
             _tokenLock.Release();
         }
+    }
+
+    private async Task<string> GetFreshViewerTokenAsync()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var username = $"share_viewer_{Guid.NewGuid():N}"[..20];
+        const string initialPassword = "Viewer@Test1!";
+        const string changedPassword = "Viewer@Test2!";
+
+        var createRes = await AuthPost(adminToken, "/api/admin/users", new
+        {
+            username,
+            email = $"{username}@test.local",
+            password = initialPassword,
+            role = "Viewer"
+        });
+        Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
+
+        var loginRes = await _client.PostAsJsonAsync("/api/auth/login", new
+        {
+            username,
+            password = initialPassword
+        });
+        Assert.Equal(HttpStatusCode.OK, loginRes.StatusCode);
+        var loginBody = await loginRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var token = loginBody!["token"]!.GetValue<string>();
+
+        using var changePassword = new HttpRequestMessage(HttpMethod.Post, "/api/auth/change-password");
+        changePassword.Headers.Authorization = new("Bearer", token);
+        changePassword.Content = JsonContent.Create(new
+        {
+            currentPassword = initialPassword,
+            newPassword = changedPassword
+        });
+        var changeRes = await _client.SendAsync(changePassword);
+        Assert.Equal(HttpStatusCode.NoContent, changeRes.StatusCode);
+
+        var reloginRes = await _client.PostAsJsonAsync("/api/auth/login", new
+        {
+            username,
+            password = changedPassword
+        });
+        Assert.Equal(HttpStatusCode.OK, reloginRes.StatusCode);
+        var reloginBody = await reloginRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        return reloginBody!["token"]!.GetValue<string>();
     }
 
     private Task<HttpResponseMessage> AuthGet(string token, string url)

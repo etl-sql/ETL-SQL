@@ -91,6 +91,37 @@ public class ReportsController : ControllerBase
             scriptChanged);
     }
 
+    private async Task<string> GenerateUniqueShareTokenAsync()
+    {
+        while (true)
+        {
+            var bytes = RandomNumberGenerator.GetBytes(32);
+            var token = Convert.ToBase64String(bytes)
+                .TrimEnd('=')
+                .Replace('+', '-')
+                .Replace('/', '_');
+            if (!await db.ReportShareLinks.AnyAsync(l => l.Token == token))
+                return token;
+        }
+    }
+
+    private ReportShareLinkDto ToShareLinkDto(ReportShareLink link)
+    {
+        var report = link.Report;
+        var folderPath = report.Folder?.Path ?? "";
+        return new ReportShareLinkDto(
+            link.Id,
+            link.ReportId,
+            report.Name,
+            folderPath,
+            link.Token,
+            $"{Request.Scheme}://{Request.Host}/api/share/{link.Token}",
+            link.CreatedBy,
+            link.CreatedAt,
+            link.ExpiresAt,
+            link.RevokedAt);
+    }
+
     // ── GET /api/folders/{id}/reports ─────────────────────────────────────────
 
     [HttpGet("folders/{folderId:int}/reports")]
@@ -421,6 +452,105 @@ public class ReportsController : ControllerBase
         await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "UNFAVORITE_REPORT", "Report", id.ToString());
         return NoContent();
+    }
+
+    // ── POST /api/reports/{id}/share-links ──────────────────────────────────
+
+    [HttpPost("reports/{id:int}/share-links")]
+    public async Task<IActionResult> CreateShareLink(int id, [FromBody] CreateReportShareLinkRequest? req)
+    {
+        var report = await db.Reports
+            .Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null || perm < FolderPermission.Execute) return Forbid();
+
+        if (req?.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow)
+            return BadRequest(new { error = "Share link expiration must be in the future." });
+
+        var link = new ReportShareLink
+        {
+            ReportId = id,
+            CreatedBy = CurrentUserId,
+            Token = await GenerateUniqueShareTokenAsync(),
+            ExpiresAt = req?.ExpiresAt
+        };
+        db.ReportShareLinks.Add(link);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "CREATE_REPORT_SHARE_LINK", "Report", id.ToString(), report.Name);
+
+        link.Report = report;
+        return CreatedAtAction(nameof(ResolveShareLink), new { token = link.Token }, ToShareLinkDto(link));
+    }
+
+    // ── GET /api/reports/{id}/share-links ───────────────────────────────────
+
+    [HttpGet("reports/{id:int}/share-links")]
+    public async Task<IActionResult> GetShareLinks(int id)
+    {
+        var report = await db.Reports
+            .Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null || (perm < FolderPermission.Manage && !IsAdmin)) return Forbid();
+
+        var links = await db.ReportShareLinks
+            .Include(l => l.Report).ThenInclude(r => r.Folder)
+            .Where(l => l.ReportId == id)
+            .OrderByDescending(l => l.CreatedAt)
+            .ToListAsync();
+
+        return Ok(links.Select(ToShareLinkDto));
+    }
+
+    // ── DELETE /api/reports/{id}/share-links/{token} ────────────────────────
+
+    [HttpDelete("reports/{id:int}/share-links/{token}")]
+    public async Task<IActionResult> RevokeShareLink(int id, string token)
+    {
+        var link = await db.ReportShareLinks
+            .Include(l => l.Report)
+            .FirstOrDefaultAsync(l => l.ReportId == id && l.Token == token);
+        if (link is null) return NoContent();
+
+        var perm = await GetEffectivePermissionAsync(link.Report.FolderId);
+        if (perm is null || (perm < FolderPermission.Manage && link.CreatedBy != CurrentUserId)) return Forbid();
+
+        if (link.RevokedAt is null)
+        {
+            link.RevokedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            await audit.LogAsync(CurrentUserId, "REVOKE_REPORT_SHARE_LINK", "Report", id.ToString(), token);
+        }
+
+        return NoContent();
+    }
+
+    // ── GET /api/share/{token} ──────────────────────────────────────────────
+
+    [HttpGet("share/{token}")]
+    public async Task<IActionResult> ResolveShareLink(string token)
+    {
+        var link = await db.ReportShareLinks
+            .Include(l => l.Report).ThenInclude(r => r.Folder)
+            .FirstOrDefaultAsync(l => l.Token == token);
+        if (link is null || link.Report.IsDeleted) return NotFound();
+        if (link.RevokedAt is not null) return NotFound();
+        if (link.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(link.Report.FolderId);
+        if (perm is null) return Forbid();
+
+        return Ok(new ReportShareResolutionDto(
+            link.ReportId,
+            link.Report.Name,
+            link.Report.Folder.Path,
+            $"/reports/{link.ReportId}",
+            link.ExpiresAt));
     }
 
     // ── GET /api/reports/{id}/parameters ─────────────────────────────────────

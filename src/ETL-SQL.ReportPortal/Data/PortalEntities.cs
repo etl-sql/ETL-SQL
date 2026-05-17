@@ -110,6 +110,7 @@ public class Report
     public ICollection<Subscription>   Subscriptions { get; set; } = [];
     public ICollection<DatasetJob>     DatasetJobs  { get; set; } = [];
     public ICollection<ReportFavorite> Favorites    { get; set; } = [];
+    public ICollection<ReportShareLink> ShareLinks   { get; set; } = [];
 }
 
 public class ReportFavorite
@@ -120,6 +121,19 @@ public class ReportFavorite
     public int        ReportId  { get; set; }
     public Report     Report    { get; set; } = null!;
     public DateTime   CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class ReportShareLink
+{
+    public int        Id          { get; set; }
+    public int        ReportId    { get; set; }
+    public Report     Report      { get; set; } = null!;
+    public int        CreatedBy   { get; set; }
+    public PortalUser Creator     { get; set; } = null!;
+    public string     Token       { get; set; } = "";
+    public DateTime   CreatedAt   { get; set; } = DateTime.UtcNow;
+    public DateTime?  ExpiresAt   { get; set; }
+    public DateTime?  RevokedAt   { get; set; }
 }
 
 public class ReportSnapshot

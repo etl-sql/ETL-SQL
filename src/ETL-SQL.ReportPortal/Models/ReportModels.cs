@@ -41,6 +41,27 @@ public record ReportScriptValidationDto(
     IReadOnlyList<ReportParameterDto> Parameters,
     IReadOnlyList<string> Errors);
 
+public record CreateReportShareLinkRequest(DateTime? ExpiresAt);
+
+public record ReportShareLinkDto(
+    int Id,
+    int ReportId,
+    string ReportName,
+    string FolderPath,
+    string Token,
+    string Url,
+    int CreatedBy,
+    DateTime CreatedAt,
+    DateTime? ExpiresAt,
+    DateTime? RevokedAt);
+
+public record ReportShareResolutionDto(
+    int ReportId,
+    string ReportName,
+    string FolderPath,
+    string Url,
+    DateTime? ExpiresAt);
+
 public record ReportDto(
     int Id,
     int FolderId,

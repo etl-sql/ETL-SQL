@@ -23,6 +23,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<Dataset>        Datasets        => Set<Dataset>();
     public DbSet<DatasetAcl>     DatasetAcls     => Set<DatasetAcl>();
     public DbSet<ReportFavorite> ReportFavorites => Set<ReportFavorite>();
+    public DbSet<ReportShareLink> ReportShareLinks => Set<ReportShareLink>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -52,6 +53,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasMany(x => x.Snapshots).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
             e.HasMany(x => x.Subscriptions).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
             e.HasMany(x => x.DatasetJobs).WithOne(j => j.Report).HasForeignKey(j => j.ReportId);
+            e.HasMany(x => x.ShareLinks).WithOne(l => l.Report).HasForeignKey(l => l.ReportId);
         });
 
         builder.Entity<RefreshToken>(e =>
@@ -64,6 +66,13 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasIndex(x => new { x.UserId, x.ReportId }).IsUnique();
             e.HasOne(x => x.User).WithMany(u => u.ReportFavorites).HasForeignKey(x => x.UserId);
             e.HasOne(x => x.Report).WithMany(r => r.Favorites).HasForeignKey(x => x.ReportId);
+        });
+
+        builder.Entity<ReportShareLink>(e =>
+        {
+            e.HasIndex(x => x.Token).IsUnique();
+            e.HasOne(x => x.Report).WithMany(r => r.ShareLinks).HasForeignKey(x => x.ReportId);
+            e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
         });
 
         builder.Entity<SmtpConnection>(e =>
