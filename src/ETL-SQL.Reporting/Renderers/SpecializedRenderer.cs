@@ -586,6 +586,7 @@ namespace ETL_SQL.Reporting.Renderers
             double repulsion = double.TryParse(repStr, out var rep) ? rep : 1000.0;
             v.Options.TryGetValue("LAYOUT", out var layoutOpt);
             string layout = (layoutOpt ?? "FORCE").ToLowerInvariant() == "circular" ? "circular" : "force";
+            bool roam = !v.Options.TryGetValue("ROAM", out var roamOpt) || IsOn(roamOpt);
 
             var nodes = new Dictionary<string, SunNode>(StringComparer.Ordinal);
             var groups = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -613,7 +614,9 @@ namespace ETL_SQL.Reporting.Renderers
                 if (gi >= 0)
                 {
                     var row = v.Rows.FirstOrDefault(r =>
-                        fi >= 0 && fi < r.Count && (r[fi] ?? "") == name && gi < r.Count && !string.IsNullOrEmpty(r[gi]));
+                        gi < r.Count && !string.IsNullOrEmpty(r[gi]) &&
+                        ((fi >= 0 && fi < r.Count && (r[fi] ?? "") == name) ||
+                         (ti >= 0 && ti < r.Count && (r[ti] ?? "") == name)));
                     if (row != null && gi < row.Count)
                         groups.TryGetValue(row[gi] ?? "", out cat);
                 }
@@ -628,7 +631,7 @@ namespace ETL_SQL.Reporting.Renderers
                 ["layout"]     = layout,
                 ["data"]       = nodeData,
                 ["links"]      = links,
-                ["roam"]       = IsOn(v.Options.GetValueOrDefault("ROAM")) || true,
+                ["roam"]       = roam,
                 ["label"]      = new { show = true, position = "right" },
                 ["edgeSymbol"] = new[] { "circle", "arrow" },
                 ["lineStyle"]  = new { color = "source", curveness = 0.3 },
@@ -753,12 +756,27 @@ namespace ETL_SQL.Reporting.Renderers
 
         // ── MATRIX (Pivot / Cross-tab) ─────────────────────────────────────────
         // Mappings: ROW = row-dimension column, COL = column-pivot column, VALUE = measure.
-        //   For multiple row dimensions: ROW1, ROW2 (ROW is alias for ROW1).
+        //   For multiple dimensions: ROW1/ROW2/ROW3 and COL1/COL2/COL3.
         // Options: AGGREGATE = SUM|AVG|COUNT|MIN|MAX (default SUM), GRAND_TOTAL = ON|OFF.
         // Returns JSON consumed by renderMatrix() in the browser, not an ECharts option.
 
         public string RenderMatrix(VisualManifest v)
         {
+            const string Sep = "\u001F";
+
+            static string? AggregateCell(List<double>? vals, string agg)
+            {
+                if (vals == null || vals.Count == 0) return null;
+                return agg switch
+                {
+                    "COUNT" => vals.Count.ToString(),
+                    "AVG"   => (vals.Sum() / vals.Count).ToString("G6"),
+                    "MIN"   => vals.Min().ToString("G6"),
+                    "MAX"   => vals.Max().ToString("G6"),
+                    _       => vals.Sum().ToString("G6")
+                };
+            }
+
             // Collect row-dimension columns (ROW / ROW1 / ROW2 / ROW3)
             var rowCols = new List<string>();
             var r1 = FindRole(v, "row") ?? FindRole(v, "row1");
@@ -769,31 +787,47 @@ namespace ETL_SQL.Reporting.Renderers
             if (r3 != null) rowCols.Add(r3);
             if (rowCols.Count == 0 && v.Columns.Count > 0) rowCols.Add(v.Columns[0]);
 
-            var colPivot = FindRole(v, "col") ?? FindRole(v, "columns") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
-            var valCol   = FindRole(v, "value") ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
+            // Collect column-dimension columns (COL / COL1 / COL2 / COL3).
+            var colCols = new List<string>();
+            var c1 = FindRole(v, "col") ?? FindRole(v, "col1") ?? FindRole(v, "columns");
+            var c2 = FindRole(v, "col2");
+            var c3 = FindRole(v, "col3");
+            if (c1 != null) colCols.Add(c1);
+            if (c2 != null) colCols.Add(c2);
+            if (c3 != null) colCols.Add(c3);
+            if (colCols.Count == 0 && v.Columns.Count > 1) colCols.Add(v.Columns[1]);
+
+            var valCol = FindRole(v, "value") ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
 
             v.Options.TryGetValue("AGGREGATE", out var aggOpt);
             string agg = (aggOpt ?? "SUM").ToUpperInvariant();
             bool grandTotal = IsOn(v.Options.GetValueOrDefault("GRAND_TOTAL"));
 
             var rowIndices = rowCols.Select(c => ColIdx(v, c)).ToList();
-            int ci = ColIdx(v, colPivot), vi = ColIdx(v, valCol);
+            var colIndices = colCols.Select(c => ColIdx(v, c)).ToList();
+            int vi = ColIdx(v, valCol);
 
-            // Collect unique column pivot values (sorted)
-            var colValues = v.Rows
-                .Select(r => ci >= 0 && ci < r.Count ? r[ci] ?? "" : "")
+            // Collect unique column pivot paths (sorted)
+            var colKeys = v.Rows
+                .Select(r => string.Join(Sep, colIndices.Select(idx => idx >= 0 && idx < r.Count ? r[idx] ?? "" : "")))
                 .Distinct()
                 .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            var colParts = colKeys
+                .Select(key => key.Split(Sep).ToList())
+                .ToList();
+            var colValues = colParts
+                .Select(parts => string.Join(" / ", parts.Where(p => !string.IsNullOrEmpty(p))))
+                .ToList();
 
-            // Group raw values by (row key, col pivot value)
+            // Group raw values by (row path, column path)
             var groups = new Dictionary<string, Dictionary<string, List<double>>>(StringComparer.Ordinal);
             var rowKeyOrder = new List<string>();
 
             foreach (var row in v.Rows)
             {
-                var rowKey = string.Join(" ", rowIndices.Select(idx => idx >= 0 && idx < row.Count ? row[idx] ?? "" : ""));
-                var colKey = ci >= 0 && ci < row.Count ? row[ci] ?? "" : "";
+                var rowKey = string.Join(Sep, rowIndices.Select(idx => idx >= 0 && idx < row.Count ? row[idx] ?? "" : ""));
+                var colKey = string.Join(Sep, colIndices.Select(idx => idx >= 0 && idx < row.Count ? row[idx] ?? "" : ""));
                 var val    = vi >= 0 && vi < row.Count ? ToDouble(row[vi]) ?? 0.0 : 1.0;
 
                 if (!groups.ContainsKey(rowKey)) { groups[rowKey] = new Dictionary<string, List<double>>(StringComparer.Ordinal); rowKeyOrder.Add(rowKey); }
@@ -804,18 +838,11 @@ namespace ETL_SQL.Reporting.Renderers
             // Build pivot rows
             var pivotRows = rowKeyOrder.Distinct().Select(rowKey =>
             {
-                var parts = rowKey.Split(' ');
-                var cells = colValues.Select(cv =>
+                var parts = rowKey.Split(Sep);
+                var cells = colKeys.Select(ck =>
                 {
-                    if (!groups[rowKey].TryGetValue(cv, out var vals) || vals.Count == 0) return null;
-                    return agg switch
-                    {
-                        "COUNT" => vals.Count.ToString(),
-                        "AVG"   => (vals.Sum() / vals.Count).ToString("G6"),
-                        "MIN"   => vals.Min().ToString("G6"),
-                        "MAX"   => vals.Max().ToString("G6"),
-                        _       => vals.Sum().ToString("G6")
-                    };
+                    groups[rowKey].TryGetValue(ck, out var vals);
+                    return AggregateCell(vals, agg);
                 }).ToList();
                 return parts.Concat(cells).ToList();
             }).ToList();
@@ -825,20 +852,12 @@ namespace ETL_SQL.Reporting.Renderers
             if (grandTotal)
             {
                 totals = Enumerable.Repeat<string?>(null, rowCols.Count)
-                    .Concat(colValues.Select(cv =>
+                    .Concat(colKeys.Select(ck =>
                     {
                         var allVals = groups.Values
-                            .SelectMany(g => g.TryGetValue(cv, out var l) ? l : Enumerable.Empty<double>())
+                            .SelectMany(g => g.TryGetValue(ck, out var l) ? l : Enumerable.Empty<double>())
                             .ToList();
-                        if (allVals.Count == 0) return null;
-                        return agg switch
-                        {
-                            "COUNT" => allVals.Count.ToString(),
-                            "AVG"   => (allVals.Sum() / allVals.Count).ToString("G6"),
-                            "MIN"   => allVals.Min().ToString("G6"),
-                            "MAX"   => allVals.Max().ToString("G6"),
-                            _       => allVals.Sum().ToString("G6")
-                        };
+                        return AggregateCell(allVals, agg);
                     })).ToList();
             }
 
@@ -846,7 +865,11 @@ namespace ETL_SQL.Reporting.Renderers
             {
                 __matrix     = true,
                 rowHeaders   = rowCols,
+                colHeaders   = colCols,
+                colKeys      = colKeys,
+                colParts     = colParts,
                 colValues    = colValues,
+                aggregate    = agg,
                 rows         = pivotRows,
                 grandTotals  = totals
             });

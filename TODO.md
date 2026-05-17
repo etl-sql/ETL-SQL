@@ -152,12 +152,12 @@
     - [x] Alert delivery through the same notification/subscription infrastructure.
 
 ### Phase 5 — Documentation, samples, and release readiness
-- [ ] Update the golden workflow and kitchen sink reports to the new canonical syntax.
-- [ ] Add parser tests for every changed statement form.
-- [ ] Add report runtime tests for interactions, buttons, layout containers, navigation, and maximize.
-- [ ] Add portal integration tests for publish, permissions, subscriptions, refresh, export, audit, and catalog search.
-- [ ] Update `AGENTS.md`, `Docs/Report_SQL_Guide.md`, `Docs/Reference/Grammar.md`, `Docs/Strategy/ReportPortal_Strategy.md`, editor help, and sample guide so all agents and users generate the same syntax.  Make sure very container type, action, style, etc is documented.
-- [ ] Remove old docs/examples for replaced syntax before launch unless a deliberate compatibility decision is made.
+- [x] Update the golden workflow and kitchen sink reports to the new canonical syntax.
+- [x] Add parser tests for every changed statement form.
+- [x] Add report runtime tests for interactions, buttons, layout containers, navigation, and maximize.
+- [x] Add portal integration tests for publish, permissions, subscriptions, refresh, export, audit, and catalog search.
+- [x] Update `AGENTS.md`, `Docs/Report_SQL_Guide.md`, `Docs/Reference/Grammar.md`, `Docs/Strategy/ReportPortal_Strategy.md`, editor help, and sample guide so all agents and users generate the same syntax.  Make sure every container type, action, style, etc is documented.
+- [x] Remove old docs/examples for replaced syntax before launch unless a deliberate compatibility decision is made.
 
 ### Phase 6 — Advanced Visualization Capability Gaps (BI Parity)
 - [x] **GANTT Visual**: Port the existing Orchestrator Portal Gantt implementation (ECharts 'custom' series) into the reporting engine.

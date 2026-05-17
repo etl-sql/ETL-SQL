@@ -21,6 +21,18 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 - Grants folder permissions, creates refresh jobs, and refreshes the report after promotion.
 - Keeps portal object names and target paths as explicit string literals for reviewable deployments.
 
+### [08_Reporting/kitchen_sink.rptsql](../samples/08_Reporting/kitchen_sink.rptsql)
+**Purpose**: Compact Report-SQL kitchen sink for interactive inputs and deferred execution.
+- Demonstrates `SLICER`, `NUMBERBOX`, `CHECKBOX`, `TEXTBOX`, `RELDATEPICKER`, `TABLE`, and `BAR`.
+- Uses canonical `ACTIONS (ON_CHANGE = SET_PARAMETER(...))` bindings and `CREATE BUTTON ... AS (...)` for staged apply.
+- Places controls, buttons, and visuals directly into quoted `MAP` slots on a `CREATE PAGE`.
+
+### [10_Kitchen_Sinks/report_kitchen_sink.rptsql](../samples/10_Kitchen_Sinks/report_kitchen_sink.rptsql)
+**Purpose**: Full Report-SQL reference report for release readiness and visual/runtime coverage.
+- Demonstrates the extended visual set, named styles, datasets, buttons, navigation, containers, interactions, and advanced charts.
+- Uses CSS grid-template-area `STRUCTURE` strings and quoted `MAP` slots throughout.
+- Pairs with `report_kitchen_sink.snapshot.json` so runtime and snapshot behavior can be inspected without external services.
+
 ## Core Samples
 
 ### 1. [Basic_ETL.etlsql](../samples/01_Basics/Basic_ETL.etlsql)

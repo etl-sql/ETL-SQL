@@ -4502,7 +4502,7 @@
       "visualType": "TEXT",
       "isMarkdown": true,
       "chartConfig": null,
-      "defaultValue": "### Buttons\\n\u0060CREATE BUTTON\u0060 defines interactive command buttons with \u0060ACTIONS\u0060.\\n\\n| Name | Action | Purpose |\\n|------|--------|---------|\\n| BtnRefresh | \u0060REFRESH_REPORT\u0060 | Force rebuild of all visual snapshots |\\n| BtnBack | \u0060BACK\u0060 | Navigate to previous browser page |\\n| BtnExport | \u0060EXPORT_CSV\u0060 | Export the transaction table |\\n\\n\u003E Buttons cannot currently be placed directly in page \u0060MAP\u0060 slots \u2014 they require a dedicated button bar component (tracked in TODO.md).",
+      "defaultValue": "### Buttons\\n\u0060CREATE BUTTON\u0060 defines interactive command buttons with \u0060ACTIONS\u0060.\\n\\n| Name | Action | Purpose |\\n|------|--------|---------|\\n| BtnRefresh | \u0060REFRESH_REPORT\u0060 | Force rebuild of all visual snapshots |\\n| BtnBack | \u0060BACK\u0060 | Navigate to previous browser page |\\n| BtnExport | \u0060EXPORT_CSV\u0060 | Export the transaction table |\\n\\nButtons can be placed in page or container \u0060MAP\u0060 slots exactly like visuals.",
       "columns": [],
       "rows": [],
       "options": {

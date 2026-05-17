@@ -2070,7 +2070,7 @@ CREATE VISUAL <name> AS <type> (
 | `SUNBURST` (parent-child mode) | `LABEL` (or `NAME`), `PARENT`, `VALUE` | â€” |
 | `NETWORK` | `FROM`, `TO` | `VALUE`, `NODE_GROUP` |
 | `TRELLIS` | `X`, `Y`, `FACET` | â€” |
-| `MATRIX` | `ROW` (or `ROW1`), `COL`, `VALUE` | `ROW2`, `ROW3` |
+| `MATRIX` | `ROW` (or `ROW1`), `COL` (or `COL1`), `VALUE` | `ROW2`, `ROW3`, `COL2`, `COL3` |
 | `MAP` (choropleth) | `REGION` | `VALUE` |
 | `MAP` (points â€” `MODE=POINTS`) | `LON`, `LAT` | `VALUE`, `LABEL` |
 | `TABLE` | _(all source columns rendered automatically)_ | â€” |

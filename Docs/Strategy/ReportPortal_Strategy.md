@@ -304,6 +304,11 @@ EXECUTE portal BEGIN
         IN FOLDER '/Finance'
         WITH (DESCRIPTION = 'Monthly revenue by region');
     ALTER REPORT 'Monthly Sales' SET FOLDER = '/Finance/Archive';
+    VALIDATE REPORT SCRIPT '/reports/finance/monthly_sales.rptsql' INTO #validation;
+    FAVORITE REPORT 'Monthly Sales' FOR USER 'john.doe';
+    SHOW REPORT HISTORY 'Monthly Sales' INTO #history;
+    SHOW REPORT DEPENDENCIES 'Monthly Sales' INTO #dependencies;
+    SHOW CATALOG SEARCH 'sales' LIMIT 25 INTO #catalog;
 
     CREATE SETS !PROD
     BEGIN
@@ -334,6 +339,34 @@ EXECUTE portal BEGIN
     GRANT EDITOR ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'FinanceAnalysts';
     REVOKE EDITOR ON DATASET 'Sales Summary' IN FOLDER '/Finance' FROM GROUP 'FinanceAnalysts';
     DROP DATASET 'Sales Summary' IN FOLDER '/Finance';
+
+    -- Sharing and embedded consumption
+    CREATE SHARE LINK FOR REPORT 'Monthly Sales'
+        EXPIRES '2026-12-31T23:59:59Z'
+        INTO #share;
+    SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;
+    REVOKE SHARE LINK 'share-token';
+
+    CREATE EMBED TOKEN FOR REPORT 'Monthly Sales'
+        NAME 'Intranet'
+        EXPIRES '2026-12-31T23:59:59Z'
+        INTO #embed;
+    SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' INTO #embed_tokens;
+    REVOKE EMBED TOKEN 'embed-token';
+
+    CREATE SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales'
+        DEFAULT
+        PARAMETERS (@region = 'West')
+        INTO #view;
+    SHOW SAVED VIEWS FOR REPORT 'Monthly Sales' INTO #views;
+    DROP SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales';
+
+    CREATE ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales'
+        WHEN VISUAL 'Revenue' >= 100000
+        DELIVER TO 'finance-ops@example.com'
+        AT corporate-smtp;
+    SHOW ALERTS FOR REPORT 'Monthly Sales' INTO #alerts;
+    DROP ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales';
 
     -- Snapshots
     DROP SNAPSHOT FOR REPORT 'Monthly Sales';
@@ -375,6 +408,8 @@ EXECUTE portal BEGIN
     SHOW USERS;
     SHOW REPORTS IN FOLDER '/Finance';
     SHOW ACTIVE SESSIONS;
+    SHOW EFFECTIVE PERMISSIONS FOR USER 'john.doe' INTO #effective;
+    SHOW PORTAL USAGE METRICS FOR 30 DAYS INTO #usage;
     SELECT * FROM portal.AuditLog
     WHERE Action = 'LOGIN_FAILED'
       AND Timestamp > DATEADD(DAY, -7, GETDATE());

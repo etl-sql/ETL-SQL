@@ -7,11 +7,16 @@ A report is a sequence of CREATE statements. The engine compiles them into a sel
 Key components:
   DATASET     — shared cached data source
   VISUAL      — a chart or control bound to a data source
-  PAGE        — a grid layout containing visuals
+  PAGE        — a grid layout containing visuals, containers, and buttons
   CONTAINER   — nested layout group within a page
   NAVIGATION  — menu or tab strip linking pages
   BUTTON      — interactive back / refresh / link button
   STYLE       — reusable formatting theme
+
+Canonical layout rules:
+  STRUCTURE uses CSS grid-template-areas text such as 'A A / B C'
+  MAP slots are quoted strings such as MAP ('A' = SalesBar)
+  Buttons use CREATE BUTTON ButtonName AS (...) and can be placed in MAP slots
 
 ```sql
 -- Minimal two-visual report with a slicer

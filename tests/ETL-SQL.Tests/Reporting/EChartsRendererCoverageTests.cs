@@ -212,6 +212,157 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("#00FF00", json);
         }
 
+        [Fact]
+        public void Scatter_WithBrushOptions_EmitsRuntimeBrushMarkers()
+        {
+            var v = V("S", "SCATTER", new[] { "X", "Y" }, new[]
+            {
+                new[] { "1", "10" }, new[] { "2", "20" }
+            }, new Dictionary<string, string>
+            {
+                ["BRUSH"] = "ON",
+                ["BRUSH_PARAM"] = "@selectedX",
+                ["BRUSH_TYPE"] = "polygon"
+            });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.Contains("__brushParam", json);
+            Assert.Contains("@selectedX", json);
+            Assert.Contains("polygon", json);
+        }
+
+        [Fact]
+        public void Gantt_ProducesCustomSeriesWithRuntimeRenderMarker()
+        {
+            var v = V("G", "GANTT", new[] { "Task", "Start", "End", "Color" }, new[]
+            {
+                new[] { "Extract", "2026-01-01", "2026-01-03", "#5470c6" },
+                new[] { "Load", "2026-01-04", "2026-01-06", "#91cc75" }
+            }, new Dictionary<string, string>
+            {
+                ["mapping:y"] = "Task",
+                ["mapping:start"] = "Start",
+                ["mapping:end"] = "End",
+                ["mapping:color"] = "Color"
+            });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.Contains("\"custom\"", json);
+            Assert.Contains("__ganttRenderItem", json);
+        }
+
+        [Fact]
+        public void Sankey_ProducesSankeySeries()
+        {
+            var v = V("Flow", "SANKEY", new[] { "Source", "Target", "Amount" }, new[]
+            {
+                new[] { "Raw", "Stage", "10" },
+                new[] { "Stage", "Warehouse", "8" }
+            }, new Dictionary<string, string>
+            {
+                ["mapping:source"] = "Source",
+                ["mapping:target"] = "Target",
+                ["mapping:value"] = "Amount"
+            });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.Contains("\"sankey\"", json);
+            Assert.Contains("\"links\"", json);
+        }
+
+        [Fact]
+        public void Sunburst_LevelMappings_ProducesHierarchySeries()
+        {
+            var v = V("Tree", "SUNBURST", new[] { "Region", "Category", "Revenue" }, new[]
+            {
+                new[] { "North", "Software", "100" },
+                new[] { "North", "Services", "60" }
+            }, new Dictionary<string, string>
+            {
+                ["mapping:level1"] = "Region",
+                ["mapping:level2"] = "Category",
+                ["mapping:value"] = "Revenue"
+            });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.Contains("\"sunburst\"", json);
+            Assert.Contains("Software", json);
+        }
+
+        [Fact]
+        public void Network_ProducesGraphSeriesAndHonorsRoamOff()
+        {
+            var v = V("Lineage", "NETWORK", new[] { "From", "To", "Weight", "Group" }, new[]
+            {
+                new[] { "Extract", "Stage", "2", "Pipeline" },
+                new[] { "Stage", "Warehouse", "3", "Storage" }
+            }, new Dictionary<string, string>
+            {
+                ["mapping:from"] = "From",
+                ["mapping:to"] = "To",
+                ["mapping:value"] = "Weight",
+                ["mapping:node_group"] = "Group",
+                ["ROAM"] = "OFF"
+            });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.Contains("\"graph\"", json);
+            Assert.Contains("\"roam\":false", json);
+            Assert.Contains("\"categories\"", json);
+        }
+
+        [Fact]
+        public void Trellis_ProducesMultipleGridsAndSeries()
+        {
+            var v = V("Facets", "TRELLIS", new[] { "Month", "Revenue", "Region" }, new[]
+            {
+                new[] { "Jan", "10", "North" },
+                new[] { "Feb", "15", "North" },
+                new[] { "Jan", "8", "South" }
+            }, new Dictionary<string, string>
+            {
+                ["mapping:x"] = "Month",
+                ["mapping:y"] = "Revenue",
+                ["mapping:facet"] = "Region",
+                ["CHART_TYPE"] = "LINE",
+                ["COLUMNS"] = "2"
+            });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.Contains("\"grid\"", json);
+            Assert.Contains("\"line\"", json);
+            Assert.Contains("North", json);
+            Assert.Contains("South", json);
+        }
+
+        [Fact]
+        public void Matrix_ProducesHierarchicalPivotMetadataAndGrandTotals()
+        {
+            var v = V("Pivot", "MATRIX", new[] { "Region", "Segment", "Year", "Quarter", "Revenue" }, new[]
+            {
+                new[] { "North", "Enterprise", "2026", "Q1", "10" },
+                new[] { "North", "Enterprise", "2026", "Q2", "15" },
+                new[] { "South", "SMB", "2026", "Q1", "7" }
+            }, new Dictionary<string, string>
+            {
+                ["mapping:row1"] = "Region",
+                ["mapping:row2"] = "Segment",
+                ["mapping:col1"] = "Year",
+                ["mapping:col2"] = "Quarter",
+                ["mapping:value"] = "Revenue",
+                ["GRAND_TOTAL"] = "ON"
+            });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.Contains("__matrix", json);
+            Assert.Contains("\"rowHeaders\":[\"Region\",\"Segment\"]", json);
+            Assert.Contains("\"colHeaders\":[\"Year\",\"Quarter\"]", json);
+            Assert.Contains("\"colParts\":[[\"2026\",\"Q1\"],[\"2026\",\"Q2\"]]", json);
+            Assert.Contains("\"colValues\":[\"2026 / Q1\",\"2026 / Q2\"]", json);
+            Assert.Contains("\"aggregate\":\"SUM\"", json);
+            Assert.Contains("\"grandTotals\"", json);
+        }
+
         // ── StatisticalRenderer ───────────────────────────────────────────────
 
         [Fact]

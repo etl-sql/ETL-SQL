@@ -87,6 +87,7 @@
     const _registeredMaps = new Set();
     const _crossFilterStates = {}; // Keyed by page element ID; persists across renderManifest re-builds
     const _uiStates = {};          // Keyed by object name; persists across re-renders (e.g. collapsed: true)
+    let _lastManifest = null;
     let _maximizedVisualCard = null;
 
     /**
@@ -226,6 +227,8 @@
     }
 
     function renderManifest(manifest) {
+        _lastManifest = manifest;
+
         // Phase 2: Detect Staged Mode (presence of APPLY_PARAMETERS action)
         isStagedMode = false;
         (manifest.buttons || []).forEach(b => {
@@ -1644,7 +1647,7 @@
     }
 
     // ── MATRIX (Pivot / Cross-tab) ────────────────────────────────────────────
-    // chartConfig carries JSON with { __matrix, rowHeaders, colValues, rows, grandTotals }.
+    // chartConfig carries JSON with { __matrix, rowHeaders, colHeaders, colParts, rows, grandTotals }.
 
     function renderMatrix(container, visual) {
         let meta;
@@ -1654,7 +1657,23 @@
             return;
         }
 
-        const { rowHeaders = [], colValues = [], rows = [], grandTotals = null } = meta;
+        const sep = '\u001F';
+        const rowHeaders = meta.rowHeaders || [];
+        const rows = meta.rows || [];
+        const grandTotals = meta.grandTotals || null;
+        const matrixAggregate = String(meta.aggregate || 'SUM').toUpperCase();
+        const colParts = Array.isArray(meta.colParts) && meta.colParts.length > 0
+            ? meta.colParts.map(p => Array.isArray(p) ? p.map(v => String(v ?? '')) : [String(p ?? '')])
+            : (meta.colValues || []).map(v => [String(v ?? '')]);
+        const colHeaders = meta.colHeaders && meta.colHeaders.length > 0
+            ? meta.colHeaders
+            : (colParts[0] || ['Column']).map((_, i) => i === 0 ? 'Column' : `Column ${i + 1}`);
+        const colDepth = Math.max(1, colHeaders.length, ...colParts.map(p => p.length));
+        const rowDepth = Math.max(1, rowHeaders.length);
+        const stateKey = `matrix:${visual.name || visual.id || ''}`;
+        const state = _uiStates[stateKey] || (_uiStates[stateKey] = { collapsedRows: {}, collapsedCols: {} });
+        state.collapsedRows = state.collapsedRows || {};
+        state.collapsedCols = state.collapsedCols || {};
 
         const wrapper = document.createElement('div');
         wrapper.className = 'table-wrapper';
@@ -1664,51 +1683,240 @@
         const table = document.createElement('table');
         table.className = 'matrix-table';
 
-        // Header row
+        const leaves = colParts.map((parts, index) => ({
+            index,
+            parts: Array.from({ length: colDepth }, (_, i) => parts[i] || ''),
+            key: Array.from({ length: colDepth }, (_, i) => parts[i] || '').join(sep)
+        }));
+
+        function colPrefixKey(parts, level) {
+            return parts.slice(0, level + 1).join(sep);
+        }
+
+        function rowPrefixKey(parts, level) {
+            return parts.slice(0, level + 1).join(sep);
+        }
+
+        function hasColumnChildren(parts, level) {
+            if (level >= colDepth - 1) return false;
+            const key = colPrefixKey(parts, level);
+            const nextValues = new Set(leaves
+                .filter(leaf => colPrefixKey(leaf.parts, level) === key)
+                .map(leaf => leaf.parts[level + 1]));
+            return nextValues.size > 0;
+        }
+
+        function buildColumnNodes(level, prefix, sourceLeaves) {
+            if (level >= colDepth) return [];
+            const buckets = new Map();
+            sourceLeaves.forEach(leaf => {
+                const label = leaf.parts[level] || '';
+                if (!buckets.has(label)) buckets.set(label, []);
+                buckets.get(label).push(leaf);
+            });
+            return Array.from(buckets, ([label, bucket]) => {
+                const parts = prefix.concat(label);
+                return {
+                    label,
+                    level,
+                    parts,
+                    key: parts.join(sep),
+                    leaves: bucket,
+                    children: buildColumnNodes(level + 1, parts, bucket)
+                };
+            });
+        }
+
+        function flattenColumns(nodes, output = []) {
+            nodes.forEach(node => {
+                const hasChildren = node.children.length > 0;
+                if (!hasChildren || state.collapsedCols[node.key]) {
+                    output.push(node);
+                } else {
+                    flattenColumns(node.children, output);
+                }
+            });
+            return output;
+        }
+
+        const visibleColumns = flattenColumns(buildColumnNodes(0, [], leaves));
+
+        function numericCell(value) {
+            const n = parseFloat(String(value ?? '').replace(/,/g, ''));
+            return Number.isFinite(n) ? n : null;
+        }
+
+        function formatMatrixNumber(total, sawAny) {
+            if (!sawAny) return '';
+            return Number.isInteger(total) ? String(total) : String(Number(total.toFixed(6)));
+        }
+
+        function aggregateNumbers(values) {
+            if (!values.length) return '';
+            if (matrixAggregate === 'MIN') return formatMatrixNumber(Math.min(...values), true);
+            if (matrixAggregate === 'MAX') return formatMatrixNumber(Math.max(...values), true);
+            if (matrixAggregate === 'AVG') return formatMatrixNumber(values.reduce((a, b) => a + b, 0) / values.length, true);
+            return formatMatrixNumber(values.reduce((a, b) => a + b, 0), true);
+        }
+
+        function aggregateColumn(row, col) {
+            const values = [];
+            col.leaves.forEach(leaf => {
+                const n = numericCell(row[rowDepth + leaf.index]);
+                if (n != null) values.push(n);
+            });
+            return aggregateNumbers(values);
+        }
+
+        function aggregateRows(sourceRows, col) {
+            const values = [];
+            sourceRows.forEach(row => {
+                col.leaves.forEach(leaf => {
+                    const n = numericCell(row[rowDepth + leaf.index]);
+                    if (n != null) values.push(n);
+                });
+            });
+            return aggregateNumbers(values);
+        }
+
+        function buildRowNodes(level, sourceRows) {
+            const buckets = new Map();
+            sourceRows.forEach(row => {
+                const label = String(row[level] ?? '');
+                if (!buckets.has(label)) buckets.set(label, []);
+                buckets.get(label).push(row);
+            });
+            return Array.from(buckets, ([label, bucket]) => ({
+                label,
+                level,
+                parts: bucket[0].slice(0, level + 1).map(v => String(v ?? '')),
+                rows: bucket,
+                children: level < rowDepth - 1 ? buildRowNodes(level + 1, bucket) : []
+            }));
+        }
+
+        function appendToggle(cell, key, isCollapsed, onClick) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'matrix-toggle';
+            button.textContent = isCollapsed ? '+' : '-';
+            button.setAttribute('aria-label', isCollapsed ? 'Expand' : 'Collapse');
+            button.addEventListener('click', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClick();
+                renderManifest(_lastManifest);
+            });
+            cell.appendChild(button);
+        }
+
+        function appendRowNode(tbody, node) {
+            const isLeaf = node.children.length === 0;
+            const key = rowPrefixKey(node.parts, node.level);
+            const isCollapsed = !!state.collapsedRows[key];
+
+            const tr = document.createElement('tr');
+            tr.className = isLeaf ? 'matrix-leaf-row' : 'matrix-group-row';
+
+            for (let i = 0; i < rowDepth; i++) {
+                const td = document.createElement('td');
+                td.className = 'matrix-dim';
+                if (i === node.level) {
+                    td.style.paddingLeft = `${10 + node.level * 18}px`;
+                    if (!isLeaf) {
+                        appendToggle(td, key, isCollapsed, () => {
+                            state.collapsedRows[key] = !isCollapsed;
+                        });
+                    }
+                    td.appendChild(document.createTextNode(node.label));
+                } else if (isLeaf) {
+                    td.textContent = String(node.rows[0][i] ?? '');
+                }
+                tr.appendChild(td);
+            }
+
+            visibleColumns.forEach(col => {
+                const td = document.createElement('td');
+                td.className = 'matrix-val';
+                const val = isLeaf ? aggregateColumn(node.rows[0], col) : aggregateRows(node.rows, col);
+                td.textContent = formatValue(val, null);
+                tr.appendChild(td);
+            });
+
+            tbody.appendChild(tr);
+            if (!isLeaf && !isCollapsed) node.children.forEach(child => appendRowNode(tbody, child));
+        }
+
+        function appendColumnHeaderButton(th, node) {
+            const canCollapse = node.leaves.length > 1 || hasColumnChildren(node.parts, node.level);
+            if (!canCollapse) return;
+            const key = node.key;
+            appendToggle(th, key, !!state.collapsedCols[key], () => {
+                state.collapsedCols[key] = !state.collapsedCols[key];
+            });
+        }
+
+        // Header rows
         const thead = document.createElement('thead');
-        const headerRow = document.createElement('tr');
-        rowHeaders.forEach(h => {
-            const th = document.createElement('th');
-            th.textContent = h;
-            th.className = 'matrix-dim-header';
-            headerRow.appendChild(th);
-        });
-        colValues.forEach(cv => {
-            const th = document.createElement('th');
-            th.textContent = cv;
-            th.className = 'matrix-val-header';
-            headerRow.appendChild(th);
-        });
-        thead.appendChild(headerRow);
+        for (let level = 0; level < colDepth; level++) {
+            const headerRow = document.createElement('tr');
+            if (level === 0) {
+                rowHeaders.forEach(h => {
+                    const th = document.createElement('th');
+                    th.textContent = h;
+                    th.className = 'matrix-dim-header';
+                    th.rowSpan = colDepth;
+                    headerRow.appendChild(th);
+                });
+            }
+            visibleColumns.forEach(col => {
+                const th = document.createElement('th');
+                th.className = 'matrix-val-header';
+                const label = col.parts[level] || '';
+                if (label) {
+                    const prefixParts = col.parts.slice(0, level + 1);
+                    const prefixKey = prefixParts.join(sep);
+                    const headerNode = {
+                        parts: prefixParts,
+                        level,
+                        key: prefixKey,
+                        leaves: leaves.filter(leaf => colPrefixKey(leaf.parts, level) === prefixKey)
+                    };
+                    appendColumnHeaderButton(th, headerNode);
+                    th.appendChild(document.createTextNode(label));
+                }
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+        }
         table.appendChild(thead);
 
         // Data rows
         const tbody = document.createElement('tbody');
-        rows.forEach(row => {
-            const tr = document.createElement('tr');
-            const totalCols = rowHeaders.length + colValues.length;
-            for (let i = 0; i < totalCols; i++) {
-                const td = document.createElement('td');
-                const val = row[i] != null ? String(row[i]) : '';
-                td.textContent = i < rowHeaders.length ? val : formatValue(val, null);
-                td.className = i < rowHeaders.length ? 'matrix-dim' : 'matrix-val';
-                tr.appendChild(td);
-            }
-            tbody.appendChild(tr);
-        });
+        buildRowNodes(0, rows).forEach(node => appendRowNode(tbody, node));
 
         // Grand total row
         if (grandTotals && grandTotals.length > 0) {
             const tr = document.createElement('tr');
             tr.className = 'matrix-grand-total';
-            const totalCols = rowHeaders.length + colValues.length;
-            for (let i = 0; i < totalCols; i++) {
+            for (let i = 0; i < rowDepth; i++) {
                 const td = document.createElement('td');
                 const val = grandTotals[i] != null ? String(grandTotals[i]) : '';
-                td.textContent = i < rowHeaders.length ? (i === 0 ? 'Grand Total' : '') : formatValue(val, null);
-                td.className = i < rowHeaders.length ? 'matrix-dim matrix-total-label' : 'matrix-val matrix-total-val';
+                td.textContent = i === 0 ? 'Grand Total' : val;
+                td.className = 'matrix-dim matrix-total-label';
                 tr.appendChild(td);
             }
+            visibleColumns.forEach(col => {
+                const td = document.createElement('td');
+                const values = [];
+                col.leaves.forEach(leaf => {
+                    const n = numericCell(grandTotals[rowDepth + leaf.index]);
+                    if (n != null) values.push(n);
+                });
+                td.textContent = formatValue(aggregateNumbers(values), null);
+                td.className = 'matrix-val matrix-total-val';
+                tr.appendChild(td);
+            });
             tbody.appendChild(tr);
         }
 

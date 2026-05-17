@@ -842,10 +842,10 @@ Changes to any control above propagate instantly to all dependent visuals (witho
 '
 );
 
--- TEXT — Buttons reference (since buttons can't be placed in page slots directly)
+-- TEXT — Buttons reference
 CREATE VISUAL ButtonsText AS TEXT (
     TITLE   = 'Action Buttons (CREATE BUTTON)',
-    CONTENT = '### Buttons\n`CREATE BUTTON` defines interactive command buttons with `ACTIONS`.\n\n| Name | Action | Purpose |\n|------|--------|---------|\n| BtnRefresh | `REFRESH_REPORT` | Force rebuild of all visual snapshots |\n| BtnBack | `BACK` | Navigate to previous browser page |\n| BtnExport | `EXPORT_CSV` | Export the transaction table |\n\n> Buttons cannot currently be placed directly in page `MAP` slots — they require a dedicated button bar component (tracked in TODO.md).'
+    CONTENT = '### Buttons\n`CREATE BUTTON` defines interactive command buttons with `ACTIONS`.\n\n| Name | Action | Purpose |\n|------|--------|---------|\n| BtnRefresh | `REFRESH_REPORT` | Force rebuild of all visual snapshots |\n| BtnBack | `BACK` | Navigate to previous browser page |\n| BtnExport | `EXPORT_CSV` | Export the transaction table |\n\nButtons can be placed in page or container `MAP` slots exactly like visuals.'
 );
 
 -- BUTTON — Refresh data

@@ -10,11 +10,11 @@ Use `DATEPICKER` instead when the variable is typed `DATE` or `DATETIME` and onl
 CREATE VISUAL MyPicker AS RELDATEPICKER (
     OPTIONS (
         DEFAULT = 'D-7'
-    )
+    ),
     ACTIONS (
-        ON_CHANGE SET_PARAMETER @StartDate
+        ON_CHANGE = SET_PARAMETER(@StartDate, VALUE)
     )
-)
+);
 ```
 
 ## Options
@@ -27,9 +27,9 @@ CREATE VISUAL MyPicker AS RELDATEPICKER (
 
 ## Actions
 
-| Action                          | Description                             |
-|---------------------------------|-----------------------------------------|
-| `ON_CHANGE SET_PARAMETER @Name` | Updates parameter when the value changes |
+| Action                                         | Description                             |
+|------------------------------------------------|-----------------------------------------|
+| `ON_CHANGE = SET_PARAMETER(@Name, VALUE)`      | Updates parameter when the value changes |
 
 ## Relative Date Syntax
 
@@ -51,14 +51,14 @@ The quick-pick buttons (Today, D-1, D-7, D-30, M-1, M-3, Y-1) write directly to 
 
 ```sql
 CREATE VISUAL StartPicker AS RELDATEPICKER (
-    OPTIONS ( DEFAULT = 'M-1' )
-    ACTIONS ( ON_CHANGE SET_PARAMETER @Start )
-)
+    OPTIONS ( DEFAULT = 'M-1' ),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@Start, VALUE))
+);
 
 CREATE VISUAL EndPicker AS RELDATEPICKER (
-    OPTIONS ( DEFAULT = 'D-0' )
-    ACTIONS ( ON_CHANGE SET_PARAMETER @End )
-)
+    OPTIONS ( DEFAULT = 'D-0' ),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@End, VALUE))
+);
 ```
 
 Your script then resolves `@Start` and `@End` using `RELDATE()`:

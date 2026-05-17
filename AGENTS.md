@@ -68,7 +68,7 @@ Key syntax facts:
 
 - **File structure**: normal ETL-SQL data prep statements first, then `CREATE VISUAL`, `CREATE PAGE`, `CREATE DATASET`, `CREATE CONTAINER`, `CREATE NAVIGATION` at the end
 - **Report metadata**: `SET REPORT TITLE = '...'` and `SET REPORT DESCRIPTION = '...'` (optional, appear before visuals)
-- **Visual types**: `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `TABLE`, `CARD`, `TEXT`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
+- **Visual types**: `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `FUNNEL`, `GAUGE`, `WATERFALL`, `BUBBLE`, `RADAR`, `CANDLESTICK`, `MAP`, `SANKEY`, `SUNBURST`, `NETWORK`, `TRELLIS`, `MATRIX`, `GANTT`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, `TEXTBOX`, `NUMBERBOX`, `CHECKBOX`
 - **SLICER pattern** — SOURCE provides the option list; ACTIONS binds to a parameter:
   ```sql
   CREATE VISUAL RegionFilter AS SLICER (
@@ -77,15 +77,17 @@ Key syntax facts:
     ACTIONS  (ON_CHANGE = SET_PARAMETER(@region, region))
   );
   ```
-- **STRUCTURE** is a CSS grid-template-areas string, not a `grid:NxN` shorthand:
+- **STRUCTURE** is a CSS grid-template-areas string:
   ```sql
   STRUCTURE = 'A A / B C'   -- two rows; A spans both columns; B and C share the second row
   ```
 - **MAP slots are quoted strings**: `MAP ('A' = VisualName, 'B' = OtherVisual)`
+- **Buttons use the page-style form**: `CREATE BUTTON ButtonName AS (...)`; do not use typed button aliases.
 - **ENCRYPT modes**: `ENCRYPT = MACHINE` (no creds), `ENCRYPT = PASSWORD, PASSWORD = '...'`, or `ENCRYPT = KEYFILE, KEYFILE = '...'`
 - **Filter types** (`DATEPICKER`, `SLIDER`, `SEARCH`) do not require a `SOURCE` clause
 - **MULTISELECT** requires a `SOURCE` clause for its option list
 - **STYLE** cascades: page-level `STYLE (THEME = dark)` applies to all charts; visual-level `STYLE` overrides it
+- **Portal administration is script-first** inside `EXECUTE portal BEGIN...END`: use commands such as `PUBLISH REPORT`, `CREATE SUBSCRIPTION`, `REFRESH REPORT`, `FAVORITE REPORT`, `SHOW REPORT HISTORY`, `SHOW REPORT DEPENDENCIES`, `SHOW CATALOG SEARCH`, `SHOW EFFECTIVE PERMISSIONS`, `SHOW PORTAL USAGE METRICS`, `VALIDATE REPORT SCRIPT`, `CREATE SHARE LINK`, `CREATE EMBED TOKEN`, `CREATE SAVED VIEW`, and `CREATE ALERT`.
 
 ---
 

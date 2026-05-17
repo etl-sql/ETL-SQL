@@ -78,11 +78,9 @@ A named layout object that holds VISUALs in a grid, nestable inside a PAGE. This
 
 ---
 
-### 1.4 Page Structure Rework
+### 1.4 Page Structure
 
-The `'A A / B C'` CSS grid-template-areas pattern is already the intended internal structure in `CreatePageStatement` (see `Reporting.md §3.3`). The current `STRUCTURE = 'grid:1x1'` is a legacy shorthand to be replaced.
-
-`CreatePageStatement.Structure` already stores the string. The work is in `report-runtime.js`: it must emit real `grid-template-areas` CSS instead of the current `grid:NxN` renderer. Parser change is small; runtime change is the real work.
+`STRUCTURE` uses a CSS grid-template-areas string such as `'A A / B C'`. `CreatePageStatement.Structure` stores that string directly, and `report-runtime.js` emits matching `grid-template-areas` CSS for page layout.
 
 ---
 
