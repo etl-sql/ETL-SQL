@@ -1,4 +1,4 @@
-# ETL-SQL Syntax Index
+﻿# ETL-SQL Syntax Index
 
 This document provides a comprehensive index of every keyword, command, function, and configuration option available in the ETL-SQL language. Use this as a central map to find definitions, examples, and help documentation.
 
@@ -145,199 +145,236 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 
 | Function | Category | Help File | Description |
 | :--- | :--- | :--- | :--- |
-| `UPPER(s)` | String | [UPPER.md] | Converts string to uppercase |
-| `LOWER(s)` | String | [LOWER.md] | Converts string to lowercase |
-| `CONCAT(s1, s2, ...)` | String | [CONCAT.md] | Concatenates multiple strings |
-| `LEN(s)` / `LENGTH(s)` | String | [LEN.md] / [LENGTH.md] | Returns string length |
-| `SUBSTRING(s, start, len)` | String | [SUBSTRING.md] | Returns part of a string |
-| `TRIM(s)` | String | [TRIM.md] | Removes leading/trailing whitespace |
-| `REPLACE(s, f, r)` | String | [REPLACE.md] | Replaces occurrences of a substring |
-| `CHARINDEX(f, s)` | String | [CHARINDEX.md] | Returns index of first occurrence |
-| `INITCAP(s)` | String | [INITCAP.md] | Capitalizes first letter of each word |
-| `LTRIM(s)` | String | [LTRIM.md] | Removes leading whitespace |
-| `RTRIM(s)` | String | [RTRIM.md] | Removes trailing whitespace |
-| `REVERSE(s)` | String | [REVERSE.md] | Reverses string characters |
-| `LEFT(s, n)` | String | [LEFT.md] | Returns leftmost N characters |
-| `RIGHT(s, n)` | String | [RIGHT.md] | Returns rightmost N characters |
-| `INSTR(s, f)` | String | [INSTR.md] | Alias for POSITION |
-| `CONCAT_WS(sep, ...)`| String | [CONCAT_WS.md] | Join with separator; skips nulls |
-| `SPLIT_PART(s, d, n)`| String | [SPLIT_PART.md] | Returns Nth segment after split |
-| `SPACE(n)` | String | [SPACE.md] | Returns N space characters |
-| `TO_STR(v)` | String | [TO_STR.md] | Converts any value to string |
-| `PATINDEX(p, s)` | String | [PATINDEX.md] | Position of wildcard pattern |
-| `REPLICATE(s, n)` | String | [REPLICATE.md] | Repeats string N times |
-| `QUOTENAME(s, [c])` | String | [QUOTENAME.md] | Returns delimited identifier |
-| `ASCII(s)` | String | [ASCII.md] | Numeric code of first character |
-| `UNICODE(s)` | String | [UNICODE.md] | Unicode code of first character |
-| `CHAR(n)` | String | [CHAR.md] | Character for given code |
-| `DATALENGTH(v)` | String | [DATALENGTH.md] | Byte count of value |
-| `TRANSLATE(s, f, t)`| String | [TRANSLATE.md] | Replaces chars in f with chars in t |
-| `STRING_ESCAPE(t, y)`| String | [STRING_ESCAPE.md] | Escapes special characters |
-| `STRING_SPLIT(s, d)` | String | [STRING_SPLIT.md] | Table-valued split |
+| `UPPER(string)` | String | [UPPER.md] | Converts string to uppercase |
+| `LOWER(string)` | String | [LOWER.md] | Converts string to lowercase |
+| `CONCAT(string1, string2, ...)` | String | [CONCAT.md] | Concatenates multiple strings |
+| `LEN(string)` / `LENGTH(string)` | String | [LEN.md] / [LENGTH.md] | Returns string length |
+| `SUBSTRING(string, start, length)` | String | [SUBSTRING.md] | Returns part of a string |
+| `TRIM(string)` | String | [TRIM.md] | Removes leading/trailing whitespace |
+| `REPLACE(string, find, replacement)` | String | [REPLACE.md] | Replaces occurrences of a substring |
+| `CHARINDEX(find, string)` | String | [CHARINDEX.md] | Returns index of first occurrence |
+| `INITCAP(string)` | String | [INITCAP.md] | Capitalizes first letter of each word |
+| `LTRIM(string)` | String | [LTRIM.md] | Removes leading whitespace |
+| `RTRIM(string)` | String | [RTRIM.md] | Removes trailing whitespace |
+| `REVERSE(string)` | String | [REVERSE.md] | Reverses string characters |
+| `LEFT(string, count)` | String | [LEFT.md] | Returns leftmost N characters |
+| `RIGHT(string, count)` | String | [RIGHT.md] | Returns rightmost N characters |
+| `INSTR(string, find)` | String | [INSTR.md] | Alias for POSITION |
+| `CONCAT_WS(separator, string1, ...)` | String | [CONCAT_WS.md] | Join with separator; skips nulls |
+| `SPLIT_PART(string, delimiter, part)` | String | [SPLIT_PART.md] | Returns Nth segment after split |
+| `SPACE(count)` | String | [SPACE.md] | Returns N space characters |
+| `TO_STR(value)` | String | [TO_STR.md] | Converts any value to string |
+| `PATINDEX(pattern, string)` | String | [PATINDEX.md] | Position of wildcard pattern |
+| `REPLICATE(string, count)` | String | [REPLICATE.md] | Repeats string N times |
+| `QUOTENAME(string, [delimiter])` | String | [QUOTENAME.md] | Returns delimited identifier |
+| `ASCII(string)` | String | [ASCII.md] | Numeric code of first character |
+| `UNICODE(string)` | String | [UNICODE.md] | Unicode code of first character |
+| `CHAR(code)` | String | [CHAR.md] | Character for given code |
+| `DATALENGTH(value)` | String | [DATALENGTH.md] | Byte count of value |
+| `TRANSLATE(string, find_chars, replace_chars)` | String | [TRANSLATE.md] | Replaces chars 1-to-1 |
+| `STRING_ESCAPE(text, type)` | String | [STRING_ESCAPE.md] | Escapes special characters |
+| `STRING_SPLIT(string, delimiter)` | String | [STRING_SPLIT.md] | Table-valued split |
+| `CHAR_LENGTH(string)` | String | [CHAR_LENGTH.md] | String length (SQL standard alias) |
+| `OVERLAY(string, replacement, start, length)` | String | [OVERLAY.md] | Replaces substring at position |
+| `POSITION(find IN string)` | String | [POSITION.md] | Position of substring (SQL standard) |
+| `SUBSTR(string, start, length)` | String | [SUBSTR.md] | Alias for SUBSTRING |
+| `STUFF(string, start, length, replacement)` | String | [STUFF.md] | Deletes part of string and inserts replacement |
+| `STR(number, [length], [decimals])` | String | [STR.md] | Formats number as string |
 | `GETDATE()` | Date | [GETDATE.md] | Current local datetime |
 | `NOW()` | Date | [NOW.md] | Current UTC datetime |
-| `DATEADD(u, n, d)` | Date | [DATEADD.md] | Adds units to a date |
-| `DATEDIFF(u, d1, d2)` | Date | [DATEDIFF.md] | Difference between dates |
-| `DATENAME(u, d)` | Date | [DATENAME.md] | Returns name of date part |
-| `DATEPART(u, d)` | Date | [DATEPART.md] | Returns integer date part |
-| `EOMONTH(d)` | Date | [EOMONTH.md] | Last day of the month |
-| `ISDATE(s)` | Date | [ISDATE.md] | 1 if parseable as date |
-| `DATETIMEFROMPARTS` | Date | [DATETIMEFROMPARTS.md] | Build DATETIME from components |
-| `TIMEFROMPARTS` | Date | [TIMEFROMPARTS.md] | Build TIME from components |
-| `TRUNC(d)` | Date | [TRUNC.md] | Truncates time portion |
-| `AT TIME ZONE` | Date | [AT_TIME_ZONE.md] | Converts to specified timezone |
-| `ABS(n)` | Math | [ABS.md] | Absolute value |
-| `ROUND(n, d)` | Math | [ROUND.md] | Rounds to d decimals |
-| `FLOOR(n)` | Math | [FLOOR.md] | Largest integer <= n |
-| `CEILING(n)` | Math | [CEILING.md] | Smallest integer >= n |
+| `DATEADD(datepart, number, date)` | Date | [DATEADD.md] | Adds units to a date |
+| `DATEDIFF(datepart, start_date, end_date)` | Date | [DATEDIFF.md] | Difference between dates |
+| `DATENAME(datepart, date)` | Date | [DATENAME.md] | Returns name of date part |
+| `DATEPART(datepart, date)` | Date | [DATEPART.md] | Returns integer date part |
+| `EOMONTH(date)` | Date | [EOMONTH.md] | Last day of the month |
+| `ISDATE(string)` | Date | [ISDATE.md] | 1 if parseable as date |
+| `DATETIMEFROMPARTS(year, month, day, hour, minute, second, ms)` | Date | [DATETIMEFROMPARTS.md] | Build DATETIME from components |
+| `TIMEFROMPARTS(hour, minute, second, fractions, precision)` | Date | [TIMEFROMPARTS.md] | Build TIME from components |
+| `TRUNC(date)` | Date | [TRUNC.md] | Truncates time portion |
+| `AT TIME ZONE(date, timezone)` | Date | [AT_TIME_ZONE.md] | Converts to specified timezone |
+| `CURRENT_DATE()` | Date | [CURRENT_DATE.md] | Current date (no time) |
+| `CURRENT_TIME()` | Date | [CURRENT_TIME.md] | Current time |
+| `CURRENT_TIMESTAMP()` | Date | [CURRENT_TIMESTAMP.md] | Current datetime (UTC) |
+| `DATETRUNC(datepart, date)` | Date | [DATETRUNC.md] | Truncates date to unit boundary |
+| `DAY(date)` | Date | [DAY.md] | Day-of-month component |
+| `MONTH(date)` | Date | [MONTH.md] | Month component |
+| `YEAR(date)` | Date | [YEAR.md] | Year component |
+| `HOUR(date)` | Date | [HOUR.md] | Hour component |
+| `MINUTE(date)` | Date | [MINUTE.md] | Minute component |
+| `SECOND(date)` | Date | [SECOND.md] | Second component |
+| `ABS(number)` | Math | [ABS.md] | Absolute value |
+| `ROUND(number, decimals)` | Math | [ROUND.md] | Rounds to N decimal places |
+| `FLOOR(number)` | Math | [FLOOR.md] | Largest integer <= number |
+| `CEILING(number)` | Math | [CEILING.md] | Smallest integer >= number |
+| `CEIL(number)` | Math | [CEIL.md] | Alias for CEILING |
 | `RAND()` | Math | [RAND.md] | Random number [0, 1) |
-| `MOD(n, d)` / `n % d` | Math | [MOD.md] | Remainder of division |
-| `POWER(b, e)` | Math | [POWER.md] | Base raised to exponent |
-| `SQRT(n)` | Math | [SQRT.md] | Square root |
-| `EXP(n)` | Math | [EXP.md] | e^n |
-| `LOG(n)` / `LN(n)` | Math | [LOG.md] | Natural logarithm |
-| `LOG10(n)` | Math | [LOG10.md] | Base-10 logarithm |
-| `LEAST(v1, v2, ...)` | Math | [LEAST.md] | Smallest of arguments |
-| `GREATEST(v1, v2, ...)`| Math | [GREATEST.md] | Largest of arguments |
-| `COALESCE(v1, v2, ...)`| Logic | [COALESCE.md] | First non-null value |
-| `ISNULL(v, d)` | Logic | [ISNULL.md] | Returns d if v is null |
-| `IIF(c, t, f)` | Logic | [IIF.md] | Inline IF |
-| `NVL(v, d)` | Logic | [NVL.md] | Alias for ISNULL |
-| `IFNULL(v, d)` | Logic | [IFNULL.md] | Alias for ISNULL |
-| `NVL2(v, n, f)` | Logic | [NVL2.md] | Oracle-style null conditional |
-| `NULLIF(v1, v2)` | Logic | [NULLIF.md] | NULL if v1 = v2 |
-| `IS_NULL(v)` | Logic | [IS_NULL.md] | 1 if v is null |
-| `IS_NOT_NULL(v)` | Logic | [IS_NOT_NULL.md] | 1 if v is not null |
-| `DECODE(v, ...)` | Logic | [DECODE.md] | Oracle-style CASE shorthand |
-| `CAST(v AS t)` | System | [CAST.md] | Converts v to type t |
-| `TRY_CAST(v AS t)` | System | [TRY_CAST.md] | Converts v to type t, NULL on fail |
-| `HASHBYTES(a, s)` | System | [HASHBYTES.md] | Returns hash of string |
+| `RANDOM()` | Math | [RANDOM.md] | Alias for RAND() |
+| `RANDOM_INT(min, max)` | Math | [RANDOM_INT.md] | Random integer in range |
+| `RANDOM_DECIMAL(min, max)` | Math | [RANDOM_DECIMAL.md] | Random decimal in range |
+| `MOD(number, divisor)` / `number % divisor` | Math | [MOD.md] | Remainder of division |
+| `POWER(base, exponent)` | Math | [POWER.md] | Base raised to exponent |
+| `POW(base, exponent)` | Math | [POW.md] | Alias for POWER |
+| `SQRT(number)` | Math | [SQRT.md] | Square root |
+| `EXP(number)` | Math | [EXP.md] | e raised to the power of number |
+| `LOG(number)` / `LN(number)` | Math | [LOG.md] | Natural logarithm |
+| `LOG10(number)` | Math | [LOG10.md] | Base-10 logarithm |
+| `LEAST(value1, value2, ...)` | Math | [LEAST.md] | Smallest of arguments |
+| `GREATEST(value1, value2, ...)` | Math | [GREATEST.md] | Largest of arguments |
+| `SIN(radians)` | Math | [SIN.md] | Sine |
+| `COS(radians)` | Math | [COS.md] | Cosine |
+| `TAN(radians)` | Math | [TAN.md] | Tangent |
+| `ASIN(number)` | Math | [ASIN.md] | Arcsine |
+| `ACOS(number)` | Math | [ACOS.md] | Arccosine |
+| `ATAN(number)` | Math | [ATAN.md] | Arctangent |
+| `ATAN2(y, x)` | Math | [ATAN2.md] | Arctangent of y/x |
+| `SIGN(number)` | Math | [SIGN.md] | Returns -1, 0, or 1 |
+| `DEGREES(radians)` | Math | [DEGREES.md] | Converts radians to degrees |
+| `RADIANS(degrees)` | Math | [RADIANS.md] | Converts degrees to radians |
+| `PI()` | Math | [PI.md] | Mathematical constant Ï€ |
+| `QUOTIENT(number, divisor)` | Math | [QUOTIENT.md] | Integer quotient of division |
+| `TRUNCATE(number, decimals)` | Math | [TRUNCATE.md] | Truncates number to N decimal places |
+| `COALESCE(value1, value2, ...)` | Logic | [COALESCE.md] | First non-null value |
+| `ISNULL(value, default)` | Logic | [ISNULL.md] | Returns default if value is null |
+| `IIF(condition, true_value, false_value)` | Logic | [IIF.md] | Inline IF |
+| `NVL(value, default)` | Logic | [NVL.md] | Alias for ISNULL |
+| `IFNULL(value, default)` | Logic | [IFNULL.md] | Alias for ISNULL |
+| `NVL2(value, not_null_result, null_result)` | Logic | [NVL2.md] | Oracle-style null conditional |
+| `NULLIF(value1, value2)` | Logic | [NULLIF.md] | NULL if value1 = value2 |
+| `IS_NULL(value)` | Logic | [IS_NULL.md] | 1 if value is null |
+| `IS_NOT_NULL(value)` | Logic | [IS_NOT_NULL.md] | 1 if value is not null |
+| `DECODE(value, search1, result1, ..., [default])` | Logic | [DECODE.md] | Oracle-style CASE shorthand |
+| `CAST(value AS type)` | System | [CAST.md] | Converts value to type |
+| `TRY_CAST(value AS type)` | System | [TRY_CAST.md] | Converts value to type, NULL on fail |
+| `CONVERT(type, value)` | System | [CONVERT.md] | Converts value to type |
+| `TRY_CONVERT(type, value)` | System | [TRY_CONVERT.md] | CONVERT with NULL on failure |
+| `PARSE(string, type)` | System | [PARSE.md] | Culture-aware string to type |
+| `TRY_PARSE(string, type)` | System | [TRY_PARSE.md] | PARSE with NULL on failure |
+| `HASHBYTES(algorithm, string)` | System | [HASHBYTES.md] | Returns hash of string |
 | `NEWID()` | System | [NEWID.md] | Generates a new GUID |
+| `NEWSEQUENTIALID()` | System | [NEWSEQUENTIALID.md] | Time-ordered GUID v7 |
+| `FORMAT(value, format_string)` | System | [FORMAT.md] | Formats value using string pattern |
+| `CHECKSUM(value1, ...)` | System | [CHECKSUM.md] | 64-bit integer hash |
+| `BINARY_CHECKSUM(value1, ...)` | System | [BINARY_CHECKSUM.md] | Binary-compatible hash |
+| `ENV(variable_name)` | System | [ENV.md] | Host environment variable value |
+| `GENERATE_SERIES(start, stop, [step])` | System | [GENERATE_SERIES.md] | Returns table of numbers/dates |
 | `ERROR_MESSAGE()` | System | [ERROR_MESSAGE.md] | Error string in CATCH block |
 | `ERROR_NUMBER()` | System | [ERROR_NUMBER.md] | Error code in CATCH block |
 | `ERROR_SEVERITY()` | System | [ERROR_SEVERITY.md] | Error severity in CATCH block |
 | `ERROR_STATE()` | System | [ERROR_STATE.md] | Error state in CATCH block |
 | `ERROR_LINE()` | System | [ERROR_LINE.md] | Error line in CATCH block |
-| `ENV(v)` | System | [ENV.md] | Host environment variable |
-| `CHECKSUM(...)` | System | [CHECKSUM.md] | 64-bit integer hash |
-| `BINARY_CHECKSUM(...)`| System | [BINARY_CHECKSUM.md] | Binary-compatible hash |
-| `NEWSEQUENTIALID()` | System | [NEWSEQUENTIALID.md] | Time-ordered GUID v7 |
-| `JSON_VALUE(j, p)` | JSON | [JSON_VALUE.md] | Extracts scalar from JSON |
-| `JSON_QUERY(j, p)` | JSON | [JSON_QUERY.md] | Extracts object/array from JSON |
-| `JSON_MODIFY(j, p, v)` | JSON | [JSON_MODIFY.md] | Updates JSON string |
-| `ISJSON(s)` | JSON | [ISJSON.md] | 1 if valid JSON |
-| `JSON_EXISTS(j, p)` | JSON | [JSON_EXISTS.md] | 1 if path exists |
-| `JSON_OBJECT(...)` | JSON | [JSON_OBJECT.md] | Builds JSON object |
-| `JSON_ARRAY(...)` | JSON | [JSON_ARRAY.md] | Builds JSON array |
-| `JSON_TABLE(j, p)` | JSON | [JSON_TABLE.md] | Table from JSON |
-| `OPENJSON(j, [p])` | JSON | [OPENJSON.md] | SQL Server-style expansion |
-| `XMLVALUE(x, p)` | XML | [XMLVALUE.md] | Extracts scalar from XML |
-| `XMLEXISTS(x, p)` | XML | [XMLEXISTS.md] | 1 if XPath exists |
-| `XMLQUERY(x, p)` | XML | [XMLQUERY.md] | XML fragment |
-| `XMLTABLE(x, p)` | XML | [XMLTABLE.md] | Table from XML |
-| `XMLELEMENT(n, c)` | XML | [XMLELEMENT.md] | Builds XML element |
-| `XMLATTRIBUTES(...)` | XML | [XMLATTRIBUTES.md] | XML attributes |
-| `XMLFOREST(...)` | XML | [XMLFOREST.md] | Forest of XML elements |
-| `FILE_EXISTS(p)` | File | [FILE_EXISTS.md] | 1 if file exists, 0 otherwise |
-| `DIRECTORY_EXISTS(p)` | File | [DIRECTORY_EXISTS.md] | 1 if dir exists, 0 otherwise |
-| `FILE_LIST(p, m)` | File | [FILE_LIST.md] | Returns table of files in path |
-| `REMOTE_FILE_LIST` | File | [REMOTE_FILE_LIST.md] | Table of files on remote conn |
-| `SUM(v)` | Aggregate | [SUM.md] | Sum of values |
-| `COUNT(v)` | Aggregate | [COUNT.md] | Count of non-null values |
-| `AVG(v)` | Aggregate | [AVG.md] | Average of values |
-| `MAX(v)` | Aggregate | [MAX.md] | Maximum value |
-| `MIN(v)` | Aggregate | [MIN.md] | Minimum value |
-| `VAR(v)` / `VAR_SAMP` | Aggregate | [VAR.md] | Sample variance |
-| `VARP(v)` / `VAR_POP` | Aggregate | [VARP.md] | Population variance |
-| `STDEV(v)` / `STDDEV` | Aggregate | [STDEV.md] | Sample standard deviation |
-| `STDEVP(v)` | Aggregate | [STDEVP.md] | Population standard deviation |
-| `COVAR_SAMP(x, y)` | Aggregate | [COVAR_SAMP.md] | Sample covariance |
-| `COVAR_POP(x, y)` | Aggregate | [COVAR_POP.md] | Population covariance |
-| `CORR(x, y)` | Aggregate | [CORR.md] | Pearson correlation |
+| `JSON_VALUE(json, path)` | JSON | [JSON_VALUE.md] | Extracts scalar from JSON |
+| `JSON_QUERY(json, path)` | JSON | [JSON_QUERY.md] | Extracts object/array from JSON |
+| `JSON_MODIFY(json, path, new_value)` | JSON | [JSON_MODIFY.md] | Updates JSON string |
+| `ISJSON(string)` | JSON | [ISJSON.md] | 1 if valid JSON |
+| `JSON_EXISTS(json, path)` | JSON | [JSON_EXISTS.md] | 1 if path exists |
+| `JSON_OBJECT(key, value, ...)` | JSON | [JSON_OBJECT.md] | Builds JSON object |
+| `JSON_ARRAY(value1, ...)` | JSON | [JSON_ARRAY.md] | Builds JSON array |
+| `JSON_TABLE(json, path)` | JSON | [JSON_TABLE.md] | Table from JSON |
+| `OPENJSON(json, [path])` | JSON | [OPENJSON.md] | SQL Server-style JSON expansion |
+| `XMLVALUE(xml, xpath)` | XML | [XMLVALUE.md] | Extracts scalar from XML |
+| `XMLEXISTS(xml, xpath)` | XML | [XMLEXISTS.md] | 1 if XPath exists |
+| `XMLQUERY(xml, xpath)` | XML | [XMLQUERY.md] | XML fragment |
+| `XMLTABLE(xml, xpath)` | XML | [XMLTABLE.md] | Table from XML |
+| `XMLELEMENT(name, content)` | XML | [XMLELEMENT.md] | Builds XML element |
+| `XMLATTRIBUTES(name, value, ...)` | XML | [XMLATTRIBUTES.md] | XML attributes |
+| `XMLFOREST(value1, ...)` | XML | [XMLFOREST.md] | Forest of XML elements |
+| `FILE_EXISTS(path)` | File | [FILE_EXISTS.md] | 1 if file exists, 0 otherwise |
+| `DIRECTORY_EXISTS(path)` | File | [DIRECTORY_EXISTS.md] | 1 if directory exists, 0 otherwise |
+| `FILE_LIST(path, [mask])` | File | [FILE_LIST.md] | Returns table of files in path |
+| `REMOTE_FILE_LIST(connection, path)` | File | [REMOTE_FILE_LIST.md] | Table of files on remote connection |
+| `DIRECTORY(path)` | File | [DIRECTORY.md] | Returns directory metadata |
+| `SUM(expression)` | Aggregate | [SUM.md] | Sum of values |
+| `COUNT(expression)` | Aggregate | [COUNT.md] | Count of non-null values |
+| `AVG(expression)` | Aggregate | [AVG.md] | Average of values |
+| `MAX(expression)` | Aggregate | [MAX.md] | Maximum value |
+| `MIN(expression)` | Aggregate | [MIN.md] | Minimum value |
+| `MEDIAN(expression)` | Aggregate | [MEDIAN.md] | Median (50th percentile) |
+| `VAR(expression)` / `VAR_SAMP` | Aggregate | [VAR.md] | Sample variance |
+| `VARP(expression)` / `VAR_POP` | Aggregate | [VARP.md] | Population variance |
+| `STDEV(expression)` / `STDDEV` | Aggregate | [STDEV.md] | Sample standard deviation |
+| `STDEVP(expression)` | Aggregate | [STDEVP.md] | Population standard deviation |
+| `COVAR_SAMP(expr1, expr2)` | Aggregate | [COVAR_SAMP.md] | Sample covariance |
+| `COVAR_POP(expr1, expr2)` | Aggregate | [COVAR_POP.md] | Population covariance |
+| `CORR(expr1, expr2)` | Aggregate | [CORR.md] | Pearson correlation |
+| `LISTAGG(expression, separator)` | Aggregate | [LISTAGG.md] | Concatenates values with separator |
+| `STRING_AGG(expression, separator)` | Aggregate | [STRING_AGG.md] | Concatenates strings with separator |
 | `ROW_NUMBER()` | Window | [ROW_NUMBER.md] | Sequential row number |
 | `RANK()` | Window | [RANK.md] | Rank with gaps |
 | `DENSE_RANK()` | Window | [DENSE_RANK.md] | Rank without gaps |
-| `LAG(v, n)` | Window | [LAG.md] | Value from n rows before |
-| `LEAD(v, n)` | Window | [LEAD.md] | Value from n rows after |
-| `NTILE(n)` | Window | [NTILE.md] | Bucket number 1-n |
+| `LAG(expression, [offset], [default])` | Window | [LAG.md] | Value from N rows before |
+| `LEAD(expression, [offset], [default])` | Window | [LEAD.md] | Value from N rows after |
+| `NTILE(buckets)` | Window | [NTILE.md] | Bucket number 1-N |
 | `PERCENT_RANK()` | Window | [PERCENT_RANK.md] | Relative rank (0-1) |
 | `CUME_DIST()` | Window | [CUME_DIST.md] | Cumulative distribution |
-| `FIRST_VALUE(v)` | Window | [FIRST_VALUE.md] | First value in partition |
-| `LAST_VALUE(v)` | Window | [LAST_VALUE.md] | Last value in partition |
-| `NTH_VALUE(v, n)` | Window | [NTH_VALUE.md] | Nth value in window frame |
-| `PERCENTILE_CONT(n)` | Window | [PERCENTILE_CONT.md] | Continuous percentile |
-| `PERCENTILE_DISC(n)` | Window | [PERCENTILE_DISC.md] | Discrete percentile |
-| `REGEXP_LIKE(s, p)` | Regex | [REGEXP_LIKE.md] | 1 if string matches regex |
-| `REGEXP_REPLACE(s, p, r)` | Regex | [REGEXP_REPLACE.md] | Replace matches in string |
-| `REGEXP_SUBSTR(s, p)` | Regex | [REGEXP_SUBSTR.md] | Matched substring |
-| `REGEXP_INSTR(s, p)` | Regex | [REGEXP_INSTR.md] | Position of match |
-| `REGEXP_COUNT(s, p)` | Regex | [REGEXP_COUNT.md] | Count of matches |
-| `REGEXP_MATCHES(s, p)` | Regex | [REGEXP_MATCHES.md] | Table of all matches |
-| `REGEXP_SPLIT(...)` | Regex | [REGEXP_SPLIT.md] | Table of split segments |
-| `LISTAGG(v, s)` | Aggregate | [LISTAGG.md] | Concatenates values with separator |
-| `STRING_AGG(v, s)` | Aggregate | [STRING_AGG.md] | Concatenates strings with separator |
-| `ADD_TO_LIST(l, v)` | List | [ADD_TO_LIST.md] | Appends value to a LIST |
-| `SORT_LIST(l)` | List | [SORT_LIST.md] | Returns sorted copy of list |
-| `APPEND_TO_LIST(l, v)`| List | [APPEND_TO_LIST.md] | Alias for ADD_TO_LIST |
-| `REMOVE_FROM_LIST(l, v)`| List | [REMOVE_FROM_LIST.md] | Removes occurrences from list |
-| `GET_TAGS(t, [c])` | Lineage | [GET_TAGS.md] | Returns list of tag names |
-| `GET_TAG_VALUE(t, c, n)`| Lineage | [GET_TAG_VALUE.md] | Returns value of specific tag |
-| `NORMALIZE(s, [m])` | Fuzzy | [NORMALIZE.md] | Domain-aware preprocessing |
-| `SIMILARITY(a, b, [m])`| Fuzzy | [SIMILARITY.md] | Normalized similarity score (0-1) |
-| `LEVENSHTEIN(a, b)` | Fuzzy | [LEVENSHTEIN.md] | Raw edit distance |
-| `SOUNDEX(s)` | Fuzzy | [SOUNDEX.md] | 4-char phonetic code |
-| `METAPHONE(s)` | Fuzzy | [METAPHONE.md] | English phonetic code |
-| `DMETAPHONE(s)` | Fuzzy | [DMETAPHONE.md] | Double Metaphone primary code |
-| `DMETAPHONE_ALT(s)` | Fuzzy | [DMETAPHONE_ALT.md] | Double Metaphone alternate code |
-| `NGRAMS(s, n)` | Fuzzy | [NGRAMS.md] | Table of N-character grams |
-| `NGRAM_TOKENS(s)` | Fuzzy | [NGRAM_TOKENS.md] | Table of 3-grams (blocking) |
-| `GENERATE_SERIES` | System | [GENERATE_SERIES.md] | Returns table of numbers/dates |
-| `SIN(n)` | Math | [SIN.md] | Sine of n (radians) |
-| `COS(n)` | Math | [COS.md] | Cosine of n (radians) |
-| `TAN(n)` | Math | [TAN.md] | Tangent of n (radians) |
-| `ASIN(n)` | Math | [ASIN.md] | Arcsine of n |
-| `ACOS(n)` | Math | [ACOS.md] | Arccosine of n |
-| `ATAN(n)` | Math | [ATAN.md] | Arctangent of n |
-| `ATAN2(y, x)` | Math | [ATAN2.md] | Arctangent of y/x |
-| `SIGN(n)` | Math | [SIGN.md] | Returns -1, 0, or 1 |
-| `STUFF(s, b, l, r)` | String | [STUFF.md] | Deletes part of string and inserts new |
-| `STR(n, [l], [d])` | String | [STR.md] | Formats number as string |
-| `FORMAT(v, f)` | System | [FORMAT.md] | Formats value using string pattern |
-| `CEIL(n)` | Math | [CEIL.md] | Alias for CEILING |
-| `CHAR_LENGTH(s)` | String | [CHAR_LENGTH.md] | String length (SQL standard alias) |
-| `CONVERT(t, v)` | System | [CONVERT.md] | Converts value to type |
-| `CURRENT_DATE()` | Date | [CURRENT_DATE.md] | Current date (no time) |
-| `CURRENT_TIME()` | Date | [CURRENT_TIME.md] | Current time |
-| `CURRENT_TIMESTAMP()` | Date | [CURRENT_TIMESTAMP.md] | Current datetime (UTC) |
-| `DATETRUNC(u, d)` | Date | [DATETRUNC.md] | Truncates date to unit boundary |
-| `DAY(d)` | Date | [DAY.md] | Day-of-month component |
-| `MONTH(d)` | Date | [MONTH.md] | Month component |
-| `YEAR(d)` | Date | [YEAR.md] | Year component |
-| `HOUR(d)` | Date | [HOUR.md] | Hour component |
-| `MINUTE(d)` | Date | [MINUTE.md] | Minute component |
-| `SECOND(d)` | Date | [SECOND.md] | Second component |
-| `DEGREES(n)` | Math | [DEGREES.md] | Converts radians to degrees |
-| `RADIANS(n)` | Math | [RADIANS.md] | Converts degrees to radians |
-| `PI()` | Math | [PI.md] | Mathematical constant π |
-| `POW(b, e)` | Math | [POW.md] | Alias for POWER |
-| `QUOTIENT(n, d)` | Math | [QUOTIENT.md] | Integer quotient of division |
-| `RANDOM()` | Math | [RANDOM.md] | Alias for RAND() |
-| `RANDOM_INT(min, max)` | Math | [RANDOM_INT.md] | Random integer in range |
-| `RANDOM_DECIMAL(min, max)` | Math | [RANDOM_DECIMAL.md] | Random decimal in range |
-| `MEDIAN(v)` | Aggregate | [MEDIAN.md] | Median (50th percentile) |
-| `DIFFERENCE(s1, s2)` | Fuzzy | [DIFFERENCE.md] | SOUNDEX difference score (0-4) |
-| `OVERLAY(s, r, b, l)` | String | [OVERLAY.md] | Replaces substring at position |
-| `PARSE(s, t)` | System | [PARSE.md] | Culture-aware string to type |
-| `POSITION(f IN s)` | String | [POSITION.md] | Position of substring (SQL standard) |
-| `SUBSTR(s, b, l)` | String | [SUBSTR.md] | Alias for SUBSTRING |
-| `TRUNCATE(n, d)` | Math | [TRUNCATE.md] | Truncates number to d decimals |
-| `TRY_CONVERT(t, v)` | System | [TRY_CONVERT.md] | CONVERT with NULL on failure |
-| `TRY_PARSE(s, t)` | System | [TRY_PARSE.md] | PARSE with NULL on failure |
-| `DIRECTORY(p)` | File | [DIRECTORY.md] | Returns directory metadata |
+| `FIRST_VALUE(expression)` | Window | [FIRST_VALUE.md] | First value in partition |
+| `LAST_VALUE(expression)` | Window | [LAST_VALUE.md] | Last value in partition |
+| `NTH_VALUE(expression, nth)` | Window | [NTH_VALUE.md] | Nth value in window frame |
+| `PERCENTILE_CONT(fraction)` | Window | [PERCENTILE_CONT.md] | Continuous percentile |
+| `PERCENTILE_DISC(fraction)` | Window | [PERCENTILE_DISC.md] | Discrete percentile |
+| `REGEXP_LIKE(string, pattern)` | Regex | [REGEXP_LIKE.md] | 1 if string matches regex |
+| `REGEXP_REPLACE(string, pattern, replacement)` | Regex | [REGEXP_REPLACE.md] | Replace matches in string |
+| `REGEXP_SUBSTR(string, pattern)` | Regex | [REGEXP_SUBSTR.md] | Matched substring |
+| `REGEXP_INSTR(string, pattern)` | Regex | [REGEXP_INSTR.md] | Position of match |
+| `REGEXP_COUNT(string, pattern)` | Regex | [REGEXP_COUNT.md] | Count of matches |
+| `REGEXP_MATCHES(string, pattern)` | Regex | [REGEXP_MATCHES.md] | Table of all matches |
+| `REGEXP_SPLIT(string, pattern)` | Regex | [REGEXP_SPLIT.md] | Table of split segments |
+| `ADD_TO_LIST(list, value)` | List | [ADD_TO_LIST.md] | Appends value to a LIST |
+| `SORT_LIST(list)` | List | [SORT_LIST.md] | Returns sorted copy of list |
+| `APPEND_TO_LIST(list, value)` | List | [APPEND_TO_LIST.md] | Alias for ADD_TO_LIST |
+| `REMOVE_FROM_LIST(list, value)` | List | [REMOVE_FROM_LIST.md] | Removes occurrences from list |
+| `GET_TAGS(table, [column])` | Lineage | [GET_TAGS.md] | Returns list of tag names |
+| `GET_TAG_VALUE(table, column, tag_name)` | Lineage | [GET_TAG_VALUE.md] | Returns value of specific tag |
+| `NORMALIZE(string, [mode])` | Fuzzy | [NORMALIZE.md] | Domain-aware preprocessing |
+| `SIMILARITY(string1, string2, [mode])` | Fuzzy | [SIMILARITY.md] | Normalized similarity score (0-1) |
+| `LEVENSHTEIN(string1, string2)` | Fuzzy | [LEVENSHTEIN.md] | Raw edit distance |
+| `SOUNDEX(string)` | Fuzzy | [SOUNDEX.md] | 4-char phonetic code |
+| `METAPHONE(string)` | Fuzzy | [METAPHONE.md] | English phonetic code |
+| `DMETAPHONE(string)` | Fuzzy | [DMETAPHONE.md] | Double Metaphone primary code |
+| `DMETAPHONE_ALT(string)` | Fuzzy | [DMETAPHONE_ALT.md] | Double Metaphone alternate code |
+| `NGRAMS(string, size)` | Fuzzy | [NGRAMS.md] | Table of N-character grams |
+| `NGRAM_TOKENS(string)` | Fuzzy | [NGRAM_TOKENS.md] | Table of 3-grams (blocking) |
+| `DIFFERENCE(string1, string2)` | Fuzzy | [DIFFERENCE.md] | SOUNDEX difference score (0-4) |
 
-*Note: Over 190 functions are registered. See [Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md) for full signatures. Functions without help file links (fuzzy matching, XML builders, JSON builders, covariance, lineage helpers) are documented in Standard_Library.md only.*
+*Note: Over 190 functions are registered. See [Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md) for full signatures. Functions without help file links (XML builders, JSON builders, covariance, lineage helpers) are documented in Standard_Library.md only.*
 
 ---
+
+## 4. Window Functions
+
+Window functions perform calculations across a set of table rows that are somehow related to the current row.
+
+### 4.1 Window Syntax
+```sql
+FUNCTION_NAME(args) OVER (
+  [PARTITION BY col1, col2, ...]
+  [ORDER BY colA [ASC|DESC], ...]
+  [ROWS|RANGE BETWEEN <bound> AND <bound>]
+)
+```
+
+**Supported Bounds:**
+- `UNBOUNDED PRECEDING`
+- `<n> PRECEDING`
+- `CURRENT ROW`
+- `<n> FOLLOWING`
+- `UNBOUNDED FOLLOWING`
+
+### 4.2 Dedicated Window Functions
+| Function | Help File | Description |
+| :--- | :--- | :--- |
+| `ROW_NUMBER()` | [ROW_NUMBER.md] | Sequential row number within partition |
+| `RANK()` | [RANK.md] | Rank with gaps for ties |
+| `DENSE_RANK()` | [DENSE_RANK.md] | Rank without gaps for ties |
+| `PERCENT_RANK()` | [PERCENT_RANK.md] | Relative rank (0 to 1) |
+| `CUME_DIST()` | [CUME_DIST.md] | Cumulative distribution |
+| `NTILE(buckets)` | [NTILE.md] | Divide rows into N buckets |
+| `LAG(expression, [offset], [default])` | [LAG.md] | Value from N rows before |
+| `LEAD(expression, [offset], [default])` | [LEAD.md] | Value from N rows after |
+| `FIRST_VALUE(expression)` | [FIRST_VALUE.md] | First value in window frame |
+| `LAST_VALUE(expression)` | [LAST_VALUE.md] | Last value in window frame |
+| `NTH_VALUE(expression, nth)` | [NTH_VALUE.md] | Nth value in window frame |
+| `PERCENTILE_CONT(fraction)` | [PERCENTILE_CONT.md] | Continuous percentile |
+| `PERCENTILE_DISC(fraction)` | [PERCENTILE_DISC.md] | Discrete percentile |
 
 ## 4. Window Functions
 
