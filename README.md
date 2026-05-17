@@ -10,12 +10,6 @@ A high-performance ETL engine and scripting language that blends **Standard SQL*
 
 ## See It In Action
 
-### Terminal IDE (`--ui edit`)
-
-![TUI demo](Docs/assets/tui-demo.gif)
-
-*Syntax highlighting · autocomplete · live results grid · compare mode · profiling dashboard*
-
 ### VS Code Extension & Notebooks
 
 ![VS Code demo](Docs/assets/vscode-demo.gif)
@@ -27,6 +21,12 @@ A high-performance ETL engine and scripting language that blends **Standard SQL*
 ![Report demo](Docs/assets/report-demo.gif)
 
 *Interactive charts · drill-down navigation · live parameter slicers · multi-page navigation · PDF export*
+
+### Terminal IDE (`--ui edit`)
+
+![TUI demo](Docs/assets/tui-demo.gif)
+
+*Syntax highlighting · autocomplete · live results grid · compare mode · profiling dashboard*
 
 ---
 
