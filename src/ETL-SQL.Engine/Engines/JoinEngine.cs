@@ -45,6 +45,11 @@ namespace ETL_SQL.Engine.Engines
             var wherePredicates = new List<Expression>();
             if (stmt.WhereClause != null) FlattenAnds(stmt.WhereClause, wherePredicates);
 
+            // Pre-filter the FROM table before any joins so single-table predicates (e.g., 765=b4)
+            // never participate in a Cartesian product at all.
+            if (allBufferedRows.Count > 0 && wherePredicates.Count > 0)
+                allBufferedRows = await ApplyResolvablePredicates(allBufferedRows, wherePredicates, "INNER JOIN");
+
             foreach (var join in joins)
             {
                 if (join.IsApply)
@@ -57,6 +62,12 @@ namespace ETL_SQL.Engine.Engines
 
                 _logger.Debug("Joining table {TableName}{Alias} ({JoinType})", join.Table.TableName, join.Table.Alias != null ? $" AS {join.Table.Alias}" : "", join.JoinType);
                 var joinRows = await GetJoinRows(join);
+
+                // Pre-filter the join table using predicates that reference ONLY its own columns —
+                // none of the already-accumulated left columns. Eliminates single-table predicates
+                // (e.g., d6 IN (...)) before any Cartesian product is formed.
+                if (joinRows.Count > 0 && wherePredicates.Count > 0 && allBufferedRows.Count > 0)
+                    joinRows = await PreFilterJoinTable(joinRows, wherePredicates, BuildBareColumnSet(allBufferedRows[0]));
 
                 // For CROSS JOINs still carrying a literal-true condition, find WHERE predicates whose
                 // referenced columns are all present in the combined left+right row — and use them as
@@ -229,6 +240,48 @@ namespace ETL_SQL.Engine.Engines
             // Remove applied predicates so subsequent join steps don't re-evaluate them.
             foreach (var p in applicable) wherePredicates.Remove(p);
 
+            return filtered;
+        }
+
+        /// <summary>
+        /// Applies WHERE predicates that reference ONLY columns in the join table — none from the
+        /// already-accumulated left side. This pre-filters each join table before it participates
+        /// in any Cartesian product, preventing exponential row explosion for comma-join queries
+        /// with per-table filter predicates (e.g., IN-lists scoped to a single table).
+        /// </summary>
+        private async Task<List<Row>> PreFilterJoinTable(
+            List<Row> joinRows,
+            List<Expression> wherePredicates,
+            HashSet<string> leftBareColumns)
+        {
+            if (joinRows.Count == 0 || wherePredicates.Count == 0) return joinRows;
+
+            var joinBare = BuildBareColumnSet(joinRows[0]);
+            var applicable = new List<Expression>();
+            foreach (var p in wherePredicates)
+            {
+                var cols = p.GetSourceColumns().ToList();
+                if (cols.Count > 0
+                    && cols.All(c => joinBare.Contains(c))
+                    && !cols.Any(c => leftBareColumns.Contains(c)))
+                    applicable.Add(p);
+            }
+            if (applicable.Count == 0) return joinRows;
+
+            Expression filter = applicable.Count == 1
+                ? applicable[0]
+                : applicable.Skip(1).Aggregate(applicable[0],
+                    (acc, p) => (Expression)new BinaryExpression(acc, TokenType.AND, p));
+
+            var filtered = new List<Row>(joinRows.Count);
+            foreach (var r in joinRows)
+                if (await _context.EvaluateCondition(filter, r)) filtered.Add(r);
+
+            if (filtered.Count < joinRows.Count)
+                _logger.Debug("[JOIN] Pre-join table filter: {Predicates} predicate(s) reduced {Before} → {After} rows",
+                    applicable.Count, joinRows.Count, filtered.Count);
+
+            foreach (var p in applicable) wherePredicates.Remove(p);
             return filtered;
         }
 
@@ -676,7 +729,9 @@ namespace ETL_SQL.Engine.Engines
                             return true;
                         }
                         // Unqualified identifiers: use bare column sets to determine which side each belongs to.
-                        // This handles WHERE col1 = col2 without table-qualifier prefixes.
+                        // Use bare names as hash keys — combined rows carry both unqualified and
+                        // qualified column names, so bare lookups work correctly across multi-join
+                        // accumulated rows where leftAlias is always the FROM table, not the owning table.
                         if (!lid.Name.Contains('.') && !rid.Name.Contains('.') && leftCols != null && rightCols != null)
                         {
                             bool lidInLeft = leftCols.Contains(lid.Name);
@@ -685,14 +740,14 @@ namespace ETL_SQL.Engine.Engines
                             bool ridInRight = rightCols.Contains(rid.Name);
                             if (lidInLeft && ridInRight && !lidInRight && !ridInLeft)
                             {
-                                leftKeys.Add($"{leftAlias}.{lid.Name}");
-                                rightKeys.Add($"{rightAlias}.{rid.Name}");
+                                leftKeys.Add(lid.Name);
+                                rightKeys.Add(rid.Name);
                                 return true;
                             }
                             if (ridInLeft && lidInRight && !ridInRight && !lidInLeft)
                             {
-                                leftKeys.Add($"{leftAlias}.{rid.Name}");
-                                rightKeys.Add($"{rightAlias}.{lid.Name}");
+                                leftKeys.Add(rid.Name);
+                                rightKeys.Add(lid.Name);
                                 return true;
                             }
                         }
