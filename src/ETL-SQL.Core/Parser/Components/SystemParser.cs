@@ -484,7 +484,25 @@ namespace ETL_SQL.Core.Parser.Components
             // Portal admin SHOW commands
             else if (Match(TokenType.USER) || MatchIdentifier("USERS"))
                 stmt = new ShowPortalUsersStatement();
-            else if (Match(TokenType.REPORT) || MatchIdentifier("REPORTS"))
+            else if (Match(TokenType.REPORT))
+            {
+                if (Match(TokenType.HISTORY))
+                {
+                    var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal after SHOW REPORT HISTORY").Value;
+                    stmt = new ShowPortalReportHistoryStatement(reportName);
+                }
+                else if (MatchIdentifier("DEPENDENCIES"))
+                {
+                    var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal after SHOW REPORT DEPENDENCIES").Value;
+                    stmt = new ShowPortalReportDependenciesStatement(reportName);
+                }
+                else
+                {
+                    var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal after SHOW REPORT").Value;
+                    stmt = new ShowPortalReportStatement(reportName);
+                }
+            }
+            else if (MatchIdentifier("REPORTS"))
             {
                 string? folder = null;
                 if (Match(TokenType.IN))
@@ -495,6 +513,68 @@ namespace ETL_SQL.Core.Parser.Components
                         : ConsumeIdentifier("Expected folder path").Value;
                 }
                 stmt = new ShowPortalReportsStatement(folder);
+            }
+            else if (Match(TokenType.FAVORITE) || MatchIdentifier("FAVORITES"))
+            {
+                string? username = null;
+                if (Match(TokenType.FOR))
+                {
+                    Consume(TokenType.USER, "Expected USER after SHOW FAVORITES FOR");
+                    username = Consume(TokenType.STRING_LITERAL, "Expected username string literal").Value;
+                }
+                stmt = new ShowPortalFavoritesStatement(username, ParseOptionalLimit());
+            }
+            else if (Match(TokenType.SHARE))
+            {
+                if (!Match(TokenType.LINK) && !MatchIdentifier("LINKS"))
+                    throw new SyntaxException("Expected LINK or LINKS after SHOW SHARE", _parser.Current.Line, _parser.Current.Column);
+                Consume(TokenType.FOR, "Expected FOR after SHOW SHARE LINK");
+                Consume(TokenType.REPORT, "Expected REPORT");
+                var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal").Value;
+                stmt = new ShowPortalShareLinksStatement(reportName);
+            }
+            else if (MatchIdentifier("RECENT"))
+            {
+                ConsumeIdentifierValue("REPORTS", "Expected REPORTS after SHOW RECENT");
+                stmt = new ShowPortalRecentReportsStatement(ParseOptionalLimit());
+            }
+            else if (Match(TokenType.CATALOG))
+            {
+                Consume(TokenType.SEARCH, "Expected SEARCH after SHOW CATALOG");
+                var query = Consume(TokenType.STRING_LITERAL, "Expected catalog search string literal").Value;
+                stmt = new SearchPortalCatalogStatement(query, ParseOptionalLimit());
+            }
+            else if (Match(TokenType.EFFECTIVE))
+            {
+                Consume(TokenType.PERMISSIONS, "Expected PERMISSIONS after SHOW EFFECTIVE");
+                Consume(TokenType.FOR, "Expected FOR after SHOW EFFECTIVE PERMISSIONS");
+                string targetType;
+                if (Match(TokenType.USER))
+                    targetType = "USER";
+                else if (Match(TokenType.REPORT))
+                    targetType = "REPORT";
+                else if (Match(TokenType.FOLDER))
+                    targetType = "FOLDER";
+                else
+                    throw new SyntaxException("Expected USER, REPORT, or FOLDER after SHOW EFFECTIVE PERMISSIONS FOR", _parser.Current.Line, _parser.Current.Column);
+
+                var target = Consume(TokenType.STRING_LITERAL, "Expected target string literal").Value;
+                stmt = new ShowEffectivePortalPermissionsStatement(targetType, target);
+            }
+            else if (Match(TokenType.PORTAL))
+            {
+                if (Match(TokenType.USAGE))
+                {
+                    Match(TokenType.METRICS);
+                    stmt = new ShowPortalUsageMetricsStatement(ParseOptionalDays());
+                }
+                else
+                    throw new SyntaxException("Expected USAGE after SHOW PORTAL", _parser.Current.Line, _parser.Current.Column);
+            }
+            else if (Match(TokenType.USAGE))
+            {
+                Match(TokenType.METRICS);
+                stmt = new ShowPortalUsageMetricsStatement(ParseOptionalDays());
             }
             else if (Match(TokenType.ACTIVE))
             {
@@ -532,6 +612,16 @@ namespace ETL_SQL.Core.Parser.Components
                     ShowSafeZonesStatement ssz   => ssz with { IntoTable = tempTable },
                     ShowSessionsStatement sess   => sess with { IntoTable = tempTable },
                     ShowDatasetsStatement sds    => sds with { IntoTable = tempTable },
+                    ShowPortalReportsStatement sprs => sprs with { IntoTable = tempTable },
+                    ShowPortalReportStatement spr => spr with { IntoTable = tempTable },
+                    ShowPortalReportHistoryStatement sprh => sprh with { IntoTable = tempTable },
+                    ShowPortalReportDependenciesStatement sprd => sprd with { IntoTable = tempTable },
+                    ShowPortalShareLinksStatement spsl => spsl with { IntoTable = tempTable },
+                    ShowPortalFavoritesStatement spf => spf with { IntoTable = tempTable },
+                    ShowPortalRecentReportsStatement sprr => sprr with { IntoTable = tempTable },
+                    SearchPortalCatalogStatement spc => spc with { IntoTable = tempTable },
+                    ShowEffectivePortalPermissionsStatement sepp => sepp with { IntoTable = tempTable },
+                    ShowPortalUsageMetricsStatement spum => spum with { IntoTable = tempTable },
                     LineageStatement lin         => lin with { IntoTable = tempTable },
                     _                            => stmt
                 };
@@ -539,6 +629,52 @@ namespace ETL_SQL.Core.Parser.Components
 
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return stmt with { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        private int? ParseOptionalLimit()
+        {
+            if (!Match(TokenType.LIMIT))
+                return null;
+
+            return ParsePositiveInt("Expected positive integer after LIMIT");
+        }
+
+        private int? ParseOptionalDays()
+        {
+            if (!Match(TokenType.FOR))
+                return null;
+
+            int days = ParsePositiveInt("Expected positive integer after FOR");
+            if (Match(TokenType.DAY))
+                return days;
+            if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                _parser.Current.Value.Equals("DAYS", StringComparison.OrdinalIgnoreCase))
+            {
+                Advance();
+                return days;
+            }
+
+            throw new SyntaxException("Expected DAY or DAYS after usage metrics range", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private int ParsePositiveInt(string message)
+        {
+            var tok = Consume(TokenType.NUMBER, message);
+            if (!int.TryParse(tok.Value, out int value) || value <= 0)
+                throw new SyntaxException(message, tok.Line, tok.Column);
+            return value;
+        }
+
+        private void ConsumeIdentifierValue(string value, string message)
+        {
+            var tok = _parser.Current;
+            if (tok.Value.Equals(value, StringComparison.OrdinalIgnoreCase))
+            {
+                Advance();
+                return;
+            }
+
+            throw new SyntaxException(message, tok.Line, tok.Column);
         }
 
         private LineageStatement ParseShowLineage(Token startToken)

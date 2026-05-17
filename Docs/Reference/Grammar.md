@@ -2336,6 +2336,9 @@ EXECUTE portal BEGIN
 
     SHOW PERMISSIONS ON FOLDER '/Finance'     [INTO #perms];
     SHOW PERMISSIONS FOR GROUP 'Finance'      [INTO #perms];
+    SHOW EFFECTIVE PERMISSIONS FOR USER 'john.doe' [INTO #effective];
+    SHOW EFFECTIVE PERMISSIONS FOR REPORT 'Monthly Sales' [INTO #effective];
+    SHOW EFFECTIVE PERMISSIONS FOR FOLDER '/Finance' [INTO #effective];
 
     -- =========================================================
     -- REPORT CATALOG
@@ -2369,9 +2372,26 @@ EXECUTE portal BEGIN
     DROP REPORT 'Monthly Sales';
     DROP REPORT 'Monthly Sales' CASCADE;   -- also removes snapshots and subscriptions
 
+    VALIDATE REPORT SCRIPT '/reports/finance/monthly_sales.rptsql' [INTO #validation];
+
+    FAVORITE REPORT 'Monthly Sales';
+    FAVORITE REPORT 'Monthly Sales' FOR USER 'john.doe';
+    UNFAVORITE REPORT 'Monthly Sales';
+    UNFAVORITE REPORT 'Monthly Sales' FOR USER 'john.doe';
+
+    CREATE SHARE LINK FOR REPORT 'Monthly Sales' [EXPIRES '2026-12-31T23:59:59Z'] [INTO #share];
+    SHOW SHARE LINKS FOR REPORT 'Monthly Sales' [INTO #shares];
+    REVOKE SHARE LINK 'share-token';
+
     SHOW REPORTS                         [INTO #reports];
     SHOW REPORTS IN FOLDER '/Finance'    [INTO #reports];
     SHOW REPORT  'Monthly Sales'         [INTO #detail];
+    SHOW REPORT HISTORY 'Monthly Sales'  [INTO #history];
+    SHOW REPORT DEPENDENCIES 'Monthly Sales' [INTO #deps];
+    SHOW FAVORITES                       [INTO #favorites];
+    SHOW FAVORITES FOR USER 'john.doe' LIMIT 50 [INTO #favorites];
+    SHOW RECENT REPORTS LIMIT 20         [INTO #recent];
+    SHOW CATALOG SEARCH 'sales' LIMIT 25 [INTO #catalog];
 
     -- =========================================================
     -- SNAPSHOTS
@@ -2463,6 +2483,7 @@ EXECUTE portal BEGIN
     REVOKE TOKENS FOR USER 'dr.allen';   -- invalidate all JWT refresh tokens
 
     SHOW ACTIVE SESSIONS [INTO #sessions];
+    SHOW PORTAL USAGE METRICS FOR 30 DAYS [INTO #usage];
 
     -- =========================================================
     -- SERVICE CONTROL

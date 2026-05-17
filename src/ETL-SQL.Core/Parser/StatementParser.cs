@@ -85,6 +85,9 @@ namespace ETL_SQL.Core.Parser
             _dispatchMap[TokenType.GRANT]        = () => { var t = _parser.Previous; return PortalParser.ParseGrant(t); };
             _dispatchMap[TokenType.REVOKE]       = () => { var t = _parser.Previous; return PortalParser.ParseRevoke(t); };
             _dispatchMap[TokenType.PUBLISH]      = () => { var t = _parser.Previous; return PortalParser.ParsePublishReport(t); };
+            _dispatchMap[TokenType.FAVORITE]     = () => { var t = _parser.Previous; return PortalParser.ParseFavoriteReport(t, favorite: true); };
+            _dispatchMap[TokenType.UNFAVORITE]   = () => { var t = _parser.Previous; return PortalParser.ParseFavoriteReport(t, favorite: false); };
+            _dispatchMap[TokenType.VALIDATE]     = () => { var t = _parser.Previous; return PortalParser.ParseValidateReport(t); };
             _dispatchMap[TokenType.DISCONNECT]   = () => { var t = _parser.Previous; return PortalParser.ParseDisconnectUser(t); };
             _dispatchMap[TokenType.RESTART]      = () => { var t = _parser.Previous; return PortalParser.ParseRestartPortal(t); };
             _dispatchMap[TokenType.SHUTDOWN]     = () => { var t = _parser.Previous; return PortalParser.ParseShutdownPortal(t); };

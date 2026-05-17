@@ -2107,6 +2107,14 @@ namespace ETL_SQL.Core
 
     public record DropPortalReportStatement(string ReportName, bool Cascade) : Statement;
 
+    public record FavoritePortalReportStatement(string ReportName, string? Username) : Statement;
+
+    public record UnfavoritePortalReportStatement(string ReportName, string? Username) : Statement;
+
+    public record CreatePortalShareLinkStatement(string ReportName, string? ExpiresAt, string? IntoTable = null) : Statement;
+
+    public record RevokePortalShareLinkStatement(string Token) : Statement;
+
     public record CreatePortalRefreshJobStatement(
         string ReportName, string Schedule, string OrchestratorAlias) : Statement;
 
@@ -2158,7 +2166,27 @@ namespace ETL_SQL.Core
 
     public record ShowPortalUsersStatement : Statement;
 
-    public record ShowPortalReportsStatement(string? FolderPath) : Statement;
+    public record ShowPortalReportsStatement(string? FolderPath, string? IntoTable = null) : Statement;
+
+    public record ShowPortalReportStatement(string ReportName, string? IntoTable = null) : Statement;
+
+    public record ShowPortalReportHistoryStatement(string ReportName, string? IntoTable = null) : Statement;
+
+    public record ShowPortalReportDependenciesStatement(string ReportName, string? IntoTable = null) : Statement;
+
+    public record ShowPortalShareLinksStatement(string ReportName, string? IntoTable = null) : Statement;
+
+    public record ShowPortalFavoritesStatement(string? Username, int? Limit, string? IntoTable = null) : Statement;
+
+    public record ShowPortalRecentReportsStatement(int? Limit, string? IntoTable = null) : Statement;
+
+    public record SearchPortalCatalogStatement(string Query, int? Limit, string? IntoTable = null) : Statement;
+
+    public record ShowEffectivePortalPermissionsStatement(string TargetType, string Target, string? IntoTable = null) : Statement;
+
+    public record ShowPortalUsageMetricsStatement(int? Days, string? IntoTable = null) : Statement;
 
     public record ShowActivePortalSessionsStatement : Statement;
+
+    public record ValidatePortalReportStatement(string ScriptPath, string? IntoTable = null) : Statement;
 }

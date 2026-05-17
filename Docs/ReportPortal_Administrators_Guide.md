@@ -263,13 +263,21 @@ At every execution (snapshot build), the portal computes a fresh hash of the fil
 
 > **Note:** the hash is advisory — execution is not blocked by a mismatch in the Report Portal (unlike the Orchestrator's `BLOCK` policy). Use `scriptChanged = true` as a signal to re-publish the report after intentional changes or to investigate unexpected modifications.
 
-Use `GET /api/reports/{id}/history` to inspect the lifecycle metadata behind the History button in the viewer. The response includes the pinned publish hash, the current script hash when the script is still available under `ScriptRootPath`, a `scriptChanged` flag, snapshot build rows with runtime hashes, and report audit entries such as publish, update, favorite, and delete activity.
+Use `SHOW REPORT HISTORY 'Report Name'` or `GET /api/reports/{id}/history` to inspect the lifecycle metadata behind the History button in the viewer. The response includes the pinned publish hash, the current script hash when the script is still available under `ScriptRootPath`, a `scriptChanged` flag, snapshot build rows with runtime hashes, and report audit entries such as publish, update, favorite, and delete activity.
+
+```sql
+SHOW REPORT HISTORY 'Monthly Sales' INTO #report_history;
+```
 
 ### 6.2 Updating a Report
 
 Edit the `.rptsql` file on disk. The portal detects the modification timestamp and marks the report as **stale** until a new snapshot is built. The snapshot is not rebuilt automatically — a user with Execute permission (or an Orchestrator dataset job) must trigger a refresh. If you intentionally changed the script, re-publish the report (via `PUT /api/reports/{id}` or by deleting and re-publishing) to reset the pinned hash.
 
-Before publishing or replacing a report script, the portal validates that the file exists under `ScriptRootPath`, has a `.rptsql` extension, and parses successfully. Use `POST /api/reports/validate` with `{ "scriptPath": "sales/daily.rptsql" }` to run the same validation used by `POST /api/reports` and `PUT /api/reports/{id}`. The response includes the script hash, last modified time, script metadata tags, input parameters, and parse errors when validation fails. The Admin publish form runs this validation before saving.
+Before publishing or replacing a report script, the portal validates that the file exists under `ScriptRootPath`, has a `.rptsql` extension, and parses successfully. Use `VALIDATE REPORT SCRIPT 'sales/daily.rptsql'` or `POST /api/reports/validate` with `{ "scriptPath": "sales/daily.rptsql" }` to run the same validation used by `POST /api/reports` and `PUT /api/reports/{id}`. The response includes the script hash, last modified time, script metadata tags, input parameters, and parse errors when validation fails. The Admin publish form runs this validation before saving.
+
+```sql
+VALIDATE REPORT SCRIPT 'sales/daily.rptsql' INTO #validation;
+```
 
 ### 6.3 Deleting a Report
 
@@ -320,27 +328,73 @@ Admins can inspect resolved portal access without mentally joining users, groups
 
 Reports inherit folder permissions. If a user belongs to multiple groups, the highest permission wins (`Read < Execute < Manage`) and the response lists the group or groups that supplied that winning level.
 
+```sql
+SHOW EFFECTIVE PERMISSIONS FOR USER 'john.doe' INTO #effective;
+SHOW EFFECTIVE PERMISSIONS FOR REPORT 'Monthly Sales' INTO #effective;
+SHOW EFFECTIVE PERMISSIONS FOR FOLDER '/Finance' INTO #effective;
+```
+
 ### 6.6 Usage Metrics
 
-Admins can inspect operational usage with `GET /api/admin/metrics/usage?days=30`. The response includes total report views, unique viewers, reports viewed, refresh failure count, average refresh duration, subscription delivery failures, and per-report rows with view counts, unique viewers, last view time, refresh status/error/duration, and subscription failure counts.
+Admins can inspect operational usage with `SHOW PORTAL USAGE METRICS FOR 30 DAYS` or `GET /api/admin/metrics/usage?days=30`. The response includes total report views, unique viewers, reports viewed, refresh failure count, average refresh duration, subscription delivery failures, and per-report rows with view counts, unique viewers, last view time, refresh status/error/duration, and subscription failure counts.
+
+```sql
+SHOW PORTAL USAGE METRICS FOR 30 DAYS INTO #usage;
+```
 
 ### 6.7 Report Dependencies
 
-Use `GET /api/reports/{id}/dependencies` to inspect the dependency view available from the report viewer. The response is permission-aware and includes the report identity, latest snapshot metadata, datasets found in the snapshot manifest, report-owned registered datasets, dataset refresh jobs, and source table references that can be parsed from the report script or dataset source queries.
+Use `SHOW REPORT DEPENDENCIES 'Report Name'` or `GET /api/reports/{id}/dependencies` to inspect the dependency view available from the report viewer. The response is permission-aware and includes the report identity, latest snapshot metadata, datasets found in the snapshot manifest, report-owned registered datasets, dataset refresh jobs, and source table references that can be parsed from the report script or dataset source queries.
+
+```sql
+SHOW REPORT DEPENDENCIES 'Monthly Sales' INTO #dependencies;
+```
 
 Source connection values are derived from two-part object names such as `sales.Orders`: `sales` is reported as the connection and `Orders` as the object. Raw column-level lineage remains available through engine lineage commands such as `SHOW LINEAGE`; the portal dependency endpoint only reports lineage details that are already present in portal metadata or parseable script text.
 
 ### 6.8 Catalog Search
 
-Use `GET /api/catalog/search?q=<term>` to search visible folders and reports. Search is permission-aware: admins search the full catalog, while other users only see folders granted through group ACLs and reports inside those folders.
+Use `SHOW CATALOG SEARCH '<term>'` or `GET /api/catalog/search?q=<term>` to search visible folders and reports. Search is permission-aware: admins search the full catalog, while other users only see folders granted through group ACLs and reports inside those folders.
 
 The search matches folder name/path and report name, description, owner, contact, tags, category, domain, steward, and certification fields. Results include a `type` of `Folder` or `Report`, the catalog `path`, report metadata, and status fields such as `snapshotBuiltAt`, `lastViewedAt`, `lastRefreshStatus`, `lastRefreshError`, and `lastRefreshDurationMs` where applicable.
 
-Use `GET /api/catalog/recent?limit=20` to list the caller's recently viewed reports. This endpoint is also permission-aware and uses the same catalog result shape as search, including snapshot, stale, script-changed, and refresh status fields. A report enters the recent list when the caller opens a snapshot through `GET /api/reports/{id}/snapshot`.
+Use `SHOW RECENT REPORTS LIMIT 20` or `GET /api/catalog/recent?limit=20` to list the caller's recently viewed reports. This endpoint is also permission-aware and uses the same catalog result shape as search, including snapshot, stale, script-changed, and refresh status fields. A report enters the recent list when the caller opens a snapshot through `GET /api/reports/{id}/snapshot`.
 
-Use `POST /api/reports/{id}/favorite` and `DELETE /api/reports/{id}/favorite` to manage a user's favorite reports. Use `GET /api/catalog/favorites?limit=50` to list the caller's favorite reports. Favorite catalog results use the same shape as search and include `isFavorite = true`.
+Use `FAVORITE REPORT`, `UNFAVORITE REPORT`, `SHOW FAVORITES`, or the REST endpoints to manage and list favorite reports. Favorite catalog results use the same shape as search and include `isFavorite = true`.
 
-### 6.9 Environment Promotion Pattern
+```sql
+SHOW CATALOG SEARCH 'sales' LIMIT 25 INTO #catalog;
+SHOW RECENT REPORTS LIMIT 20 INTO #recent;
+
+FAVORITE REPORT 'Monthly Sales';
+FAVORITE REPORT 'Monthly Sales' FOR USER 'john.doe';
+UNFAVORITE REPORT 'Monthly Sales' FOR USER 'john.doe';
+SHOW FAVORITES FOR USER 'john.doe' LIMIT 50 INTO #favorites;
+```
+
+### 6.9 Share Links
+
+Share links are shortcuts, not permission bypasses. Resolving a share link still requires an authenticated portal user with access to the report's folder. Users without folder permission receive `403 Forbidden`, and revoked or expired links return `404 Not Found`.
+
+Use `CREATE SHARE LINK FOR REPORT`, `SHOW SHARE LINKS`, and `REVOKE SHARE LINK` for script-first administration, or the backing REST endpoints:
+
+| Endpoint | Purpose |
+| :--- | :--- |
+| `POST /api/reports/{id}/share-links` | Create a share link for a report the caller can execute. |
+| `GET /api/reports/{id}/share-links` | List share links for a report the caller can manage. |
+| `DELETE /api/reports/{id}/share-links/{token}` | Revoke a share link. |
+| `GET /api/share/{token}` | Resolve a share link after checking the caller's report permission. |
+
+```sql
+CREATE SHARE LINK FOR REPORT 'Monthly Sales'
+    EXPIRES '2026-12-31T23:59:59Z'
+    INTO #share;
+
+SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;
+REVOKE SHARE LINK 'share-token';
+```
+
+### 6.10 Environment Promotion Pattern
 
 Use ETL-SQL environment sets as the deployment boundary. Do not create a separate portal deployment language for dev/test/prod. Scripts should define or load the environment values first, activate the target set, then use the same portal admin commands for folders, grants, publishing, subscriptions, and refresh jobs.
 

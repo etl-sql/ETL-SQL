@@ -208,7 +208,18 @@ namespace ETL_SQL.Core.Parser
             dict["SHUTDOWN"]     = TokenType.SHUTDOWN;
             dict["PORTAL"]       = TokenType.PORTAL;
             dict["REPORTPORTAL"] = TokenType.REPORTPORTAL;
-            
+            dict["FAVORITE"]     = TokenType.FAVORITE;
+            dict["UNFAVORITE"]   = TokenType.UNFAVORITE;
+            dict["CATALOG"]      = TokenType.CATALOG;
+            dict["PERMISSIONS"]  = TokenType.PERMISSIONS;
+            dict["EFFECTIVE"]    = TokenType.EFFECTIVE;
+            dict["USAGE"]        = TokenType.USAGE;
+            dict["METRICS"]      = TokenType.METRICS;
+            dict["VALIDATE"]     = TokenType.VALIDATE;
+            dict["SHARE"]        = TokenType.SHARE;
+            dict["LINK"]         = TokenType.LINK;
+            dict["EXPIRES"]      = TokenType.EXPIRES;
+             
 
             return dict;
         }

@@ -189,6 +189,15 @@ namespace ETL_SQL.Core.Parser.Components
         // REVOKE VIEWER|EDITOR|OWNER ON DATASET 'name' IN FOLDER '/path' FROM GROUP 'name'
         public Statement ParseRevoke(Token start)
         {
+            if (Match(TokenType.SHARE))
+            {
+                Consume(TokenType.LINK, "Expected LINK after REVOKE SHARE");
+                string token = ConsumeStringLiteral("Expected share-link token string literal");
+                Match(TokenType.SEMICOLON);
+                return new RevokePortalShareLinkStatement(token)
+                { Line = start.Line, Column = start.Column };
+            }
+
             var permissionToken = _parser.Advance();
             Consume(TokenType.ON, "Expected ON");
 
@@ -324,6 +333,59 @@ namespace ETL_SQL.Core.Parser.Components
             string name = ConsumeStringLiteral("Expected report name string literal");
             bool cascade = MatchIdentifier("CASCADE");
             return new DropPortalReportStatement(name, cascade)
+            { Line = start.Line, Column = start.Column };
+        }
+
+        // FAVORITE REPORT 'name' [FOR USER 'username']
+        // UNFAVORITE REPORT 'name' [FOR USER 'username']
+        public Statement ParseFavoriteReport(Token start, bool favorite)
+        {
+            Consume(TokenType.REPORT, "Expected REPORT");
+            string report = ConsumeStringLiteral("Expected report name string literal");
+            string? username = null;
+            if (Match(TokenType.FOR))
+            {
+                Consume(TokenType.USER, "Expected USER");
+                username = ConsumeStringLiteral("Expected username string literal");
+            }
+
+            Match(TokenType.SEMICOLON);
+            Statement stmt = favorite
+                ? new FavoritePortalReportStatement(report, username)
+                : new UnfavoritePortalReportStatement(report, username);
+            return stmt with { Line = start.Line, Column = start.Column };
+        }
+
+        // VALIDATE REPORT SCRIPT 'path' [INTO #validation]
+        public Statement ParseValidateReport(Token start)
+        {
+            Consume(TokenType.REPORT, "Expected REPORT");
+            Consume(TokenType.SCRIPT, "Expected SCRIPT");
+            string scriptPath = ConsumeStringLiteral("Expected report script path string literal");
+            string? intoTable = null;
+            if (Match(TokenType.INTO))
+                intoTable = ConsumeTempTableName("VALIDATE REPORT SCRIPT ... INTO target must be a temporary table starting with '#'");
+            Match(TokenType.SEMICOLON);
+            return new ValidatePortalReportStatement(scriptPath, intoTable)
+            { Line = start.Line, Column = start.Column };
+        }
+
+        // CREATE SHARE LINK FOR REPORT 'name' [EXPIRES '2026-12-31T23:59:59Z'] [INTO #share]
+        public Statement ParseCreateShareLink(Token start)
+        {
+            Consume(TokenType.LINK, "Expected LINK after CREATE SHARE");
+            Consume(TokenType.FOR, "Expected FOR");
+            Consume(TokenType.REPORT, "Expected REPORT");
+            string report = ConsumeStringLiteral("Expected report name string literal");
+            string? expiresAt = null;
+            if (Match(TokenType.EXPIRES))
+                expiresAt = ConsumeStringLiteral("Expected expiration timestamp string literal");
+            string? intoTable = null;
+            if (Match(TokenType.INTO))
+                intoTable = ConsumeTempTableName("CREATE SHARE LINK ... INTO target must be a temporary table starting with '#'");
+
+            Match(TokenType.SEMICOLON);
+            return new CreatePortalShareLinkStatement(report, expiresAt, intoTable)
             { Line = start.Line, Column = start.Column };
         }
 
@@ -553,6 +615,14 @@ namespace ETL_SQL.Core.Parser.Components
             if (_parser.Current.Type == TokenType.STRING_LITERAL)
                 return _parser.Advance().Value;
             throw new SyntaxException(message, _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private string ConsumeTempTableName(string message)
+        {
+            var tempTable = ConsumeIdentifier("Expected temporary table name after INTO").Value;
+            if (!tempTable.StartsWith("#"))
+                throw new SyntaxException(message, _parser.Previous.Line, _parser.Previous.Column);
+            return tempTable;
         }
 
         private void ConsumeIdentifierValue(string value, string message)

@@ -141,6 +141,7 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.FOLDER))     return _parent.PortalParser.ParseCreateFolder(startToken);
             if (Match(TokenType.REFRESH))    return _parent.PortalParser.ParseCreateRefreshJob(startToken);
             if (Match(TokenType.SUBSCRIPTION)) return _parent.PortalParser.ParseCreateSubscription(startToken);
+            if (Match(TokenType.SHARE))      return _parent.PortalParser.ParseCreateShareLink(startToken);
 
             throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, TEMPLATE, or THEME after CREATE", _parser.Current.Line, _parser.Current.Column);
         }

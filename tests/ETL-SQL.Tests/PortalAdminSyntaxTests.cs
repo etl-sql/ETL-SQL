@@ -132,6 +132,96 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
+        public void PortalFavorites_ParseScriptCommands()
+        {
+            var favoriteScript = TestHelpers.Parse("FAVORITE REPORT 'Monthly Sales';");
+            var favorite = Assert.IsType<FavoritePortalReportStatement>(Assert.Single(favoriteScript.Statements));
+            Assert.Equal("Monthly Sales", favorite.ReportName);
+            Assert.Null(favorite.Username);
+
+            var unfavoriteScript = TestHelpers.Parse("UNFAVORITE REPORT 'Monthly Sales' FOR USER 'chuck';");
+            var unfavorite = Assert.IsType<UnfavoritePortalReportStatement>(Assert.Single(unfavoriteScript.Statements));
+            Assert.Equal("Monthly Sales", unfavorite.ReportName);
+            Assert.Equal("chuck", unfavorite.Username);
+        }
+
+        [Fact]
+        public void PortalShowCommands_ParseHistoryDependenciesAndFavorites()
+        {
+            var historyScript = TestHelpers.Parse("SHOW REPORT HISTORY 'Monthly Sales' INTO #history;");
+            var history = Assert.IsType<ShowPortalReportHistoryStatement>(Assert.Single(historyScript.Statements));
+            Assert.Equal("Monthly Sales", history.ReportName);
+            Assert.Equal("#history", history.IntoTable);
+
+            var dependenciesScript = TestHelpers.Parse("SHOW REPORT DEPENDENCIES 'Monthly Sales' INTO #deps;");
+            var dependencies = Assert.IsType<ShowPortalReportDependenciesStatement>(Assert.Single(dependenciesScript.Statements));
+            Assert.Equal("Monthly Sales", dependencies.ReportName);
+            Assert.Equal("#deps", dependencies.IntoTable);
+
+            var favoritesScript = TestHelpers.Parse("SHOW FAVORITES FOR USER 'chuck' LIMIT 25 INTO #favorites;");
+            var favorites = Assert.IsType<ShowPortalFavoritesStatement>(Assert.Single(favoritesScript.Statements));
+            Assert.Equal("chuck", favorites.Username);
+            Assert.Equal(25, favorites.Limit);
+            Assert.Equal("#favorites", favorites.IntoTable);
+        }
+
+        [Fact]
+        public void PortalShowCommands_ParseCatalogPermissionsAndUsage()
+        {
+            var recentScript = TestHelpers.Parse("SHOW RECENT REPORTS LIMIT 10 INTO #recent;");
+            var recent = Assert.IsType<ShowPortalRecentReportsStatement>(Assert.Single(recentScript.Statements));
+            Assert.Equal(10, recent.Limit);
+            Assert.Equal("#recent", recent.IntoTable);
+
+            var searchScript = TestHelpers.Parse("SHOW CATALOG SEARCH 'sales' LIMIT 20 INTO #catalog;");
+            var search = Assert.IsType<SearchPortalCatalogStatement>(Assert.Single(searchScript.Statements));
+            Assert.Equal("sales", search.Query);
+            Assert.Equal(20, search.Limit);
+            Assert.Equal("#catalog", search.IntoTable);
+
+            var permissionsScript = TestHelpers.Parse("SHOW EFFECTIVE PERMISSIONS FOR REPORT 'Monthly Sales' INTO #perms;");
+            var permissions = Assert.IsType<ShowEffectivePortalPermissionsStatement>(Assert.Single(permissionsScript.Statements));
+            Assert.Equal("REPORT", permissions.TargetType);
+            Assert.Equal("Monthly Sales", permissions.Target);
+            Assert.Equal("#perms", permissions.IntoTable);
+
+            var usageScript = TestHelpers.Parse("SHOW PORTAL USAGE METRICS FOR 30 DAYS INTO #usage;");
+            var usage = Assert.IsType<ShowPortalUsageMetricsStatement>(Assert.Single(usageScript.Statements));
+            Assert.Equal(30, usage.Days);
+            Assert.Equal("#usage", usage.IntoTable);
+        }
+
+        [Fact]
+        public void ValidateReportScript_ParsesIntoCapture()
+        {
+            var script = TestHelpers.Parse("VALIDATE REPORT SCRIPT 'reports/monthly_sales.rptsql' INTO #validation;");
+            var validate = Assert.IsType<ValidatePortalReportStatement>(Assert.Single(script.Statements));
+
+            Assert.Equal("reports/monthly_sales.rptsql", validate.ScriptPath);
+            Assert.Equal("#validation", validate.IntoTable);
+        }
+
+        [Fact]
+        public void PortalShareLinks_ParseCreateShowAndRevoke()
+        {
+            var createScript = TestHelpers.Parse(
+                "CREATE SHARE LINK FOR REPORT 'Monthly Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #share;");
+            var create = Assert.IsType<CreatePortalShareLinkStatement>(Assert.Single(createScript.Statements));
+            Assert.Equal("Monthly Sales", create.ReportName);
+            Assert.Equal("2026-12-31T23:59:59Z", create.ExpiresAt);
+            Assert.Equal("#share", create.IntoTable);
+
+            var showScript = TestHelpers.Parse("SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;");
+            var show = Assert.IsType<ShowPortalShareLinksStatement>(Assert.Single(showScript.Statements));
+            Assert.Equal("Monthly Sales", show.ReportName);
+            Assert.Equal("#shares", show.IntoTable);
+
+            var revokeScript = TestHelpers.Parse("REVOKE SHARE LINK 'abc123';");
+            var revoke = Assert.IsType<RevokePortalShareLinkStatement>(Assert.Single(revokeScript.Statements));
+            Assert.Equal("abc123", revoke.Token);
+        }
+
+        [Fact]
         public void PortalPromotionPattern_ParsesSetsPublishAlterGrantsAndRefresh()
         {
             var script = TestHelpers.Parse(@"
