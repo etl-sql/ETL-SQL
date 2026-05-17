@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("smoke", "fast", "engine", "portal", "integration", "perf", "full", "benchmarks")]
+    [ValidateSet("smoke", "fast", "engine", "portal", "integration", "perf", "full", "benchmarks", "slt")]
     [string]$Lane = "fast",
 
     [string]$Configuration = "Debug",
@@ -81,6 +81,16 @@ switch ($Lane) {
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
         Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"
         Invoke-DotNetTest "tests\ETL-SQL.PerfTests\ETL-SQL.PerfTests.csproj"
+    }
+    "slt" {
+        $previousRunSlt = $env:ETL_SQL_RUN_SLT
+        try {
+            $env:ETL_SQL_RUN_SLT = "1"
+            Invoke-DotNetTest "tests\ETL-SQL.SqlLogicTests\ETL-SQL.SqlLogicTests.csproj" "Category=SLT"
+        }
+        finally {
+            $env:ETL_SQL_RUN_SLT = $previousRunSlt
+        }
     }
     "benchmarks" {
         $args = @(

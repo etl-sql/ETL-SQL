@@ -31,6 +31,7 @@ ETL-SQL's test suite protects a broad product surface: parser and AST behavior, 
 | `tests\ETL-SQL.LanguageServer.Tests` | LSP metadata and smoke checks. | Included in Fast and Full. |
 | `tests\ETL-SQL.PerfTests` | xUnit performance tests. | Included only in Perf and Full. |
 | `tests\ETL-SQL.Benchmarks` | BenchmarkDotNet executable. | Run with the Benchmarks lane, not `dotnet test`. |
+| `tests\ETL-SQL.SqlLogicTests` | SQL Logic Test corpus runner (`SltTests`). | Excluded from all standard lanes; run explicitly with `Category=SLT`. |
 | `tests\ETL-SQL.LintTests` | Command-line lint verification program. | Treat as a tool/program until it is converted to xUnit or moved out of `tests`. |
 
 ## Trait Conventions
@@ -45,6 +46,7 @@ Use `Category` traits for lane routing:
 | `Smoke.Portal` | Small portal publish/execute/snapshot checks. |
 | `Integration` | Tests that should not be part of the default fast lane. |
 | `Performance` | Tests with performance timing/scale expectations. |
+| `SLT` | SQL Logic Test corpus tests — slow by nature, excluded from all standard lanes. Run manually with `--filter "Category=SLT"`. |
 
 New broad layer traits can be added later, but avoid mass-tagging until each folder has been audited. The first rule is that smoke, integration, and performance labels must stay accurate.
 
@@ -60,7 +62,8 @@ Nightly or release CI should add:
 
 1. Integration lane.
 2. Perf lane.
-3. Benchmarks when investigating performance trends.
+3. SLT lane (`--filter "Category=SLT"`) for full SQL correctness sweep — expect 15+ minutes.
+4. Benchmarks when investigating performance trends.
 
 ## Cleanup Backlog
 

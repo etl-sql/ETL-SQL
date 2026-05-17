@@ -14,9 +14,9 @@ namespace ETL_SQL.Core.Data
         {
             ["INT"] = v => Math.Truncate(Convert.ToDecimal(v)),
             ["INTEGER"] = v => Math.Truncate(Convert.ToDecimal(v)),
-            ["DECIMAL"] = v => Convert.ToDecimal(v),
+            ["DECIMAL"] = v => { var d = Convert.ToDecimal(v); return ((decimal.GetBits(d)[3] >> 16) & 0x7F) == 0 ? d * 1.0m : d; },
             ["MONEY"] = v => Convert.ToDecimal(v),
-            ["NUMERIC"] = v => Convert.ToDecimal(v),
+            ["NUMERIC"] = v => { var d = Convert.ToDecimal(v); return ((decimal.GetBits(d)[3] >> 16) & 0x7F) == 0 ? d * 1.0m : d; },
             ["FLOAT"] = v => Convert.ToDouble(v),
             ["DOUBLE"] = v => Convert.ToDouble(v),
             ["BIT"] = v => Convert.ToBoolean(v),

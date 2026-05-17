@@ -1,10 +1,10 @@
 -- TUI Report Preview Test Script
 -- Use Alt+R in the TUI IDE to view this graphical report, 
--- or run 'etl-sql-report print samples/tui_test_report.rptsql' from the CLI.
+-- or run 'etl-sql-report print samples/08_Reporting/tui_test_report.rptsql' from the CLI.
 
 CREATE CONNECTION db ON MOCKDB();
 
--- 1. Prepare data for the Bar Chart
+-- 1. Prepare data for standard and advanced charts
 CREATE DATASET &SalesSummary AS (
     SELECT 'Electronics' as Category, 45000.0 as Amount
     UNION ALL SELECT 'Furniture', 32000.0
@@ -13,7 +13,6 @@ CREATE DATASET &SalesSummary AS (
     UNION ALL SELECT 'Books', 12000.0
 );
 
--- 2. Prepare data for the Table
 CREATE DATASET &RecentOrders AS (
     SELECT 101 as ID, '2026-05-01' as Date, 'West' as Region, 1200 as Total
     UNION ALL SELECT 102, '2026-05-01', 'East', 850
@@ -21,7 +20,6 @@ CREATE DATASET &RecentOrders AS (
     UNION ALL SELECT 104, '2026-05-01', 'South', 540
 );
 
--- 2.5 Prepare data for specialized visuals
 CREATE DATASET &BoxPlotData AS (
     SELECT 'Web Server' as App, 10 as Min, 45 as Q1, 60 as Med, 120 as Q3, 250 as Max
     UNION ALL SELECT 'DB Server', 5, 20, 35, 50, 90
@@ -35,7 +33,6 @@ CREATE DATASET &WaterfallData AS (
     UNION ALL SELECT 'Total', 1300
 );
 
--- 2.6 Prepare data for high-res visuals
 CREATE DATASET &LineTrendData AS (
     SELECT 1 as Day, 120 as Val
     UNION ALL SELECT 2, 150
@@ -63,16 +60,87 @@ CREATE DATASET &ActivityHeatMap AS (
     UNION ALL SELECT 'Fri', 30, 40, 50, 60
 );
 
--- 3. Define Visuals
-CREATE VISUAL IntroText AS TEXT (
-    CONTENT = '# ETL-SQL TUI Report Preview
-This is the **Research Paper View** rendering directly in your terminal.
-- Use `Alt+R` to toggle between Code and Report.
-- Use `Arrows / PgUp / PgDn` to scroll within a page.
-- Use `Shift+PgUp / Shift+PgDn` to switch pages.'
+-- Datasets for the new visual types
+CREATE DATASET &BubbleData AS (
+    SELECT 10 as X, 20 as Y, 5 as Size
+    UNION ALL SELECT 25, 45, 10
+    UNION ALL SELECT 35, 15, 3
+    UNION ALL SELECT 45, 55, 12
 );
 
+CREATE DATASET &FunnelData AS (
+    SELECT 'Leads' as Stage, 1000 as Val
+    UNION ALL SELECT 'MQLs', 600
+    UNION ALL SELECT 'Opportunities', 300
+    UNION ALL SELECT 'Customers', 100
+);
+
+CREATE DATASET &GanttData AS (
+    SELECT 'Requirements' as Task, 0 as StartTime, 3 as EndTime
+    UNION ALL SELECT 'Design', 3, 6
+    UNION ALL SELECT 'Development', 6, 12
+    UNION ALL SELECT 'Testing', 11, 15
+);
+
+CREATE DATASET &CandleData AS (
+    SELECT 'Day 1' as D, 100 as O, 120 as H, 95 as L, 110 as C
+    UNION ALL SELECT 'Day 2', 110, 115, 105, 108
+    UNION ALL SELECT 'Day 3', 108, 130, 106, 125
+    UNION ALL SELECT 'Day 4', 125, 127, 115, 118
+);
+
+CREATE DATASET &MatrixData AS (
+    SELECT 'North > Q1' as Period, 4500 as Rev, 3000 as Exp
+    UNION ALL SELECT 'North > Q2', 5100, 3200
+    UNION ALL SELECT 'South > Q1', 3800, 2900
+    UNION ALL SELECT 'South > Q2', 4200, 3100
+);
+
+CREATE DATASET &TrellisData AS (
+    SELECT 'Region A' as Reg, 'Product X' as Prod, 500 as Sales
+    UNION ALL SELECT 'Region A', 'Product Y', 300
+    UNION ALL SELECT 'Region B', 'Product X', 400
+    UNION ALL SELECT 'Region B', 'Product Y', 600
+);
+
+CREATE DATASET &MapData AS (
+    SELECT 'California' as Reg, 12000 as Sales
+    UNION ALL SELECT 'Texas', 9500
+    UNION ALL SELECT 'New York', 11000
+);
+
+CREATE DATASET &SankeyData AS (
+    SELECT 'Budget' as Src, 'Salary' as Dst, 5000 as Flow
+    UNION ALL SELECT 'Budget', 'Marketing', 3000
+    UNION ALL SELECT 'Revenue', 'Budget', 8000
+);
+
+CREATE DATASET &SunburstData AS (
+    SELECT 'US > West > CA' as Path, 7000 as Val
+    UNION ALL SELECT 'US > West > OR', 2000
+    UNION ALL SELECT 'US > East > NY', 5000
+);
+
+CREATE DATASET &NetworkData AS (
+    SELECT 'Node A' as Src, 'Node B' as Dst, 'Active' as Status
+    UNION ALL SELECT 'Node B', 'Node C', 'Active'
+);
+
+-- Declare active interactive variables
 DECLARE @day varchar(200) = 'Tue';
+DECLARE @active varchar(20) = 'TRUE';
+DECLARE @search varchar(100) = 'Electronics';
+DECLARE @limit int = 50;
+
+-- 2. Define Visuals
+CREATE VISUAL IntroText AS TEXT (
+    CONTENT = '# ETL-SQL Complete Showcase Dashboard
+Welcome to the absolute showcase of **all 36 visual types** rendering natively in your terminal!
+- **Category A**: Optimized traditional charts (HBAR, BAR, LINE, SCATTER, HEATMAP, GAUGE, BOXPLOT, WATERFALL, PIE)
+- **Category B**: Rich ASCII charts (BUBBLE, FUNNEL, GANTT, CANDLESTICK, TRELLIS, MATRIX, CHECKBOX, TEXTBOX, NUMBERBOX)
+- **Category C**: Zero-dependency interactive Markdown descriptions
+- **Category D**: Premium Visual Fallbacks (MAP, IMAGE, COMBO, TREEMAP, RADAR, SANKEY, SUNBURST, NETWORK)'
+);
 
 CREATE VISUAL SelectActivityDay AS SLICER(
     SOURCE = (SELECT DISTINCT Day FROM &ActivityHeatMap),
@@ -113,7 +181,7 @@ CREATE VISUAL PerfScatter AS SCATTER (
 
 CREATE VISUAL ActivityDensity AS HEATMAP (
     SOURCE = &ActivityHeatMap,
-    MAPPINGS (X = Day, Y = Day, VALUE = H1), -- Placeholders for linter, renderer uses data structure
+    MAPPINGS (X = Day, Y = Day, VALUE = H1),
     STYLE (TITLE = 'Activity Density (HeatMap)')
 );
 
@@ -151,15 +219,113 @@ CREATE VISUAL OrdersTable AS TABLE (
     STYLE (TITLE = 'Recent Orders Summary')
 );
 
+-- Bubble, Funnel, Gantt, Candlestick, Trellis, Matrix, Checkbox, Textbox, Numberbox
+CREATE VISUAL BubbleChart AS BUBBLE (
+    SOURCE = &BubbleData,
+    MAPPINGS (X = X, Y = Y, SIZE = Size),
+    STYLE (TITLE = 'Market Density (Bubble Chart)')
+);
+
+CREATE VISUAL FunnelChart AS FUNNEL (
+    SOURCE = &FunnelData,
+    MAPPINGS (LABEL = Stage, VALUE = Val),
+    STYLE (TITLE = 'Conversion Funnel')
+);
+
+CREATE VISUAL GanttChart AS GANTT (
+    SOURCE = &GanttData,
+    MAPPINGS (LABEL = Task, START = StartTime, END = EndTime),
+    STYLE (TITLE = 'Project Timeline (Gantt)')
+);
+
+CREATE VISUAL CandleChart AS CANDLESTICK (
+    SOURCE = &CandleData,
+    MAPPINGS (LABEL = D, OPEN = O, HIGH = H, LOW = L, CLOSE = C),
+    STYLE (TITLE = 'Stock Trend (Candlestick)')
+);
+
+CREATE VISUAL MatrixGrid AS MATRIX (
+    SOURCE = &MatrixData,
+    STYLE (TITLE = 'Financial Pivot (Matrix Grid)')
+);
+
+CREATE VISUAL RegionTrellis AS TRELLIS (
+    SOURCE = &TrellisData,
+    OPTIONS (FACET = Reg),
+    STYLE (TITLE = 'Regional Performance (Trellis)')
+);
+
+CREATE VISUAL ActiveFilter AS CHECKBOX (
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@active, value)),
+    STYLE (TITLE = 'Active Accounts Only')
+);
+
+CREATE VISUAL SearchFilter AS TEXTBOX (
+    DEFAULT = 'Search...',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@search, value)),
+    STYLE (TITLE = 'Product Name Search')
+);
+
+CREATE VISUAL LimitFilter AS NUMBERBOX (
+    MIN = 1,
+    MAX = 100,
+    DEFAULT = 50,
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@limit, value)),
+    STYLE (TITLE = 'Max Row Limit')
+);
+
+-- Fallback placeholders: Map, Image, Combo, Treemap, Radar, Sankey, Sunburst, Network
+CREATE VISUAL SalesMap AS MAP (
+    SOURCE = &MapData,
+    MAPPINGS (REGION = Reg, VALUE = Sales),
+    STYLE (TITLE = 'State Distribution Map')
+);
+
+CREATE VISUAL BrandLogo AS IMAGE (
+    DEFAULT = 'https://etl-sql.org/logo.png',
+    OPTIONS (ALT = 'ETL-SQL Brand Logo'),
+    STYLE (TITLE = 'Organization Logo')
+);
+
+CREATE VISUAL HybridTrend AS COMBO (
+    SOURCE = &LineTrendData,
+    MAPPINGS (X = Day, Y = Val),
+    STYLE (TITLE = 'Stacked Revenue Trend (Combo)')
+);
+
 CREATE VISUAL RegionTreeMap AS TREEMAP (
     SOURCE = &SalesSummary,
     MAPPINGS (LABEL = Category, VALUE = Amount),
-    STYLE (TITLE = 'Sales by Region (TreeMap Placeholder)')
+    STYLE (TITLE = 'Sales by Region (TreeMap)')
 );
 
--- 4. Assemble the Page
+CREATE VISUAL FeatureRadar AS RADAR (
+    SOURCE = &SalesSummary,
+    MAPPINGS (LABEL = Category, VALUE = Amount),
+    STYLE (TITLE = 'Category Balance (Radar)')
+);
+
+CREATE VISUAL BudgetFlow AS SANKEY (
+    SOURCE = &SankeyData,
+    MAPPINGS (SOURCE = Src, TARGET = Dst, VALUE = Flow),
+    STYLE (TITLE = 'Departmental Budget Flow (Sankey)')
+);
+
+CREATE VISUAL OrgHierarchy AS SUNBURST (
+    SOURCE = &SunburstData,
+    MAPPINGS (PATH = Path, VALUE = Val),
+    STYLE (TITLE = 'Organizational Breakdown (Sunburst)')
+);
+
+CREATE VISUAL ServerTopology AS NETWORK (
+    SOURCE = &NetworkData,
+    MAPPINGS (SOURCE = Src, TARGET = Dst),
+    STYLE (TITLE = 'Server Topologies (Network Graph)')
+);
+
+-- 3. Assemble the Page
 CREATE PAGE Dashboard AS (
-    STRUCTURE = 'A / B / C / D / E / F / G / H / I / J / K / L / M / N',
+    STRUCTURE = 'A / B / C / D / E / F / G / H / I / J / K / L / M / N / O / P / Q / R / S / T / U / V / W / X / Y / Z / AA / AB / AC / AD',
     MAP (
         'A' = IntroText, 
         'B' = SelectActivityDay,
@@ -173,11 +339,27 @@ CREATE PAGE Dashboard AS (
         'J' = MonthlyBar,
         'K' = LatencyBox,
         'L' = ProfitWaterfall,
-        'M' = RegionTreeMap,
-        'N' = OrdersTable
+        'M' = BubbleChart,
+        'N' = FunnelChart,
+        'O' = GanttChart,
+        'P' = CandleChart,
+        'Q' = MatrixGrid,
+        'R' = RegionTrellis,
+        'S' = ActiveFilter,
+        'T' = SearchFilter,
+        'U' = LimitFilter,
+        'V' = SalesMap,
+        'W' = BrandLogo,
+        'X' = HybridTrend,
+        'Y' = RegionTreeMap,
+        'Z' = FeatureRadar,
+        'AA' = BudgetFlow,
+        'AB' = OrgHierarchy,
+        'AC' = ServerTopology,
+        'AD' = OrdersTable
     )
 );
 
--- 5. Set Report Metadata
-SET REPORT TITLE = 'TUI Feature Showcase';
-SET REPORT DESCRIPTION = 'Demonstrates terminal-based graphical rendering of ETL-SQL reports.';
+-- 4. Set Report Metadata
+SET REPORT TITLE = 'ETL-SQL TUI Showcase';
+SET REPORT DESCRIPTION = 'Comprehensive showcase demonstrating terminal-based graphical rendering of all 36 ETL-SQL visual types.';

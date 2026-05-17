@@ -15,6 +15,7 @@ namespace ETL_SQL.SqlLogicTests
     /// without loading the full corpus (which OOMs on low-memory machines).
     /// Each test is self-contained: it sets up t1 fresh and runs a single query.
     /// </summary>
+    [Trait("Category", "SLT")]
     public class CorpusRegressionTests
     {
         // The 30 INSERT statements from select1.test lines 4-93 (named-column form)
@@ -86,7 +87,7 @@ namespace ETL_SQL.SqlLogicTests
             });
 
         // select1.test line 94
-        [Fact]
+        [SltFact]
         public async Task Line94_CaseWithScalarSubquery_CountAndHash()
         {
             using var runner = await CreateT1RunnerAsync();
@@ -106,7 +107,7 @@ namespace ETL_SQL.SqlLogicTests
         }
 
         // select1.test line 2270
-        [Fact]
+        [SltFact]
         public async Task Line2270_NotBetweenAndBetweenWithArithmetic()
         {
             using var runner = await CreateT1RunnerAsync();
@@ -130,7 +131,7 @@ namespace ETL_SQL.SqlLogicTests
         }
 
         // select1.test line 3221 (the 90-value triple-column query)
-        [Fact]
+        [SltFact]
         public async Task Line3221_TripleColumnCaseAndArithmetic()
         {
             using var runner = await CreateT1RunnerAsync();
@@ -154,7 +155,7 @@ namespace ETL_SQL.SqlLogicTests
 
         // Persistent vs transient parity: same hash in both modes when spilling is forced.
         // Catches divergence in spill file cleanup (IsPersistentSession=false cleans up eagerly).
-        [Fact]
+        [SltFact]
         public async Task SpillParity_TransientVsPersistentGivesSameHash()
         {
             var record = new SltRecord

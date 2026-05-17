@@ -405,7 +405,7 @@ namespace ETL_SQL.Tests.Reporting
         // ── RenderVisual – unsupported types in TUI ───────────────────────────
 
         [Fact]
-        public void RenderVisual_Treemap_ReturnsUnsupportedPanel()
+        public void RenderVisual_Treemap_ReturnsPremiumPlaceholder()
         {
             var v = V("T", "TREEMAP", new[] { "Name", "Value" }, new[] { new[] { "A", "1" } });
             var result = TerminalRenderer.RenderVisual(v);
@@ -414,34 +414,150 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
-        public void RenderVisual_Radar_ReturnsUnsupportedPanel()
+        public void RenderVisual_Radar_ReturnsPremiumPlaceholder()
         {
             var v = V("R", "RADAR", new[] { "Series", "Metric" }, new[] { new[] { "A", "50" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
         }
 
         [Fact]
-        public void RenderVisual_Bubble_ReturnsUnsupportedPanel()
+        public void RenderVisual_Bubble_RendersCanvasBubbleChart()
         {
-            var v = V("B", "BUBBLE", new[] { "X", "Y" }, new[] { new[] { "1", "2" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var v = V("B", "BUBBLE", new[] { "X", "Y", "Size" }, new[] { new[] { "10", "20", "5" }, new[] { "30", "40", "10" } });
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
         }
 
         [Fact]
-        public void RenderVisual_Candlestick_ReturnsUnsupportedPanel()
+        public void RenderVisual_Funnel_RendersFunnelChart()
+        {
+            var v = V("F", "FUNNEL", new[] { "Stage", "Value" }, new[] { new[] { "Leads", "100" }, new[] { "Customers", "10" } });
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
+        }
+
+        [Fact]
+        public void RenderVisual_Gantt_RendersGanttChart()
+        {
+            var v = V("G", "GANTT", new[] { "Task", "Start", "End" }, new[] { new[] { "Design", "0", "5" }, new[] { "Dev", "5", "15" } });
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
+        }
+
+        [Fact]
+        public void RenderVisual_Candlestick_RendersCandleChart()
         {
             var v = V("C", "CANDLESTICK", new[] { "Date", "O", "H", "L", "Cl" }, new[]
             {
                 new[] { "Jan", "100", "110", "95", "105" }
             });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
         }
 
         [Fact]
-        public void RenderVisual_Map_ReturnsUnsupportedPanel()
+        public void RenderVisual_Matrix_RendersMatrixGrid()
+        {
+            var v = V("M", "MATRIX", new[] { "Period", "Rev" }, new[] { new[] { "Q1", "1000" } });
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
+        }
+
+        [Fact]
+        public void RenderVisual_Trellis_RendersTrellisGrid()
+        {
+            var v = V("Tr", "TRELLIS", new[] { "Reg", "Prod", "Sales" }, new[] { new[] { "A", "X", "100" } },
+                opts: new Dictionary<string, string> { ["FACET"] = "Reg" });
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+        }
+
+        [Fact]
+        public void RenderVisual_Checkbox_RendersInteractiveControl()
+        {
+            var v = V("Chk", "CHECKBOX", new string[] { });
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
+        }
+
+        [Fact]
+        public void RenderVisual_Textbox_RendersInteractiveControl()
+        {
+            var v = V("Txt", "TEXTBOX", new string[] { });
+            v.DefaultValue = "Initial Text";
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
+        }
+
+        [Fact]
+        public void RenderVisual_Numberbox_RendersInteractiveControl()
+        {
+            var v = V("Num", "NUMBERBOX", new string[] { });
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
+        }
+
+        [Fact]
+        public void RenderVisual_Map_ReturnsPremiumPlaceholder()
         {
             var v = V("M", "MAP", new[] { "Region", "Value" }, new[] { new[] { "US", "100" } });
-            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
+        }
+
+        [Fact]
+        public void RenderVisual_Image_ReturnsPremiumPlaceholder()
+        {
+            var v = V("Img", "IMAGE", new string[] { });
+            v.DefaultValue = "logo.png";
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
+        }
+
+        [Fact]
+        public void RenderVisual_Combo_ReturnsPremiumPlaceholder()
+        {
+            var v = V("Cmb", "COMBO", new[] { "X", "Y" }, new[] { new[] { "A", "10" } });
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
+        }
+
+        [Fact]
+        public void RenderVisual_Sankey_ReturnsPremiumPlaceholder()
+        {
+            var v = V("Sank", "SANKEY", new[] { "Src", "Dst", "Val" }, new[] { new[] { "A", "B", "100" } });
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
+        }
+
+        [Fact]
+        public void RenderVisual_Sunburst_ReturnsPremiumPlaceholder()
+        {
+            var v = V("Sun", "SUNBURST", new[] { "Path", "Val" }, new[] { new[] { "A>B", "10" } });
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
+        }
+
+        [Fact]
+        public void RenderVisual_Network_ReturnsPremiumPlaceholder()
+        {
+            var v = V("Net", "NETWORK", new[] { "Src", "Dst" }, new[] { new[] { "A", "B" } });
+            var result = TerminalRenderer.RenderVisual(v);
+            Assert.NotNull(result);
+            Assert.IsType<Panel>(result);
         }
 
         // ── RenderVisual – unknown / fallback ─────────────────────────────────
@@ -479,3 +595,4 @@ namespace ETL_SQL.Tests.Reporting
         }
     }
 }
+

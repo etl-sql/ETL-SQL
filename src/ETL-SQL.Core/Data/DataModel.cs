@@ -114,6 +114,18 @@ namespace ETL_SQL.Data
             }
         }
 
+        /// <summary>
+        /// Returns all alias names registered for a canonical column, i.e., names that resolve
+        /// to the same slot but are not the primary canonical name stored in ColumnNames.
+        /// </summary>
+        public IEnumerable<string> EnumerateAliasesOf(string canonicalName)
+        {
+            if (!_columnToIndex.TryGetValue(canonicalName, out var idx)) yield break;
+            foreach (var kvp in _columnToIndex)
+                if (kvp.Value == idx && !string.Equals(kvp.Key, canonicalName, StringComparison.OrdinalIgnoreCase))
+                    yield return kvp.Key;
+        }
+
         public void RenameColumn(string oldName, string newName)
         {
             if (!_columnToIndex.Remove(oldName, out var index)) return;

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Spectre.Console;
 using Spectre.Console.Rendering;
@@ -13,6 +14,11 @@ namespace ETL_SQL.Reporting.Renderers
     /// </summary>
     public static class TerminalRenderer
     {
+        private static readonly Color[] ChartColors = new[]
+        {
+            Color.Blue, Color.Green, Color.Yellow, Color.Red,
+            Color.Purple, Color.Cyan, Color.Orange1, Color.Teal
+        };
         /// <summary>
         /// Renders a full report page into a collection of Spectre.Console renderables.
         /// </summary>
@@ -72,14 +78,24 @@ namespace ETL_SQL.Reporting.Renderers
                     "LINE" => RenderLineChart(visual),
                     "SCATTER" => RenderScatterPlot(visual),
                     "HEATMAP" => RenderHeatMap(visual),
-                    "SLICER" or "MULTISELECT" or "DATEPICKER" or "RELDATEPICKER" or "SLIDER" or "SEARCH" => RenderSlicer(visual, manifest),
-                    "TREEMAP" or "RADAR" or "BUBBLE" or "CANDLESTICK" or "MAP" => new Panel(
-                        new Text($"{visual.VisualType} not supported in TUI", new Style(Color.Grey)))
-                    {
-                        Header = new PanelHeader(Markup.Escape(GetVisualTitle(visual))),
-                        Border = BoxBorder.Rounded,
-                        Expand = false
-                    },
+                    "SLICER" or "DATEPICKER" or "RELDATEPICKER" or "SLIDER" or "MULTISELECT" or "SEARCH" => RenderSlicer(visual, manifest),
+                    "BUBBLE" => RenderBubbleChart(visual),
+                    "FUNNEL" => RenderFunnelChart(visual),
+                    "GANTT" => RenderGanttChart(visual),
+                    "CANDLESTICK" => RenderCandlestickChart(visual),
+                    "TRELLIS" => RenderTrellisChart(visual, manifest),
+                    "MATRIX" => RenderMatrixChart(visual),
+                    "CHECKBOX" => RenderCheckbox(visual, manifest),
+                    "TEXTBOX" => RenderTextbox(visual, manifest),
+                    "NUMBERBOX" => RenderNumberbox(visual, manifest),
+                    "MAP" => RenderMapPlaceholder(visual),
+                    "IMAGE" => RenderImagePlaceholder(visual),
+                    "COMBO" => RenderComboPlaceholder(visual),
+                    "TREEMAP" => RenderTreemapPlaceholder(visual),
+                    "RADAR" => RenderRadarPlaceholder(visual),
+                    "SANKEY" => RenderSankeyPlaceholder(visual),
+                    "SUNBURST" => RenderSunburstPlaceholder(visual),
+                    "NETWORK" => RenderNetworkPlaceholder(visual),
                     _ => RenderPlaceholder(visual)
                 };
             }
@@ -103,8 +119,9 @@ namespace ETL_SQL.Reporting.Renderers
             for (int i = 0; i < rows.Count; i++)
             {
                 double x = i;
-                if (double.TryParse(rows[i].FirstOrDefault() ?? "0", out var xVal)) x = xVal;
-                if (double.TryParse(rows[i].ElementAtOrDefault(1) ?? "0", out var yVal))
+                var row = rows[i];
+                if (row.Count > 0 && double.TryParse(row[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var xVal)) x = xVal;
+                if (row.Count > 1 && double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var yVal))
                 {
                     points.Add((x, yVal));
                 }
@@ -150,8 +167,9 @@ namespace ETL_SQL.Reporting.Renderers
             var points = new List<(double x, double y)>();
             foreach (var row in rows)
             {
-                if (double.TryParse(row.FirstOrDefault() ?? "0", out var xVal) &&
-                    double.TryParse(row.ElementAtOrDefault(1) ?? "0", out var yVal))
+                if (row.Count > 1 &&
+                    double.TryParse(row[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var xVal) &&
+                    double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var yVal))
                 {
                     points.Add((xVal, yVal));
                 }
@@ -203,7 +221,7 @@ namespace ETL_SQL.Reporting.Renderers
             {
                 for (int i = 1; i < row.Count; i++)
                 {
-                    if (double.TryParse(row[i], out var v)) maxVal = Math.Max(maxVal, v);
+                    if (double.TryParse(row[i], NumberStyles.Any, CultureInfo.InvariantCulture, out var v)) maxVal = Math.Max(maxVal, v);
                 }
             }
             if (maxVal == 0) maxVal = 1;
@@ -211,11 +229,11 @@ namespace ETL_SQL.Reporting.Renderers
             foreach (var row in rows)
             {
                 var displayRow = new List<IRenderable>();
-                displayRow.Add(new Text(row[0] ?? ""));
+                displayRow.Add(new Text(row.Count > 0 ? row[0] ?? "" : ""));
 
                 for (int i = 1; i < row.Count; i++)
                 {
-                    if (double.TryParse(row[i], out var v))
+                    if (double.TryParse(row[i], NumberStyles.Any, CultureInfo.InvariantCulture, out var v))
                     {
                         double pct = v / maxVal;
                         // Blue-to-Red palette
@@ -259,18 +277,24 @@ namespace ETL_SQL.Reporting.Renderers
         private static IRenderable RenderGauge(VisualManifest visual)
         {
             var title = GetVisualTitle(visual);
-            var valueStr = visual.Rows.FirstOrDefault()?.FirstOrDefault() ?? "0";
-            if (!double.TryParse(valueStr, out double value)) value = 0;
+            var firstRow = visual.Rows.Count > 0 ? visual.Rows[0] : null;
+            var valueStr = firstRow != null && firstRow.Count > 0 ? firstRow[0] ?? "0" : "0";
+            if (!double.TryParse(valueStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double value)) value = 0;
 
-            double min = double.TryParse(visual.Options.GetValueOrDefault("MIN"), out var minVal) ? minVal : 0;
-            double max = double.TryParse(visual.Options.GetValueOrDefault("MAX"), out var maxVal) ? maxVal : 100;
+            double min = double.TryParse(visual.Options.GetValueOrDefault("MIN"), NumberStyles.Any, CultureInfo.InvariantCulture, out var minVal) ? minVal : 0;
+            double max = double.TryParse(visual.Options.GetValueOrDefault("MAX"), NumberStyles.Any, CultureInfo.InvariantCulture, out var maxVal) ? maxVal : 100;
 
             double pct = (value - min) / (max - min);
             pct = Math.Clamp(pct, 0, 1);
 
             int width = 30;
             int filled = (int)(width * pct);
-            string bar = new string('█', filled) + new string('░', width - filled);
+            
+            // Zero-allocation progress bar creation
+            char[] chars = new char[width];
+            Array.Fill(chars, '█', 0, filled);
+            Array.Fill(chars, '░', filled, width - filled);
+            string bar = new string(chars);
             
             Color color = Color.Green;
             if (pct > 0.7) color = Color.Yellow;
@@ -303,11 +327,11 @@ namespace ETL_SQL.Reporting.Renderers
                 string label = (row.Count > 5 ? row[0] : "Data") ?? "Data";
                 int offset = row.Count > 5 ? 1 : 0;
 
-                if (double.TryParse(row[offset], out double min) &&
-                    double.TryParse(row[offset + 1], out double q1) &&
-                    double.TryParse(row[offset + 2], out double med) &&
-                    double.TryParse(row[offset + 3], out double q3) &&
-                    double.TryParse(row[offset + 4], out double max))
+                if (double.TryParse(row[offset], NumberStyles.Any, CultureInfo.InvariantCulture, out double min) &&
+                    double.TryParse(row[offset + 1], NumberStyles.Any, CultureInfo.InvariantCulture, out double q1) &&
+                    double.TryParse(row[offset + 2], NumberStyles.Any, CultureInfo.InvariantCulture, out double med) &&
+                    double.TryParse(row[offset + 3], NumberStyles.Any, CultureInfo.InvariantCulture, out double q3) &&
+                    double.TryParse(row[offset + 4], NumberStyles.Any, CultureInfo.InvariantCulture, out double max))
                 {
                     // Simple ASCII BoxPlot:  |---[  |  ]---|
                     // We scale this to ~40 chars
@@ -350,18 +374,14 @@ namespace ETL_SQL.Reporting.Renderers
             if (rows.Count == 0) return RenderPlaceholder(visual);
 
             var content = new List<IRenderable>();
-            double currentSum = 0;
-            double maxVal = rows.Max(r => {
-                double.TryParse(r.Count > 1 ? r[1] : "0", out double v);
-                return Math.Abs(currentSum + v);
-            }); // Rough max for scaling
             
-            // Recalculate max properly
+            // Recalculate max properly (removed dead maxVal calculation and LINQ)
             double rolling = 0;
             double absoluteMax = 0;
-            foreach(var r in rows)
+            foreach (var r in rows)
             {
-                double.TryParse(r.Count > 1 ? r[1] : "0", out double v);
+                double v = 0;
+                if (r.Count > 1) double.TryParse(r[1], NumberStyles.Any, CultureInfo.InvariantCulture, out v);
                 rolling += v;
                 absoluteMax = Math.Max(absoluteMax, Math.Abs(rolling));
                 absoluteMax = Math.Max(absoluteMax, Math.Abs(rolling - v));
@@ -369,12 +389,13 @@ namespace ETL_SQL.Reporting.Renderers
             if (absoluteMax == 0) absoluteMax = 1;
 
             int fullWidth = 50;
-            currentSum = 0;
+            double currentSum = 0;
 
             foreach (var row in rows)
             {
-                string label = row[0] ?? "Item";
-                if (!double.TryParse(row.Count > 1 ? row[1] : "0", out double val)) val = 0;
+                string label = row.Count > 0 ? row[0] ?? "Item" : "Item";
+                double val = 0;
+                if (row.Count > 1) double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out val);
 
                 double start = currentSum;
                 double end = currentSum + val;
@@ -409,8 +430,8 @@ namespace ETL_SQL.Reporting.Renderers
             var data = new List<(string label, double value)>();
             foreach (var row in rows)
             {
-                var label = row.FirstOrDefault() ?? "";
-                if (double.TryParse(row.ElementAtOrDefault(1) ?? "0", out var val))
+                var label = row.Count > 0 ? row[0] ?? "" : "";
+                if (row.Count > 1 && double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
                 {
                     data.Add((label, val));
                 }
@@ -461,8 +482,9 @@ namespace ETL_SQL.Reporting.Renderers
             var chart = new BreakdownChart() { Width = 60 };
             for (int i = 0; i < rows.Count; i++)
             {
-                var label = rows[i].FirstOrDefault() ?? "Unknown";
-                if (double.TryParse(rows[i].ElementAtOrDefault(1) ?? "0", out var val))
+                var row = rows[i];
+                var label = row.Count > 0 ? row[0] ?? "Unknown" : "Unknown";
+                if (row.Count > 1 && double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
                 {
                     chart.AddItem(label, val, GetColorForIndex(i));
                 }
@@ -497,17 +519,19 @@ namespace ETL_SQL.Reporting.Renderers
             if (valueIdx < 0) valueIdx = 1;
 
             bool hasItems = false;
+            int rowIndex = 0;
             foreach (var row in visual.Rows)
             {
                 if (row.Count > Math.Max(labelIdx, valueIdx))
                 {
                     var label = row[labelIdx] ?? "Unknown";
-                    if (double.TryParse(row[valueIdx], out double val))
+                    if (double.TryParse(row[valueIdx], NumberStyles.Any, CultureInfo.InvariantCulture, out double val))
                     {
-                        chart.AddItem(label, val, GetColorForIndex(visual.Rows.IndexOf(row)));
+                        chart.AddItem(label, val, GetColorForIndex(rowIndex));
                         hasItems = true;
                     }
                 }
+                rowIndex++;
             }
 
             if (!hasItems)
@@ -560,10 +584,12 @@ namespace ETL_SQL.Reporting.Renderers
         private static IRenderable RenderText(VisualManifest visual)
         {
             string markdown = visual.DefaultValue ?? "";
-            return new Panel(new Text(markdown))
-                .Header(Markup.Escape(visual.Name))
-                .Border(BoxBorder.None)
-                .Padding(1, 0, 1, 0);
+            return new Panel(RenderMarkdownText(markdown))
+            {
+                Header = new PanelHeader(Markup.Escape(GetVisualTitle(visual))),
+                Border = BoxBorder.None,
+                Padding = new Padding(1, 0, 1, 0)
+            };
         }
 
         private static IRenderable RenderPlaceholder(VisualManifest visual)
@@ -627,8 +653,7 @@ namespace ETL_SQL.Reporting.Renderers
 
         private static Color GetColorForIndex(int index)
         {
-            var colors = new[] { Color.Blue, Color.Green, Color.Yellow, Color.Red, Color.Purple, Color.Cyan, Color.Orange1, Color.Teal };
-            return colors[index % colors.Length];
+            return ChartColors[index % ChartColors.Length];
         }
 
         private static string GetVisualTitle(VisualManifest visual)
@@ -641,6 +666,739 @@ namespace ETL_SQL.Reporting.Renderers
                 return styleTitle;
 
             return visual.Name;
+        }
+
+        private static IRenderable RenderBubbleChart(VisualManifest visual)
+        {
+            var title = GetVisualTitle(visual);
+            var rows = visual.Rows;
+            if (rows.Count == 0) return RenderPlaceholder(visual);
+
+            // Set up a standard 50x12 grid canvas as approved in plan
+            var canvas = new Canvas(50, 12);
+            
+            // X, Y and Size values
+            var points = new List<(double x, double y, double size)>();
+            double minX = double.MaxValue, maxX = double.MinValue;
+            double minY = double.MaxValue, maxY = double.MinValue;
+            double maxSize = double.MinValue;
+
+            foreach (var row in rows)
+            {
+                if (row.Count > 2 &&
+                    double.TryParse(row[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var xVal) &&
+                    double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var yVal) &&
+                    double.TryParse(row[2], NumberStyles.Any, CultureInfo.InvariantCulture, out var sizeVal))
+                {
+                    points.Add((xVal, yVal, sizeVal));
+                    minX = Math.Min(minX, xVal);
+                    maxX = Math.Max(maxX, xVal);
+                    minY = Math.Min(minY, yVal);
+                    maxY = Math.Max(maxY, yVal);
+                    maxSize = Math.Max(maxSize, sizeVal);
+                }
+            }
+
+            if (points.Count == 0) return RenderPlaceholder(visual);
+
+            // Scale protection
+            if (maxX == minX) maxX += 1;
+            if (maxY == minY) maxY += 1;
+            if (maxSize == 0) maxSize = 1;
+
+            // Draw bubbles as solid circles on canvas using Spectre
+            for (int i = 0; i < points.Count; i++)
+            {
+                var pt = points[i];
+                int cx = (int)((pt.x - minX) / (maxX - minX) * 48) + 1;
+                int cy = 10 - (int)((pt.y - minY) / (maxY - minY) * 10);
+                double normSize = pt.size / maxSize;
+                int radius = (int)(normSize * 3);
+                if (radius < 1) radius = 1;
+
+                Color color = GetColorForIndex(i);
+
+                // Draw circle using distance formula
+                for (int dy = -radius; dy <= radius; dy++)
+                {
+                    for (int dx = -radius; dx <= radius; dx++)
+                    {
+                        if (dx * dx + dy * dy <= radius * radius)
+                        {
+                            int px = cx + dx;
+                            int py = cy + dy;
+                            if (px >= 0 && px < 50 && py >= 0 && py < 12)
+                            {
+                                canvas.SetPixel(px, py, color);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return new Panel(canvas)
+            {
+                Header = new PanelHeader(Markup.Escape(title)),
+                Border = BoxBorder.Rounded,
+                Expand = false
+            };
+        }
+
+        private static IRenderable RenderFunnelChart(VisualManifest visual)
+        {
+            var title = GetVisualTitle(visual);
+            var rows = visual.Rows;
+            if (rows.Count == 0) return RenderPlaceholder(visual);
+
+            var content = new List<IRenderable>();
+            double maxVal = 0;
+            var stages = new List<(string label, double value)>();
+
+            foreach (var row in rows)
+            {
+                var label = row.Count > 0 ? row[0] ?? "Stage" : "Stage";
+                double val = 0;
+                if (row.Count > 1) double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out val);
+                stages.Add((label, val));
+                maxVal = Math.Max(maxVal, val);
+            }
+
+            if (maxVal == 0) maxVal = 1;
+            int maxWidth = 40;
+
+            for (int i = 0; i < stages.Count; i++)
+            {
+                var stage = stages[i];
+                int barWidth = (int)(stage.value / maxVal * maxWidth);
+                if (barWidth < 1 && stage.value > 0) barWidth = 1;
+                int leftPadding = (maxWidth - barWidth) / 2;
+
+                string indent = new string(' ', leftPadding);
+                string bar = new string('█', barWidth);
+                Color color = GetColorForIndex(i);
+
+                content.Add(new Text($"{stage.label.PadRight(15)} {indent}", Style.Plain));
+                content.Add(new Text(bar, new Style(color)));
+                content.Add(new Text($" ({stage.value:N0})", new Style(Color.Grey)));
+                content.Add(new Text("\n"));
+            }
+
+            return new Panel(new Rows(content))
+            {
+                Header = new PanelHeader(Markup.Escape(title)),
+                Border = BoxBorder.Rounded,
+                Expand = false
+            };
+        }
+
+        private static IRenderable RenderGanttChart(VisualManifest visual)
+        {
+            var title = GetVisualTitle(visual);
+            var rows = visual.Rows;
+            if (rows.Count == 0) return RenderPlaceholder(visual);
+
+            var content = new List<IRenderable>();
+            var tasks = new List<(string name, double start, double end)>();
+            double minTime = double.MaxValue, maxTime = double.MinValue;
+
+            foreach (var row in rows)
+            {
+                var name = row.Count > 0 ? row[0] ?? "Task" : "Task";
+                double start = 0, end = 0;
+                if (row.Count > 1) double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out start);
+                if (row.Count > 2) double.TryParse(row[2], NumberStyles.Any, CultureInfo.InvariantCulture, out end);
+                
+                tasks.Add((name, start, end));
+                minTime = Math.Min(minTime, start);
+                maxTime = Math.Max(maxTime, end);
+            }
+
+            if (maxTime == minTime) maxTime += 1;
+            int timelineWidth = 30;
+
+            for (int i = 0; i < tasks.Count; i++)
+            {
+                var task = tasks[i];
+                int pStart = (int)((task.start - minTime) / (maxTime - minTime) * timelineWidth);
+                int pEnd = (int)((task.end - minTime) / (maxTime - minTime) * timelineWidth);
+                pStart = Math.Clamp(pStart, 0, timelineWidth);
+                pEnd = Math.Clamp(pEnd, 0, timelineWidth);
+                int pLen = Math.Max(1, pEnd - pStart);
+
+                string before = new string(' ', pStart);
+                string bar = new string('█', pLen);
+                string after = new string(' ', timelineWidth - pStart - pLen);
+
+                Color color = GetColorForIndex(i);
+
+                content.Add(new Text($"{task.name.PadRight(15)} │", Style.Plain));
+                content.Add(new Text(before, Style.Plain));
+                content.Add(new Text(bar, new Style(color)));
+                content.Add(new Text(after, Style.Plain));
+                content.Add(new Text($"│ ({task.start:N0} to {task.end:N0})", new Style(Color.Grey)));
+                content.Add(new Text("\n"));
+            }
+
+            return new Panel(new Rows(content))
+            {
+                Header = new PanelHeader(Markup.Escape(title)),
+                Border = BoxBorder.Rounded,
+                Expand = false
+            };
+        }
+
+        private static IRenderable RenderCandlestickChart(VisualManifest visual)
+        {
+            var title = GetVisualTitle(visual);
+            var rows = visual.Rows;
+            if (rows.Count == 0) return RenderPlaceholder(visual);
+
+            var canvas = new Canvas(50, 12);
+            var candles = new List<(double open, double high, double low, double close)>();
+            double minVal = double.MaxValue, maxVal = double.MinValue;
+
+            foreach (var row in rows)
+            {
+                int offset = row.Count > 4 ? 1 : 0;
+                if (row.Count > offset + 3 &&
+                    double.TryParse(row[offset], NumberStyles.Any, CultureInfo.InvariantCulture, out var o) &&
+                    double.TryParse(row[offset + 1], NumberStyles.Any, CultureInfo.InvariantCulture, out var h) &&
+                    double.TryParse(row[offset + 2], NumberStyles.Any, CultureInfo.InvariantCulture, out var l) &&
+                    double.TryParse(row[offset + 3], NumberStyles.Any, CultureInfo.InvariantCulture, out var c))
+                {
+                    candles.Add((o, h, l, c));
+                    minVal = Math.Min(minVal, l);
+                    maxVal = Math.Max(maxVal, h);
+                }
+            }
+
+            if (candles.Count == 0) return RenderPlaceholder(visual);
+
+            if (maxVal == minVal) maxVal += 1;
+            int numCandles = Math.Min(candles.Count, 24);
+            int candleSpacing = 50 / numCandles;
+
+            for (int i = 0; i < numCandles; i++)
+            {
+                var candle = candles[i];
+                int cx = i * candleSpacing + (candleSpacing / 2);
+                
+                int yHigh = 10 - (int)((candle.high - minVal) / (maxVal - minVal) * 10);
+                int yLow = 10 - (int)((candle.low - minVal) / (maxVal - minVal) * 10);
+                int yOpen = 10 - (int)((candle.open - minVal) / (maxVal - minVal) * 10);
+                int yClose = 10 - (int)((candle.close - minVal) / (maxVal - minVal) * 10);
+
+                yHigh = Math.Clamp(yHigh, 0, 11);
+                yLow = Math.Clamp(yLow, 0, 11);
+                yOpen = Math.Clamp(yOpen, 0, 11);
+                yClose = Math.Clamp(yClose, 0, 11);
+
+                Color color = candle.close >= candle.open ? Color.Green : Color.Red;
+
+                for (int y = Math.Min(yHigh, yLow); y <= Math.Max(yHigh, yLow); y++)
+                {
+                    canvas.SetPixel(cx, y, Color.Grey);
+                }
+
+                for (int y = Math.Min(yOpen, yClose); y <= Math.Max(yOpen, yClose); y++)
+                {
+                    canvas.SetPixel(cx, y, color);
+                    if (cx > 0) canvas.SetPixel(cx - 1, y, color);
+                    if (cx < 49) canvas.SetPixel(cx + 1, y, color);
+                }
+            }
+
+            return new Panel(canvas)
+            {
+                Header = new PanelHeader(Markup.Escape(title)),
+                Border = BoxBorder.Rounded,
+                Expand = false
+            };
+        }
+
+        private static IRenderable RenderTrellisChart(VisualManifest visual, ReportManifest? manifest)
+        {
+            var title = GetVisualTitle(visual);
+            var rows = visual.Rows;
+            if (rows.Count == 0) return RenderPlaceholder(visual);
+
+            int facetIdx = 0;
+            if (visual.Options.TryGetValue("FACET", out var facetCol) || visual.Options.TryGetValue("FACET_COLUMN", out facetCol))
+            {
+                int colIdx = visual.Columns.FindIndex(c => c.Equals(facetCol, StringComparison.OrdinalIgnoreCase));
+                if (colIdx >= 0) facetIdx = colIdx;
+            }
+
+            var grouped = new Dictionary<string, List<List<string?>>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows)
+            {
+                var fVal = row.Count > facetIdx ? row[facetIdx] ?? "Other" : "Other";
+                if (!grouped.TryGetValue(fVal, out var gRows))
+                {
+                    gRows = new List<List<string?>>();
+                    grouped[fVal] = gRows;
+                }
+                gRows.Add(row);
+            }
+
+            var grid = new Table().Border(TableBorder.None).HideHeaders();
+            grid.AddColumn(new TableColumn("Col1"));
+            grid.AddColumn(new TableColumn("Col2"));
+
+            var subVisuals = new List<IRenderable>();
+            foreach (var pair in grouped)
+            {
+                var subManifest = new VisualManifest
+                {
+                    Name = $"{visual.Name} ({pair.Key})",
+                    VisualType = "BAR",
+                    Columns = visual.Columns,
+                    Rows = pair.Value,
+                    Options = visual.Options,
+                    Styles = visual.Styles
+                };
+
+                var subRender = RenderVerticalBarChart(subManifest);
+                subVisuals.Add(new Panel(subRender)
+                {
+                    Header = new PanelHeader(Markup.Escape(pair.Key)),
+                    Border = BoxBorder.Rounded,
+                    Padding = new Padding(1, 0, 1, 0)
+                });
+            }
+
+            for (int i = 0; i < subVisuals.Count; i += 2)
+            {
+                if (i + 1 < subVisuals.Count)
+                    grid.AddRow(subVisuals[i], subVisuals[i + 1]);
+                else
+                    grid.AddRow(subVisuals[i], new Text(""));
+            }
+
+            return new Panel(grid)
+            {
+                Header = new PanelHeader(Markup.Escape(title)),
+                Border = BoxBorder.Rounded,
+                Expand = false
+            };
+        }
+
+        private static IRenderable RenderMatrixChart(VisualManifest visual)
+        {
+            var title = GetVisualTitle(visual);
+            var rows = visual.Rows;
+            if (rows.Count == 0) return RenderPlaceholder(visual);
+
+            var table = new Table();
+            foreach (var col in visual.Columns)
+            {
+                table.AddColumn(new TableColumn($"[blue]{Markup.Escape(col)}[/]").Centered());
+            }
+
+            foreach (var row in rows)
+            {
+                var displayRow = new List<string>();
+                for (int i = 0; i < row.Count; i++)
+                {
+                    var cell = row[i] ?? "";
+                    if (i == 0)
+                    {
+                        if (cell.Contains(">"))
+                        {
+                            var parts = cell.Split('>');
+                            string indent = new string(' ', (parts.Length - 1) * 3);
+                            cell = $"{indent}[grey][+][/] {parts.Last().Trim()}";
+                        }
+                        else
+                        {
+                            cell = $"[bold green][-][/] {cell}";
+                        }
+                    }
+                    displayRow.Add(cell);
+                }
+                table.AddRow(displayRow.ToArray());
+            }
+
+            return new Panel(table)
+            {
+                Header = new PanelHeader(Markup.Escape(title)),
+                Border = BoxBorder.Rounded,
+                Expand = false
+            };
+        }
+
+        private static IRenderable RenderCheckbox(VisualManifest visual, ReportManifest? manifest)
+        {
+            var title = GetVisualTitle(visual);
+            bool isChecked = false;
+            
+            var pName = visual.Actions.FirstOrDefault(a => a.Type == "SET_PARAMETER")?.ParameterName ?? "none";
+            if (manifest != null && !string.IsNullOrEmpty(pName))
+            {
+                if (manifest.Parameters.TryGetValue(pName, out var pVal) ||
+                    manifest.Parameters.TryGetValue(pName.StartsWith("@") ? pName.Substring(1) : "@" + pName, out pVal))
+                {
+                    isChecked = pVal.Trim().Equals("TRUE", StringComparison.OrdinalIgnoreCase) || pVal.Trim().Equals("1");
+                }
+            }
+
+            var checkMarkup = isChecked ? "[bold green][X][/]" : "[grey][ ][/]";
+            var content = new Markup($"{checkMarkup} [white]{Markup.Escape(title)}[/]");
+
+            return new Panel(content)
+            {
+                Border = BoxBorder.Rounded,
+                Expand = false,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+        }
+
+        private static IRenderable RenderTextbox(VisualManifest visual, ReportManifest? manifest)
+        {
+            var title = GetVisualTitle(visual);
+            string currentVal = visual.DefaultValue ?? "";
+
+            var pName = visual.Actions.FirstOrDefault(a => a.Type == "SET_PARAMETER")?.ParameterName ?? "none";
+            if (manifest != null && !string.IsNullOrEmpty(pName))
+            {
+                if (manifest.Parameters.TryGetValue(pName, out var pVal) ||
+                    manifest.Parameters.TryGetValue(pName.StartsWith("@") ? pName.Substring(1) : "@" + pName, out pVal))
+                {
+                    currentVal = pVal.Trim('\'', '"');
+                }
+            }
+
+            var content = new Markup($"[blue]{Markup.Escape(title)}:[/] [grey]\\[[/] {Markup.Escape(currentVal.PadRight(20))} [grey]\\][/]");
+            return new Panel(content)
+            {
+                Border = BoxBorder.Rounded,
+                Expand = false,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+        }
+
+        private static IRenderable RenderNumberbox(VisualManifest visual, ReportManifest? manifest)
+        {
+            var title = GetVisualTitle(visual);
+            string currentVal = visual.DefaultValue ?? "0";
+
+            var pName = visual.Actions.FirstOrDefault(a => a.Type == "SET_PARAMETER")?.ParameterName ?? "none";
+            if (manifest != null && !string.IsNullOrEmpty(pName))
+            {
+                if (manifest.Parameters.TryGetValue(pName, out var pVal) ||
+                    manifest.Parameters.TryGetValue(pName.StartsWith("@") ? pName.Substring(1) : "@" + pName, out pVal))
+                {
+                    currentVal = pVal;
+                }
+            }
+
+            double min = visual.Min ?? 0;
+            double max = visual.Max ?? 100;
+
+            var content = new Markup($"[blue]{Markup.Escape(title)}:[/] [grey]\\[[/] {currentVal.PadRight(10)} [grey]\\][/] [grey](Min: {min}, Max: {max})[/]");
+            return new Panel(content)
+            {
+                Border = BoxBorder.Rounded,
+                Expand = false,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+        }
+
+        private static IRenderable RenderMapPlaceholder(VisualManifest visual)
+        {
+            var table = new Table().Border(TableBorder.None).HideHeaders();
+            table.AddColumn("Bullet");
+            table.AddColumn("Value");
+
+            int limit = 0;
+            foreach (var row in visual.Rows)
+            {
+                if (limit++ >= 5) break;
+                var region = row.Count > 0 ? row[0] ?? "Unknown" : "Unknown";
+                var val = row.Count > 1 ? row[1] ?? "0" : "0";
+                table.AddRow($"[grey]•[/] {Markup.Escape(region)}", $"[bold cyan]{val}[/]");
+            }
+
+            var content = new Rows(
+                new Markup("🗺️ [bold yellow]Region Map[/] [italic red](Cannot display map in terminal mode)[/]"),
+                new Text("\nTop Regions:"),
+                table
+            );
+
+            return new Panel(content)
+            {
+                Header = new PanelHeader(Markup.Escape(GetVisualTitle(visual))),
+                Border = BoxBorder.Rounded,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+        }
+
+        private static IRenderable RenderImagePlaceholder(VisualManifest visual)
+        {
+            var src = visual.DefaultValue ?? "N/A";
+            var alt = visual.Options.GetValueOrDefault("ALT") ?? "N/A";
+
+            var content = new Rows(
+                new Markup("🖼️ [bold yellow]Image Visual[/] [italic red](Cannot display image in terminal mode)[/]"),
+                new Markup($"[grey]Source:[/] [cyan]{Markup.Escape(src)}[/]"),
+                new Markup($"[grey]Alt:[/] [cyan]{Markup.Escape(alt)}[/]")
+            );
+
+            return new Panel(content)
+            {
+                Header = new PanelHeader(Markup.Escape(GetVisualTitle(visual))),
+                Border = BoxBorder.Double,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+        }
+
+        private static IRenderable RenderComboPlaceholder(VisualManifest visual)
+        {
+            var title = GetVisualTitle(visual);
+            var subBar = new VisualManifest
+            {
+                Name = $"{visual.Name} (Bars)",
+                VisualType = "BAR",
+                Columns = visual.Columns,
+                Rows = visual.Rows,
+                Options = visual.Options,
+                Styles = visual.Styles
+            };
+
+            var subLine = new VisualManifest
+            {
+                Name = $"{visual.Name} (Lines)",
+                VisualType = "LINE",
+                Columns = visual.Columns,
+                Rows = visual.Rows,
+                Options = visual.Options,
+                Styles = visual.Styles
+            };
+
+            var content = new Rows(
+                new Markup("📊 [bold yellow]Combo View[/] [grey](Stacked Bar + Line ASCII preview)[/]"),
+                new Text("\n"),
+                RenderVerticalBarChart(subBar),
+                new Text("\n"),
+                RenderLineChart(subLine)
+            );
+
+            return new Panel(content)
+            {
+                Header = new PanelHeader(Markup.Escape(title)),
+                Border = BoxBorder.Rounded,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+        }
+
+        private static IRenderable RenderTreemapPlaceholder(VisualManifest visual)
+        {
+            var title = GetVisualTitle(visual);
+            var rows = visual.Rows;
+            
+            var content = new List<IRenderable>
+            {
+                new Markup("🌳 [bold yellow]Treemap Visual[/] [grey](Flat hierarchy breakdown)[/]"),
+                new Text("\n")
+            };
+
+            var table = new Table().Border(TableBorder.None).HideHeaders();
+            table.AddColumn("Item");
+            table.AddColumn("Value");
+
+            int limit = 0;
+            foreach (var r in rows)
+            {
+                if (limit++ >= 5) break;
+                var cat = r.Count > 0 ? r[0] ?? "Other" : "Other";
+                var val = r.Count > 1 ? r[1] ?? "0" : "0";
+                table.AddRow($"[grey]•[/] {Markup.Escape(cat)}", $"[bold green]{val}[/]");
+            }
+            content.Add(table);
+
+            return new Panel(new Rows(content))
+            {
+                Header = new PanelHeader(Markup.Escape(title)),
+                Border = BoxBorder.Rounded,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+        }
+
+        private static IRenderable RenderRadarPlaceholder(VisualManifest visual)
+        {
+            var title = GetVisualTitle(visual);
+            var table = new Table();
+            table.AddColumn(new TableColumn("[blue]Dimension[/]").Centered());
+            table.AddColumn(new TableColumn("[blue]Score / Value[/]").Centered());
+
+            foreach (var r in visual.Rows)
+            {
+                var dim = r.Count > 0 ? r[0] ?? "Metric" : "Metric";
+                var val = r.Count > 1 ? r[1] ?? "0" : "0";
+                table.AddRow(Markup.Escape(dim), val);
+            }
+
+            var content = new Rows(
+                new Markup("🕸️ [bold yellow]Radar Dimensions Summary[/] [grey](Tabular overview)[/]"),
+                new Text("\n"),
+                table
+            );
+
+            return new Panel(content)
+            {
+                Header = new PanelHeader(Markup.Escape(title)),
+                Border = BoxBorder.Rounded,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+        }
+
+        private static IRenderable RenderSankeyPlaceholder(VisualManifest visual)
+        {
+            var title = GetVisualTitle(visual);
+            var content = new List<IRenderable>
+            {
+                new Markup("🌊 [bold yellow]Sankey Flow Overview[/] [grey](Direct connections)[/]"),
+                new Text("\n")
+            };
+
+            int limit = 0;
+            foreach (var r in visual.Rows)
+            {
+                if (limit++ >= 5) break;
+                var src = r.Count > 0 ? r[0] ?? "Source" : "Source";
+                var dst = r.Count > 1 ? r[1] ?? "Target" : "Target";
+                var flow = r.Count > 2 ? r[2] ?? "0" : "0";
+                content.Add(new Markup($"  [grey]•[/] {Markup.Escape(src)} ──▶ {Markup.Escape(dst)} [bold cyan]({flow})[/]\n"));
+            }
+
+            return new Panel(new Rows(content))
+            {
+                Header = new PanelHeader(Markup.Escape(title)),
+                Border = BoxBorder.Rounded,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+        }
+
+        private static IRenderable RenderSunburstPlaceholder(VisualManifest visual)
+        {
+            var title = GetVisualTitle(visual);
+            var content = new List<IRenderable>
+            {
+                new Markup("☀️ [bold yellow]Sunburst Hierarchy[/] [grey](Flat tree list)[/]"),
+                new Text("\n")
+            };
+
+            int limit = 0;
+            foreach (var r in visual.Rows)
+            {
+                if (limit++ >= 5) break;
+                var path = r.Count > 0 ? r[0] ?? "Root" : "Root";
+                var val = r.Count > 1 ? r[1] ?? "0" : "0";
+                
+                var cleanPath = path.Replace(">", " ──▶ ");
+                content.Add(new Markup($"  [grey]•[/] {cleanPath} [bold green]({val})[/]\n"));
+            }
+
+            return new Panel(new Rows(content))
+            {
+                Header = new PanelHeader(Markup.Escape(title)),
+                Border = BoxBorder.Rounded,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+        }
+
+        private static IRenderable RenderNetworkPlaceholder(VisualManifest visual)
+        {
+            var title = GetVisualTitle(visual);
+            var content = new Rows(
+                new Markup("🕸️ [bold yellow]Network Topology Metrics[/]"),
+                new Text("\n"),
+                new Markup($"  [grey]Total Graph Rows:[/] [cyan]{visual.Rows.Count}[/]"),
+                new Markup($"  [grey]Schema Columns:[/] [cyan]{string.Join(", ", visual.Columns.Select(Markup.Escape))}[/]")
+            );
+
+            return new Panel(content)
+            {
+                Header = new PanelHeader(Markup.Escape(title)),
+                Border = BoxBorder.Rounded,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+        }
+
+        private static IRenderable RenderMarkdownText(string markdown)
+        {
+            if (string.IsNullOrWhiteSpace(markdown)) return new Text("");
+
+            var lines = markdown.Split('\n');
+            var result = new List<IRenderable>();
+
+            foreach (var rawLine in lines)
+            {
+                var line = rawLine.TrimEnd('\r');
+                var trimmed = line.TrimStart();
+
+                if (trimmed.StartsWith("#"))
+                {
+                    int level = 0;
+                    while (level < trimmed.Length && trimmed[level] == '#') level++;
+                    var text = trimmed.Substring(level).Trim();
+                    
+                    string style = level switch
+                    {
+                        1 => "bold blue underline",
+                        2 => "bold blue",
+                        3 => "bold cyan",
+                        _ => "bold"
+                    };
+                    
+                    result.Add(new Markup($"[{style}]{Markup.Escape(text)}[/]"));
+                    result.Add(new Text("\n"));
+                    continue;
+                }
+
+                if (trimmed == "---" || trimmed == "___" || trimmed == "***")
+                {
+                    result.Add(new Rule().RuleStyle("grey"));
+                    continue;
+                }
+
+                bool isBullet = false;
+                if (trimmed.StartsWith("- ") || trimmed.StartsWith("* "))
+                {
+                    isBullet = true;
+                    trimmed = trimmed.Substring(2);
+                }
+
+                string parsed = ParseInlineMarkdown(trimmed);
+
+                if (isBullet)
+                {
+                    result.Add(new Markup($"  [grey]•[/] {parsed}"));
+                }
+                else
+                {
+                    result.Add(new Markup(parsed));
+                }
+                result.Add(new Text("\n"));
+            }
+
+            return new Rows(result);
+        }
+
+        private static string ParseInlineMarkdown(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+
+            string escaped = Markup.Escape(text);
+
+            escaped = System.Text.RegularExpressions.Regex.Replace(escaped, @"\*\*(.*?)\*\*", "[bold]$1[/]");
+            escaped = System.Text.RegularExpressions.Regex.Replace(escaped, @"__(.*?)__", "[bold]$1[/]");
+            escaped = System.Text.RegularExpressions.Regex.Replace(escaped, @"\*(.*?)\*", "[italic]$1[/]");
+            escaped = System.Text.RegularExpressions.Regex.Replace(escaped, @"_(.*?)_", "[italic]$1[/]");
+            escaped = System.Text.RegularExpressions.Regex.Replace(escaped, @"`(.*?)`", "[yellow]$1[/]");
+            escaped = System.Text.RegularExpressions.Regex.Replace(escaped, @"\[(.*?)\]\((.*?)\)", "[link=$2]$1[/]");
+
+            return escaped;
         }
     }
 }

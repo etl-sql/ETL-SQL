@@ -10,7 +10,7 @@ namespace ETL_SQL.SqlLogicTests
     [Trait("Category", "SLT")]
     public class SltTests
     {
-        [Theory]
+        [SltTheory]
         [MemberData(nameof(GetTestFiles))]
         public async Task RunSltTestFile(string filePath)
         {

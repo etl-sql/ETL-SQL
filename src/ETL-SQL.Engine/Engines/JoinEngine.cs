@@ -684,19 +684,38 @@ namespace ETL_SQL.Engine.Engines
         /// <summary>
         /// Builds a combined schema from the column names of two sample rows.
         /// Used once per join step so all combined rows share the same schema (array-based storage).
+        /// When the right side has a bare column name that conflicts with the left, the right's
+        /// qualified alias (e.g. c.cat_id) is added as a new canonical slot so that both sides'
+        /// values are independently addressable and join conditions like uc.cat_id = c.cat_id
+        /// evaluate correctly even when both tables share a bare column name.
         /// </summary>
         private static TableSchema? BuildCombinedSchema(Row leftSample, Row rightSample)
         {
             var cols = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             leftSample.ForEachColumn((k, _) => { if (seen.Add(k)) cols.Add(k); });
-            rightSample.ForEachColumn((k, _) => { if (seen.Add(k)) cols.Add(k); });
+            rightSample.ForEachColumn((k, _) =>
+            {
+                if (seen.Add(k))
+                {
+                    cols.Add(k);
+                }
+                else if (rightSample.Schema != null)
+                {
+                    // Bare name conflicts with the left. Add the right's qualified aliases as
+                    // separate canonical slots so both sides' values remain independently addressable.
+                    foreach (var alias in rightSample.Schema.EnumerateAliasesOf(k))
+                        if (seen.Add(alias)) cols.Add(alias);
+                }
+            });
             if (cols.Count == 0) return null;
 
             var schema = new TableSchema(cols);
             // Propagate qualified-name aliases from both sides so lookups like t6.d6
             // resolve correctly in the combined row even when the canonical name is the bare d6.
             leftSample.Schema?.CopyAliasesTo(schema);
+            // Right's CopyAliasesTo: for any alias whose canonical was already in the left and
+            // whose qualified name is now a separate canonical slot, TryAdd is a no-op (correct).
             rightSample.Schema?.CopyAliasesTo(schema);
             return schema;
         }
@@ -705,12 +724,37 @@ namespace ETL_SQL.Engine.Engines
         /// Merges two rows into one. When <paramref name="schema"/> is provided (built once per join step
         /// via <see cref="BuildCombinedSchema"/>), the result uses array-based storage instead of a
         /// dynamic dictionary, reducing GC pressure by ~5× per combined row.
+        /// When a right bare column name conflicts with the left and the combined schema has a separate
+        /// canonical slot for the right's qualified alias, the value is written to that slot so the
+        /// left's value is not overwritten.
         /// </summary>
         private static Row CombineRows(Row left, Row right, TableSchema? schema = null)
         {
             var combined = schema != null ? new Row(schema) : new Row();
             left.ForEachColumn((k, v) => combined[k] = v);
-            right.ForEachColumn((k, v) => combined[k] = v);
+
+            if (schema != null && right.Schema != null)
+            {
+                right.ForEachColumn((k, v) =>
+                {
+                    // If the bare name maps to a slot already owned by the left, route the right's value
+                    // to its qualified alias slot (which BuildCombinedSchema created separately).
+                    if (left.HasColumn(k))
+                    {
+                        int leftSlot = schema.GetIndex(k);
+                        string? rightSlot = right.Schema.EnumerateAliasesOf(k)
+                            .FirstOrDefault(a => schema.GetIndex(a) != leftSlot && schema.GetIndex(a) >= 0);
+                        if (rightSlot != null)
+                        { combined[rightSlot] = v; return; }
+                    }
+                    combined[k] = v;
+                });
+            }
+            else
+            {
+                right.ForEachColumn((k, v) => combined[k] = v);
+            }
+
             return combined;
         }
 
