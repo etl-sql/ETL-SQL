@@ -138,6 +138,7 @@ etlsql.db
 
 # More general scratch/diagnostic captures
 *.txt
+!Docs/QUICKSTART.txt
 *.cs.scratch
 *.etlsql.scratch
 test_lineage.md

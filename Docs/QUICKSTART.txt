@@ -1,0 +1,69 @@
+================================================================================
+  ETL-SQL v0.7.0 Quickstart Guide
+================================================================================
+
+Welcome to ETL-SQL, the high-performance hybrid engine for SQL, NoSQL, and 
+FlatFiles. This release (v0.7.0) is focused on portability and security.
+
+1. FIRST STEPS
+--------------------------------------------------------------------------------
+Open a terminal in the folder where you extracted the binaries and run:
+  
+  ./ETL-SQL doctor
+
+This command will verify that your OS, .NET runtime, and disk permissions are 
+correctly configured for operation.
+
+2. RUNNING A SCRIPT
+--------------------------------------------------------------------------------
+To run a standard ETL-SQL script:
+
+  ./ETL-SQL run path/to/your_script.etlsql
+
+Useful flags:
+  --perf     Display performance metrics after execution.
+  --verbose  Show detailed execution tracking.
+  --log      Save execution logs to the /logs directory.
+
+3. THE TERMINAL IDE (TUI)
+--------------------------------------------------------------------------------
+If you prefer a windowed environment for editing and running scripts:
+
+  ./ETL-SQL-TUI
+
+This starts the modern terminal IDE with syntax highlighting and F5 execution.
+
+4. REPORTING (Report-SQL)
+--------------------------------------------------------------------------------
+To compile a .rptsql file into a dashboard manifest:
+
+  ./ETL-SQL-Report path/to/report.rptsql
+
+Then, host the report using the portal player:
+
+  ./ETL-SQL-Portal
+
+REPORT PORTAL QUICKSTART:
+  1. Set a 32-char 'Portal__Jwt__Secret' env var.
+  2. Run ./ETL-SQL-Portal and login at http://localhost:5001.
+  3. Default Admin: admin / Admin@12345! (Change on first login!)
+  4. Detailed guide in Docs/ReportPortal_Guide.txt.
+
+5. CONNECTORS
+--------------------------------------------------------------------------------
+ETL-SQL supports:
+  - SQL: MSSQL, Postgres, Oracle, ODBC
+  - Files: CSV, JSON, XML, Parquet, Avro, Excel
+  - REST: Native HTTP/API connector
+  - Transfers: SFTP, FTP, Azure Blob
+
+6. DOCUMENTATION
+--------------------------------------------------------------------------------
+For the full language reference, visit the Docs/ folder in the repository 
+or the official documentation site.
+
+https://github.com/AmericanSuperstar/ETL-SQL
+
+Enjoy your data integration!
+- The ETL-SQL Team
+================================================================================
