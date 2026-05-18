@@ -18,6 +18,41 @@ namespace ETL_SQL.SqlLogicTests
     [Trait("Category", "SLT")]
     public class CorpusRegressionTests
     {
+        // The 30 INSERT statements from select2.test (with NULLs in various columns)
+        private static readonly string[] T1InsertsSelect2 =
+        [
+            "INSERT INTO t1(e,c,b,d,a) VALUES(NULL,102,NULL,101,104)",
+            "INSERT INTO t1(a,c,d,e,b) VALUES(107,106,108,109,105)",
+            "INSERT INTO t1(e,d,b,a,c) VALUES(110,114,112,NULL,113)",
+            "INSERT INTO t1(d,c,e,a,b) VALUES(116,119,117,115,NULL)",
+            "INSERT INTO t1(c,d,b,e,a) VALUES(123,122,124,NULL,121)",
+            "INSERT INTO t1(a,d,b,e,c) VALUES(127,128,129,126,125)",
+            "INSERT INTO t1(e,c,a,d,b) VALUES(132,134,131,133,130)",
+            "INSERT INTO t1(a,d,b,e,c) VALUES(138,136,139,135,137)",
+            "INSERT INTO t1(e,c,d,a,b) VALUES(144,141,140,142,143)",
+            "INSERT INTO t1(b,a,e,d,c) VALUES(145,149,146,NULL,147)",
+            "INSERT INTO t1(b,c,a,d,e) VALUES(151,150,153,NULL,NULL)",
+            "INSERT INTO t1(c,e,a,d,b) VALUES(155,157,159,NULL,158)",
+            "INSERT INTO t1(c,b,a,d,e) VALUES(161,160,163,164,162)",
+            "INSERT INTO t1(b,d,a,e,c) VALUES(167,NULL,168,165,166)",
+            "INSERT INTO t1(d,b,c,e,a) VALUES(171,170,172,173,174)",
+            "INSERT INTO t1(e,c,a,d,b) VALUES(177,176,179,NULL,175)",
+            "INSERT INTO t1(b,e,a,d,c) VALUES(181,180,182,183,184)",
+            "INSERT INTO t1(c,a,b,e,d) VALUES(187,188,186,189,185)",
+            "INSERT INTO t1(d,b,c,e,a) VALUES(190,194,193,192,191)",
+            "INSERT INTO t1(a,e,b,d,c) VALUES(199,197,198,196,195)",
+            "INSERT INTO t1(b,c,d,a,e) VALUES(NULL,202,203,201,204)",
+            "INSERT INTO t1(c,e,a,b,d) VALUES(208,NULL,NULL,206,207)",
+            "INSERT INTO t1(c,e,a,d,b) VALUES(214,210,213,212,211)",
+            "INSERT INTO t1(b,c,a,d,e) VALUES(218,215,216,217,219)",
+            "INSERT INTO t1(b,e,d,a,c) VALUES(223,221,222,220,224)",
+            "INSERT INTO t1(d,e,b,a,c) VALUES(226,227,228,229,225)",
+            "INSERT INTO t1(a,c,b,e,d) VALUES(234,231,232,230,233)",
+            "INSERT INTO t1(e,b,a,c,d) VALUES(237,236,239,NULL,238)",
+            "INSERT INTO t1(e,c,b,a,d) VALUES(NULL,244,240,243,NULL)",
+            "INSERT INTO t1(e,d,c,b,a) VALUES(246,248,247,249,245)",
+        ];
+
         // The 30 INSERT statements from select1.test lines 4-93 (named-column form)
         private static readonly string[] T1Inserts =
         [
@@ -85,6 +120,33 @@ namespace ETL_SQL.SqlLogicTests
                 ExpectSuccess = true,
                 LineNumber = 0
             });
+
+        private static async Task<SltRunner> CreateT1RunnerSelect2Async()
+        {
+            var runner = new SltRunner();
+            await RunStatement(runner, "CREATE TABLE t1(a INTEGER, b INTEGER, c INTEGER, d INTEGER, e INTEGER)");
+            foreach (var insert in T1InsertsSelect2)
+                await RunStatement(runner, insert);
+            return runner;
+        }
+
+        // select2.test line 96 — same query as select1 but with NULLs in various columns
+        // NULLs change avg(c): only 29 of 30 rows have non-null c; c=NULL excluded from AVG
+        // Expected avg(c) = 4996/29 = 172.276, so c=172 (row 15) goes to ELSE (b*10=1700)
+        [SltFact]
+        public async Task Select2_Line96_CaseWithScalarSubqueryAndNulls()
+        {
+            using var runner = await CreateT1RunnerSelect2Async();
+            var record = new SltRecord
+            {
+                Type = SltRecordType.Query,
+                Sql = "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END FROM t1",
+                SortMode = SltSortMode.RowSort,
+                ExpectedResult = "30 values hashing to efdbaa4d180e7867bec1c4d897bd25b9",
+                LineNumber = 96
+            };
+            await runner.RunTestAsync(record);
+        }
 
         // select1.test line 94
         [SltFact]

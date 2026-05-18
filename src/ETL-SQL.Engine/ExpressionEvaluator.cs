@@ -69,6 +69,9 @@ namespace ETL_SQL.Engine
             // 1. Check immediate context (with ambiguity check)
             if (context != null)
             {
+                // HasColumn check must precede the null check so a null column value in the
+                // inner scope is returned as null rather than leaking through to the outer scope.
+                if (context.HasColumn(name)) return context[name];
                 var fb = ResolveIdentifierFallback(name, context);
                 if (fb != null) return fb;
             }
