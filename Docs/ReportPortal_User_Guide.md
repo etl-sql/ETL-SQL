@@ -21,7 +21,7 @@ The Report Portal is a web application that lets you browse, run, and subscribe 
 
 ## 1. Logging In
 
-Navigate to the portal URL provided by your administrator (e.g. `http://yourserver:5050`). You will be redirected to the login page.
+Navigate to the portal URL provided by your administrator (for example, `http://yourserver:5000` for the default HTTP port). You will be redirected to the login page.
 
 Enter your **username** and **password**, then click **Sign In**.
 
@@ -75,7 +75,7 @@ If a report declares parameters, an input form appears above the result panel. F
 
 ## 5. Viewing & Exporting Results
 
-A report can contain multiple **visuals** — charts, tables, KPI cards, and Markdown prose. These are rendered in the order defined by the Report-SQL script.
+A report can contain multiple **visuals** — charts, tables, KPI cards, and text blocks. They are arranged by the page and container layout defined in the Report-SQL script.
 
 ### 5.1 Charts
 

@@ -1,9 +1,30 @@
 # ETL-SQL Sample Guide
 
-This guide describes the provided sample scripts in the `samples/` folder. These samples are organized into topical subfolders (e.g., `01_Basics`, `07_Real_World`, `08_Reporting`) to demonstrate the various capabilities of the ETL-SQL engine. The folder contains **100+ scripts** across engine, connector, reporting, test, and real-world scenarios.
+This guide describes the provided sample scripts in the `samples/` folder. These samples are organized into topical subfolders (for example, `01_Basics`, `07_Real_World`, `08_Reporting`, and `10_Kitchen_Sinks`) to demonstrate ETL-SQL engine, connector, reporting, test, and release-readiness scenarios. The folder currently contains **160+ `.etlsql` and `.rptsql` scripts**.
 
 > [!TIP]
-> **Running the samples safely**: All scripts in the **Core Samples** section use `MOCKDB` and require no external connections. Scripts in the **Enterprise Real-World Scenarios** section reference external databases — replace the connection details with your own before running. Use `SET WHAT_IF ON;` at the top of any script to do a dry-run before executing destructive operations.
+> **Running the samples safely**: Many samples are self-contained, but some use local flat files, generated output folders, Docker, or placeholder database connections. Read the connection declarations at the top of a sample before running it. Use `SET WHAT_IF ON;` when validating destructive operations.
+
+## Folder Map
+
+| Folder | What it is for |
+| :--- | :--- |
+| `00_QuickStart` | Smallest possible starter script. |
+| `01_Basics` | Variables, lists, previewing, dynamic filters, date logic, and function basics. |
+| `02_Data_Movement` | Flat files, fixed-width files, Avro, Parquet, bulk insert, and text qualifiers. |
+| `03_SQL_Engines` | SQL connectors, pushdown examples, Docker-backed SQL engines, and dialect-specific examples. |
+| `04_Orchestration` | Modular scripts, batches, jobs, lineage, and multi-system orchestration. |
+| `05_Security_Diagnostics` | `WHAT_IF`, linter diagnostics, audit settings, verbose logging, and engine statistics. |
+| `06_Advanced_SQL` | Grouping, windows, joins, subqueries, set logic, and join hints. |
+| `07_Real_World` | Scenario-style scripts that combine multiple features. |
+| `08_Reporting` | Report-SQL interaction, inputs, dashboards, and targeted report behavior checks. |
+| `09_Conversions` | Multi-script conversion/check workflows. |
+| `10_Kitchen_Sinks` | Broad release-readiness coverage for report visuals and language features. |
+| `golden_workflow` | End-to-end Report-SQL workflow used for demos and regression checks. |
+| `paginated` | Multi-report/paginated hosting examples. |
+| `report_portal_deployment` | Script-first portal promotion and deployment pattern. |
+| `99_Experimental` | Stress tests and experiments; not the first place to learn the language. |
+| `output` and nested `samples/output` folders | Generated or checked-in sample output artifacts. |
 
 ## Golden Workflow
 
@@ -34,6 +55,8 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 - Pairs with `report_kitchen_sink.snapshot.json` so runtime and snapshot behavior can be inspected without external services.
 
 ## Core Samples
+
+Core samples introduce language features and small workflows. Some read or write files under `TestData/` or `samples/output/`; inspect the paths before running them from a different working directory.
 
 ### 1. [Basic_ETL.etlsql](../samples/01_Basics/Basic_ETL.etlsql)
 **Purpose**: Introduction to basic ETL operations.
@@ -180,31 +203,31 @@ These advanced scripts demonstrate complex, production-grade business requiremen
 **Multi-System DW Load**: Extracts PostgreSQL transactions, joins a legacy CSV dimension map via `INNER HASH JOIN`, aggregates metrics, and bulk inserts them into a SQL Server Data Warehouse.
 
 ### 27. [realworld_02_secure_sftp_alert.etlsql](../samples/07_Real_World/realworld_02_secure_sftp_alert.etlsql)
-**Secure File Transfer & Alerting**: Extracts daily Oracle ledgers to a CSV, executes 256-bit AES `ENCRYPT_FILE`, moves the payload dynamically via `SFTP`, and uses `TRY/CATCH` blocks to send automated `EMAIL_SEND` exception reports to engineering oncalls upon failure.
+**Secure File Transfer & Alerting**: Self-contained local simulation of a finance extract, encrypted payload handoff, and `TRY/CATCH` failure handling. It uses local folders to stand in for an SFTP drop.
 
 ### 28. [realworld_03_schema_quarantine.etlsql](../samples/07_Real_World/realworld_03_schema_quarantine.etlsql)
 **Strict Schema Quarantine**: Ingests third-party files utilizing `STRICT_SCHEMA='ON'`. Splits traffic dynamically into a "Clean" #Temp table and a "Malaligned" Quarantined audit log, printing validation counts to the console natively.
 
 ### 29. [realworld_04_incremental_merge.etlsql](../samples/07_Real_World/realworld_04_incremental_merge.etlsql)
-**Incremental UPSERT**: Evaluates a daily delta load using standard SQL `MERGE INTO`. Updates preexisting records, inserts new objects natively, and tracks every state permutation outputively via an internal audit trace matrix.
+**Incremental UPSERT**: Demonstrates a daily delta load with `MERGE INTO`, updating existing rows and inserting new rows while recording an audit-style result set.
 
 ### 30. [realworld_05_masking_json.etlsql](../samples/07_Real_World/realworld_05_masking_json.etlsql)
-**Dynamic Masking & JSON Formatting**: Redacts PII records iteratively (SSN, Email) using native `SUBSTRING`/`CONCAT` operations, reallocates projection vectors dynamically grouping profiles, and deposits a unified struct explicitly defined as JSON onto an Azure storage blob.
+**Dynamic Masking & JSON Formatting**: Redacts PII-like fields with string functions and writes a masked profile export to local JSON output.
 
 ### 31. [realworld_06_reconciliation_anti_join.etlsql](../samples/07_Real_World/realworld_06_reconciliation_anti_join.etlsql)
-**Data Reconciliation Anti-Join**: Extracts live dimensions simultaneously from a Postgres node versus a secondary database (connected via `ODBC` — MySQL is not a natively supported connector type) to orchestrate a `LEFT IS NULL` anti-join mapping pipeline that immediately logs untracked disparities to a flat report.
+**Data Reconciliation Anti-Join**: Demonstrates a reconciliation pattern using anti-join logic and writes unmatched rows to a flat audit report.
 
 ### 32. [realworld_07_window_deduplication.etlsql](../samples/07_Real_World/realworld_07_window_deduplication.etlsql)
-**Window Analytics Deduplication**: Ingests unstructured clickstream events formatting natively sequentially over a unified `ROW_NUMBER() OVER(PARTITION BY UserID)` logical ranking hierarchy to dynamically compress/delete old transactions before executing a compressed `PARQUET` write.
+**Window Analytics Deduplication**: Uses `ROW_NUMBER() OVER(PARTITION BY ...)` to identify duplicate or older events before writing a cleaned Parquet-style output.
 
 ### 33. [realworld_08_aggregation_pivot.etlsql](../samples/07_Real_World/realworld_08_aggregation_pivot.etlsql)
-**Complex Quarterly Pivot**: Orchestrates cross-aggregate logic employing matrixed `SUM(CASE WHEN...)` groupings to artificially pivot continuous sequential transactions into physical grid columns natively deposited into an internal corporate `EXCEL` document.
+**Complex Quarterly Pivot**: Uses `SUM(CASE WHEN ...)` aggregation to build a quarterly pivot-style board report.
 
 ### 34. [realworld_09_directory_watcher.etlsql](../samples/07_Real_World/realworld_09_directory_watcher.etlsql)
-**Event-Driven Daemon Orchestration**: Executes an infinite state machine via a continuous generic `WHILE` loop intelligently monitoring a pickup array waiting for incoming integration drops before archiving the artifact natively out of path and breaking successfully.
+**Directory Watcher Pattern**: Uses a `WHILE` loop and directory/file checks to wait for an incoming drop, process it, and archive the artifact.
 
 ### 35. [realworld_10_docker_sync.etlsql](../samples/07_Real_World/realworld_10_docker_sync.etlsql)
-**Ephemeral Sandboxed Synchronization**: Instantiates temporary synchronized infrastructure utilizing simultaneous lightweight engine hooks triggering `mcr.mssql` environments and secondary `alpine.postgres` hubs, safely cloning configuration grids autonomously prior to terminating operations flawlessly.
+**Docker-Based Synchronization**: Starts temporary SQL Server and Postgres containers, copies a small reference table between them through the engine, and closes the containers. Requires Docker to be available.
 
 ---
 

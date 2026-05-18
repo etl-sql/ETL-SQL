@@ -16,11 +16,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > -- or capture it
 > DECLARE @v STRING = @@VERSION;
 > ```
-> You can also check the binary version from the shell:
-> ```bash
-> ETL-SQL.exe --version
-> ```
-> The current release is **v0.7.0**. Use `SHOW VERSION;` to display version info from within a script session.
+> Use `SHOW VERSION;` to display version info from within a script session. The current release baseline is **v0.7.0**.
 
 **Q: Where do I start?**
 > Read the [User Manual](User_Manual.md) first — it explains the pipeline mental model that everything else builds on. Then work through the [Cookbook](Cookbook.md) for production-ready examples.
@@ -130,6 +126,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 
 **Q: Why does my file operation silently do nothing?**
 > The most common cause is not checking whether the source file exists first. Always check before operating:
+> ```sql
 > IF NOT FILE_EXISTS('C:\Incoming\data.csv')
 > BEGIN
 >     PRINT 'Source file not found.';
@@ -283,9 +280,10 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > `.etlsql` files are data pipeline scripts — they move, transform, and load data. `.rptsql` files are Report-SQL scripts — they define dashboards using `CREATE DATASET`, `CREATE VISUAL`, `CREATE PAGE`, and `CREATE NAVIGATION`. The Report-SQL language is a superset of ETL-SQL syntax.
 
 **Q: How do I preview a report without serving it over HTTP?**
-> Use the VS Code extension's **Preview Report** button (similar to Markdown preview) which triggers the `ETL-SQL.ReportPlayer` locally. From the CLI:
+> Use the VS Code extension's **Preview Report** button for an interactive local preview. To build static output without starting a preview server, use the report CLI:
 > ```bash
-> ETL-SQL-Report.exe --preview MyReport.rptsql
+> etl-sql-report build MyReport.rptsql --format md
+> etl-sql-report build MyReport.rptsql --format pdf
 > ```
 
 ---
