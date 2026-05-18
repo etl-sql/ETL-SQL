@@ -1,8 +1,14 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as echarts from 'echarts';
 import { RefreshCw, AlertCircle, Calendar, FileText, File, Download, ExternalLink } from 'lucide-react';
-import type { ReportManifest, VisualManifest, ContainerManifest, PageManifest } from '../types';
+import type { ReportManifest, VisualManifest, ContainerManifest, PageManifest, ReportAction } from '../types';
 import { clsx } from 'clsx';
+
+type ContextMenuArgs = { x: number; y: number; visual: VisualManifest; rowData?: unknown[] };
+
+interface VsCodeWindow {
+    vscode?: { postMessage: (message: unknown) => void };
+}
 
 interface ReportTabProps {
     manifest: ReportManifest;
@@ -16,32 +22,22 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExp
     );
 
     const [crossFilterSource, setCrossFilterSource] = useState<string | null>(null);
-    const [baselineManifest, setBaselineManifest] = useState<ReportManifest | null>(null);
+    const [baselineManifest] = useState<ReportManifest>(() => manifest);
 
     // Local parameter state initialized from manifest defaults
     const [parameters, setParameters] = useState<Record<string, string | null>>(manifest.parameters || {});
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [contextMenu, setContextMenu] = useState<{ x: number, y: number, visual: VisualManifest, rowData?: any[] } | null>(null);
-    const debounceTimer = useRef<any>(null);
+    const [contextMenu, setContextMenu] = useState<ContextMenuArgs | null>(null);
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const activePage = useMemo(() => 
+    const activePage = useMemo(() =>
         manifest.pages.find(p => p.name === activePageName) || manifest.pages[0],
     [manifest, activePageName]);
 
-    // Reset isRefreshing when manifest changes (indicating refresh completed)
+    // Reset isRefreshing and re-sync parameters when manifest changes (refresh completed)
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsRefreshing(false);
-    }, [manifest]);
-
-    // Initialize baseline manifest on first load
-    useEffect(() => {
-        if (!baselineManifest) {
-            setBaselineManifest(manifest);
-        }
-    }, [manifest]);
-
-    // Initialize parameters when manifest changes
-    useEffect(() => {
         if (manifest.parameters) {
             setParameters(manifest.parameters);
         }
@@ -90,8 +86,8 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExp
                     </div>
                     
                     <div className="flex items-center border border-[var(--border)] bg-[var(--vscode-toolbar-hoverBackground,transparent)]/20">
-                        <button 
-                            onClick={() => (window as any).vscode?.postMessage({ type: 'serve' })}
+                        <button
+                            onClick={() => (window as Window & VsCodeWindow).vscode?.postMessage({ type: 'serve' })}
                             className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-[var(--text)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))]"
                             title="Open interactive report"
                         >
@@ -234,7 +230,7 @@ const RenderPage: React.FC<{
     parameters: Record<string, string | null>,
     onParameterChange: (name: string, value: string, source?: string) => void,
     crossFilterSource: string | null,
-    onShowContextMenu: (val: any) => void
+    onShowContextMenu: (val: ContextMenuArgs) => void
 }> = ({ page, manifest, baselineManifest, parameters, onParameterChange, crossFilterSource, onShowContextMenu }) => {
     return (
         <GenericLayout 
@@ -258,7 +254,7 @@ const GenericLayout: React.FC<{
     parameters: Record<string, string | null>,
     onParameterChange: (name: string, value: string, source?: string) => void,
     crossFilterSource: string | null,
-    onShowContextMenu: (val: any) => void
+    onShowContextMenu: (val: ContextMenuArgs) => void
 }> = ({ structure, slotMap, manifest, baselineManifest, parameters, onParameterChange, crossFilterSource, onShowContextMenu }) => {
     const rows = structure.split('/').map(r => r.trim());
     const rowCount = rows.length;
@@ -298,7 +294,7 @@ const RenderObject: React.FC<{
     parameters: Record<string, string | null>,
     onParameterChange: (name: string, value: string, source?: string) => void,
     crossFilterSource: string | null,
-    onShowContextMenu: (val: any) => void
+    onShowContextMenu: (val: ContextMenuArgs) => void
 }> = ({ name, manifest, baselineManifest, parameters, onParameterChange, crossFilterSource, onShowContextMenu }) => {
     const visual = manifest.visuals.find(v => v.name.toLowerCase() === name.toLowerCase());
     if (visual) return (
@@ -344,7 +340,7 @@ const ContainerView: React.FC<{
     parameters: Record<string, string | null>,
     onParameterChange: (name: string, value: string, source?: string) => void,
     crossFilterSource: string | null,
-    onShowContextMenu: (val: any) => void
+    onShowContextMenu: (val: ContextMenuArgs) => void
 }> = ({ container, manifest, baselineManifest, parameters, onParameterChange, crossFilterSource, onShowContextMenu }) => {
     if (container.structure && container.slotMap) {
         return (
@@ -401,7 +397,7 @@ const VisualCard: React.FC<{
     parameters: Record<string, string | null>,
     onParameterChange: (name: string, value: string, source?: string) => void,
     crossFilterSource: string | null,
-    onShowContextMenu: (val: any) => void
+    onShowContextMenu: (val: ContextMenuArgs) => void
 }> = ({ visual, manifest, baselineManifest, parameters, onParameterChange, crossFilterSource, onShowContextMenu }) => {
     const type = visual.visualType.toUpperCase();
     const isFilter = ['SLICER', 'DATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH'].includes(type);
@@ -478,12 +474,12 @@ const VisualCard: React.FC<{
     );
 };
 
-const ReportChart: React.FC<{ 
-    visual: VisualManifest, 
+const ReportChart: React.FC<{
+    visual: VisualManifest,
     onParameterChange: (name: string, value: string, source?: string) => void,
     baselineManifest: ReportManifest | null,
     currentManifest: ReportManifest,
-    onShowContextMenu: (x: number, y: number, rowData?: any[]) => void
+    onShowContextMenu: (x: number, y: number, rowData?: unknown[]) => void
 }> = ({ visual, onParameterChange, baselineManifest, currentManifest, onShowContextMenu }) => {
     const chartRef = useRef<HTMLDivElement>(null);
     const chartInstance = useRef<echarts.ECharts | null>(null);
@@ -516,19 +512,19 @@ const ReportChart: React.FC<{
 
                     if (xIdx >= 0 && yIdx >= 0) {
                         const baselineMap: Record<string, number> = {};
-                        baselineVisual.rows.forEach(r => { baselineMap[String(r[xIdx])] = parseFloat(r[yIdx] as any) || 0; });
-                        
+                        baselineVisual.rows.forEach(r => { baselineMap[String(r[xIdx])] = Number(r[yIdx]) || 0; });
+
                         const currentMap: Record<string, number> = {};
-                        visual.rows.forEach(r => { currentMap[String(r[xIdx])] = parseFloat(r[yIdx] as any) || 0; });
+                        visual.rows.forEach(r => { currentMap[String(r[xIdx])] = Number(r[yIdx]) || 0; });
 
                         if (option.series && option.series.length > 0) {
                             const primarySeries = option.series[0];
-                            const categories = option.xAxis?.data || option.yAxis?.data || [];
-                            
+                            const categories: unknown[] = option.xAxis?.data || option.yAxis?.data || [];
+
                             const filteredData: number[] = [];
                             const remainingData: number[] = [];
 
-                            categories.forEach((cat: any) => {
+                            categories.forEach((cat) => {
                                 const total = baselineMap[String(cat)] || 0;
                                 const filtered = currentMap[String(cat)] || 0;
                                 filteredData.push(filtered);
@@ -546,7 +542,7 @@ const ReportChart: React.FC<{
                             remainingSeries.emphasis = { disabled: true };
                             remainingSeries.tooltip = { show: false };
                             option.series.push(remainingSeries);
-                            option.series.forEach((s: any) => {
+                            option.series.forEach((s) => {
                                 s.stack = 'highlight';
                                 if (!s.emphasis) s.emphasis = {};
                                 s.emphasis.focus = 'none'; // Disable hover-dimming per user request
@@ -557,7 +553,7 @@ const ReportChart: React.FC<{
             } else {
                 // If not filtered, still disable hover-dimming for consistency
                 if (option.series) {
-                    option.series.forEach((s: any) => {
+                    option.series.forEach((s) => {
                         if (!s.emphasis) s.emphasis = {};
                         s.emphasis.focus = 'none';
                     });
@@ -574,37 +570,38 @@ const ReportChart: React.FC<{
             chartInstance.current.setOption(option, true);
 
             // Handle Interaction Events
-            let lastHoveredRow: any = null;
-            chartInstance.current.on('mousemove', (params: any) => {
-                const idx = params.dataIndex != null ? params.dataIndex : -1;
-                lastHoveredRow = (visual.rows || [])[idx] || null;
+            let lastHoveredRow: unknown[] | null = null;
+            chartInstance.current.on('mousemove', (params) => {
+                const idx = (params as { dataIndex?: number }).dataIndex ?? -1;
+                lastHoveredRow = (idx >= 0 ? (visual.rows || [])[idx] : null) as unknown[] | null;
             });
 
-            chartInstance.current.on('click', (params: any) => {
+            chartInstance.current.on('click', (params) => {
+                const p = params as { name?: string; data?: unknown; seriesIndex?: number; dataIndex?: number };
                 const interactionMode = visual.interactions?.ON_SELECT?.toUpperCase();
                 if (interactionMode && interactionMode !== 'NONE') {
-                    const val = params.name || (Array.isArray(params.data) ? params.data[0] : params.data);
+                    const val = p.name || (Array.isArray(p.data) ? p.data[0] : p.data);
                     const matchingColumn = visual.interactions?.MATCHING || visual.options?.['mapping:x'] || visual.columns?.[0];
                     onParameterChange(`@${matchingColumn}`, String(val), visual.name);
-                    
+
                     // Highlight source bar, dim others
                     chartInstance.current?.dispatchAction({ type: 'downplay' });
                     chartInstance.current?.dispatchAction({
                         type: 'highlight',
-                        seriesIndex: params.seriesIndex,
-                        dataIndex: params.dataIndex
+                        seriesIndex: p.seriesIndex,
+                        dataIndex: p.dataIndex
                     });
                 } else {
                     const clickActions = visual.actions?.filter(a => a.trigger === 'ON_CLICK');
-                    const idx = params.dataIndex != null ? params.dataIndex : -1;
+                    const idx = p.dataIndex ?? -1;
                     const rowData = (visual.rows || [])[idx] || [];
                     clickActions?.forEach(action => {
                         // Handle drill down or other click actions
-                        (window as any).vscode?.postMessage({ 
-                            type: 'executeAction', 
-                            action, 
-                            rowData, 
-                            columns: visual.columns 
+                        (window as Window & VsCodeWindow).vscode?.postMessage({
+                            type: 'executeAction',
+                            action,
+                            rowData,
+                            columns: visual.columns
                         });
                     });
                 }
@@ -614,7 +611,7 @@ const ReportChart: React.FC<{
                 const hasDrillDown = visual.actions?.some(a => a.type === 'DRILL_DOWN');
                 if (hasDrillDown) {
                     e.preventDefault();
-                    onShowContextMenu(e.clientX, e.clientY, lastHoveredRow);
+                    onShowContextMenu(e.clientX, e.clientY, lastHoveredRow ?? undefined);
                 }
             });
         } catch (e) {
@@ -629,6 +626,7 @@ const ReportChart: React.FC<{
             chartInstance.current?.dispose();
             chartInstance.current = null;
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chart re-renders on config/theme/baseline change only; visual callbacks intentionally stable
     }, [visual.chartConfig, isDark, baselineManifest, currentManifest.parameters]);
 
     return (
@@ -646,9 +644,9 @@ const ReportChart: React.FC<{
     );
 };
 
-const ReportTable: React.FC<{ 
+const ReportTable: React.FC<{
     visual: VisualManifest,
-    onShowContextMenu: (x: number, y: number, rowData?: any[]) => void
+    onShowContextMenu: (x: number, y: number, rowData?: unknown[]) => void
 }> = ({ visual, onShowContextMenu }) => {
     const grid = (visual.options?.GRID || 'HEADER').toUpperCase();
 
@@ -925,7 +923,7 @@ const ReportImage: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
                 src={src} 
                 alt={visual.name}
                 className="max-w-full max-h-full"
-                style={{ objectFit: fit as any }}
+                style={{ objectFit: fit as React.CSSProperties['objectFit'] }}
             />
         </div>
     );
@@ -934,7 +932,7 @@ const ReportImage: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
 const SimpleMarkdown: React.FC<{ text: string }> = ({ text }) => {
     const html = useMemo(() => {
         // Basic escaping
-        let h = text
+        const h = text
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
@@ -952,7 +950,7 @@ const SimpleMarkdown: React.FC<{ text: string }> = ({ text }) => {
         const lines = h.split('\n');
         let inTable = false;
         let tableLines: string[] = [];
-        let resultLines: string[] = [];
+        const resultLines: string[] = [];
 
         const flushTable = () => {
             if (tableLines.length === 0) return;
@@ -1016,14 +1014,14 @@ const ReportMapPlaceholder: React.FC<{ visual: VisualManifest }> = ({ visual }) 
     );
 };
 
-const ContextMenu: React.FC<{ 
-    x: number, 
-    y: number, 
-    visual: VisualManifest, 
-    rowData?: any[], 
+const ContextMenu: React.FC<{
+    x: number,
+    y: number,
+    visual: VisualManifest,
+    rowData?: unknown[],
     onClose: () => void,
-    onAction: (action: any) => void
-}> = ({ x, y, visual, rowData: _rowData, onClose, onAction }) => {
+    onAction: (action: ReportAction) => void
+}> = ({ x, y, visual, onClose, onAction }) => {
     useEffect(() => {
         const handle = () => onClose();
         window.addEventListener('click', handle, { capture: true });
@@ -1033,7 +1031,7 @@ const ContextMenu: React.FC<{
     const drillDowns = (visual.actions || []).filter(a => a.type === 'DRILL_DOWN');
 
     const exportCsv = () => {
-        const escape = (v: any) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+        const escape = (v: unknown) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
         const lines = [visual.columns.map(escape).join(',')];
         visual.rows.forEach(r => lines.push(visual.columns.map((_, i) => escape(r[i])).join(',')));
         const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });

@@ -40,6 +40,7 @@ function App() {
 
   useEffect(() => {
     if (status === 'error' && prevStatusRef.current !== 'error') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveTab('pipeline');
     }
     prevStatusRef.current = status;
@@ -55,6 +56,29 @@ function App() {
   const reportManifest = useMemo(() => {
     const reportMsg = [...messages].reverse().find(m => m.type === 'reportManifest') as ReportManifest | undefined;
     return reportMsg;
+  }, [messages]);
+
+  // These must be declared before any early returns to satisfy rules-of-hooks
+  const pipeline = useMemo(() => extractPipelineNodes(messages), [messages]);
+
+  const results = useMemo(() => {
+    return messages.filter(m => m.type === 'results') as ResultsMessage[];
+  }, [messages]);
+
+  // Auto-advance to latest result set; reset compare mode when results are cleared
+  useEffect(() => {
+    if (results.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedResultIndex(results.length - 1);
+    } else {
+      setSelectedResultIndex(0);
+      setIsCompareMode(false);
+    }
+  }, [results.length]);
+
+  const perf = useMemo(() => {
+    const perfMessages = messages.filter(m => m.type === 'performance') as PerformanceMessage[];
+    return perfMessages.length > 0 ? perfMessages[perfMessages.length - 1].metrics : null;
   }, [messages]);
 
   if (currentView === 'sidebar') {
@@ -83,31 +107,7 @@ function App() {
     );
   }
 
-  // Rest of Results Panel code...
-
-  // Extract relevant state from messages with defensive checks
-  const pipeline = useMemo(() => extractPipelineNodes(messages), [messages]);
-
-  const results = useMemo(() => {
-    return messages.filter(m => m.type === 'results') as ResultsMessage[];
-  }, [messages]);
-
-  // Auto-advance to latest result set; reset compare mode when results are cleared
-  useEffect(() => {
-    if (results.length > 0) {
-      setSelectedResultIndex(results.length - 1);
-    } else {
-      setSelectedResultIndex(0);
-      setIsCompareMode(false);
-    }
-  }, [results.length]);
-
   const currentResult = results[selectedResultIndex] || results[results.length - 1];
-
-  const perf = useMemo(() => {
-    const perfMessages = messages.filter(m => m.type === 'performance') as PerformanceMessage[];
-    return perfMessages.length > 0 ? perfMessages[perfMessages.length - 1].metrics : null;
-  }, [messages]);
 
   const statusConfig = {
     ready: { label: 'Ready', color: 'bg-[var(--vscode-charts-blue,#3794ff)]' },
@@ -284,7 +284,7 @@ function App() {
   );
 }
 
-const EmptyState = ({ icon: Icon, message }: { icon: any, message: string }) => (
+const EmptyState = ({ icon: Icon, message }: { icon: LucideIcon, message: string }) => (
   <div className="flex-1 flex flex-col items-center justify-center opacity-50 space-y-2 text-[var(--muted)]">
     <Icon size={32} strokeWidth={1.5} />
     <p className="text-[12px]">{message}</p>

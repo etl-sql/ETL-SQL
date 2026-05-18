@@ -10,11 +10,11 @@ interface VariablesTabProps {
 export const VariablesTab: React.FC<VariablesTabProps> = ({ messages }) => {
   const variables = useMemo(() => {
     // 1. Get the latest runtime variables (from execution)
-    const runtimeMsg = [...messages].reverse().find(m => (m as any).type === 'variables');
+    const runtimeMsg = [...messages].reverse().find(m => m.type === 'variables');
     const runtimeVars = extractVariables(runtimeMsg);
 
     // 2. Get the latest script variables (from LSP while typing)
-    const scriptMsg = [...messages].reverse().find(m => (m as any).type === 'scriptVariables');
+    const scriptMsg = [...messages].reverse().find(m => m.type === 'scriptVariables');
     const scriptVars = extractVariables(scriptMsg);
 
     // 3. Merge them: Runtime values win over static definitions
@@ -26,16 +26,13 @@ export const VariablesTab: React.FC<VariablesTabProps> = ({ messages }) => {
         name: v.name,
         typeName: v.typeName,
         value: v.value || '(declared)',
-        isScriptOnly: true
-      } as any);
+        isScriptOnly: true,
+      });
     });
 
     // Overwrite with runtime variables (actual state)
     runtimeVars.forEach(v => {
-      merged.set(v.name.toLowerCase(), {
-        ...v,
-        isScriptOnly: false
-      } as any);
+      merged.set(v.name.toLowerCase(), { ...v, isScriptOnly: false });
     });
 
     return Array.from(merged.values());
@@ -62,7 +59,7 @@ export const VariablesTab: React.FC<VariablesTabProps> = ({ messages }) => {
           </tr>
         </thead>
         <tbody>
-          {variables.map((v: any) => (
+          {variables.map((v) => (
             <tr
               key={v.name}
               className="border-b border-[var(--border)]/70 hover:bg-[var(--vscode-list-hoverBackground,rgba(90,93,94,0.31))]"

@@ -62,7 +62,7 @@ export function useVsCodeApi() {
         return null;
     }, []);
 
-    const postMessage = useCallback((message: any) => {
+    const postMessage = useCallback((message: Record<string, unknown>) => {
         if (vscode) {
             vscode.postMessage(message);
         } else {
@@ -136,7 +136,7 @@ export function useVsCodeApi() {
 
 // VS Code API type definition
 declare function acquireVsCodeApi(): {
-    postMessage(message: any): void;
-    getState(): any;
-    setState(state: any): void;
+    postMessage(message: unknown): void;
+    getState(): unknown;
+    setState(state: unknown): void;
 };

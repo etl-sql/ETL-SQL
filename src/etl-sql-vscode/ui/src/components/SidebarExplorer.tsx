@@ -6,7 +6,7 @@ import { MetadataItem } from './MetadataItem';
 
 interface SidebarExplorerProps {
   messages: ProtocolMessage[];
-  postMessage: (msg: any) => void;
+  postMessage: (msg: Record<string, unknown>) => void;
 }
 
 export const SidebarExplorer: React.FC<SidebarExplorerProps> = ({ messages, postMessage }) => {
@@ -21,32 +21,32 @@ export const SidebarExplorer: React.FC<SidebarExplorerProps> = ({ messages, post
 
   const scriptConnections = useMemo(() => {
     const scriptConnMsgs = messages.filter(m => m.type === 'scriptConnections');
-    const latestByUri = new Map<string, any[]>();
+    const latestByUri = new Map<string, Connection[]>();
     scriptConnMsgs.forEach(m => {
       if (m.type === 'scriptConnections') latestByUri.set(m.uri, m.connections);
     });
     return latestByUri.get(activeUri || '') || [];
   }, [messages, activeUri]);
 
-useEffect(() => {
-    const activeMsg = [...messages].reverse().find(m => (m as any).type === 'activeEditorChanged');
+  useEffect(() => {
+    const activeMsg = [...messages].reverse().find(m => m.type === 'activeEditorChanged');
     if (activeMsg?.type === 'activeEditorChanged') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveUri(activeMsg.uri);
     }
   }, [messages]);
 
   useEffect(() => {
-    // Signal ready to extension to receive initial data
     postMessage({ type: 'ready' });
-  }, []);
+  }, [postMessage]);
 
   const variables = useMemo(() => {
-    const runtimeMsg = [...messages].reverse().find(m => (m as any).type === 'variables');
+    const runtimeMsg = [...messages].reverse().find(m => m.type === 'variables');
     const runtimeVars = extractVariables(runtimeMsg) as ScriptVar[];
-    const scriptMsg = [...messages].reverse().find(m => (m as any).type === 'scriptVariables');
-    const scriptVars = extractVariables(scriptMsg) as any[];
+    const scriptMsg = [...messages].reverse().find(m => m.type === 'scriptVariables');
+    const scriptVars = extractVariables(scriptMsg);
     const merged = new Map<string, ScriptVar>();
-    scriptVars.forEach((v: any) => merged.set(v.name.toLowerCase(), { name: v.name, typeName: v.typeName, value: v.value || '(declared)' }));
+    scriptVars.forEach(v => merged.set(v.name.toLowerCase(), { name: v.name, typeName: v.typeName, value: v.value || '(declared)' }));
     runtimeVars.forEach(v => merged.set(v.name.toLowerCase(), v));
     return Array.from(merged.values());
   }, [messages]);

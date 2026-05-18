@@ -155,6 +155,7 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
 
   // Jump back to current whenever a new run starts
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (status === 'running') setSelectedRun('current');
   }, [status]);
 

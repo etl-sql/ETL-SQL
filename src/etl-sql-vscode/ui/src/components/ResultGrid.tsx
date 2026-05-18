@@ -5,18 +5,19 @@ import {
   getFilteredRowModel,
   flexRender,
   createColumnHelper,
+  type ColumnFiltersState,
 } from '@tanstack/react-table';
 import type { Column } from '@tanstack/react-table';
 import { Download, Search, Filter } from 'lucide-react';
 
 interface ResultGridProps {
-  rows: any[];
+  rows: Record<string, unknown>[];
   columns: string[];
 }
 
 export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
-  const columnHelper = useMemo(() => createColumnHelper<any>(), []);
-  const [columnFilters, setColumnFilters] = useState<any[]>([]);
+  const columnHelper = useMemo(() => createColumnHelper<Record<string, unknown>>(), []);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [showFilters, setShowFilters] = useState(false);
 
   const tableColumns = useMemo(
@@ -37,6 +38,7 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
     [columns, columnHelper]
   );
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table v8 not yet compatible with React Compiler
   const table = useReactTable({
     data: rows,
     columns: tableColumns,
@@ -142,7 +144,7 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
   );
 };
 
-function FilterInput({ column }: { column: Column<any, any> }) {
+function FilterInput({ column }: { column: Column<Record<string, unknown>, unknown> }) {
   const columnFilterValue = column.getFilterValue();
 
   return (

@@ -1,25 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Table as TableIcon, RefreshCw, Box } from 'lucide-react';
+import { ChevronRight, ChevronDown, Table as TableIcon, RefreshCw, Box, type LucideIcon } from 'lucide-react';
 import type { ProtocolMessage } from '../types';
+
+interface ChildItem {
+  label: string;
+  type: 'table' | 'column';
+}
 
 interface MetadataItemProps {
   label: string;
   type: 'connection' | 'table' | 'column' | 'variable' | 'temp-root';
-  icon: any;
+  icon: LucideIcon;
   detail?: string;
   value?: string;
   isScript?: boolean;
   connectionName?: string;
   uri?: string;
   messages: ProtocolMessage[];
-  postMessage: (msg: any) => void;
+  postMessage: (msg: Record<string, unknown>) => void;
 }
 
-export const MetadataItem: React.FC<MetadataItemProps> = ({ 
-  label, type, icon: Icon, detail, value, isScript, connectionName, uri, messages, postMessage 
+export const MetadataItem: React.FC<MetadataItemProps> = ({
+  label, type, icon: Icon, detail, value, isScript, connectionName, uri, messages, postMessage
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [children, setChildren] = useState<any[]>([]);
+  const [children, setChildren] = useState<ChildItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [requestId] = useState(() => Math.random().toString(36).substring(7));
 
@@ -29,6 +34,7 @@ export const MetadataItem: React.FC<MetadataItemProps> = ({
     if (!isExpanded) return;
 
     if (type === 'connection') {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setLoading(true);
         postMessage({ type: 'getTables', connectionName: label, uri, requestId });
     } else if (type === 'table') {
@@ -43,16 +49,17 @@ export const MetadataItem: React.FC<MetadataItemProps> = ({
   // Handle responses from the extension
   useEffect(() => {
     const latest = messages[messages.length - 1];
-    if (!latest || (latest as any).requestId !== requestId) return;
+    if (!latest || !('requestId' in latest) || (latest as { requestId: string }).requestId !== requestId) return;
 
     if (latest.type === 'tablesResponse') {
-        setChildren(latest.tables.map(t => ({ label: t, type: 'table' })));
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setChildren(latest.tables.map(t => ({ label: t, type: 'table' as const })));
         setLoading(false);
     } else if (latest.type === 'columnsResponse') {
-        setChildren(latest.columns.map(c => ({ label: c, type: 'column' })));
+        setChildren(latest.columns.map(c => ({ label: c, type: 'column' as const })));
         setLoading(false);
     } else if (latest.type === 'tempTablesResponse') {
-        setChildren(latest.tables.map(t => ({ label: t, type: 'table' })));
+        setChildren(latest.tables.map(t => ({ label: t, type: 'table' as const })));
         setLoading(false);
     }
   }, [messages, requestId]);
@@ -63,7 +70,6 @@ export const MetadataItem: React.FC<MetadataItemProps> = ({
   };
 
   const handleDragStart = (e: React.DragEvent) => {
-    // Basic drag-and-drop: drag the name
     let text = label;
     if (type === 'variable' && !text.startsWith('@')) text = '@' + text;
     e.dataTransfer.setData('text/plain', text);
@@ -72,7 +78,7 @@ export const MetadataItem: React.FC<MetadataItemProps> = ({
 
   return (
     <div className="select-none">
-      <div 
+      <div
         draggable={type === 'table' || type === 'column' || type === 'variable'}
         onDragStart={handleDragStart}
         className={`
@@ -89,9 +95,9 @@ export const MetadataItem: React.FC<MetadataItemProps> = ({
             </div>
           )}
           {!hasChildren && <div className="w-3" />}
-          
+
           <Icon size={13} className={`shrink-0 ${isScript ? 'text-[var(--vscode-gitDecoration-modifiedResourceForeground,#e2c08d)]' : 'text-[var(--muted)]'}`} />
-          
+
           <span className="truncate text-[12px] text-[var(--text-primary)]">
             {label}
           </span>
@@ -117,7 +123,7 @@ export const MetadataItem: React.FC<MetadataItemProps> = ({
       {isExpanded && children.length > 0 && (
         <div className="ml-4 border-l border-[var(--border)]">
           {children.map((child, idx) => (
-            <MetadataItem 
+            <MetadataItem
               key={`${child.label}-${idx}`}
               label={child.label}
               type={child.type}

@@ -25,7 +25,7 @@ export interface PerformanceMetrics {
 
 export interface ResultsMessage {
     type: 'results';
-    rows: any[];
+    rows: Record<string, unknown>[];
     columns: string[];
 }
 
@@ -72,6 +72,7 @@ export interface Variable {
     name: string;
     value: string;
     typeName: string;
+    isScriptOnly?: boolean;
 }
 
 export interface ConnectionsMessage {
@@ -82,13 +83,13 @@ export interface ConnectionsMessage {
 export interface ScriptConnectionsMessage {
     type: 'scriptConnections';
     uri: string;
-    connections: any[];
+    connections: Connection[];
 }
 
 export interface VariablesMessage {
     type: 'variables';
     variables?: Variable[];
-    data?: any[]; // For backwards compatibility with some engine versions
+    data?: Variable[]; // For backwards compatibility with some engine versions
 }
 
 export interface TablesResponse {
@@ -117,7 +118,7 @@ export interface ActiveEditorChangedMessage {
 export interface ScriptVariablesMessage {
     type: 'scriptVariables';
     uri: string;
-    variables: any[];
+    variables: Variable[];
 }
 
 export type ProtocolMessage = 
@@ -138,16 +139,24 @@ export type ProtocolMessage =
     | ActiveEditorChangedMessage
     | ReportManifest;
 
+export interface ReportAction {
+    type: string;
+    trigger?: string;
+    targetVisual?: string;
+    targetPage?: string;
+    parameterName?: string;
+}
+
 export interface VisualManifest {
     name: string;
     visualType: string;
     chartConfig?: string;
     columns: string[];
-    rows: any[][];
+    rows: unknown[][];
     rowStyles?: (string | null)[];
     options: Record<string, string>;
     error?: string;
-    actions: any[];
+    actions: ReportAction[];
     interactions?: Record<string, string>;
     styles?: Record<string, string>;
     defaultValue?: string;
