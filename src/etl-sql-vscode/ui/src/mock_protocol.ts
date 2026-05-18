@@ -84,7 +84,7 @@ export const mockTrace: ProtocolMessage[] = [
         { name: 'STAGING_CSV', type: 'FLATFILE', connectionString: 'C:/Data/staging.csv' }
     ]},
     { type: 'scriptConnections', uri: 'mock:///demo.etlsql', connections: [
-        { name: 'm', type: 'MOCKDB' }
+        { name: 'm', type: 'MOCKDB', connectionString: '' }
     ]},
     { type: 'variables', variables: [
         { name: '@batch_id',     value: '4502',       typeName: 'INT' },

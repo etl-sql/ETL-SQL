@@ -542,7 +542,7 @@ const ReportChart: React.FC<{
                             remainingSeries.emphasis = { disabled: true };
                             remainingSeries.tooltip = { show: false };
                             option.series.push(remainingSeries);
-                            option.series.forEach((s) => {
+                            option.series.forEach((s: any) => {
                                 s.stack = 'highlight';
                                 if (!s.emphasis) s.emphasis = {};
                                 s.emphasis.focus = 'none'; // Disable hover-dimming per user request
@@ -553,7 +553,7 @@ const ReportChart: React.FC<{
             } else {
                 // If not filtered, still disable hover-dimming for consistency
                 if (option.series) {
-                    option.series.forEach((s) => {
+                    option.series.forEach((s: any) => {
                         if (!s.emphasis) s.emphasis = {};
                         s.emphasis.focus = 'none';
                     });
@@ -784,7 +784,7 @@ const ReportSlicer: React.FC<{
         const uniqueValues = new Set<string>();
         visual.rows.forEach(r => {
             const val = r[colIdx];
-            if (val !== null) uniqueValues.add(val);
+            if (val != null) uniqueValues.add(String(val));
         });
         return Array.from(uniqueValues).sort();
     }, [visual, colIdx]);
@@ -856,7 +856,7 @@ const ReportMultiSelect: React.FC<{
         const uniqueValues = new Set<string>();
         visual.rows.forEach(r => {
             const val = r[colIdx];
-            if (val !== null) uniqueValues.add(val);
+            if (val != null) uniqueValues.add(String(val));
         });
         return Array.from(uniqueValues).sort();
     }, [visual, colIdx]);
