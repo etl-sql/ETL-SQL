@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -116,8 +117,12 @@ SET TELEMETRY = OFF;";
                 _evaluator.LastResult = null;
                 _evaluator.LastResultSets.Clear();
 
-                if (_queryCount % 500 == 0)
-                    GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
+                if (_queryCount % 200 == 0)
+                {
+                    GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                    GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+                    GC.WaitForPendingFinalizers();
+                }
 
                 if (!record.ExpectSuccess && !isQueryLike)
                 {
