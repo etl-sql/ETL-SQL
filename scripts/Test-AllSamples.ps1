@@ -50,6 +50,9 @@ foreach ($script in $etlScripts) {
         elseif ($service -eq 'performance') {
             $available = $false  # performance tests are excluded from the quick run by default
         }
+        elseif ($service -eq 'portal') {
+            $available = $false  # portal management scripts require a running portal instance
+        }
         if (-not $available) {
             Write-Host "SKIPPED ($service unavailable)" -ForegroundColor Yellow
             $skipped++

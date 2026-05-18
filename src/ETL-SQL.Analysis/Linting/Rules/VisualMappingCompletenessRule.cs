@@ -22,7 +22,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
             {
                 if (stmt is not CreateVisualStatement visual) continue;
 
-                var requiredRoles = GetRequiredRoles(visual.VisualType);
+                var requiredRoles = GetRequiredRoles(visual);
                 if (requiredRoles == null || requiredRoles.Count == 0) continue;
 
                 var presentRoles = new HashSet<string>(visual.Mappings.Select(m => m.Role.ToUpperInvariant()));
@@ -45,9 +45,9 @@ namespace ETL_SQL.Analysis.Linting.Rules
             return Task.FromResult<IEnumerable<LintResult>>(results);
         }
 
-        private static List<string>? GetRequiredRoles(VisualType type)
+        private static List<string>? GetRequiredRoles(CreateVisualStatement visual)
         {
-            return type switch
+            return visual.VisualType switch
             {
                 VisualType.Bar => new List<string> { "X", "Y" },
                 VisualType.Line => new List<string> { "X", "Y" },
@@ -66,9 +66,18 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 VisualType.Combo       => new List<string> { "X" },
                 VisualType.Bubble      => new List<string> { "X", "Y" },
                 VisualType.Candlestick => new List<string> { "X", "OPEN", "HIGH", "LOW", "CLOSE" },
-                VisualType.Map         => new List<string> { "REGION" },
-                _ => null  // Radar: flexible; Map POINTS mode uses LON/LAT instead
+                VisualType.Map         => GetMapRequiredRoles(visual),
+                _ => null
             };
+        }
+
+        private static List<string> GetMapRequiredRoles(CreateVisualStatement visual)
+        {
+            var mode = visual.Options
+                .FirstOrDefault(o => o.Key.Equals("MODE", StringComparison.OrdinalIgnoreCase))?.Value ?? "";
+            return mode.Equals("POINTS", StringComparison.OrdinalIgnoreCase)
+                ? new List<string> { "LAT", "LON" }
+                : new List<string> { "REGION" };
         }
     }
 }

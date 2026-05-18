@@ -42,7 +42,7 @@ CREATE VISUAL TechnicalRoadmap AS GANTT (
     )
 );
 
-CREATE PAGE 'Timeline' (
+CREATE PAGE 'Timeline' AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = ProjectTimeline,

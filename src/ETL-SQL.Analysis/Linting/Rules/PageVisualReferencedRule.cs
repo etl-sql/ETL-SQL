@@ -16,7 +16,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
         public string Name        => "PageVisualReferenced";
         public string Description => "Warns when CREATE PAGE MAP slots and STRUCTURE letters are inconsistent, or a referenced visual is not defined.";
 
-        private static readonly Regex _slotLetters = new(@"[A-Za-z]", RegexOptions.Compiled);
+        private static readonly Regex _slotLetters = new(@"[A-Za-z]+", RegexOptions.Compiled);
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {

@@ -240,7 +240,7 @@ CREATE VISUAL GanttChart AS GANTT (
 
 CREATE VISUAL CandleChart AS CANDLESTICK (
     SOURCE = &CandleData,
-    MAPPINGS (LABEL = D, OPEN = O, HIGH = H, LOW = L, CLOSE = C),
+    MAPPINGS (X = D, OPEN = O, HIGH = H, LOW = L, CLOSE = C),
     STYLE (TITLE = 'Stock Trend (Candlestick)')
 );
 
