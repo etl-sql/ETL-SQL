@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     1. Validates environment (dotnet, node, npm).
-    2. Runs the full sample validation suite (Test-AllSamples.ps1).
+    2. Runs the release smoke lane by default, with optional full sample validation.
     3. Builds the React UI once.
     4. Orchestrates platform-specific builds via publish_release.ps1.
 
@@ -16,7 +16,8 @@
 param(
     [string]$Version = "0.7.0",
     [switch]$SkipTests,
-    [switch]$SkipUI
+    [switch]$SkipUI,
+    [switch]$IncludeSampleValidation
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,11 +41,23 @@ Write-Host "  Environment OK." -ForegroundColor Gray
 
 # --- STEP 1: Testing ---
 if (!$SkipTests) {
-    Write-Host "`n[2/7] Running Sample Validation Suite..." -ForegroundColor Yellow
-    & (Join-Path $PSScriptRoot "Test-AllSamples.ps1")
+    Write-Host "`n[2/7] Running Release Smoke Test Lane..." -ForegroundColor Yellow
+    & (Join-Path $PSScriptRoot "test-lane.ps1") -Lane smoke -Configuration Release -NoRestore -NoBuild
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Validation tests failed. Aborting release."
+        Write-Error "Release smoke lane failed. Aborting release."
         exit 1
+    }
+
+    if ($IncludeSampleValidation) {
+        Write-Host "  Running optional full sample validation suite..." -ForegroundColor Yellow
+        & (Join-Path $PSScriptRoot "Test-AllSamples.ps1")
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Sample validation failed. Aborting release."
+            exit 1
+        }
+    }
+    else {
+        Write-Host "  Full sample validation skipped. Use -IncludeSampleValidation for the deployment sample lane." -ForegroundColor Gray
     }
 } else {
     Write-Host "`n[2/7] Skipping tests..." -ForegroundColor Gray
@@ -102,7 +115,7 @@ if (Test-Path $LinuxScript) {
     Write-Host "  Triggering Linux package build..." -ForegroundColor Gray
     # On Windows, we can trigger via WSL if available, or just acknowledge existence
     if (Get-Command wsl -ErrorAction SilentlyContinue) {
-        wsl bash -c "cd scripts && ./build_linux_packages.sh"
+        wsl bash -c "./scripts/build_linux_packages.sh $Version release/linux-x64/bin"
     } else {
         Write-Warning "  WSL not found. Please run build_linux_packages.sh on a Linux host."
     }
@@ -113,14 +126,11 @@ if (Test-Path $MacScript) {
     Write-Host "  Triggering Mac DMG build (Requires MacOS host)..." -ForegroundColor Gray
 }
 
-# --- STEP 6: Update Installation Scripts ---
-Write-Host "`n[7/7] Updating Installation Bootstrap Scripts..." -ForegroundColor Yellow
+# --- STEP 6: Check Installation Scripts ---
+Write-Host "`n[7/7] Checking Installation Bootstrap Scripts..." -ForegroundColor Yellow
 $InstallPs1 = Join-Path $PSScriptRoot "install.ps1"
 if (Test-Path $InstallPs1) {
-    $Content = Get-Content $InstallPs1
-    $NewContent = $Content -replace '\$Version = ".*"', "`$Version = `"$Version`""
-    $NewContent | Set-Content $InstallPs1
-    Write-Host "  Updated install.ps1 to version $Version" -ForegroundColor Gray
+    Write-Host "  install.ps1 is a bootstrap template and was not modified." -ForegroundColor Gray
 }
 
 # --- SUMMARY ---

@@ -69,6 +69,8 @@ Desktop.ini
 TestData/large_*.csv
 TestData/qualified_output.csv
 TestData/*.out.csv
+slt_results/
+tests/ETL-SQL.SqlLogicTests/slt.runsettings
 
 ## ETL output files — keep TestData source fixtures, ignore generated outputs
 Output/

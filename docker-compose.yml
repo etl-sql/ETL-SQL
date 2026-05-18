@@ -21,13 +21,13 @@ services:
       context: .
       dockerfile: src/ETL-SQL.ReportPortal/Dockerfile
     ports:
-      - "5002:5002"
+      - "5000:5000"
     volumes:
       - ./Reports:/app/Reports
       - ./Snapshots:/app/Snapshots
       - ./data:/app/data
-      - ./src/ETL-SQL.ReportPortal/wwwroot:/app/wwwroot
     environment:
+      - ASPNETCORE_URLS=http://+:5000
       - Portal__Orchestrator__ApiUrl=http://orchestrator-srv:5001
       - Portal__DatabasePath=/app/data/portal.db
       - Portal__ScriptRootPath=/app/Reports

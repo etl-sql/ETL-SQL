@@ -5,7 +5,7 @@ suite('Extension Integration Test Suite', () => {
 	vscode.window.showInformationMessage('Starting integration tests...');
 
 	test('Extension should activate successfully', async () => {
-		const extension = vscode.extensions.getExtension('chuck.etl-sql-vscode');
+		const extension = vscode.extensions.getExtension('AmericanSuperstar.etl-sql-vscode');
 		assert.ok(extension, 'Extension was not found');
 		await extension!.activate();
 		assert.strictEqual(extension!.isActive, true, 'Extension should be active');

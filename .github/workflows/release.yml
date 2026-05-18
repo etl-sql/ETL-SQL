@@ -41,9 +41,9 @@ jobs:
       - name: Build & Publish
         shell: pwsh
         run: |
-          $Version = $github.ref_name.TrimStart('v')
+          $Version = $env:GITHUB_REF_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
-          .\scripts\publish_release.ps1
+          .\scripts\publish_release.ps1 -Platforms win-x64
       
       - name: Build MSI
         shell: pwsh
@@ -52,7 +52,7 @@ jobs:
           .\scripts\build_msi.ps1
           # The MSI script puts it in src/ETL-SQL.Installer
           # We want to move it to the release folder
-          $Version = $github.ref_name.TrimStart('v')
+          $Version = $env:GITHUB_REF_NAME.TrimStart('v')
           Move-Item "src/ETL-SQL.Installer/ETL-SQL-Enterprise-v$Version.msi" "release/ETL-SQL-v$Version-x64-Setup.msi"
 
       - name: Upload Windows Artifacts
@@ -72,20 +72,20 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.x'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       
       - name: Publish Binaries
+        shell: pwsh
         run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          mkdir -p release/linux-x64
-          # Publish core projects
-          dotnet publish src/ETL-SQL.App/ETL-SQL.App.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o release/linux-x64/bin
-          # Build .deb
+          $Version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $env:ETL_SQL_VERSION = $Version
+          ./scripts/publish_release.ps1 -Platforms linux-x64
           chmod +x scripts/build_linux_packages.sh
-          ./scripts/build_linux_packages.sh $VERSION
-          # Move .deb to release root
-          mv etl-sql_${VERSION}_amd64.deb release/
-          # Create zip
-          cd release/linux-x64 && zip -r ../ETL-SQL-v${VERSION}-linux-x64.zip *
+          ./scripts/build_linux_packages.sh $Version release/linux-x64/bin
+          mv "etl-sql_${Version}_amd64.deb" release/
 
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
@@ -104,19 +104,20 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.x'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       
       - name: Publish Binaries
+        shell: pwsh
         run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          mkdir -p release/osx-x64
-          dotnet publish src/ETL-SQL.App/ETL-SQL.App.csproj -c Release -r osx-x64 --self-contained true -p:PublishSingleFile=true -o release/osx-x64/bin
-          # Build .dmg
+          $Version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $env:ETL_SQL_VERSION = $Version
+          ./scripts/publish_release.ps1 -Platforms osx-x64
           chmod +x scripts/build_mac_dmg.sh
-          ./scripts/build_mac_dmg.sh $VERSION
-          # Move .dmg to release root
-          mv ETL-SQL_v${VERSION}.dmg release/
-          # Create zip
-          cd release/osx-x64 && zip -r ../ETL-SQL-v${VERSION}-osx-x64.zip *
+          ./scripts/build_mac_dmg.sh $Version release/osx-x64/bin
+          mv "ETL-SQL_v${Version}.dmg" release/
 
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4

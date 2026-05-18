@@ -3,7 +3,7 @@
   "displayName": "ETL-SQL Tools",
   "description": "Language support for ETL-SQL scripts with lineage tracking and diagnostics.",
   "version": "0.7.0",
-  "publisher": "chuck",
+  "publisher": "AmericanSuperstar",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -15,7 +15,18 @@
   "categories": [
     "Programming Languages"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:etlsql",
+    "onNotebook:etl-sql-notebook",
+    "onView:etlsql-sidebar",
+    "onView:etlsql-results-view",
+    "onCommand:etlsql.previewReport",
+    "onCommand:etlsql.runScript",
+    "onCommand:etlsql.runSelection",
+    "onCommand:etlsql.showLineage",
+    "onCommand:etlsql.publishToPortal",
+    "onCommand:etlsql.exportNotebook"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "notebooks": [

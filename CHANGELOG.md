@@ -35,7 +35,7 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
     - **Visualization**: Enhanced Mermaid-based lineage graphs with distinct shapes for Reports and Datasets.
 - **Data Lake Connectors**: Native support for **Snowflake** and **BigQuery**.
 - **Batch Separator**: Added `GO` keyword support for separating execution batches.
-- **Improved Loops**: `FOR` loops now support implicit start values (e.g., `FOR @i = 10` instead of `FOR @i = 1 TO 10`).
+- **Improved Loops**: `FOR` loops now support implicit start values with `FOR @i TO 10`.
 - **QUALIFY Clause**: Added T-SQL/Snowflake-style `QUALIFY` clause for filtering results based on window function values.
 - **Window FILTER**: Support for the `FILTER (WHERE ...)` clause inside aggregate window functions.
 - **@@FETCH_STATUS**: Added support for checking cursor/foreach fetch status.
@@ -54,7 +54,7 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
     - Finalized purge of unstable semantic features for improved stability.
 - **VS Code Preview**: Support for new chart types (Bubble, Radar, Candlestick, Map) and improved sidebar variable discovery.
 - **Report SQL Audit**: Comprehensive rewrite of `Report_SQL_Guide.md` and inline help files to match current production state.
-- **Deployment Packaging**: Integrated MSI installer, Linux `.tar.gz`, and macOS `.pkg` generation into the release pipeline.
+- **Deployment Packaging**: Integrated Windows MSI/ZIP, Linux `.deb`/ZIP, macOS DMG/ZIP, and platform-targeted VSIX generation into the release pipeline.
 
 ### Fixed
 - **Multi-Select Regression**: Fixed a duplication bug where legacy dropdown logic was overwriting the new checkbox-list implementation.
@@ -68,6 +68,6 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 - **Protocol Standardization**: Migrated REPL communication to strict PascalCase JSON with mandatory CRLF endings for Windows pipe stability.
 
 ### Changed
-- **Sample Reorganization**: Moved all `TestData` to `samples/data/` and redirected script outputs to `samples/output/` for repository cleanliness.
-- **Visibility Syntax**: Deprecated `HIDDEN = ON` in favor of the unified `VISIBLE` property.
+- **Sample Reorganization**: Expanded the curated `samples/` library and redirected generated sample outputs under `samples/output/` patterns for repository cleanliness.
+- **Visibility Syntax**: Standardized report visibility on the unified `VISIBLE` property.
 - **Directory Connections**: Statements like `COPY DIRECTORY` and `FILE_LIST` now natively accept `DIRECTORY` connection aliases as path arguments.

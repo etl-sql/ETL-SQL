@@ -3,6 +3,7 @@
 # Usage: ./build_mac_dmg.sh <version>
 
 VERSION=${1:-"0.7.0"}
+PUBLISHED_BIN_DIR=${2:-"release/osx-x64/bin"}
 APP_NAME="ETL-SQL"
 BUILD_DIR="src/ETL-SQL.Installer/mac"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
@@ -13,6 +14,7 @@ echo "--- ETL-SQL macOS DMG Builder ---"
 rm -rf "$BUILD_DIR"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
+mkdir -p "$APP_BUNDLE/Contents/Resources/bin"
 
 # 2. Create Info.plist
 cat <<EOF > "$APP_BUNDLE/Contents/Info.plist"
@@ -34,11 +36,26 @@ cat <<EOF > "$APP_BUNDLE/Contents/Info.plist"
 </plist>
 EOF
 
-# 3. Create Launcher Script
+# 3. Copy Binaries and Create Launcher Script
+if [ ! -d "$PUBLISHED_BIN_DIR" ]; then
+    echo "[ERROR] Published binary directory not found: $PUBLISHED_BIN_DIR"
+    exit 1
+fi
+
+if [ ! -f "$PUBLISHED_BIN_DIR/ETL-SQL" ]; then
+    echo "[ERROR] Required CLI binary not found: $PUBLISHED_BIN_DIR/ETL-SQL"
+    exit 1
+fi
+
+echo "Copying published osx-x64 binaries from $PUBLISHED_BIN_DIR..."
+cp -a "$PUBLISHED_BIN_DIR/." "$APP_BUNDLE/Contents/Resources/bin/"
+chmod +x "$APP_BUNDLE/Contents/Resources/bin/ETL-SQL"*
+
 cat <<EOF > "$APP_BUNDLE/Contents/MacOS/ETL-SQL"
 #!/bin/bash
-# Simple launcher that opens the TUI in a new terminal window
-osascript -e 'tell application "Terminal" to do script "/usr/local/bin/ETL-SQL ui edit"'
+SCRIPT_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+CLI="\$SCRIPT_DIR/../Resources/bin/ETL-SQL"
+osascript -e "tell application \"Terminal\" to do script \"\\\"\$CLI\\\" ui edit\""
 EOF
 chmod +x "$APP_BUNDLE/Contents/MacOS/ETL-SQL"
 

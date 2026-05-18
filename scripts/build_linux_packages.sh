@@ -3,6 +3,7 @@
 # Usage: ./build_linux_packages.sh <version>
 
 VERSION=${1:-"0.7.0"}
+PUBLISHED_BIN_DIR=${2:-"release/linux-x64/bin"}
 ARCH="amd64"
 PKG_NAME="etl-sql"
 BASE_DIR="src/ETL-SQL.Installer/linux"
@@ -19,9 +20,26 @@ mkdir -p "$BUILD_ROOT/usr/lib/etl-sql/portal"
 mkdir -p "$BUILD_ROOT/etc/systemd/system"
 mkdir -p "$BUILD_ROOT/DEBIAN"
 
-# 2. Publish Binaries (Simulated - assume pre-built for speed in this script)
-echo "Publishing binaries (win-x64 used for demo, would be linux-x64)..."
-# In a real run: dotnet publish ../src/ETL-SQL.App/ETL-SQL.App.csproj -c Release -r linux-x64 ...
+# 2. Copy Published Binaries
+if [ ! -d "$PUBLISHED_BIN_DIR" ]; then
+    echo "[ERROR] Published binary directory not found: $PUBLISHED_BIN_DIR"
+    exit 1
+fi
+
+if [ ! -f "$PUBLISHED_BIN_DIR/ETL-SQL" ]; then
+    echo "[ERROR] Required CLI binary not found: $PUBLISHED_BIN_DIR/ETL-SQL"
+    exit 1
+fi
+
+echo "Copying published linux-x64 binaries from $PUBLISHED_BIN_DIR..."
+cp -a "$PUBLISHED_BIN_DIR/." "$BUILD_ROOT/usr/lib/etl-sql/bin/"
+cp -a "$PUBLISHED_BIN_DIR/." "$BUILD_ROOT/usr/lib/etl-sql/orchestrator/"
+cp -a "$PUBLISHED_BIN_DIR/." "$BUILD_ROOT/usr/lib/etl-sql/portal/"
+
+ln -s /usr/lib/etl-sql/bin/ETL-SQL "$BUILD_ROOT/usr/bin/etl-sql"
+ln -s /usr/lib/etl-sql/bin/ETL-SQL-Report "$BUILD_ROOT/usr/bin/etl-sql-report"
+ln -s /usr/lib/etl-sql/bin/ETL-SQL-LSP "$BUILD_ROOT/usr/bin/etl-sql-lsp"
+ln -s /usr/lib/etl-sql/bin/ETL-SQL-TUI "$BUILD_ROOT/usr/bin/etl-sql-tui"
 
 # 3. Create DEBIAN/control
 cat <<EOF > "$BUILD_ROOT/DEBIAN/control"
