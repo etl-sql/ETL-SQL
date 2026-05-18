@@ -545,7 +545,7 @@ SHOW JOB HISTORY;                     -- Execution history for all jobs
 SHOW JOB HISTORY NightlyArchive;      -- History for a specific job
 DROP JOB IF EXISTS CleanupJob;        -- Remove a job
 -- To terminate an actively running job, use the Orchestrator REST API:
---   PUT http://localhost:5100/jobs/{job_name}/cancel
+--   POST http://localhost:5001/api/scheduled-jobs/{job_name}/kill
 ```
 
 ---

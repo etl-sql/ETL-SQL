@@ -1,13 +1,14 @@
 # ETL-SQL Notebooks (.etlnb)
 
-ETL-SQL Notebooks provide a stateful, iterative environment for data engineering and visualization directly within VS Code.
+ETL-SQL Notebooks provide a stateful, iterative environment for writing and running ETL-SQL cells directly inside VS Code.
 
 ## Key Features
 
 - **Cell-Based Execution**: Run small snippets of ETL-SQL and see results immediately.
 - **Persistent State**: Variables (`@var`) and temporary tables (`#temp`) persist across cells within the same notebook session.
 - **Interactive Mode**: Automatically enabled for notebooks, modifying engine behavior for exploration.
-- **Rich Visuals**: `CREATE VISUAL` statements render charts and tables directly in the cell output without needing a `PAGE` layout.
+- **Inline Outputs**: query results render as notebook output tables; `CREATE VISUAL` statements emit their resolved visual manifest for inspection.
+- **Export Path**: notebooks can be exported to a regular `.etlsql` script for scheduling, source control review, or CI.
 
 ---
 
@@ -15,19 +16,17 @@ ETL-SQL Notebooks provide a stateful, iterative environment for data engineering
 
 When running in a notebook, the engine operates in **Interactive Mode**. This introduces several behaviors designed for rapid iteration:
 
-### 1. Global Idempotency
-In standard scripts, declaring a variable or connection that already exists throws an error. In Interactive Mode, these operations become idempotent:
-- **DECLARE**: If the variable exists, it is updated (like `SET`).
-- **CREATE CONNECTION**: If the connection exists, it is patched/updated (like `ALTER`).
-- **CREATE VISUAL**: Overwrites any existing visual with the same name.
+### 1. Idempotent Authoring
+In standard scripts, creating a connection or dataset that already exists can fail. In Interactive Mode, authoring operations are friendlier for repeated cell execution:
+- **CREATE CONNECTION**: If the connection exists, it is updated.
+- **CREATE DATASET**: Re-running a cell can update the dataset definition.
+- **CREATE VISUAL**: Re-running a cell replaces the visual definition with the same name.
 
-### 2. Immediate Visual Emission
-In a standard script, `CREATE VISUAL` only registers a definition. You must then use `CREATE PAGE` or `EXPORT` to see it.
-In a notebook, `CREATE VISUAL` emits the visual manifest **immediately** to the cell output.
+### 2. Immediate Output
+In a standard script, `CREATE VISUAL` registers a definition for a later report page or export. In a notebook, the extension also emits the visual manifest to the cell output so you can inspect the resolved definition immediately.
 
 ### 3. Transaction Safety
-If a cell execution fails or is cancelled inside a `BEGIN TRANSACTION`, the transaction may remain open. 
-- Use the **Rollback All Transactions** command (from the command palette or sidebar) to clear any dangling locks.
+If a cell execution fails or is cancelled inside a `BEGIN TRANSACTION`, use the **ETL-SQL: Rollback All Transactions** command from the command palette to clear any dangling transaction state in the active REPL session.
 
 ---
 
@@ -60,9 +59,10 @@ CREATE VISUAL ErrorTrend AS LINE (
 
 | Command | Description |
 | :--- | :--- |
-| **Run Cell** | Executes the current cell and updates global state. |
-| **Cancel Execution** | Sends a cancellation request to the engine (interrupts long-running queries). |
-| **Rollback Transactions** | Forces a rollback of all active transactions in the current engine session. |
+| **Run Cell** | Executes the selected cell using the ETL-SQL notebook controller and updates notebook session state. |
+| **Stop Cell** | Sends a cancellation request to the active engine execution. |
+| **ETL-SQL: Rollback All Transactions** | Forces a rollback of active transactions in the current REPL session. |
+| **ETL-SQL: Export Notebook to .etlsql** | Writes code cells to a regular ETL-SQL script. |
 
 ---
 

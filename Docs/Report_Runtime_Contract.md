@@ -20,13 +20,13 @@ Host copies are generated artifacts:
 Edit the canonical files first, then run:
 
 ```powershell
-.\scripts\sync-assets.ps1
+node .\scripts\sync-assets.js
 ```
 
 CI runs:
 
 ```powershell
-.\scripts\sync-assets.ps1 -Check
+node .\scripts\sync-assets.js -Check
 ```
 
 That check fails when any host copy drifts from the canonical shared asset.

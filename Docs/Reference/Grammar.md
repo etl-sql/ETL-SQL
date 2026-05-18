@@ -649,7 +649,7 @@ CREATE CONNECTION logs_dir ON DIRECTORY('C:\Logs\') WITH(RECURSIVE=TRUE);
 -- Report Portal
 CREATE CONNECTION portal ON REPORTPORTAL(
     HOST = 'report-server.company.com',
-    PORT = 5001,
+    PORT = 5000,
     USER = 'admin',
     PASSWORD = ENC:...
 );
@@ -657,7 +657,7 @@ CREATE CONNECTION portal ON REPORTPORTAL(
 -- Orchestrator
 CREATE CONNECTION orch ON ORCHESTRATOR(
     HOST = 'orch-server.company.com',
-    PORT = 5100,
+    PORT = 5001,
     USER = 'admin',
     PASSWORD = ENC:...
 );
@@ -2336,7 +2336,7 @@ Portal catalog names, user names, group names, recipients, report names, and pat
 ```sql
 CREATE CONNECTION portal ON REPORTPORTAL(
     HOST = 'report-server.company.com',
-    PORT = 5001,
+    PORT = 5000,
     USER = 'admin',
     PASSWORD = ENC:...
 );
@@ -2630,7 +2630,7 @@ For targeting a remote Orchestrator from a standalone `CREATE JOB` statement (ou
 ```sql
 CREATE CONNECTION orch ON ORCHESTRATOR(
     HOST = 'orch-server.company.com',
-    PORT = 5100,
+    PORT = 5001,
     USER = 'admin',
     PASSWORD = ENC:...
 );

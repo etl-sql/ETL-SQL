@@ -307,15 +307,21 @@ DROP JOB NightlyArchive;
 ```
 
 > [!CAUTION]
-> `DROP JOB` permanently deletes the job and all its history entries. There is no undo. If you just want to pause a job temporarily, use the Orchestrator REST API: `PUT /jobs/{name}/disable` — or connect to `etlsql.db` with any SQLite tool and set `IsEnabled = 0`.
+> `DROP JOB` permanently deletes the job and all its history entries. There is no undo. If you just want to pause a job temporarily, update it through the Report Portal or call `PUT /api/scheduled-jobs/{name}` with `IsEnabled = false`.
 
 ### 3.5 Cancelling a Running Job
 
-To request cancellation of a currently-executing job, use the Orchestrator REST API:
+To request cancellation of a currently-executing scheduled job, use the Orchestrator REST API:
 
 ```bash
-# Get job run ID from SHOW JOB HISTORY (Id column, Status = 'RUNNING')
-PUT http://localhost:5100/jobs/{name}/cancel
+curl -X POST http://localhost:5001/api/scheduled-jobs/{name}/kill \
+  -H "X-Orchestrator-Key: your-shared-secret"
+```
+
+For ad-hoc jobs submitted directly to `POST /jobs`, cancel by job id:
+
+```bash
+curl -X DELETE http://localhost:5001/jobs/{id}
 ```
 
 From within a script or TUI session, the in-engine scheduler will also automatically stop a job's execution if its `CancellationToken` is triggered (e.g. via `Ctrl+C` or process shutdown).
@@ -859,7 +865,7 @@ Orchestrator__ScriptRoot=/opt/etl/scripts
 {
   "Portal": {
     "Orchestrator": {
-      "ApiUrl": "http://orchestrator-host:5100",
+      "ApiUrl": "http://orchestrator-host:5001",
       "ApiKey": "your-shared-secret"
     }
   }
@@ -867,7 +873,7 @@ Orchestrator__ScriptRoot=/opt/etl/scripts
 ```
 Or:
 ```
-Portal__Orchestrator__ApiUrl=http://orchestrator-host:5100
+Portal__Orchestrator__ApiUrl=http://orchestrator-host:5001
 Portal__Orchestrator__ApiKey=your-shared-secret
 ```
 

@@ -1,84 +1,121 @@
 # ETL-SQL Migration Guide (v0.7.0)
 
-This document describes breaking changes between ETL-SQL releases and provides upgrade instructions for each version transition.
+ETL-SQL v0.7.0 is the current release baseline. Because the app has not had a public stable release before this baseline, this guide is mainly for repository maintainers, early testers, and anyone updating pre-release scripts from older branches.
 
-> [!NOTE]
-> ETL-SQL v0.7.0 is the current release baseline. This guide documents the breaking syntax and behavior changes needed when upgrading existing scripts.
-
----
-
-## How to Use This Guide
+For current syntax, prefer [User_Manual.md](User_Manual.md), [Reference/Grammar.md](Reference/Grammar.md), [Reference/Data_Connectors.md](Reference/Data_Connectors.md), and [Report_SQL_Guide.md](Report_SQL_Guide.md).
 
 ---
 
-## v0.7.0 (May 2026)
+## Upgrade Checklist
 
-### Breaking Changes
+1. Run the script through the current linter.
+2. Replace old report layout experiments with the current `CREATE PAGE`, `CREATE CONTAINER`, `CREATE BUTTON`, and `CREATE VISUAL` forms.
+3. Replace page, container, or visual visibility options with `VISIBLE = ON|OFF`.
+4. Confirm portal deployments have a `Portal:Jwt:Secret` value of at least 32 characters.
+5. Confirm portal-to-orchestrator URLs use the current service ports: Portal `5000`/`5002`, Orchestrator `5001`/`5003`.
+6. Run the relevant smoke lane from [Testing.md](Testing.md).
 
-#### 1. Visibility Property Migration
-The legacy `HIDDEN = ON | OFF` syntax has been deprecated and removed. All report objects (Pages, Containers, Visuals) now use the `VISIBLE` property.
+---
 
-- **Old Syntax**: `CREATE VISUAL myChart AS ... WITH(HIDDEN = ON);`
-- **New Syntax**: `CREATE VISUAL myChart AS ... WITH(VISIBLE = OFF);`
+## v0.7.0 Baseline Notes
 
-**Upgrade Path**: Run a search-and-replace on your `.rptsql` files:
-- Replace `HIDDEN = ON` with `VISIBLE = OFF`
-- Replace `HIDDEN = OFF` with `VISIBLE = ON`
+### Report Object Visibility
 
-#### 2. Portal JWT Secret Enforcement
-The Report Portal now requires a minimum 32-character secret for `Portal:Jwt:Secret`. The portal will refuse to start if the secret is missing or too short.
+Report pages, containers, visuals, and buttons use `VISIBLE = ON|OFF` for initial visibility.
 
-**Upgrade Path**: Generate a new secret using the engine:
+```sql
+CREATE PAGE DetailPage AS (
+    TITLE = 'Detail',
+    VISIBLE = OFF,
+    STRUCTURE = 'A',
+    MAP ('A' = DetailTable)
+);
+```
+
+Use `VISIBLE = OFF` when an object should be hidden from the initial navigation or delayed until a user action makes it relevant.
+
+### Report Buttons
+
+Buttons use the page-style form:
+
+```sql
+CREATE BUTTON OpenDetail AS (
+    LABEL = 'Open Detail',
+    ACTIONS (ON_CLICK = NAVIGATE_TO_PAGE(DetailPage))
+);
+```
+
+Do not use typed button aliases or older layout-specific button forms in new scripts.
+
+### Portal JWT Secret Enforcement
+
+The Report Portal refuses to start if `Portal:Jwt:Secret` is missing or shorter than 32 characters.
+
+Generate and install a portal secret with the CLI:
+
+```bash
+ETL-SQL config setup-jwt --update
+```
+
+Or generate a secret inside an ETL-SQL session and copy the value into your deployment secret store:
+
 ```sql
 GENERATE JWT_SECRET;
 ```
-Then update your `appsettings.json` or environment variables.
 
-### New Capabilities
-- **`GO` Batch Separator**: Support for multi-batch script execution.
-- **`QUALIFY` Clause**: Filter results based on window function outputs without a CTE.
-- **Interactive Reporting**: Collapsible containers, cross-visual actions, and shared datasets are now production-ready.
+### `FOR` Loop Implicit Start
 
-Each section below covers the upgrade rules for the 0.7.0 baseline.
+`FOR` loops can omit the explicit start value. The implicit start is `1`.
 
-For a full list of what changed in each release, see [CHANGELOG.md](../CHANGELOG.md).
+```sql
+FOR @i TO 10
+BEGIN
+    PRINT 'Iteration ' + CAST(@i AS STRING);
+END
+```
+
+The explicit form remains valid:
+
+```sql
+FOR @i = 1 TO 10
+BEGIN
+    PRINT 'Iteration ' + CAST(@i AS STRING);
+END
+```
+
+### `GO` Batch Separator
+
+`GO` separates script batches. This is useful when a script needs one batch to define objects or state before a later batch consumes them.
+
+```sql
+CREATE CONNECTION src ON MOCKDB();
+GO
+
+SELECT * FROM src.Users;
+```
+
+### `QUALIFY`
+
+Use `QUALIFY` to filter on window function results without wrapping the query in a CTE.
+
+```sql
+SELECT
+    DeptID,
+    Name,
+    Salary,
+    RANK() OVER (PARTITION BY DeptID ORDER BY Salary DESC) AS rnk
+FROM Employee
+QUALIFY rnk <= 2;
+```
 
 ---
 
-## Upgrading to v0.7.0
+## Validation
 
-### Deprecated: `HIDDEN = ON/OFF` property
-**What changed:** The `HIDDEN` property for Pages, Containers, and Visuals has been deprecated and replaced by the standardized `VISIBLE = ON/OFF` property.
+Use the fast smoke lanes for local upgrade checks:
 
-**Before (pre-v0.7.0):**
-```sql
-CREATE PAGE MyPage WITH (HIDDEN = ON);
+```powershell
+.\scripts\test-smoke.ps1 -Lane all
 ```
 
-**After (v0.7.0+):**
-```sql
-CREATE PAGE MyPage WITH (VISIBLE = OFF);
-```
-
-**Find-and-replace pattern:**
-- Search: `HIDDEN = ON` -> `VISIBLE = OFF`
-- Search: `HIDDEN = OFF` -> `VISIBLE = ON`
-
----
-
-### Improved: `FOR` loop implicit start
-**What changed:** `FOR` loops now support an implicit start value of `1`.
-
-**Before (pre-v0.7.0):**
-```sql
-FOR @i = 1 TO 10 ...
-```
-
-**After (v0.7.0+):**
-```sql
-FOR @i = 10 ... -- assumes 1 TO 10
-```
-
----
-
-*For questions about migrating a specific script pattern, open a [GitHub Discussion](https://github.com/AmericanSuperstar/ETL-SQL/discussions).*
+The SQL Logic Test corpus is deployment-only and intentionally excluded from normal local runs. See [Testing.md](Testing.md) before running it.

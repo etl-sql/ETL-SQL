@@ -143,14 +143,14 @@ statements.
    ```sql
    CREATE CONNECTION portal ON REPORTPORTAL(
        HOST = 'report-server.company.com',
-       PORT = 5001,
+       PORT = 5000,
        USER = 'admin',
        PASSWORD = ENC:...
    );
 
    CREATE CONNECTION orch ON ORCHESTRATOR(
        HOST = 'orch-server.company.com',
-       PORT = 5100,
+       PORT = 5001,
        USER = 'admin',
        PASSWORD = ENC:...
    );

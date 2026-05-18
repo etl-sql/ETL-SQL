@@ -1,6 +1,6 @@
 # Orchestrating Pipelines & DAGs
 
-ETL-SQL is designed to handle complex data pipelines where multiple operations must be coordinated, often requiring a **Directed Acyclic Graph (DAG)** structure. This guide explains how to build and mirror DAG behavior using native commands.
+ETL-SQL handles pipeline coordination with normal script control flow: `RUN SCRIPT`, `PARALLEL`, `IF`, `TRY...CATCH`, scheduler jobs, and file or data readiness checks. This guide shows how to model DAG-style dependencies without introducing a separate workflow language.
 
 ---
 
@@ -51,6 +51,8 @@ PRINT 'Parallel extraction complete.';
 
 > [!TIP]
 > Use `PARALLEL(n)` to limit concurrent branches to `n`. Extra branches will wait in a queue, preventing resource exhaustion during massive loads.
+
+Parallel branches share session variables but should write to separate `#temp` tables. Avoid having two branches mutate or read/write the same temp table at the same time; make the dependency explicit by joining or merging after the `PARALLEL` block completes.
 
 ---
 
@@ -111,10 +113,16 @@ BEGIN TRY
 END TRY
 BEGIN CATCH
     PRINT 'Critical task failed: ' + ERROR_MESSAGE();
-    SEND EMAIL TO 'admin@company.com' SUBJECT 'Pipeline Error' BODY ERROR_MESSAGE();
+    SEND EMAIL
+        TO 'admin@company.com'
+        SUBJECT 'Pipeline Error'
+        BODY ERROR_MESSAGE()
+        AT mailer;
     THROW; -- Stop the entire master pipeline
 END CATCH
 ```
+
+The example assumes an SMTP connection named `mailer` already exists. Keep alert bodies free of connection strings, passwords, API keys, and `ENC:` values.
 
 ### Automatic Retries
 For transient failures (network blips), use the **Job Scheduler** retry policy:

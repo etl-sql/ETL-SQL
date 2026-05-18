@@ -822,7 +822,7 @@ The portal communicates with the Orchestrator Service over HTTP. Configure the c
 ```json
 "Portal": {
   "Orchestrator": {
-    "ApiUrl": "http://orchestrator-host:5100",
+    "ApiUrl": "http://orchestrator-host:5001",
     "ApiKey": "your-shared-secret",
     "SameHost": false
   }
@@ -833,7 +833,7 @@ The portal communicates with the Orchestrator Service over HTTP. Configure the c
 
 1. Log in as Admin.
 2. Navigate to **Admin → Settings → Orchestrator Connection**.
-3. Enter the **Orchestrator API URL** (e.g., `http://orchestrator-host:5100`).
+3. Enter the **Orchestrator API URL** (e.g., `http://orchestrator-host:5001`).
 4. Enter the **API Key** if one is configured on the Orchestrator side.
 5. Click **Save**.
 

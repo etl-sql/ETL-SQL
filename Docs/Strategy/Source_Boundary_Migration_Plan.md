@@ -63,7 +63,7 @@ The canonical browser runtime lives in:
 src/ETL-SQL.ReportRuntime/Resources/Shared/
 ```
 
-Generated host copies live under ReportPlayer, ReportPortal, and the VS Code extension. Do not edit those copies directly; use `scripts/sync-assets.ps1`.
+Generated host copies live under ReportPlayer, ReportPortal, and the VS Code extension. Do not edit those copies directly; use `node .\scripts\sync-assets.js`.
 
 `ETL-SQL.ReportRuntime` is the dedicated source area for canonical JavaScript, CSS, themes, browser dependencies, runtime fixtures, and runtime debugging utilities. The contract in `Docs/Report_Runtime_Contract.md` is the source of truth.
 
@@ -126,8 +126,8 @@ Move canonical browser assets out of Core only after the sync check is stable.
 Recommended steps:
 
 1. Add the new runtime source area with the same canonical files. *(Done: canonical assets moved to `src/ETL-SQL.ReportRuntime/Resources/Shared` and represented by `ETL-SQL.ReportRuntime.csproj`.)*
-2. Update `scripts/sync-assets.ps1` and `Docs/Report_Runtime_Contract.md`. *(Done: sync/check tooling now reads from ReportRuntime and covers nested map assets.)*
-3. Run the runtime sync check. *(Done: `scripts/sync-assets.ps1 -Check` passes from the ReportRuntime source.)*
+2. Update `scripts/sync-assets.ps1` and `Docs/Report_Runtime_Contract.md`. *(Done: sync/check tooling now reads from ReportRuntime and covers nested map assets; use the Node wrapper for cross-platform runs.)*
+3. Run the runtime sync check. *(Done: `node .\scripts\sync-assets.js -Check` passes from the ReportRuntime source.)*
 4. Verify ReportPlayer, ReportPortal, and VS Code still consume generated copies. *(Done: ReportPlayer and ReportPortal build from generated host copies; VS Code compile runs the canonical sync script.)*
 
 Phase 3 is complete. Keep canonical browser runtime changes in `ETL-SQL.ReportRuntime`, run the sync script after edits, and treat host runtime files as generated outputs.
@@ -195,7 +195,7 @@ Before moving files or projects:
 - Preserve public CLI names, package names, endpoint contracts, and VS Code package identity unless a release plan says otherwise.
 - Add or update smoke coverage for the affected host or service.
 - Update `AGENTS.md`, architecture/strategy docs, and any sync scripts if canonical paths change.
-- Run `scripts/sync-assets.ps1 -Check` whenever report runtime assets or their canonical path are touched.
+- Run `node .\scripts\sync-assets.js -Check` whenever report runtime assets or their canonical path are touched.
 
 ## Dependency Direction
 
