@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-    <Product Id="*" Name="ETL-SQL Enterprise Suite" Language="1033" Version="0.6.0.0" Manufacturer="AmericanSuperstar" UpgradeCode="7e3da743-19a2-463e-a794-b9fb9a1757e1">
+    <Product Id="*" Name="ETL-SQL Enterprise Suite" Language="1033" Version="0.7.0.0" Manufacturer="AmericanSuperstar" UpgradeCode="7e3da743-19a2-463e-a794-b9fb9a1757e1">
         <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
 
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />

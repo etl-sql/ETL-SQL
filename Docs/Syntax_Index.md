@@ -582,6 +582,7 @@ Options configured via `SET <Option> = <Value>` or `SET <Option> ON|OFF`.
 | `INTERACTIVE_MODE` | Session | OFF | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
 | `MAX_FILE_OPERATIONS` | Security | 100 | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
 | `MAX_GENERATE_ROWS` | Performance | 1,000,000 | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
+| `MAX_SMTP_EMAILS_PER_SCRIPT` | Security | 100 | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
 | `MAX_GROUPING_SETS` | Performance | 100 | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
 | `MAX_IN_MEMORY_BATCHES` | Performance | 100 | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
 | `MAX_MESSAGES` | Diagnostics | 1,000 | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |

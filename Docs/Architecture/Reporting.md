@@ -49,7 +49,7 @@ build / refresh / serve                Kestrel HTTP + ReportHosting
   .md  .json  .pdf  .snapshot.json    Single-report: GET /
                                       Multi-report:  GET /  (catalog)
                                                      GET /reports/{name}
-                                      localhost:5200
+                                      dynamic localhost port by default
 ```
 
 ---
@@ -62,7 +62,7 @@ build / refresh / serve                Kestrel HTTP + ReportHosting
 | `ETL-SQL.Engine` | Statement handlers that register visual/page/dataset/container/navigation definitions into `IExecutionContext` |
 | `ETL-SQL.Reporting` | Manifest building, ECharts rendering, SVG rendering, PDF/CSV/Markdown/terminal rendering, snapshot persistence, shared interaction refresh semantics |
 | `ETL-SQL.ReportHosting` | Reusable report sessions, parameter state, selective refresh, manifest caching, background dataset refresh timers, and multi-report manifest factories |
-| `ETL-SQL.ReportRuntime` | Canonical browser runtime assets (`report-runtime.js`, `echarts.min.js`, CSS themes) — sync to host projects via `scripts/sync-assets.ps1` |
+| `ETL-SQL.ReportRuntime` | Canonical browser runtime assets (`report-runtime.js`, `echarts.min.js`, CSS themes, Tabulator assets) — sync to host projects via `node .\scripts\sync-assets.js` and verify with `node .\scripts\sync-assets.js -Check` |
 | `ETL-SQL.ReportBuilder` | Engine-facing `EXPORT REPORT` statement handler compatibility assembly |
 | `ETL-SQL.ReportBuilder.CLI` | `etl-sql-report` CLI — `build`, `refresh`, `serve` sub-commands |
 | `ETL-SQL.ReportPlayer` | Local Kestrel web server, routes, HTML shell, static asset hosting, and report embedding |
@@ -108,20 +108,30 @@ All nodes are C# records (immutable value types).
 Name         — identifier used in page slot maps and container VISUALS lists
 VisualType   — Bar | Line | Scatter | Pie | Donut | HorizontalBar | BoxPlot |
                Treemap | HeatMap | Combo | Gauge | Funnel | Waterfall |
-               Table | Card | Text |
-               Slicer | DatePicker | Slider | MultiSelect | Search
+               Bubble | Radar | Candlestick | Map | Gantt |
+               Sankey | Sunburst | Network | Trellis | Matrix |
+               Table | Card | Text | Image |
+               Slicer | DatePicker | RelDatePicker | Slider | MultiSelect |
+               Search | Checkbox | Textbox | Numberbox
 Title        — optional display title string
+TitleIsMarkdown / SubtitleIsMarkdown — markdown flags for title text
 Subtitle     — optional display subtitle string
 Source       — VisualSourceExpression (inline SELECT or #temp reference)
-              (null / empty for Text, DatePicker, Slider, Search)
+              (null / empty for Text, Image, DatePicker, Slider, Search, Checkbox, Textbox, Numberbox)
 Mappings     — List<VisualMapping> (role → column, e.g. X → Region)
 Options      — List<VisualOption> flat key-value pairs (STACKED, SMOOTH, FORMAT, etc.)
 AxisOptions  — List<AxisOptions> per-axis X_AXIS / Y_AXIS config blocks
 TypedSeries      — List<TypedSeries> for COMBO charts (BAR col, LINE col)
 FormattingRules  — List<FormattingRule> for TABLE conditional cell colors
+Overlays         — List<VisualOverlay> for GOAL / MOVING_AVG / regression overlays
+Summaries        — List<TableSummaryItem> for MATRIX/TABLE aggregate summaries
+SummaryOptions   — TableSummaryOptions for grand totals and summary placement
 Styles           — Dictionary<string, string> (THEME, WIDTH, HEIGHT, BORDER, etc.)
 StyleName        — optional name of a CREATE STYLE to inherit
 Actions          — List<VisualAction> (ON_CLICK, ON_CHANGE triggers)
+Interactions     — List<VisualInteraction> for cross-visual filter/highlight/select behavior
+Tooltip          — optional text/container/inline tooltip
+Visible          — false when VISIBLE = OFF defers data fetch until runtime
 Mode             — Create | Alter | CreateOrAlter
 ```
 
@@ -225,7 +235,16 @@ Value — the string value
 | Type | Fields | Runtime effect |
 |---|---|---|
 | `SetParameterAction` | trigger, parameterName, valueExpression | Updates a `@param` and triggers selective rebuild |
-| `DrillDownAction` | trigger, targetVisual, keyColumn | Navigate to target visual with row context |
+| `DrillDownAction` | trigger, targetVisual, keyColumns | Navigate to target visual with row context |
+| `DrillInAction` | trigger, hierarchy | Drill within the same visual by hierarchy level |
+| `RunScriptAction` | trigger, scriptPath, parameters | Runs an ETL-SQL script through the report host |
+| `ClearFiltersAction` | trigger | Clears active client-side filters |
+| `ApplyParametersAction` | trigger | Applies staged parameter edits |
+| `ReportCommandAction` | trigger, command | Runs a named report-runtime command |
+| `DrillReportAction` | trigger, targetReport, parameters | Opens another report with parameter bindings |
+| `NavigatePageAction` | trigger, targetPage | Switches to a report page |
+| `RefreshVisualsAction` | trigger, targets | Selectively refreshes named visuals |
+| `SetUiStateAction` | trigger, targets, key, value | Updates runtime UI state for target visuals |
 
 ---
 
@@ -240,6 +259,7 @@ Value — the string value
 ### 4.2 `CreatePageStatementHandler`
 
 - Validates all slot-mapped visual/container names exist in `VisualDefinitions` or `ContainerDefinitions`
+- Validates all slot-mapped visual/container/button names exist in `VisualDefinitions`, `ContainerDefinitions`, or `ButtonDefinitions`
 - Registers: `context.PageDefinitions[stmt.Name] = stmt`
 
 ### 4.3 `CreateDatasetStatementHandler`
@@ -259,9 +279,17 @@ Value — the string value
 
 ### 4.6 `SetReportMetadataStatementHandler`
 
-- Sets `context.ReportTitle` (Key = "TITLE") or `context.ReportDescription` (Key = "DESCRIPTION")
+- Sets report-level metadata on `context.ReportContext`, including `TITLE`, `DESCRIPTION`, custom CSS/JS/HTML fragments, favicon, logo, background, theme, and navigation reference.
 
-### 4.7 `IReportContext` (on `IExecutionContext`)
+### 4.7 Other report object handlers
+
+- `CreateStyleStatementHandler` registers named style dictionaries.
+- `CreateButtonStatementHandler` registers page-addressable buttons.
+- `CreateTemplateStatementHandler` registers reusable option/style defaults.
+- `CreateThemeStatementHandler` registers custom ECharts themes.
+- `AlterReportObjectStatementHandler` and `DropReportObjectStatementHandler` mutate or remove existing report definitions.
+
+### 4.8 `IReportContext` (on `IExecutionContext`)
 
 ```csharp
 IDictionary<string, CreateVisualStatement>    VisualDefinitions     { get; }
@@ -269,8 +297,25 @@ IDictionary<string, CreatePageStatement>      PageDefinitions       { get; }
 IDictionary<string, CreateDatasetStatement>   DatasetDefinitions    { get; }
 IDictionary<string, CreateContainerStatement> ContainerDefinitions  { get; }
 IDictionary<string, CreateNavigationStatement>NavigationDefinitions { get; }
+IDictionary<string, CreateStyleStatement>     StyleDefinitions      { get; }
+IDictionary<string, CreateButtonStatement>    ButtonDefinitions     { get; }
+IDictionary<string, CreateTemplateStatement>  TemplateDefinitions   { get; }
+IDictionary<string, CreateThemeStatement>     ThemeDefinitions      { get; }
+string TemplatePath { get; set; }
 string? ReportTitle       { get; set; }
+bool ReportTitleIsMarkdown{ get; set; }
 string? ReportDescription { get; set; }
+IDictionary<string, string> BaselineParameters { get; }
+string? ReportCss         { get; set; }
+string? ReportJs          { get; set; }
+string? ReportHtmlHead    { get; set; }
+string? ReportHtmlBody    { get; set; }
+string? ReportHtmlFooter  { get; set; }
+string? ReportFavicon     { get; set; }
+string? ReportLogo        { get; set; }
+string? ReportBackground  { get; set; }
+string? ReportTheme       { get; set; }
+string? ReportNavigation  { get; set; }
 ```
 
 `ManifestBuilder` reads all dictionaries after script evaluation completes.
@@ -314,13 +359,25 @@ ManifestBuilder.BuildAsync(scriptPath)
 ```
 Source      — script file path
 BuiltAt     — UTC timestamp
+IsInteraction — true when built from an interaction refresh
 Title       — from SET REPORT TITLE
+TitleIsMarkdown — markdown flag for the title
 Description — from SET REPORT DESCRIPTION
+Css / Js / HtmlHead / HtmlBody / HtmlFooter — custom report shell fragments
+Favicon / Logo / Background / Theme / Styles / Navigation — report-level presentation metadata
 Visuals     — List<VisualManifest>
 Pages       — List<PageManifest>
 Containers  — List<ContainerManifest>?  (null if none defined)
 Navigations — List<NavigationManifest>? (null if none defined)
+Buttons     — List<ButtonManifest>?     (null if none defined)
 Datasets    — List<DatasetManifest>
+Parameters  — Dictionary<string, string> active session parameter values
+ParameterMetadata — Dictionary<string, ParameterMetadataManifest>
+CustomThemes — List<ThemeManifest>? registered CREATE THEME definitions
+Telemetry   — TelemetryManifest? execution and spill counters
+Messages    — List<LogEntryManifest>? report build/runtime log messages
+ExecutionTree — execution tree object when available
+Error       — top-level build error when report creation fails
 ```
 
 ### 5.3 `VisualManifest`
@@ -329,12 +386,24 @@ Datasets    — List<DatasetManifest>
 Name        — visual identifier
 VisualType  — string ("Bar", "Donut", "HeatMap", etc.)
 ChartConfig — ECharts option JSON string (null for Table / Card / Text / filter types)
+TitleIsMarkdown / SubtitleIsMarkdown / IsMarkdown — markdown rendering flags
+IsHidden    — true when VISIBLE = OFF deferred data fetch
+DefaultValue / Min / Max / Decimals / Placeholder / LabelPosition — filter/input metadata
+Tooltip     — optional TooltipManifest
 Columns     — List<string> column names
 Rows        — List<List<string?>> — all data as strings for portability
+HighlightRows / RowStyles — cross-visual interaction and formatting output
 Options     — Dictionary<string, string> (mapping:x, axis:x:label, FORMAT, etc.)
 Styles      — Dictionary<string, string>? (THEME, HEIGHT, etc.)
 Actions     — List<VisualActionManifest>
+Interactions — Dictionary<string, string>? cross-visual behavior
 SeriesDefs  — List<SeriesDefManifest>? (COMBO charts only)
+FormattingRules — List<FormattingRuleManifest>?
+Overlays    — List<OverlayManifest>?
+SummaryData — TableSummaryData?
+GridStyle   — TABLE grid display mode
+DataLabels  — chart label settings
+DrillState  — active DRILL_IN state
 Error       — string? (non-null if source query failed)
 ```
 
@@ -367,11 +436,23 @@ Converts a `VisualManifest` into an [Apache ECharts v5](https://echarts.apache.o
 | Gauge | `gauge` | value, max (optional), label (optional) |
 | Funnel | `funnel` | label, value |
 | Waterfall | stacked `bar` (transparent base + delta) | x, y |
+| Bubble | `scatter` with symbol sizing | x, y, size, series |
+| Radar | `radar` | dimensions, value |
+| Candlestick | `candlestick` | x, open, close, low, high |
+| Map | `map` | region, value |
+| Gantt | custom bar/timeline-style option | task, start, end |
+| Sankey | `sankey` | source, target, value |
+| Sunburst | `sunburst` | hierarchy, value |
+| Network | `graph` | source, target, value/category |
+| Trellis | multiple chart panels | x, y, facet |
+| Matrix | table/matrix runtime rendering | row, column, value |
 | Table | *(none — HTML table with optional FORMATTING rules)* | all columns |
 | Card | *(none — scalar div)* | label, value |
 | Text | *(none — HTML div)* | VALUE option |
+| Image | *(none — image element)* | URL/VALUE option |
 | Slicer / MultiSelect | *(none — `<select>` / checkboxes)* | value |
-| DatePicker / Slider / Search | *(none — input controls)* | — |
+| DatePicker / RelDatePicker / Slider / Search | *(none — input controls)* | — |
+| Checkbox / Textbox / Numberbox | *(none — input controls)* | value |
 
 For multi-series charts, rows with a `series` column are pivoted: each distinct series value becomes a separate ECharts dataset. Colors are assigned from a built-in palette or from `COLORS(...)` option entries (`color:{key}` in `vm.Options`).
 
@@ -386,7 +467,7 @@ The `LEGEND_POSITION` flat option in `vm.Options` controls ECharts legend placem
 | **Parser-supplied** | **UPPERCASE** | `VisualBuilder` — copied verbatim from the parsed option name | `STACKED`, `SMOOTH`, `FORMAT`, `LEGEND_POSITION`, `TITLE`, `SUBTITLE` |
 | **Internally-computed** | **lowercase with colons** | `VisualBuilder` — synthesized during manifest build | `title`, `subtitle`, `mapping:x`, `mapping:value`, `axis:x:label`, `axis:y:min`, `color:Revenue` |
 
-**Why two tiers?** Parser-supplied keys come directly from the source script (`OPTIONS(STACKED = ON)`), so they are stored as-is in uppercase to match the grammar. Internally-computed keys are synthesized by `VisualBuilder` from structured AST nodes (`AxisOptions`, `MappingHints`, `TypedSeries`) — they use lowercase-with-colon namespace notation to avoid clashing with any future parser keyword.
+**Why two tiers?** Parser-supplied keys come directly from the source script (`OPTIONS(STACKED = ON)`), so they are stored as-is in uppercase to match the grammar. Internally-computed keys are synthesized by `VisualBuilder` from structured AST nodes (`AxisOptions`, `MappingHints`, `TypedSeries`) — they use lowercase-with-colon namespace notation to avoid clashing with parser keywords.
 
 **Reading rules:**
 - `EChartsRenderer` must read parser-supplied keys in **UPPERCASE** (e.g., `vm.Options.TryGetValue("TITLE", ...)`).
@@ -430,7 +511,7 @@ Produces a static, portable `.md` file:
 - Card visuals: blockquote `> **Label** Value`
 - Slicer / filter visuals: italic note *(interactive only — no static representation)*
 
-### 6.5 Client-Side Runtime (`wwwroot/report-runtime.js`)
+### 6.5 Client-Side Runtime (`src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js`)
 
 Dual-mode JavaScript file:
 
@@ -516,7 +597,7 @@ All filter types use `SET_PARAMETER` in their `ACTIONS` clause to bind the selec
 ## 9. Report Player (Web Server)
 
 **Project:** `ETL-SQL.ReportPlayer`  
-**Default port:** `localhost:5200`
+**Default port:** OS-assigned dynamic port (`0`) unless `--port` or `ReportPlayer:Port` is configured.
 
 ### 9.1 Single-Report Routes
 
@@ -526,7 +607,10 @@ All filter types use `SET_PARAMETER` in their `ACTIONS` clause to bind the selec
 | `/api/manifest` | GET | Current `ReportManifest` as JSON |
 | `/api/parameter` | POST | Set one parameter, selective rebuild, return new manifest |
 | `/api/parameters` | POST | Set multiple parameters, selective rebuild, return new manifest |
+| `/api/drill` | POST | Drill in/up for one visual |
+| `/api/refresh-visuals` | POST | Selectively refresh named visuals |
 | `/api/refresh` | GET | Force full rebuild, return new manifest |
+| `/maps/custom` | GET | Return custom GeoJSON map inventory |
 
 ### 9.2 Multi-Report Routes
 
@@ -537,7 +621,11 @@ All filter types use `SET_PARAMETER` in their `ACTIONS` clause to bind the selec
 | `/reports/{name}/api/manifest` | GET | Report manifest JSON |
 | `/reports/{name}/api/parameter` | POST | Set one parameter |
 | `/reports/{name}/api/parameters` | POST | Set multiple parameters |
+| `/reports/{name}/api/run-script` | POST | Run a report action script |
+| `/reports/{name}/api/drill` | POST | Drill in/up for one visual |
+| `/reports/{name}/api/refresh-visuals` | POST | Selectively refresh named visuals |
 | `/reports/{name}/api/refresh` | GET | Force rebuild |
+| `/reports/{name}/maps/custom` | GET | Return custom GeoJSON map inventory for the report |
 
 ### 9.3 `DashboardServiceFactory` (multi-report)
 
@@ -554,7 +642,9 @@ All filter types use `SET_PARAMETER` in their `ACTIONS` clause to bind the selec
 `wwwroot/` contains:
 
 - `report-runtime.js` — client-side rendering runtime
-- ECharts is loaded from CDN (no local bundle required)
+- `report-runtime.css` — shared report styles
+- `echarts.min.js` — local ECharts bundle copied from `ETL-SQL.ReportRuntime`
+- `tabulator.min.js` / `tabulator.min.css` — table runtime assets copied from `ETL-SQL.ReportRuntime`
 
 ---
 
@@ -585,14 +675,3 @@ Invoked as `etl-sql-report <command>`.
 | **9H** | CREATE CONTAINER, CREATE NAVIGATION, SET REPORT TITLE/DESCRIPTION, COMBO visual type, STYLE clause, COLORS/LEGEND options |
 
 ---
-
-## 12. Outstanding Work
-
-| Item | Description |
-|---|---|
-| **Rpt-2** | `SnapshotStore` write safety — atomic write via `.tmp` rename; `ReaderWriterLockSlim` for concurrent access |
-| **Rpt-3** | Linter rule warning when column aliases shadow Report-SQL keywords |
-| **Rpt-4** | `STRUCTURE` string validation — every slot letter must appear in both `STRUCTURE` and `MAP(...)` |
-| **Drill-down** | `DrillDownAction` defined in AST and partially wired in client runtime; full UX pending |
-| **Scheduled refresh** | `REFRESH EVERY` advisory is stored but requires Orchestrator integration to act on it |
-| **Excel export** | `--format xlsx` via ClosedXML or EPPlus — not yet implemented |

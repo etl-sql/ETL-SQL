@@ -262,7 +262,7 @@ SELECT * FROM prod.Sales WHERE SaleDate BETWEEN @start AND @end;
 | `WE`, `ME`, `QE`, `YE` | End of current week/month/quarter/year |
 | ISO date string | Fixed date â€” resolves to itself |
 
-Append `-<n>` to shift back n periods, e.g. `M-3` = first day of three months ago. Append `+<n>` for future offsets. For `N` (Now), use inline units: `N-2H` (2 hours), `N-30M` (30 minutes), `N-7D` (7 days).
+Append `-<n>` to shift back n periods, e.g. `M-3` = first day of three months ago. Append `+<n>` for forward offsets. For `N` (Now), use inline units: `N-2H` (2 hours), `N-30M` (30 minutes), `N-7D` (7 days).
 
 Week-boundary anchors (`W`, `WE`) use **Monday** as week-start by default; override with `SET WEEK_START_DAY` (Â§2.6) or the `Engine.StartOfWeek` config key.
 
@@ -466,6 +466,7 @@ Override `appsettings.json` defaults for the current session.
 | `SET MAX_MESSAGES = n` | 1,000 | Log/print messages captured in the session buffer |
 | `SET MAX_FILE_OPERATIONS = n` | 100 | Filesystem operations allowed per script |
 | `SET MAX_GENERATE_ROWS = n` | 10,000 | Rows per `GENERATE` statement (prevents resource exhaustion) |
+| `SET MAX_SMTP_EMAILS_PER_SCRIPT = n` | 100 | SMTP emails the current script may send |
 | `SET MAX_PARALLEL_DEGREE = n` | 8 | Max concurrent branches inside a `PARALLEL` block |
 | `SET MAX_STRING_RESULT_SIZE = n` | 5,242,880 | Max byte length of a string expression result (5 MB) |
 | `SET REGEX_MATCH_TIMEOUT = n` | 1,000 | Milliseconds before a regex match is aborted |
@@ -2046,7 +2047,7 @@ HELP TYPE <name>;            -- documentation for a data type (e.g. HELP TYPE MI
 ```sql
 /*
    @author:      Chuck
-   @version:     1.2.3
+@version:     0.7.0
    @description: Nightly cleanup of staging tables
 */
 ```

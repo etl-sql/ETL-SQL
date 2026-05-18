@@ -1,8 +1,8 @@
 # ETL-SQL Connectors Engineering Standards
 
-**Version 1.0 — Established with the IConnector / IDataSource / IDatabaseSource architecture**
+**Applies to ETL-SQL 0.7.0 — Established with the IConnector / IDataSource / IDatabaseSource architecture**
 
-This document is the authoritative standard for all work that touches any data connector in the ETL-SQL ecosystem. It defines rules that are non-negotiable and must be met by any change, any new connector, and any future version of the data access layer.
+This document is the authoritative standard for all work that touches any data connector in the ETL-SQL ecosystem. It defines rules that are non-negotiable and must be met by any change, any new connector, and the current data access layer.
 
 When in doubt about whether a change is acceptable: if it would require you to violate any rule in this document, the design is wrong. Rethink the design.
 

@@ -2,7 +2,7 @@
 # ETL-SQL Linux Package Builder
 # Usage: ./build_linux_packages.sh <version>
 
-VERSION=${1:-"0.6.0"}
+VERSION=${1:-"0.7.0"}
 ARCH="amd64"
 PKG_NAME="etl-sql"
 BASE_DIR="src/ETL-SQL.Installer/linux"

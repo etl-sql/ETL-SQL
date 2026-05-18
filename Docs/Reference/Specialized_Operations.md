@@ -209,6 +209,8 @@ ORDER BY LastModified DESC;
 
 Sends automated emails using a configured `SMTP` connection. Both styles support any clause order.
 
+SMTP sends are capped per script by `Security:MaxSmtpEmailsPerScript` (default `100`). Use `SET MAX_SMTP_EMAILS_PER_SCRIPT = n` when a script intentionally needs a different limit; values above the configured security ceiling require the same approved-safe-zone treatment as other security-sensitive threshold increases.
+
 *SQL Style:*
 ```sql
 SEND EMAIL
@@ -291,7 +293,7 @@ Scripts can define global metadata in a comment block at the very top of the fil
 ```sql
 /* 
    @author: Chuck 
-   @version: 1.0.1 
+@version: 0.7.0
    @description: Quarterly cleanup and archival
 */
 ```

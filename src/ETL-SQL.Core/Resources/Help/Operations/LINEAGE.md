@@ -164,7 +164,7 @@ FROM #orders;
 Add script metadata in the file header with structured comments. The engine records those tags with lineage entries:
 
 ```sql
-/* @author: Data Engineering; @pipeline: Daily Sales ETL; @version: 2.1; */
+/* @author: Data Engineering; @pipeline: Daily Sales ETL; @version: 0.7.0; */
 ```
 
 ## Example: Complete Tagged Pipeline

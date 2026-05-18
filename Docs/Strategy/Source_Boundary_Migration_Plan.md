@@ -53,7 +53,7 @@ This area should own:
 - Visual, page, container, navigation, dataset, style, theme, action, and chart semantics.
 - Server-resolved report state that every host must render consistently.
 
-The rename should happen after compatibility shims are planned. A package/project rename should not be combined with unrelated behavior changes.
+The rename should happen after compatibility shims are defined. A package/project rename should not be combined with unrelated behavior changes.
 
 ### Report Runtime Assets
 
@@ -146,7 +146,7 @@ Current progress:
 - Shared report snapshot persistence now lives in `ETL-SQL.Reporting`.
 - Markdown, SVG, PDF, and terminal rendering now live in `ETL-SQL.Reporting`.
 - Shared ECharts chart rendering semantics now live in `ETL-SQL.Reporting` with namespace compatibility retained.
-- `ETL-SQL.ReportBuilder` references `ETL-SQL.Reporting` and continues to own the engine-facing `EXPORT REPORT` statement handler until package/project renaming is planned.
+- `ETL-SQL.ReportBuilder` references `ETL-SQL.Reporting` and continues to own the engine-facing `EXPORT REPORT` statement handler as the compatibility assembly.
 
 Recommended steps:
 
@@ -156,7 +156,7 @@ Recommended steps:
 4. Update each host separately with smoke coverage. *(Done for current hosts: ReportPlayer, ReportPortal, CLI, Engine, ReportBuilder, and focused reporting/snapshot tests pass.)*
 5. Rename packages/projects only after references are clean.
 
-Phase 4 is functionally complete for the first-pass boundary. Keep `ETL-SQL.ReportBuilder` as the compatibility assembly for the engine-facing `EXPORT REPORT` handler until a release-safe package/project rename is planned.
+Phase 4 is functionally complete for the first-pass boundary. Keep `ETL-SQL.ReportBuilder` as the compatibility assembly for the engine-facing `EXPORT REPORT` handler.
 
 Phase 4b progress:
 
@@ -178,7 +178,7 @@ Phase 5 is functionally complete for the first-pass boundary. Hosts now delegate
 
 ### Phase 6: Documentation and Handoff Alignment
 
-After source moves land, align architecture, strategy, and agent-facing docs so future work does not reintroduce old ownership assumptions.
+After source moves land, align architecture, strategy, and agent-facing docs so follow-up work does not reintroduce old ownership assumptions.
 
 Current progress:
 

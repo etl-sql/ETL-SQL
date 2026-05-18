@@ -67,6 +67,8 @@ namespace ETL_SQL.Connectors.Email
         /// <param name="row">Row containing email fields (To, Cc, Subject, Body, etc.).</param>
         public async Task SendEmail(Row row)
         {
+            _context?.RecordSmtpEmailSend();
+
             var message = new MimeMessage();
             
             string from = (row.Columns.TryGetValue("From", out var f) ? f?.ToString() : (_options.TryGetValue("DEFAULT_FROM", out var df) ? df : "etl-sql@localhost")) ?? "etl-sql@localhost";

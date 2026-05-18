@@ -1,6 +1,6 @@
 # ETL-SQL Connectors Architecture & Engineering Reference
 
-**Version 1.0**
+**Applies to ETL-SQL 0.7.0**
 
 This document describes the internal mechanics of the ETL-SQL data access layer. It is the primary reference for understanding the connection lifecycle, the registry system, the batching pipeline, and the threading and security contracts that all connectors must honour. It is written for engineers who need to understand not just what the system does but why it is designed the way it is.
 
@@ -68,23 +68,25 @@ This document describes the internal mechanics of the ETL-SQL data access layer.
 
 | Connector token | Type | `IDatabaseSource` | Transactional | Notes |
 |----------------|------|:-----------------:|:-------------:|-------|
-| `MSSQL`, `SQL` | Relational | ✓ | ✓ | SqlBulkCopy for writes |
-| `POSTGRES`, `PG` | Relational | ✓ | ✓ | COPY protocol for bulk |
+| `MSSQL`, `SQLSERVER` | Relational | ✓ | ✓ | SqlBulkCopy for writes |
+| `POSTGRES` | Relational | ✓ | ✓ | COPY protocol for bulk |
 | `ORACLE` | Relational | ✓ | ✓ | |
 | `ODBC` | Relational | ✓ | | Provider-dependent |
+| `SNOWFLAKE` | Relational / warehouse | ✓ | ✓ | Native Snowflake connector |
+| `BIGQUERY` | Relational / warehouse | ✓ | — | BigQuery DML is auto-committed |
 | `MOCKDB` | In-memory | — | — | Test/dev only |
-| `FLATFILE`, `CSV`, `TSV` | File | — | — | Fixed-width supported |
+| `FLATFILE`, `CSV`, `FILE` | File | — | — | Delimited and fixed-width support |
 | `JSON` | File | — | — | Array or newline-delimited |
 | `XML` | File | — | — | XPath-rooted reads |
 | `PARQUET` | File | — | — | Columnar; high throughput |
 | `AVRO` | File | — | — | Schema-embedded |
-| `EXCEL`, `XLSX` | File | — | — | Sheet-per-table |
-| `REST`, `HTTP` | Protocol | — | — | JSON response; any auth |
+| `EXCEL` | File | — | — | Sheet-per-table |
+| `API`, `REST`, `HTTP` | Protocol | — | — | JSON response; any auth |
 | `SFTP` | Protocol | — | — | SSH key or password |
-| `FTP`, `FTPS` | Protocol | — | — | |
-| `AZUREBLOB` | Protocol | — | — | SAS or connection string |
+| `FTP_CONN`, `FTP` | Protocol | — | — | |
+| `AZURE_BLOB`, `BLOB` | Protocol | — | — | SAS or connection string |
 | `DIRECTORY` | File | — | — | Folder enumeration |
-| `EMAIL`, `SMTP` | Protocol | — | — | Write-only (SEND_EMAIL) |
+| `SMTP`, `EMAIL` | Protocol | — | — | Write-only email connector |
 
 ---
 
@@ -108,7 +110,7 @@ public interface IConnector
     /// Returns the remote engine version string. Used by SHOW CONNECTION.
     /// Must not throw — return a safe default string on failure.
     /// </summary>
-    Task<string> GetVersionAsync(string connectionString, ILogger? logger = null);
+    Task<string> GetVersionAsync(IExecutionContext context, string connectionString);
 
     /// <summary>
     /// SQL functions native to this dialect (e.g., GETDATE, ISNULL for MSSQL).
@@ -153,32 +155,32 @@ public interface IConnector
 
     /// <summary>Creates an active IDataSource from a validated connection string.</summary>
     IDataSource CreateDataSource(
+        IExecutionContext context,
         string connectionString,
-        Dictionary<string, string>? options = null,
-        ILogger? logger = null);
+        Dictionary<string, string>? options = null);
 
     /// <summary>
     /// Creates an IDataSource with a pre-known column schema (used for typed writes).
     /// Default implementation delegates to the schema-less overload.
     /// </summary>
     IDataSource CreateDataSource(
+        IExecutionContext context,
         string connectionString,
         Dictionary<string, string>? options,
-        IEnumerable<ColumnDefinition>? templateSchema,
-        ILogger? logger = null)
-        => CreateDataSource(connectionString, options, logger);
+        IEnumerable<ColumnDefinition>? templateSchema)
+        => CreateDataSource(context, connectionString, options);
 
     /// <summary>Table names available at the given connection string (for autocomplete).</summary>
-    Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null);
+    Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString);
 
     /// <summary>View names available at the given connection string.</summary>
-    Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null);
+    Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString);
 
     /// <summary>Column names for a specific table (for inline alias.* autocomplete).</summary>
-    Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null);
+    Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName);
 
     /// <summary>Stored procedure names (for EXECUTE PROCEDURE completions).</summary>
-    Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null);
+    Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString);
 
     /// <summary>
     /// Builds a provider-specific connection string from a property dictionary.
@@ -186,6 +188,12 @@ public interface IConnector
     /// Default returns empty string; override if the connector uses standard DSNs.
     /// </summary>
     string BuildConnectionString(Dictionary<string, string> properties) => string.Empty;
+
+    /// <summary>Returns the target host for network-based connectors to support egress validation.</summary>
+    string? GetHost(string connectionString, Dictionary<string, string>? options = null) => null;
+
+    /// <summary>Returns true when the connector represents local file access and must use path resolution.</summary>
+    bool IsFileBased => false;
 
     /// <summary>
     /// Default command timeout in seconds. OLTP connectors return 30; data warehouse
@@ -202,6 +210,9 @@ public interface IConnector
     ///   • Default command timeout is 1800 s instead of 30 s.
     /// </summary>
     bool IsDataWarehouse => false;
+
+    /// <summary>Returns catalog metadata enrichment support, or null when unsupported.</summary>
+    ICatalogMetadataProvider? GetCatalogProvider(string connectionString) => null;
 }
 ```
 
@@ -248,7 +259,7 @@ public interface IDataSource : IAsyncDisposable
     /// For SQL targets, this maps to SqlBulkCopy / COPY / INSERT bulk patterns.
     /// For file targets, this appends or overwrites depending on connector semantics.
     /// </summary>
-    Task WriteBatches(IAsyncEnumerable<DataTable> batches);
+    Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false);
 
     /// <summary>
     /// Removes all rows from the data source.

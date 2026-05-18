@@ -217,7 +217,7 @@ Use this map to find the right document for any task.
 | Presentation layer (IDE, ANSI rendering) | **[Architecture/Presentation.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Presentation.md)** |
 | Rules for writing a new connector | **[Standards/Connectors_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md)** |
 | Rules for touch the presentation layer | **[Standards/Presentation_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Presentation_Standards.md)** |
-| Engine upgrade roadmap | **[Strategy/Engine_Upgrade_Strategy.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Strategy/Engine_Upgrade_Strategy.md)** |
+| Engine upgrade strategy | **[Strategy/Engine_Upgrade_Strategy.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Strategy/Engine_Upgrade_Strategy.md)** |
 
 ---
 

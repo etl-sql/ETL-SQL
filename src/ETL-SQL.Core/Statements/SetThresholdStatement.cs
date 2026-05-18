@@ -24,6 +24,7 @@ namespace ETL_SQL.Core
         TempTableSpill,
         MaxLastResultRows,
         MaxGenerateRows,
+        MaxSmtpEmailsPerScript,
         MaxInternalOperations,
         InteractiveMode,
         CaseSensitive,

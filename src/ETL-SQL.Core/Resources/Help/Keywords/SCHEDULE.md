@@ -13,7 +13,7 @@ SCHEDULE JOB 'WeeklyReport'
   WITH (@region = 'North')
   EVERY '0 8 * * MON';         -- cron: Mondays at 08:00
 
--- One-shot future run
+-- One-shot scheduled run
 SCHEDULE JOB 'MigrationOnce'
   RUN SCRIPT 'migrations/v2.etlsql'
   AT '2025-06-01 02:00:00';

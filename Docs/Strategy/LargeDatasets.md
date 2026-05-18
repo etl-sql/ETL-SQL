@@ -1,6 +1,6 @@
-# Large Dataset Handling — Design Spike
+# Large Dataset Handling
 
-**Status:** Design complete — implementation pending  
+**Status:** Implemented for ETL-SQL 0.7.0
 **Phase:** 8A  
 **Date:** 2026-04-12  
 
@@ -58,16 +58,6 @@ ETL-SQL currently materializes all query results into in-memory `DataTable` obje
 
 **Risk:** High. Transparent read merging is complex. Implement only after 2.1 and 2.2 are in production.
 
-### 2.4 Columnar Format for `#temp` Tables (Future)
-
-**What:** Replace `DataTable` (row-oriented, boxed `object[]`) with Apache Arrow columnar format for temp table storage.
-
-**Benefits:** 10–50× faster for aggregation-heavy workloads; dramatically lower memory for numeric columns.
-
-**Risk:** Very high. Requires replacing the core data representation used by all 40+ statement handlers. Not recommended until the other strategies have been validated. Scope this as a separate architectural migration project.
-
----
-
 ## 3. Recommended Implementation Order
 
 | Priority | Strategy | Phase | Expected effort |
@@ -75,7 +65,6 @@ ETL-SQL currently materializes all query results into in-memory `DataTable` obje
 | 1 | **2.1 Streaming batch propagation** | 8A-impl | Medium |
 | 2 | **2.3 Spill-to-disk for #temp** | 8A-impl | High |
 | 3 | **2.2 Chunked FOR loop pushdown** | 8A-impl | Medium |
-| 4 | **2.4 Arrow columnar format** | Future | Very High |
 
 ---
 
@@ -173,7 +162,7 @@ Findings go in `Docs/LargeDatasets-Profiling.md` after measurement.
 
 - Real-time streaming data (Kafka, CDC) — out of scope for this phase.
 - Changing the public `IDataSource` contract in a breaking way.
-- Removing `DataTable` entirely — too broad; Arrow migration is a separate future project.
+- Removing `DataTable` entirely — too broad for the 0.7.0 engine contract.
 - Distributed execution — each script runs on one node.
 
 ---

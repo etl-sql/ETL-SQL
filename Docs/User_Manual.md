@@ -777,7 +777,7 @@ The engine automatically reads a structured comment at the top of any `.etlsql` 
 ```sql
 /*
    @author:      Chuck
-   @version:     2.1.0
+@version:     0.7.0
    @description: Nightly customer sync from Postgres → SQL Server DW
 */
 

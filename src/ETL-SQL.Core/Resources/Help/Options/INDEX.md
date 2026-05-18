@@ -33,6 +33,7 @@ Performance Thresholds (override appsettings.json for this session)
   SET EXTERNAL_SORT_CHUNK_SIZE = n      Rows per sort chunk when spilling (default 50,000)
   SET MAX_LAST_RESULT_ROWS = n          Rows in the interactive display buffer (default 50,000)
   SET MAX_GENERATE_ROWS = n             Max rows GENERATE is allowed to produce (default 1,000,000)
+  SET MAX_SMTP_EMAILS_PER_SCRIPT = n    Max SMTP emails a script may send (default 100)
   SET MAX_PARALLEL_DEGREE = n           Thread limit inside PARALLEL BEGIN...END (default: CPU count)
   SET FOREACH_PAGE_SIZE = n             Batch size when FOREACH iterates over a #temp table
 

@@ -1,6 +1,6 @@
 # Arrow Columnar Format Strategy
 
-**Status:** Design complete — Phase A approved for implementation  
+**Status:** Implemented for ETL-SQL 0.7.0 spill workloads
 **Phase:** 0.7.0  
 **Date:** 2026-04-23  
 
@@ -31,9 +31,9 @@ The intuition was: let users choose Arrow for analytics-heavy temp tables withou
 - **Leaks physical layout into user syntax.** SQL users should not manage storage representation. `CREATE COLUMNAR TABLE` is a physical detail, not a logical one. Every script author would need to understand when columnar is beneficial and when it hurts.
 - **Combinatorial handler complexity.** Every join, aggregate, sort, and window handler would need to handle row×row, row×columnar, columnar×row, and columnar×columnar combinations. That quadruples the internal branching of every hot path.
 - **Silent conversion overhead.** When a columnar `#temp` is joined to a row-oriented `#temp`, a silent format conversion is required at the boundary. For ETL-scale row counts this conversion can cost more than the vectorized speedup earns.
-- **Mutations break the model.** Arrow `RecordBatch` is immutable. `UPDATE #temp` and `DELETE FROM #temp` require copy-on-write batch reconstruction, which is non-trivial and not yet designed.
+- **Mutations break the model.** Arrow `RecordBatch` is immutable. `UPDATE #temp` and `DELETE FROM #temp` require copy-on-write batch reconstruction, so user-visible columnar temp-table syntax is intentionally not exposed.
 
-### 2.2 Replace `DataTable` engine-wide with `RecordBatch` (Deferred)
+### 2.2 Replace `DataTable` engine-wide with `RecordBatch` (Rejected)
 
 Replacing `DataTable` as the universal batch format across all 40+ handlers and the `IDataSource` interface would yield the largest structural Arrow benefit. It is deferred because:
 
@@ -42,7 +42,7 @@ Replacing `DataTable` as the universal batch format across all 40+ handlers and 
 - It is a major breaking change to `IDataSource.ReadBatches()`, `IDataSource.WriteBatches()`, and every handler. Requires a coordinated 1.0-milestone effort, not a point release.
 - `DataTable` has 20+ years of documentation, tooling, and predictable behavior. The C# Arrow library is less mature, has a smaller community, and has known gaps in nullable types and dictionary-encoded string handling.
 
-This path is documented here for future consideration. It should not be started until Phase A has been in production, the mutation story for `InMemoryDataSource` is designed, and the C# Arrow ecosystem has been further validated.
+This path is not part of the 0.7.0 engine contract.
 
 ---
 
@@ -170,7 +170,7 @@ Add one new key to `appsettings.json`:
 }
 ```
 
-`SpillFormat` accepts `"Arrow"` (default) or `"Json"` (legacy fallback). The `"Json"` path is retained during the transition window so that persistent sessions with existing spill files can still be read. It may be removed in a future version once all persistent session spill files have expired.
+`SpillFormat` accepts `"Arrow"` (default) or `"Json"` (legacy fallback). The `"Json"` path is retained so persistent sessions with existing spill files can still be read.
 
 ### 4.4 Files Changed
 
@@ -192,20 +192,6 @@ No changes to `ISpillStore`, `ISpillWriter`, `ISpillReader`, any external engine
 - Arrow Flight or zero-copy Python interop.
 - Spill-to-disk for `#temp` tables (`InMemoryDataSource`) — that is a separate item (LargeDatasets.md §5).
 - Changing the `IDataSource.ReadBatches()` contract.
-
----
-
-## 6. Future Phases (Not Approved)
-
-These are documented here for continuity. They require separate design review and stakeholder sign-off before implementation begins.
-
-**Phase B — `DataTable` → `RecordBatch` as internal batch format**
-
-Replace `IDataSource.ReadBatches()` return type and `InMemoryDataSource` storage with Arrow `RecordBatch`. This is the breaking change that makes Arrow pervasive through the engine. Prerequisites: Phase A validated in production, mutation strategy for `InMemoryDataSource` designed, C# Arrow ecosystem further validated.
-
-**Phase C — Vectorized compute kernels**
-
-Rewrite `AggregateEngine`, `JoinEngine`, `ExternalSortEngine` hot paths to operate columnar using `System.Runtime.Intrinsics`. Only meaningful after Phase B. Requires benchmarking to confirm the 2–4× realistic C# ceiling before investing.
 
 ---
 

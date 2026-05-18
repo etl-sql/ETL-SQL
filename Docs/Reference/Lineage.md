@@ -103,7 +103,7 @@ SELECT customer_id /*@pii; @sensitive*/ FROM #customers;
 
 ## Standard Tag Catalog
 
-ETL-SQL defines 20 standard tags across five governance domains. Custom tags are always allowed — the standard tags are recognized by the engine for enhanced rendering, intellisense, and future enforcement.
+ETL-SQL defines 20 standard tags across five governance domains. Custom tags are always allowed; the standard tags are recognized by the engine for enhanced rendering, intellisense, and governance checks.
 
 ### Security & Privacy
 
@@ -361,7 +361,7 @@ Add a metadata header to any `.etlsql` script. The engine auto-injects `author` 
 -- @author: Jane Smith;
 -- @environment: production;
 -- @domain: Finance;
--- @version: 2.1;
+-- @version: 0.7.0;
 -- @description: Monthly revenue reconciliation;
 -- @schedule: daily;
 ```
@@ -395,7 +395,7 @@ INTO #raw_customers;
 
 ### Use @d for Every Non-Obvious Column
 
-The `@d` description tag is the most valuable tag for long-term maintainability. A brief description of what a column means — especially for computed or transformed columns — pays dividends when someone else (or future you) reads the script.
+The `@d` description tag is the most valuable tag for long-term maintainability. A brief description of what a column means — especially for computed or transformed columns — pays dividends when someone else reads the script.
 
 ```sql
 SELECT

@@ -885,6 +885,7 @@ namespace ETL_SQL.Core.Formatting
                 ThresholdType.JoinSpill => "JOIN_SPILL_THRESHOLD",
                 ThresholdType.ExternalHashPartitions => "EXTERNAL_HASH_PARTITIONS",
                 ThresholdType.ExternalSortChunkSize => "EXTERNAL_SORT_CHUNK_SIZE",
+                ThresholdType.MaxSmtpEmailsPerScript => "MAX_SMTP_EMAILS_PER_SCRIPT",
                 ThresholdType.CaseSensitive => "CASE_SENSITIVE",
                 _ => "UNKNOWN"
             };

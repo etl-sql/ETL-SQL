@@ -50,6 +50,18 @@ var server = await LanguageServer.From(options => options
             registry.Register(new SqlServerConnector());
             registry.Register(new PostgresConnector());
             registry.Register(new OracleConnector());
+            registry.Register(new ParquetConnector());
+            registry.Register(new AvroConnector());
+            registry.Register(new JsonConnector());
+            registry.Register(new XmlConnector());
+            registry.Register(new ExcelConnector());
+            registry.Register(new OdbcConnector());
+            registry.Register(new RestConnector());
+            registry.Register(new SmtpConnector());
+            registry.Register(new SftpConnector());
+            registry.Register(new AzureBlobConnector());
+            registry.Register(new FtpConnector());
+            registry.Register(new DirectoryConnector());
         });
         services.AddSingleton<IMetadataManager, MetadataManager>();
         services.AddSingleton<DocumentStateStore>();
@@ -202,8 +214,8 @@ Implements `IMetadataProvider` (the interface expected by all `ILintRule` implem
 This means every linter rule that checks column existence, source table availability, or connection validity automatically benefits from the server's cached schema without any rule-level changes.
 
 **Linter rules in scope for `.rptsql`:**
-- `DatasetEncryptWithoutKeyRule` — ENCRYPT = KEYFILE without KEYFILE clause
-- `PageVisualReferencedRule` — MAP slot references an undefined visual
+
+The language server runs the same `ETL-SQL.Analysis` rule set used by the engine. Report-specific rules include dataset encryption/refresh validation, page slot references, visual source existence, required visual sources, mapping completeness, mapping column existence, dashboard/report keyword conflicts, and file-operation restrictions inside report scripts. General ETL-SQL rules still apply to the data-preparation statements inside a `.rptsql` file.
 
 **Severity mapping:**
 
@@ -252,12 +264,12 @@ The language server can connect to these sources to fetch live schema:
 | Connector | Schema support |
 |-----------|----------------|
 | `MockDbConnector` | In-memory mock tables — always available |
-| `FlatFileConnector` | Reads header row from CSV/flatfile to infer columns |
+| `FlatFileConnector` / `JsonConnector` / `XmlConnector` / `ExcelConnector` / `ParquetConnector` / `AvroConnector` | File metadata where the connector can infer or read a schema |
 | `SqlServerConnector` | `sys.tables`, `sys.columns`, `INFORMATION_SCHEMA.VIEWS` |
 | `PostgresConnector` | `pg_catalog`, `information_schema` |
 | `OracleConnector` | `ALL_TABLES`, `ALL_TAB_COLUMNS` |
-
-Connectors not in this list (SFTP, API, Azure Blob, etc.) return empty metadata — completions fall back to keyword-only suggestions for those connection types.
+| `OdbcConnector` | Provider-dependent metadata |
+| `RestConnector`, `SmtpConnector`, `SftpConnector`, `FtpConnector`, `AzureBlobConnector`, `DirectoryConnector` | Registered for keyword/options awareness; schema completions are limited or empty unless the connector can expose tabular metadata |
 
 ---
 

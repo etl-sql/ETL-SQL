@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.App;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.Email;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -159,6 +160,35 @@ namespace ETL_SQL.Tests.Statements
 
             string script = "SEND EMAIL TO 'a' SUBJECT 'b' BODY 'c' AT MYSMTP;";
             await Assert.ThrowsAnyAsync<Exception>(async () => await RunScriptAsync(evaluator, script));
+        }
+
+        [Fact]
+        public async Task SmtpDataSource_Enforces_PerScriptSendLimit()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = services.GetRequiredService<Evaluator>();
+            evaluator.MaxSmtpEmailsPerScript = 0;
+
+            var smtp = new SmtpDataSource(evaluator, new Dictionary<string, string>());
+            var row = new Row();
+            row["To"] = "user@test.com";
+            row["From"] = "sender@test.com";
+            row["Subject"] = "Blocked";
+            row["Body"] = "This should not connect.";
+
+            await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() => smtp.SendEmail(row));
+            Assert.Equal(1, evaluator.SmtpEmailsSentThisScript);
+        }
+
+        [Fact]
+        public async Task Set_MaxSmtpEmailsPerScript_UpdatesLimit()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = services.GetRequiredService<Evaluator>();
+
+            await RunScriptAsync(evaluator, "SET MAX_SMTP_EMAILS_PER_SCRIPT = 7;");
+
+            Assert.Equal(7, evaluator.MaxSmtpEmailsPerScript);
         }
     }
 }

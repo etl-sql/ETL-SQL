@@ -42,11 +42,17 @@ All portal state lives in a single SQLite database managed by EF Core with migra
 
 ```
 PortalUser ──< UserGroup >── Group ──< FolderAcl >── Folder ──< Report ──< ReportSnapshot
-                                                                         ──< Subscription ──> PortalUser
-                                                                         ──< DatasetJob
+                                                                         ├──< Subscription ──> PortalUser
+                                                                         ├──< ReportFavorite ──> PortalUser
+                                                                         ├──< ReportShareLink
+                                                                         ├──< ReportEmbedToken
+                                                                         ├──< SavedReportView
+                                                                         └──< ReportAlert
+Dataset ──< DatasetAcl
+Report ──< DatasetJob
 PortalUser ──< RefreshToken
 SmtpConnection  (standalone)
-AuditLog        (append-only)
+AuditLog        (append-oriented portal event table)
 ```
 
 ### Key Design Decisions
@@ -60,6 +66,8 @@ AuditLog        (append-only)
 - **`Subscription.ScriptPath`** — the Orchestrator job script is generated at subscription-creation time and stored as a `.etlsql` file under `ScriptRootPath`. This path is recorded so the job file can be cleaned up on subscription deletion.
 
 - **`SmtpConnection.EncryptedPassword`** — stored via .NET Data Protection API. The `SmtpPasswordProtector` service wraps `IDataProtector`. The password is never returned to clients in any API response.
+
+- **Catalog and embedding records** — favorites, share links, embed tokens, saved views, alerts, dependencies, and usage metrics are first-class portal records exposed through the report/admin API and ETL-SQL portal scripting commands.
 
 ---
 
@@ -232,9 +240,34 @@ All endpoints require a `Bearer` JWT token unless marked **Public**.
 | :--- | :--- | :--- | :--- |
 | GET | `/api/folders/{folderId}/reports` | Any | List reports in folder |
 | POST | `/api/reports` | Admin, Publisher | Publish report |
+| POST | `/api/reports/validate` | Admin, Publisher | Validate a report script |
 | GET | `/api/reports/{id}` | Any | Get report metadata |
+| GET | `/api/reports/{id}/dependencies` | Any | Get report dependencies |
+| GET | `/api/reports/{id}/history` | Any | Get report history |
 | PUT | `/api/reports/{id}` | Admin, Publisher | Update report metadata |
+| POST | `/api/reports/{id}/favorite` | Any | Mark report as favorite |
+| DELETE | `/api/reports/{id}/favorite` | Any | Remove favorite |
+| POST | `/api/reports/{id}/share-links` | Admin, Publisher | Create share link |
+| GET | `/api/reports/{id}/share-links` | Admin, Publisher | List share links |
+| DELETE | `/api/reports/{id}/share-links/{token}` | Admin, Publisher | Revoke share link |
+| GET | `/api/share/{token}` | Public | Resolve share link |
+| POST | `/api/reports/{id}/embed-tokens` | Admin, Publisher | Create embed token |
+| GET | `/api/reports/{id}/embed-tokens` | Admin, Publisher | List embed tokens |
+| DELETE | `/api/reports/{id}/embed-tokens/{token}` | Admin, Publisher | Revoke embed token |
+| GET | `/api/embed/{token}` | Public | Resolve embed token |
+| GET | `/api/reports/{id}/saved-views` | Any | List saved views |
+| POST | `/api/reports/{id}/saved-views` | Any | Create saved view |
+| PUT | `/api/reports/{id}/saved-views/{viewId}` | Any | Update saved view |
+| DELETE | `/api/reports/{id}/saved-views/{viewId}` | Any | Delete saved view |
+| GET | `/api/reports/{id}/alerts` | Any | List report alerts |
+| POST | `/api/reports/{id}/alerts` | Any | Create report alert |
+| PUT | `/api/reports/{id}/alerts/{alertId}` | Any | Update report alert |
+| DELETE | `/api/reports/{id}/alerts/{alertId}` | Any | Delete report alert |
+| GET | `/api/reports/{id}/parameters` | Any | Get declared report parameters |
 | DELETE | `/api/reports/{id}` | Admin, Publisher | Soft-delete report |
+| POST | `/api/scripts/upload` | Admin, Publisher | Upload script file |
+| GET | `/api/reports/available-scripts` | Admin, Publisher | List available script files |
+| GET | `/api/maps/custom` | Any | List custom map assets |
 
 ### Execution
 
@@ -243,9 +276,28 @@ All endpoints require a `Bearer` JWT token unless marked **Public**.
 | POST | `/api/reports/{id}/execute` | Any | Start execution job |
 | GET | `/api/jobs/{jobId}` | Any | Poll job status |
 | GET | `/api/reports/{id}/snapshot` | Any | Get snapshot JSON |
+| GET | `/api/reports/{id}/manifest` | Any | Get current manifest JSON |
 | GET | `/api/reports/{id}/snapshot/manifest` | Any | Get snapshot manifest |
 | POST | `/api/reports/{id}/refresh` | Any | Rebuild snapshot |
+| POST | `/api/reports/{id}/parameter` | Any | Set one parameter value |
 | POST | `/api/reports/{id}/parameters` | Any | Set parameter values |
+| POST | `/api/reports/{id}/drill` | Any | Drill in/up for one visual |
+| POST | `/api/reports/{id}/refresh-visuals` | Any | Selectively refresh named visuals |
+
+### Datasets
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/datasets` | Any | List accessible datasets |
+| GET | `/api/datasets/{id}` | Any | Get dataset metadata |
+| GET | `/api/datasets/{id}/rows` | Any | Get dataset rows |
+| POST | `/api/datasets/{id}/refresh` | Admin, Publisher | Start dataset refresh |
+| GET | `/api/datasets/{id}/refresh-status` | Any | Get dataset refresh status |
+| PATCH | `/api/datasets/{id}` | Admin, Publisher | Update dataset metadata |
+| DELETE | `/api/datasets/{id}` | Admin, Publisher | Delete dataset |
+| GET | `/api/datasets/{id}/acl` | Admin | List dataset ACL entries |
+| POST | `/api/datasets/{id}/acl` | Admin | Add dataset ACL entry |
+| DELETE | `/api/datasets/{id}/acl/{groupId}` | Admin | Remove dataset ACL entry |
 
 ### Export
 
@@ -261,8 +313,10 @@ All endpoints require a `Bearer` JWT token unless marked **Public**.
 | GET | `/api/subscriptions` | Any | List own subscriptions |
 | GET | `/api/subscriptions/{id}` | Any | Get subscription |
 | POST | `/api/subscriptions` | Any | Create subscription |
+| PUT | `/api/subscriptions/{id}` | Any | Update subscription |
 | DELETE | `/api/subscriptions/{id}` | Any | Delete subscription |
 | GET | `/api/subscriptions/{id}/history` | Any | Delivery history |
+| GET | `/api/smtp-aliases` | Any | List usable SMTP aliases |
 
 ### Admin — Users & Groups
 
@@ -278,6 +332,7 @@ All endpoints require a `Bearer` JWT token unless marked **Public**.
 | GET | `/api/admin/groups` | Admin | List groups |
 | POST | `/api/admin/groups` | Admin | Create group |
 | GET | `/api/admin/groups/{id}` | Admin | Get group |
+| PUT | `/api/admin/groups/{id}` | Admin | Update group |
 | DELETE | `/api/admin/groups/{id}` | Admin | Delete group |
 | GET | `/api/admin/groups/{id}/members` | Admin | List group members |
 | POST | `/api/admin/groups/{id}/members` | Admin | Add member |
@@ -298,6 +353,43 @@ All endpoints require a `Bearer` JWT token unless marked **Public**.
 | :--- | :--- | :--- | :--- |
 | GET | `/api/admin/audit` | Admin | Browse audit log (paginated) |
 | GET | `/api/admin/audit/export/csv` | Admin | Download audit log as CSV |
+
+### Admin — Portal Operations
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/admin/reports` | Admin | Browse reports across folders |
+| GET | `/api/admin/permissions/effective/user/{userId}` | Admin | Inspect effective user permissions |
+| GET | `/api/admin/permissions/effective/folder/{folderId}` | Admin | Inspect effective folder permissions |
+| GET | `/api/admin/permissions/effective/report/{reportId}` | Admin | Inspect effective report permissions |
+| GET | `/api/admin/metrics/usage` | Admin | Portal usage metrics |
+| GET | `/api/admin/settings/orchestrator` | Admin | Get orchestrator settings |
+| PUT | `/api/admin/settings/orchestrator` | Admin | Update orchestrator settings |
+
+### Catalog
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/catalog/search` | Any | Search reports/catalog content |
+| GET | `/api/catalog/recent` | Any | Recently viewed or updated reports |
+| GET | `/api/catalog/favorites` | Any | Current user's favorites |
+
+### Orchestrator Proxy
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/orchestrator/status` | Admin | Orchestrator status |
+| GET | `/api/orchestrator/metrics` | Admin | Orchestrator metrics |
+| GET | `/api/orchestrator/jobs` | Admin | List jobs |
+| POST | `/api/orchestrator/jobs` | Admin | Create job |
+| PUT | `/api/orchestrator/jobs/{name}` | Admin | Update job |
+| DELETE | `/api/orchestrator/jobs/{name}` | Admin | Delete job |
+| GET | `/api/orchestrator/jobs/{name}/history` | Admin | Job history |
+| POST | `/api/orchestrator/jobs/{name}/trigger` | Admin | Trigger job now |
+| POST | `/api/orchestrator/jobs/{name}/kill` | Admin | Kill running job |
+| GET | `/api/orchestrator/scripts` | Admin | List scripts |
+| GET | `/api/orchestrator/scripts/content` | Admin | Read script content |
+| POST | `/api/orchestrator/service/stop` | Admin | Request orchestrator service stop |
 
 ### System
 

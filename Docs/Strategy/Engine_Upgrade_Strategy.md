@@ -282,7 +282,7 @@ Create `src/ETL-SQL.TUI/ETL-SQL.TUI.csproj`:
     <PackageReference Include="Serilog" Version="4.2.0" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="9.0.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
-    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+<PackageReference Include="System.CommandLine" Version="0.7.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
@@ -314,7 +314,7 @@ Add to `ETL-SQL.slnx` under `/src/`:
 **Step 2.5 — Apply the SimpleUi decoupling (Step 2.1)**  
 Before moving: edit `src/ETL-SQL.App/UI/SimpleUi.cs`:
 - Remove `using ETL_SQL.App;`
-- Change constructor signature and update internal references as planned in Step 2.1
+- Change constructor signature and update internal references from Step 2.1
 
 **Step 2.5a — Split ConsoleEditor rendering from orchestration (CQ-5)**  
 `ConsoleEditor.cs` (~423 LOC) currently mixes three concerns: rendering (drawing the editor frame, syntax highlighting, line numbers), input handling (key dispatch, cursor movement), and file I/O (load/save). Before moving the file, separate the rendering concern so the file is cleaner and testable in its new home.
@@ -447,7 +447,7 @@ Add a section describing the two executables:
 - `ETL-SQL-TUI.exe` — interactive console editor; use for development, debugging, ad-hoc queries
 
 **Step 4.3 — Update TODO.md**  
-Mark Engine Enhancements Item 1 as complete (the initial split). Note the Orchestrator is currently a class library hosted in-process; promoting it to a standalone service is a future phase (Phase 6).
+Mark Engine Enhancements Item 1 as complete (the initial split). The Orchestrator is currently a class library hosted in-process.
 
 **Step 4.4 — Create Engine.md engineering document**  
 Create `Docs/Engine.md` that maps the interactions between all components, data sources, and projects as they now stand after the split. This document serves as the onboarding reference for any agent or developer working on the engine going forward. It should cover:
@@ -503,7 +503,7 @@ Target: 519 pass, 1 fail (Docker). This is the acceptance gate for Phases 0-4.
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
 | New Report-SQL tokens conflict with existing ETL-SQL column/alias names in existing scripts | Medium | High | All new tokens are non-reserved — only keywords inside a `CREATE VISUAL`/`CREATE PAGE`/`CREATE DATASET` context; add a linter rule that warns if a column alias shadows a Report-SQL keyword |
-| `DashboardService` singleton holds stale state if the served script is changed between requests | Low | Medium | `etl-sql-report serve` is a single-script, single-user local process; document that changing the script requires restarting the server; future multi-script hosting can introduce per-script keyed services |
+| `DashboardService` singleton holds stale state if the served script is changed between requests | Low | Medium | `etl-sql-report serve` is a single-script, single-user local process; document that changing the script requires restarting the server; multi-script hosting uses per-script keyed services |
 | `report-runtime.js` fetches `/api/visual/{name}/data` for all visuals on every parameter change, even visuals not affected by that parameter | Medium | Medium | Track which `@params` appear in each visual's `SourceSql`; only re-fetch visuals whose source references the changed parameter |
 | Parquet snapshot file corrupted mid-write (process crash during refresh) | Low | High | Write to a `.tmp` file, then atomically rename to the final path on success; on startup check for orphaned `.tmp` files and delete them |
 | `CREATE DATASET` refresh job and a live dashboard session read/write the snapshot simultaneously | Medium | High | Use a `ReaderWriterLockSlim` in `SnapshotStore`: multiple readers allowed; writer takes exclusive lock; dashboard reads the old snapshot until the new one is fully written and renamed |
@@ -748,7 +748,7 @@ Orchestrator tracks system resource utilization (CPU/RAM) and enforces a configu
 
 ### PHASE 9 — Report-SQL: Report and Dashboard Builder
 
-**Status:** Design complete — not yet started  
+**Status:** Implemented in the 0.7.0 release line
 **Prerequisites:**
 - Phases 1–4 (architecture separation) — hard required
 - Phase 5 Steps 5.1 and 5.2 (Ast.cs + Parser split) — hard required; new statement families cannot be added cleanly to the monolithic files
@@ -934,7 +934,7 @@ AS (
 - The `&DatasetName` is available in the report dataset namespace after `CREATE DATASET` completes, regardless of whether it was loaded from snapshot or live — callers don't need to know which path was taken.
 - Staleness behavior: if snapshot exists but is beyond TTL, the dashboard player shows a staleness warning banner with the last-refresh timestamp and an optional manual refresh button. It does NOT block rendering — it shows the stale data with a warning.
 
-**Storage format:** Parquet is the target. It is compressed by design, columnar (efficient for aggregation queries), and can be read back using an existing or new Parquet connector. As an interim fallback, compressed JSON (GZip) is acceptable if Parquet is not yet in the connector library.
+**Storage format:** Parquet is the target. It is compressed by design, columnar (efficient for aggregation queries), and can be read back using an existing or new Parquet connector. As an interim fallback, compressed JSON (GZip) is acceptable when Parquet is unavailable in the connector library.
 
 ---
 
@@ -1079,7 +1079,7 @@ After the Evaluator runs the script, `ManifestBuilder` walks `ISessionState` and
 
 #### MarkdownRenderer
 Takes a `ReportManifest` and the actual data rows from each visual's source (fetched one time at build time), and produces a `.md` file:
-- Each visual rendered as: a heading with the visual title, a markdown table of up to 50 rows of source data, and an HTML comment `<!-- CHART:{ ...manifest json... } -->` containing the full visual definition JSON. This comment allows future tooling to re-render the chart from the markdown file.
+- Each visual rendered as: a heading with the visual title, a markdown table of up to 50 rows of source data, and an HTML comment `<!-- CHART:{ ...manifest json... } -->` containing the full visual definition JSON. This comment allows tooling to re-render the chart from the markdown file.
 - Page layout rendered as a markdown section per page with a comment showing the grid structure.
 - Parameters documented as a markdown table at the top of the file.
 
@@ -1183,7 +1183,7 @@ public class DashboardService
 }
 ```
 
-`DashboardService` is registered as a **singleton per server instance** (one per `etl-sql-report serve` process). It is not scoped to an HTTP request. Since a `serve` process serves a single analyst at a time (local use), this is the correct lifetime. If multi-user deployments are added in the future, promote to a keyed/scoped service per session token.
+`DashboardService` is registered as a **singleton per server instance** (one per `etl-sql-report serve` process). It is not scoped to an HTTP request. Since a `serve` process serves a single analyst at a time (local use), this is the correct lifetime. Multi-user deployments use a keyed/scoped service per session token.
 
 **Data access contract:** When `GetDataForVisualAsync` is called:
 1. Look up the `VisualDefinition` by name.
@@ -1255,7 +1255,7 @@ The template has no server-side rendering directives. It is plain HTML + Chart.j
 | Mode | Surface | Data source | Interactivity | Parameters |
 |---|---|---|---|---|
 | **Research paper** | `etl-sql-report build` → `.md` file | Live database, baked in at build time | None (static) | Rendered with default values only |
-| **VS Code preview** | WebviewPanel, inline `window.__MANIFEST__` | Live database, re-fetched on save | None (read-only render) | Not yet interactive; shows defaults |
+| **VS Code preview** | WebviewPanel, inline `window.__MANIFEST__` | Live database, re-fetched on save | Webview interaction handlers | Interactive preview with default parameter state |
 | **Local serve** | Browser via Kestrel | Live database → `#temp` tables | Full (slicers, drill-down) | Dynamic via `/api/parameter` |
 | **Deployed (fresh)** | Browser via Kestrel | Live database — no snapshot exists | Full | Dynamic |
 | **Deployed (cached)** | Browser via Kestrel | `SnapshotStore` → `#temp` tables | Full | Dynamic; parameterized visuals re-query against snapshot |

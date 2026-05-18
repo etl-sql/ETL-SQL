@@ -37,7 +37,7 @@ Tier 5 — Report Layer
   ETL-SQL.ReportPortal    → ReportHosting, Reporting, Engine, Connectors, Orchestrator
 
 Service Host
-  ETL-SQL.Service         → Core, Engine, Connectors, Orchestrator
+  ETL-SQL.Orchestrator.Service → Core, Engine, Connectors, Orchestrator, Reporting
 ```
 
 Build output names:
@@ -58,7 +58,7 @@ The shared kernel. Nothing depends on this except what it pulls in from NuGet.
 - **Parser** (`ETL_SQL.Core.Parser`) — tokenizer, parser, and full AST definition. Every statement type (`SelectStatement`, `CreateConnectionStatement`, etc.) lives here.
 - **Interfaces** — `IConnector`, `IConnectorRegistry`, `IDataSource`, `IDatabaseSource`, `IStatementHandler`, `IExecutionContext`, `IScriptExecutor`, `IJobHistoryStore`, `ILintRule`, `ILintContext`.
 - **Data model** — `Row`, `DataTable`, `ColumnDefinition`, `JobDefinition`, `JobHistoryEntry`, `SessionState`.
-- **Linting** — `ILintRule`, `Linter`, `LinterFactory`, and all 17 built-in rules under `Linting/Rules/`.
+- **Analysis contracts used by runtime** — shared parser diagnostics, metadata abstractions, and AST/data contracts consumed by the `ETL-SQL.Analysis` project.
 - **Common utilities** — `ILogger` facade (ETL_SQL.Common), `ExecutionException`, `ExecutionTree`, `LineageTracker`.
 - **InMemoryDataSource** — the in-process table implementation used for `#temp` tables and MOCKDB.
 - **Crypto / security** — `ICryptoService`, `ISecurityService`, DPAPI-backed key management.
@@ -74,6 +74,13 @@ All runtime logic that evaluates a parsed `Script`.
 - **`SchemaManager`** — handles `CREATE TABLE`, `DROP TABLE`, `CREATE INDEX`, etc.
 - **`TransactionManager`** — BEGIN / COMMIT / ROLLBACK coordination across connections.
 - **`FunctionRegistry`** / `StandardFunctions`** — built-in ETL-SQL functions.
+
+### ETL-SQL.Analysis
+Static analysis and diagnostics that operate over Core AST objects.
+
+- **Linting** — `ILintRule`, `Linter`, `LinterFactory`, `LintResult`, and the built-in rule set under `Linting/Rules/`.
+- **Lineage analysis** — `LineageAnalyzer` and graph rendering helpers used by the evaluator, language server, and documentation tooling.
+- **Script metadata overlay** — document/session metadata used by lint rules without moving runtime services into Core.
 
 ### ETL-SQL.Connectors
 All `IConnector` / `IDataSource` implementations.
@@ -91,7 +98,7 @@ Job scheduling and execution infrastructure.
 - **`ExecutionSession`** — executes a single script run; wraps `Evaluator` lifecycle.
 - **`ScriptExecutorAdapter`** — implements `IScriptExecutor` on top of `ExecutionSession`; the DI-injectable boundary used by the scheduler.
 - **`JobThrottle`** — semaphore-based concurrency cap.
-- **`ProcessJobExecutor`** — spawns child processes for isolated execution (future path).
+- **`ProcessJobExecutor`** — spawns child processes for isolated execution.
 - **`SQLiteJobHistoryStore`** — implements `IJobHistoryStore` using SQLite for persistence.
 
 ### ETL-SQL.Orchestrator.Service
@@ -119,7 +126,7 @@ Report-SQL semantics, report sessions, and dashboard runtime.
 Thin entry points. CLI compiles a `.rptsql` file to a manifest; ReportPlayer and ReportPortal host report shells over HTTP (ASP.NET).
 
 ### ETL-SQL.LanguageServer
-Implements the Language Server Protocol using OmniSharp. Provides completions, diagnostics, and hover info for `.etlsql` files in VS Code and JetBrains IDEs.
+Implements the Language Server Protocol using OmniSharp. Provides completions, diagnostics, hover info, formatting, and navigation for `.etlsql` and `.rptsql` files. The VS Code extension is the primary bundled client; other editors can host it if they speak LSP over stdio.
 
 ---
 
@@ -434,7 +441,7 @@ LintStatementHandler.Execute(LintStatement, IExecutionContext)
 
 ## Scale & Large Dataset Handling
 
-ETL-SQL processes data in batches and can spill intermediate results to disk when in-memory thresholds are exceeded. This section covers where those decisions are made and what mechanisms are in play. For design rationale, profiling targets, and the future roadmap see [`Docs/Strategy/LargeDatasets.md`](../Strategy/LargeDatasets.md).
+ETL-SQL processes data in batches and can spill intermediate results to disk when in-memory thresholds are exceeded. This section covers where those decisions are made and what mechanisms are in play. For design rationale and profiling targets see [`Docs/Strategy/LargeDatasets.md`](../Strategy/LargeDatasets.md).
 
 ### SelectStatementHandler execution strategies
 
@@ -572,13 +579,3 @@ Both default to `true`. Setting either to `false` triggers a linter warning (`Sp
 `context.LastResult` is always capped at `MaxLastResultRows` (50,000) for display — the full row count is available via `TotalRowsMatched` regardless of the cap.
 
 There is currently no configuration for the external engine thresholds (100k) or partition counts (32). These are compile-time constants in each engine class.
-
-### What is not yet done (Phase 8A remaining items)
-
-**`InMemoryDataSource` spill-to-disk (8A-2)**
-
-Even with streaming and external engines, a `#temp` table is still backed entirely by `InMemoryDataSource._batches` (a `List<DataTable>`). A 50M-row `SELECT * INTO #t FROM file.csv` streams correctly through the handler but all 50M rows accumulate in the destination `InMemoryDataSource`. Fixing this requires `InMemoryDataSource` to overflow pages to disk when a configurable `SpillThresholdRows` is exceeded. Detailed design is in `LargeDatasets.md` §5.
-
-**Chunked `FOR` loop pushdown (8A-3)**
-
-`FOR @row IN (SELECT ...)` loads all rows from the source into memory before iterating. When the source is a SQL connector, it should re-issue the query with `OFFSET / FETCH` pagination per batch instead. Not yet implemented.

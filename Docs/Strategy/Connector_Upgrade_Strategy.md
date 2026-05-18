@@ -1,6 +1,6 @@
-# ETL-SQL Connector Upgrade Strategy
+# ETL-SQL Connector Upgrade Notes
 
-This document defines the **Roadmap and Implementation Backlog** for modernizing the ETL-SQL connector library. Our goal is 100% technical exhaustion, ensuring every connector is production-grade, pattern-centric, and secure.
+This document records the connector modernization standards used for ETL-SQL 0.7.0. The connector library is treated as production-grade, pattern-centric, and secure.
 
 ---
 
@@ -20,47 +20,6 @@ To maintain absolute technical consistency, all implementation work MUST adhere 
 - **BigQuery Connector** [v0.7.0]
     - **Patterns**: `PROJECT_ID`, `DATASET_ID`, `KEY_FILE`.
     - **Syntax**: `SELECT * FROM bq_conn.Events;`
-
-## 3. Future Connector Roadmap (Technical Specs)
-- **Databricks SQL & Spark**
-    - **Pattern**: `HOST`, `HTTP_PATH`, `TOKEN` (Personal Access Token).
-- **Delta Sharing**
-    - **Pattern**: `PROFILE_PATH` (Local/Cloud path to `.share` JSON profile).
-    - **Syntax**: `SELECT * FROM DELTA_SHARING(@Profile) WHERE Share = 'sales';`
-
-### 3.2 Enterprise SaaS (OData/REST)
-- **ServiceNow**
-    - **Pattern**: `INSTANCE` (slug), `USER`, `PASS` (or `CLIENT_ID`, `CLIENT_SECRET`).
-    - **Syntax**: `SELECT * FROM sn.incident WHERE priority = 1;` (OData entities abstracted as SQL tables).
-- **Microsoft Dataverse / Dynamics 365**
-    - **Pattern**: `ORG_URL`, `TENANT_ID`, `CLIENT_ID`, `CLIENT_SECRET`.
-- **SharePoint Connector**
-    - **Syntax (List)**: `SELECT * FROM sp.Employees;`
-    *   **Syntax (File)**: `SELECT * FROM FLATFILE('doc.csv') ON sp;`
-
----
-
-## 4. Current Connector Audit (Technical Debt)
-
-The following production-grade options must be added to reach 100% technical exhaustion.
-
-### Relational (MSSQL, Postgres, Oracle)
-- [ ] **Failover**: `APPLICATION_INTENT`, `MULTI_SUBNET_FAILOVER`.
-- [ ] **Pooling**: `MIN_POOL_SIZE`, `MAX_POOL_SIZE`, `POOL_LIFETIME`.
-- [ ] **Security**: `ENCRYPT`, `TRUST_SERVER_CERTIFICATE`, `COLUMN_ENCRYPTION`.
-- [ ] **Timeouts**: `COMMAND_TIMEOUT`.
-
-### Flat Files & Documents
-- [ ] **Parsing**: `ENCODING`, `CULTURE` (Locale-aware parsing), `TRIM_WHITESPACE`.
-- [ ] **Security**: `PASSWORD` for encrypted Workbooks.
-- [ ] **Precision**: `FLATTEN_ARRAYS` (JSON/XML).
-
-### Network & Cloud Storage
-- [ ] **SFTP**: `HOST_KEY_FINGERPRINT`.
-- [ ] **Proxy**: `PROXY_TYPE`, `PROXY_HOST`, `PROXY_PORT`, `PROXY_USER`, `PROXY_PASS`.
-- [ ] **AzureBlob**: `RETRY_POLICY`, `MAX_RETRIES`.
-
----
 
 ## 6. Pushdown Optimization Contract
 

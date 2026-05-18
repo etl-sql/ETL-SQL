@@ -86,12 +86,24 @@ The client uses **full text synchronization** — every document change sends th
 |------------|---------------|---------|----------|
 | `etlsql.runScript` | ETL-SQL: Run Script | `runEtlSql(ctx, false)` | Executes entire active document via REPL |
 | `etlsql.runSelection` | ETL-SQL: Run Selection | `runEtlSql(ctx, true)` | Executes selected text only |
+| `etlsql.stopScript` | ETL-SQL: Stop Script | `ReplManager.cancel()` | Sends a cooperative cancel request to the REPL process |
+| `etlsql.rollbackTransactions` | ETL-SQL: Rollback Transactions | `ReplManager.rollback()` | Sends `ROLLBACK;` to the active REPL session |
 | `etlsql.showLineage` | ETL-SQL: Show Lineage | `editor.action.showHover()` | Delegates to the hover provider |
 | `etlsql.removeConnection` | ETL-SQL: Remove Connection | Provider method | Removes from global state, syncs to LSP |
 | `etlsql.refreshConnections` | ETL-SQL: Refresh Connections | LSP notification | Sends `etlsql/refreshMetadata`; server clears cache and re-analyzes |
 | `etlsql.copyConnection` | ETL-SQL: Copy Connection | Clipboard write | Copies `CREATE CONNECTION` statement for the selected connection |
 | `etlsql.browseFile` | ETL-SQL: Browse for File | File picker | Opens OS file dialog, inserts relative path at cursor |
 | `etlsql.previewReport` | ETL-SQL: Preview Report | `ReportPreviewPanel.open()` | Opens report preview panel for `.rptsql` file |
+| `etlsql.launchInBrowser` | ETL-SQL: Launch Report in Browser | Preview panel helper | Starts ReportPlayer for the active report preview |
+| `etlsql.launchReportFile` | ETL-SQL: Launch Report File | `launchReport*` helper | Starts ReportPlayer for a selected `.rptsql` file |
+| `etlsql.launchReportDirectory` | ETL-SQL: Launch Report Directory | `launchReport*` helper | Starts ReportPlayer for a directory/manifest workflow |
+| `etlsql.launchReportManifest` | ETL-SQL: Launch Report Manifest | `launchReport*` helper | Starts ReportPlayer with a multi-report manifest |
+| `etlsql.publishToPortal` | ETL-SQL: Publish to Portal | Preview panel helper | Publishes the current report to the configured portal |
+| `etlsql.exportMarkdown` | ETL-SQL: Export Markdown | Preview panel helper | Runs report CLI export as Markdown |
+| `etlsql.exportPdf` | ETL-SQL: Export PDF | Preview panel helper | Runs report CLI export as PDF |
+| `etlsql.exportText` | ETL-SQL: Export Text | Preview panel helper | Runs report CLI text export |
+| `etlsql.exportNotebook` | ETL-SQL: Export Notebook | notebook helper | Exports the active script/results as a notebook artifact |
+| `etlsql.showWelcome` | ETL-SQL: Show Welcome | welcome panel | Opens the extension welcome view |
 
 ---
 
@@ -140,8 +152,8 @@ The process stays alive between executions. Subsequent `execute()` calls enqueue
 **Commands sent to process (stdin):**
 
 ```json
-{ "action": "run",  "script": "SELECT ..." }
-{ "action": "exit" }
+{ "Action": "run",    "Script": "SELECT ...", "ScriptPath": "...", "WorkspaceRoot": "...", "InteractiveMode": false }
+{ "Action": "cancel" }
 ```
 
 **Messages received from process (stdout):**
@@ -191,7 +203,7 @@ The Results Panel hosts a React application loaded from `ui/dist/index.html` (bu
 
 ### Message Queueing
 
-If the webview is not yet visible when a message is posted, the message is queued. When the webview becomes visible (`resolveWebviewView()`), queued messages are drained in order and the panel is automatically shown.
+If the webview is hidden when a message is posted, the message is queued. When the webview becomes visible (`resolveWebviewView()`), queued messages are drained in order and the panel is automatically shown.
 
 ---
 
@@ -214,7 +226,7 @@ _buildManifest():
 _getReportHtml(manifest):
   inject: window.__MANIFEST__ = <manifest JSON>
   load: report-runtime.js (from extension resources)
-  load: ECharts from CDN
+  load: echarts.min.js (from extension media resources)
     ↓
 webviewPanel.webview.html = html
 ```
@@ -227,7 +239,7 @@ The panel registers a `vscode.workspace.onDidSaveTextDocument` listener. When th
 
 The preview panel uses the **VS Code mode** of `report-runtime.js` — it pre-embeds the manifest as `window.__MANIFEST__` rather than fetching from a server. This means:
 - No HTTP server is needed for preview
-- Interactive controls (SLICER, DATEPICKER, etc.) are not active in preview mode — they require the web server's `/api/parameter` endpoint
+- Interactive controls can render in preview mode, but actions that require a live report session, such as drill-in, server-side parameter refresh, and script actions, require the ReportPlayer/Portal API
 - To test interactivity, use `etl-sql-report serve` to launch the full ReportPlayer
 
 ---
@@ -298,10 +310,11 @@ Both `.etlsql` and `.rptsql` use the same language ID (`etlsql`) and grammar, so
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `etlsql.executablePath` | *(empty)* | Path to `ETL-SQL.App.exe`. Auto-discovered from workspace build output if empty. |
-| `etlsql.server.path` | *(empty)* | Path to `ETL-SQL.LanguageServer.exe`. Auto-discovered if empty. |
-| `etlsql.reportCliPath` | *(empty)* | Path to `etl-sql-report.exe`. Used by the preview panel build step. |
-| `etlsql.autoPreviewReport` | `false` | Automatically open preview panel when a `.rptsql` file is opened. |
+| `etlsql.executable.path` | `ETL-SQL.exe` | Path to the ETL-SQL CLI executable used for running scripts. |
+| `etlsql.server.path` | *(empty)* | Path to `ETL-SQL-LSP.exe` / `ETL-SQL.LanguageServer`. Auto-discovered if empty. |
+| `etlsql.report.executable.path` | `ETL-SQL-Report.exe` | Path to the report CLI used by the preview/export/publish workflows. |
+| `etlsql.portal.url` | *(empty)* | Base URL of the ETL-SQL Report Portal used by report publishing. |
+| `etlsql.report.autoOpenPreview` | `false` | Automatically open preview panel when a `.rptsql` file is opened. |
 
 ---
 

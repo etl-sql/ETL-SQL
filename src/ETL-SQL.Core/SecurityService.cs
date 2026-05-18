@@ -132,6 +132,7 @@ namespace ETL_SQL.Services
             MaxParallelDegree = int.TryParse(section["MaxParallelDegree"], out var mpd) ? mpd : DefaultMaxParallelDegree;
             MaxStringResultSize = long.TryParse(section["MaxStringResultSize"], out var msr) ? msr : DefaultMaxStringResultSize;
             RegexMatchTimeout = int.TryParse(section["RegexMatchTimeoutMs"], out var rmt) ? TimeSpan.FromMilliseconds(rmt) : DefaultRegexMatchTimeout;
+            MaxSmtpEmailsPerScript = int.TryParse(section["MaxSmtpEmailsPerScript"], out var mse) && mse >= 0 ? mse : DefaultMaxSmtpEmailsPerScript;
         }
 
         // Data formats a script is expected to read or write. Any other extension is denied by default.
@@ -171,6 +172,7 @@ namespace ETL_SQL.Services
         public const int DefaultMaxRecursiveDepth = 5;
         public const int DefaultMaxParallelDegree = 32;
         public const long DefaultMaxStringResultSize = 100 * 1024 * 1024; // 100 MiB
+        public const int DefaultMaxSmtpEmailsPerScript = 100;
         public static readonly TimeSpan DefaultRegexMatchTimeout = TimeSpan.FromSeconds(1);
 
         public int MaxFileOperations { get; set; } = DefaultMaxFileOperations;
@@ -178,6 +180,7 @@ namespace ETL_SQL.Services
         public int MaxRecursiveDepth { get; set; } = DefaultMaxRecursiveDepth;
         public int MaxParallelDegree { get; set; } = DefaultMaxParallelDegree;
         public long MaxStringResultSize { get; set; } = DefaultMaxStringResultSize;
+        public int MaxSmtpEmailsPerScript { get; set; } = DefaultMaxSmtpEmailsPerScript;
         public TimeSpan RegexMatchTimeout { get; set; } = DefaultRegexMatchTimeout;
         public static readonly int DefaultMaxGenerateRows = 10000;
 
@@ -533,6 +536,10 @@ namespace ETL_SQL.Services
                 case ThresholdType.MaxGenerateRows:
                     isExceeding = Convert.ToInt32(newValue) > 1000000;
                     globalLimit = 1000000;
+                    break;
+                case ThresholdType.MaxSmtpEmailsPerScript:
+                    isExceeding = Convert.ToInt32(newValue) > MaxSmtpEmailsPerScript;
+                    globalLimit = MaxSmtpEmailsPerScript;
                     break;
                 case ThresholdType.MaxInternalOperations:
                     isExceeding = Convert.ToInt32(newValue) > 10000000; // Allow up to 10M for internal ops if authorized

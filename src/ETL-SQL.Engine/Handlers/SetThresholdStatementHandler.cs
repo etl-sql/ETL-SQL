@@ -35,6 +35,11 @@ namespace ETL_SQL.Engine.Handlers
                 throw new ExecutionException($"{s.Type.ToString().ToUpperInvariant()} must be at least 1.");
             }
 
+            if (s.Type == ThresholdType.MaxSmtpEmailsPerScript && intVal < 0)
+            {
+                throw new ExecutionException("MAX_SMTP_EMAILS_PER_SCRIPT must be zero or greater.");
+            }
+
 
             switch (s.Type)
             {
@@ -94,6 +99,9 @@ namespace ETL_SQL.Engine.Handlers
                     break;
                 case ThresholdType.MaxGenerateRows:
                     context.MaxGenerateRows = intVal;
+                    break;
+                case ThresholdType.MaxSmtpEmailsPerScript:
+                    context.MaxSmtpEmailsPerScript = intVal;
                     break;
                 case ThresholdType.MaxInternalOperations:
                     context.SecurityService.MaxInternalOperations = intVal;

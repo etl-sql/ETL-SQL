@@ -1,6 +1,6 @@
 # ETL-SQL Orchestrator Architecture & Engineering Reference
 
-**Version 1.0**
+**Applies to ETL-SQL 0.7.0**
 
 This document describes the internal mechanics of the `ETL-SQL.Orchestrator` project — the layer responsible for scheduling, executing, tracking, and governing ETL-SQL scripts in both interactive (TUI/IDE) and unattended (background job) contexts. It is the primary reference for engineers who need to understand how scripts move from a `CREATE JOB` statement to a completed run entry in the `SHOW JOB HISTORY` table.
 
@@ -565,7 +565,7 @@ All Orchestrator configuration is bound from `appsettings.json` in the host appl
 
 **Check 1:** Is `IsEnabled = 1` in the `Jobs` table? `DROP JOB` sets it to `0`, not `DELETE`.
 
-**Check 2:** Is `NextRun` set to a future time? Query `SELECT Name, NextRun, LastRun FROM Jobs` directly against `etlsql.db` to inspect.
+**Check 2:** Is `NextRun` set to a later scheduled time? Query `SELECT Name, NextRun, LastRun FROM Jobs` directly against `etlsql.db` to inspect.
 
 **Check 3:** Is the `SchedulerService` started? It must be called explicitly via `SchedulerService.Start()` at application boot. The DI container does not start it automatically.
 

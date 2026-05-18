@@ -18,6 +18,7 @@ namespace ETL_SQL.Engine
         public long MaxSessionSize { get; set; } = 200 * 1024 * 1024; // 200MB Default
         public int MaxLastResultRows { get; set; } = LanguageMetadata.DefaultMaxLastResultRows;
         public int MaxGenerateRows { get; set; } = SecurityService.DefaultMaxGenerateRows;
+        public int MaxSmtpEmailsPerScript { get; set; } = SecurityService.DefaultMaxSmtpEmailsPerScript;
         public int MaxInternalOperations { get; set; } = 100000;
 
         public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;

@@ -73,7 +73,7 @@ All keywords are registered in a `static Dictionary<string, TokenType>` at class
 `SELECT`, `FROM`, `WHERE`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `DROP`, `INTO`, `AS`, `ON`, `JOIN`, `AND`, `OR`, `NOT`, `IN`, `IS`, `NULL`, `IF`, `ELSE`, `WHILE`, `FOR`, `BEGIN`, `END`, `DECLARE`, `SET`, `RETURN`, `WITH`, `UNION`, `EXCEPT`, `INTERSECT`, `ORDER`, `GROUP`, `BY`, `HAVING`, `CASE`, `WHEN`, `THEN`, `CAST`, `OVER`, `PARTITION`, `EXISTS`, `DISTINCT`, `ALL`, `TOP`, `LIMIT`, `OFFSET`, `FETCH`, `NEXT`, `ONLY`, …
 
 **Non-reserved / context-sensitive keywords** (lexed as their token type but accepted as identifiers by the parser outside their specific contexts — see §3.3):  
-Report-SQL: `VISUAL`, `PAGE`, `DATASET`, `LAYOUT`, `MAPPINGS`, `OPTIONS`, `ACTIONS`, `STRUCTURE`, `MAP`, `SERIES`, `SLICER`, `CARD`, `HEATMAP`, `DONUT`, `HBAR`, `BOXPLOT`, `TREEMAP`, `COLORS`, `STYLE`, `CONTAINER`, `NAVIGATION`, `COMBO`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, `REFRESH`, `TTL`, `KEYFILE`, `X_AXIS`, `Y_AXIS`, `TITLE`, `SUBTITLE`
+Report-SQL: `VISUAL`, `PAGE`, `DATASET`, `BUTTON`, `TEMPLATE`, `THEME`, `MAPPINGS`, `OPTIONS`, `ACTIONS`, `INTERACTIONS`, `STRUCTURE`, `MAP`, `SERIES`, `SLICER`, `CARD`, `TEXT`, `IMAGE`, `HEATMAP`, `DONUT`, `HBAR`, `BOXPLOT`, `TREEMAP`, `SANKEY`, `SUNBURST`, `NETWORK`, `TRELLIS`, `MATRIX`, `COLORS`, `STYLE`, `CONTAINER`, `NAVIGATION`, `COMBO`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX`, `REFRESH`, `TTL`, `KEYFILE`, `X_AXIS`, `Y_AXIS`, `TITLE`, `SUBTITLE`
 
 ---
 

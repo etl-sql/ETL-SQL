@@ -1,11 +1,11 @@
 # ETL-SQL Presentation Layer Standards
 
-**Version 1.0 — Established with the ScriptOutput / IOutputSink architecture**
+**Applies to ETL-SQL 0.7.0 — Established with the ScriptOutput / IOutputSink architecture**
 
 This document is the authoritative standard for all work that touches the boundary between
 the ETL-SQL execution engine and any presentation surface (Terminal IDE, VS Code extension,
-future web UI, future API). It defines rules that are non-negotiable and must be met by any
-change, any new feature, and any future version of the platform.
+web UI, and API surfaces). It defines rules that are non-negotiable and must be met by any
+change, any new feature, and the current platform.
 
 When in doubt about whether a change is acceptable: if it would require you to violate any
 rule in this document, the design is wrong. Rethink the design.

@@ -2,7 +2,7 @@
 # Requires WiX Toolset v3.x installed and in PATH.
 
 $ErrorActionPreference = "Stop"
-$Version = "0.6.0"
+$Version = "0.7.0"
 $BuildDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer\publish\win-x64\bin"
 $InstallerDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer"
 

@@ -163,6 +163,14 @@ namespace ETL_SQL.Core.Common
         public bool AllowLargeStringResults { get; set; }
         public HashSet<string> AllowedFileTypeOverrides { get; } = new(StringComparer.OrdinalIgnoreCase);
         public int MaxGenerateRows { get => SecurityService.DefaultMaxGenerateRows; set { } }
+        public int MaxSmtpEmailsPerScript { get; set; } = SecurityService.DefaultMaxSmtpEmailsPerScript;
+        public int SmtpEmailsSentThisScript { get; private set; }
+        public void RecordSmtpEmailSend()
+        {
+            SmtpEmailsSentThisScript++;
+            if (MaxSmtpEmailsPerScript >= 0 && SmtpEmailsSentThisScript > MaxSmtpEmailsPerScript)
+                throw new ETL_SQL.Services.SecurityException($"SMTP send limit exceeded: this script attempted to send {SmtpEmailsSentThisScript} emails, but MAX_SMTP_EMAILS_PER_SCRIPT is {MaxSmtpEmailsPerScript}.");
+        }
         public int MaxInternalOperations { get => SecurityService.MaxInternalOperations; set => SecurityService.MaxInternalOperations = value; }
         
         public IDictionary<string, CreateVisualStatement> VisualDefinitions { get; } = new Dictionary<string, CreateVisualStatement>();

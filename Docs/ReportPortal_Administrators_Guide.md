@@ -138,9 +138,9 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Jwt.Secret` | *(required)* | HMAC-SHA256 signing secret. **Must be at least 32 characters.** The portal will refuse to start without it. |
 | `Jwt.ExpiryMinutes` | `60` | How long an access token is valid. |
 | `Jwt.RefreshExpiryDays` | `7` | How long a refresh token is valid. |
-| `Identity.Provider` | `Local` | Authentication provider. `Local` is active today. The first enterprise provider path is OIDC, with Microsoft Entra ID as the reference implementation. |
-| `Identity.Oidc.Authority` | *(empty)* | Future OIDC authority URL, for example `https://login.microsoftonline.com/<tenant-id>/v2.0`. |
-| `Identity.Oidc.ClientId` | *(empty)* | Future OIDC client/application id. |
+| `Identity.Provider` | `Local` | Authentication provider. `Local` is the bundled provider. OIDC configuration keys are reserved for enterprise authentication deployments. |
+| `Identity.Oidc.Authority` | *(empty)* | OIDC authority URL, for example `https://login.microsoftonline.com/<tenant-id>/v2.0`. |
+| `Identity.Oidc.ClientId` | *(empty)* | OIDC client/application id. |
 | `Identity.Oidc.GroupClaimTypes` | `groups`, `roles` | Claims the portal will map into portal groups for folder and dataset ACLs. |
 | `FirstRun.AdminUsername` | `admin` | Username created on first start if no users exist yet. |
 | `Engine.StartOfWeek` | `Monday` | Day used as the start of week when resolving `RELDATE` week-boundary expressions (`W`, `W-1`, etc.). Accepted values: `Monday`–`Sunday`. Can be overridden per-script with `SET WEEK_START_DAY = '<day>'`. |

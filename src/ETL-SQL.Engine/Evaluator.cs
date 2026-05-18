@@ -174,6 +174,17 @@ namespace ETL_SQL.Engine
         public long MaxSessionSize { get => _options.MaxSessionSize; set => _options.MaxSessionSize = value; }
         public int MaxLastResultRows { get => _options.MaxLastResultRows; set => _options.MaxLastResultRows = value; }
         public int MaxGenerateRows { get => _options.MaxGenerateRows; set => _options.MaxGenerateRows = value; }
+        public int MaxSmtpEmailsPerScript { get => _options.MaxSmtpEmailsPerScript; set => _options.MaxSmtpEmailsPerScript = value; }
+        private int _smtpEmailsSentThisScript;
+        public int SmtpEmailsSentThisScript => _smtpEmailsSentThisScript;
+        public void RecordSmtpEmailSend()
+        {
+            var count = System.Threading.Interlocked.Increment(ref _smtpEmailsSentThisScript);
+            if (MaxSmtpEmailsPerScript >= 0 && count > MaxSmtpEmailsPerScript)
+            {
+                throw new SecurityException($"SMTP send limit exceeded: this script attempted to send {count} emails, but MAX_SMTP_EMAILS_PER_SCRIPT is {MaxSmtpEmailsPerScript}.");
+            }
+        }
         public int MaxInternalOperations 
         { 
             get => _options.MaxInternalOperations; 
@@ -451,7 +462,7 @@ namespace ETL_SQL.Engine
             _languageHelp = languageHelp;
             _bufferManager = _serviceProvider?.GetService<IBufferManager>();
             
-            _options = options ?? new EvaluatorOptions();
+            _options = options ?? new EvaluatorOptions { MaxSmtpEmailsPerScript = _securityService.MaxSmtpEmailsPerScript };
             _registry = registry ?? new EvaluatorComponentRegistry();
             _subqueryCache = new ETL_SQL.Core.Common.LruCache<SubqueryCacheKey, ETL_SQL.Core.Data.SubqueryResult>(_options.SubqueryCacheSize);
             _subqueryCache.OnEvicted = async (val) => {
@@ -661,6 +672,7 @@ namespace ETL_SQL.Engine
                 ClearResults();
                 _nodeReuseMap.Clear();
                 _operationCount = 0;
+                _smtpEmailsSentThisScript = 0;
                 // Lineage and Telemetry are session-persistent; clearing handled by ResetSessionAsync
                 _expressionEvaluator.ClearCaches();
                 _subqueryCache.Clear();

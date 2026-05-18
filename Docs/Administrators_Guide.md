@@ -16,7 +16,7 @@ ETL-SQL is a distributed platform consisting of three primary components:
 ## 2. Production Installation
 
 ### Windows
-1. Run the `ETL-SQL-Enterprise-v0.6.0.msi` installer.
+1. Run the `ETL-SQL-Enterprise-v0.7.0.msi` installer.
 2. Select the features you wish to install.
 3. The services will be registered as `ETL-SQL-Orchestrator` and `ETL-SQL-Portal`.
 4. Services are configured to start automatically under the `LocalSystem` account.
@@ -24,7 +24,7 @@ ETL-SQL is a distributed platform consisting of three primary components:
 ### Linux
 1. Install the `.deb` or `.rpm` package:
    ```bash
-   sudo dpkg -i etl-sql_0.6.0_amd64.deb
+   sudo dpkg -i etl-sql_0.7.0_amd64.deb
    ```
 2. Enable and start the services:
    ```bash

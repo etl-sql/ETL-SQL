@@ -513,7 +513,7 @@ Total: ~6.5 developer-days.
 ## Out of Scope (This Feature)
 
 - **RELDATE in non-subscription contexts**: `RELDATE` resolves fine in any script context (manual run, `dotnet run --run`, Orchestrator job). The resolver does not distinguish. The subscription use case is the motivator but there's no special-casing.
-- **Per-user default parameters on a report**: Not planned. Defaults live in the script.
+- **Per-user default parameters on a report**: Defaults live in the script.
 - **Parameter validation rules beyond type parsing**: No min/max constraints, no allowed-values lists at the subscription layer. The report script handles its own validation.
 - **Encrypted parameter values**: SMTP passwords are encrypted; subscription parameters are not sensitive by design. If a parameter needs to be secret (e.g. an API key), it should not be a subscription parameter.
 - **UI parameter dependency / cascading**: Slicer-style cascading filters are a dashboard feature, not a subscription feature. Subscriptions take flat key/value pairs.

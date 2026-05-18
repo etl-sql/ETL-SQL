@@ -161,6 +161,9 @@ namespace ETL_SQL.Core
         bool AllowLargeStringResults { get; set; }
         HashSet<string> AllowedFileTypeOverrides { get; }
         int MaxGenerateRows { get; set; }
+        int MaxSmtpEmailsPerScript { get; set; }
+        int SmtpEmailsSentThisScript { get; }
+        void RecordSmtpEmailSend();
         int MaxInternalOperations { get; set; }
 
         
