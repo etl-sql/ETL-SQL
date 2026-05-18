@@ -717,6 +717,7 @@
                 div.appendChild(wrapper);
             });
             container.appendChild(div);
+            setTimeout(() => resizeChartsIn(div), 50);
             return;
         }
         div.setAttribute('data-name', containerDef.name);
@@ -988,9 +989,12 @@
         const height  = getStyle(vstyles, 'HEIGHT');
         const tooltip = getStyle(vstyles, 'TOOLTIP') || visual.tooltip;
 
-        if (width)   card.style.width  = width;
-        if (height)  card.style.height = height;
-        if (tooltip) card.title        = tooltip;
+        const opacity = getStyle(vstyles, 'OPACITY');
+
+        if (width)   card.style.width   = width;
+        if (height)  card.style.height  = height;
+        if (opacity) card.style.opacity = opacity;
+        if (tooltip) card.title         = tooltip;
 
         const title = document.createElement('h3');
         title.textContent = visual.name;

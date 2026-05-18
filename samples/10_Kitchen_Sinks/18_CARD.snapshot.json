@@ -1,8 +1,8 @@
 {
   "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\18_CARD.rptsql",
-  "builtAt": "2026-05-14T18:10:11.8180146Z",
+  "builtAt": "2026-05-18T20:48:38.4720125Z",
   "title": "Kitchen Sink: CARD Visual",
-  "description": "Demonstration of CARD KPI visuals.",
+  "description": "Enhanced CARD KPI visuals with goal tracking, delta, progress indicators, and LAYER stacking.",
   "visuals": [
     {
       "name": "BasicCard",
@@ -10,74 +10,391 @@
       "chartConfig": null,
       "columns": [
         "Rev",
-        "Label",
-        "Growth"
+        "RevGoal",
+        "RevPrior",
+        "Growth",
+        "GrowthGoal",
+        "GrowthPrior",
+        "Cost",
+        "CostGoal",
+        "CostPrior",
+        "RevLabel"
       ],
       "rows": [
         [
           "1250000",
-          "Total Revenue",
-          "0.18"
+          "1000000",
+          "1100000",
+          "0.18",
+          "0.20",
+          "0.15",
+          "875000",
+          "850000",
+          "900000",
+          "Total Revenue"
         ]
       ],
       "options": {
         "FORMAT": "C0",
         "mapping:value": "Rev",
-        "mapping:label": "Label"
+        "mapping:label": "RevLabel"
       },
       "error": null,
       "actions": [],
       "styles": {}
     },
     {
-      "name": "StyledCard",
+      "name": "GoalMetCard",
       "visualType": "CARD",
       "chartConfig": null,
       "columns": [
+        "Rev",
+        "RevGoal",
+        "RevPrior",
         "Growth",
-        "Lbl"
+        "GrowthGoal",
+        "GrowthPrior",
+        "Cost",
+        "CostGoal",
+        "CostPrior",
+        "RevLabel"
       ],
       "rows": [
         [
+          "1250000",
+          "1000000",
+          "1100000",
           "0.18",
-          "Year-over-Year"
+          "0.20",
+          "0.15",
+          "875000",
+          "850000",
+          "900000",
+          "Total Revenue"
         ]
       ],
       "options": {
-        "title": "Growth %",
+        "title": "Revenue vs Target",
+        "FORMAT": "C0",
+        "SHOW_PROGRESS": "True",
+        "SHOW_GOAL": "True",
+        "ICON_SET": "CHECKS",
+        "mapping:value": "Rev",
+        "mapping:goal": "RevGoal"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "GrowthCard",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "Rev",
+        "RevGoal",
+        "RevPrior",
+        "Growth",
+        "GrowthGoal",
+        "GrowthPrior",
+        "Cost",
+        "CostGoal",
+        "CostPrior",
+        "RevLabel"
+      ],
+      "rows": [
+        [
+          "1250000",
+          "1000000",
+          "1100000",
+          "0.18",
+          "0.20",
+          "0.15",
+          "875000",
+          "850000",
+          "900000",
+          "Total Revenue"
+        ]
+      ],
+      "options": {
+        "title": "YoY Growth",
         "FORMAT": "P1",
+        "ICON_SET": "ARROWS",
+        "CLOSE_PCT": "0.85",
+        "MET_PCT": "1.00",
+        "SHOW_PERCENT_OF_GOAL": "True",
         "mapping:value": "Growth",
-        "mapping:label": "Lbl"
+        "mapping:goal": "GrowthGoal"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "CostCard",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "Rev",
+        "RevGoal",
+        "RevPrior",
+        "Growth",
+        "GrowthGoal",
+        "GrowthPrior",
+        "Cost",
+        "CostGoal",
+        "CostPrior",
+        "RevLabel"
+      ],
+      "rows": [
+        [
+          "1250000",
+          "1000000",
+          "1100000",
+          "0.18",
+          "0.20",
+          "0.15",
+          "875000",
+          "850000",
+          "900000",
+          "Total Revenue"
+        ]
+      ],
+      "options": {
+        "title": "Operating Cost",
+        "FORMAT": "C0",
+        "SHOW_PROGRESS": "True",
+        "TREND_DIR": "POSITIVE_DOWN",
+        "DELTA_LABEL": "vs LM",
+        "DELTA_FORMAT": "C0",
+        "ICON_SET": "TRAFFIC",
+        "LABEL_MET": "Under budget",
+        "LABEL_CLOSE": "Near limit",
+        "LABEL_MISSED": "Over budget",
+        "mapping:value": "Cost",
+        "mapping:goal": "CostGoal",
+        "mapping:delta": "CostPrior"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "AbbrevCard",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "Rev",
+        "RevGoal",
+        "RevPrior",
+        "Growth",
+        "GrowthGoal",
+        "GrowthPrior",
+        "Cost",
+        "CostGoal",
+        "CostPrior",
+        "RevLabel"
+      ],
+      "rows": [
+        [
+          "1250000",
+          "1000000",
+          "1100000",
+          "0.18",
+          "0.20",
+          "0.15",
+          "875000",
+          "850000",
+          "900000",
+          "Total Revenue"
+        ]
+      ],
+      "options": {
+        "title": "Revenue (Abbreviated)",
+        "FORMAT": "C0",
+        "ABBREVIATE": "True",
+        "GOAL": "1000000",
+        "SHOW_PROGRESS": "True",
+        "PROGRESS_STYLE": "RING",
+        "SHOW_GOAL": "True",
+        "SHOW_PERCENT_OF_GOAL": "True",
+        "mapping:value": "Rev"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "DeltaCard",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "Rev",
+        "RevGoal",
+        "RevPrior",
+        "Growth",
+        "GrowthGoal",
+        "GrowthPrior",
+        "Cost",
+        "CostGoal",
+        "CostPrior",
+        "RevLabel"
+      ],
+      "rows": [
+        [
+          "1250000",
+          "1000000",
+          "1100000",
+          "0.18",
+          "0.20",
+          "0.15",
+          "875000",
+          "850000",
+          "900000",
+          "Total Revenue"
+        ]
+      ],
+      "options": {
+        "title": "Revenue vs Prior Year",
+        "FORMAT": "C0",
+        "DELTA_LABEL": "vs LY",
+        "DELTA_FORMAT": "C0",
+        "TREND_DIR": "POSITIVE_UP",
+        "PREFIX": "",
+        "SUFFIX": " USD",
+        "mapping:value": "Rev",
+        "mapping:delta": "RevPrior"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "RevTrendBar",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022RevTrendBar\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Q1\u0022,\u0022Q2\u0022,\u0022Q3\u0022,\u0022Q4\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[950000,1050000,1100000,1250000]}]}",
+      "columns": [
+        "Qtr",
+        "Revenue"
+      ],
+      "rows": [
+        [
+          "Q1",
+          "950000"
+        ],
+        [
+          "Q2",
+          "1050000"
+        ],
+        [
+          "Q3",
+          "1100000"
+        ],
+        [
+          "Q4",
+          "1250000"
+        ]
+      ],
+      "options": {
+        "mapping:x": "Qtr",
+        "mapping:y": "Revenue"
       },
       "error": null,
       "actions": [],
       "styles": {
-        "BACKGROUND-COLOR": "#f8fafc",
-        "COLOR": "#2563eb",
-        "BORDER": "1px solid #e2e8f0",
-        "BORDER-RADIUS": "12px",
-        "PADDING": "24px"
+        "OPACITY": "0.15"
+      }
+    },
+    {
+      "name": "LayerKpiCard",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "Rev",
+        "RevGoal",
+        "RevPrior",
+        "Growth",
+        "GrowthGoal",
+        "GrowthPrior",
+        "Cost",
+        "CostGoal",
+        "CostPrior",
+        "RevLabel"
+      ],
+      "rows": [
+        [
+          "1250000",
+          "1000000",
+          "1100000",
+          "0.18",
+          "0.20",
+          "0.15",
+          "875000",
+          "850000",
+          "900000",
+          "Total Revenue"
+        ]
+      ],
+      "options": {
+        "title": "Revenue (Layered)",
+        "FORMAT": "C0",
+        "ABBREVIATE": "True",
+        "ICON_SET": "CHECKS",
+        "SHOW_PERCENT_OF_GOAL": "True",
+        "mapping:value": "Rev",
+        "mapping:goal": "RevGoal"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {
+        "BACKGROUND-COLOR": "transparent"
       }
     }
   ],
   "pages": [
     {
       "name": "CardKitchenSink",
-      "structure": "A",
+      "structure": "A / B / C",
       "slotMap": {
-        "A": "KpiGrid"
+        "A": "KpiRow1",
+        "B": "KpiRow2",
+        "C": "LayerDemo"
       }
     }
   ],
   "datasets": [],
   "containers": [
     {
-      "name": "KpiGrid",
+      "name": "LayerDemo",
+      "containerType": "LAYER",
+      "slotMap": {
+        "A": "RevTrendBar",
+        "B": "LayerKpiCard"
+      },
+      "styles": {
+        "HEIGHT": "200px"
+      },
+      "isPinnable": true
+    },
+    {
+      "name": "KpiRow1",
       "containerType": "BOX",
-      "structure": "A B",
+      "structure": "A B C",
       "slotMap": {
         "A": "BasicCard",
-        "B": "StyledCard"
+        "B": "GoalMetCard",
+        "C": "GrowthCard"
+      },
+      "isPinnable": true
+    },
+    {
+      "name": "KpiRow2",
+      "containerType": "BOX",
+      "structure": "A B C",
+      "slotMap": {
+        "A": "CostCard",
+        "B": "AbbrevCard",
+        "C": "DeltaCard"
       },
       "isPinnable": true
     }
@@ -113,59 +430,99 @@
   },
   "messages": [
     {
-      "message": "[b97195f0] [SELECT] Executing SelectStatement. Session: b97195f0",
+      "message": "[7893223b] [SELECT] Executing SelectStatement. Session: 7893223b",
       "color": "white",
-      "timestamp": "2026-05-14T18:10:11.7894137Z"
+      "timestamp": "2026-05-18T20:48:38.4438218Z"
     },
     {
-      "message": "[b97195f0] 1 rows affected.",
+      "message": "[7893223b] 1 rows affected.",
       "color": "white",
-      "timestamp": "2026-05-14T18:10:11.8059628Z"
+      "timestamp": "2026-05-18T20:48:38.4596258Z"
     },
     {
-      "message": "[b97195f0] Visual \u0027BasicCard\u0027 created.",
+      "message": "[7893223b] Visual \u0027BasicCard\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T18:10:11.8083381Z"
+      "timestamp": "2026-05-18T20:48:38.4620789Z"
     },
     {
-      "message": "[b97195f0] Visual \u0027StyledCard\u0027 created.",
+      "message": "[7893223b] Visual \u0027GoalMetCard\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T18:10:11.8104693Z"
+      "timestamp": "2026-05-18T20:48:38.4641669Z"
     },
     {
-      "message": "[b97195f0] Container \u0027KpiGrid\u0027 registered.",
+      "message": "[7893223b] Visual \u0027GrowthCard\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T18:10:11.8109362Z"
+      "timestamp": "2026-05-18T20:48:38.4642119Z"
     },
     {
-      "message": "[b97195f0] Page \u0027CardKitchenSink\u0027 created.",
+      "message": "[7893223b] Visual \u0027CostCard\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T18:10:11.8119417Z"
+      "timestamp": "2026-05-18T20:48:38.4642915Z"
     },
     {
-      "message": "[b97195f0] Navigation \u0027MainNav\u0027 registered.",
+      "message": "[7893223b] Visual \u0027AbbrevCard\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T18:10:11.8125669Z"
+      "timestamp": "2026-05-18T20:48:38.4643215Z"
+    },
+    {
+      "message": "[7893223b] Visual \u0027DeltaCard\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-18T20:48:38.4643503Z"
+    },
+    {
+      "message": "[7893223b] Visual \u0027RevTrendBar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-18T20:48:38.4646672Z"
+    },
+    {
+      "message": "[7893223b] Visual \u0027LayerKpiCard\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-18T20:48:38.4647008Z"
+    },
+    {
+      "message": "[7893223b] Container \u0027LayerDemo\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-18T20:48:38.4651756Z"
+    },
+    {
+      "message": "[7893223b] Container \u0027KpiRow1\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-18T20:48:38.4652129Z"
+    },
+    {
+      "message": "[7893223b] Container \u0027KpiRow2\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-18T20:48:38.4652305Z"
+    },
+    {
+      "message": "[7893223b] Page \u0027CardKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-18T20:48:38.4662741Z"
+    },
+    {
+      "message": "[7893223b] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-18T20:48:38.4668827Z"
     }
   ],
   "executionTree": [
     {
-      "id": "92c64c3e-fbd6-47be-82bf-ac85ded442bf",
+      "id": "7ae22e21-2b20-485b-afda-7de691ca8260",
       "name": "Script Execution",
       "status": "Completed",
       "rowsProcessed": 0,
-      "durationMs": 31.469,
+      "durationMs": 31.4867,
       "iterationCount": 1,
       "isParallelBlock": false,
       "velocity": 0,
       "error": null,
       "children": [
         {
-          "id": "8b1032cc-ad83-4110-964d-08e908b8eebb",
+          "id": "6a40bd9b-6f16-48d2-a8c8-99f528ce8a10",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.2665,
+          "durationMs": 1.2954,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -173,11 +530,11 @@
           "children": []
         },
         {
-          "id": "fa60cbc9-de84-47d2-afbe-db257a928da5",
+          "id": "1a58b4af-5979-4d6b-9656-e9cfe6d0bd44",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0308,
+          "durationMs": 0.3671,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -185,23 +542,23 @@
           "children": []
         },
         {
-          "id": "e14ecc81-0feb-4026-910c-d4e3e1115fb4",
+          "id": "efd90e1f-b477-4cc5-a288-f816a0142b07",
           "name": "Select",
           "status": "Completed",
           "rowsProcessed": 2,
-          "durationMs": 19.1459,
+          "durationMs": 18.3259,
           "iterationCount": 1,
           "isParallelBlock": false,
-          "velocity": 104.46100731749355,
+          "velocity": 109.13515843696625,
           "error": null,
           "children": []
         },
         {
-          "id": "dbbf904a-d023-4d90-a665-293943154a2d",
+          "id": "84a8ace3-e1e2-4302-8326-5e0df2dad470",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.8066,
+          "durationMs": 0.7927,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -209,11 +566,11 @@
           "children": []
         },
         {
-          "id": "7a357f8f-5d46-4d89-a9b5-81f6b027d062",
+          "id": "ef94c348-2916-4f73-9de5-ebaa428c720c",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0768,
+          "durationMs": 0.0848,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -221,11 +578,83 @@
           "children": []
         },
         {
-          "id": "e16057a7-ba20-4efb-a802-ba706ef57f73",
+          "id": "ca4f7905-b4e8-4a6f-993c-addb8b95cfb2",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0211,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "07313732-7788-4f3d-b2a1-c5bf86fe98a3",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0673,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "080a68e5-ded2-48e6-84eb-05bdc3ae0759",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0171,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8a53c498-04e7-4a09-a663-976c7a24a635",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0197,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "45fc8460-0792-4b27-8507-fa5282c0375e",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0639,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "b19b59d0-e0cf-442c-8395-1f0d334f9089",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0207,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "91b5268e-0365-4ba9-ae1d-5e8ded404a6f",
           "name": "CreateContainer",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2709,
+          "durationMs": 0.288,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -233,11 +662,35 @@
           "children": []
         },
         {
-          "id": "de8596f1-823c-465d-81d9-9cbacea5a6b9",
+          "id": "a131df99-35a7-4219-ad09-08d1d7a5c3d8",
+          "name": "CreateContainer",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0274,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "fecbf6e9-d92a-4aef-9000-647515220881",
+          "name": "CreateContainer",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0142,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "e1352e70-39cb-417d-b37e-42ec2a7128b6",
           "name": "CreatePage",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.8524,
+          "durationMs": 0.8926,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -245,11 +698,11 @@
           "children": []
         },
         {
-          "id": "662ffe84-e477-4a42-add6-478ee819b171",
+          "id": "2011e6a8-511b-42b4-8c6d-1dfe750fa813",
           "name": "CreateNavigation",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2633,
+          "durationMs": 0.2622,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
