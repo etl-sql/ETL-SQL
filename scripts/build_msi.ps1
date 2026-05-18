@@ -2,7 +2,7 @@
 # Requires WiX Toolset v3.x installed and in PATH.
 
 $ErrorActionPreference = "Stop"
-$Version = "0.7.0"
+$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.7.0" }
 $BuildDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer\publish\win-x64\bin"
 $InstallerDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer"
 
@@ -27,14 +27,18 @@ foreach ($Proj in $Projects) {
 # 2. Compile WiX Manifest
 Write-Host "Compiling WiX manifest..." -ForegroundColor Gray
 if (Get-Command candle.exe -ErrorAction SilentlyContinue) {
-    Set-Location $InstallerDir
-    candle.exe Installer.wxs -o Installer.wixobj
-    
-    # 3. Link MSI
-    Write-Host "Linking MSI package..." -ForegroundColor Gray
-    light.exe Installer.wixobj -o "ETL-SQL-Enterprise-v$Version.msi" -ext WixUIExtension
-    
-    Write-Host "[SUCCESS] Installer created: ETL-SQL-Enterprise-v$Version.msi" -ForegroundColor Green
+    Push-Location $InstallerDir
+    try {
+        candle.exe Installer.wxs -o Installer.wixobj
+
+        # 3. Link MSI
+        Write-Host "Linking MSI package..." -ForegroundColor Gray
+        light.exe Installer.wixobj -o "ETL-SQL-Enterprise-v$Version.msi" -ext WixUIExtension
+
+        Write-Host "[SUCCESS] Installer created: ETL-SQL-Enterprise-v$Version.msi" -ForegroundColor Green
+    } finally {
+        Pop-Location
+    }
 } else {
     Write-Host "[WARNING] WiX Toolset (candle.exe) not found in PATH." -ForegroundColor Yellow
     Write-Host "Manifest created at $InstallerDir\Installer.wxs. Run WiX manually to build the MSI." -ForegroundColor Gray
