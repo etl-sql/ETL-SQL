@@ -646,7 +646,17 @@
         }
 
         _maximizedVisualCard = card;
+        // Teleport card to <body> so position:fixed anchors to viewport regardless of
+        // any CSS transform/contain on ancestor elements in the portal layout.
+        card._maxOriginalParent = card.parentElement;
+        card._maxNextSibling    = card.nextSibling;
+        document.body.appendChild(card);
         card.classList.add('visual-maximized');
+        // Override any transparent/glass inline background so maximized card is fully opaque.
+        card._maxOrigBg      = card.style.backgroundColor;
+        card._maxOrigBgImage = card.style.backgroundImage;
+        card.style.backgroundColor = card.classList.contains('theme-dark') ? '#1e1e1e' : '#fff';
+        card.style.backgroundImage = 'none';
         document.body.classList.add('visual-maximize-active');
         if (button) {
             button.textContent = 'x';
@@ -662,6 +672,18 @@
         const card = _maximizedVisualCard;
         card.classList.remove('visual-maximized');
         document.body.classList.remove('visual-maximize-active');
+
+        // Restore card to its original position in the layout
+        if (card._maxOriginalParent) {
+            card._maxOriginalParent.insertBefore(card, card._maxNextSibling || null);
+            card._maxOriginalParent = null;
+            card._maxNextSibling    = null;
+        }
+        // Restore original background
+        card.style.backgroundColor = card._maxOrigBg      || '';
+        card.style.backgroundImage = card._maxOrigBgImage || '';
+        card._maxOrigBg      = null;
+        card._maxOrigBgImage = null;
 
         const button = card.querySelector('.visual-tool-btn');
         if (button) {
@@ -996,11 +1018,21 @@
         const opacity = getStyle(vstyles, 'OPACITY');
         const bgColor = getStyle(vstyles, 'BACKGROUND-COLOR') || getStyle(vstyles, 'BACKGROUND');
 
-        if (width)   card.style.width           = width;
-        if (height)  card.style.height          = height;
-        if (opacity) card.style.opacity         = opacity;
-        if (bgColor) card.style.backgroundColor = bgColor;
-        if (tooltip) card.title                 = tooltip;
+        if (width)   card.style.width   = width;
+        if (height)  card.style.height  = height;
+        if (opacity) card.style.opacity = opacity;
+        if (bgColor) {
+            const normalized = bgColor.trim().toLowerCase();
+            const isTransparent = normalized === 'transparent' || normalized === 'rgba(0,0,0,0)' || normalized === 'rgba(0, 0, 0, 0)';
+            if (isTransparent) {
+                card.style.backgroundColor = 'transparent';
+                card.style.backgroundImage = 'none';
+            } else {
+                // Layer over the CSS theme base color; keeps #1e1e1e dark base intact for dark-themed cards.
+                card.style.backgroundImage = `linear-gradient(${bgColor}, ${bgColor})`;
+            }
+        }
+        if (tooltip) card.title = tooltip;
 
         const title = document.createElement('h3');
         title.textContent = visual.name;
