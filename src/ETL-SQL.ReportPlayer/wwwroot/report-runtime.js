@@ -994,11 +994,13 @@
         const tooltip = getStyle(vstyles, 'TOOLTIP') || visual.tooltip;
 
         const opacity = getStyle(vstyles, 'OPACITY');
+        const bgColor = getStyle(vstyles, 'BACKGROUND-COLOR') || getStyle(vstyles, 'BACKGROUND');
 
-        if (width)   card.style.width   = width;
-        if (height)  card.style.height  = height;
-        if (opacity) card.style.opacity = opacity;
-        if (tooltip) card.title         = tooltip;
+        if (width)   card.style.width           = width;
+        if (height)  card.style.height          = height;
+        if (opacity) card.style.opacity         = opacity;
+        if (bgColor) card.style.backgroundColor = bgColor;
+        if (tooltip) card.title                 = tooltip;
 
         const title = document.createElement('h3');
         title.textContent = visual.name;

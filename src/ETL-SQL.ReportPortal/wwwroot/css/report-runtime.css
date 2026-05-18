@@ -116,7 +116,7 @@
   /* ── LAYER container ─────────────────────────────────────────────────── */
   .container-layer { position:relative; overflow:hidden; min-height:200px; }
   .layer-slot { position:absolute; inset:0; }
-  .layer-slot > .visual-card { height:100%; }
+  .layer-slot > .visual-card { height:100%; box-sizing:border-box; }
   .slicer-wrapper select { font-size: 13px; padding: 6px 32px 6px 12px; }
   .stale-banner { background: #fff3cd; border: 1px solid #ffc107;
                   border-radius: 4px; padding: 8px 12px; margin-bottom: 16px;
