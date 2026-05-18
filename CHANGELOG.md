@@ -4,7 +4,7 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 ---
 
-## [0.7.0] — 2026-05-12
+## [0.7.0] — 2026-05-18
 
 ### Added
 

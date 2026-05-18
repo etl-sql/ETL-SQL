@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*' # Trigger on any version tag like v0.7.0
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   # 1. Validation Job - ensures the release is stable
   validate:
