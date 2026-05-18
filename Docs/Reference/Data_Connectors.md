@@ -789,11 +789,11 @@ CREATE CONNECTION <name> ON MOCKDB();
 
 | Table | Columns |
 | :--- | :--- |
-| `Users` | `UserID`, `UserName`, `Email` |
-| `Products` | `ProductID`, `ProductName`, `Price` |
-| `Orders` | `OrderID`, `OrderDate`, `TotalAmount` |
-| `Employee` | `ID`, `Name`, `Status`, `Active`, `first_name`, `last_name` |
-| `departments` | `column1`, `column2`, `column3` |
+| `Users` | `UserID`, `UserName`, `Email`, `ExternalID`, `RegistrationDate`, `PreciseTime`, `LastLoginOffset` |
+| `Products` | `ProductID`, `ProductName`, `Category`, `Cost`, `Price`, `StockLevel`, `Discontinued`, `WeightGrams`, `SkidGuid` |
+| `Orders` / `Sales` | `SaleID`, `OrderDate`, `CustomerID`, `ProductID`, `Quantity`, `UnitPrice`, `Total`, `Region`, `ShipTimeOffset`, `ProcessDuration` |
+| `Employee` | `EmpID`, `FirstName`, `LastName`, `Name`, `DeptID`, `Salary`, `HireDate`, `ManagerID`, `Status`, `Active`, `GlobalID` |
+| `departments` | `DeptID`, `DeptName`, `Budget` |
 
 All tables are pre-seeded with sample rows. `INSERT`, `UPDATE`, and `DELETE` operations are accepted but **do not persist** between sessions.
 
@@ -801,15 +801,15 @@ All tables are pre-seeded with sample rows. `INSERT`, `UPDATE`, and `DELETE` ope
 ```sql
 CREATE CONNECTION m ON MOCKDB();
 
-SELECT u.UserName, o.TotalAmount
+SELECT u.UserName, o.Total
 INTO #UserOrders
 FROM m.Users AS u
-JOIN m.Orders AS o ON u.UserID = o.OrderID;
+JOIN m.Orders AS o ON u.UserID = o.CustomerID;
 
 -- Test an EXECUTE block
 EXECUTE m INTO #emp
 BEGIN
-    SELECT ID, Name FROM Employee WHERE Active = 1;
+    SELECT EmpID, Name FROM Employee WHERE Active = 1;
 END
 ```
 

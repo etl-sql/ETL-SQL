@@ -7,6 +7,7 @@ Welcome to ETL-SQL. This guide is designed to help you transition from thinking 
 
 ## Contents
 
+0. [First Hour Walkthrough](#first-hour-walkthrough)
 1. [The Pipeline Mental Model](#1-the-pipeline-mental-model)
 2. [Your First Connection](#2-your-first-connection)
 3. [Variables & State Management](#3-variables--state-management)
@@ -26,6 +27,72 @@ Welcome to ETL-SQL. This guide is designed to help you transition from thinking 
 17. [Report-SQL Dashboards](#17-report-sql-dashboards)
 18. [Report Portal Workflow](#18-report-portal-workflow)
 19. [Next Steps](#next-steps)
+
+---
+
+## First Hour Walkthrough
+
+The fastest way to understand ETL-SQL is to run one small pipeline that has no external dependencies. `MOCKDB` is an in-memory demo connector, so this script does not need a database server, files, credentials, or network access.
+
+Save this as `first_hour.etlsql`:
+
+```sql
+SET PROFILING ON;
+
+CREATE CONNECTION demo ON MOCKDB();
+
+-- Extract: copy remote rows into the engine workspace.
+SELECT
+    Region,
+    Total
+INTO #orders
+FROM demo.Orders;
+
+-- Validate: fail early if the source contract is not what this pipeline expects.
+ASSERT (SELECT COUNT(*) FROM #orders) > 0,
+    'MOCKDB Orders should contain rows';
+
+-- Transform: create a reusable engine-side summary.
+SELECT
+    Region,
+    COUNT(*) AS OrderCount,
+    SUM(Total) AS Revenue,
+    AVG(Total) AS AverageOrder
+INTO #regional_summary
+FROM #orders
+GROUP BY Region;
+
+-- Deliver: return the final result to the caller.
+SELECT
+    Region,
+    OrderCount,
+    Revenue,
+    AverageOrder
+FROM #regional_summary
+ORDER BY Revenue DESC;
+
+SHOW PROFILE;
+SET PROFILING OFF;
+```
+
+Run it from the project checkout:
+
+```powershell
+dotnet run --project src\ETL-SQL.App -- run first_hour.etlsql
+```
+
+This one script shows the core workflow used throughout the rest of the manual:
+
+| Step | What happened | Why it matters |
+| :--- | :--- | :--- |
+| Connect | `CREATE CONNECTION demo ON MOCKDB()` | Every source gets a named connection. |
+| Stage | `SELECT ... INTO #orders` | Data enters the engine workspace before transformation. |
+| Validate | `ASSERT ...` | Bad input stops the pipeline before load or delivery. |
+| Transform | `GROUP BY Region` against `#orders` | Engine-side tables let ETL-SQL apply its own functions and rules. |
+| Deliver | Final `SELECT` | The last query is the result a caller, job, or report can consume. |
+| Diagnose | `SHOW PROFILE` | Profiling exposes statement timing while you develop. |
+
+After this works, change only one thing at a time: swap `MOCKDB` for a real connector, add a `WHERE` filter, write the summary to a file, or turn the final query into a report visual.
 
 ---
 
@@ -155,13 +222,13 @@ ETL-SQL run monthly_report.etlsql --var @env=PROD --var @month=2026-03
 ETL-SQL run nightly_load.etlsql --perf --log C:\Logs\ETL-SQL\
 
 # Development checkout form
-dotnet run --project src/ETL-SQL.App -- --run samples\01_Basic.etlsql
+dotnet run --project src/ETL-SQL.App -- run samples\01_Basic.etlsql
 ```
 
 Use the TUI when you want an interactive editor and result panes:
 
 ```powershell
-ETL-SQL --ui edit MyScript.etlsql
+ETL-SQL ui edit MyScript.etlsql
 ```
 
 Use VS Code when you want inline diagnostics, quick fixes, and report preview. Use the CLI or scheduler for repeatable automation.
@@ -988,7 +1055,9 @@ CREATE CONNECTION m ON MOCKDB();
 
 -- Pre-seeded tables: Users, Products, Orders, Employee, departments
 SELECT * FROM m.Users;
-SELECT u.UserName, o.TotalAmount FROM m.Users AS u JOIN m.Orders AS o ON u.UserID = o.OrderID;
+SELECT u.UserName, o.Total
+FROM m.Users AS u
+JOIN m.Orders AS o ON u.UserID = o.CustomerID;
 ```
 
 ---
@@ -1175,7 +1244,7 @@ SELECT * FROM test_src.Users;
 Launch the terminal IDE with:
 
 ```bash
-ETL-SQL --ui edit MyScript.etlsql
+ETL-SQL ui edit MyScript.etlsql
 ```
 
 ### 15.1 Layout
@@ -1301,7 +1370,7 @@ SET REPORT DESCRIPTION = 'Daily revenue and order count by region';
 
 CREATE CONNECTION src ON MOCKDB();
 
-SELECT Region, COUNT(*) AS Orders, SUM(TotalAmount) AS Revenue
+SELECT Region, COUNT(*) AS Orders, SUM(Total) AS Revenue
 INTO #sales
 FROM src.Orders
 GROUP BY Region;

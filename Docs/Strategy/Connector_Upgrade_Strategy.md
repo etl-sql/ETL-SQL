@@ -1,5 +1,8 @@
 # ETL-SQL Connector Upgrade Notes
 
+> [!NOTE]
+> This is an implemented modernization note for the 0.7.0 connector work. Current connector syntax belongs in `Docs/Reference/Data_Connectors.md`; current implementation contracts belong in `Docs/Architecture/Connectors.md` and `Docs/Standards/Connectors_Standards.md`.
+
 This document records the connector modernization standards used for ETL-SQL 0.7.0. The connector library is treated as production-grade, pattern-centric, and secure.
 
 ---

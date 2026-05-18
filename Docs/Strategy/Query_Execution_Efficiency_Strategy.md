@@ -12,6 +12,11 @@ pipeline (join, filter, aggregate, sort, project) buffers the entire intermediat
 a `List<Row>` before passing it to the next stage. A 5-stage query creates 5 full copies of data
 in memory simultaneously.
 
+More precisely: the simple SELECT path already streams, and parts of `JoinEngine` already perform
+early predicate filtering for some join shapes. The make-or-break risk is the **complex SELECT path**:
+when a query has joins, aggregates, windows, DISTINCT, ORDER BY, OFFSET/LIMIT, QUALIFY, or a
+combination of those features, execution still falls back to a materialized multi-pass model.
+
 This is the single biggest technical risk in the project. It manifests as:
 
 - **Memory exhaustion** during large corpus test runs (~20,000 sequential queries). The process
@@ -46,6 +51,15 @@ later stages over the materialized list.
 There is already a fast streaming path for simple SELECT statements. The performance risk is the
 complex path: joins, aggregates, windows, DISTINCT, ORDER BY, OFFSET/LIMIT, QUALIFY, and combinations
 of those features.
+
+There is also already some optimizer behavior in `JoinEngine`:
+
+- comma-join CROSS JOIN predicates can be promoted into INNER JOIN conditions,
+- some single-table predicates are applied before joins,
+- some post-join predicates are applied as soon as their referenced columns exist.
+
+That is useful work, but it should be formalized into a real logical planning layer instead of
+continuing to grow as one-off logic inside execution engines.
 
 ---
 
@@ -164,6 +178,19 @@ UNION ALL replaces `listA.Concat(listB).ToList()` with `streamA.Concat(streamB)`
 Streaming alone is not enough. Without basic planning, the engine may still stream far more data
 than necessary or build the wrong side of a hash join.
 
+The optimizer should become explicit:
+
+```text
+SelectStatement
+  → LogicalPlan        -- relational operators, aliases, predicates, required columns
+  → OptimizedPlan      -- pushed predicates, pruned columns, simplified joins
+  → PhysicalPlan       -- streaming vs blocking operators, join algorithms, spill decisions
+  → ExecutionPipeline  -- IAsyncEnumerable/DataTable batches consumed by hosts
+```
+
+Do not add a broad cost-based optimizer first. Start with deterministic rule-based rewrites that
+are easy to test and preserve semantics.
+
 #### Predicate Pushdown Inside the Engine
 
 Split `WHERE` predicates by referenced aliases:
@@ -200,7 +227,11 @@ Carry only columns needed by:
 - lineage/tag metadata required by the statement.
 
 This reduces `Row` dictionary size and clone cost. It may matter as much as streaming because
-current rows are dictionary-heavy and qualified-column cloning is expensive.
+current rows can accumulate schema-backed values plus dynamic qualified aliases, and clone/qualification
+work happens in hot query paths.
+
+Projection pruning should be treated as an early performance phase, not a late polish item. Reducing
+row width lowers memory, spill bytes, hash-table size, sort key payloads, and final result pressure.
 
 #### Join Side Selection
 
@@ -238,10 +269,44 @@ Define one product-level contract:
 
 Without this contract, streaming work can be undone by host display code.
 
+This should be one of the first implementation steps. If final results are still retained
+unbounded, a streaming execution pipeline can still exhaust memory after doing the hard part
+correctly.
+
+#### Memory Grants and Adaptive Spill
+
+Row-count thresholds are too blunt for a production ETL engine. Ten thousand narrow rows and ten
+thousand wide rows have very different memory footprints.
+
+Add a small memory-grant model:
+
+- estimate row width from schema, sampled values, or actual first batches,
+- assign per-operator memory budgets,
+- spill based on estimated or actual bytes, not just row count,
+- record actual rows, estimated bytes, spill bytes, and spill count in profile output,
+- let operators adapt when actual row width or row count is much higher than estimated.
+
+Keep the first version simple. The goal is not a full database buffer manager; the goal is to avoid
+hard-coded row thresholds being the only defense against large/wide data.
+
+Example decision rule:
+
+```text
+estimatedBytes = estimatedRows × estimatedRowWidth
+if estimatedBytes > operatorMemoryGrantBytes:
+    choose external/spilling operator
+else:
+    choose in-memory operator
+```
+
+Over time, profile actuals can feed better defaults.
+
 #### Row Representation Cost
 
 Streaming reduces list copies, but each row is still a dictionary-like object and rows are cloned
-and qualified often. After the first streaming pass, benchmark whether further wins require:
+and qualified often. The current `Row` type can use schema-backed arrays, which is good, but dynamic
+columns are still used for qualified aliases, aggregate/window synthetic columns, and ad hoc values.
+After the first streaming pass, benchmark whether further wins require:
 
 - column ordinals for hot paths,
 - lightweight projected row views,
@@ -250,13 +315,15 @@ and qualified often. After the first streaming pass, benchmark whether further w
 
 ### Memory Impact
 
-| Scenario | Current | After v0.8.0 |
+| Scenario | Current | After v0.8.x |
 |---|---|---|
 | JOIN 100k × 100k, filter to 500 | Large joined intermediate plus later copies | Smaller build side + streaming probe + early predicates |
 | ORDER BY LIMIT 10 | Full sort of result | Top-N heap when semantics permit |
 | Projection over wide rows | Carries every source column | Carries only required columns |
+| Wide rows with qualified aliases | Duplicate dynamic keys increase clone/hash/sort cost | Required-column plan avoids unnecessary aliases and payload |
 | 20 000 SLT corpus queries | Monotonic working-set growth → guard failure | Working-set plateau after GC/spill cycles |
 | Report/interactive final result | Potential full retained result | Capped retained rows plus total-row metadata |
+| Wide aggregate/sort workload | Spills by row count only | Spills by estimated/actual bytes under memory grants |
 
 ### Phased Implementation Order
 
@@ -275,15 +342,30 @@ Do not attempt a single large rewrite. Each phase should ship behind focused tes
   - report query materialization.
 - Capture elapsed time, allocated bytes, working set, Gen2/LOH collections, spill bytes, retained rows, and total matched rows.
 - Add correctness fixtures for edge cases before changing the execution engine.
+- Add a semantic matrix covering aliases, ordinal ORDER BY, NULL behavior, TOP/OFFSET/LIMIT,
+  DISTINCT, grouping sets, outer joins, window frames, QUALIFY, and report materialization.
 
-#### Phase 1 — Streaming Non-Blocking Stages
+#### Phase 1 — Result Retention and Row-Width Reduction
+
+- Define the retained-result contract for `LastResult`, `LastResultSets`, `OnResultSet`, CLI/TUI,
+  ReportPlayer, ReportPortal, tests, and SLT.
+- Enforce capped retention consistently while preserving `TotalRowsMatched`.
+- Add required-column analysis for SELECT, WHERE, JOIN, GROUP BY, HAVING, QUALIFY, ORDER BY,
+  aggregate/window expressions, lineage, and final projection.
+- Stop carrying unnecessary source columns through hot paths where semantics allow it.
+- Avoid creating duplicate qualified aliases unless an expression actually needs them.
+
+This phase comes before major streaming join work because it reduces memory pressure everywhere
+and prevents final result retention from erasing streaming wins.
+
+#### Phase 2 — Streaming Non-Blocking Stages
 
 - Add or reuse async enumerable helpers for `Where`, `Select`, `Take`, and `Concat`.
 - Stream WHERE and projection when no later blocking operator requires full materialization.
 - Preserve `BatchSize`, `RowsProcessed`, `LastStatementRowsProcessed`, and `OnResultSet` behavior.
 - Keep final materialization bounded and explicit.
 
-#### Phase 2 — Top-N Sort
+#### Phase 3 — Top-N Sort
 
 - Implement `TopNAsync` only for ORDER BY forms where semantics are proven:
   - no TOP PERCENT,
@@ -292,14 +374,23 @@ Do not attempt a single large rewrite. Each phase should ship behind focused tes
   - OFFSET handled as `N + offset` retained rows, then skip offset after final ordering.
 - Add tests for ASC/DESC mixes, nulls, aliases, ordinal ORDER BY, LIMIT, TOP, and OFFSET.
 
-#### Phase 3 — Logical Query Optimizer: Predicate Pushdown and Projection Pruning
+#### Phase 4 — Logical Query Optimizer: Predicate Pushdown and Plan Normalization
 
 - Add expression analysis that returns referenced aliases/columns.
+- Move existing join predicate-pushdown behavior toward a reusable logical optimizer instead of
+  leaving it embedded only in `JoinEngine`.
 - Push single-source predicates before joins.
-- Build a required-column set before reading/cloning rows.
+- Keep conservative behavior for outer joins, APPLY, subqueries, and non-deterministic functions.
 - Verify lineage/tag behavior still has the metadata it needs.
 
-#### Phase 4 — Physical Query Optimizer and Streaming Join Pipeline
+#### Phase 5 — Memory Grants and Adaptive Spill
+
+- Estimate row width and operator input sizes.
+- Replace or supplement row-count spill thresholds with byte-based grants.
+- Add profile output for estimated bytes, actual bytes, and spill decisions.
+- Keep row-count thresholds as a backstop while the byte model matures.
+
+#### Phase 6 — Physical Query Optimizer and Streaming Join Pipeline
 
 - Refactor join execution so the probe side streams through where possible.
 - Choose smaller build side for inner hash joins.
@@ -307,13 +398,13 @@ Do not attempt a single large rewrite. Each phase should ship behind focused tes
 - Keep external hash join as the fallback when either side exceeds memory thresholds.
 - Add multi-join tests before enabling join reordering beyond simple inner joins.
 
-#### Phase 5 — Aggregates, DISTINCT, Windows, and Result Retention
+#### Phase 7 — Aggregates, DISTINCT, and Windows
 
 - Keep aggregates and DISTINCT explicit blocking operators.
 - Make external aggregate/window paths return streams without immediate full materialization unless a downstream stage requires it.
-- Define and enforce result-retention behavior for CLI, TUI, ReportPlayer, ReportPortal, tests, and SLT.
+- Use memory grants to decide in-memory vs external aggregate/window execution.
 
-#### Phase 6 — Remove Temporary Compatibility Materialization
+#### Phase 8 — Remove Temporary Compatibility Materialization
 
 - Search for remaining `ToListAsync()` and `ToList()` calls in hot query paths.
 - Keep intentional materialization documented with comments and tests.
@@ -356,6 +447,7 @@ The rewrite is successful only when all of these are true:
 - Working set plateaus across long sequential query runs.
 - `LastResult` remains correct for small results and clearly capped for large results.
 - `EXPLAIN` or profile output identifies blocking operators and spill events.
+- Profile output includes row estimates, row-width estimates or actuals, and spill bytes for heavy operators.
 - ReportPlayer and ReportPortal render the same report data before and after the rewrite.
 
 ---
@@ -364,14 +456,15 @@ The rewrite is successful only when all of these are true:
 
 ETL-SQL is positioned as a large-scale data-movement tool. If it cannot run a 10-table join
 against 500k-row tables without exhausting RAM, it cannot compete with free tools like DuckDB,
-SQLite, or a bash pipeline. The v0.8.0 streaming rewrite is not a nice-to-have — it is the
+SQLite, or a bash pipeline. The v0.8.x streaming and query-planning work is not a nice-to-have — it is the
 dividing line between "interesting prototype" and "production-ready ETL platform."
 
 The encouraging news: the architecture already has the right skeleton. The external engines stream,
 the simple SELECT path already streams, and the core interfaces can carry batches. The missing piece
 is not just "remove `.ToListAsync()`"; it is to make the complex SELECT orchestrator understand
 which operators stream, which operators block, which columns are needed, which predicates can move,
-and how much final data each host is allowed to retain.
+how much memory each operator is allowed to use, when an operator should spill, and how much final
+data each host is allowed to retain.
 
 ---
 
@@ -380,4 +473,4 @@ and how much final data each host is allowed to retain.
 | Version | Scope | Risk | Expected Outcome |
 |---|---|---|---|
 | **v0.7.0** | Threshold tuning, LOH-compacting GC, SLT failures fixed | Very low | Corpus tests complete without OOM |
-| **v0.8.x** | Phased streaming rewrite, top-N, predicate pushdown, projection pruning, result-retention contract | Medium | Scalable complex SELECT execution with measured memory plateau |
+| **v0.8.x** | Result-retention contract, row-width reduction, phased streaming rewrite, top-N, logical/physical optimizer, memory grants | Medium | Scalable complex SELECT execution with measured memory plateau |

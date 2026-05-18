@@ -1,5 +1,8 @@
 # ETL-SQL Presentation Layer Specification
 
+> [!IMPORTANT]
+> **Mixed specification and backlog.** Some requirements here remain useful, but parts of this document describe unresolved or historical presentation work. Current implementation facts belong in `Docs/Architecture/Presentation.md`, `Docs/Architecture/TuiEditor.md`, and `Docs/Architecture/VSCodeExtension.md`.
+
 This is the authoritative reference for all presentation layer work across the Terminal IDE (TUI)
 and VS Code extension. It exists because the presentation layer is make-or-break for user
 adoption — users forgive a slow query engine far longer than they forgive a broken editor.

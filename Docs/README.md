@@ -28,6 +28,8 @@ Reference docs describe the supported product surface. They should stay factual,
 | [Reference/RelativeDate_Parameters.md](Reference/RelativeDate_Parameters.md) | Relative date expressions for reports and subscriptions |
 | [Syntax_Index.md](Syntax_Index.md) | Cross-reference from syntax tokens to docs and help files |
 
+Start with [Reference/README.md](Reference/README.md) for ownership and maintenance rules for this section.
+
 ## Reporting and Portal
 
 | Document | Audience |

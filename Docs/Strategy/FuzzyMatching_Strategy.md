@@ -4,6 +4,9 @@
 **Date:** 2026-05-14  
 **Scope:** New engine functions, query syntax, and normalization capabilities to support joining unstructured data to structured reference data.
 
+> [!NOTE]
+> The shipped fuzzy matching surface is documented in `Docs/Reference/Standard_Library.md` and `Docs/Reference/Grammar.md`. Phase 5 embedding/semantic matching is future work and is not part of the 0.7.0 feature-complete surface.
+
 | Phase | Status |
 | :--- | :--- |
 | Phase 1 — `NORMALIZE()` | ✅ Shipped (`FuzzyFunctions.cs`) |

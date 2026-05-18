@@ -1,6 +1,9 @@
 # ETL-SQL Report Portal — Development Strategy
 
-**Status:** Design complete — implementation ready  
+> [!IMPORTANT]
+> **Historical roadmap.** The Report Portal implementation has moved beyond this launch plan. Use this file for design rationale only. For current behavior, use `Docs/ReportPortal_User_Guide.md`, `Docs/ReportPortal_Administrators_Guide.md`, and `Docs/Architecture/ReportPortal.md`.
+
+**Status:** Historical roadmap — reconcile before using for implementation
 **Date:** 2026-04-24
 
 ---

@@ -2,6 +2,9 @@
 
 This document provides a comprehensive index of every keyword, command, function, and configuration option available in the ETL-SQL language. Use this as a central map to find definitions, examples, and help documentation.
 
+> [!NOTE]
+> This is a cross-reference inventory, not the primary explanation of the language. Use the reference docs for authoritative syntax and examples. The `Help File` column intentionally points at source-tree help assets and may use local/file links until this index is generated or normalized for release packaging.
+
 ---
 
 ## 1. Keywords & Commands (Statements)

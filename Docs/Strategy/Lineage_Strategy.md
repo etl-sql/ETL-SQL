@@ -1,6 +1,9 @@
 # Lineage & Data Governance Strategy
 
-**Status:** Phase 1 ready to start  
+> [!IMPORTANT]
+> **Active but unaudited strategy.** Treat this as a roadmap candidate, not current product reference. Before implementing from this file, audit it against `Docs/Reference/Lineage.md`, `Docs/Architecture/Engine.md`, the current lineage analyzer, and report/portal behavior.
+
+**Status:** Active/partially stale strategy — audit before implementation
 **Date:** 2026-05-04  
 **Scope:** All enhancements to the ETL-SQL lineage tracking, tag system, and data governance capabilities. This is a priority feature — it is a core selling differentiator of ETL-SQL over generic ETL tools.
 

@@ -181,7 +181,7 @@ An **Advanced** toggle reveals a text input accepting any valid RELDATE expressi
 
 ## Resolution context
 
-RELDATE expressions resolve at **execution time** regardless of how the report runs — subscription, manual run, scheduled job, or `dotnet run --run`. There is no subscription-only context. A developer can test `DECLARE @start RELDATE = D-1` locally and get the same result the subscription will get when it fires.
+RELDATE expressions resolve at **execution time** regardless of how the report runs — subscription, manual run, scheduled job, or `dotnet run --project src/ETL-SQL.App -- run`. There is no subscription-only context. A developer can test `DECLARE @start RELDATE = D-1` locally and get the same result the subscription will get when it fires.
 
 The expression string (`D-1`) is what gets stored in the subscription's parameter table, not a resolved date. Each execution resolves it fresh against the clock at that moment.
 

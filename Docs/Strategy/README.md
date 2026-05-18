@@ -17,17 +17,17 @@ This folder contains design records, implementation plans, and historical roadma
 | [Arrow_Columnar_Strategy.md](Arrow_Columnar_Strategy.md) | Implemented design note | Keep; reconcile with current spill implementation when large-dataset docs change |
 | [LargeDatasets.md](LargeDatasets.md) | Implemented design note | Keep; link from architecture/reference where spill behavior is explained |
 | [Source_Boundary_Migration_Plan.md](Source_Boundary_Migration_Plan.md) | Implemented migration record with remaining boundary guidance | Keep; eventually convert remaining guidance into architecture docs |
-| [Connector_Upgrade_Strategy.md](Connector_Upgrade_Strategy.md) | Implemented modernization note | Keep only if it adds context not already covered by connector architecture and standards |
+| [Connector_Upgrade_Strategy.md](Connector_Upgrade_Strategy.md) | Implemented modernization note | Keep as design history; current syntax and contracts live in connector reference, architecture, and standards |
 | [ScriptSecurity_Strategy.md](ScriptSecurity_Strategy.md) | Security design rationale | Keep; cross-check against `SECURITY.md` before releases |
 | [FuzzyMatching_Strategy.md](FuzzyMatching_Strategy.md) | Mostly shipped design note with one deferred area | Keep; make Phase 5 explicitly post-0.7 or move it to backlog |
-| [DataLake_Connectors_Strategy.md](DataLake_Connectors_Strategy.md) | Mixed shipped capability and future data-lake direction | Split shipped connector behavior into reference docs; keep raw object-storage direction as future strategy |
+| [DataLake_Connectors_Strategy.md](DataLake_Connectors_Strategy.md) | Mixed shipped capability and future data-lake direction | Header now marks the split; keep shipped connector facts in reference/architecture |
 | [Query_Execution_Efficiency_Strategy.md](Query_Execution_Efficiency_Strategy.md) | Active performance strategy | Keep; use benchmark results and phased implementation notes to drive v0.8 query execution work |
-| [Presentation_Layer_Strategy.md](Presentation_Layer_Strategy.md) | Mixed specification and unresolved presentation backlog | Reconcile against current TUI/VS Code architecture and move open issues to tracked work |
+| [Presentation_Layer_Strategy.md](Presentation_Layer_Strategy.md) | Mixed specification and unresolved presentation backlog | Header now warns readers; reconcile current facts into presentation/TUI/VS Code architecture docs |
 | [Engine_Upgrade_Strategy.md](Engine_Upgrade_Strategy.md) | Historical roadmap | Archive or rewrite as a short design note; current architecture belongs in `Docs/Architecture` |
-| [Report_SQL_Strategy.md](Report_SQL_Strategy.md) | Historical roadmap/backlog | Reconcile against shipped Report-SQL syntax and remove completed backlog tables |
-| [ReportPortal_Strategy.md](ReportPortal_Strategy.md) | Historical roadmap | Reconcile against shipped portal docs and architecture; archive remaining planning detail |
-| [SubscriptionParameters_Strategy.md](SubscriptionParameters_Strategy.md) | Historical feature plan | Reconcile with `RelativeDate_Parameters.md`, Report-SQL guide, and portal subscription docs |
-| [Lineage_Strategy.md](Lineage_Strategy.md) | Active or partially stale strategy | Audit against current lineage implementation before treating as roadmap |
+| [Report_SQL_Strategy.md](Report_SQL_Strategy.md) | Historical roadmap/backlog | Header now warns readers; use Report-SQL guide/cookbook/syntax index for current behavior |
+| [ReportPortal_Strategy.md](ReportPortal_Strategy.md) | Historical roadmap | Header now warns readers; use portal user/admin guides and architecture for current behavior |
+| [SubscriptionParameters_Strategy.md](SubscriptionParameters_Strategy.md) | Historical feature plan | Header now warns readers; current behavior belongs in relative date, Report-SQL, and portal docs |
+| [Lineage_Strategy.md](Lineage_Strategy.md) | Active or partially stale strategy | Header now warns readers; audit against current lineage implementation before treating as roadmap |
 | [Test_Strategy.md](Test_Strategy.md) | Active operational strategy | Keep; pair with `Docs/Testing.md` |
 
 ## Cleanup Rules

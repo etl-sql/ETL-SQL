@@ -1,5 +1,8 @@
 # Data Lake Connectors Strategy
 
+> [!IMPORTANT]
+> **Mixed shipped capability and future direction.** Native Snowflake and BigQuery connector behavior belongs in `Docs/Reference/Data_Connectors.md` and `Docs/Architecture/Connectors.md`. Treat the raw object-storage/table-format sections as future strategy, not shipped feature reference.
+
 ## What "Data Lake" Means Here
 
 The term covers a wide range of products that are architecturally quite different. For ETL-SQL's purposes they fall into two distinct tiers that require different implementation approaches:

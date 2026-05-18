@@ -57,13 +57,13 @@ dotnet build
 ### Run a Script
 
 ```bash
-dotnet run --project src/ETL-SQL.App -- --run MyScript.etlsql
+dotnet run --project src/ETL-SQL.App -- run MyScript.etlsql
 ```
 
 ### Open the Terminal IDE
 
 ```bash
-dotnet run --project src/ETL-SQL.App -- --ui edit MyScript.etlsql
+dotnet run --project src/ETL-SQL.App -- ui edit MyScript.etlsql
 ```
 
 ### Serve a Report Dashboard
@@ -245,7 +245,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | Tool | Purpose |
 | :--- | :--- |
 | `ETL-SQL.exe` | Headless script executor for pipelines, CI/CD, cron, and server deployments. |
-| `ETL-SQL --ui edit` | Interactive terminal IDE with editor, results, messages, autocomplete, and profiling. |
+| `ETL-SQL ui edit` | Interactive terminal IDE with editor, results, messages, autocomplete, and profiling. |
 | `etl-sql-report` | Report-SQL CLI for `build`, `refresh`, and `serve`. |
 | VS Code extension | Language server, REPL panel, notebook support, schema sidebar, and report preview. |
 | Report Portal | Multi-report hosting, publishing, permissions, subscriptions, alerts, saved views, and usage metrics. |
