@@ -695,8 +695,34 @@
 
     function renderContainer(container, containerDef, manifest, pageTheme) {
         const div = document.createElement('div');
-        const isScroll = (containerDef.containerType || '').toUpperCase() === 'SCROLL';
-        div.className = isScroll ? 'container-scroll' : 'container-box';
+        const containerTypeName = (containerDef.containerType || '').toUpperCase();
+        const isScroll = containerTypeName === 'SCROLL';
+        const isLayer  = containerTypeName === 'LAYER';
+        div.className = isScroll ? 'container-scroll' : isLayer ? 'container-layer' : 'container-box';
+
+        // LAYER: stack children as absolutely-positioned overlapping panels
+        if (isLayer) {
+            div.setAttribute('data-name', containerDef.name);
+            const height = (containerDef.styles || {})['HEIGHT'] || (containerDef.styles || {})['height'];
+            if (height) div.style.height = height;
+            const slotMap = containerDef.slotMap || {};
+            const uniqueItems = [...new Set(Object.values(slotMap))];
+            uniqueItems.forEach((item, i) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'layer-slot';
+                wrapper.style.zIndex = String(i + 1);
+                const visual = (manifest.visuals || []).find(v => v.name.toLowerCase() === item.toLowerCase());
+                if (visual) {
+                    renderVisual(wrapper, visual, pageTheme, manifest);
+                } else {
+                    const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
+                    if (nested) renderContainer(wrapper, nested, manifest, pageTheme);
+                }
+                div.appendChild(wrapper);
+            });
+            container.appendChild(div);
+            return;
+        }
         div.setAttribute('data-name', containerDef.name);
         
         const tag = getOption(containerDef.options, 'TAG') || getStyle(containerDef.styles, 'TAG');
@@ -2123,31 +2149,177 @@
 
     // ── Card ────────────────────────────────────────────────────────────────
 
+    function abbreviateNumber(num, formatHint) {
+        const abs = Math.abs(num);
+        let suffix = '', divisor = 1;
+        if (abs >= 1e9)      { suffix = 'B'; divisor = 1e9; }
+        else if (abs >= 1e6) { suffix = 'M'; divisor = 1e6; }
+        else if (abs >= 1e3) { suffix = 'K'; divisor = 1e3; }
+        const isCurrency = formatHint && formatHint.charAt(0).toUpperCase() === 'C';
+        const prefix = isCurrency ? '$' : '';
+        const abbreviated = num / divisor;
+        const decimals = suffix ? 2 : 0;
+        const sign = num < 0 ? '-' : '';
+        return sign + prefix + abbreviated.toFixed(decimals) + suffix;
+    }
+
     function renderCard(container, visual) {
         const opts = visual.options || {};
-        // Title comes from the TITLE option (stored as lowercase "title" in manifest)
         const cardTitle    = getOption(opts, 'title') || visual.name;
         const cardSubtitle = getOption(opts, 'subtitle') || '';
 
+        // ── Value ──────────────────────────────────────────────────────────
         const valueColName = getOption(opts, 'mapping:value');
         const valIdx = valueColName
             ? (visual.columns || []).findIndex(c => c.toLowerCase() === valueColName.toLowerCase())
             : 0;
-
         const row = visual.rows && visual.rows[0] ? visual.rows[0] : null;
-        let displayValue = row ? (row[valIdx >= 0 ? valIdx : 0] ?? '0') : 'No data';
+        const rawValue = row ? parseFloat(row[valIdx >= 0 ? valIdx : 0] ?? '0') : null;
 
-        const formatOpt = getOption(opts, 'format');
-        if (formatOpt && displayValue !== 'No data') {
-            displayValue = formatValue(displayValue, formatOpt);
+        const formatOpt    = getOption(opts, 'format');
+        const doAbbreviate = isOn(getOption(opts, 'abbreviate'));
+        const prefix       = getOption(opts, 'prefix') || '';
+        const suffix       = getOption(opts, 'suffix') || '';
+
+        let displayValue;
+        if (rawValue === null) {
+            displayValue = 'No data';
+        } else if (doAbbreviate) {
+            displayValue = prefix + abbreviateNumber(rawValue, formatOpt) + suffix;
+        } else if (formatOpt) {
+            displayValue = prefix + formatValue(rawValue, formatOpt) + suffix;
+        } else {
+            displayValue = prefix + String(rawValue) + suffix;
+        }
+
+        // ── Goal ───────────────────────────────────────────────────────────
+        const goalColName = getOption(opts, 'mapping:goal');
+        let goalValue = null;
+        if (goalColName && row) {
+            const gIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === goalColName.toLowerCase());
+            if (gIdx >= 0) goalValue = parseFloat(row[gIdx] ?? '0');
+        }
+        if (goalValue === null) {
+            const goalOpt = getOption(opts, 'goal');
+            if (goalOpt !== null) goalValue = parseFloat(goalOpt);
+        }
+
+        // ── Status ─────────────────────────────────────────────────────────
+        const closePct = parseFloat(getOption(opts, 'close_pct') ?? '0.80');
+        const metPct   = parseFloat(getOption(opts, 'met_pct')   ?? '1.00');
+        let status = null, ratio = null;
+        if (goalValue !== null && rawValue !== null && goalValue !== 0) {
+            ratio = rawValue / goalValue;
+            if      (ratio >= metPct)   status = 'met';
+            else if (ratio >= closePct) status = 'close';
+            else                        status = 'missed';
+        }
+
+        // ── Colors & icons ─────────────────────────────────────────────────
+        const colors = {
+            met:    getOption(opts, 'color_met')    || '#10b981',
+            close:  getOption(opts, 'color_close')  || '#f59e0b',
+            missed: getOption(opts, 'color_missed') || '#ef4444'
+        };
+        const iconSets = {
+            TRAFFIC: { met: '🟢', close: '🟡', missed: '🔴' },
+            ARROWS:  { met: '↑',  close: '→',  missed: '↓'  },
+            CHECKS:  { met: '✓',  close: '~',  missed: '✗'  }
+        };
+        const iconSetName  = (getOption(opts, 'icon_set') || '').toUpperCase();
+        const presetIcons  = iconSets[iconSetName] || null;
+        const icons = {
+            met:    getOption(opts, 'icon_met')    ?? (presetIcons ? presetIcons.met    : '✓'),
+            close:  getOption(opts, 'icon_close')  ?? (presetIcons ? presetIcons.close  : '⚠'),
+            missed: getOption(opts, 'icon_missed') ?? (presetIcons ? presetIcons.missed : '✗')
+        };
+
+        // ── Delta ──────────────────────────────────────────────────────────
+        const deltaColName = getOption(opts, 'mapping:delta');
+        let deltaAmount = null;
+        if (deltaColName && row) {
+            const dIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === deltaColName.toLowerCase());
+            if (dIdx >= 0 && rawValue !== null) deltaAmount = rawValue - parseFloat(row[dIdx] ?? '0');
+        }
+        const deltaFormat = getOption(opts, 'delta_format') || formatOpt;
+        const deltaLabel  = getOption(opts, 'delta_label')  || '';
+        const trendDir    = (getOption(opts, 'trend_dir') || 'POSITIVE_UP').toUpperCase();
+
+        // ── Status label override ──────────────────────────────────────────
+        let subtitleText = cardSubtitle;
+        if (status === 'met'    && getOption(opts, 'label_met'))    subtitleText = getOption(opts, 'label_met');
+        if (status === 'close'  && getOption(opts, 'label_close'))  subtitleText = getOption(opts, 'label_close');
+        if (status === 'missed' && getOption(opts, 'label_missed')) subtitleText = getOption(opts, 'label_missed');
+
+        // ── Build HTML ─────────────────────────────────────────────────────
+        // Status badge
+        let badgeHtml = '';
+        if (status) {
+            badgeHtml = `<span class="card-status-badge" style="background:${escHtml(colors[status])}">${escHtml(icons[status])}</span>`;
+        }
+
+        // Delta row
+        let deltaHtml = '';
+        if (deltaAmount !== null) {
+            const isPos    = deltaAmount >= 0;
+            const isGood   = trendDir === 'POSITIVE_UP' ? isPos : !isPos;
+            const arrow    = isPos ? '▲' : '▼';
+            const clr      = isGood ? '#10b981' : '#ef4444';
+            const absAmt   = Math.abs(deltaAmount);
+            const deltaStr = deltaFormat ? formatValue(absAmt, deltaFormat) : String(absAmt);
+            const sign     = isPos ? '+' : '-';
+            deltaHtml = `<div class="card-delta" style="color:${clr}">` +
+                `<span class="card-delta-arrow">${arrow}</span>` +
+                `<span class="card-delta-value">${escHtml(sign + deltaStr)}</span>` +
+                (deltaLabel ? `<span class="card-delta-label">${escHtml(deltaLabel)}</span>` : '') +
+                `</div>`;
+        }
+
+        // Goal display line
+        let goalLineHtml = '';
+        if (goalValue !== null && isOn(getOption(opts, 'show_goal'))) {
+            const gDisplay = doAbbreviate
+                ? abbreviateNumber(goalValue, formatOpt)
+                : (formatOpt ? formatValue(goalValue, formatOpt) : String(goalValue));
+            goalLineHtml = `<div class="card-goal">Target: ${escHtml(gDisplay)}</div>`;
+        }
+
+        // % of goal line
+        let goalPctHtml = '';
+        if (ratio !== null && isOn(getOption(opts, 'show_percent_of_goal'))) {
+            goalPctHtml = `<div class="card-goal-pct">${Math.round(ratio * 100)}% of target</div>`;
+        }
+
+        // Progress bar or ring
+        let progressHtml = '';
+        const showProgress  = isOn(getOption(opts, 'show_progress'));
+        const progressStyle = (getOption(opts, 'progress_style') || 'BAR').toUpperCase();
+        if (showProgress && ratio !== null && status) {
+            const pct      = Math.min(ratio * 100, 100);
+            const barColor = colors[status];
+            if (progressStyle === 'RING') {
+                const r = 18, circ = 2 * Math.PI * r;
+                const dash = (pct / 100) * circ;
+                progressHtml = `<div class="card-progress-ring">` +
+                    `<svg width="48" height="48" viewBox="0 0 48 48">` +
+                    `<circle cx="24" cy="24" r="${r}" fill="none" stroke="#e5e7eb" stroke-width="4"/>` +
+                    `<circle cx="24" cy="24" r="${r}" fill="none" stroke="${escHtml(barColor)}" stroke-width="4"` +
+                    ` stroke-dasharray="${dash.toFixed(2)} ${circ.toFixed(2)}" transform="rotate(-90 24 24)"/>` +
+                    `</svg><span class="card-ring-pct">${Math.round(pct)}%</span></div>`;
+            } else {
+                progressHtml = `<div class="card-progress">` +
+                    `<div class="card-progress-fill" style="width:${pct.toFixed(1)}%;background:${escHtml(barColor)}"></div>` +
+                    `</div>`;
+            }
         }
 
         const cardEl = document.createElement('div');
-        cardEl.className = 'card-value';
+        cardEl.className = 'card-value' + (status ? ` card-status-${status}` : '');
         cardEl.innerHTML =
-            `<div class="card-label">${escHtml(cardTitle)}</div>` +
-            (cardSubtitle ? `<div class="card-subtitle">${escHtml(cardSubtitle)}</div>` : '') +
-            `<div class="card-number">${escHtml(String(displayValue))}</div>`;
+            `<div class="card-header-row"><div class="card-label">${escHtml(cardTitle)}</div>${badgeHtml}</div>` +
+            (subtitleText ? `<div class="card-subtitle">${escHtml(subtitleText)}</div>` : '') +
+            `<div class="card-number">${escHtml(String(displayValue))}</div>` +
+            goalLineHtml + goalPctHtml + deltaHtml + progressHtml;
         container.appendChild(cardEl);
     }
 
@@ -3715,6 +3887,6 @@
     // Test escape hatch: exposes pure functions for automated testing.
     // Harmless in production (just sets a window property that nothing reads).
     if (typeof window !== 'undefined') {
-        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderChart };
+        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderChart, abbreviateNumber };
     }
 })();

@@ -562,10 +562,10 @@ namespace ETL_SQL.Core.Parser.Components
             else
             {
                 var raw = ConsumeIdentifier("Expected container type after AS").Value.ToUpperInvariant();
-                containerType = raw is "BOX" or "SCROLL" or "DRAWER" or "SIDEBAR" or "TABS" or "ACCORDION" or "MODAL" or "POPOVER"
+                containerType = raw is "BOX" or "SCROLL" or "DRAWER" or "SIDEBAR" or "TABS" or "ACCORDION" or "MODAL" or "POPOVER" or "LAYER"
                     ? raw
                     : throw new SyntaxException(
-                        $"Unknown container type '{raw}'. Expected BOX, SCROLL, DRAWER, SIDEBAR, TABS, ACCORDION, MODAL, or POPOVER.",
+                        $"Unknown container type '{raw}'. Expected BOX, SCROLL, DRAWER, SIDEBAR, TABS, ACCORDION, MODAL, POPOVER, or LAYER.",
                         _parser.Previous.Line,
                         _parser.Previous.Column);
             }
@@ -1131,7 +1131,6 @@ namespace ETL_SQL.Core.Parser.Components
 
         private static bool IsPassiveVisual(VisualType visualType) => visualType is
             VisualType.Text
-            or VisualType.Card
             or VisualType.Image;
 
         private VisualSourceExpression ParseVisualSource()

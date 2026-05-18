@@ -1,46 +1,169 @@
--- Kitchen Sink: CARD Visual
--- This script demonstrates the CARD visual type.
+-- Kitchen Sink: CARD Visual (Enhanced)
+-- Demonstrates goal tracking, status bands, icons, delta/trend, progress
+-- bar, progress ring, abbreviation, prefix/suffix, status labels, and
+-- LAYER container for visual stacking.
 
 SET REPORT TITLE = 'Kitchen Sink: CARD Visual';
-SET REPORT DESCRIPTION = 'Demonstration of CARD KPI visuals.';
+SET REPORT DESCRIPTION = 'Enhanced CARD KPI visuals with goal tracking, delta, progress indicators, and LAYER stacking.';
 
--- 1. Mock Data Generation
-SELECT 1250000 AS Rev, 'Total Revenue' AS Label, 0.18 AS Growth INTO #kpis;
+-- Mock data: current values, goal values, and prior-period comparison values
+SELECT
+    1250000  AS Rev,
+    1000000  AS RevGoal,
+    1100000  AS RevPrior,
+    0.18     AS Growth,
+    0.20     AS GrowthGoal,
+    0.15     AS GrowthPrior,
+    875000   AS Cost,
+    850000   AS CostGoal,
+    900000   AS CostPrior,
+    'Total Revenue' AS RevLabel
+INTO #kpis;
 
--- 2. Basic Card
+-- ── Group A: Basic & no-regression ──────────────────────────────────────
+
+-- 1. Basic card (unchanged syntax — verifies no regression)
 CREATE VISUAL BasicCard AS CARD (
     SOURCE = #kpis,
-    MAPPINGS (VALUE = Rev, LABEL = Label),
+    MAPPINGS (VALUE = Rev, LABEL = RevLabel),
     OPTIONS (FORMAT = 'C0')
 );
 
--- 3. Card with Styling
-CREATE VISUAL StyledCard AS CARD (
-    SOURCE = (SELECT Growth, 'Year-over-Year' AS Lbl FROM #kpis),
-    TITLE = 'Growth %',
-    MAPPINGS (VALUE = Growth, LABEL = Lbl),
-    OPTIONS (FORMAT = 'P1'),
-    STYLE (
-        BACKGROUND-COLOR = '#f8fafc',
-        COLOR = '#2563eb',
-        BORDER = '1px solid #e2e8f0',
-        BORDER-RADIUS = '12px',
-        PADDING = '24px'
+-- ── Group B: Goal tracking ───────────────────────────────────────────────
+
+-- 2. Goal met — green badge, progress bar, CHECKS icon preset
+CREATE VISUAL GoalMetCard AS CARD (
+    SOURCE = #kpis,
+    TITLE = 'Revenue vs Target',
+    MAPPINGS (VALUE = Rev, GOAL = RevGoal),
+    OPTIONS (
+        FORMAT = 'C0',
+        SHOW_PROGRESS = ON,
+        SHOW_GOAL = ON,
+        ICON_SET = 'CHECKS'
     )
 );
 
--- 4. Multiple Cards in a Row (using Container)
-CREATE CONTAINER KpiGrid AS BOX (
+-- 3. Goal close (amber) — ARROWS icon preset, custom threshold
+CREATE VISUAL GrowthCard AS CARD (
+    SOURCE = #kpis,
+    TITLE = 'YoY Growth',
+    MAPPINGS (VALUE = Growth, GOAL = GrowthGoal),
+    OPTIONS (
+        FORMAT = 'P1',
+        ICON_SET = 'ARROWS',
+        CLOSE_PCT = 0.85,
+        MET_PCT = 1.00,
+        SHOW_PERCENT_OF_GOAL = ON
+    )
+);
+
+-- 4. Goal missed — cost metric, POSITIVE_DOWN trend, TRAFFIC icons, status labels
+CREATE VISUAL CostCard AS CARD (
+    SOURCE = #kpis,
+    TITLE = 'Operating Cost',
+    MAPPINGS (VALUE = Cost, GOAL = CostGoal, DELTA = CostPrior),
+    OPTIONS (
+        FORMAT = 'C0',
+        SHOW_PROGRESS = ON,
+        TREND_DIR = 'POSITIVE_DOWN',
+        DELTA_LABEL = 'vs LM',
+        DELTA_FORMAT = 'C0',
+        ICON_SET = 'TRAFFIC',
+        LABEL_MET = 'Under budget',
+        LABEL_CLOSE = 'Near limit',
+        LABEL_MISSED = 'Over budget'
+    )
+);
+
+-- ── Group C: Display options ─────────────────────────────────────────────
+
+-- 5. Abbreviation + literal goal + progress ring + % of goal
+CREATE VISUAL AbbrevCard AS CARD (
+    SOURCE = #kpis,
+    TITLE = 'Revenue (Abbreviated)',
+    MAPPINGS (VALUE = Rev),
+    OPTIONS (
+        FORMAT = 'C0',
+        ABBREVIATE = ON,
+        GOAL = 1000000,
+        SHOW_PROGRESS = ON,
+        PROGRESS_STYLE = 'RING',
+        SHOW_GOAL = ON,
+        SHOW_PERCENT_OF_GOAL = ON
+    )
+);
+
+-- 6. Delta/trend + prefix/suffix
+CREATE VISUAL DeltaCard AS CARD (
+    SOURCE = #kpis,
+    TITLE = 'Revenue vs Prior Year',
+    MAPPINGS (VALUE = Rev, DELTA = RevPrior),
+    OPTIONS (
+        FORMAT = 'C0',
+        DELTA_LABEL = 'vs LY',
+        DELTA_FORMAT = 'C0',
+        TREND_DIR = 'POSITIVE_UP',
+        PREFIX = '',
+        SUFFIX = ' USD'
+    )
+);
+
+-- ── Group D: LAYER container (visual stacking) ───────────────────────────
+
+-- Background bar chart (renders at low opacity via STYLE)
+CREATE VISUAL RevTrendBar AS BAR (
+    SOURCE = (
+        SELECT 'Q1' AS Qtr, 950000 AS Revenue UNION ALL
+        SELECT 'Q2', 1050000 UNION ALL
+        SELECT 'Q3', 1100000 UNION ALL
+        SELECT 'Q4', 1250000
+    ),
+    MAPPINGS (X = Qtr, Y = Revenue),
+    STYLE (OPACITY = '0.15')
+);
+
+-- CARD layered on top with transparent background
+CREATE VISUAL LayerKpiCard AS CARD (
+    SOURCE = #kpis,
+    TITLE = 'Revenue (Layered)',
+    MAPPINGS (VALUE = Rev, GOAL = RevGoal),
+    OPTIONS (
+        FORMAT = 'C0',
+        ABBREVIATE = ON,
+        ICON_SET = 'CHECKS',
+        SHOW_PERCENT_OF_GOAL = ON
+    ),
+    STYLE (BACKGROUND-COLOR = 'transparent')
+);
+
+-- LAYER stacks RevTrendBar (bottom) then LayerKpiCard (top)
+CREATE CONTAINER LayerDemo AS LAYER (
     LAYOUT (
-        STRUCTURE = 'A B',
-        MAP ('A' = BasicCard, 'B' = StyledCard)
+        MAP ('A' = RevTrendBar, 'B' = LayerKpiCard)
+    ),
+    STYLE (HEIGHT = '200px')
+);
+
+-- ── Layout ───────────────────────────────────────────────────────────────
+
+CREATE CONTAINER KpiRow1 AS BOX (
+    LAYOUT (
+        STRUCTURE = 'A B C',
+        MAP ('A' = BasicCard, 'B' = GoalMetCard, 'C' = GrowthCard)
     )
 );
 
--- Page Layout
+CREATE CONTAINER KpiRow2 AS BOX (
+    LAYOUT (
+        STRUCTURE = 'A B C',
+        MAP ('A' = CostCard, 'B' = AbbrevCard, 'C' = DeltaCard)
+    )
+);
+
 CREATE PAGE CardKitchenSink AS (
-    STRUCTURE = 'A',
-    MAP ('A' = KpiGrid)
+    STRUCTURE = 'A / B / C',
+    MAP ('A' = KpiRow1, 'B' = KpiRow2, 'C' = LayerDemo)
 );
 
 CREATE NAVIGATION MainNav AS TAB (DEFAULT = CardKitchenSink, PAGES (CardKitchenSink));

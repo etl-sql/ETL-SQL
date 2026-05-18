@@ -69,8 +69,14 @@
   .visual-card.theme-dark .visual-tool-btn:hover { background: #37373d; border-color: #5470c6; color: #fff; }
   .visual-card.theme-dark.visual-maximized { background: #1e1e1e; }
   .visual-card.theme-dark h3 { color: #fff; }
-  .visual-card.theme-dark .card-label { color: #888; }
-  .visual-card.theme-dark .card-number { color: #fff; }
+  .visual-card.theme-dark .card-label    { color: #888; }
+  .visual-card.theme-dark .card-number   { color: #fff; }
+  .visual-card.theme-dark .card-subtitle,
+  .visual-card.theme-dark .card-goal,
+  .visual-card.theme-dark .card-goal-pct,
+  .visual-card.theme-dark .card-delta-label { color: #666; }
+  .visual-card.theme-dark .card-progress { background: #333; }
+  .visual-card.theme-dark .card-ring-pct { color: #aaa; }
   .visual-card.theme-dark .table-wrapper th { background: #2d2d2d; color: #aaa; border-color: #444; }
   .visual-card.theme-dark .table-wrapper td { border-color: #333; }
   .visual-card.theme-dark select, .visual-card.theme-dark input { background: #2d2d2d; color: #fff; border-color: #444; }
@@ -80,9 +86,32 @@
   table { border-collapse: collapse; width: 100%; }
   th, td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; }
   th { background: #f0f0f0; }
-  .card-value  { display: flex; flex-direction: column; gap: 4px; }
-  .card-label  { font-size: 0.85em; color: #888; }
-  .card-number { font-size: 2em; font-weight: bold; }
+  /* ── CARD visual (enhanced) ──────────────────────────────────────────── */
+  .card-value { display:flex; flex-direction:column; gap:6px; height:100%; justify-content:center; }
+  .card-header-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .card-label  { font-size:0.85em; color:#888; flex:1; }
+  .card-subtitle { font-size:0.8em; color:#aaa; margin-top:-4px; }
+  .card-number { font-size:2em; font-weight:bold; line-height:1.1; }
+  .card-status-badge {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:28px; height:28px; padding:0 8px; border-radius:14px;
+    font-size:0.85em; font-weight:600; color:#fff; flex-shrink:0;
+  }
+  .card-status-met    { border-left:4px solid #10b981 !important; }
+  .card-status-close  { border-left:4px solid #f59e0b !important; }
+  .card-status-missed { border-left:4px solid #ef4444 !important; }
+  .card-goal     { font-size:0.78em; color:#aaa; }
+  .card-goal-pct { font-size:0.78em; color:#aaa; }
+  .card-delta { display:flex; align-items:center; gap:4px; font-size:0.85em; font-weight:600; }
+  .card-delta-arrow { font-size:0.75em; }
+  .card-delta-label { font-weight:400; color:#aaa; font-size:0.9em; }
+  .card-progress { height:4px; background:#e5e7eb; border-radius:2px; overflow:hidden; margin-top:4px; }
+  .card-progress-fill { height:100%; border-radius:2px; transition:width 0.4s ease; }
+  .card-progress-ring { position:relative; display:inline-flex; align-items:center; justify-content:center; margin-top:4px; }
+  .card-ring-pct { position:absolute; font-size:0.65em; font-weight:700; color:#555; }
+  /* ── LAYER container ─────────────────────────────────────────────────── */
+  .container-layer { position:relative; overflow:hidden; min-height:200px; }
+  .layer-slot { position:absolute; inset:0; }
   .slicer-wrapper select { font-size: 13px; padding: 6px 32px 6px 12px; }
   .stale-banner { background: #fff3cd; border: 1px solid #ffc107;
                   border-radius: 4px; padding: 8px 12px; margin-bottom: 16px;
