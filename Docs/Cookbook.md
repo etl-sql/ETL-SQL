@@ -767,4 +767,4 @@ CREATE PAGE Main AS (STRUCTURE = 'A', MAP ('A' = TxTable));
 
 ---
 
-*Refer to [Reference/Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md) for function signatures, [Reference/Data_Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Data_Connectors.md) for connector options, and [User_Manual.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/User_Manual.md) for the mental model.*
+*Refer to [Reference/Standard_Library.md](Reference/Standard_Library.md) for function signatures, [Reference/Data_Connectors.md](Reference/Data_Connectors.md) for connector options, and [User_Manual.md](User_Manual.md) for the mental model.*

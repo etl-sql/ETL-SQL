@@ -630,7 +630,7 @@ PARAMETERS (
 
 #### RELDATE parameter values
 
-When a report uses `RELDATE` INPUT parameters, the subscription stores the expression string — not a resolved date. The engine resolves it fresh each time the subscription fires. See [`Docs/Reference/RelativeDate_Parameters.md`](../Reference/RelativeDate_Parameters.md) for the full expression reference.
+When a report uses `RELDATE` INPUT parameters, the subscription stores the expression string — not a resolved date. The engine resolves it fresh each time the subscription fires. See [`Docs/Reference/RelativeDate_Parameters.md`](Reference/RelativeDate_Parameters.md) for the full expression reference.
 
 Common expressions:
 

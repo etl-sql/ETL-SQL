@@ -599,6 +599,6 @@ All Orchestrator configuration is bound from `appsettings.json` in the host appl
 
 ---
 
-*For the engine internals (Evaluator, Lexer, Parser, AST), see [Architecture/Engine.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Engine.md).*  
-*For connector implementation details, see [Architecture/Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md).*  
-*For the language scheduling syntax (`CREATE JOB`, `RUN SCRIPT`, `PARALLEL`), see [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md).*
+*For the engine internals (Evaluator, Lexer, Parser, AST), see [Engine.md](Engine.md).*
+*For connector implementation details, see [Connectors.md](Connectors.md).*
+*For the language scheduling syntax (`CREATE JOB`, `RUN SCRIPT`, `PARALLEL`), see [Grammar.md](../Reference/Grammar.md).*

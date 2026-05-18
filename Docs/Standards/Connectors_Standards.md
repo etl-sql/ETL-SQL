@@ -397,4 +397,4 @@ Use this checklist when reviewing any PR that adds or significantly modifies a c
 
 ---
 
-*Refer to [Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md) for technical implementation details and [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) for language specifications.*
+*Refer to [Connectors.md](../Architecture/Connectors.md) for technical implementation details and [Grammar.md](../Reference/Grammar.md) for language specifications.*

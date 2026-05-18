@@ -715,4 +715,4 @@ services.AddSingleton<IConnector, SnowflakeConnector>();
 
 ---
 
-*Refer to [Connectors_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md) for governance rules and [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) for language specifications.*
+*Refer to [Connectors_Standards.md](../Standards/Connectors_Standards.md) for governance rules and [Grammar.md](../Reference/Grammar.md) for language specifications.*

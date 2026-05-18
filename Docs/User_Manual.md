@@ -21,7 +21,11 @@ Welcome to ETL-SQL. This guide is designed to help you transition from thinking 
 12. [Debugging & Diagnostics](#12-debugging--diagnostics)
 13. [Zero-Trust Security](#13-zero-trust-security)
 14. [Mocking & Testing](#14-mocking--testing)
-- [Next Steps](#next-steps)
+15. [Interactive TUI Editor](#15-interactive-tui-editor)
+16. [VS Code Authoring](#16-vs-code-authoring)
+17. [Report-SQL Dashboards](#17-report-sql-dashboards)
+18. [Report Portal Workflow](#18-report-portal-workflow)
+19. [Next Steps](#next-steps)
 
 ---
 
@@ -118,6 +122,49 @@ END
 USE SETS !DEV;
 CREATE CONNECTION dw ON MSSQL() WITH(SERVER=@server, DATABASE=@db, TRUSTED_CONNECTION=TRUE);
 ```
+
+### 2.4 Choosing a Connector
+
+Choose the connector by the system you are talking to, not by the shape of the data you expect back. SQL databases use SQL connectors, local files use file connectors, APIs use `API`/`REST`, and transfer endpoints use SFTP/FTP/Azure Blob.
+
+| Need | Connector family | Typical use |
+| :--- | :--- | :--- |
+| SQL Server, Postgres, Oracle | `MSSQL`, `POSTGRES`, `ORACLE`, `ODBC` | Query source systems or load warehouse tables |
+| Cloud warehouses | `SNOWFLAKE`, `BIGQUERY`, `ODBC` | Read/write managed analytical stores |
+| Local tabular or semi-structured files | `FLATFILE`, `CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO` | Ingest local extracts and produce deliverables |
+| HTTP services | `API`, `REST` | Read or write JSON/XML API payloads |
+| File transfer | `SFTP`, `FTP`, `AZURE_BLOB` | Send or receive files after staging/encryption |
+| Email delivery | `SMTP` | Send notifications or report delivery emails |
+| Filesystem metadata | `DIRECTORY` | Query local file inventories |
+| Tests and demos | `MOCKDB` | Develop examples without real infrastructure |
+
+Use `HELP CONNECTION <type>` for the exact options accepted by a connector, and [Data_Connectors.md](Reference/Data_Connectors.md) for authentication patterns and mutually exclusive settings.
+
+### 2.5 Running a Script
+
+During development, run scripts from the CLI, TUI, or VS Code. Use the same script file in every host; the host changes how you interact with results, logs, prompts, and reports.
+
+```powershell
+# Run a script once
+ETL-SQL run nightly_load.etlsql
+
+# Pass INPUT variables
+ETL-SQL run monthly_report.etlsql --var @env=PROD --var @month=2026-03
+
+# Capture performance and logs
+ETL-SQL run nightly_load.etlsql --perf --log C:\Logs\ETL-SQL\
+
+# Development checkout form
+dotnet run --project src/ETL-SQL.App -- --run samples\01_Basic.etlsql
+```
+
+Use the TUI when you want an interactive editor and result panes:
+
+```powershell
+ETL-SQL --ui edit MyScript.etlsql
+```
+
+Use VS Code when you want inline diagnostics, quick fixes, and report preview. Use the CLI or scheduler for repeatable automation.
 
 ---
 
@@ -284,6 +331,7 @@ ALTER TABLE #staging DROP COLUMN LegacyField;
 
 -- Drop when done (auto-dropped at session end anyway)
 DROP TABLE IF EXISTS #staging;
+```
 
 ### 4.2 Querying Directories
 While `FILE_LIST()` is a function that returns a table, you can also mount a directory as a permanent connection. This is useful when you need to join file metadata against other databases:
@@ -295,7 +343,6 @@ CREATE CONNECTION raw_files ON DIRECTORY('C:\Incoming\') WITH(RECURSIVE=TRUE);
 SELECT FileName, Size, LastModified
 FROM raw_files
 WHERE Extension = '.csv' AND Size > 1024;
-```
 ```
 
 ---
@@ -357,6 +404,71 @@ FROM prod.Customers AS c
 JOIN RecentOrders AS r ON c.Id = r.CustomerId
 WHERE r.Total > 5000;
 ```
+
+### 5.5 Cross-Source Joins
+
+When data comes from multiple systems, stage each side into engine `#temp` tables first. This avoids asking one remote database to understand another system's dialect or credentials.
+
+```sql
+SELECT CustomerId, Email, Region
+INTO #customers
+FROM crm_db.Customers
+WHERE IsActive = 1;
+
+SELECT CustomerId, SUM(Amount) AS Revenue
+INTO #revenue
+FROM finance_db.Invoices
+WHERE InvoiceDate >= DATEADD(MONTH, -1, GETDATE())
+GROUP BY CustomerId;
+
+SELECT c.Region, COUNT(*) AS Customers, SUM(r.Revenue) AS Revenue
+FROM #customers AS c
+LEFT JOIN #revenue AS r ON c.CustomerId = r.CustomerId
+GROUP BY c.Region;
+```
+
+This is the safest default pattern. Push work down with `EXECUTE ... BEGIN ... END` only when the work is clearly native to one remote system and does not need engine-side tables.
+
+### 5.6 Common Transformations
+
+Use engine functions after staging when you need portable behavior across connectors:
+
+```sql
+SELECT
+    CustomerId,
+    LOWER(TRIM(Email)) AS Email,
+    REGEX_REPLACE(Phone, '[^0-9]', '') AS PhoneDigits,
+    HASHBYTES('SHA256', LOWER(TRIM(Email))) AS EmailHash,
+    COALESCE(Region, 'Unknown') AS Region,
+    CAST(OrderDate AS DATE) AS OrderDate
+INTO #clean
+FROM #raw;
+```
+
+Common transformation tools:
+
+| Need | Use |
+| :--- | :--- |
+| Normalize strings | `TRIM`, `LOWER`, `UPPER`, `REPLACE`, `REGEX_REPLACE` |
+| Validate strings | `REGEXP_LIKE`, `LIKE`, `LEN` |
+| Handle missing values | `COALESCE`, `ISNULL`, `NULLIF` |
+| Convert types safely | `CAST`, `TRY_CAST` |
+| Mask or fingerprint sensitive values | `HASHBYTES` |
+| Parse semi-structured data | JSON/XML functions in [Standard_Library.md](Reference/Standard_Library.md) |
+| Match messy names or addresses | `NORMALIZE`, `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `FUZZY JOIN` |
+
+### 5.7 Dialect Awareness
+
+ETL-SQL validates some dialect mismatches before execution. A query against a Postgres connection should use Postgres syntax; a query against SQL Server can use SQL Server syntax.
+
+| Pattern | SQL Server | Postgres | Engine-safe alternative |
+| :--- | :--- | :--- | :--- |
+| Limit rows | `TOP 10` | `LIMIT 10` | Stage to `#temp`, then use `LIMIT 10` |
+| Current timestamp | `GETDATE()` | `NOW()` | Use engine-side `GETDATE()` after staging |
+| Null fallback | `ISNULL(x, y)` | `COALESCE(x, y)` | `COALESCE(x, y)` |
+| Native block | `EXECUTE mssql BEGIN ... END` | `EXECUTE pg BEGIN ... END` | Write native SQL inside the block |
+
+Rule of thumb: if the query touches one remote SQL system and can benefit from its indexes, push it down. If it touches multiple systems, file data, variables, or engine-only functions, stage to `#temp`.
 
 ---
 
@@ -644,6 +756,50 @@ EXEC dbo.sp_archive @Year = 2025, @DryRun = 1;
 > [!TIP]
 > **Choosing the right form**: Use Form 1 for dynamic ETL logic that needs engine functions. Use Form 3 (parameterized) any time user input or variable values appear in the query string — it eliminates SQL injection risk. Use Form 4 when you need stored procs, CTEs, or native syntax the ETL-SQL parser doesn't handle directly.
 
+### 8.6 Outputs and Deliverables
+
+Most pipelines end in one of four ways:
+
+| Destination | Pattern |
+| :--- | :--- |
+| Database table | `INSERT`, `MERGE`, or connector-specific `BULK INSERT` |
+| Local file | Create a file connector or use file operations after exporting data |
+| Transfer endpoint | Write/encrypt locally, then `SEND FILE ... AT sftp_conn` |
+| Report/dashboard | Build a `.rptsql` manifest with `CREATE VISUAL` and `CREATE PAGE` |
+
+Database load example:
+
+```sql
+MERGE INTO dw.CustomerSummary AS T
+USING #summary AS S ON T.CustomerId = S.CustomerId
+WHEN MATCHED THEN
+    UPDATE SET T.Revenue = S.Revenue, T.LastSeen = S.LastSeen
+WHEN NOT MATCHED THEN
+    INSERT (CustomerId, Revenue, LastSeen)
+    VALUES (S.CustomerId, S.Revenue, S.LastSeen);
+```
+
+File delivery example:
+
+```sql
+CREATE CONNECTION out_csv ON FLATFILE('C:\Exports\customer_summary.csv')
+WITH(FORMAT='CSV', HEADER=TRUE);
+
+INSERT INTO out_csv
+SELECT CustomerId, Revenue, LastSeen
+FROM #summary;
+
+COMPRESS FILE 'C:\Exports\customer_summary.csv'
+TO 'C:\Exports\customer_summary.csv.gz'
+WITH(OVERWRITE=ON);
+
+SEND FILE 'C:\Exports\customer_summary.csv.gz'
+TO '/outbound/customer_summary.csv.gz'
+AT sftp_conn;
+```
+
+For report deliverables, keep the same data-prep pattern and add Report-SQL declarations at the end of the script. See [Report-SQL Dashboards](#17-report-sql-dashboards).
+
 ---
 
 ## 9. File Operations
@@ -852,15 +1008,15 @@ Key rules enforced by the engine:
 | **Operation cap** | Max 100 filesystem operations per script; max 5 recursive directory levels |
 | **Credential masking** | Never `PRINT` passwords, tokens, or `ENC:` values |
 
-Use `SET WHAT_IF ON` before any destructive operation. See [SECURITY.md](file:///c:/Users/chuck/scratch/ETL-SQL/SECURITY.md) for the complete security policy.
+Use `SET WHAT_IF ON` before any destructive operation. See [SECURITY.md](../SECURITY.md) for the complete security policy.
 
 ---
 
-## 13.1 Approved Safe Zones
+### 13.1 Approved Safe Zones
 
 ETL-SQL operates on a **Whitelisting** principle. By default, the engine is blocked from reading or writing to any directory on your system. To perform file operations, you must authorize specific paths in your `appsettings.json` file.
 
-### 13.1.1 Authorizing a Path
+#### 13.1.1 Authorizing a Path
 In your `appsettings.json`, add your project directories to the `Security.ApprovedSafeZones` list:
 
 ```json
@@ -877,7 +1033,7 @@ In your `appsettings.json`, add your project directories to the `Security.Approv
 > [!CAUTION]
 > **Trailing Slashes Matter**: Always include a trailing slash (e.g. `C:\Data\`) to ensure the entire directory is whitelisted. Without it, the engine may only authorize the specific file named `Data`.
 
-### 13.1.2 Troubleshooting "Access Denied"
+#### 13.1.2 Troubleshooting "Access Denied"
 If you receive an error like `Access to path '...' is denied by security policy`:
 1. Check if the path is inside one of the `ApprovedSafeZones`.
 2. Ensure you are using **Absolute Paths**. The engine cannot validate relative paths against safe zones reliably.
@@ -885,11 +1041,23 @@ If you receive an error like `Access to path '...' is denied by security policy`
 
 ---
 
-## 13.2 Runaway Protection
+### 13.2 Runaway Protection
 
-To prevent accidental resource exhaustion or malicious behavior, the engine enforces a default cap of **100 filesystem operations** per script run. 
+To prevent accidental resource exhaustion or malicious behavior, the engine enforces conservative per-script limits.
 
-If you are performing a large-scale migration (e.g. moving 1,000 files), you must explicitly override this limit in your script:
+| Limit | Default | Override |
+| :--- | :--- | :--- |
+| Filesystem operations | 100 operations | `SET ALLOW_FILE_OPERATIONS = n` |
+| Recursive directory depth | 5 levels | `SET ALLOW_RECURSIVE_LAYERS = n` |
+| Generated rows | 10,000 rows per `GENERATE` | `SET MAX_GENERATE_ROWS = n` |
+| SMTP sends | 100 emails per script | `SET MAX_SMTP_EMAILS_PER_SCRIPT = n` |
+| Parallel branches | Host security ceiling | `SET MAX_PARALLEL_DEGREE = n` |
+| Regex match time | Host security ceiling | `SET REGEX_MATCH_TIMEOUT = n` |
+| String result size | Host security ceiling | `SET MAX_STRING_RESULT_SIZE = n` |
+
+Script overrides can lower limits freely. Raising security-sensitive limits above the configured host ceiling requires administrator-approved safe-zone treatment.
+
+If you are performing a large-scale migration (e.g. moving 1,000 files), explicitly raise the relevant limit in your script:
 
 ```sql
 -- Raise the limit for the current session
@@ -901,13 +1069,20 @@ BEGIN
 END
 ```
 
+For large notification jobs, keep SMTP limits intentional and visible:
+
+```sql
+SET MAX_SMTP_EMAILS_PER_SCRIPT = 250;
+SEND EMAIL TO 'ops@example.com' SUBJECT 'Batch complete' BODY 'All regions loaded.' AT mailer;
+```
+
 ---
 
-## 13.3 Securing Credentials
+### 13.3 Securing Credentials
 
 Never store plaintext passwords in your scripts. ETL-SQL provides automated tools to transform vulnerable scripts into secure ones using `ENC:` (Encrypted) strings.
 
-### 13.1.1 The VS Code Quick Fix
+#### 13.3.1 The VS Code Quick Fix
 When the ETL-SQL linter detects a plaintext password in a `CREATE CONNECTION` statement, it will highlight it with a security warning. 
 1. Hover over the warning.
 2. Select **Quick Fix...**
@@ -915,20 +1090,20 @@ When the ETL-SQL linter detects a plaintext password in a `CREATE CONNECTION` st
 4. Enter your **Master Password** when prompted.
 5. The extension will automatically encrypt the password and update your script to use the `ENC:` format.
 
-### 13.1.2 TUI Auto-Encryption
+#### 13.3.2 TUI Auto-Encryption
 The Terminal IDE (TUI) includes a proactive "One-Way Valve" guardrail. If you attempt to save a script containing plaintext credentials:
 - The TUI will interrupt the save.
 - It will prompt you for a Master Password.
 - It will automatically transform the script before it hits the disk.
 
-### 13.1.3 Manual Encryption via CLI
+#### 13.3.3 Manual Encryption via CLI
 If you are working outside the IDE, you can manually generate encrypted strings using the engine utility:
 ```bash
 etl-sql encrypt "myPlainPassword" --pass "myMasterSecret"
 ```
 Copy the output (starting with `ENC:`) and paste it into your `CREATE CONNECTION` statement.
 
-### 13.1.4 Authorizing the Session
+#### 13.3.4 Authorizing the Session
 Once your script uses `ENC:` strings, the engine needs the Master Password at runtime to decrypt them. Use the `USE PASSWORD` statement at the top of your script:
 ```sql
 -- Secure: Prompts the user for the password at runtime (never stored)
@@ -1084,15 +1259,149 @@ Press `F1` inside the editor for the full interactive help overlay (shows live s
 
 ---
 
+## 16. VS Code Authoring
+
+The VS Code extension is the best day-to-day authoring surface when you want linting, syntax highlighting, quick fixes, and report previews without leaving your editor.
+
+Use it for:
+
+- Writing `.etlsql` scripts with live diagnostics.
+- Writing `.rptsql` reports with Report-SQL syntax highlighting.
+- Encrypting plaintext connection credentials through the security quick fix.
+- Browsing pipeline, result, variable, metadata, and report preview panels.
+
+The extension uses the ETL-SQL language server, so diagnostics should match command-line lint behavior. When in doubt, run the same script through the CLI or TUI before scheduling it.
+
+Typical workflow:
+
+```sql
+-- 1. Write and lint locally
+CREATE CONNECTION src ON MOCKDB();
+SELECT * INTO #users FROM src.Users;
+
+-- 2. Add validations before writes
+ASSERT (SELECT COUNT(*) FROM #users) > 0, 'Expected at least one user';
+
+-- 3. Run the script or publish it through your chosen host
+```
+
+See [Architecture/VSCodeExtension.md](Architecture/VSCodeExtension.md) for implementation details and [Reference/Grammar.md](Reference/Grammar.md) for the syntax accepted by the language server.
+
+---
+
+## 17. Report-SQL Dashboards
+
+Report-SQL files (`.rptsql`) are normal ETL-SQL scripts with reporting statements at the end. Put data preparation first, then define datasets, visuals, pages, buttons, navigation, and optional portal behavior.
+
+Minimal report shape:
+
+```sql
+SET REPORT TITLE = 'Sales Overview';
+SET REPORT DESCRIPTION = 'Daily revenue and order count by region';
+
+CREATE CONNECTION src ON MOCKDB();
+
+SELECT Region, COUNT(*) AS Orders, SUM(TotalAmount) AS Revenue
+INTO #sales
+FROM src.Orders
+GROUP BY Region;
+
+CREATE VISUAL RevenueByRegion AS BAR (
+    SOURCE = (SELECT Region, Revenue FROM #sales),
+    MAPPINGS (CATEGORY = Region, VALUE = Revenue),
+    TITLE = 'Revenue by Region'
+);
+
+CREATE PAGE Overview AS (
+    STRUCTURE = 'A',
+    MAP ('A' = RevenueByRegion)
+);
+```
+
+Key rules:
+
+| Rule | Why it matters |
+| :--- | :--- |
+| Data prep first, report declarations last | The report manifest is built from the final script state |
+| `SOURCE` queries feed visuals | Visuals should not repeat heavy preparation logic |
+| `CREATE PAGE ... MAP` lays out visuals | Page structure controls the dashboard grid |
+| `CREATE BUTTON ButtonName AS (...)` defines button controls | Buttons use the same page-style `AS (...)` form |
+| Filters use `ACTIONS` to set parameters | Slicers, date pickers, sliders, search, and inputs drive re-query behavior |
+| Page and visual `STYLE` blocks cascade | Use page-level defaults and visual-level overrides |
+
+Filter example:
+
+```sql
+DECLARE @region TEXT INPUT = 'All';
+
+CREATE VISUAL RegionFilter AS SLICER (
+    SOURCE = (SELECT DISTINCT Region FROM #sales ORDER BY Region),
+    MAPPINGS (VALUE = Region),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@region, Region))
+);
+```
+
+For the complete language surface, use [Report_SQL_Guide.md](Report_SQL_Guide.md). For copy-pasteable dashboard patterns, use [Report_Cookbook.md](Report_Cookbook.md).
+
+---
+
+## 18. Report Portal Workflow
+
+The Report Portal hosts `.rptsql` reports for browser users. It adds catalog folders, snapshots, permissions, favorites, subscriptions, saved views, alerts, share links, embed tokens, and operational history.
+
+The normal lifecycle is:
+
+1. Author and test a `.rptsql` report locally.
+2. Publish it to the portal catalog.
+3. Assign folder/report permissions.
+4. Refresh or schedule snapshots.
+5. Let users view, favorite, subscribe, and save filtered views.
+6. Review history, dependencies, usage metrics, and effective permissions.
+
+Portal administration is script-first inside a portal execution block:
+
+```sql
+EXECUTE portal BEGIN
+    PUBLISH REPORT 'C:\Reports\Sales.rptsql'
+        TO '/Finance/Sales'
+        AS 'Sales Overview';
+
+    FAVORITE REPORT '/Finance/Sales/Sales Overview';
+
+    SHOW REPORT HISTORY '/Finance/Sales/Sales Overview';
+    SHOW REPORT DEPENDENCIES '/Finance/Sales/Sales Overview';
+END
+```
+
+Common portal commands include:
+
+| Task | Command family |
+| :--- | :--- |
+| Publish and refresh reports | `PUBLISH REPORT`, `REFRESH REPORT` |
+| User navigation | `FAVORITE REPORT`, `CREATE SAVED VIEW`, `SHOW CATALOG SEARCH` |
+| Delivery | `CREATE SUBSCRIPTION`, `CREATE ALERT` |
+| Sharing and embedding | `CREATE SHARE LINK`, `CREATE EMBED TOKEN` |
+| Operations | `SHOW REPORT HISTORY`, `SHOW REPORT DEPENDENCIES`, `SHOW PORTAL USAGE METRICS` |
+| Security review | `SHOW EFFECTIVE PERMISSIONS`, `VALIDATE REPORT SCRIPT` |
+
+For browser usage, see [ReportPortal_User_Guide.md](ReportPortal_User_Guide.md). For deployment and administration, see [ReportPortal_Administrators_Guide.md](ReportPortal_Administrators_Guide.md).
+
+---
+
 ## Next Steps
 
 | Topic | Document |
 | :--- | :--- |
-| Full language syntax — every keyword | **[Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md)** |
-| Connector options and authentication | **[Data_Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Data_Connectors.md)** |
-| All built-in functions | **[Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md)** |
-| File ops, email, lineage, Docker, jobs | **[Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md)** |
-| 18 production-ready recipes | **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)** |
-| 55+ sample scripts inventory | **[Sample_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Sample_Guide.md)** |
-| Reporting & dashboards | **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** |
-| Security policy | **[SECURITY.md](file:///c:/Users/chuck/scratch/ETL-SQL/SECURITY.md)** |
+| Full language syntax — every keyword | **[Grammar.md](Reference/Grammar.md)** |
+| Connector options and authentication | **[Data_Connectors.md](Reference/Data_Connectors.md)** |
+| All built-in functions | **[Standard_Library.md](Reference/Standard_Library.md)** |
+| File ops, email, lineage, Docker, jobs | **[Specialized_Operations.md](Reference/Specialized_Operations.md)** |
+| 18 production-ready recipes | **[Cookbook.md](Cookbook.md)** |
+| 55+ sample scripts inventory | **[Sample_Guide.md](Sample_Guide.md)** |
+| Reporting & dashboards | **[Report_SQL_Guide.md](Report_SQL_Guide.md)** |
+| Report examples | **[Report_Cookbook.md](Report_Cookbook.md)** |
+| Portal users | **[ReportPortal_User_Guide.md](ReportPortal_User_Guide.md)** |
+| Portal administrators | **[ReportPortal_Administrators_Guide.md](ReportPortal_Administrators_Guide.md)** |
+| Local and release test lanes | **[Testing.md](Testing.md)** |
+| Documentation map | **[Docs README](README.md)** |
+| Security policy | **[SECURITY.md](../SECURITY.md)** |

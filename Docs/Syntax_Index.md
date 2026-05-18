@@ -538,8 +538,8 @@ Read-only counters tracking session state.
 | `@@SORT_SPILLS` | Count of external sort spills | [@@SORT_SPILLS.md](../src/ETL-SQL.Core/Resources/Help/Variables/@@SORT_SPILLS.md) |
 | `@@SUBQUERY_CACHE_HITS` | Subquery cache hit count | [@@SUBQUERY_CACHE_HITS.md](../src/ETL-SQL.Core/Resources/Help/Variables/@@SUBQUERY_CACHE_HITS.md) |
 | `@@SUBQUERY_CACHE_MISSES` | Subquery cache miss count | [@@SUBQUERY_CACHE_MISSES.md](../src/ETL-SQL.Core/Resources/Help/Variables/@@SUBQUERY_CACHE_MISSES.md) |
-| `@@RESULTSETS` | Count of result sets from last stmt | [@@RESULTSETS.md](../src/ETL-SQL.Core/Resources/Help/Variables/@@RESULTSETS.md) |
-| `@@PARTITIONS_COUNT` | External spill partition count | [@@PARTITIONS_COUNT.md](../src/ETL-SQL.Core/Resources/Help/Variables/@@PARTITIONS_COUNT.md) |
+| `@@RESULTSETS` | Count of result sets from last stmt | [Standard_Library.md](Reference/Standard_Library.md) |
+| `@@PARTITIONS_COUNT` | External spill partition count | [Standard_Library.md](Reference/Standard_Library.md) |
 | `@@FILE_EXISTS(p)` | File existence check (also available as function `FILE_EXISTS()`) | - |
 | `@@DIRECTORY_EXISTS(p)` | Directory existence check (also available as function `DIRECTORY_EXISTS()`) | - |
 
