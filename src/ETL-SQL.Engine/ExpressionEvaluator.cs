@@ -996,6 +996,9 @@ namespace ETL_SQL.Engine
             if (hasInput)
             {
                 inputVal = await EvaluateInternal(c.InputExpression, context, decryptSensitive);
+                // SQL standard: if simple CASE operand is NULL, no WHEN can match — go straight to ELSE
+                if (inputVal.IsNull())
+                    return await EvaluateInternal(c.ElseResult, context, decryptSensitive);
             }
 
             foreach (var clause in c.WhenClauses)

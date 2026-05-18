@@ -215,6 +215,33 @@ namespace ETL_SQL.SqlLogicTests
             await runner.RunTestAsync(record);
         }
 
+        // select3.test line 2273 — correlated count(*) subquery + simple CASE with NULLs
+        [SltFact]
+        public async Task Select3_Line2273_CorrelatedCountAndSimpleCaseWithNulls()
+        {
+            using var runner = await CreateT1RunnerSelect2Async();
+            var record = new SltRecord
+            {
+                Type = SltRecordType.Query,
+                Sql = """
+                    SELECT (SELECT count(*) FROM t1 AS x WHERE x.b<t1.b),
+                           CASE a+1 WHEN b THEN 111 WHEN c THEN 222
+                            WHEN d THEN 333  WHEN e THEN 444 ELSE 555 END,
+                           a+b*2+c*3+d*4+e*5,
+                           a-b,
+                           abs(a),
+                           d
+                      FROM t1
+                     WHERE (c<=d-2 OR c>=d+2)
+                        OR c BETWEEN b-2 AND d+2
+                    """,
+                SortMode = SltSortMode.RowSort,
+                ExpectedResult = "114 values hashing to 0446a9accb80cccec6bc4d954353b3d5",
+                LineNumber = 2273
+            };
+            await runner.RunTestAsync(record);
+        }
+
         // Persistent vs transient parity: same hash in both modes when spilling is forced.
         // Catches divergence in spill file cleanup (IsPersistentSession=false cleans up eagerly).
         [SltFact]
