@@ -1319,7 +1319,14 @@
             }
 
             const chart = echarts.init(wrapper, effectiveTheme || null);
-            
+
+            // Auto-resize whenever the wrapper changes dimensions (maximize, restore, window resize).
+            // ResizeObserver is more reliable than the 50ms setTimeout heuristic.
+            if (typeof ResizeObserver !== 'undefined') {
+                const ro = new ResizeObserver(() => chart.resize());
+                ro.observe(wrapper);
+            }
+
             // Enable universal highlight/downplay support for cross-filtering
             if (option.series) {
                 option.series.forEach(s => {
