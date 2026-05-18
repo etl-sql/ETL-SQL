@@ -566,7 +566,7 @@ namespace ETL_SQL.Engine
             IsPersistentSession = DefaultThresholds.PersistenceDefault(config);
             CaseSensitiveComparison = DefaultThresholds.CaseSensitiveComparison(config);
             LineageEnabled = DefaultThresholds.LineageEnabled(config);
-            TelemetryEnabled = DefaultThresholds.TelemetryEnabled(config);
+            Telemetry.TelemetryEnabled = DefaultThresholds.TelemetryEnabled(config);
         }
 
         private async Task AutoExportOpenLineageAsync(System.Threading.CancellationToken ct)
@@ -699,7 +699,7 @@ namespace ETL_SQL.Engine
                 }
 
                 ExecutionNode? scriptNode = null;
-                if (TelemetryEnabled)
+                if (Telemetry.TelemetryEnabled)
                 {
                     scriptNode = new ExecutionNode {
                         Name = "Script Execution",
@@ -863,7 +863,7 @@ namespace ETL_SQL.Engine
             ExecutionNode? node = null;
             var cacheKey = (parentId, statement);
             
-            if (TelemetryEnabled)
+            if (Telemetry.TelemetryEnabled)
             {
                 if (ReuseLoopNodes && _nodeReuseMap.TryGetValue(cacheKey, out var existingNode))
                 {

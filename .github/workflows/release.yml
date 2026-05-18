@@ -92,7 +92,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-linux
-          path: release/*.{zip,deb}
+          path: |
+            release/*.zip
+            release/*.deb
 
   # 4. macOS Build (ZIP + DMG)
   build-macos:
@@ -124,7 +126,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-macos
-          path: release/*.{zip,dmg}
+          path: |
+            release/*.zip
+            release/*.dmg
 
   # 5. Create GitHub Release
   create-release:

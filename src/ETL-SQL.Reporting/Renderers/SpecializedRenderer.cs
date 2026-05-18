@@ -388,13 +388,13 @@ namespace ETL_SQL.Reporting.Renderers
                 var endVal     = ei >= 0 && ei < r.Count ? r[ei] : null;
                 var color      = ci >= 0 && ci < r.Count ? r[ci]?.ToString() : null;
 
-                return new object[] 
-                { 
-                    catIdx, 
-                    FormatValue(startVal), 
-                    FormatValue(endVal), 
-                    catName, 
-                    color ?? GetColor(v, "primary") ?? "#5470c6" 
+                return new object?[]
+                {
+                    catIdx,
+                    FormatValue(startVal),
+                    FormatValue(endVal),
+                    catName,
+                    color ?? GetColor(v, "primary") ?? "#5470c6"
                 };
             }).ToList();
 

@@ -398,13 +398,13 @@ namespace ETL_SQL.Engine.Engines
             else if (expr is UnaryExpression u) CollectAggregates(u.Expression, aggs);
             else if (expr is CaseExpression c)
             {
-                CollectAggregates(c.InputExpression, aggs);
+                if (c.InputExpression != null) CollectAggregates(c.InputExpression, aggs);
                 foreach (var w in c.WhenClauses)
                 {
                     CollectAggregates(w.Condition, aggs);
                     CollectAggregates(w.Result, aggs);
                 }
-                CollectAggregates(c.ElseResult, aggs);
+                if (c.ElseResult != null) CollectAggregates(c.ElseResult, aggs);
             }
             else if (expr is IsNullExpression isnull) CollectAggregates(isnull.Expression, aggs);
             else if (expr is InExpression inExpr)
@@ -426,7 +426,7 @@ namespace ETL_SQL.Engine.Engines
             {
                 CollectAggregates(like.Left, aggs);
                 CollectAggregates(like.Pattern, aggs);
-                CollectAggregates(like.EscapeChar, aggs);
+                if (like.EscapeChar != null) CollectAggregates(like.EscapeChar, aggs);
             }
         }
 
@@ -852,7 +852,7 @@ namespace ETL_SQL.Engine.Engines
                 var val = await context.EvaluateValue(f.Arguments[0], row);
                 if (val != null)
                 {
-                    if (_min == null || ((IComparable)CompoundKey.NormalizeValue(val)).CompareTo(CompoundKey.NormalizeValue(_min)) < 0)
+                    if (_min == null || ((IComparable)CompoundKey.NormalizeValue(val)!).CompareTo(CompoundKey.NormalizeValue(_min!)) < 0)
                         _min = val;
                 }
             }
@@ -870,7 +870,7 @@ namespace ETL_SQL.Engine.Engines
                 var val = await context.EvaluateValue(f.Arguments[0], row);
                 if (val != null)
                 {
-                    if (_max == null || ((IComparable)CompoundKey.NormalizeValue(val)).CompareTo(CompoundKey.NormalizeValue(_max)) > 0)
+                    if (_max == null || ((IComparable)CompoundKey.NormalizeValue(val)!).CompareTo(CompoundKey.NormalizeValue(_max!)) > 0)
                         _max = val;
                 }
             }

@@ -101,7 +101,7 @@ namespace ETL_SQL.Reporting.Builders
             }
 
             // Otherwise, evaluate the expression
-            var result = await ctx.EvaluateValue(input, null);
+            var result = await ctx.EvaluateValue(input, null!);
             return (result?.ToString(), parserFlag);
         }
     }
