@@ -101,8 +101,15 @@ namespace ETL_SQL.Core
 
     public record VisualMapping : AstNode
     {
-        public required string Role   { get; init; }
-        public required new string Column { get; init; }
+        public required string Role        { get; init; }
+        public required new string Column  { get; init; }
+        public string? Format              { get; init; }
+        public string? Align               { get; init; }
+        public string? DisplayName         { get; init; }
+        public bool DataBar                { get; init; }
+        public string? DataBarColor        { get; init; }
+        public string? ColorScaleFrom      { get; init; }
+        public string? ColorScaleTo        { get; init; }
         public override string ToSql() => AstSerializer.Format(this);
     }
 
@@ -218,6 +225,7 @@ namespace ETL_SQL.Core
     {
         public required Expression Condition { get; init; }
         public required string Color         { get; init; }
+        public string? FontColor             { get; init; }
     }
 
     public record TypedSeries : AstNode

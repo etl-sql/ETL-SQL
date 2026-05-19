@@ -2143,7 +2143,7 @@ CREATE VISUAL <name> AS <type> (
 | `MAP` (choropleth) | `REGION` | `VALUE` |
 | `MAP` (points â€” `MODE=POINTS`) | `LON`, `LAT` | `VALUE`, `LABEL` |
 | `TABLE` | _(all source columns rendered automatically)_ | â€” |
-| `CARD` | `VALUE` | `LABEL` |
+| `CARD` | `VALUE` | `LABEL`, `GOAL`, `DELTA` |
 | `SLICER`, `MULTISELECT` | `VALUE` | â€” |
 | `TEXT`, `IMAGE`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX` | _(no mappings)_ | â€” |
 

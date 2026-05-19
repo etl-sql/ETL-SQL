@@ -1022,7 +1022,7 @@ OPTIONS (
 | `DATA_LABELS:FONT_WEIGHT`| BAR, LINE | `NORMAL`, `BOLD` | Data label font weight. |
 | `DATA_LABELS:FONT_FAMILY`| BAR, LINE | String | Data label font family. |
 | `DATA_LABELS:FORMAT` | BAR, LINE | .NET format | Numeric format string for labels. |
-| `AXIS_SORT` | BAR, HBAR, LINE, AREA | `ASC` / `DESC` / `SOURCE` / `VALUE` / `VALUE_DESC` | Controls X-axis category order. `ASC` (default) uses type-aware ascending sort (datetime → numeric → alphabetical). `DESC` reverses it. `SOURCE` preserves the source query's row order. `VALUE` / `VALUE_DESC` rank categories by their metric value — useful for ranked bar charts. |
+| `AXIS_SORT` | BAR, HBAR, LINE, AREA, COMBO | `ASC` / `DESC` / `SOURCE` / `VALUE` / `VALUE_DESC` | Controls X-axis category order. `ASC` (default) uses type-aware ascending sort (datetime → numeric → alphabetical). `DESC` reverses it. `SOURCE` preserves the source query's row order. `VALUE` / `VALUE_DESC` rank categories by their metric value — useful for ranked bar charts. |
 
 #### X_AXIS / Y_AXIS sub-block options
 

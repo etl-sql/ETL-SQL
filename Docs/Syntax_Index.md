@@ -707,6 +707,27 @@ CREATE VISUAL name AS <Type> ( ... )
 | `DECIMALS` | `DECIMALS = n` | Numeric precision |
 | `PLACEHOLDER` | `PLACEHOLDER = '...'` | Empty state text |
 
+Common `OPTIONS` keys for report visuals:
+
+| Key | Applies to | Values | Description |
+| :--- | :--- | :--- | :--- |
+| `FORMAT` | `CARD`, `TABLE`, data labels | .NET format string such as `'N0'`, `'C2'`, `'P1'` | Numeric display format |
+| `AXIS_SORT` | `BAR`, `HBAR`, `LINE`, `AREA`, `COMBO` | `ASC`, `DESC`, `SOURCE`, `VALUE`, `VALUE_DESC` | Controls category-axis order. `ASC` type-sorts datetime, numeric, then text values; `SOURCE` preserves query order; `VALUE` and `VALUE_DESC` sort by the metric value. |
+| `ABBREVIATE` | `CARD` | `ON` / `OFF` | Shortens large numbers, such as `1250000` to `1.25M` |
+| `GOAL` | `CARD` | Numeric literal | Supplies a literal target when `MAPPINGS(GOAL = column)` is not used |
+| `SHOW_GOAL` | `CARD` | `ON` / `OFF` | Shows the target value line |
+| `SHOW_PERCENT_OF_GOAL` | `CARD` | `ON` / `OFF` | Shows percent-to-target text |
+| `SHOW_PROGRESS` | `CARD` | `ON` / `OFF` | Shows a goal progress indicator |
+| `PROGRESS_STYLE` | `CARD` | `BAR` / `RING` | Chooses the progress indicator style |
+| `CLOSE_PCT` / `MET_PCT` | `CARD` | Decimal ratio from `0` to `1` | Sets the close/met status thresholds |
+| `COLOR_MET` / `COLOR_CLOSE` / `COLOR_MISSED` | `CARD` | CSS color | Status accent colors |
+| `ICON_SET` | `CARD` | `CHECKS`, `ARROWS`, `TRAFFIC` | Preset status badge icon family |
+| `ICON_MET` / `ICON_CLOSE` / `ICON_MISSED` | `CARD` | String | Custom status badge icons |
+| `LABEL_MET` / `LABEL_CLOSE` / `LABEL_MISSED` | `CARD` | String | Status label overrides |
+| `TREND_DIR` | `CARD` | `POSITIVE_UP`, `POSITIVE_DOWN` | Chooses whether an upward or downward delta is favorable |
+| `DELTA_FORMAT` | `CARD` | .NET format string | Numeric format for the delta display |
+| `DELTA_LABEL` | `CARD` | String | Label shown next to the delta |
+
 ### 6.7 CREATE PAGE / CONTAINER
 ```sql
 CREATE PAGE name AS ( ... ) [WITH ( ... )]
@@ -774,7 +795,7 @@ Specific to `.rptsql` files and the reporting engine.
 | `TRELLIS` | Chart | [TRELLIS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TRELLIS.md) |
 | `MATRIX` | Data | [MATRIX.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/MATRIX.md) |
 | `TABLE` | Data | [TABLE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TABLE.md) |
-| `CARD` | KPI | [CARD.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/CARD.md) |
+| `CARD` | KPI with value, label, goal/progress, and delta support | [CARD.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/CARD.md) |
 | `MAP` | Chart | [MAP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/MAP.md) |
 | `TEXT` | Static | [TEXT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TEXT.md) |
 | `IMAGE` | Static | [IMAGE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/IMAGE.md) |

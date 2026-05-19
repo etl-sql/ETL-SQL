@@ -221,6 +221,16 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<string?>? RowStyles { get; set; }
 
+        /// <summary>Row-level font colors applied via FORMATTING rules (FONT_COLOR clause).</summary>
+        [JsonPropertyName("rowFontStyles")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string?>? RowFontStyles { get; set; }
+
+        /// <summary>Per-column format and alignment metadata (TABLE visual).</summary>
+        [JsonPropertyName("columnMeta")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<ColumnMetaManifest?>? ColumnMeta { get; set; }
+
         /// <summary>Flat options (title, legend, etc.).</summary>
         [JsonPropertyName("options")]
         public Dictionary<string, string> Options { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -456,6 +466,52 @@ namespace ETL_SQL.Reporting
     {
         [JsonPropertyName("condition")] public string Condition { get; set; } = string.Empty;
         [JsonPropertyName("color")]     public string Color     { get; set; } = string.Empty;
+        [JsonPropertyName("fontColor")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? FontColor { get; set; }
+    }
+
+    public class ColumnMetaManifest
+    {
+        [JsonPropertyName("format")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Format { get; set; }
+
+        [JsonPropertyName("align")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Align { get; set; }
+
+        [JsonPropertyName("dataBar")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool DataBar { get; set; }
+
+        [JsonPropertyName("dataBarColor")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? DataBarColor { get; set; }
+
+        [JsonPropertyName("dataBarMin")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? DataBarMin { get; set; }
+
+        [JsonPropertyName("dataBarMax")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? DataBarMax { get; set; }
+
+        [JsonPropertyName("colorScaleFrom")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ColorScaleFrom { get; set; }
+
+        [JsonPropertyName("colorScaleTo")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ColorScaleTo { get; set; }
+
+        [JsonPropertyName("colorScaleMin")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? ColorScaleMin { get; set; }
+
+        [JsonPropertyName("colorScaleMax")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? ColorScaleMax { get; set; }
     }
 
     public class OverlayManifest

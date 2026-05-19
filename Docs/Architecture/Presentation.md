@@ -102,7 +102,7 @@ The extension has two independent backend channels:
 
 ## 5. Terminal UI
 
-`ETL-SQL.TUI` owns the terminal IDE experience. It uses Terminal.Gui/Spectre-style terminal rendering and should keep UI work inside the TUI project.
+`ETL-SQL.TUI` owns the terminal IDE experience. It uses the project's custom terminal renderer with Spectre.Console-style output and should keep UI work inside the TUI project.
 
 Key responsibilities:
 

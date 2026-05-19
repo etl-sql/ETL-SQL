@@ -257,6 +257,14 @@ app.MapHealthChecks("/health", new HealthCheckOptions
     }
 }).AllowAnonymous();
 
+app.MapGet("/third-party-notices", () =>
+{
+    var noticesPath = FindRepoFile("THIRD-PARTY-NOTICES.md");
+    return noticesPath is null
+        ? Results.NotFound("THIRD-PARTY-NOTICES.md was not found.")
+        : Results.Text(File.ReadAllText(noticesPath), "text/markdown; charset=utf-8");
+}).AllowAnonymous();
+
 // Root → login
 app.MapGet("/", () => Results.Redirect("/login.html"))
    .AllowAnonymous();
@@ -291,4 +299,21 @@ static async Task SeedFirstRunAsync(IServiceProvider services, PortalConfig conf
         if (result.Succeeded)
             await userMgr.AddToRoleAsync(admin, "Admin");
     }
+}
+
+static string? FindRepoFile(string fileName)
+{
+    foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
+    {
+        var dir = new DirectoryInfo(start);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, fileName);
+            if (File.Exists(candidate))
+                return candidate;
+            dir = dir.Parent;
+        }
+    }
+
+    return null;
 }

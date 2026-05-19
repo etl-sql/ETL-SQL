@@ -501,6 +501,9 @@ namespace ETL_SQL.TUI.UI
             Row("Shift+F5",               "Run current statement only");
             Row("Ctrl+R",                  "Clear all results and output");
 
+            Section("About");
+            Row("Notices",                 "Terminal UI powered by Spectre.Console. See THIRD-PARTY-NOTICES.md.");
+
             Section("File");
             Row("Ctrl+S",                  "Save");
             Row("Ctrl+Shift+S",            "Save As");

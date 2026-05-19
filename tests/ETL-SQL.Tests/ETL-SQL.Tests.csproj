@@ -18,7 +18,6 @@
     <PackageReference Include="Serilog.Sinks.XUnit" />
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="System.Linq.Async" />
-    <PackageReference Include="Terminal.Gui" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

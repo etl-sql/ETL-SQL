@@ -247,7 +247,19 @@ For full engine coding standards, see **[Standards/Connectors_Standards.md](file
 
 ---
 
-## 9. Shared Report Runtime Assets
+## 9. Third-Party Dependency Policy
+
+Use only free and open-source software for new third-party libraries, tools, and bundled assets unless the user explicitly approves an exception.
+
+- Prefer OSI-approved licenses such as MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MPL-2.0, EPL-2.0, LGPL, or GPL-compatible licenses that fit the distribution model.
+- Do not add proprietary, source-available-only, noncommercial, trial, paid, freemium-gated, or revenue-threshold licenses without calling out the license and asking first.
+- Before adding or upgrading a dependency, check its license metadata and update `THIRD-PARTY-NOTICES.md` and `THIRD-PARTY-INVENTORY.md` when applicable.
+- Preserve license and copyright banners in bundled JavaScript, CSS, fonts, images, and generated browser assets.
+- Existing non-FOSS or commercially conditioned dependencies are grandfathered only until replaced; do not expand their use without explicit approval.
+
+---
+
+## 10. Shared Report Runtime Assets
 
 The report browser runtime has exactly one source of truth:
 
@@ -272,7 +284,7 @@ Do not "fix" drift by editing generated host copies. The check step compares hos
 
 ---
 
-## 10. Source Boundary Rules for Agents
+## 11. Source Boundary Rules for Agents
 
 Before moving source files, projects, report runtime assets, or host-owned behavior, read **[Source_Boundary_Migration_Plan.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Strategy/Source_Boundary_Migration_Plan.md)**.
 
@@ -285,7 +297,7 @@ Before moving source files, projects, report runtime assets, or host-owned behav
 
 ---
 
-## 11. Common Mistakes to Avoid
+## 12. Common Mistakes to Avoid
 
 | Mistake | Correct pattern |
 | :--- | :--- |

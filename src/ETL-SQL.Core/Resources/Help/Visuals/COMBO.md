@@ -10,6 +10,7 @@ Mappings:
 Options:
   STACKED    = ON|OFF  — stack the bars (default OFF)
   SMOOTH     = ON|OFF  — smooth the line (default OFF)
+  AXIS_SORT  = ASC|DESC|SOURCE|VALUE|VALUE_DESC — category-axis order; SOURCE preserves query order
   Y_AXIS  (LABEL = 'left axis label')
   Y2_AXIS (LABEL = 'right axis label')
   LEGEND  = ON|OFF
@@ -29,6 +30,7 @@ CREATE VISUAL RevenueWithMargin AS COMBO (
   MAPPINGS (X = month, Y = total_revenue, Y2 = avg_margin),
   OPTIONS  (
     SMOOTH  = ON,
+    AXIS_SORT = SOURCE,
     Y_AXIS  (LABEL = 'Revenue ($)'),
     Y2_AXIS (LABEL = 'Margin (%)'),
     TITLE   = 'Revenue & Margin Trend'

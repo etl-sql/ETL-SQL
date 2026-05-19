@@ -161,6 +161,7 @@ namespace ETL_SQL.Core.Parser
         // ── Overlay tokens (Phase 9F) ──────────────────────────────────────
         OVERLAYS, GOAL, AVERAGE, MOVING_AVG, LINEAR, EXPONENTIAL, LOGARITHMIC, POLYNOMIAL, POWER,
         SOLID, DASHED, DOTTED, COLOR,
+        FONT_COLOR, DATA_BAR, COLOR_SCALE, ICON_SET,
 
         EOF         // End of file / string
     }

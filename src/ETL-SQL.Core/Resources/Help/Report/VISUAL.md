@@ -48,8 +48,9 @@ Interactive controls:
 CREATE VISUAL SalesBar AS BAR (
   SOURCE   = #monthly_sales,
   MAPPINGS (X = month, Y = revenue, COLOR = region),
-  OPTIONS  (TITLE = 'Revenue by Month', STACKED = ON)
+  OPTIONS  (TITLE = 'Revenue by Month', STACKED = ON, AXIS_SORT = SOURCE)
 );
 ```
 
-Use HELP VISUAL <TYPE> for type-specific mappings and options (e.g. HELP VISUAL BAR, HELP VISUAL TABLE).
+Use `AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC` on BAR/HBAR/LINE/AREA/COMBO visuals to control category order.
+Use HELP VISUAL <TYPE> for type-specific mappings and options (e.g. HELP VISUAL BAR, HELP VISUAL CARD, HELP VISUAL TABLE).

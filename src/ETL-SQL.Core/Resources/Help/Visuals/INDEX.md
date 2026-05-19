@@ -50,3 +50,12 @@ Interactive controls (pair with ACTIONS to drive other visuals):
   CHECKBOX      — boolean toggle; binds a BIT/BOOLEAN to a @variable
   TEXTBOX       — single-line text input; binds a STRING to a @variable
   NUMBERBOX     — numeric input with validation; binds a number to a @variable
+
+Common chart option:
+  AXIS_SORT   — BAR/HBAR/LINE/AREA/COMBO category-axis order:
+                ASC, DESC, SOURCE, VALUE, or VALUE_DESC
+
+Common CARD options:
+  FORMAT, ABBREVIATE, GOAL, SHOW_GOAL, SHOW_PERCENT_OF_GOAL,
+  SHOW_PROGRESS, PROGRESS_STYLE, COLOR_MET, COLOR_CLOSE,
+  COLOR_MISSED, ICON_SET, TREND_DIR, DELTA_FORMAT, DELTA_LABEL

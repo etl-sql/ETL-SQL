@@ -51,6 +51,12 @@ namespace ETL_SQL.App
                 return 0;
             }
 
+            if (ctx.Command == "notices")
+            {
+                ShowThirdPartyNotices(logger);
+                return 0;
+            }
+
             if (ctx.Command == "serve")
             {
                 return await ServeReport(ctx, logger);
@@ -572,6 +578,38 @@ namespace ETL_SQL.App
             }
 
             return 0;
+        }
+
+        private static void ShowThirdPartyNotices(ILogger logger)
+        {
+            logger.WriteLine("Third-party notices", ConsoleColor.Cyan);
+            logger.WriteLine("Visualizations powered by Apache ECharts. Table views powered by Tabulator. Terminal experience powered by Spectre.Console.");
+
+            var noticesPath = FindRepoFile("THIRD-PARTY-NOTICES.md");
+            if (noticesPath is null)
+            {
+                logger.WriteLine("THIRD-PARTY-NOTICES.md was not found in this installation.", ConsoleColor.Yellow);
+                return;
+            }
+
+            logger.WriteLine($"Full notices: {noticesPath}", ConsoleColor.Gray);
+        }
+
+        private static string? FindRepoFile(string fileName)
+        {
+            foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
+            {
+                var dir = new DirectoryInfo(start);
+                while (dir != null)
+                {
+                    var candidate = Path.Combine(dir.FullName, fileName);
+                    if (File.Exists(candidate))
+                        return candidate;
+                    dir = dir.Parent;
+                }
+            }
+
+            return null;
         }
 
         private static async Task<int> RunSetupJwt(ILogger logger, bool updateConfig)

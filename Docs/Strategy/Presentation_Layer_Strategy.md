@@ -27,7 +27,7 @@ be fixed before adding any new output features.
 
 > The execution engine produces **data**. The presentation layer produces **rendered output**.
 > Nothing in `ETL_SQL.Core`, `ETL_SQL.Engine`, or `ExecutionResult` may reference any
-> presentation framework (`Spectre.Console`, `Terminal.Gui`, HTML, JSON for VS Code, etc.).
+> presentation framework (`Spectre.Console`, terminal UI rendering, HTML, JSON for VS Code, etc.).
 
 ### Proposed `ScriptOutput` Model (replaces / extends `ExecutionResult`)
 
@@ -174,8 +174,8 @@ of truth for the Messages tab.
 | E9 | Autocomplete — `alias.*` expands to `alias.<col1>, alias.<col2>, ...` for the table bound to that alias | Needs live connection state from last run |
 | E10 | Autocomplete — bare `*` with Ctrl+Space expands to all columns across all tables in scope, each prefixed with its alias if one exists | Needs live connection state |
 | E11 | Format script (Shift+Alt+F) — uppercases keywords, normalizes whitespace | `SqlFormatter.Format()` already exists |
-| E12 | Shift-select, copy, paste, undo, redo | Built into Terminal.Gui `TextView` and VS Code editor natively |
-| E13 | Multiline edits — selecting and replacing across multiple lines must work correctly | Terminal.Gui `TextView` supports this; must not be broken by syntax highlight override |
+| E12 | Shift-select, copy, paste, undo, redo | Owned by the TUI editor buffer and VS Code editor natively |
+| E13 | Multiline edits — selecting and replacing across multiple lines must work correctly | Owned by the TUI editor buffer and must not be broken by syntax highlight rendering |
 | E14 | Line numbers — visible alongside code | VS Code handles this natively. TUI needs a gutter column rendered alongside the editor. User can disable. |
 | E15 | Run full script (F5) | |
 | E16 | Run selected text (F6) — use selection if non-empty, else full script | |
@@ -243,21 +243,21 @@ All tabs reset (cleared) when a new script execution begins. No artifacts from p
 5. **Profile goes to Perf tab.** `SHOW PROFILE` output routes to the Perf tab as a subsection of the performance view — it does not open a new tab.
 6. **Connection state for autocomplete is cached from the last run.** After `ExecuteAsync` completes, the presentation layer stores the live connection map. Suggestions for `m.Users` and `*` expansion use that cached state. The engine is never re-instantiated just to satisfy a suggestion request.
 
-### Terminal IDE (TUI) — Terminal.Gui specific
+### Terminal IDE (TUI)
 
-1. **Tab key interception must happen in `_editor.KeyDown` with `args.Handled = true`.** This is the only point in Terminal.Gui 1.x's dispatch chain that prevents `Toplevel` from calling `FocusNext()`. Overriding `ProcessKey` on the parent window does not intercept Tab — by the time that override runs, focus has already moved.
+1. **Tab key interception must happen at the editor input boundary before focus changes.** Tab accepts autocomplete when suggestions are visible and must never be allowed to drift into generic focus traversal first.
 
-2. **`_suggestionList.CanFocus = false`.** The overlay list must never receive focus. If it can focus, Tab navigates to it instead of being intercepted.
+2. **The suggestion overlay must never receive editor focus.** It is a visual aid; keyboard input continues to belong to the editor.
 
-3. **`HideSuggestions` only calls `SetFocus` when the list was actually visible.** Calling `SetFocus` on every keystroke (even when the list is already hidden) disrupts the editor's active state.
+3. **Hiding suggestions must not disrupt editor focus.** Do not bounce focus on every keystroke when the list is already hidden.
 
-4. **Never replace `_editor.Text` to implement autocomplete insertion.** Replacing the full text resets Terminal.Gui's internal cursor and selection state. Use `_editor.ProcessKey(Key.Backspace)` to delete the prefix, then `_editor.InsertText(suggestion)` to insert.
+4. **Never replace the full editor text to implement autocomplete insertion.** Delete the typed prefix and insert the selected suggestion through the buffer/edit command path so cursor and selection state remain stable.
 
 5. **Line numbers are rendered as a fixed-width gutter column in `SyntaxTextView`.** This is an additional rendering pass in `Redraw`, not a separate view. The gutter width is `floor(log10(lineCount)) + 2` characters.
 
 6. **`AllowsTab = false` on the editor.** Tab must never insert a tab character — it is reserved for autocomplete acceptance.
 
-7. **`Application.MainLoop.Invoke(action)` for all UI updates from async callbacks.** `OnNodeAdded`, `IOutputSink.Write`, and any other callbacks that fire from engine threads must marshal to the UI thread before touching any Terminal.Gui view.
+7. **Marshal all async callbacks to the UI render loop.** `OnNodeAdded`, `IOutputSink.Write`, and any other callbacks that fire from engine threads must not mutate visible TUI state directly.
 
 ### VS Code Extension
 
@@ -273,12 +273,12 @@ All tabs reset (cleared) when a new script execution begins. No artifacts from p
 
 ---
 
-## 6. Terminal.Gui Key Dispatch — The Root Cause of Every Autocomplete Regression
+## 6. Legacy Terminal Framework Key Dispatch — Historical Note
 
 This section documents what was learned through repeated failed attempts so it is not
 re-learned the hard way again.
 
-### How Terminal.Gui 1.x dispatches the Tab key
+### How legacy focus dispatch broke the Tab key
 
 ```
 Application.ProcessKeyEvent(ke)
@@ -294,8 +294,9 @@ Application.ProcessKeyEvent(ke)
        └─ FocusNext()    ← happens here, BEFORE Window.ProcessKey is ever called
 ```
 
-`TerminalIdeWindow.ProcessKey` is **not in this call chain for Tab**. It is never reached.
-Every version of the code that intercepted Tab in `ProcessKey` was silently bypassed.
+Parent-level key handlers are often too late for Tab because focus traversal may have
+already run. Every version of the code that intercepted Tab after focus dispatch was
+silently bypassed.
 
 ### The only correct intercept point
 
@@ -400,7 +401,7 @@ public class TestOutputSink : IOutputSink
 **Layer 2 — Output contract tests** (new — highest priority)
 - Run real scripts through `ExecutionSession` with a `TestOutputSink`
 - Assert against `ScriptOutput` fields and captured `OutputMessage` list
-- No Terminal.Gui, no Spectre, no VS Code — plain xUnit
+- No terminal UI framework, no Spectre, no VS Code — plain xUnit
 - These become the regression gate: if any of these fail, nothing ships
 
 ```csharp

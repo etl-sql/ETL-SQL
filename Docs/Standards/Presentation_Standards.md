@@ -23,14 +23,14 @@ Nothing in `ETL_SQL.Core`, `ETL_SQL.Engine`, `ETL_SQL.Common`, or `ExecutionSess
 reference any presentation framework. This includes but is not limited to:
 
 - `Spectre.Console` (no `IRenderable`, `Table`, `Markup`, `AnsiConsole`, etc.)
-- `Terminal.Gui` (no `View`, `ListView`, `ustring`, `Application`, etc.)
+- Terminal UI framework types (no `View`, `ListView`, application loop, or widget types)
 - HTML/CSS strings
 - JSON structures shaped for a specific client
 
 The engine produces `ScriptOutput`. Each presentation platform renders `ScriptOutput`
 in its own way. The engine has no opinion on how the data is displayed.
 
-**Violation indicator:** Any `using Spectre.Console` or `using Terminal.Gui` in a file
+**Violation indicator:** Any `using Spectre.Console` or terminal UI framework `using` in a file
 under `src/ETL-SQL.Core/` or `src/ETL-SQL.Engine/`.
 
 ### Rule 2: ILogger Is Not a UI Channel
@@ -135,7 +135,7 @@ For the TUI: `Application.MainLoop.Invoke` is the required synchronization mecha
 For JSON streaming: writes to stdout must be synchronized (Console output is thread-safe
 on .NET but the packet sequencing must be protected).
 
-**Violation indicator:** Cross-thread exceptions from Terminal.Gui views, or interleaved
+**Violation indicator:** Cross-thread exceptions from terminal UI views, or interleaved
 JSON packets in VS Code output.
 
 ### Rule 10: No Blocking Operations on the UI Thread
@@ -328,7 +328,7 @@ Portal surfaces must remain dense but readable:
 Use this checklist when reviewing any PR that touches the presentation layer or
 output pipeline:
 
-- [ ] No Spectre.Console or Terminal.Gui types in Core/Engine layer
+- [ ] No Spectre.Console or terminal UI framework types in Core/Engine layer
 - [ ] No `ILogger.OnMessage` subscriptions in UI code
 - [ ] `MessageCategory.System` filtered before reaching any UI panel
 - [ ] No `GetService<Evaluator>()` calls from UI code for non-execution purposes

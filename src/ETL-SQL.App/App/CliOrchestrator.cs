@@ -69,6 +69,9 @@ namespace ETL_SQL.App
             };
             generateCommand.SetHandler(async (context) => await Dispatch(context, "generate", handler));
 
+            var noticesCommand = new Command("notices", "Show third-party notices and dependency credits");
+            noticesCommand.SetHandler(async (context) => await Dispatch(context, "notices", handler));
+
             // 5. SESSION Command
             var sessionCommand = new Command("session", "Manage ad-hoc execution sessions");
             var clearSubcommand = new Command("clear", "Clear a session state")
@@ -138,6 +141,7 @@ namespace ETL_SQL.App
             rootCommand.AddCommand(testCommand);
             rootCommand.AddCommand(encryptCommand);
             rootCommand.AddCommand(generateCommand);
+            rootCommand.AddCommand(noticesCommand);
             rootCommand.AddCommand(sessionCommand);
             rootCommand.AddCommand(uiCommand);
             rootCommand.AddCommand(doctorCommand);
@@ -256,6 +260,7 @@ namespace ETL_SQL.App
             table.AddRow($"test [blue]{Markup.Escape("<category>")}[/]", "Run unit or integration tests (e.g., unit).");
             table.AddRow($"encrypt [blue]{Markup.Escape("<string>")}[/]", "Securely encrypt connection strings.");
             table.AddRow("generate", "Generate large scale mock data for performance validation.");
+            table.AddRow("notices", "Show third-party notices and dependency credits.");
             table.AddRow("config setup-jwt", "Generate a secure 256-bit JWT secret.");
             table.AddRow("ui repl", "Start the JSON-based REPL protocol.");
             AnsiConsole.Write(table);

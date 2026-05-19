@@ -60,6 +60,9 @@ export class WelcomeView {
                     case 'openSamples':
                         vscode.commands.executeCommand('vscode.open', vscode.Uri.file(path.join(this._extensionUri.fsPath, '../../samples')));
                         return;
+                    case 'openNotices':
+                        vscode.commands.executeCommand('vscode.open', vscode.Uri.file(path.join(this._extensionUri.fsPath, '../../THIRD-PARTY-NOTICES.md')));
+                        return;
                 }
             },
             null,

@@ -1227,14 +1227,85 @@ namespace ETL_SQL.Core.Parser.Components
             var result = new List<VisualMapping>();
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
-                var roleToken = _parser.Current;
-                if (roleToken.Type == TokenType.RPAREN) break;
+                var nameToken = _parser.Current;
+                if (nameToken.Type == TokenType.RPAREN) break;
                 Advance();
-                var role = roleToken.Value.ToUpperInvariant();
+                var name = nameToken.Value;
 
-                Consume(TokenType.EQUALS, $"Expected '=' after mapping role '{role}'");
-                var column = ConsumeIdentifier("Expected column name after '='").Value;
-                result.Add(new VisualMapping { Role = role, Column = column });
+                if (_parser.Current.Type == TokenType.EQUALS)
+                {
+                    // ROLE = column syntax (MATRIX, charts, etc.)
+                    Advance();
+                    var column = ConsumeIdentifier($"Expected column name after '=' for role '{name}'").Value;
+                    result.Add(new VisualMapping { Role = name.ToUpperInvariant(), Column = column });
+                }
+                else
+                {
+                    // TABLE column syntax: col_name [FORMAT 'fmt'] [ALIGN 'dir'] [DATA_BAR [COLOR 'c']]
+                    //                                [COLOR_SCALE FROM 'c1' TO 'c2'] [AS 'alias']
+                    string? format = null, align = null, displayName = null;
+                    string? dataBarColor = null, colorScaleFrom = null, colorScaleTo = null;
+                    bool dataBar = false;
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportCheck(TokenType.COMMA) && !ReportAtEnd())
+                    {
+                        if (_parser.Current.Type == TokenType.FORMAT ||
+                            (_parser.Current.Type == TokenType.IDENTIFIER &&
+                             _parser.Current.Value.Equals("FORMAT", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            Advance();
+                            format = Consume(TokenType.STRING_LITERAL, "Expected format string after FORMAT").Value;
+                        }
+                        else if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                                 _parser.Current.Value.Equals("ALIGN", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Advance();
+                            align = Consume(TokenType.STRING_LITERAL, "Expected alignment value after ALIGN").Value;
+                        }
+                        else if (_parser.Current.Type == TokenType.DATA_BAR)
+                        {
+                            Advance();
+                            dataBar = true;
+                            if (_parser.Current.Type == TokenType.COLOR)
+                            {
+                                Advance();
+                                dataBarColor = Consume(TokenType.STRING_LITERAL, "Expected color string after DATA_BAR COLOR").Value;
+                            }
+                        }
+                        else if (_parser.Current.Type == TokenType.COLOR_SCALE)
+                        {
+                            Advance();
+                            if (_parser.Current.Type == TokenType.FROM)
+                            {
+                                Advance();
+                                colorScaleFrom = Consume(TokenType.STRING_LITERAL, "Expected start color after FROM").Value;
+                            }
+                            if (_parser.Current.Type == TokenType.TO)
+                            {
+                                Advance();
+                                colorScaleTo = Consume(TokenType.STRING_LITERAL, "Expected end color after TO").Value;
+                            }
+                        }
+                        else if (Match(TokenType.AS))
+                        {
+                            displayName = _parser.Current.Type == TokenType.STRING_LITERAL
+                                ? Advance().Value
+                                : ConsumeIdentifier("Expected alias after AS").Value;
+                        }
+                        else break;
+                    }
+                    result.Add(new VisualMapping
+                    {
+                        Role = name.ToUpperInvariant(),
+                        Column = name,
+                        Format = format,
+                        Align = align,
+                        DisplayName = displayName,
+                        DataBar = dataBar,
+                        DataBarColor = dataBarColor,
+                        ColorScaleFrom = colorScaleFrom,
+                        ColorScaleTo = colorScaleTo
+                    });
+                }
                 Match(TokenType.COMMA);
             }
             return result;
@@ -1713,7 +1784,13 @@ namespace ETL_SQL.Core.Parser.Components
                 var condition = _parser.ParseExpression();
                 Consume(TokenType.THEN, "Expected THEN after formatting condition");
                 var color = Consume(TokenType.STRING_LITERAL, "Expected color string after THEN").Value;
-                result.Add(new FormattingRule { Condition = condition, Color = color });
+                string? fontColor = null;
+                if (_parser.Current.Type == TokenType.FONT_COLOR)
+                {
+                    Advance();
+                    fontColor = Consume(TokenType.STRING_LITERAL, "Expected color string after FONT_COLOR").Value;
+                }
+                result.Add(new FormattingRule { Condition = condition, Color = color, FontColor = fontColor });
                 Match(TokenType.COMMA);
             }
             return result;

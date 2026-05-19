@@ -168,7 +168,7 @@ namespace ETL_SQL.Core.Parser
 
             // Report-SQL and overlay tokens are contextual: reserved inside their own clauses,
             // but should be allowed as identifiers/function names elsewhere.
-            if (token.Type >= TokenType.VISUAL && token.Type <= TokenType.COLOR)
+            if (token.Type >= TokenType.VISUAL && token.Type <= TokenType.ICON_SET)
                 return true;
 
 

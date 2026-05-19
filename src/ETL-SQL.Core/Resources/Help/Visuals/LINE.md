@@ -11,6 +11,7 @@ Options:
   SYMBOLS = ON|OFF  — show data-point markers on the line (default OFF)
   AREA    = ON|OFF  — fill the region below the line (default OFF)
   STACKED = ON|OFF  — stack multiple series vertically (default OFF)
+  AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC — category-axis order; SOURCE preserves query order
   TITLE   = 'text'
 
 ```sql
@@ -24,7 +25,7 @@ SELECT order_date AS date, SUM(amount) AS revenue
 CREATE VISUAL RevenueTrend AS LINE (
   SOURCE   = #daily,
   MAPPINGS (X = date, Y = revenue),
-  OPTIONS  (SMOOTH = ON, SYMBOLS = ON, TITLE = 'Daily Revenue')
+  OPTIONS  (SMOOTH = ON, SYMBOLS = ON, AXIS_SORT = SOURCE, TITLE = 'Daily Revenue')
 );
 
 -- Multi-series by region using COLOR grouping

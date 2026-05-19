@@ -103,6 +103,8 @@ namespace ETL_SQL.Reporting.Builders
             if (vStmt.FormattingRules.Count > 0)
             {
                 vm.RowStyles = new List<string?>();
+                if (vStmt.FormattingRules.Any(r => r.FontColor != null))
+                    vm.RowFontStyles = new List<string?>();
             }
 
             // Axis options
@@ -231,6 +233,8 @@ namespace ETL_SQL.Reporting.Builders
 
                     ResolveActionValues(vm);
                     CalculateSummaries(vStmt, vm);
+                    if (vStmt.VisualType == VisualType.Table && vStmt.Mappings.Count > 0)
+                        ApplyTableMappings(vStmt, vm);
                     vm.ChartConfig = renderer.Render(vm);
                 }
                 catch (Exception ex)
@@ -497,18 +501,113 @@ namespace ETL_SQL.Reporting.Builders
                     if (targetStyles != null && vStmt.FormattingRules.Count > 0)
                     {
                         string? matchedColor = null;
+                        string? matchedFontColor = null;
                         foreach (var rule in vStmt.FormattingRules)
                         {
                             if (await ctx.EvaluateCondition(rule.Condition, row))
                             {
                                 matchedColor = rule.Color;
+                                matchedFontColor = rule.FontColor;
                                 break;
                             }
                         }
                         targetStyles.Add(matchedColor);
+                        vm.RowFontStyles?.Add(matchedFontColor);
                     }
                 }
             }
+        }
+
+        private void ApplyTableMappings(CreateVisualStatement vStmt, VisualManifest vm)
+        {
+            // Build case-insensitive source column index
+            var colIdx = vm.Columns
+                .Select((c, i) => (c, i))
+                .ToDictionary(x => x.c, x => x.i, StringComparer.OrdinalIgnoreCase);
+
+            var selected = vStmt.Mappings
+                .Where(m => colIdx.ContainsKey(m.Column))
+                .Select(m => (srcIdx: colIdx[m.Column], display: m.DisplayName ?? m.Column, m))
+                .ToList();
+
+            if (selected.Count == 0) return;
+
+            // Build old-name → new-display-name map for renaming summary keys
+            var rename = selected.ToDictionary(
+                x => vm.Columns[x.srcIdx],
+                x => x.display,
+                StringComparer.OrdinalIgnoreCase);
+
+            // Rewrite rows (filter + reorder columns)
+            for (int r = 0; r < vm.Rows.Count; r++)
+            {
+                var old = vm.Rows[r];
+                vm.Rows[r] = selected.Select(x => x.srcIdx < old.Count ? old[x.srcIdx] : null).ToList();
+            }
+            if (vm.HighlightRows != null)
+            {
+                for (int r = 0; r < vm.HighlightRows.Count; r++)
+                {
+                    var old = vm.HighlightRows[r];
+                    vm.HighlightRows[r] = selected.Select(x => x.srcIdx < old.Count ? old[x.srcIdx] : null).ToList();
+                }
+            }
+
+            // Rename columns
+            vm.Columns = selected.Select(x => x.display).ToList();
+
+            // Rename summary grand-total keys to match new display names
+            if (vm.SummaryData?.GrandTotals != null)
+            {
+                var newTotals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var (k, v) in vm.SummaryData.GrandTotals)
+                    if (rename.TryGetValue(k, out var nk)) newTotals[nk] = v;
+                vm.SummaryData.GrandTotals = newTotals;
+            }
+
+            // Precompute per-column numeric min/max for DATA_BAR and COLOR_SCALE
+            var colMinMax = new Dictionary<int, (double Min, double Max)>(); // key = selected index
+            for (int si = 0; si < selected.Count; si++)
+            {
+                var m = selected[si].m;
+                if (!m.DataBar && m.ColorScaleFrom == null) continue;
+
+                double cmin = double.MaxValue, cmax = double.MinValue;
+                foreach (var row in vm.Rows)
+                {
+                    if (si < row.Count && row[si] != null && double.TryParse(row[si], out var d))
+                    {
+                        if (d < cmin) cmin = d;
+                        if (d > cmax) cmax = d;
+                    }
+                }
+                if (cmin <= cmax) colMinMax[si] = (cmin, cmax);
+            }
+
+            // Build column meta (format, align, data bar, color scale per column)
+            var metas = selected.Select((x, si) =>
+            {
+                var m = x.m;
+                bool hasAny = m.Format != null || m.Align != null || m.DataBar || m.ColorScaleFrom != null;
+                if (!hasAny) return (ColumnMetaManifest?)null;
+                var meta = new ColumnMetaManifest { Format = m.Format, Align = m.Align };
+                if (m.DataBar)
+                {
+                    meta.DataBar = true;
+                    meta.DataBarColor = m.DataBarColor;
+                    if (colMinMax.TryGetValue(si, out var mm)) { meta.DataBarMin = mm.Min; meta.DataBarMax = mm.Max; }
+                }
+                if (m.ColorScaleFrom != null)
+                {
+                    meta.ColorScaleFrom = m.ColorScaleFrom;
+                    meta.ColorScaleTo = m.ColorScaleTo;
+                    if (colMinMax.TryGetValue(si, out var mm)) { meta.ColorScaleMin = mm.Min; meta.ColorScaleMax = mm.Max; }
+                }
+                return (ColumnMetaManifest?)meta;
+            }).ToList();
+
+            if (metas.Any(m => m != null))
+                vm.ColumnMeta = metas;
         }
 
         private void CalculateSummaries(CreateVisualStatement vStmt, VisualManifest vm)

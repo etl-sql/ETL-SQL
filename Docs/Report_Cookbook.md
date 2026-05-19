@@ -24,7 +24,7 @@ A collection of copy-paste-ready dashboard recipes for ETL-SQL. Every example is
 
 **Pattern**: KPI cards, regional bar chart, slicer-filtered detail table. The go-to starting point for any executive summary report.
 
-**Demonstrates**: `CARD`, `BAR`, `TABLE`, `SLICER`, `WITH PARAMETERS`, `CREATE DATASET`, `FORMAT`, `FORMATTING`, conditional formatting, multi-slot layout.
+**Demonstrates**: `CARD` goal/progress/delta options, `BAR` `AXIS_SORT`, `TABLE`, `SLICER`, `WITH PARAMETERS`, `CREATE DATASET`, `FORMAT`, `FORMATTING`, conditional formatting, multi-slot layout.
 
 ```sql
 SET REPORT TITLE       = 'Executive Sales Dashboard';
@@ -64,11 +64,20 @@ CREATE VISUAL RegionFilter AS SLICER (
 
 -- ── KPI cards ─────────────────────────────────────────────────────────────
 CREATE VISUAL TotalRevenue AS CARD (
-  SOURCE   = (SELECT SUM(revenue) AS val FROM &sales
+  SOURCE   = (SELECT SUM(revenue) AS val, 125000 AS target, 110000 AS prior_val FROM &sales
               WHERE @region = 'All' OR region = @region),
   TITLE    = 'Total Revenue',
-  MAPPINGS (VALUE = val),
-  OPTIONS  (FORMAT = 'C0')
+  MAPPINGS (VALUE = val, GOAL = target, DELTA = prior_val),
+  OPTIONS  (
+    FORMAT               = 'C0',
+    ABBREVIATE           = ON,
+    SHOW_GOAL            = ON,
+    SHOW_PERCENT_OF_GOAL = ON,
+    SHOW_PROGRESS        = ON,
+    PROGRESS_STYLE       = BAR,
+    ICON_SET             = CHECKS,
+    DELTA_LABEL          = 'vs target baseline'
+  )
 );
 
 CREATE VISUAL TotalUnits AS CARD (
@@ -96,6 +105,7 @@ CREATE VISUAL RevenueByRegion AS BAR (
   TITLE    = 'Revenue by Region',
   MAPPINGS (X = region, Y = revenue),
   OPTIONS  (
+    AXIS_SORT = VALUE_DESC,
     X_AXIS (LABEL = 'Region'),
     Y_AXIS (LABEL = 'Revenue ($)', MIN = 0)
   )

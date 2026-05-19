@@ -5,7 +5,7 @@ using ETL_SQL.TUI.UI;
 namespace ETL_SQL.Tests.Integration.UI
 {
     /// <summary>
-    /// Pure tokenization logic — no Terminal.Gui init required.
+    /// Pure tokenization logic — no terminal UI initialization required.
     /// </summary>
     public class EtlSqlHighlighterTests
     {

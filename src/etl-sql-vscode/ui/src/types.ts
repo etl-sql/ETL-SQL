@@ -147,6 +147,19 @@ export interface ReportAction {
     parameterName?: string;
 }
 
+export interface ColumnMetaManifest {
+    format?: string;
+    align?: string;
+    dataBar?: boolean;
+    dataBarColor?: string;
+    dataBarMin?: number;
+    dataBarMax?: number;
+    colorScaleFrom?: string;
+    colorScaleTo?: string;
+    colorScaleMin?: number;
+    colorScaleMax?: number;
+}
+
 export interface VisualManifest {
     name: string;
     visualType: string;
@@ -154,6 +167,8 @@ export interface VisualManifest {
     columns: string[];
     rows: unknown[][];
     rowStyles?: (string | null)[];
+    rowFontStyles?: (string | null)[];
+    columnMeta?: (ColumnMetaManifest | null)[];
     options: Record<string, string>;
     error?: string;
     actions: ReportAction[];

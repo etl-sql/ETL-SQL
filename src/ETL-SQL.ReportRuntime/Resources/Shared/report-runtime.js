@@ -1647,75 +1647,259 @@
             return;
         }
 
-        const clickActions     = actionsFor(visual, 'ON_CLICK');
-        const isClickable      = clickActions.length > 0;
-        const interactionMode  = ((visual.interactions || {})['ON_SELECT'] || '').toUpperCase();
-        const crossFilter      = !!interactionMode && interactionMode !== 'NONE';
+        const opts          = visual.options || {};
+        const colMeta       = visual.columnMeta || [];
+        const allRows       = visual.rows || [];
+        const pageSize      = parseInt(opts['PAGE_SIZE'] || opts['page_size'] || '50', 10) || 50;
+        const showSearch    = (opts['SEARCH'] || opts['search'] || 'ON').toUpperCase() !== 'OFF';
+        const striped       = (opts['STRIPED'] || opts['striped'] || 'ON').toUpperCase() !== 'OFF';
+        const clickActions  = actionsFor(visual, 'ON_CLICK');
+        const isClickable   = clickActions.length > 0;
+        const interactionMode = ((visual.interactions || {})['ON_SELECT'] || '').toUpperCase();
+        const crossFilter   = !!interactionMode && interactionMode !== 'NONE';
+        const stateKey      = 'table:' + (visual.name || visual.id || '');
+        const state         = _uiStates[stateKey] || (_uiStates[stateKey] = { sortCol: -1, sortDir: 'asc', page: 0, search: '' });
 
-        // Register as an interaction target so applyPageCrossFilter can find it
         if (crossFilter) {
             container.setAttribute('data-cross-filter', '1');
             container._visualData = visual;
         }
 
+        function getFilteredRows() {
+            const q = state.search.toLowerCase();
+            let rows = q
+                ? allRows.filter(row => row.some(c => c != null && String(c).toLowerCase().includes(q)))
+                : allRows;
+            if (state.sortCol >= 0) {
+                rows = rows.slice().sort((a, b) => {
+                    const av = a[state.sortCol] ?? '', bv = b[state.sortCol] ?? '';
+                    const an = parseFloat(av), bn = parseFloat(bv);
+                    const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : String(av).localeCompare(String(bv));
+                    return state.sortDir === 'asc' ? cmp : -cmp;
+                });
+            }
+            return rows;
+        }
+
         const wrapper = document.createElement('div');
         wrapper.className = 'table-wrapper' + (isClickable ? ' clickable' : '');
-        
-        let heightOpt = visual.styles ? (visual.styles['HEIGHT'] || visual.styles['height']) : null;
-        if (heightOpt) { wrapper.style.maxHeight = heightOpt; }
 
-        const table = document.createElement('table');
-        const thead = document.createElement('thead');
+        let heightOpt = visual.styles ? (visual.styles['HEIGHT'] || visual.styles['height']) : null;
+        if (heightOpt) wrapper.style.maxHeight = heightOpt;
+
+        // Search box
+        if (showSearch) {
+            const searchRow = document.createElement('div');
+            searchRow.className = 'table-search-row';
+            const searchInput = document.createElement('input');
+            searchInput.type = 'text';
+            searchInput.placeholder = 'Search…';
+            searchInput.className = 'table-search-input';
+            searchInput.value = state.search;
+            searchInput.addEventListener('input', () => {
+                state.search = searchInput.value;
+                state.page = 0;
+                rebuildBody();
+            });
+            searchRow.appendChild(searchInput);
+            wrapper.appendChild(searchRow);
+        }
+
+        const table  = document.createElement('table');
+        const thead  = document.createElement('thead');
         const headerRow = document.createElement('tr');
-        visual.columns.forEach(col => {
-            const th = document.createElement('th');
-            th.textContent = col;
+
+        visual.columns.forEach((col, ci) => {
+            const th   = document.createElement('th');
+            th.className = 'sortable';
+            const meta = colMeta[ci] || {};
+            if (meta.align) th.style.textAlign = meta.align;
+
+            const label = document.createElement('span');
+            label.textContent = col;
+            th.appendChild(label);
+
+            const arrow = document.createElement('span');
+            arrow.className = 'sort-arrow';
+            th.appendChild(arrow);
+
+            th.addEventListener('click', () => {
+                if (state.sortCol === ci) {
+                    state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    state.sortCol = ci;
+                    state.sortDir = 'asc';
+                }
+                state.page = 0;
+                rebuildBody();
+            });
             headerRow.appendChild(th);
         });
         thead.appendChild(headerRow);
         table.appendChild(thead);
 
         const tbody = document.createElement('tbody');
-        (visual.rows || []).forEach((row, rowIndex) => {
-            const tr = document.createElement('tr');
-            if (isClickable) tr.style.cursor = 'pointer';
-            const rowColor = Array.isArray(visual.rowStyles) ? visual.rowStyles[rowIndex] : null;
-            if (rowColor) { tr.style.color = rowColor; }
-
-            visual.columns.forEach((col, ci) => {
-                const td = document.createElement('td');
-                const cellVal = row[ci] != null ? String(row[ci]) : '';
-                const format  = (visual.options || {})['FORMAT'];
-                td.textContent = formatValue(cellVal, format);
-                tr.appendChild(td);
-
-            });
-            if (isClickable || crossFilter) {
-                tr.addEventListener('click', (e) => {
-                    if (crossFilter) {
-                        const xMappingCol = (visual.options || {})['mapping:x'] || (visual.columns && visual.columns[0]);
-                        const xIdx = xMappingCol ? (visual.columns || []).findIndex(c => c.toLowerCase() === xMappingCol.toLowerCase()) : 0;
-                        const clickedValue = row[xIdx];
-                        applyPageCrossFilter(container, String(clickedValue), xMappingCol, visual.name, e);
-                    } else {
-                        clickActions.forEach(action => executeAction(action, row, visual.columns, visual.name, visual));
-                    }
-                });
-            }
-            tbody.appendChild(tr);
-        });
         table.appendChild(tbody);
+
+        // Summary footer
+        if (visual.summaryData) {
+            const tfoot = document.createElement('tfoot');
+            if (visual.summaryData.grandTotals) {
+                const tr = document.createElement('tr');
+                visual.columns.forEach((col, ci) => {
+                    const td  = document.createElement('td');
+                    td.className = 'summary-cell';
+                    const meta = colMeta[ci] || {};
+                    const val  = visual.summaryData.grandTotals[col] ?? '';
+                    td.textContent = val ? formatValue(val, meta.format) : '';
+                    if (meta.align) td.style.textAlign = meta.align;
+                    tr.appendChild(td);
+                });
+                tfoot.appendChild(tr);
+            }
+            if (visual.summaryData.aggregates && visual.summaryData.aggregates.length > 0) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = visual.columns.length;
+                td.className = 'summary-aggregates';
+                visual.summaryData.aggregates.forEach(agg => {
+                    const sp = document.createElement('span');
+                    sp.textContent = (agg.alias || (agg.aggregate + '(' + agg.column + ')')) + ' = ' + agg.value;
+                    td.appendChild(sp);
+                });
+                tr.appendChild(td);
+                tfoot.appendChild(tr);
+            }
+            table.appendChild(tfoot);
+        }
+
         wrapper.appendChild(table);
+
+        const paginationRow = document.createElement('div');
+        paginationRow.className = 'table-pagination';
+        wrapper.appendChild(paginationRow);
+
+        function updateSortArrows() {
+            Array.from(headerRow.children).forEach((th, ci) => {
+                const arrow = th.querySelector('.sort-arrow');
+                if (arrow) arrow.textContent = state.sortCol === ci ? (state.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+            });
+        }
+
+        function rebuildBody() {
+            const filtered   = getFilteredRows();
+            const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(filtered.length / pageSize)) : 1;
+            if (state.page >= totalPages) state.page = Math.max(0, totalPages - 1);
+
+            const start    = pageSize > 0 ? state.page * pageSize : 0;
+            const pageRows = pageSize > 0 ? filtered.slice(start, start + pageSize) : filtered;
+
+            tbody.innerHTML = '';
+            pageRows.forEach((row, localIdx) => {
+                const origIdx = allRows.indexOf(row);
+                const tr = document.createElement('tr');
+                if (isClickable) tr.style.cursor = 'pointer';
+
+                // Striped
+                if (striped && (start + localIdx) % 2 === 1) tr.classList.add('table-row-alt');
+
+                // Row background / font color from FORMATTING rules
+                const rowBg   = Array.isArray(visual.rowStyles)     ? visual.rowStyles[origIdx]     : null;
+                const rowFont = Array.isArray(visual.rowFontStyles)  ? visual.rowFontStyles[origIdx] : null;
+                if (rowBg)   tr.style.backgroundColor = rowBg;
+                if (rowFont) tr.style.color = rowFont;
+
+                visual.columns.forEach((col, ci) => {
+                    const td   = document.createElement('td');
+                    const meta = colMeta[ci] || {};
+                    const rawVal = row[ci] != null ? String(row[ci]) : '';
+                    const fmtVal = formatValue(rawVal, meta.format || opts['FORMAT']);
+                    if (meta.align) td.style.textAlign = meta.align;
+
+                    // COLOR_SCALE: gradient background based on column min/max
+                    if (meta.colorScaleFrom && meta.colorScaleTo && meta.colorScaleMax !== undefined) {
+                        const num = parseFloat(rawVal);
+                        if (!isNaN(num)) {
+                            const range = (meta.colorScaleMax - meta.colorScaleMin) || 1;
+                            const t = Math.max(0, Math.min(1, (num - meta.colorScaleMin) / range));
+                            td.style.backgroundColor = interpolateColor(meta.colorScaleFrom, meta.colorScaleTo, t);
+                        }
+                    }
+
+                    // DATA_BAR: proportional fill bar behind cell text
+                    if (meta.dataBar && meta.dataBarMax !== undefined) {
+                        const num = parseFloat(rawVal);
+                        if (!isNaN(num) && meta.dataBarMax > meta.dataBarMin) {
+                            const pct = Math.max(0, Math.min(100, (num - meta.dataBarMin) / (meta.dataBarMax - meta.dataBarMin) * 100));
+                            td.style.position = 'relative';
+                            td.style.padding = '0';
+                            const bar = document.createElement('div');
+                            bar.className = 'data-bar-fill';
+                            bar.style.width = pct.toFixed(1) + '%';
+                            bar.style.backgroundColor = meta.dataBarColor || '#4472C4';
+                            td.appendChild(bar);
+                            const span = document.createElement('span');
+                            span.className = 'data-bar-label';
+                            span.textContent = fmtVal;
+                            td.appendChild(span);
+                        } else {
+                            td.textContent = fmtVal;
+                        }
+                    } else {
+                        td.textContent = fmtVal;
+                    }
+                    tr.appendChild(td);
+                });
+
+                if (isClickable || crossFilter) {
+                    tr.addEventListener('click', (e) => {
+                        if (crossFilter) {
+                            const xCol = opts['mapping:x'] || (visual.columns && visual.columns[0]);
+                            const xIdx = xCol ? visual.columns.findIndex(c => c.toLowerCase() === xCol.toLowerCase()) : 0;
+                            applyPageCrossFilter(container, String(row[xIdx]), xCol, visual.name, e);
+                        } else {
+                            clickActions.forEach(action => executeAction(action, row, visual.columns, visual.name, visual));
+                        }
+                    });
+                }
+                tbody.appendChild(tr);
+            });
+
+            updateSortArrows();
+
+            // Pagination controls
+            paginationRow.innerHTML = '';
+            if (pageSize > 0 && totalPages > 1) {
+                const prev = document.createElement('button');
+                prev.textContent = '◀';
+                prev.disabled = state.page === 0;
+                prev.addEventListener('click', () => { state.page--; rebuildBody(); });
+
+                const info = document.createElement('span');
+                info.className = 'pagination-info';
+                info.textContent = `${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}`;
+
+                const next = document.createElement('button');
+                next.textContent = '▶';
+                next.disabled = state.page >= totalPages - 1;
+                next.addEventListener('click', () => { state.page++; rebuildBody(); });
+
+                paginationRow.append(prev, info, next);
+            }
+        }
 
         // Right-click → Drill Down & Export
         wrapper.addEventListener('contextmenu', e => {
             e.preventDefault();
-            const tr = e.target.closest('tr');
+            const tr  = e.target.closest('tr');
             const idx = tr ? Array.from(tbody.rows).indexOf(tr) : -1;
-            const rowData = idx >= 0 ? (visual.rows || [])[idx] : null;
+            const filtered = getFilteredRows();
+            const start = pageSize > 0 ? state.page * pageSize : 0;
+            const rowData = idx >= 0 ? (pageSize > 0 ? filtered : allRows)[start + idx] : null;
             showCtxMenu(e.clientX, e.clientY, visual, rowData);
         });
 
+        rebuildBody();
         container.appendChild(wrapper);
     }
 
@@ -3828,6 +4012,21 @@
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+    }
+
+    function parseHexColor(hex) {
+        const h = hex.replace('#', '');
+        const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+        return [parseInt(full.slice(0, 2), 16), parseInt(full.slice(2, 4), 16), parseInt(full.slice(4, 6), 16)];
+    }
+
+    function interpolateColor(fromHex, toHex, t) {
+        const [r1, g1, b1] = parseHexColor(fromHex);
+        const [r2, g2, b2] = parseHexColor(toHex);
+        const r = Math.round(r1 + (r2 - r1) * t);
+        const g = Math.round(g1 + (g2 - g1) * t);
+        const b = Math.round(b1 + (b2 - b1) * t);
+        return `rgb(${r},${g},${b})`;
     }
 
     function formatValue(value, format) {

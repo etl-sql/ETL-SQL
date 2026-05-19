@@ -61,6 +61,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .login-card input:focus { outline: none; border-color: var(--portal-accent);
                            box-shadow: 0 0 0 3px var(--portal-focus); }
 .login-card .btn-primary { width: 100%; padding: 10px; }
+.login-notices { margin-top: 18px; text-align: center; font-size: .78em; }
+.login-notices a { color: var(--portal-muted); }
+.login-notices a:hover { color: var(--portal-accent); }
 .btn-primary { background: var(--portal-accent); color: #fff;
                border: 1px solid var(--portal-accent); border-radius: var(--portal-radius-sm);
                cursor: pointer; font-weight: 600; }

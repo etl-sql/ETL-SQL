@@ -1,16 +1,37 @@
 Type: CARD
-A prominent KPI tile showing a single large number with an optional label, trend indicator, and goal comparison. Ideal for dashboard headlines.
+A prominent KPI tile showing a single large number with an optional label, trend indicator, goal comparison, status badge, and progress indicator. Ideal for dashboard headlines.
 
 Mappings:
-  VALUE   — the primary metric (required); displayed large
-  LABEL   — subtitle text below the number (optional)
-  GOAL    — target value; engine computes % of goal and renders a progress indicator
-  DELTA   — change vs. prior period; shown with an up/down arrow and colour coding
+  VALUE   — primary metric column (required); displayed large
+  LABEL   — caption column (optional); falls back to the metric column name
+  GOAL    — target value column; drives status and optional progress display
+  DELTA   — prior-period value column; drives trend/delta display
 
 Options:
-  FORMAT  = '.NET format string'  — e.g. 'N0', 'C2', 'P1' (default auto)
-  COLORS  = ('positive_color', 'negative_color')  — colours for positive/negative DELTA
-  TITLE   = 'card title'
+  FORMAT               = '.NET format string'  — e.g. 'N0', 'C2', 'P1'
+  ABBREVIATE           = ON|OFF                — shorten large numbers, e.g. 1250000 -> 1.25M
+  PREFIX               = 'text'                — prepend text to the displayed value
+  SUFFIX               = 'text'                — append text to the displayed value
+  GOAL                 = numeric               — literal target when MAPPINGS(GOAL=...) is not used
+  CLOSE_PCT            = decimal               — close threshold, default 0.80
+  MET_PCT              = decimal               — met threshold, default 1.00
+  SHOW_GOAL            = ON|OFF                — show target value text
+  SHOW_PERCENT_OF_GOAL = ON|OFF                — show percent-to-target text
+  SHOW_PROGRESS        = ON|OFF                — show a progress indicator
+  PROGRESS_STYLE       = BAR|RING              — progress style, default BAR
+  COLOR_MET            = CSS color             — status colour when goal is met
+  COLOR_CLOSE          = CSS color             — status colour when close to goal
+  COLOR_MISSED         = CSS color             — status colour when goal is missed
+  ICON_SET             = CHECKS|ARROWS|TRAFFIC — preset status badge icon family
+  ICON_MET             = 'text'                — custom met icon
+  ICON_CLOSE           = 'text'                — custom close icon
+  ICON_MISSED          = 'text'                — custom missed icon
+  LABEL_MET            = 'text'                — status label override when met
+  LABEL_CLOSE          = 'text'                — status label override when close
+  LABEL_MISSED         = 'text'                — status label override when missed
+  TREND_DIR            = POSITIVE_UP|POSITIVE_DOWN — favourable delta direction
+  DELTA_FORMAT         = '.NET format string'  — format for the delta display
+  DELTA_LABEL          = 'text'                — label shown next to the delta
 
 ```sql
 SELECT
@@ -23,7 +44,16 @@ INTO #kpi FROM #sales;
 CREATE VISUAL RevKPI AS CARD (
   SOURCE   = #kpi,
   MAPPINGS (VALUE = revenue, LABEL = label, GOAL = goal, DELTA = delta),
-  OPTIONS  (FORMAT = 'C0', TITLE = 'Revenue')
+  OPTIONS  (
+    FORMAT               = 'C0',
+    ABBREVIATE           = ON,
+    SHOW_GOAL            = ON,
+    SHOW_PERCENT_OF_GOAL = ON,
+    SHOW_PROGRESS        = ON,
+    PROGRESS_STYLE       = RING,
+    ICON_SET             = CHECKS,
+    DELTA_LABEL          = 'vs prior period'
+  )
 );
 ```
 

@@ -393,7 +393,7 @@ namespace ETL_SQL.Core.Parser
                 type == TokenType.IF || type == TokenType.WHILE || type == TokenType.TRY || type == TokenType.CATCH)
                 return false;
 
-            if (type >= TokenType.VISUAL && type <= TokenType.COLOR) return true;
+            if (type >= TokenType.VISUAL && type <= TokenType.ICON_SET) return true;
 
             return type < TokenType.STAR;
         }

@@ -136,6 +136,14 @@ app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = contentTypes })
 var noCache = new JsonSerializerOptions { WriteIndented = false };
 var webOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
+app.MapGet("/third-party-notices", () =>
+{
+    var noticesPath = FindRepoFile("THIRD-PARTY-NOTICES.md");
+    return noticesPath is null
+        ? Results.NotFound("THIRD-PARTY-NOTICES.md was not found.")
+        : Results.Text(File.ReadAllText(noticesPath), "text/markdown; charset=utf-8");
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Multi-report routes
 // ─────────────────────────────────────────────────────────────────────────────
@@ -484,6 +492,7 @@ const string SharedCss = @"
                   border-radius: 4px; padding: 8px 12px; margin-bottom: 16px;
                   font-size: 0.9em; }
   footer { margin-top: 32px; color: #888; font-size: 0.8em; }
+  footer a { color: #5470c6; }
   .text-visual { line-height: 1.6; }
   .no-data { color: #999; font-style: italic; }
   .error   { color: #c00; }
@@ -544,7 +553,7 @@ static string GetDashboardHtml(ReportManifest manifest, string staleBanner)
         "<link rel=\"stylesheet\" href=\"/report-runtime.css\">\n</head>\n<body>\n" +
         staleBanner + "\n" +
         "<div id=\"root\"></div>\n" +
-        "<footer>Powered by ETL-SQL ReportPlayer</footer>\n\n" +
+        ReportPlayerFooter() +
         // Pre-embed manifest; set __IS_WEB__ so interactive controls activate.
         "<script>window.__IS_WEB__ = true; window.__MANIFEST__ = " + manifestJson + ";</script>\n" +
         "<script src=\"/echarts.min.js\"></script>\n" +
@@ -564,7 +573,7 @@ static string GetDashboardShellHtml(string reportName, string? description, stri
         "<link rel=\"stylesheet\" href=\"/report-runtime.css\">\n</head>\n<body>\n" +
         staleBanner + "\n" +
         "<div id=\"root\"></div>\n" +
-        "<footer>Powered by ETL-SQL ReportPlayer</footer>\n\n" +
+        ReportPlayerFooter() +
         "<script>window.__IS_WEB__ = true; window.__API_BASE__ = '" + apiBase + "';</script>\n" +
         "<script src=\"/echarts.min.js\"></script>\n" +
         "<script src=\"/report-runtime.js\"></script>\n" +
@@ -611,8 +620,28 @@ static string GetCatalogHtml(IReadOnlyList<ReportEntry> reports)
         "<h1>ETL-SQL Reports</h1>\n" +
         $"<p class=\"report-desc\">{reports.Count} report{(reports.Count == 1 ? "" : "s")} available.</p>\n" +
         cards +
-        "<footer>Powered by ETL-SQL ReportPlayer</footer>\n" +
+        ReportPlayerFooter() +
         "</body>\n</html>";
+}
+
+static string ReportPlayerFooter() =>
+    "<footer>Powered by ETL-SQL ReportPlayer &middot; <a href=\"/third-party-notices\" target=\"_blank\" rel=\"noopener\">Third-party notices</a></footer>\n";
+
+static string? FindRepoFile(string fileName)
+{
+    foreach (var start in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
+    {
+        var dir = new DirectoryInfo(start);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, fileName);
+            if (File.Exists(candidate))
+                return candidate;
+            dir = dir.Parent;
+        }
+    }
+
+    return null;
 }
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────

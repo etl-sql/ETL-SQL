@@ -480,11 +480,129 @@ SET REPORT DESCRIPTION = 'Regional and product-level revenue by month.';";
         {
             var sql = "set report title = 'Test'; SET REPORT description = 'Test';";
             var script = Parse(sql);
-            
+
             var statements = script.Statements.OfType<SetReportMetadataStatement>().ToList();
             Assert.Equal(2, statements.Count);
             Assert.Equal("TITLE", statements[0].Key);
             Assert.Equal("DESCRIPTION", statements[1].Key);
+        }
+
+        // ── TABLE column MAPPINGS ────────────────────────────────────────────
+
+        [Fact]
+        public void ParseTableMappings_ColumnWithFormatAndAlign_ParsesMetadata()
+        {
+            var sql = @"
+CREATE VISUAL Orders AS TABLE (
+    SOURCE = #orders,
+    MAPPINGS (
+        order_id AS 'Order #',
+        amount FORMAT 'C2' ALIGN 'right' AS 'Amount',
+        status
+    )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().First();
+
+            Assert.Equal(VisualType.Table, stmt.VisualType);
+            Assert.Equal(3, stmt.Mappings.Count);
+
+            var m0 = stmt.Mappings[0];
+            Assert.Equal("order_id", m0.Column);
+            Assert.Equal("Order #", m0.DisplayName);
+            Assert.Null(m0.Format);
+
+            var m1 = stmt.Mappings[1];
+            Assert.Equal("amount", m1.Column);
+            Assert.Equal("C2", m1.Format);
+            Assert.Equal("right", m1.Align);
+            Assert.Equal("Amount", m1.DisplayName);
+
+            var m2 = stmt.Mappings[2];
+            Assert.Equal("status", m2.Column);
+            Assert.Null(m2.Format);
+            Assert.Null(m2.DisplayName);
+        }
+
+        [Fact]
+        public void ParseTableMappings_RoleEqualsColumnSyntax_StillWorks()
+        {
+            // MATRIX / chart ROLE = column syntax must be unchanged
+            var sql = @"
+CREATE VISUAL SalesByRegion AS MATRIX (
+    SOURCE = #data,
+    MAPPINGS ( ROW = category, COL = region, VALUE = revenue )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().First();
+
+            Assert.Equal(VisualType.Matrix, stmt.VisualType);
+            var row = stmt.Mappings.First(m => m.Role == "ROW");
+            Assert.Equal("category", row.Column);
+            var col = stmt.Mappings.First(m => m.Role == "COL");
+            Assert.Equal("region", col.Column);
+        }
+
+        [Fact]
+        public void ParseFormattingRule_WithFontColor_ParsesBothColors()
+        {
+            var sql = @"
+CREATE VISUAL T AS TABLE (
+    SOURCE = #t,
+    FORMATTING (
+        WHEN amount < 0 THEN '#ffe0e0' FONT_COLOR '#cc0000',
+        WHEN amount > 1000 THEN '#d4edda'
+    )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().First();
+
+            Assert.Equal(2, stmt.FormattingRules.Count);
+            Assert.Equal("#ffe0e0", stmt.FormattingRules[0].Color);
+            Assert.Equal("#cc0000", stmt.FormattingRules[0].FontColor);
+            Assert.Equal("#d4edda", stmt.FormattingRules[1].Color);
+            Assert.Null(stmt.FormattingRules[1].FontColor);
+        }
+
+        [Fact]
+        public void ParseTableMappings_DataBarWithColor_ParsesCorrectly()
+        {
+            var sql = @"
+CREATE VISUAL T AS TABLE (
+    SOURCE = #t,
+    MAPPINGS (
+        revenue FORMAT 'C2' DATA_BAR COLOR '#4472C4' AS 'Revenue',
+        cost DATA_BAR
+    )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().First();
+
+            Assert.Equal(2, stmt.Mappings.Count);
+            Assert.True(stmt.Mappings[0].DataBar);
+            Assert.Equal("#4472C4", stmt.Mappings[0].DataBarColor);
+            Assert.Equal("C2", stmt.Mappings[0].Format);
+            Assert.Equal("Revenue", stmt.Mappings[0].DisplayName);
+            Assert.True(stmt.Mappings[1].DataBar);
+            Assert.Null(stmt.Mappings[1].DataBarColor);
+        }
+
+        [Fact]
+        public void ParseTableMappings_ColorScale_ParsesFromAndTo()
+        {
+            var sql = @"
+CREATE VISUAL T AS TABLE (
+    SOURCE = #t,
+    MAPPINGS (
+        score COLOR_SCALE FROM '#FF0000' TO '#00FF00'
+    )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().First();
+
+            Assert.Single(stmt.Mappings);
+            Assert.Equal("#FF0000", stmt.Mappings[0].ColorScaleFrom);
+            Assert.Equal("#00FF00", stmt.Mappings[0].ColorScaleTo);
         }
     }
 }

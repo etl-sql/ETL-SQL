@@ -644,21 +644,103 @@ const ReportChart: React.FC<{
     );
 };
 
+function parseHexColor(hex: string): [number, number, number] {
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    return [parseInt(full.slice(0, 2), 16), parseInt(full.slice(2, 4), 16), parseInt(full.slice(4, 6), 16)];
+}
+
+function interpolateColor(fromHex: string, toHex: string, t: number): string {
+    const [r1, g1, b1] = parseHexColor(fromHex);
+    const [r2, g2, b2] = parseHexColor(toHex);
+    return `rgb(${Math.round(r1 + (r2 - r1) * t)},${Math.round(g1 + (g2 - g1) * t)},${Math.round(b1 + (b2 - b1) * t)})`;
+}
+
+function formatCellValue(val: unknown, format?: string | null): string {
+    if (val == null) return '';
+    const s = String(val);
+    if (!format) return s;
+    const num = parseFloat(s);
+    if (isNaN(num)) return s;
+    const type = format.charAt(0).toUpperCase();
+    const prec = parseInt(format.substring(1));
+    const precision = isNaN(prec) ? undefined : prec;
+    try {
+        if (type === 'C') return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: precision, maximumFractionDigits: precision }).format(num);
+        if (type === 'N') return new Intl.NumberFormat('en-US', { minimumFractionDigits: precision, maximumFractionDigits: precision }).format(num);
+        if (type === 'P') return new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: precision, maximumFractionDigits: precision }).format(num);
+    } catch { /* ignore */ }
+    return s;
+}
+
 const ReportTable: React.FC<{
     visual: VisualManifest,
     onShowContextMenu: (x: number, y: number, rowData?: unknown[]) => void
 }> = ({ visual, onShowContextMenu }) => {
-    const grid = (visual.options?.GRID || 'HEADER').toUpperCase();
+    const [sortCol, setSortCol] = useState(-1);
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+    const [searchText, setSearchText] = useState('');
+    const [page, setPage] = useState(0);
+
+    const grid      = (visual.options?.GRID     || 'HEADER').toUpperCase();
+    const opts      = visual.options || {};
+    const colMeta   = visual.columnMeta || [];
+    const rawPageSize = parseInt(opts['PAGE_SIZE'] || '50', 10);
+    const pageSize  = isNaN(rawPageSize) || rawPageSize <= 0 ? 0 : rawPageSize;
+    const showSearch = (opts['SEARCH'] || 'ON').toUpperCase() !== 'OFF';
+    const striped   = (opts['STRIPED'] || 'ON').toUpperCase() !== 'OFF';
+
+    const filteredRows = useMemo(() => {
+        let rows = visual.rows as unknown[][];
+        if (searchText) {
+            const q = searchText.toLowerCase();
+            rows = rows.filter(row => row.some(c => c != null && String(c).toLowerCase().includes(q)));
+        }
+        if (sortCol >= 0) {
+            rows = [...rows].sort((a, b) => {
+                const av = a[sortCol] ?? '', bv = b[sortCol] ?? '';
+                const an = parseFloat(String(av)), bn = parseFloat(String(bv));
+                const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : String(av).localeCompare(String(bv));
+                return sortDir === 'asc' ? cmp : -cmp;
+            });
+        }
+        return rows;
+    }, [visual.rows, searchText, sortCol, sortDir]);
+
+    const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(filteredRows.length / pageSize)) : 1;
+    const safePageSize = pageSize > 0 ? pageSize : filteredRows.length;
+    const pageRows = filteredRows.slice(page * safePageSize, (page + 1) * safePageSize);
+
+    function handleSort(ci: number) {
+        if (sortCol === ci) {
+            setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortCol(ci);
+            setSortDir('asc');
+        }
+        setPage(0);
+    }
 
     return (
-        <div className="w-full h-full relative">
+        <div className="w-full h-full flex flex-col overflow-hidden">
+            {showSearch && (
+                <div className="px-2 py-1 flex-shrink-0">
+                    <input
+                        type="text"
+                        placeholder="Search…"
+                        value={searchText}
+                        onChange={e => { setSearchText(e.target.value); setPage(0); }}
+                        className="w-full max-w-[220px] text-xs px-2 py-0.5 border border-[var(--border)] rounded bg-[var(--vscode-editor-background,var(--bg))] text-[var(--text)] outline-none focus:border-blue-400"
+                    />
+                </div>
+            )}
             <div
-                className="w-full h-full overflow-auto border border-[var(--border)] bg-[var(--vscode-editor-background,var(--bg))] custom-scrollbar"
-                onContextMenu={e => { 
-                    e.preventDefault(); 
+                className="flex-1 min-h-0 overflow-auto border border-[var(--border)] bg-[var(--vscode-editor-background,var(--bg))] custom-scrollbar"
+                onContextMenu={e => {
+                    e.preventDefault();
                     const tr = (e.target as HTMLElement).closest('tr');
                     const idx = tr ? Array.from((tr.parentElement as HTMLTableSectionElement)?.rows || []).indexOf(tr) : -1;
-                    onShowContextMenu(e.clientX, e.clientY, idx >= 0 ? visual.rows[idx] : undefined); 
+                    onShowContextMenu(e.clientX, e.clientY, idx >= 0 ? pageRows[idx] as unknown[] : undefined);
                 }}
             >
                 <table className={clsx(
@@ -670,60 +752,121 @@ const ReportTable: React.FC<{
                         (grid === 'HEADER' || grid === 'ALL' || grid === 'ROWS' || grid === 'BOTH') && "border-b border-[var(--border)]"
                     )}>
                         <tr>
-                            {visual.columns.map((col, ci) => (
-                                <th key={col} className={clsx(
-                                    "px-2 py-1.5 font-normal text-[var(--muted)] text-[12px]",
-                                    (grid === 'ALL' || grid === 'COLS' || grid === 'BOTH') && ci < visual.columns.length - 1 && "border-r border-[var(--border)]/30",
-                                    (grid === 'HEADER' || grid === 'ALL' || grid === 'ROWS' || grid === 'BOTH') && "border-b border-[var(--border)]",
-                                    (grid === 'LEFT' && ci === 0) && "border-l border-[var(--border)]",
-                                    (grid === 'RIGHT' && ci === visual.columns.length - 1) && "border-r border-[var(--border)]"
-                                )}>
-                                    {col}
-                                </th>
-                            ))}
+                            {visual.columns.map((col, ci) => {
+                                const meta = colMeta[ci];
+                                return (
+                                    <th
+                                        key={col}
+                                        onClick={() => handleSort(ci)}
+                                        style={{ textAlign: (meta?.align as React.CSSProperties['textAlign']) }}
+                                        className={clsx(
+                                            "px-2 py-1.5 font-normal text-[var(--muted)] text-[12px] cursor-pointer select-none hover:bg-black/5",
+                                            (grid === 'ALL' || grid === 'COLS' || grid === 'BOTH') && ci < visual.columns.length - 1 && "border-r border-[var(--border)]/30",
+                                            (grid === 'HEADER' || grid === 'ALL' || grid === 'ROWS' || grid === 'BOTH') && "border-b border-[var(--border)]",
+                                        )}
+                                    >
+                                        {col}
+                                        {sortCol === ci && <span className="ml-1 text-[10px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                                    </th>
+                                );
+                            })}
                         </tr>
                     </thead>
                     <tbody className={clsx(
                         (grid === 'ROWS' || grid === 'ALL' || grid === 'BOTH') ? "divide-y divide-[var(--border)]/40" : ""
                     )}>
-                        {visual.rows.slice(0, 100).map((row, i) => {
-                            const rowStyle = visual.rowStyles?.[i];
+                        {pageRows.map((row, i) => {
+                            const origIdx = visual.rows.indexOf(row as never);
+                            const rowBg   = visual.rowStyles?.[origIdx];
+                            const rowFont = visual.rowFontStyles?.[origIdx];
+                            const altRow  = striped && (page * safePageSize + i) % 2 === 1;
                             return (
-                                <tr 
-                                    key={i} 
-                                    className="hover:bg-[var(--vscode-list-hoverBackground,rgba(90,93,94,0.31))]"
-                                    style={rowStyle ? { backgroundColor: rowStyle + '33' } : {}}
+                                <tr
+                                    key={i}
+                                    className={clsx(
+                                        "hover:bg-[var(--vscode-list-hoverBackground,rgba(90,93,94,0.31))]",
+                                        altRow && !rowBg && "bg-[var(--bg-darker,rgba(0,0,0,0.04))]"
+                                    )}
+                                    style={{
+                                        ...(rowBg  ? { backgroundColor: rowBg + '33' } : {}),
+                                        ...(rowFont ? { color: rowFont } : {}),
+                                    }}
                                 >
-                                    {row.map((cell, ci) => (
-                                        <td key={ci} className={clsx(
-                                            "px-2 py-1.5 font-mono text-[var(--text)]",
-                                            (grid === 'ALL' || grid === 'COLS' || grid === 'BOTH') && ci < visual.columns.length - 1 && "border-r border-[var(--border)]/20",
-                                            (grid === 'LEFT' && ci === 0) && "border-l border-[var(--border)]",
-                                            (grid === 'RIGHT' && ci === visual.columns.length - 1) && "border-r border-[var(--border)]"
-                                        )}>
-                                            {cell !== null ? String(cell) : ''}
-                                        </td>
-                                    ))}
+                                    {(row as unknown[]).map((cell, ci) => {
+                                        const meta = colMeta[ci];
+                                        const rawVal = cell != null ? String(cell) : '';
+                                        const fmtVal = formatCellValue(cell, meta?.format);
+
+                                        // COLOR_SCALE: gradient background
+                                        let bgColor: string | undefined;
+                                        if (meta?.colorScaleFrom && meta.colorScaleTo && meta.colorScaleMax !== undefined) {
+                                            const num = parseFloat(rawVal);
+                                            if (!isNaN(num)) {
+                                                const range = (meta.colorScaleMax - (meta.colorScaleMin ?? 0)) || 1;
+                                                const t = Math.max(0, Math.min(1, (num - (meta.colorScaleMin ?? 0)) / range));
+                                                bgColor = interpolateColor(meta.colorScaleFrom, meta.colorScaleTo, t);
+                                            }
+                                        }
+
+                                        // DATA_BAR: proportional fill bar
+                                        let dataBarPct: number | undefined;
+                                        if (meta?.dataBar && meta.dataBarMax !== undefined) {
+                                            const num = parseFloat(rawVal);
+                                            const dmin = meta.dataBarMin ?? 0;
+                                            const dmax = meta.dataBarMax;
+                                            if (!isNaN(num) && dmax > dmin) {
+                                                dataBarPct = Math.max(0, Math.min(100, (num - dmin) / (dmax - dmin) * 100));
+                                            }
+                                        }
+
+                                        return (
+                                            <td
+                                                key={ci}
+                                                style={{
+                                                    textAlign: (meta?.align as React.CSSProperties['textAlign']),
+                                                    ...(bgColor ? { backgroundColor: bgColor } : {}),
+                                                    ...(dataBarPct !== undefined ? { position: 'relative', padding: 0 } : {}),
+                                                }}
+                                                className={clsx(
+                                                    "font-mono text-[var(--text)]",
+                                                    dataBarPct === undefined && "px-2 py-1.5",
+                                                    (grid === 'ALL' || grid === 'COLS' || grid === 'BOTH') && ci < visual.columns.length - 1 && "border-r border-[var(--border)]/20",
+                                                )}
+                                            >
+                                                {dataBarPct !== undefined ? (
+                                                    <>
+                                                        <div style={{
+                                                            position: 'absolute', inset: 0, height: '100%',
+                                                            width: dataBarPct.toFixed(1) + '%',
+                                                            backgroundColor: meta?.dataBarColor || '#4472C4',
+                                                            opacity: 0.28, pointerEvents: 'none'
+                                                        }} />
+                                                        <span style={{ position: 'relative', display: 'block', padding: '6px 8px', zIndex: 1 }}>
+                                                            {fmtVal}
+                                                        </span>
+                                                    </>
+                                                ) : fmtVal}
+                                            </td>
+                                        );
+                                    })}
                                 </tr>
                             );
                         })}
-                        {visual.rows.length > 100 && (
-                            <tr>
-                                <td colSpan={visual.columns.length} className="px-2 py-2 text-center text-[var(--muted)] italic">
-                                    Showing first 100 rows of {visual.rows.length}...
-                                </td>
-                            </tr>
-                        )}
                     </tbody>
                     {visual.summaryData && (
                         <tfoot className="sticky bottom-0 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))] z-10 border-t border-[var(--border)]">
                             {visual.summaryData.grandTotals && (
                                 <tr>
-                                    {visual.columns.map((col, ci) => (
-                                        <td key={ci} className="px-2 py-1.5 font-semibold text-[var(--text)] text-xs border-t border-[var(--border)]">
-                                            {visual.summaryData!.grandTotals![col] ?? ''}
-                                        </td>
-                                    ))}
+                                    {visual.columns.map((col, ci) => {
+                                        const meta = colMeta[ci];
+                                        return (
+                                            <td key={ci}
+                                                style={{ textAlign: (meta?.align as React.CSSProperties['textAlign']) }}
+                                                className="px-2 py-1.5 font-semibold text-[var(--text)] text-xs border-t border-[var(--border)]">
+                                                {formatCellValue(visual.summaryData!.grandTotals![col], meta?.format) ?? ''}
+                                            </td>
+                                        );
+                                    })}
                                 </tr>
                             )}
                             {visual.summaryData.aggregates.length > 0 && (
@@ -744,6 +887,23 @@ const ReportTable: React.FC<{
                     )}
                 </table>
             </div>
+            {pageSize > 0 && totalPages > 1 && (
+                <div className="flex items-center gap-2 px-2 py-1 border-t border-[var(--border)] text-[11px] text-[var(--muted)] flex-shrink-0">
+                    <button
+                        onClick={() => setPage(p => Math.max(0, p - 1))}
+                        disabled={page === 0}
+                        className="px-2 py-0.5 border border-[var(--border)] rounded disabled:opacity-30 hover:bg-black/5 cursor-pointer"
+                    >◀</button>
+                    <span className="flex-1 text-center">
+                        {page * pageSize + 1}–{Math.min((page + 1) * pageSize, filteredRows.length)} of {filteredRows.length}
+                    </span>
+                    <button
+                        onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                        disabled={page >= totalPages - 1}
+                        className="px-2 py-0.5 border border-[var(--border)] rounded disabled:opacity-30 hover:bg-black/5 cursor-pointer"
+                    >▶</button>
+                </div>
+            )}
         </div>
     );
 };
