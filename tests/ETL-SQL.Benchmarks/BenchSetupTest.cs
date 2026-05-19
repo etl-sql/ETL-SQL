@@ -97,6 +97,84 @@ namespace ETL_SQL.Benchmarks.Tests
             Assert.True(result.Rows.Count == 1, "Q14 returns a single scalar promotion percentage");
         }
 
+        // ── SelectShape benchmark sanity tests ─────────────────────────────────────
+
+        [Fact]
+        public async Task SelectShape_Setup()
+        {
+            var bench = new SelectShapeBenchmarks();
+            await bench.Setup();
+            Assert.NotNull(bench);
+        }
+
+        [Fact]
+        public async Task SelectShape_SimpleFilter()
+        {
+            var bench = new SelectShapeBenchmarks();
+            await bench.Setup();
+            await bench.SimpleFilter();
+            var result = bench.LastResult;
+            Assert.NotNull(result);
+            Assert.True(result.Rows.Count > 0, "SimpleFilter should return rows where score > 50");
+            Assert.Contains(result.ColumnNames, c => c.Equals("id", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.ColumnNames, c => c.Equals("score", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public async Task SelectShape_Distinct()
+        {
+            var bench = new SelectShapeBenchmarks();
+            await bench.Setup();
+            await bench.Distinct();
+            var result = bench.LastResult;
+            Assert.NotNull(result);
+            Assert.Equal(5, result.Rows.Count); // seeder has exactly 5 categories
+            Assert.Contains(result.ColumnNames, c => c.Equals("category", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public async Task SelectShape_LimitedSort()
+        {
+            var bench = new SelectShapeBenchmarks();
+            await bench.Setup();
+            await bench.LimitedSort();
+            var result = bench.LastResult;
+            Assert.NotNull(result);
+            Assert.Equal(100, result.Rows.Count);
+            // Verify descending order
+            var scores = result.Rows.Select(r => Convert.ToInt32(r["score"])).ToList();
+            for (int i = 1; i < scores.Count; i++)
+                Assert.True(scores[i - 1] >= scores[i], "Scores should be in descending order");
+        }
+
+        [Fact]
+        public async Task SelectShape_WindowQualify()
+        {
+            var bench = new SelectShapeBenchmarks();
+            await bench.Setup();
+            await bench.WindowQualify();
+            var result = bench.LastResult;
+            Assert.NotNull(result);
+            Assert.Equal(5, result.Rows.Count); // one top row per category
+            Assert.Contains(result.ColumnNames, c => c.Equals("category", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.ColumnNames, c => c.Equals("score", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public async Task SelectShape_UnionAll()
+        {
+            var bench = new SelectShapeBenchmarks();
+            await bench.Setup();
+            await bench.UnionAll();
+            var result = bench.LastResult;
+            Assert.NotNull(result);
+            Assert.True(result.Rows.Count > 0, "UnionAll should return rows from both branches");
+            Assert.Contains(result.ColumnNames, c => c.Equals("id", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.ColumnNames, c => c.Equals("score", StringComparison.OrdinalIgnoreCase));
+        }
+
+        // ── TPC-H snapshot test ─────────────────────────────────────────────────
+
         /// <summary>
         /// Snapshot test: runs Q1 at SF=0.1 with the fixed rng seed and asserts the result is identical
         /// to the baseline captured in tests/tpch_data/expected/q1_sf01.json.
