@@ -158,6 +158,10 @@ export interface ColumnMetaManifest {
     colorScaleTo?: string;
     colorScaleMin?: number;
     colorScaleMax?: number;
+    cellRenderer?: 'image' | 'hyperlink' | 'sparkline';
+    imageWidth?: number;
+    hyperlinkLabel?: string;
+    sparklineType?: 'line' | 'bar' | 'area';
 }
 
 export interface VisualManifest {

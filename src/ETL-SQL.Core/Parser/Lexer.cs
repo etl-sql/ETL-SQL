@@ -155,6 +155,8 @@ namespace ETL_SQL.Core.Parser
             dict["DATA_BAR"]    = TokenType.DATA_BAR;
             dict["COLOR_SCALE"] = TokenType.COLOR_SCALE;
             dict["ICON_SET"]    = TokenType.ICON_SET;
+            dict["HYPERLINK"]   = TokenType.HYPERLINK;
+            dict["SPARKLINE"]   = TokenType.SPARKLINE;
             dict["SUMMARY"]     = TokenType.SUMMARY;
             dict["GRAND_TOTAL"] = TokenType.GRAND_TOTAL;
             dict["GRAND_TOTAL_ROW"]    = TokenType.GRAND_TOTAL_ROW;

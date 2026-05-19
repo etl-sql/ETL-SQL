@@ -604,5 +604,92 @@ CREATE VISUAL T AS TABLE (
             Assert.Equal("#FF0000", stmt.Mappings[0].ColorScaleFrom);
             Assert.Equal("#00FF00", stmt.Mappings[0].ColorScaleTo);
         }
+
+        [Fact]
+        public void ParseTableMappings_ImageWithWidth_ParsesCorrectly()
+        {
+            var sql = @"
+CREATE VISUAL T AS TABLE (
+    SOURCE = #t,
+    MAPPINGS (
+        logo_url IMAGE WIDTH 48 AS 'Logo'
+    )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().First();
+
+            Assert.Single(stmt.Mappings);
+            var m = stmt.Mappings[0];
+            Assert.Equal("logo_url", m.Column);
+            Assert.Equal("image", m.CellRenderer);
+            Assert.Equal(48, m.ImageWidth);
+            Assert.Equal("Logo", m.DisplayName);
+        }
+
+        [Fact]
+        public void ParseTableMappings_HyperlinkWithLabel_ParsesCorrectly()
+        {
+            var sql = @"
+CREATE VISUAL T AS TABLE (
+    SOURCE = #t,
+    MAPPINGS (
+        product_url HYPERLINK LABEL 'View' AS 'Link'
+    )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().First();
+
+            Assert.Single(stmt.Mappings);
+            var m = stmt.Mappings[0];
+            Assert.Equal("product_url", m.Column);
+            Assert.Equal("hyperlink", m.CellRenderer);
+            Assert.Equal("View", m.HyperlinkLabel);
+            Assert.Equal("Link", m.DisplayName);
+        }
+
+        [Fact]
+        public void ParseTableMappings_Sparkline_ParsesColumnsAndType()
+        {
+            var sql = @"
+CREATE VISUAL T AS TABLE (
+    SOURCE = #t,
+    MAPPINGS (
+        SPARKLINE(jan, feb, mar, apr, may) LINE AS 'Trend'
+    )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().First();
+
+            Assert.Single(stmt.Mappings);
+            var m = stmt.Mappings[0];
+            Assert.Equal("SPARKLINE", m.Role);
+            Assert.NotNull(m.SparklineColumns);
+            Assert.Equal(new[] { "jan", "feb", "mar", "apr", "may" }, m.SparklineColumns!);
+            Assert.Equal("line", m.SparklineType);
+            Assert.Equal("Trend", m.DisplayName);
+        }
+
+        [Fact]
+        public void ParseTableMappings_SparklineArea_DefaultsAndMixed()
+        {
+            // Sparkline can appear alongside regular column mappings
+            var sql = @"
+CREATE VISUAL T AS TABLE (
+    SOURCE = #t,
+    MAPPINGS (
+        region,
+        SPARKLINE(q1, q2, q3, q4) AREA AS 'Quarterly'
+    )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().First();
+
+            Assert.Equal(2, stmt.Mappings.Count);
+            Assert.Equal("region", stmt.Mappings[0].Column);
+            var sparkline = stmt.Mappings[1];
+            Assert.Equal("SPARKLINE", sparkline.Role);
+            Assert.Equal("area", sparkline.SparklineType);
+            Assert.Equal(new[] { "q1", "q2", "q3", "q4" }, sparkline.SparklineColumns!);
+        }
     }
 }

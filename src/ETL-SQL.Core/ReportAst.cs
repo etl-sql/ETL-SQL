@@ -110,6 +110,13 @@ namespace ETL_SQL.Core
         public string? DataBarColor        { get; init; }
         public string? ColorScaleFrom      { get; init; }
         public string? ColorScaleTo        { get; init; }
+        // Phase 3A: cell renderers
+        public string? CellRenderer        { get; init; }  // "image" | "hyperlink"
+        public int? ImageWidth             { get; init; }
+        public string? HyperlinkLabel      { get; init; }
+        // Phase 3B: sparkline virtual column
+        public List<string>? SparklineColumns { get; init; }
+        public string? SparklineType       { get; init; }  // "line" | "bar" | "area"
         public override string ToSql() => AstSerializer.Format(this);
     }
 

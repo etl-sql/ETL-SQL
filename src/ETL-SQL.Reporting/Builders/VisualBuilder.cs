@@ -525,31 +525,51 @@ namespace ETL_SQL.Reporting.Builders
                 .Select((c, i) => (c, i))
                 .ToDictionary(x => x.c, x => x.i, StringComparer.OrdinalIgnoreCase);
 
-            var selected = vStmt.Mappings
-                .Where(m => colIdx.ContainsKey(m.Column))
-                .Select(m => (srcIdx: colIdx[m.Column], display: m.DisplayName ?? m.Column, m))
-                .ToList();
+            // Build selected list: regular column mappings + sparkline virtual columns.
+            // Each entry carries a row-value extractor to keep the row rewrite uniform.
+            var selected = new List<(int srcIdx, string display, VisualMapping m, Func<List<string?>, string?> extract)>();
+            foreach (var m in vStmt.Mappings)
+            {
+                if (m.SparklineColumns is { Count: > 0 })
+                {
+                    var indices = m.SparklineColumns
+                        .Select(sc => colIdx.TryGetValue(sc, out var i) ? i : -1)
+                        .ToArray();
+                    var capturedIndices = indices;
+                    selected.Add((-1, m.DisplayName ?? "Trend", m,
+                        row => "[" + string.Join(",", capturedIndices.Select(
+                            i => i >= 0 && i < row.Count ? (row[i] ?? "null") : "null")) + "]"));
+                }
+                else if (colIdx.TryGetValue(m.Column, out var si))
+                {
+                    var capturedSi = si;
+                    selected.Add((si, m.DisplayName ?? m.Column, m,
+                        row => capturedSi < row.Count ? row[capturedSi] : null));
+                }
+            }
 
             if (selected.Count == 0) return;
 
-            // Build old-name → new-display-name map for renaming summary keys
-            var rename = selected.ToDictionary(
-                x => vm.Columns[x.srcIdx],
-                x => x.display,
-                StringComparer.OrdinalIgnoreCase);
+            // Build rename map for summary keys (regular columns only)
+            var rename = selected
+                .Where(x => x.srcIdx >= 0)
+                .ToDictionary(
+                    x => vm.Columns[x.srcIdx],
+                    x => x.display,
+                    StringComparer.OrdinalIgnoreCase);
 
-            // Rewrite rows (filter + reorder columns)
+            // Rewrite rows (filter + reorder + inject sparkline values)
             for (int r = 0; r < vm.Rows.Count; r++)
             {
                 var old = vm.Rows[r];
-                vm.Rows[r] = selected.Select(x => x.srcIdx < old.Count ? old[x.srcIdx] : null).ToList();
+                vm.Rows[r] = selected.Select(x => x.extract(old)).ToList();
             }
             if (vm.HighlightRows != null)
             {
                 for (int r = 0; r < vm.HighlightRows.Count; r++)
                 {
                     var old = vm.HighlightRows[r];
-                    vm.HighlightRows[r] = selected.Select(x => x.srcIdx < old.Count ? old[x.srcIdx] : null).ToList();
+                    vm.HighlightRows[r] = selected.Select(x => x.extract(old)).ToList();
                 }
             }
 
@@ -571,6 +591,7 @@ namespace ETL_SQL.Reporting.Builders
             {
                 var m = selected[si].m;
                 if (!m.DataBar && m.ColorScaleFrom == null) continue;
+                if (m.SparklineColumns != null) continue; // sparkline columns carry JSON, not numeric
 
                 double cmin = double.MaxValue, cmax = double.MinValue;
                 foreach (var row in vm.Rows)
@@ -584,11 +605,13 @@ namespace ETL_SQL.Reporting.Builders
                 if (cmin <= cmax) colMinMax[si] = (cmin, cmax);
             }
 
-            // Build column meta (format, align, data bar, color scale per column)
+            // Build column meta (format, align, data bar, color scale, cell renderer)
             var metas = selected.Select((x, si) =>
             {
                 var m = x.m;
-                bool hasAny = m.Format != null || m.Align != null || m.DataBar || m.ColorScaleFrom != null;
+                bool hasAny = m.Format != null || m.Align != null || m.DataBar
+                    || m.ColorScaleFrom != null || m.CellRenderer != null
+                    || m.SparklineColumns != null;
                 if (!hasAny) return (ColumnMetaManifest?)null;
                 var meta = new ColumnMetaManifest { Format = m.Format, Align = m.Align };
                 if (m.DataBar)
@@ -602,6 +625,17 @@ namespace ETL_SQL.Reporting.Builders
                     meta.ColorScaleFrom = m.ColorScaleFrom;
                     meta.ColorScaleTo = m.ColorScaleTo;
                     if (colMinMax.TryGetValue(si, out var mm)) { meta.ColorScaleMin = mm.Min; meta.ColorScaleMax = mm.Max; }
+                }
+                if (m.CellRenderer != null)
+                {
+                    meta.CellRenderer = m.CellRenderer;
+                    meta.ImageWidth = m.ImageWidth;
+                    meta.HyperlinkLabel = m.HyperlinkLabel;
+                }
+                if (m.SparklineColumns != null)
+                {
+                    meta.CellRenderer = "sparkline";
+                    meta.SparklineType = m.SparklineType ?? "line";
                 }
                 return (ColumnMetaManifest?)meta;
             }).ToList();

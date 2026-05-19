@@ -512,6 +512,22 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("colorScaleMax")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public double? ColorScaleMax { get; set; }
+
+        [JsonPropertyName("cellRenderer")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? CellRenderer { get; set; }  // "image" | "hyperlink" | "sparkline"
+
+        [JsonPropertyName("imageWidth")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? ImageWidth { get; set; }
+
+        [JsonPropertyName("hyperlinkLabel")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? HyperlinkLabel { get; set; }
+
+        [JsonPropertyName("sparklineType")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? SparklineType { get; set; }  // "line" | "bar" | "area"
     }
 
     public class OverlayManifest

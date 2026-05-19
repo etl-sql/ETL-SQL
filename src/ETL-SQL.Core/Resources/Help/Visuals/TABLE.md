@@ -9,6 +9,9 @@ Mappings (column-level, inside MAPPINGS block):
   column_name DATA_BAR                           — show a proportional fill bar behind cell value
   column_name DATA_BAR COLOR '#4472C4'           — data bar with custom color
   column_name COLOR_SCALE FROM '#FF0000' TO '#00FF00'  — gradient cell background (min→max)
+  column_name IMAGE [WIDTH n]                    — render cell value as an <img> (URL column)
+  column_name HYPERLINK [LABEL 'text']           — render cell value as a clickable link
+  SPARKLINE(col1, col2, ...) [LINE|BAR|AREA] [AS 'alias']  — mini trend chart across columns
   Combinable: column FORMAT 'C2' ALIGN 'right' DATA_BAR COLOR '#4472C4' AS 'Revenue'
 
   MAPPINGS restricts visible columns to those listed (in that order).
@@ -37,7 +40,10 @@ SELECT
     customer_name,
     order_date,
     amount,
-    status
+    status,
+    logo_url,
+    product_url,
+    jan, feb, mar, apr, may, jun
 INTO #orders_view
 FROM prod.Orders
 WHERE order_date >= DATEADD(DAY, -90, GETDATE())
@@ -50,7 +56,10 @@ CREATE VISUAL RecentOrders AS TABLE (
     customer_name AS "Customer",
     order_date    AS "Date",
     amount        FORMAT 'C2' ALIGN 'right' DATA_BAR COLOR '#4472C4' AS "Amount",
-    status        COLOR_SCALE FROM '#FFE0E0' TO '#D4EDDA'
+    status        COLOR_SCALE FROM '#FFE0E0' TO '#D4EDDA',
+    logo_url      IMAGE WIDTH 24 AS "Logo",
+    product_url   HYPERLINK LABEL 'View' AS "Link",
+    SPARKLINE(jan, feb, mar, apr, may, jun) LINE AS "6-Month Trend"
   ),
   FORMATTING (
     WHEN amount > 10000 THEN '#d4edda' FONT_COLOR '#155724',

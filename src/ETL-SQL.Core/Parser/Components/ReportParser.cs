@@ -1222,11 +1222,58 @@ namespace ETL_SQL.Core.Parser.Components
                 ConsumeIdentifier("Expected string, container name, or '(' for TOOLTIP").Value);
         }
 
+        private VisualMapping ParseSparklineMapping()
+        {
+            Advance(); // consume SPARKLINE
+            Consume(TokenType.LPAREN, "Expected '(' after SPARKLINE");
+            var cols = new List<string>();
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                cols.Add(ConsumeIdentifier("Expected column name in SPARKLINE").Value);
+                Match(TokenType.COMMA);
+            }
+            Consume(TokenType.RPAREN, "Expected ')' after SPARKLINE columns");
+
+            string sparklineType = "line";
+            if (_parser.Current.Type == TokenType.LINE)
+            { sparklineType = "line"; Advance(); }
+            else if (_parser.Current.Type == TokenType.IDENTIFIER)
+            {
+                var t = _parser.Current.Value.ToUpperInvariant();
+                if (t is "LINE" or "BAR" or "AREA") { sparklineType = t.ToLower(); Advance(); }
+            }
+
+            string? displayName = null;
+            if (Match(TokenType.AS))
+            {
+                displayName = _parser.Current.Type == TokenType.STRING_LITERAL
+                    ? Advance().Value
+                    : ConsumeIdentifier("Expected alias after AS").Value;
+            }
+
+            return new VisualMapping
+            {
+                Role            = "SPARKLINE",
+                Column          = "$sparkline",
+                SparklineColumns = cols,
+                SparklineType   = sparklineType,
+                DisplayName     = displayName
+            };
+        }
+
         private IEnumerable<VisualMapping> ParseMappings()
         {
             var result = new List<VisualMapping>();
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
+                // SPARKLINE(col1, col2, ...) [LINE|BAR|AREA] [AS 'alias']
+                if (_parser.Current.Type == TokenType.SPARKLINE)
+                {
+                    result.Add(ParseSparklineMapping());
+                    Match(TokenType.COMMA);
+                    continue;
+                }
+
                 var nameToken = _parser.Current;
                 if (nameToken.Type == TokenType.RPAREN) break;
                 Advance();
@@ -1242,9 +1289,13 @@ namespace ETL_SQL.Core.Parser.Components
                 else
                 {
                     // TABLE column syntax: col_name [FORMAT 'fmt'] [ALIGN 'dir'] [DATA_BAR [COLOR 'c']]
-                    //                                [COLOR_SCALE FROM 'c1' TO 'c2'] [AS 'alias']
+                    //                                [COLOR_SCALE FROM 'c1' TO 'c2']
+                    //                                [IMAGE [WIDTH n] | HYPERLINK [LABEL 'text']]
+                    //                                [AS 'alias']
                     string? format = null, align = null, displayName = null;
                     string? dataBarColor = null, colorScaleFrom = null, colorScaleTo = null;
+                    string? cellRenderer = null, hyperlinkLabel = null;
+                    int? imageWidth = null;
                     bool dataBar = false;
                     while (!ReportCheck(TokenType.RPAREN) && !ReportCheck(TokenType.COMMA) && !ReportAtEnd())
                     {
@@ -1285,6 +1336,30 @@ namespace ETL_SQL.Core.Parser.Components
                                 colorScaleTo = Consume(TokenType.STRING_LITERAL, "Expected end color after TO").Value;
                             }
                         }
+                        else if (_parser.Current.Type == TokenType.IMAGE)
+                        {
+                            Advance();
+                            cellRenderer = "image";
+                            if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                                _parser.Current.Value.Equals("WIDTH", StringComparison.OrdinalIgnoreCase))
+                            {
+                                Advance();
+                                if (_parser.Current.Type == TokenType.NUMBER &&
+                                    int.TryParse(_parser.Current.Value, out var w))
+                                { imageWidth = w; Advance(); }
+                            }
+                        }
+                        else if (_parser.Current.Type == TokenType.HYPERLINK)
+                        {
+                            Advance();
+                            cellRenderer = "hyperlink";
+                            if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                                _parser.Current.Value.Equals("LABEL", StringComparison.OrdinalIgnoreCase))
+                            {
+                                Advance();
+                                hyperlinkLabel = Consume(TokenType.STRING_LITERAL, "Expected label string after LABEL").Value;
+                            }
+                        }
                         else if (Match(TokenType.AS))
                         {
                             displayName = _parser.Current.Type == TokenType.STRING_LITERAL
@@ -1295,15 +1370,18 @@ namespace ETL_SQL.Core.Parser.Components
                     }
                     result.Add(new VisualMapping
                     {
-                        Role = name.ToUpperInvariant(),
-                        Column = name,
-                        Format = format,
-                        Align = align,
-                        DisplayName = displayName,
-                        DataBar = dataBar,
-                        DataBarColor = dataBarColor,
+                        Role          = name.ToUpperInvariant(),
+                        Column        = name,
+                        Format        = format,
+                        Align         = align,
+                        DisplayName   = displayName,
+                        DataBar       = dataBar,
+                        DataBarColor  = dataBarColor,
                         ColorScaleFrom = colorScaleFrom,
-                        ColorScaleTo = colorScaleTo
+                        ColorScaleTo  = colorScaleTo,
+                        CellRenderer  = cellRenderer,
+                        ImageWidth    = imageWidth,
+                        HyperlinkLabel = hyperlinkLabel
                     });
                 }
                 Match(TokenType.COMMA);

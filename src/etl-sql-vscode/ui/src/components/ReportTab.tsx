@@ -656,6 +656,39 @@ function interpolateColor(fromHex: string, toHex: string, t: number): string {
     return `rgb(${Math.round(r1 + (r2 - r1) * t)},${Math.round(g1 + (g2 - g1) * t)},${Math.round(b1 + (b2 - b1) * t)})`;
 }
 
+function buildSparklineSvg(valuesJson: string, type: string, color?: string): string {
+    let vals: number[];
+    try {
+        const raw = JSON.parse(valuesJson) as (number | null)[];
+        vals = raw.map(v => (v === null ? NaN : parseFloat(String(v)))).filter(v => !isNaN(v));
+    } catch { return ''; }
+    if (vals.length < 2) return '';
+    const W = 60, H = 20, PAD = 2;
+    const mn = Math.min(...vals), mx = Math.max(...vals);
+    const range = mx - mn || 1;
+    const c = color || '#4472C4';
+    const pts = vals.map((v, i) => {
+        const x = (PAD + (i / (vals.length - 1)) * (W - PAD * 2)).toFixed(1);
+        const y = (H - PAD - ((v - mn) / range) * (H - PAD * 2)).toFixed(1);
+        return [x, y] as [string, string];
+    });
+    if (type === 'bar') {
+        const bw = Math.max(2, (W - PAD * 2) / vals.length - 1);
+        const bars = pts.map(([x, y]) =>
+            `<rect x="${(parseFloat(x) - bw / 2).toFixed(1)}" y="${y}" width="${bw.toFixed(1)}" height="${(H - PAD - parseFloat(y)).toFixed(1)}" fill="${c}"/>`
+        ).join('');
+        return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${bars}</svg>`;
+    }
+    const ptStr = pts.map(p => p.join(',')).join(' ');
+    if (type === 'area') {
+        const [x0] = pts[0]; const [xn] = pts[pts.length - 1];
+        const area = `<polygon points="${ptStr} ${xn},${H - PAD} ${x0},${H - PAD}" fill="${c}" fill-opacity="0.2" stroke="none"/>`;
+        const line = `<polyline points="${ptStr}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+        return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${area}${line}</svg>`;
+    }
+    return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg"><polyline points="${ptStr}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
 function formatCellValue(val: unknown, format?: string | null): string {
     if (val == null) return '';
     const s = String(val);
@@ -845,6 +878,23 @@ const ReportTable: React.FC<{
                                                             {fmtVal}
                                                         </span>
                                                     </>
+                                                ) : meta?.cellRenderer === 'image' ? (
+                                                    rawVal
+                                                        ? <img src={rawVal} alt=""
+                                                              style={{ maxHeight: (meta.imageWidth ?? 32) + 'px',
+                                                                       maxWidth: ((meta.imageWidth ?? 32) * 3) + 'px',
+                                                                       verticalAlign: 'middle' }} />
+                                                        : null
+                                                ) : meta?.cellRenderer === 'hyperlink' ? (
+                                                    <a href={/^https?:\/\//i.test(rawVal) ? rawVal : '#'}
+                                                       target="_blank" rel="noopener noreferrer">
+                                                        {meta.hyperlinkLabel || rawVal}
+                                                    </a>
+                                                ) : meta?.cellRenderer === 'sparkline' ? (
+                                                    rawVal
+                                                        ? <span style={{ lineHeight: 0, verticalAlign: 'middle' }}
+                                                                dangerouslySetInnerHTML={{ __html: buildSparklineSvg(rawVal, meta.sparklineType ?? 'line') }} />
+                                                        : null
                                                 ) : fmtVal}
                                             </td>
                                         );

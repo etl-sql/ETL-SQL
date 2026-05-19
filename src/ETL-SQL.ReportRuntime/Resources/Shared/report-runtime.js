@@ -1845,6 +1845,36 @@
                         } else {
                             td.textContent = fmtVal;
                         }
+                    } else if (meta.cellRenderer === 'image') {
+                        // IMAGE: render <img> from URL value
+                        if (rawVal) {
+                            const img = document.createElement('img');
+                            img.src = rawVal;
+                            img.alt = '';
+                            img.style.maxHeight = (meta.imageWidth || 32) + 'px';
+                            img.style.maxWidth  = (meta.imageWidth ? meta.imageWidth * 3 : 96) + 'px';
+                            img.style.verticalAlign = 'middle';
+                            td.appendChild(img);
+                        }
+                    } else if (meta.cellRenderer === 'hyperlink') {
+                        // HYPERLINK: render <a> — only allow http/https to prevent injection
+                        const href = rawVal || '';
+                        const a = document.createElement('a');
+                        a.href = /^https?:\/\//i.test(href) ? href : '#';
+                        a.target = '_blank';
+                        a.rel = 'noopener noreferrer';
+                        a.textContent = meta.hyperlinkLabel || href;
+                        td.appendChild(a);
+                    } else if (meta.cellRenderer === 'sparkline') {
+                        // SPARKLINE: inline SVG mini-chart from JSON array value
+                        const svg = rawVal ? buildSparklineSvg(rawVal, meta.sparklineType || 'line', null) : '';
+                        if (svg) {
+                            td.innerHTML = svg;
+                            td.style.verticalAlign = 'middle';
+                            td.style.lineHeight = '0';
+                        } else {
+                            td.textContent = '';
+                        }
                     } else {
                         td.textContent = fmtVal;
                     }
@@ -4027,6 +4057,37 @@
         const g = Math.round(g1 + (g2 - g1) * t);
         const b = Math.round(b1 + (b2 - b1) * t);
         return `rgb(${r},${g},${b})`;
+    }
+
+    function buildSparklineSvg(valuesJson, type, color) {
+        let vals;
+        try { vals = JSON.parse(valuesJson); } catch { return ''; }
+        vals = vals.map(v => (v === null ? null : parseFloat(v))).filter(v => v !== null && !isNaN(v));
+        if (vals.length < 2) return '';
+        const W = 60, H = 20, PAD = 2;
+        const mn = Math.min(...vals), mx = Math.max(...vals);
+        const range = mx - mn || 1;
+        const c = color || '#4472C4';
+        const pts = vals.map((v, i) => {
+            const x = PAD + (i / (vals.length - 1)) * (W - PAD * 2);
+            const y = H - PAD - ((v - mn) / range) * (H - PAD * 2);
+            return [x.toFixed(1), y.toFixed(1)];
+        });
+        if (type === 'bar') {
+            const bw = Math.max(2, (W - PAD * 2) / vals.length - 1);
+            const bars = pts.map(([x, y]) =>
+                `<rect x="${(parseFloat(x) - bw / 2).toFixed(1)}" y="${y}" width="${bw.toFixed(1)}" height="${(H - PAD - parseFloat(y)).toFixed(1)}" fill="${c}"/>`
+            ).join('');
+            return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${bars}</svg>`;
+        }
+        const ptStr = pts.map(p => p.join(',')).join(' ');
+        if (type === 'area') {
+            const [x0] = pts[0], [xn] = pts[pts.length - 1];
+            const area = `<polygon points="${ptStr} ${xn},${H - PAD} ${x0},${H - PAD}" fill="${c}" fill-opacity="0.2" stroke="none"/>`;
+            const line = `<polyline points="${ptStr}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+            return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${area}${line}</svg>`;
+        }
+        return `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg"><polyline points="${ptStr}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
     }
 
     function formatValue(value, format) {
