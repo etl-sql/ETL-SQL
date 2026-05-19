@@ -143,18 +143,44 @@ namespace ETL_SQL.Engine.Engines
             }
             else
             {
-                allRows = new List<Row>();
-                if (!whereApplied && stmt.WhereClause != null)
+                // Phase 3: Top-N heap — when ORDER BY + LIMIT is present with no blocking
+                // aggregate / window / qualify / distinct, stream rows through a size-N heap
+                // instead of materializing then full-sorting. O(n log N) time, O(N) space.
+                bool canTopN = stmt.OrderBy != null && stmt.OrderBy.Count > 0
+                    && !stmt.IsTopPercent && !stmt.WithTies && !stmt.IsDistinct
+                    && stmt.QualifyClause == null && !hasAggInColumns && !hasWindowInColumns
+                    && (stmt.LimitCount != null || stmt.TopCount != null);
+
+                if (canTopN)
                 {
-                    // Apply WHERE during materialization so unmatched rows are never buffered.
-                    // This matters most for ORDER BY / DISTINCT queries with selective predicates.
-                    await foreach (var r in WhereStream(inputStream, stmt.WhereClause, _context))
-                        allRows.Add(r);
-                    whereApplied = true;
+                    int limit = Convert.ToInt32(await _context.EvaluateValue(
+                        stmt.LimitCount ?? stmt.TopCount!, new Row()));
+                    int topOffset = stmt.Offset != null
+                        ? Convert.ToInt32(await _context.EvaluateValue(stmt.Offset, new Row()))
+                        : 0;
+
+                    var src = !whereApplied && stmt.WhereClause != null
+                        ? WhereStream(inputStream, stmt.WhereClause, _context)
+                        : inputStream;
+                    if (!whereApplied && stmt.WhereClause != null) whereApplied = true;
+
+                    allRows = await TopNFromStream(src, stmt.OrderBy, colNames, finalColumns, limit, topOffset);
                 }
                 else
                 {
-                    await foreach (var r in inputStream) allRows.Add(r);
+                    allRows = new List<Row>();
+                    if (!whereApplied && stmt.WhereClause != null)
+                    {
+                        // Apply WHERE during materialization so unmatched rows are never buffered.
+                        // This matters most for ORDER BY / DISTINCT queries with selective predicates.
+                        await foreach (var r in WhereStream(inputStream, stmt.WhereClause, _context))
+                            allRows.Add(r);
+                        whereApplied = true;
+                    }
+                    else
+                    {
+                        await foreach (var r in inputStream) allRows.Add(r);
+                    }
                 }
             }
 
@@ -323,47 +349,7 @@ namespace ETL_SQL.Engine.Engines
         {
             var rowSortKeys = new List<(Row Row, object?[] Keys)>(rows.Count);
             foreach (var row in rows)
-            {
-                var keys = new object?[orderBy.Count];
-                for (int i = 0; i < orderBy.Count; i++)
-                {
-                    var expr = orderBy[i].Expression;
-                    if (expr is LiteralExpression lit && lit.Type == TokenType.NUMBER && decimal.TryParse(lit.Value?.ToString(), out var num) && num > 0 && num <= colNames.Count)
-                    {
-                        var colIdx = (int)num - 1;
-                        var colName = colNames[colIdx];
-                        // Use direct column lookup if the projected column already exists (post-aggregation/window),
-                        // otherwise evaluate the SELECT expression directly on the pre-projection source row.
-                        keys[i] = row.HasColumn(colName)
-                            ? row[colName]
-                            : await _context.EvaluateValue(finalColumns[colIdx].Expression, row);
-                        continue;
-                    }
-                    if (expr is IdentifierExpression id && colNames.Contains(id.Name, StringComparer.OrdinalIgnoreCase))
-                    {
-                        // Alias already materialised (post-agg/window) → read directly.
-                        // Otherwise evaluate the SELECT expression against the pre-projection row.
-                        if (row.HasColumn(id.Name))
-                            keys[i] = row[id.Name];
-                        else
-                        {
-                            var colIdx = colNames.FindIndex(c => c.Equals(id.Name, StringComparison.OrdinalIgnoreCase));
-                            keys[i] = colIdx >= 0
-                                ? await _context.EvaluateValue(finalColumns[colIdx].Expression, row)
-                                : null;
-                        }
-                    }
-                    else if (expr is IdentifierExpression idAlias && finalColumns.FirstOrDefault(c => string.Equals(c.Alias, idAlias.Name, StringComparison.OrdinalIgnoreCase)) is SelectColumn col)
-                    {
-                        keys[i] = await _context.EvaluateValue(col.Expression, row);
-                    }
-                    else
-                    {
-                        keys[i] = await _context.EvaluateValue(expr, row);
-                    }
-                }
-                rowSortKeys.Add((row, keys));
-            }
+                rowSortKeys.Add((row, await ExtractSortKeys(row, orderBy, colNames, finalColumns)));
 
             rowSortKeys.Sort((a, b) => {
                 for (int i = 0; i < orderBy.Count; i++)
@@ -374,6 +360,108 @@ namespace ETL_SQL.Engine.Engines
                 return 0;
             });
             return rowSortKeys.Select(x => x.Row).ToList();
+        }
+
+        /// <summary>
+        /// Streams <paramref name="source"/> through a min-heap of size (limit+offset),
+        /// returning up to (limit+offset) rows in final output order. O(n log(limit+offset)) time
+        /// and O(limit+offset) space — compared to O(n log n) / O(n) for a full sort.
+        /// </summary>
+        private async Task<List<Row>> TopNFromStream(
+            IAsyncEnumerable<Row> source,
+            List<OrderByClause> orderBy,
+            List<string> colNames,
+            List<SelectColumn> finalColumns,
+            int limit,
+            int offset)
+        {
+            int keep = Math.Max(0, checked(offset + limit));
+            if (keep == 0) return new List<Row>();
+
+            // The heap is a MAX-heap over the output order (heap top = worst kept row).
+            // PriorityQueue is a min-heap, so we invert the output compare.
+            // heap.Peek() returns the row that would appear LAST among the kept rows.
+            var heap = new PriorityQueue<(Row Row, object?[] Keys), (Row Row, object?[] Keys)>(
+                Comparer<(Row Row, object?[] Keys)>.Create((a, b) => {
+                    for (int i = 0; i < orderBy.Count; i++)
+                    {
+                        var res = _context.CompareConstants(a.Keys[i], b.Keys[i]);
+                        if (res != 0) return orderBy[i].Descending ? res : -res; // inverted
+                    }
+                    return 0;
+                }));
+
+            await foreach (var row in source)
+            {
+                var keys = await ExtractSortKeys(row, orderBy, colNames, finalColumns);
+                var entry = (row, keys);
+
+                if (heap.Count < keep)
+                {
+                    heap.Enqueue(entry, entry);
+                }
+                else
+                {
+                    var peekKeys = heap.Peek().Keys;
+                    // Check whether the new row is better (appears earlier) than the worst kept.
+                    bool better = false;
+                    for (int i = 0; i < orderBy.Count; i++)
+                    {
+                        var res = _context.CompareConstants(keys[i], peekKeys[i]);
+                        if (res != 0) { better = orderBy[i].Descending ? res > 0 : res < 0; break; }
+                    }
+                    if (better) heap.DequeueEnqueue(entry, entry);
+                }
+            }
+
+            // Drain in inverted output order (worst-first), then reverse to get correct order.
+            var sorted = new List<Row>(heap.Count);
+            while (heap.Count > 0) sorted.Add(heap.Dequeue().Row);
+            sorted.Reverse();
+            return sorted;
+        }
+
+        private async Task<object?[]> ExtractSortKeys(Row row, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns)
+        {
+            var keys = new object?[orderBy.Count];
+            for (int i = 0; i < orderBy.Count; i++)
+            {
+                var expr = orderBy[i].Expression;
+                if (expr is LiteralExpression lit && lit.Type == TokenType.NUMBER
+                    && decimal.TryParse(lit.Value?.ToString(), out var num) && num > 0 && num <= colNames.Count)
+                {
+                    var colIdx = (int)num - 1;
+                    var colName = colNames[colIdx];
+                    // Use direct lookup when the column is already projected (post-agg/window),
+                    // otherwise evaluate the SELECT expression on the pre-projection source row.
+                    keys[i] = row.HasColumn(colName)
+                        ? row[colName]
+                        : await _context.EvaluateValue(finalColumns[colIdx].Expression, row);
+                    continue;
+                }
+                if (expr is IdentifierExpression id && colNames.Contains(id.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (row.HasColumn(id.Name))
+                        keys[i] = row[id.Name];
+                    else
+                    {
+                        var colIdx = colNames.FindIndex(c => c.Equals(id.Name, StringComparison.OrdinalIgnoreCase));
+                        keys[i] = colIdx >= 0
+                            ? await _context.EvaluateValue(finalColumns[colIdx].Expression, row)
+                            : null;
+                    }
+                }
+                else if (expr is IdentifierExpression idAlias
+                    && finalColumns.FirstOrDefault(c => string.Equals(c.Alias, idAlias.Name, StringComparison.OrdinalIgnoreCase)) is SelectColumn col)
+                {
+                    keys[i] = await _context.EvaluateValue(col.Expression, row);
+                }
+                else
+                {
+                    keys[i] = await _context.EvaluateValue(expr, row);
+                }
+            }
+            return keys;
         }
 
         private async Task<List<Row>> ApplyLimits(List<Row> rows, SelectStatement stmt)
