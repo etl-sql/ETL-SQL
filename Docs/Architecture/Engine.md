@@ -463,14 +463,56 @@ Source.ReadBatches(BatchSize)
 Activates when ORDER BY, window functions, GROUP BY, or GROUPING SETS are present, or when JOINs require buffering. Execution proceeds in pipeline stages:
 
 ```
-1. Acquire rows (join / aggregate / buffer — see below)
-2. Apply WHERE (if not already applied inline)
-3. GROUP BY / aggregate
-4. Window functions
-5. ORDER BY / sort
-6. OFFSET / TOP / LIMIT
-7. Yield result batches
+1. Logical optimize (PredicatePushdownOptimizer — see below)
+2. Acquire rows (join / aggregate / buffer — see below)
+3. Apply WHERE (streaming if no blocking stage follows, otherwise inline)
+4. GROUP BY / aggregate                   [BLOCKING]
+5. Window functions                        [BLOCKING]
+6. QUALIFY filter                          [BLOCKING]
+7. ORDER BY / sort — Top-N heap if LIMIT  [BLOCKING unless Top-N applies]
+8. OFFSET / TOP / LIMIT                    [STREAMING]
+9. Yield result batches                    [STREAMING]
 ```
+
+Operators marked `BLOCKING` must buffer the full intermediate result. Operators marked `STREAMING` pass rows through without accumulating them. `EXPLAIN` / `EXPLAIN ANALYZE` labels each operator with its mode.
+
+### Logical query optimizer (v0.8+)
+
+Before the pipeline runs, `PredicatePushdownOptimizer.Optimize(stmt)` classifies each AND-conjunct of the WHERE clause:
+
+| Scope | Meaning | Action |
+|---|---|---|
+| `LeftSingle` | References only the FROM/left source | Push before join — filter left side during scan |
+| `RightSingle` | References only one right-side JOIN source | Push before join — filter that source during scan |
+| `MultiSource` | References columns from multiple sources | Keep post-join |
+| `Conservative` | Contains a subquery or unresolvable reference | Keep post-join |
+
+The optimizer also promotes eligible `CROSS JOIN … WHERE` patterns to `INNER JOIN` (subsuming the former `CrossJoinPredicatePushdown`). The result is a `LogicalPlan` (statement + predicate classifications + required columns from `RequiredColumnAnalyzer`). `SelectExecutionEngine` reads the rewritten statement and uses the predicate list for runtime pre-filtering.
+
+### Top-N heap sort (v0.8+)
+
+When a query has `ORDER BY` + `LIMIT` (or `TOP`) without window functions, GROUP BY, QUALIFY, or DISTINCT, `SelectExecutionEngine` uses an in-stream min-heap instead of buffering all rows and sorting:
+
+```
+Source stream
+  → WhereStream (inline filter)
+  → TopNFromStream (PriorityQueue, O(n log N) time, O(N) space)
+  → ApplyLimits (OFFSET skip)
+  → Projection
+```
+
+`N` = `LIMIT + OFFSET`. For `LIMIT 10 OFFSET 5`, only 15 rows ever live in memory regardless of source size.
+
+### Streaming WHERE (v0.8+)
+
+For the `else` branch (no JOINs, no GROUP BY, no WINDOW, but has ORDER BY or DISTINCT), WHERE is applied during materialization rather than as a separate pass:
+
+```
+await foreach (var r in WhereStream(inputStream, whereClause))
+    allRows.Add(r);
+```
+
+Unmatched rows are never added to `allRows`, reducing the working set before the blocking sort/distinct stage.
 
 ### Streaming aggregate (GROUP BY without joins)
 
@@ -482,7 +524,7 @@ Source.ReadBatches()
   → ExternalAggregateEngine.ApplyAggregationExternal(stream, ...)
       → partition rows to 32 disk files by GROUP BY key hash
       → aggregate each partition in-memory
-      → return List<Row> of group results
+      → materialize result (ORDER BY / QUALIFY may follow)
 ```
 
 This means a 50M-row CSV with `SELECT region, SUM(revenue) GROUP BY region` never holds all 50M rows in RAM. The `ExternalAggregateEngine` streams them into 32 partition files and processes one partition at a time. **Crucially, this path iterates the source once and is used regardless of row count (always uses disk to ensure O(1) memory usage).**
@@ -494,30 +536,42 @@ Queries that cannot use this path (and still buffer first):
 
 ### External engines — thresholds and behaviour
 
-Four external engines activate automatically when row counts exceed thresholds. All write through `ISpillStore` (AES-256 encrypted, GZip compressed by default) to `%TEMP%\ETL-SQL\Spill\<session-guid>\` and increment `Evaluator.TotalSpilledBytes`. See [SpillStore](#spillstore--encrypted-spill-io) below for the security model.
+Four external engines activate when the estimated working set exceeds configured limits. The decision is **dual-threshold**: both row count and byte-based memory grant are checked; whichever triggers first activates the external engine.
+
+| Config key | Default | Role |
+|---|---|---|
+| `Engine:JoinSpillThreshold` | 10,000 rows | Row-count backstop for join/aggregate/sort |
+| `Engine:WindowSpillThreshold` | 10,000 rows | Row-count backstop for window functions |
+| `Engine:OperatorMemoryGrantMB` | 256 MB | Byte-based grant; wide rows spill earlier |
+| `Engine:ExternalSort:ChunkSize` | 10,000 rows | Sorted chunk size for ExternalSortEngine |
+| `Engine:ExternalHashPartitions` | 32 | Partitions per external hash operation |
+
+`RowWidthEstimator` samples up to 100 rows to derive an average row width, then projects total bytes as `count × avgWidth`. If the projection exceeds `OperatorMemoryGrantMB`, the external engine is used even if the row count is below threshold.
+
+All external engines write through `ISpillStore` (AES-256 encrypted, GZip compressed by default) to `%TEMP%\ETL-SQL\Spill\<session-guid>\` and increment `Evaluator.TotalSpilledBytes`. See [SpillStore](#spillstore--encrypted-spill-io) below for the security model.
 
 **ExternalSortEngine** (`ETL-SQL.Engine/Engines/ExternalSortEngine.cs`)
 
 | Trigger | Chunk size | Algorithm |
 |---|---|---|
-| `allBufferedRows.Count > 100,000` in ORDER BY path | 100,000 rows | External k-way merge sort |
+| `ShouldSpill(allRows)` in ORDER BY path | `ExternalSort:ChunkSize` rows | External k-way merge sort |
 
-Sorted chunks are written via `SpillStore` (encrypted + compressed), then merged in a single k-way pass. Called from `SelectExecutionEngine` when the ORDER BY input exceeds 100k rows.
+Sorted chunks are written via `SpillStore` (encrypted + compressed), then merged in a single k-way pass. **Not triggered** when Top-N heap applies (ORDER BY + LIMIT without window/qualify/distinct).
 
 **ExternalJoinEngine** (`ETL-SQL.Engine/Engines/ExternalJoinEngine.cs`)
 
 | Trigger | Partition count | Algorithm |
 |---|---|---|
-| Right-side join buffer > 100,000 rows | 32 | Hash partitioning + in-memory join per partition |
+| Left input > `JoinSpillThreshold` rows | 32 | Hash partitioning + in-memory join per partition |
 
-`JoinEngine` buffers the left side up to 100k rows. If the right side also exceeds 100k, both sides are hash-partitioned to disk and each partition pair is joined in-memory. Called from `JoinEngine.ApplyJoins`.
+`SelectExecutionEngine` buffers the left side up to `JoinSpillThreshold` rows. If the threshold is hit, both sides are hash-partitioned to disk and each partition pair is joined in-memory. Called from `SelectExecutionEngine` (not `JoinEngine`) when the streaming threshold fires.
 
 **ExternalAggregateEngine** (`ETL-SQL.Engine/Engines/ExternalAggregateEngine.cs`)
 
 | Trigger | Partition count | Algorithm |
 |---|---|---|
 | **Streaming path (no joins)** | 32 | Always used (unconditional disk spill) |
-| **Buffered path (with joins/TC)** | 32 | Activated only when buffered input > 100,000 rows |
+| **Buffered path (with joins)** | 32 | `ShouldSpill(allRows)` — row count or bytes |
 
 Rows are routed to one of 32 partition files by the hash of their GROUP BY key(s). Each partition is then aggregated in-memory by `AggregateEngine`. Because partitioning is always done via file I/O, `TotalSpilledBytes` always increases when `ExternalAggregateEngine` runs.
 

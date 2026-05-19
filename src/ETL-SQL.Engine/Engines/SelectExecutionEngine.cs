@@ -97,9 +97,11 @@ namespace ETL_SQL.Engine.Engines
                         var join = stmt.Joins[0];
                         _joinEngine.TryExtractEqualityKeys(join.Condition, fromName, join.Table.Alias ?? join.Table.TableName, hashKeysLeft, hashKeysRight);
                         
+                        // Intentional materialization: downstream stages (WHERE, GROUP BY, WINDOW,
+                        // ORDER BY) all require random-access over the full joined result.
                         allRows = await externalJoin.ApplyHashJoinExternal(
-                            PrependRows(allRows, ContinueStream(inputEnumerator)), 
-                            _joinEngine.GetJoinRowsAsyncEnumerable(join), 
+                            PrependRows(allRows, ContinueStream(inputEnumerator)),
+                            _joinEngine.GetJoinRowsAsyncEnumerable(join),
                             join, hashKeysLeft, hashKeysRight).ToListAsync();
                     }
                     else
@@ -134,6 +136,7 @@ namespace ETL_SQL.Engine.Engines
                         _logger.Info("[SELECT] Aggregate threshold reached ({Threshold}). Switching to ExternalAggregateEngine.", _context.JoinSpillThreshold);
                         var externalAgg = new ExternalAggregateEngine(_context, _logger);
                         var combinedStream = PrependRows(bufferedForSpill, ContinueStream(enumerator));
+                        // Intentional materialization: ORDER BY and QUALIFY stages require the full result.
                         allRows = await externalAgg.ApplyAggregationExternal(combinedStream, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet).ToListAsync();
                     }
                     else
@@ -211,6 +214,7 @@ namespace ETL_SQL.Engine.Engines
                 if (ShouldSpill(allRows))
                 {
                     var externalAgg = new ExternalAggregateEngine(_context, _logger);
+                    // Intentional materialization: WINDOW, QUALIFY, and ORDER BY require the full result.
                     allRows = await externalAgg.ApplyAggregationExternal(allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet).ToListAsync();
                 }
                 else
