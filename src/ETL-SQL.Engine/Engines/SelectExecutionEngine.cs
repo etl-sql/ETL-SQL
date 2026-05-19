@@ -76,40 +76,12 @@ namespace ETL_SQL.Engine.Engines
 
             if (stmt.Joins != null && stmt.Joins.Count > 0)
             {
-                allRows = new List<Row>();
-                var inputEnumerator = inputStream.GetAsyncEnumerator();
-                try
-                {
-                    int count = 0;
-                    while (await inputEnumerator.MoveNextAsync())
-                    {
-                        allRows.Add(inputEnumerator.Current);
-                        count++;
-                        if (count > _context.JoinSpillThreshold) break;
-                    }
-
-                    if (count > _context.JoinSpillThreshold)
-                    {
-                        _logger.WriteLine($"[yellow]HYPER-SCALE: Memory threshold exceeded ({count} rows). Switching to streaming external join.[/]");
-                        var externalJoin = new ExternalJoinEngine(_context, _logger);
-                        var hashKeysLeft = new List<string>();
-                        var hashKeysRight = new List<string>();
-                        var join = stmt.Joins[0];
-                        _joinEngine.TryExtractEqualityKeys(join.Condition, fromName, join.Table.Alias ?? join.Table.TableName, hashKeysLeft, hashKeysRight);
-                        
-                        // Intentional materialization: downstream stages (WHERE, GROUP BY, WINDOW,
-                        // ORDER BY) all require random-access over the full joined result.
-                        allRows = await externalJoin.ApplyHashJoinExternal(
-                            PrependRows(allRows, ContinueStream(inputEnumerator)),
-                            _joinEngine.GetJoinRowsAsyncEnumerable(join),
-                            join, hashKeysLeft, hashKeysRight).ToListAsync();
-                    }
-                    else
-                    {
-                        allRows = await _joinEngine.ApplyJoins(allRows, stmt.Joins, stmt);
-                    }
-                }
-                finally { await inputEnumerator.DisposeAsync(); }
+                // Phase 6: Stream the left side through hash-built right tables (O(right_size) space).
+                // Each join's right side is fully buffered into a hash table; the left side (arbitrarily
+                // large) streams through without pre-buffering. When a right side exceeds the memory
+                // grant, StreamSingleJoin automatically delegates to ExternalJoinEngine for that pair.
+                // Intentional materialization: GROUP BY / WINDOW / ORDER BY require random access.
+                allRows = await _joinEngine.ApplyJoinsStreaming(inputStream, stmt.Joins, stmt).ToListAsync();
             }
             else if (streamAggregate)
             {

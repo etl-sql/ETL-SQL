@@ -363,6 +363,18 @@ namespace ETL_SQL.Engine.Engines
             var hashKeysRight = new List<string>();
             bool hasEquality = TryExtractEqualityKeys(join.Condition, leftAlias, rightAlias, hashKeysLeft, hashKeysRight);
 
+            // If right side is large, delegate both sides to ExternalJoinEngine (hash-partition spill).
+            // leftStream is still unconsumed here, so it can be passed directly.
+            if (hasEquality && joinRows.Count > _context.JoinSpillThreshold)
+            {
+                _logger.WriteLine($"[yellow]HYPER-SCALE: Right side ({joinRows.Count} rows) exceeds threshold. Using ExternalJoinEngine.[/]");
+                var externalJoin = new ExternalJoinEngine(_context, _logger);
+                await foreach (var r in externalJoin.ApplyHashJoinExternal(
+                    leftStream, joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight))
+                    yield return r;
+                yield break;
+            }
+
             JoinHint algorithm = GetBestAlgorithm(join, -1, joinRows.Count, hasEquality); // -1 means unknown (stream)
             
             _logger.Debug("Join Strategy (Streaming): {Algorithm} Join between {LeftAlias} and {RightAlias}", algorithm, leftAlias, rightAlias);
