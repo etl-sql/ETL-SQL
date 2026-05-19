@@ -363,6 +363,77 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("\"grandTotals\"", json);
         }
 
+        [Fact]
+        public void Matrix_MultipleValues_EmitsValueHeadersAndInterleavedCells()
+        {
+            var v = V("Pivot", "MATRIX",
+                new[] { "Region", "Quarter", "Revenue", "Units" },
+                new[]
+                {
+                    new[] { "North", "Q1", "100", "10" },
+                    new[] { "North", "Q2", "200", "20" },
+                    new[] { "South", "Q1",  "80",  "8" }
+                },
+                new Dictionary<string, string>
+                {
+                    ["mapping:row"]    = "Region",
+                    ["mapping:col"]    = "Quarter",
+                    ["mapping:value"]  = "Revenue",
+                    ["mapping:value2"] = "Units"
+                });
+            var json = R().Render(v);
+            Assert.Contains("\"valueHeaders\":[\"Revenue\",\"Units\"]", json);
+            // North row should have 4 value cells: Q1 Revenue, Q1 Units, Q2 Revenue, Q2 Units
+            Assert.Contains("\"rows\"", json);
+        }
+
+        [Fact]
+        public void Matrix_AxisSortDesc_OrdersColKeysByValueDescending()
+        {
+            var v = V("Pivot", "MATRIX",
+                new[] { "Cat", "Region", "Revenue" },
+                new[]
+                {
+                    new[] { "A", "West",  "500" },
+                    new[] { "A", "East",  "100" },
+                    new[] { "B", "West",  "300" },
+                    new[] { "B", "East",  "200" }
+                },
+                new Dictionary<string, string>
+                {
+                    ["mapping:row"]   = "Cat",
+                    ["mapping:col"]   = "Region",
+                    ["mapping:value"] = "Revenue",
+                    ["AXIS_SORT"]     = "DESC"
+                });
+            var json = R().Render(v);
+            // West total = 800, East total = 300 — West should appear first in colKeys
+            var westIdx = json.IndexOf("\"West\"", StringComparison.Ordinal);
+            var eastIdx = json.IndexOf("\"East\"", StringComparison.Ordinal);
+            Assert.True(westIdx < eastIdx, "DESC sort should put West (higher sum) before East");
+        }
+
+        [Fact]
+        public void Matrix_SubtotalsEnabled_FlagSentInJson()
+        {
+            var v = V("Pivot", "MATRIX",
+                new[] { "Cat", "Region", "Revenue" },
+                new[]
+                {
+                    new[] { "A", "East", "100" },
+                    new[] { "B", "West", "200" }
+                },
+                new Dictionary<string, string>
+                {
+                    ["mapping:row"]   = "Cat",
+                    ["mapping:col"]   = "Region",
+                    ["mapping:value"] = "Revenue",
+                    ["SUBTOTALS"]     = "ON"
+                });
+            var json = R().Render(v);
+            Assert.Contains("\"subtotalsEnabled\":true", json);
+        }
+
         // ── StatisticalRenderer ───────────────────────────────────────────────
 
         [Fact]

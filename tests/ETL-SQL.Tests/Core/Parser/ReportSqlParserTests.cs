@@ -691,5 +691,37 @@ CREATE VISUAL T AS TABLE (
             Assert.Equal("area", sparkline.SparklineType);
             Assert.Equal(new[] { "q1", "q2", "q3", "q4" }, sparkline.SparklineColumns!);
         }
+
+        [Fact]
+        public void ParseMatrixMappings_MultipleValues_ParsesAllRoles()
+        {
+            var sql = @"
+CREATE VISUAL SalesPivot AS MATRIX (
+    SOURCE = #data,
+    MAPPINGS ( ROW = category, COL = region, VALUE = revenue, VALUE2 = units )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().First();
+
+            Assert.Equal(VisualType.Matrix, stmt.VisualType);
+            Assert.Equal("revenue", stmt.Mappings.First(m => m.Role == "VALUE").Column);
+            Assert.Equal("units",   stmt.Mappings.First(m => m.Role == "VALUE2").Column);
+        }
+
+        [Fact]
+        public void ParseMatrixOptions_SubtotalsAndAxisSort_ParseCorrectly()
+        {
+            var sql = @"
+CREATE VISUAL SalesPivot AS MATRIX (
+    SOURCE = #data,
+    MAPPINGS ( ROW = category, COL = region, VALUE = revenue ),
+    OPTIONS  ( SUBTOTALS = ON, AXIS_SORT = DESC )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().First();
+
+            Assert.NotNull(stmt.Options!.FirstOrDefault(o => o.Key == "SUBTOTALS"));
+            Assert.Equal("DESC", stmt.Options!.First(o => o.Key == "AXIS_SORT").Value);
+        }
     }
 }

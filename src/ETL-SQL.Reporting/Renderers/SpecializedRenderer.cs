@@ -777,101 +777,126 @@ namespace ETL_SQL.Reporting.Renderers
                 };
             }
 
-            // Collect row-dimension columns (ROW / ROW1 / ROW2 / ROW3)
+            // Row dimension columns (ROW / ROW1 / ROW2 / ROW3)
             var rowCols = new List<string>();
-            var r1 = FindRole(v, "row") ?? FindRole(v, "row1");
-            var r2 = FindRole(v, "row2");
-            var r3 = FindRole(v, "row3");
-            if (r1 != null) rowCols.Add(r1);
-            if (r2 != null) rowCols.Add(r2);
-            if (r3 != null) rowCols.Add(r3);
+            foreach (var role in new[] { "row", "row1", "row2", "row3" })
+            {
+                var c = FindRole(v, role);
+                if (c != null && !rowCols.Contains(c)) rowCols.Add(c);
+            }
             if (rowCols.Count == 0 && v.Columns.Count > 0) rowCols.Add(v.Columns[0]);
 
-            // Collect column-dimension columns (COL / COL1 / COL2 / COL3).
+            // Column dimension columns (COL / COL1 / COL2 / COL3)
             var colCols = new List<string>();
-            var c1 = FindRole(v, "col") ?? FindRole(v, "col1") ?? FindRole(v, "columns");
-            var c2 = FindRole(v, "col2");
-            var c3 = FindRole(v, "col3");
-            if (c1 != null) colCols.Add(c1);
-            if (c2 != null) colCols.Add(c2);
-            if (c3 != null) colCols.Add(c3);
+            foreach (var role in new[] { "col", "col1", "columns", "col2", "col3" })
+            {
+                var c = FindRole(v, role);
+                if (c != null && !colCols.Contains(c)) colCols.Add(c);
+            }
             if (colCols.Count == 0 && v.Columns.Count > 1) colCols.Add(v.Columns[1]);
 
-            var valCol = FindRole(v, "value") ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
+            // Value measure columns (VALUE / VALUE2 / VALUE3 ...)
+            var valueCols = new List<(string col, int idx)>();
+            { var vc = FindRole(v, "value"); if (vc != null) valueCols.Add((vc, ColIdx(v, vc))); }
+            for (int vn = 2; vn <= 5; vn++)
+            {
+                var vc = FindRole(v, $"value{vn}");
+                if (vc != null) valueCols.Add((vc, ColIdx(v, vc)));
+            }
+            if (valueCols.Count == 0)
+            {
+                var fb = v.Columns.Count > 2 ? v.Columns[2] : null;
+                if (fb != null) valueCols.Add((fb, ColIdx(v, fb)));
+            }
+            int valueCount = Math.Max(1, valueCols.Count);
 
-            v.Options.TryGetValue("AGGREGATE", out var aggOpt);
-            string agg = (aggOpt ?? "SUM").ToUpperInvariant();
-            bool grandTotal = IsOn(v.Options.GetValueOrDefault("GRAND_TOTAL"));
+            string agg          = (v.Options.GetValueOrDefault("AGGREGATE") ?? "SUM").ToUpperInvariant();
+            bool grandTotal     = IsOn(v.Options.GetValueOrDefault("GRAND_TOTAL"));
+            bool subtotals      = IsOn(v.Options.GetValueOrDefault("SUBTOTALS"));
+            string axisSortMode = (v.Options.GetValueOrDefault("AXIS_SORT") ?? "ALPHA").ToUpperInvariant();
 
             var rowIndices = rowCols.Select(c => ColIdx(v, c)).ToList();
             var colIndices = colCols.Select(c => ColIdx(v, c)).ToList();
-            int vi = ColIdx(v, valCol);
 
-            // Collect unique column pivot paths (sorted)
-            var colKeys = v.Rows
-                .Select(r => string.Join(Sep, colIndices.Select(idx => idx >= 0 && idx < r.Count ? r[idx] ?? "" : "")))
-                .Distinct()
-                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            var colParts = colKeys
-                .Select(key => key.Split(Sep).ToList())
-                .ToList();
-            var colValues = colParts
-                .Select(parts => string.Join(" / ", parts.Where(p => !string.IsNullOrEmpty(p))))
-                .ToList();
-
-            // Group raw values by (row path, column path)
-            var groups = new Dictionary<string, Dictionary<string, List<double>>>(StringComparer.Ordinal);
+            // Build groups: rowKey -> colKey -> List<double>[valueCount]
+            var groups      = new Dictionary<string, Dictionary<string, List<double>[]>>(StringComparer.Ordinal);
             var rowKeyOrder = new List<string>();
+            var colKeyOrder = new List<string>();
+            var colKeySet   = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var row in v.Rows)
             {
                 var rowKey = string.Join(Sep, rowIndices.Select(idx => idx >= 0 && idx < row.Count ? row[idx] ?? "" : ""));
                 var colKey = string.Join(Sep, colIndices.Select(idx => idx >= 0 && idx < row.Count ? row[idx] ?? "" : ""));
-                var val    = vi >= 0 && vi < row.Count ? ToDouble(row[vi]) ?? 0.0 : 1.0;
 
-                if (!groups.ContainsKey(rowKey)) { groups[rowKey] = new Dictionary<string, List<double>>(StringComparer.Ordinal); rowKeyOrder.Add(rowKey); }
-                if (!groups[rowKey].ContainsKey(colKey)) groups[rowKey][colKey] = new List<double>();
-                groups[rowKey][colKey].Add(val);
+                if (!groups.ContainsKey(rowKey))
+                { groups[rowKey] = new Dictionary<string, List<double>[]>(StringComparer.Ordinal); rowKeyOrder.Add(rowKey); }
+                if (!groups[rowKey].ContainsKey(colKey))
+                    groups[rowKey][colKey] = Enumerable.Range(0, valueCount).Select(_ => new List<double>()).ToArray();
+                if (colKeySet.Add(colKey)) colKeyOrder.Add(colKey);
+
+                for (int vi = 0; vi < valueCount; vi++)
+                {
+                    var ci = valueCols[vi].idx;
+                    groups[rowKey][colKey][vi].Add(ci >= 0 && ci < row.Count ? ToDouble(row[ci]) ?? 0.0 : 0.0);
+                }
             }
 
-            // Build pivot rows
+            // Sort column keys: DESC = by aggregate value sum descending, else alpha
+            IEnumerable<string> orderedColKeys = axisSortMode == "DESC"
+                ? colKeyOrder.OrderByDescending(ck =>
+                    groups.Values.Sum(g => g.TryGetValue(ck, out var vl) ? vl[0].Sum() : 0.0))
+                : colKeyOrder.OrderBy(s => s, StringComparer.OrdinalIgnoreCase);
+
+            var colKeys   = orderedColKeys.ToList();
+            var colParts  = colKeys.Select(key => key.Split(Sep).ToList()).ToList();
+            var colValues = colParts
+                .Select(parts => string.Join(" / ", parts.Where(p => !string.IsNullOrEmpty(p))))
+                .ToList();
+
+            // Build pivot rows: [rowDims..., val0_col0, val1_col0, val0_col1, val1_col1, ...]
             var pivotRows = rowKeyOrder.Distinct().Select(rowKey =>
             {
-                var parts = rowKey.Split(Sep);
-                var cells = colKeys.Select(ck =>
-                {
-                    groups[rowKey].TryGetValue(ck, out var vals);
-                    return AggregateCell(vals, agg);
-                }).ToList();
+                var parts = rowKey.Split(Sep).Cast<string?>();
+                var cells = colKeys.SelectMany((ck, _) =>
+                    Enumerable.Range(0, valueCount).Select(vi =>
+                    {
+                        var vals = groups[rowKey].TryGetValue(ck, out var vl) && vi < vl.Length ? vl[vi] : null;
+                        return AggregateCell(vals, agg);
+                    }));
                 return parts.Concat(cells).ToList();
             }).ToList();
 
-            // Grand total row
+            // Grand total row (one value cell per colKey × valueCount)
             List<string?>? totals = null;
             if (grandTotal)
             {
                 totals = Enumerable.Repeat<string?>(null, rowCols.Count)
-                    .Concat(colKeys.Select(ck =>
-                    {
-                        var allVals = groups.Values
-                            .SelectMany(g => g.TryGetValue(ck, out var l) ? l : Enumerable.Empty<double>())
-                            .ToList();
-                        return AggregateCell(allVals, agg);
-                    })).ToList();
+                    .Concat(colKeys.SelectMany((ck, _) =>
+                        Enumerable.Range(0, valueCount).Select(vi =>
+                        {
+                            var allVals = groups.Values
+                                .SelectMany(g => g.TryGetValue(ck, out var vl) && vi < vl.Length
+                                    ? vl[vi] : Enumerable.Empty<double>())
+                                .ToList();
+                            return AggregateCell(allVals, agg);
+                        })))
+                    .ToList();
             }
 
             return Serialize(new
             {
-                __matrix     = true,
-                rowHeaders   = rowCols,
-                colHeaders   = colCols,
-                colKeys      = colKeys,
-                colParts     = colParts,
-                colValues    = colValues,
-                aggregate    = agg,
-                rows         = pivotRows,
-                grandTotals  = totals
+                __matrix         = true,
+                rowHeaders       = rowCols,
+                colHeaders       = colCols,
+                colKeys          = colKeys,
+                colParts         = colParts,
+                colValues        = colValues,
+                aggregate        = agg,
+                rows             = pivotRows,
+                grandTotals      = totals,
+                valueHeaders     = valueCount > 1 ? valueCols.Select(vc => vc.col).ToArray() : null,
+                subtotalsEnabled = subtotals
             });
         }
     }

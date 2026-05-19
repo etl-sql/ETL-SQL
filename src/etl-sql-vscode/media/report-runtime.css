@@ -564,6 +564,9 @@
   }
   .matrix-grand-total .matrix-dim { background: #e0e7f3; font-weight: 700; }
   .matrix-grand-total .matrix-val { background: #e0e7f3; font-weight: 700; }
+  .matrix-subtotal-row .matrix-dim { background: #eef2fa; font-weight: 600; font-style: italic; }
+  .matrix-subtotal-row .matrix-val { background: #eef2fa; font-weight: 600; }
+  .matrix-value-subheader { font-size: 0.8em; font-style: italic; }
   .theme-dark .matrix-dim-header { background: #2a3550; color: #cdd; }
   .theme-dark .matrix-val-header { background: #3a4a80; color: #eef; }
   .theme-dark .matrix-dim        { background: #252d3d; color: #ccc; }
@@ -572,3 +575,5 @@
   .theme-dark .matrix-group-row .matrix-val { background: #2b3548; color: #eef; }
   .theme-dark .matrix-grand-total .matrix-dim,
   .theme-dark .matrix-grand-total .matrix-val { background: #2f3d5c; color: #eef; }
+  .theme-dark .matrix-subtotal-row .matrix-dim,
+  .theme-dark .matrix-subtotal-row .matrix-val { background: #283347; color: #dde; }
