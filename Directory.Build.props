@@ -7,6 +7,8 @@
     <Product>ETL-SQL Engine</Product>
     <Description>A hybrid ETL engine for SQL, NoSQL, and FlatFiles.</Description>
     <Copyright>Copyright © $([System.DateTime]::Now.Year) Charles Clemens</Copyright>
+    <RepositoryUrl>https://github.com/etl-sql/ETL-SQL.git</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/etl-sql/ETL-SQL</PackageProjectUrl>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
