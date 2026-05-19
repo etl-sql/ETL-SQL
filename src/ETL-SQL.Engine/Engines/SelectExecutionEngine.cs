@@ -68,6 +68,19 @@ namespace ETL_SQL.Engine.Engines
 
             List<Row> allRows;
             bool whereApplied = false;
+            // Phase 7: Tracks a lazy stream from an external engine (aggregate or window).
+            // Downstream stages consume it directly without materializing, unless forced by QUALIFY,
+            // ORDER BY without LIMIT, or the final projection loop.
+            IAsyncEnumerable<Row>? externalEngineStream = null;
+
+            async Task MaterializeEngineStream()
+            {
+                if (externalEngineStream != null)
+                {
+                    allRows = await externalEngineStream.ToListAsync();
+                    externalEngineStream = null;
+                }
+            }
 
             // Optimization for streaming aggregates
             bool streamAggregate = (stmt.Joins == null || stmt.Joins.Count == 0)
@@ -108,7 +121,8 @@ namespace ETL_SQL.Engine.Engines
                         _logger.Info("[SELECT] Aggregate threshold reached ({Threshold}). Switching to ExternalAggregateEngine.", _context.JoinSpillThreshold);
                         var externalAgg = new ExternalAggregateEngine(_context, _logger);
                         var combinedStream = PrependRows(bufferedForSpill, ContinueStream(enumerator));
-                        // Intentional materialization: ORDER BY and QUALIFY stages require the full result.
+                        // Must materialize inside the try block: ContinueStream captures the enumerator,
+                        // which the finally clause disposes immediately after the try exits.
                         allRows = await externalAgg.ApplyAggregationExternal(combinedStream, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet).ToListAsync();
                     }
                     else
@@ -141,7 +155,7 @@ namespace ETL_SQL.Engine.Engines
                         : inputStream;
                     if (!whereApplied && stmt.WhereClause != null) whereApplied = true;
 
-                    allRows = await TopNFromStream(src, stmt.OrderBy, colNames, finalColumns, limit, topOffset);
+                    allRows = await TopNFromStream(src, stmt.OrderBy!, colNames, finalColumns, limit, topOffset);
                 }
                 else
                 {
@@ -186,8 +200,9 @@ namespace ETL_SQL.Engine.Engines
                 if (ShouldSpill(allRows))
                 {
                     var externalAgg = new ExternalAggregateEngine(_context, _logger);
-                    // Intentional materialization: WINDOW, QUALIFY, and ORDER BY require the full result.
-                    allRows = await externalAgg.ApplyAggregationExternal(allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet).ToListAsync();
+                    // Phase 7: Keep as lazy stream; WINDOW can chain directly; QUALIFY or full ORDER BY forces materialization.
+                    externalEngineStream = externalAgg.ApplyAggregationExternal(allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                    allRows = [];
                 }
                 else
                 {
@@ -198,15 +213,17 @@ namespace ETL_SQL.Engine.Engines
             // 3. WINDOW FUNCTIONS
             if (hasWindowInColumns)
             {
-                if (ShouldSpillWindow(allRows))
+                if (externalEngineStream != null)
+                {
+                    // Phase 7: External agg output streams directly into the window engine —
+                    // no intermediate materialization. The result stays lazy until QUALIFY or ORDER BY forces it.
+                    externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(externalEngineStream, stmt);
+                }
+                else if (ShouldSpillWindow(allRows))
                 {
                     _logger.WriteLine($"[yellow]HYPER-SCALE: Switching to ExternalWindowEngine. Row count {allRows.Count} >= threshold {_context.WindowSpillThreshold}. Session: {_context.SessionId}[/]");
-                    var stream = ConvertToAsyncEnumerable(allRows);
-                    var windowStream = _externalWindowEngine.ApplyWindowFunctionsExternal(stream, stmt);
-                    
-                    // Note: For now we still materialize here to maintain compatibility with the sort/limit logic.
-                    // True end-to-end streaming will be a future refinement.
-                    allRows = await windowStream.ToListAsync();
+                    externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(allRows.ToAsyncEnumerable(), stmt);
+                    allRows = [];
                 }
                 else
                 {
@@ -217,6 +234,7 @@ namespace ETL_SQL.Engine.Engines
             // 4. QUALIFY
             if (stmt.QualifyClause != null)
             {
+                await MaterializeEngineStream();
                 // Temporarily add aliases to rows so QUALIFY can reference them by alias (e.g., QUALIFY rnk <= 1)
                 foreach (var row in allRows)
                 {
@@ -247,18 +265,35 @@ namespace ETL_SQL.Engine.Engines
             // 5. ORDER BY
             if (stmt.OrderBy != null && stmt.OrderBy.Count > 0)
             {
-                if (ShouldSpill(allRows))
+                // Phase 7: If an external engine stream is pending and the query has a LIMIT/TOP,
+                // run the TopN heap directly on the stream to avoid full materialization.
+                if (externalEngineStream != null
+                    && !stmt.IsTopPercent && !stmt.WithTies && !stmt.IsDistinct
+                    && (stmt.LimitCount != null || stmt.TopCount != null))
                 {
-                    var externalSort = new ExternalSortEngine(_context, _logger);
-                    allRows = await externalSort.SortExternal(allRows, stmt.OrderBy);
+                    int limit = Convert.ToInt32(await _context.EvaluateValue(stmt.LimitCount ?? stmt.TopCount!, new Row()));
+                    int topOffset = stmt.Offset != null ? Convert.ToInt32(await _context.EvaluateValue(stmt.Offset, new Row())) : 0;
+                    allRows = await TopNFromStream(externalEngineStream, stmt.OrderBy, colNames, finalColumns, limit, topOffset);
+                    externalEngineStream = null;
                 }
                 else
                 {
-                    allRows = await SortInMemory(allRows, stmt.OrderBy, colNames, finalColumns);
+                    await MaterializeEngineStream();
+                    if (ShouldSpill(allRows))
+                    {
+                        var externalSort = new ExternalSortEngine(_context, _logger);
+                        allRows = await externalSort.SortExternal(allRows, stmt.OrderBy);
+                    }
+                    else
+                    {
+                        allRows = await SortInMemory(allRows, stmt.OrderBy, colNames, finalColumns);
+                    }
                 }
             }
 
             // 6. OFFSET / LIMIT
+            // Phase 7: Flush any pending external engine stream (e.g. external agg with no ORDER BY).
+            await MaterializeEngineStream();
             allRows = await ApplyLimits(allRows, stmt);
 
             // Final Projection & Batching
