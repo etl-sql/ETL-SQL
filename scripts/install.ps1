@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $InstallDir = Join-Path $HOME ".etl-sql"
 $BinDir = Join-Path $InstallDir "bin"
 $Version = "latest"
-$BaseUrl = "https://github.com/AmericanSuperstar/ETL-SQL/releases/download/$Version"
+$BaseUrl = "https://github.com/etl-sql/ETL-SQL/releases/download/$Version"
 
 Write-Host "--- ETL-SQL Workstation SDK Installer ---" -ForegroundColor Cyan
 

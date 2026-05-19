@@ -62,7 +62,7 @@ ETL-SQL supports:
 For the full language reference, visit the Docs/ folder in the repository 
 or the official documentation site.
 
-https://github.com/AmericanSuperstar/ETL-SQL
+https://github.com/etl-sql/ETL-SQL
 
 Enjoy your data integration!
 - The ETL-SQL Team

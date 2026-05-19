@@ -48,7 +48,7 @@ Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: $ARCH
-Maintainer: AmericanSuperstar <chuck@example.com>
+Maintainer: Charles Clemens <etlsqlsoftware@gmail.com>
 Description: ETL-SQL Enterprise Suite
  Hybrid engine that executes SQL-like syntax against diverse data sources.
 EOF

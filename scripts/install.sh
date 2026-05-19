@@ -6,7 +6,7 @@ set -e
 INSTALL_DIR="$HOME/.etl-sql"
 BIN_DIR="$INSTALL_DIR/bin"
 VERSION="latest"
-BASE_URL="https://github.com/AmericanSuperstar/ETL-SQL/releases/download/$VERSION"
+BASE_URL="https://github.com/etl-sql/ETL-SQL/releases/download/$VERSION"
 
 echo "--- ETL-SQL Workstation SDK Installer ---"
 

@@ -3,11 +3,11 @@
   "displayName": "ETL-SQL Tools",
   "description": "Language support for ETL-SQL scripts with lineage tracking and diagnostics.",
   "version": "0.7.0",
-  "publisher": "AmericanSuperstar",
+  "publisher": "etl-sql",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AmericanSuperstar/ETL-SQL"
+    "url": "https://github.com/etl-sql/ETL-SQL"
   },
   "engines": {
     "vscode": "^1.75.0"

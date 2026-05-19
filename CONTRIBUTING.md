@@ -32,7 +32,7 @@ Thank you for your interest in contributing! This document explains how to set u
 ### Setup
 
 ```bash
-git clone https://github.com/AmericanSuperstar/ETL-SQL.git
+git clone https://github.com/etl-sql/ETL-SQL.git
 cd ETL-SQL
 dotnet build
 ```

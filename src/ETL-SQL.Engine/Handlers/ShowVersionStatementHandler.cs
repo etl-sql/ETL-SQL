@@ -27,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
             var row = new Row();
             row["Component"] = "ETL-SQL Engine";
             row["Version"] = LanguageMetadata.EngineVersion;
-            row["Metadata"] = ".NET 10.0; AmericanSuperstar (c) 2026";
+            row["Metadata"] = ".NET 10.0; Charles Clemens (c) 2026";
             await table.AddRowAsync(row);
 
             if (stmt.IntoTable != null)

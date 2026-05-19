@@ -288,4 +288,4 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 
 ---
 
-*Not finding your answer here? Open a [GitHub Discussion](https://github.com/AmericanSuperstar/ETL-SQL/discussions) or check the [User Manual](User_Manual.md) and [Cookbook](Cookbook.md).*
+*Not finding your answer here? Open a [GitHub Discussion](https://github.com/etl-sql/ETL-SQL/discussions) or check the [User Manual](User_Manual.md) and [Cookbook](Cookbook.md).*

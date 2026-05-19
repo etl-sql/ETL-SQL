@@ -49,7 +49,7 @@ Use ETL-SQL when you want SQL to be the orchestration language, not just the que
 ### Build From Source
 
 ```bash
-git clone https://github.com/AmericanSuperstar/ETL-SQL.git
+git clone https://github.com/etl-sql/ETL-SQL.git
 cd ETL-SQL
 dotnet build
 ```
