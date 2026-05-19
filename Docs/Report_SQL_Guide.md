@@ -540,13 +540,74 @@ MAPPINGS (LABEL = category, VALUE = total)
 
 #### CARD
 
+**MAPPINGS**
+
 | Role | Description |
 |------|-------------|
-| `LABEL` | Small caption rendered above the number. If omitted the column name is used. |
-| `VALUE` | The primary number or string to display large. |
+| `VALUE` | Primary metric column (numeric). Required. |
+| `LABEL` | Caption above the number. Falls back to column name if omitted. |
+| `GOAL` | Goal/target value column. Drives status bands and the optional progress indicator. |
+| `DELTA` | Prior-period column for trend/delta display. |
 
 ```sql
-MAPPINGS (VALUE = val, LABEL = lbl)
+MAPPINGS (VALUE = Revenue, LABEL = MetricName, GOAL = Target, DELTA = PriorRevenue)
+```
+
+**OPTIONS**
+
+| Key | Values | Description |
+|-----|--------|-------------|
+| `FORMAT` | .NET format string | Numeric format for VALUE (e.g. `C2`, `N0`, `P1`). |
+| `ABBREVIATE` | `ON` / `OFF` | Shorten large numbers: 1 250 000 → $1.25M. Default `OFF`. |
+| `PREFIX` | String | Text prepended to the displayed value (e.g. `'Est. '`). |
+| `SUFFIX` | String | Text appended to the displayed value (e.g. `' USD'`). |
+| `GOAL` | Numeric literal | Literal goal value when a GOAL mapping column is not used. |
+| `CLOSE_PCT` | 0–1 decimal | Ratio at which status becomes `close` (default `0.80`). |
+| `MET_PCT` | 0–1 decimal | Ratio at which status becomes `met` (default `1.00`). |
+| `SHOW_GOAL` | `ON` / `OFF` | Display a "Target: $150K" subtitle line. Default `OFF`. |
+| `SHOW_PERCENT_OF_GOAL` | `ON` / `OFF` | Display an "87% of target" subtitle line. Default `OFF`. |
+| `SHOW_PROGRESS` | `ON` / `OFF` | Show a progress bar or ring. Default `OFF`. |
+| `PROGRESS_STYLE` | `BAR` / `RING` | Progress indicator style. Default `BAR`. |
+| `COLOR_MET` | CSS color | Accent color when goal is met. Default `#10b981`. |
+| `COLOR_CLOSE` | CSS color | Accent color when close to goal. Default `#f59e0b`. |
+| `COLOR_MISSED` | CSS color | Accent color when goal is missed. Default `#ef4444`. |
+| `ICON_SET` | `CHECKS` / `ARROWS` / `TRAFFIC` | Preset badge icon family. |
+| `ICON_MET` | String / emoji | Custom badge icon when met. Overrides `ICON_SET`. |
+| `ICON_CLOSE` | String / emoji | Custom badge icon when close. Overrides `ICON_SET`. |
+| `ICON_MISSED` | String / emoji | Custom badge icon when missed. Overrides `ICON_SET`. |
+| `LABEL_MET` | String | Subtitle override when status is met. |
+| `LABEL_CLOSE` | String | Subtitle override when status is close. |
+| `LABEL_MISSED` | String | Subtitle override when status is missed. |
+| `TREND_DIR` | `POSITIVE_UP` / `POSITIVE_DOWN` | Which delta direction is favorable. Default `POSITIVE_UP`. |
+| `DELTA_FORMAT` | .NET format string | Format applied to the delta value display. |
+| `DELTA_LABEL` | String | Label shown next to the delta (e.g. `'vs prior year'`). |
+
+```sql
+-- Goal-tracking card with progress ring and status badge
+CREATE VISUAL RevenueKpi AS CARD (
+    SOURCE = (SELECT SUM(Revenue) AS Revenue, 500000 AS Target FROM #sales),
+    TITLE  = 'Total Revenue',
+    MAPPINGS (VALUE = Revenue, GOAL = Target),
+    OPTIONS (
+        FORMAT            = 'C0',
+        ABBREVIATE        = ON,
+        SHOW_GOAL         = ON,
+        SHOW_PERCENT_OF_GOAL = ON,
+        SHOW_PROGRESS     = ON,
+        PROGRESS_STYLE    = RING,
+        ICON_SET          = CHECKS,
+        LABEL_MET         = 'Target achieved!',
+        LABEL_MISSED      = 'Behind target'
+    )
+);
+
+-- Delta card showing change vs prior period
+CREATE VISUAL RevenueTrend AS CARD (
+    SOURCE = (SELECT SUM(Revenue) AS Revenue, SUM(PriorRevenue) AS Prior FROM #sales),
+    TITLE  = 'Revenue vs Prior Year',
+    MAPPINGS (VALUE = Revenue, DELTA = Prior),
+    OPTIONS (FORMAT = 'C0', DELTA_LABEL = 'vs prior year', ABBREVIATE = ON)
+);
 ```
 
 #### IMAGE
@@ -961,6 +1022,7 @@ OPTIONS (
 | `DATA_LABELS:FONT_WEIGHT`| BAR, LINE | `NORMAL`, `BOLD` | Data label font weight. |
 | `DATA_LABELS:FONT_FAMILY`| BAR, LINE | String | Data label font family. |
 | `DATA_LABELS:FORMAT` | BAR, LINE | .NET format | Numeric format string for labels. |
+| `AXIS_SORT` | BAR, HBAR, LINE, AREA | `ASC` / `DESC` / `SOURCE` / `VALUE` / `VALUE_DESC` | Controls X-axis category order. `ASC` (default) uses type-aware ascending sort (datetime → numeric → alphabetical). `DESC` reverses it. `SOURCE` preserves the source query's row order. `VALUE` / `VALUE_DESC` rank categories by their metric value — useful for ranked bar charts. |
 
 #### X_AXIS / Y_AXIS sub-block options
 

@@ -8,6 +8,9 @@ namespace ETL_SQL.Reporting.Renderers
     {
         private readonly OverlayRenderer _overlay = new();
 
+        private static string GetAxisSortMode(VisualManifest v) =>
+            (v.Options.GetValueOrDefault("AXIS_SORT") ?? "ASC").ToUpperInvariant();
+
         public string Render(VisualManifest visual, string seriesType)
         {
             var (xLabels, series) = ExtractCartesianSeries(visual, seriesType);
@@ -66,7 +69,20 @@ namespace ETL_SQL.Reporting.Renderers
             }
             else
             {
-                xLabels = SortXLabels(v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi]?.ToString() ?? "" : "").ToList());
+                var axisSortModeCombo = GetAxisSortMode(v);
+                var rawLabelsCombo = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi]?.ToString() ?? "" : "").ToList();
+                if (axisSortModeCombo is "VALUE" or "VALUE_DESC")
+                {
+                    var sums = v.Rows.GroupBy(r => xi < r.Count ? r[xi]?.ToString()?.Trim() ?? "" : "")
+                                     .Select(g => (label: g.Key, sum: g.Sum(r => ToDouble(yi < r.Count ? r[yi] : null) ?? 0)));
+                    xLabels = axisSortModeCombo == "VALUE_DESC"
+                        ? sums.OrderByDescending(x => x.sum).Select(x => x.label).ToList()
+                        : sums.OrderBy(x => x.sum).Select(x => x.label).ToList();
+                }
+                else
+                {
+                    xLabels = SortXLabels(rawLabelsCombo, axisSortModeCombo);
+                }
                 var xIndex = xLabels.Select((l, i) => (l, i)).ToDictionary(t => t.l, t => t.i, StringComparer.OrdinalIgnoreCase);
                 var seriesKeys = v.Rows.Select(r => si < r.Count ? r[si]?.ToString() ?? "" : "").Distinct().ToList();
 
@@ -146,7 +162,20 @@ namespace ETL_SQL.Reporting.Renderers
                     return new { xLabel, valObj };
                 }).ToList();
 
-                var sortedLabels = SortXLabels(rawPairs.Select(p => p.xLabel).Distinct().ToList());
+                var axisSortMode = GetAxisSortMode(v);
+                List<string> sortedLabels;
+                if (axisSortMode is "VALUE" or "VALUE_DESC")
+                {
+                    var byLabel = rawPairs.GroupBy(p => p.xLabel.Trim())
+                                         .Select(g => (label: g.Key, sum: g.Sum(p => ToDouble(p.valObj) ?? 0)));
+                    sortedLabels = axisSortMode == "VALUE_DESC"
+                        ? byLabel.OrderByDescending(x => x.sum).Select(x => x.label).ToList()
+                        : byLabel.OrderBy(x => x.sum).Select(x => x.label).ToList();
+                }
+                else
+                {
+                    sortedLabels = SortXLabels(rawPairs.Select(p => p.xLabel).ToList(), axisSortMode);
+                }
                 var labelIndex = sortedLabels.Select((l, i) => (l, i)).ToDictionary(t => t.l, t => t.i, StringComparer.OrdinalIgnoreCase);
 
                 var alignedVals = Enumerable.Repeat<object?>(null, sortedLabels.Count).ToList();
@@ -159,7 +188,20 @@ namespace ETL_SQL.Reporting.Renderers
             }
             else
             {
-                var xLabels = SortXLabels(v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi]?.ToString() ?? "" : "").Distinct().ToList());
+                var axisSortModeMulti = GetAxisSortMode(v);
+                List<string> xLabels;
+                if (axisSortModeMulti is "VALUE" or "VALUE_DESC")
+                {
+                    var sums = v.Rows.GroupBy(r => xi < r.Count ? r[xi]?.ToString()?.Trim() ?? "" : "")
+                                     .Select(g => (label: g.Key, sum: g.Sum(r => ToDouble(yi < r.Count ? r[yi] : null) ?? 0)));
+                    xLabels = axisSortModeMulti == "VALUE_DESC"
+                        ? sums.OrderByDescending(x => x.sum).Select(x => x.label).ToList()
+                        : sums.OrderBy(x => x.sum).Select(x => x.label).ToList();
+                }
+                else
+                {
+                    xLabels = SortXLabels(v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi]?.ToString() ?? "" : "").ToList(), axisSortModeMulti);
+                }
                 var seriesKeys = v.Rows.Select(r => si < r.Count ? r[si]?.ToString() ?? "" : "").Distinct().ToList();
                 var xIndex = xLabels.Select((l, i) => (l, i)).ToDictionary(t => t.l, t => t.i, StringComparer.OrdinalIgnoreCase);
                 bool fillGaps = IsOn(v.Options.GetValueOrDefault("SHOW_NO_DATA_PLACEHOLDER"));

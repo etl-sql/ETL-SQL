@@ -1,6 +1,6 @@
 {
   "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\18_CARD.rptsql",
-  "builtAt": "2026-05-18T22:20:28.0253893Z",
+  "builtAt": "2026-05-18T23:38:32.6304101Z",
   "title": "Kitchen Sink: CARD Visual",
   "description": "Enhanced CARD KPI visuals with goal tracking, delta, progress indicators, and LAYER stacking.",
   "visuals": [
@@ -430,99 +430,99 @@
   },
   "messages": [
     {
-      "message": "[872173e4] [SELECT] Executing SelectStatement. Session: 872173e4",
+      "message": "[61fd20c3] [SELECT] Executing SelectStatement. Session: 61fd20c3",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:27.9957149Z"
+      "timestamp": "2026-05-18T23:38:32.6009952Z"
     },
     {
-      "message": "[872173e4] 1 rows affected.",
+      "message": "[61fd20c3] 1 rows affected.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.0119986Z"
+      "timestamp": "2026-05-18T23:38:32.6176936Z"
     },
     {
-      "message": "[872173e4] Visual \u0027BasicCard\u0027 created.",
+      "message": "[61fd20c3] Visual \u0027BasicCard\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.0145539Z"
+      "timestamp": "2026-05-18T23:38:32.6202818Z"
     },
     {
-      "message": "[872173e4] Visual \u0027GoalMetCard\u0027 created.",
+      "message": "[61fd20c3] Visual \u0027GoalMetCard\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.0166845Z"
+      "timestamp": "2026-05-18T23:38:32.6222498Z"
     },
     {
-      "message": "[872173e4] Visual \u0027GrowthCard\u0027 created.",
+      "message": "[61fd20c3] Visual \u0027GrowthCard\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.0167421Z"
+      "timestamp": "2026-05-18T23:38:32.6223013Z"
     },
     {
-      "message": "[872173e4] Visual \u0027CostCard\u0027 created.",
+      "message": "[61fd20c3] Visual \u0027CostCard\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.0167782Z"
+      "timestamp": "2026-05-18T23:38:32.6223367Z"
     },
     {
-      "message": "[872173e4] Visual \u0027AbbrevCard\u0027 created.",
+      "message": "[61fd20c3] Visual \u0027AbbrevCard\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.016815Z"
+      "timestamp": "2026-05-18T23:38:32.6223674Z"
     },
     {
-      "message": "[872173e4] Visual \u0027DeltaCard\u0027 created.",
+      "message": "[61fd20c3] Visual \u0027DeltaCard\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.0168471Z"
+      "timestamp": "2026-05-18T23:38:32.6224424Z"
     },
     {
-      "message": "[872173e4] Visual \u0027RevTrendBar\u0027 created.",
+      "message": "[61fd20c3] Visual \u0027RevTrendBar\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.0172095Z"
+      "timestamp": "2026-05-18T23:38:32.6227616Z"
     },
     {
-      "message": "[872173e4] Visual \u0027LayerKpiCard\u0027 created.",
+      "message": "[61fd20c3] Visual \u0027LayerKpiCard\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.0172712Z"
+      "timestamp": "2026-05-18T23:38:32.6228139Z"
     },
     {
-      "message": "[872173e4] Container \u0027LayerDemo\u0027 registered.",
+      "message": "[61fd20c3] Container \u0027LayerDemo\u0027 registered.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.0177259Z"
+      "timestamp": "2026-05-18T23:38:32.6232622Z"
     },
     {
-      "message": "[872173e4] Container \u0027KpiRow1\u0027 registered.",
+      "message": "[61fd20c3] Container \u0027KpiRow1\u0027 registered.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.017763Z"
+      "timestamp": "2026-05-18T23:38:32.6233Z"
     },
     {
-      "message": "[872173e4] Container \u0027KpiRow2\u0027 registered.",
+      "message": "[61fd20c3] Container \u0027KpiRow2\u0027 registered.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.0177851Z"
+      "timestamp": "2026-05-18T23:38:32.6233277Z"
     },
     {
-      "message": "[872173e4] Page \u0027CardKitchenSink\u0027 created.",
+      "message": "[61fd20c3] Page \u0027CardKitchenSink\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.0188687Z"
+      "timestamp": "2026-05-18T23:38:32.6243908Z"
     },
     {
-      "message": "[872173e4] Navigation \u0027MainNav\u0027 registered.",
+      "message": "[61fd20c3] Navigation \u0027MainNav\u0027 registered.",
       "color": "white",
-      "timestamp": "2026-05-18T22:20:28.0194974Z"
+      "timestamp": "2026-05-18T23:38:32.6250371Z"
     }
   ],
   "executionTree": [
     {
-      "id": "7e9fbef6-0eb9-4942-b28b-e7cd0b53522c",
+      "id": "8b0d88d0-18bf-4e56-ab9a-368c373a23d3",
       "name": "Script Execution",
       "status": "Completed",
       "rowsProcessed": 0,
-      "durationMs": 32.4814,
+      "durationMs": 33.4821,
       "iterationCount": 1,
       "isParallelBlock": false,
       "velocity": 0,
       "error": null,
       "children": [
         {
-          "id": "c306015e-8c00-48c8-909d-31efee7ced53",
+          "id": "18981250-408e-484d-ad6d-0615e15642a9",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.6609,
+          "durationMs": 1.474,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -530,11 +530,11 @@
           "children": []
         },
         {
-          "id": "17c4248e-97ba-4c29-86c3-008b8ac207c1",
+          "id": "8e1e391b-dc8c-49f2-9b90-f312463e69a1",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0318,
+          "durationMs": 0.0345,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -542,23 +542,23 @@
           "children": []
         },
         {
-          "id": "7d0f3c68-cbe7-4f48-9415-366ec68ef5ec",
+          "id": "e905e89c-1a3d-47af-a78d-6804c6e7d76c",
           "name": "Select",
           "status": "Completed",
           "rowsProcessed": 2,
-          "durationMs": 18.9664,
+          "durationMs": 19.8799,
           "iterationCount": 1,
           "isParallelBlock": false,
-          "velocity": 105.44963725324784,
+          "velocity": 100.60412778736313,
           "error": null,
           "children": []
         },
         {
-          "id": "4ec92772-a729-4945-8dfa-e77b961ba868",
+          "id": "74344e11-d376-4faa-b399-7b00838ed26e",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.8241,
+          "durationMs": 0.8349,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -566,11 +566,11 @@
           "children": []
         },
         {
-          "id": "dddf59bd-4c6a-4cb0-964c-cce8f61d9f8d",
+          "id": "9ba2af84-fdb6-4987-9d73-33f9f13c1f10",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.1048,
+          "durationMs": 0.0942,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -578,11 +578,11 @@
           "children": []
         },
         {
-          "id": "4b7d130a-03d1-41a2-9d00-c401fc6810d8",
+          "id": "64a67ba9-f017-4e99-a324-c46f21a6f6ec",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0268,
+          "durationMs": 0.03,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -590,11 +590,11 @@
           "children": []
         },
         {
-          "id": "f1e0f7cc-1e0c-4c89-95ca-fb6385578aed",
+          "id": "2f08cdc8-b416-4520-bb23-e9e35b2616d0",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.021,
+          "durationMs": 0.0237,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -602,11 +602,11 @@
           "children": []
         },
         {
-          "id": "acd5fe86-60f4-45af-8180-ec6ec42874cb",
+          "id": "cc2d3e1e-322c-478e-bb04-722b68a53405",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0218,
+          "durationMs": 0.0196,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -614,11 +614,11 @@
           "children": []
         },
         {
-          "id": "ebfe5ed8-d536-4204-85a7-7fe9020374ac",
+          "id": "1fd6de83-4b14-40c8-abc0-8e9aa5b94aa2",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0211,
+          "durationMs": 0.0623,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -626,11 +626,11 @@
           "children": []
         },
         {
-          "id": "40222257-4571-4530-a539-0cec7582f690",
+          "id": "ad931c01-8088-41b4-b356-fea228cb5aa3",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0635,
+          "durationMs": 0.0639,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -638,11 +638,11 @@
           "children": []
         },
         {
-          "id": "08520f82-0f68-4be1-866f-5e36a4b8802f",
+          "id": "26b076ec-e1f7-4d10-af95-acb23cd0fb28",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0426,
+          "durationMs": 0.0343,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -650,11 +650,11 @@
           "children": []
         },
         {
-          "id": "77fcdd29-a5bb-4ea6-87c2-f85003fd321b",
+          "id": "5820f6d2-28d0-4ce8-9562-5decb01966e1",
           "name": "CreateContainer",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2669,
+          "durationMs": 0.2654,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -662,11 +662,11 @@
           "children": []
         },
         {
-          "id": "a0914fa8-ca0b-4392-a393-add831f38be2",
+          "id": "2c38e990-7ddc-4981-8b37-e10639c254c3",
           "name": "CreateContainer",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0244,
+          "durationMs": 0.025,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -674,11 +674,11 @@
           "children": []
         },
         {
-          "id": "6601020c-316c-4877-8d84-d3aade9813f6",
+          "id": "ff0d1a70-300c-4535-9ee2-958ec65c7106",
           "name": "CreateContainer",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0167,
+          "durationMs": 0.0226,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -686,11 +686,11 @@
           "children": []
         },
         {
-          "id": "011204c9-179a-40ad-8be9-5b8b8b2230bd",
+          "id": "116a39eb-8eb2-4bba-b112-765e03fd62f5",
           "name": "CreatePage",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.9245,
+          "durationMs": 0.9016,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -698,11 +698,11 @@
           "children": []
         },
         {
-          "id": "0434d028-1909-46b8-9383-fe9027a27e37",
+          "id": "bbae9836-d1a6-4eb9-ab88-e70210daa324",
           "name": "CreateNavigation",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2719,
+          "durationMs": 0.2772,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,

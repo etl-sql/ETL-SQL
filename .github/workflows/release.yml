@@ -49,11 +49,10 @@ jobs:
       - name: Build MSI
         shell: pwsh
         run: |
-          # WiX is pre-installed on windows-latest runners
-          .\scripts\build_msi.ps1
-          # The MSI script puts it in src/ETL-SQL.Installer
-          # We want to move it to the release folder
           $Version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $env:ETL_SQL_VERSION = $Version
+          .\scripts\build_msi.ps1
+          if ($LASTEXITCODE -ne 0) { throw "build_msi.ps1 failed with exit code $LASTEXITCODE" }
           Move-Item "src/ETL-SQL.Installer/ETL-SQL-Enterprise-v$Version.msi" "release/ETL-SQL-v$Version-x64-Setup.msi"
 
       - name: Upload Windows Artifacts

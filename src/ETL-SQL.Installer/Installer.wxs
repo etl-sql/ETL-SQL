@@ -36,20 +36,20 @@
 
         <!-- SDK Components -->
         <ComponentGroup Id="SDKComponents" Directory="BINDIR">
-            <Component Id="ETL_SQL_EXE" Guid="*">
+            <Component Id="ETL_SQL_EXE" Guid="*" Win64="yes">
                 <File Source="publish\win-x64\bin\ETL-SQL.exe" KeyPath="yes" />
             </Component>
-            <Component Id="ETL_SQL_LSP_EXE" Guid="*">
+            <Component Id="ETL_SQL_LSP_EXE" Guid="*" Win64="yes">
                 <File Source="publish\win-x64\bin\ETL-SQL-LSP.exe" />
             </Component>
-            <Component Id="ETL_SQL_REPORT_EXE" Guid="*">
+            <Component Id="ETL_SQL_REPORT_EXE" Guid="*" Win64="yes">
                 <File Source="publish\win-x64\bin\ETL-SQL-Report.exe" />
             </Component>
         </ComponentGroup>
 
         <!-- Orchestrator Components & Service -->
         <ComponentGroup Id="OrchestratorComponents" Directory="OrchestratorDir">
-            <Component Id="Orchestrator_EXE" Guid="*">
+            <Component Id="Orchestrator_EXE" Guid="*" Win64="yes">
                 <File Source="publish\win-x64\bin\ETL-SQL-Service.exe" KeyPath="yes" />
                 <ServiceInstall Id="ServiceInstaller_Orchestrator" 
                                 Type="ownProcess" 
@@ -65,7 +65,7 @@
 
         <!-- Portal Components & Service -->
         <ComponentGroup Id="PortalComponents" Directory="PortalDir">
-            <Component Id="Portal_EXE" Guid="*">
+            <Component Id="Portal_EXE" Guid="*" Win64="yes">
                 <File Source="publish\win-x64\bin\ETL-SQL-Portal.exe" KeyPath="yes" />
                 <ServiceInstall Id="ServiceInstaller_Portal" 
                                 Type="ownProcess" 
@@ -80,8 +80,8 @@
         </ComponentGroup>
 
         <!-- Environment Variables -->
-        <DirectoryRef Id="TARGETDIR">
-            <Component Id="PathEnvironment" Guid="dc70ead1-c4db-42f1-a8e1-7a35cc06cf3f">
+        <DirectoryRef Id="BINDIR">
+            <Component Id="PathEnvironment" Guid="dc70ead1-c4db-42f1-a8e1-7a35cc06cf3f" Win64="yes">
                 <Environment Id="PATH" Name="PATH" Value="[BINDIR]" Permanent="no" Part="last" Action="set" System="yes" />
             </Component>
         </DirectoryRef>

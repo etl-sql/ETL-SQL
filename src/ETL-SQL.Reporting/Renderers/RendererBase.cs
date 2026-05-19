@@ -109,7 +109,7 @@ namespace ETL_SQL.Reporting.Renderers
             return double.TryParse(str, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : null;
         }
 
-        protected static List<string> SortXLabels(List<string> labels)
+        protected static List<string> SortXLabels(List<string> labels, string? sortMode = null)
         {
             if (labels == null || labels.Count <= 1) return labels ?? new List<string>();
             var distinct = labels.Select(l => l?.Trim() ?? "").Distinct().ToList();
@@ -117,17 +117,25 @@ namespace ETL_SQL.Reporting.Renderers
 
             if (validLabels.Count == 0) return distinct;
 
+            var mode = (sortMode ?? "ASC").ToUpperInvariant();
+            if (mode == "SOURCE") return distinct;
+
+            bool desc = mode == "DESC";
+
             if (validLabels.All(l => DateTime.TryParse(l, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _)))
             {
-                return distinct
-                    .OrderBy(l => string.IsNullOrEmpty(l) ? DateTime.MinValue : DateTime.Parse(l, System.Globalization.CultureInfo.InvariantCulture))
-                    .ToList();
+                var sorted = distinct.OrderBy(l => string.IsNullOrEmpty(l) ? DateTime.MinValue : DateTime.Parse(l, System.Globalization.CultureInfo.InvariantCulture));
+                return (desc ? sorted.Reverse() : sorted).ToList();
             }
 
             if (validLabels.All(l => double.TryParse(l, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _)))
-                return distinct.OrderBy(l => string.IsNullOrEmpty(l) ? double.MinValue : double.Parse(l, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture)).ToList();
-            
-            return distinct.OrderBy(l => l, StringComparer.OrdinalIgnoreCase).ToList();
+            {
+                var sorted = distinct.OrderBy(l => string.IsNullOrEmpty(l) ? double.MinValue : double.Parse(l, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture));
+                return (desc ? sorted.Reverse() : sorted).ToList();
+            }
+
+            var strSorted = distinct.OrderBy(l => l, StringComparer.OrdinalIgnoreCase);
+            return (desc ? strSorted.Reverse() : strSorted).ToList();
         }
     }
 }

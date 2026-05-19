@@ -899,5 +899,125 @@ namespace ETL_SQL.Tests.Reporting
             var json = R().Render(v);
             Assert.NotNull(json);
         }
+
+        // ── AXIS_SORT option ──────────────────────────────────────────────────
+
+        [Fact]
+        public void AxisSort_Default_Asc_AlphabeticalOrder()
+        {
+            var v = V("B", "BAR", new[] { "Cat", "Val" }, new[]
+            {
+                new[] { "Zebra", "10" }, new[] { "Apple", "30" }, new[] { "Mango", "20" }
+            });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.True(json.IndexOf("Apple", StringComparison.Ordinal) < json.IndexOf("Zebra", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void AxisSort_Desc_StringsReversedAlphabetical()
+        {
+            var v = V("B", "BAR", new[] { "Cat", "Val" }, new[]
+            {
+                new[] { "Apple", "10" }, new[] { "Mango", "20" }, new[] { "Zebra", "30" }
+            }, new Dictionary<string, string> { ["AXIS_SORT"] = "DESC" });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.True(json.IndexOf("Zebra", StringComparison.Ordinal) < json.IndexOf("Apple", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void AxisSort_Desc_DatesReversedChronological()
+        {
+            var v = V("B", "BAR", new[] { "Date", "Val" }, new[]
+            {
+                new[] { "2024-01-01", "10" }, new[] { "2024-03-01", "30" }, new[] { "2024-02-01", "20" }
+            }, new Dictionary<string, string> { ["AXIS_SORT"] = "DESC" });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.True(json.IndexOf("2024-03-01", StringComparison.Ordinal) < json.IndexOf("2024-01-01", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void AxisSort_Desc_NumericLargestFirst()
+        {
+            var v = V("B", "BAR", new[] { "Year", "Val" }, new[]
+            {
+                new[] { "2021", "10" }, new[] { "2023", "30" }, new[] { "2022", "20" }
+            }, new Dictionary<string, string> { ["AXIS_SORT"] = "DESC" });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.True(json.IndexOf("2023", StringComparison.Ordinal) < json.IndexOf("2021", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void AxisSort_Source_PreservesRowOrder()
+        {
+            var v = V("B", "BAR", new[] { "Cat", "Val" }, new[]
+            {
+                new[] { "December", "10" }, new[] { "January", "30" }, new[] { "June", "20" }
+            }, new Dictionary<string, string> { ["AXIS_SORT"] = "SOURCE" });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.True(json.IndexOf("December", StringComparison.Ordinal) < json.IndexOf("January", StringComparison.Ordinal));
+            Assert.True(json.IndexOf("January", StringComparison.Ordinal) < json.IndexOf("June", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void AxisSort_ValueDesc_LargestCategoryFirst()
+        {
+            var v = V("B", "BAR", new[] { "Region", "Revenue" }, new[]
+            {
+                new[] { "North", "100" }, new[] { "South", "500" }, new[] { "East", "300" }
+            }, new Dictionary<string, string> { ["AXIS_SORT"] = "VALUE_DESC" });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.True(json.IndexOf("South", StringComparison.Ordinal) < json.IndexOf("North", StringComparison.Ordinal));
+            Assert.True(json.IndexOf("East", StringComparison.Ordinal) < json.IndexOf("North", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void AxisSort_Value_SmallestCategoryFirst()
+        {
+            var v = V("B", "BAR", new[] { "Region", "Revenue" }, new[]
+            {
+                new[] { "North", "500" }, new[] { "South", "100" }, new[] { "East", "300" }
+            }, new Dictionary<string, string> { ["AXIS_SORT"] = "VALUE" });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.True(json.IndexOf("South", StringComparison.Ordinal) < json.IndexOf("North", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void AxisSort_MultiSeries_Source_PreservesRowOrder()
+        {
+            var v = V("B", "BAR", new[] { "Month", "Region", "Revenue" }, new[]
+            {
+                new[] { "December", "East", "10" }, new[] { "January", "East", "30" },
+                new[] { "December", "West", "20" }, new[] { "January", "West", "40" }
+            }, new Dictionary<string, string> { ["AXIS_SORT"] = "SOURCE" });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.True(json.IndexOf("December", StringComparison.Ordinal) < json.IndexOf("January", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void AxisSort_MultiSeries_ValueDesc_SortsByTotalMetric()
+        {
+            var v = V("B", "BAR", new[] { "Region", "Segment", "Revenue" }, new[]
+            {
+                new[] { "North", "Enterprise", "100" }, new[] { "South", "Enterprise", "400" },
+                new[] { "North", "SMB",        "50"  }, new[] { "South", "SMB",        "150" }
+            }, new Dictionary<string, string>
+            {
+                ["AXIS_SORT"] = "VALUE_DESC",
+                ["mapping:x"] = "Region",
+                ["mapping:y"] = "Revenue",
+                ["mapping:series"] = "Segment"
+            });
+            var json = R().Render(v);
+            Assert.NotNull(json);
+            Assert.True(json.IndexOf("South", StringComparison.Ordinal) < json.IndexOf("North", StringComparison.Ordinal));
+        }
     }
 }

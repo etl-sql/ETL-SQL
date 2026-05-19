@@ -114,9 +114,38 @@ CREATE VISUAL BarWithTooltip AS BAR (
     TOOLTIP = TooltipBox
 );
 
+-- AXIS_SORT demos
+SELECT 1 AS MonthNum, 'January'  AS Month, 320 AS Revenue INTO #months UNION ALL
+SELECT 2,             'February',           290              UNION ALL
+SELECT 3,             'March',              410              UNION ALL
+SELECT 4,             'April',              380              UNION ALL
+SELECT 5,             'May',                450              UNION ALL
+SELECT 6,             'June',               500;
+
+CREATE VISUAL MonthOrderBar AS BAR (
+    SOURCE = (SELECT Month, Revenue FROM #months ORDER BY MonthNum),
+    TITLE = 'Revenue by Month (Source Order)',
+    MAPPINGS (X = Month, Y = Revenue),
+    OPTIONS (AXIS_SORT = SOURCE)
+);
+
+CREATE VISUAL DescBar AS BAR (
+    SOURCE = (SELECT Month, Revenue FROM #months),
+    TITLE = 'Revenue by Month (Z to A)',
+    MAPPINGS (X = Month, Y = Revenue),
+    OPTIONS (AXIS_SORT = DESC)
+);
+
+CREATE VISUAL RankedBar AS BAR (
+    SOURCE = (SELECT Region, SUM(Revenue) AS Revenue FROM #sales GROUP BY Region),
+    TITLE = 'Revenue by Region (Ranked, Highest First)',
+    MAPPINGS (X = Region, Y = Revenue),
+    OPTIONS (AXIS_SORT = VALUE_DESC)
+);
+
 -- Page Layout
 CREATE PAGE BarKitchenSink AS (
-    STRUCTURE = 'A B / C D / E F / G G',
+    STRUCTURE = 'A B / C D / E F / G G / H I J',
     MAP (
         'A' = BasicBar,
         'B' = GroupedBar,
@@ -124,7 +153,10 @@ CREATE PAGE BarKitchenSink AS (
         'D' = OverlayBar,
         'E' = StyledBar,
         'F' = PercentBar,
-        'G' = BarWithTooltip
+        'G' = BarWithTooltip,
+        'H' = MonthOrderBar,
+        'I' = DescBar,
+        'J' = RankedBar
     )
 );
 
