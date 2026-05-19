@@ -140,6 +140,7 @@ namespace ETL_SQL.Core.Common
         public int ExternalHashPartitions { get; set; } = LanguageMetadata.DefaultExternalHashPartitions;
         public int ExternalSortChunkSize { get; set; } = LanguageMetadata.DefaultExternalSortChunkSize;
         public int WindowSpillThreshold { get; set; } = LanguageMetadata.DefaultWindowSpillThreshold;
+        public int OperatorMemoryGrantMB { get; set; } = 256;
         public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
         public long SubquerySpillThresholdRows { get; set; } = LanguageMetadata.DefaultSubquerySpillThresholdRows;
         public long TempTableSpillThresholdRows { get; set; } = LanguageMetadata.DefaultTempTableSpillThresholdRows;

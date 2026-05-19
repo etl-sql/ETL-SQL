@@ -22,7 +22,7 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (ExplainStatement)statement;
             
             var plan = new DataTable();
-            var columns = new List<string> { "ID", "Operation", "Details", "Cost" };
+            var columns = new List<string> { "ID", "Operation", "Details", "Cost", "Mode" };
             if (stmt.IsAnalyze)
             {
                 columns.Add("Actual Rows");
@@ -91,7 +91,8 @@ namespace ETL_SQL.Engine.Handlers
                     .AddColumn("ID")
                     .AddColumn("Operation")
                     .AddColumn("Details")
-                    .AddColumn("Cost", c => c.RightAligned());
+                    .AddColumn("Cost", c => c.RightAligned())
+                    .AddColumn("Mode");
 
                 if (stmt.IsAnalyze)
                 {
@@ -101,6 +102,11 @@ namespace ETL_SQL.Engine.Handlers
 
                 foreach (var row in plan.Rows)
                 {
+                    var modeRaw = row["Mode"]?.ToString() ?? "";
+                    var modeMarkup = modeRaw == "BLOCKING"
+                        ? new Markup("[yellow]BLOCKING[/]")
+                        : (IRenderable)new Text(modeRaw);
+
                     if (stmt.IsAnalyze)
                     {
                         table.AddRow(
@@ -108,6 +114,7 @@ namespace ETL_SQL.Engine.Handlers
                             new Text(row["Operation"]?.ToString() ?? ""),
                             new Text(row["Details"]?.ToString() ?? ""),
                             new Text(row["Cost"]?.ToString() ?? ""),
+                            modeMarkup,
                             new Text(row["Actual Rows"]?.ToString() ?? "-"),
                             new Text(row["Actual Time (ms)"]?.ToString() ?? "-")
                         );
@@ -118,7 +125,8 @@ namespace ETL_SQL.Engine.Handlers
                             new Text(row["ID"]?.ToString() ?? ""),
                             new Text(row["Operation"]?.ToString() ?? ""),
                             new Text(row["Details"]?.ToString() ?? ""),
-                            new Text(row["Cost"]?.ToString() ?? "")
+                            new Text(row["Cost"]?.ToString() ?? ""),
+                            modeMarkup
                         );
                     }
                 }

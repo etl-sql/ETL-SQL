@@ -36,6 +36,9 @@ namespace ETL_SQL.Engine.Services
         public static int WindowSpillThreshold(IConfiguration? config)
             => config?.GetValue<int?>("Engine:WindowSpillThreshold") ?? LanguageMetadata.DefaultWindowSpillThreshold;
 
+        public static int OperatorMemoryGrantMB(IConfiguration? config)
+            => config?.GetValue<int?>("Engine:OperatorMemoryGrantMB") ?? 256;
+
         public static long TempTableSpillThresholdRows(IConfiguration? config)
             => config?.GetValue<long?>("Engine:TempTableSpillThresholdRows") ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
 

@@ -182,6 +182,8 @@ namespace ETL_SQL.Core
         int ExternalSortChunkSize { get; set; }
         /// <summary>Number of rows before window functions spill to disk (CFG-7).</summary>
         int WindowSpillThreshold { get; set; }
+        /// <summary>Per-operator memory budget in MB. When the estimated working set exceeds this limit the engine switches to an external (disk-spilling) operator.</summary>
+        int OperatorMemoryGrantMB { get; set; }
         /// <summary>Maximum number of batches held in RAM for #temp tables before spilling.</summary>
         int MaxInMemoryBatches { get; set; }
         /// <summary>Number of rows before subquery results spill to disk.</summary>

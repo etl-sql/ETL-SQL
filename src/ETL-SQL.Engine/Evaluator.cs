@@ -294,6 +294,7 @@ namespace ETL_SQL.Engine
         public int ExternalHashPartitions { get => _options.ExternalHashPartitions; set => _options.ExternalHashPartitions = value; }
         public int ExternalSortChunkSize { get => _options.ExternalSortChunkSize; set => _options.ExternalSortChunkSize = value; }
         public int WindowSpillThreshold { get => _options.WindowSpillThreshold; set => _options.WindowSpillThreshold = value; }
+        public int OperatorMemoryGrantMB { get => _options.OperatorMemoryGrantMB; set => _options.OperatorMemoryGrantMB = value; }
         public long SubquerySpillThresholdRows { get => _options.SubquerySpillThresholdRows; set => _options.SubquerySpillThresholdRows = value; }
         public bool SpillEncryptionEnabled { get => _options.SpillEncryptionEnabled; set => _options.SpillEncryptionEnabled = value; }
         public bool SpillCompressionEnabled { get => _options.SpillCompressionEnabled; set => _options.SpillCompressionEnabled = value; }
@@ -551,6 +552,7 @@ namespace ETL_SQL.Engine
             MaxRecursiveDepth = DefaultThresholds.MaxRecursiveDepth(config);
             ExternalSortChunkSize = DefaultThresholds.ExternalSortChunkSize(config);
             WindowSpillThreshold = DefaultThresholds.WindowSpillThreshold(config);
+            OperatorMemoryGrantMB = DefaultThresholds.OperatorMemoryGrantMB(config);
             TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
             
             _options.BatchSize = BatchSize;

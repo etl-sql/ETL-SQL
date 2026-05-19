@@ -208,7 +208,7 @@ namespace ETL_SQL.Engine.Engines
             // 2. GROUP BY
             if (!streamAggregate && (stmt.GroupBy != null || stmt.GroupingSet != null || hasAggInColumns))
             {
-                if (allRows.Count > _context.JoinSpillThreshold)
+                if (ShouldSpill(allRows))
                 {
                     var externalAgg = new ExternalAggregateEngine(_context, _logger);
                     allRows = await externalAgg.ApplyAggregationExternal(allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet).ToListAsync();
@@ -222,7 +222,7 @@ namespace ETL_SQL.Engine.Engines
             // 3. WINDOW FUNCTIONS
             if (hasWindowInColumns)
             {
-                if (allRows.Count >= _context.WindowSpillThreshold)
+                if (ShouldSpillWindow(allRows))
                 {
                     _logger.WriteLine($"[yellow]HYPER-SCALE: Switching to ExternalWindowEngine. Row count {allRows.Count} >= threshold {_context.WindowSpillThreshold}. Session: {_context.SessionId}[/]");
                     var stream = ConvertToAsyncEnumerable(allRows);
@@ -271,7 +271,7 @@ namespace ETL_SQL.Engine.Engines
             // 5. ORDER BY
             if (stmt.OrderBy != null && stmt.OrderBy.Count > 0)
             {
-                if (allRows.Count > _context.JoinSpillThreshold)
+                if (ShouldSpill(allRows))
                 {
                     var externalSort = new ExternalSortEngine(_context, _logger);
                     allRows = await externalSort.SortExternal(allRows, stmt.OrderBy);
@@ -464,6 +464,20 @@ namespace ETL_SQL.Engine.Engines
                 }
             }
             return keys;
+        }
+
+        private bool ShouldSpill(IReadOnlyList<Row> rows)
+        {
+            if (rows.Count > _context.JoinSpillThreshold) return true;
+            long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+            return RowWidthEstimator.EstimateTotalBytes(rows) > grantBytes;
+        }
+
+        private bool ShouldSpillWindow(IReadOnlyList<Row> rows)
+        {
+            if (rows.Count >= _context.WindowSpillThreshold) return true;
+            long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+            return RowWidthEstimator.EstimateTotalBytes(rows) > grantBytes;
         }
 
         private async Task<List<Row>> ApplyLimits(List<Row> rows, SelectStatement stmt)

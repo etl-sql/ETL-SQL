@@ -39,6 +39,7 @@ namespace ETL_SQL.Engine
         public int ExternalHashPartitions { get; set; } = 32;
         public int ExternalSortChunkSize { get; set; } = 100000;
         public int WindowSpillThreshold { get; set; } = LanguageMetadata.DefaultWindowSpillThreshold;
+        public int OperatorMemoryGrantMB { get; set; } = 256;
         public int SubqueryCacheSize { get; set; } = 5000;
         public long SubquerySpillThresholdRows { get; set; } = LanguageMetadata.DefaultSubquerySpillThresholdRows;
         public long TempTableSpillThresholdRows { get; set; }
