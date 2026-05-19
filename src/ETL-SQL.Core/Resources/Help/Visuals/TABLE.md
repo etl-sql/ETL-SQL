@@ -2,11 +2,14 @@ Type: TABLE
 A paginated, sortable data table. Columns are driven by the SOURCE query — every column in the SELECT becomes a table column by default. Use MAPPINGS to rename, reorder, restrict, and format columns.
 
 Mappings (column-level, inside MAPPINGS block):
-  column_name                         — include column with its original name
-  column_name AS 'Display Name'       — rename the column header
-  column_name FORMAT 'C2' AS 'Amount' — apply .NET number format and optional rename
-  column_name ALIGN 'right'           — set column text alignment (left|center|right)
-  Combinable: column FORMAT 'P1' ALIGN 'right' AS 'Pct'
+  column_name                                    — include column with its original name
+  column_name AS 'Display Name'                  — rename the column header
+  column_name FORMAT 'C2' AS 'Amount'            — apply .NET number format and optional rename
+  column_name ALIGN 'right'                      — set column text alignment (left|center|right)
+  column_name DATA_BAR                           — show a proportional fill bar behind cell value
+  column_name DATA_BAR COLOR '#4472C4'           — data bar with custom color
+  column_name COLOR_SCALE FROM '#FF0000' TO '#00FF00'  — gradient cell background (min→max)
+  Combinable: column FORMAT 'C2' ALIGN 'right' DATA_BAR COLOR '#4472C4' AS 'Revenue'
 
   MAPPINGS restricts visible columns to those listed (in that order).
   If MAPPINGS is omitted, all SELECT columns are shown.
@@ -46,8 +49,8 @@ CREATE VISUAL RecentOrders AS TABLE (
     order_id      AS "Order #",
     customer_name AS "Customer",
     order_date    AS "Date",
-    amount        FORMAT 'C2' ALIGN 'right' AS "Amount",
-    status
+    amount        FORMAT 'C2' ALIGN 'right' DATA_BAR COLOR '#4472C4' AS "Amount",
+    status        COLOR_SCALE FROM '#FFE0E0' TO '#D4EDDA'
   ),
   FORMATTING (
     WHEN amount > 10000 THEN '#d4edda' FONT_COLOR '#155724',

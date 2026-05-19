@@ -1781,6 +1781,7 @@ namespace ETL_SQL.Core.Parser.Components
             var result = new List<FormattingRule>();
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
+                Match(TokenType.WHEN);
                 var condition = _parser.ParseExpression();
                 Consume(TokenType.THEN, "Expected THEN after formatting condition");
                 var color = Consume(TokenType.STRING_LITERAL, "Expected color string after THEN").Value;
