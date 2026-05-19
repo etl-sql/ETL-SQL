@@ -32,7 +32,8 @@ UNION ALL SELECT 'DATEPICKER', '23_DATEPICKER.rptsql', 'Calendar date selection'
 UNION ALL SELECT 'RELDATEPICKER', '24_RELDATEPICKER.rptsql', 'Relative expressions (D-7, M-1)'
 UNION ALL SELECT 'SLIDER', '25_SLIDER.rptsql', 'Numeric range controls'
 UNION ALL SELECT 'SEARCH', '26_SEARCH.rptsql', 'Free-text search'
-UNION ALL SELECT 'INPUTS', '27_CHECKBOX.rptsql', 'Form-like inputs (Checkbox, Textbox, Numberbox)';
+UNION ALL SELECT 'INPUTS',  '27_CHECKBOX.rptsql', 'Form-like inputs (Checkbox, Textbox, Numberbox)'
+UNION ALL SELECT 'MATRIX',  '33_MATRIX.rptsql',  'Pivot tables: multi-dimension, multi-value, subtotals, AXIS_SORT';
 
 -- 2. Visual for the Index
 CREATE VISUAL VisualIndex AS TABLE (

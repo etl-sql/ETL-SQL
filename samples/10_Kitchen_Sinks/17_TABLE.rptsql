@@ -1,65 +1,236 @@
 -- Kitchen Sink: TABLE Visual
--- This script demonstrates all features of the TABLE visual type.
+-- Demonstrates every TABLE feature added in v0.8.0-beta.3:
+--   MAPPINGS: FORMAT, ALIGN, DATA_BAR, COLOR_SCALE, IMAGE, HYPERLINK, SPARKLINE
+--   FORMATTING: row background + FONT_COLOR
+--   OPTIONS: PAGE_SIZE, STRIPED, SEARCH, GRAND_TOTAL
 
 SET REPORT TITLE = 'Kitchen Sink: TABLE Visual';
-SET REPORT DESCRIPTION = 'Comprehensive demonstration of TABLE capabilities, including conditional formatting and summaries.';
+SET REPORT DESCRIPTION = 'Every TABLE mapping option, cell renderer, and conditional formatting feature in one place.';
 
--- 1. Mock Data Generation
-SELECT 101 AS ID, 'Direct' AS Channel, 500.00 AS Revenue, 0.15 AS Margin, '2026-05-01' AS Date INTO #sales
-UNION ALL SELECT 102, 'Social', 300.00, -0.05, '2026-05-02'
-UNION ALL SELECT 103, 'Search', 800.00, 0.20, '2026-05-03'
-UNION ALL SELECT 104, 'Referral', 150.00, 0.08, '2026-05-04'
-UNION ALL SELECT 105, 'Email', 250.00, 0.12, '2026-05-05'
-UNION ALL SELECT 106, 'Direct', 1200.00, 0.25, '2026-05-06';
+-- ── Shared mock data ──────────────────────────────────────────────────────────
+-- 8 products with price, margin (decimal), revenue, status, logo URL,
+-- product URL, and six months of revenue for sparkline trend columns.
 
--- 2. Basic Table
-CREATE VISUAL BasicTable AS TABLE (
-    SOURCE = #sales,
-    TITLE = 'Basic Data Table'
-);
+SELECT
+    'P001' AS id, 'Laptop Pro'        AS product, 'Electronics' AS category,
+    1299.00 AS price,  0.32 AS margin, 58455 AS revenue, 'Active'        AS status,
+    'https://placehold.co/24x24/4472C4/FFF?text=E' AS logo_url,
+    'https://example.com/p/001'                    AS product_url,
+     7200 AS jan,  8400 AS feb,  9800 AS mar, 10200 AS apr, 11500 AS may, 11355 AS jun
+INTO #products
+UNION ALL SELECT
+    'P002', 'Wireless Mouse',  'Electronics',  29.99, 0.18, 12150, 'Active',
+    'https://placehold.co/24x24/4472C4/FFF?text=E', 'https://example.com/p/002',
+     1800,  2100,  1950,  2400,  2600,  1300
+UNION ALL SELECT
+    'P003', 'Office Chair',    'Furniture',   349.00, -0.04, 6980, 'Low Stock',
+    'https://placehold.co/24x24/E07B39/FFF?text=F', 'https://example.com/p/003',
+     1400,  1200,  1600,   900,   800,  1080
+UNION ALL SELECT
+    'P004', 'Standing Desk',   'Furniture',   699.00,  0.21, 34950, 'Active',
+    'https://placehold.co/24x24/E07B39/FFF?text=F', 'https://example.com/p/004',
+     4200,  5100,  6300,  7400,  7800,  4150
+UNION ALL SELECT
+    'P005', 'Notebook',        'Stationery',    4.99,  0.45,  2245, 'Active',
+    'https://placehold.co/24x24/28A745/FFF?text=S', 'https://example.com/p/005',
+      600,   520,   450,   400,   180,    95
+UNION ALL SELECT
+    'P006', 'Ergo Keyboard',   'Electronics', 149.00,  0.08, 19350, 'Active',
+    'https://placehold.co/24x24/4472C4/FFF?text=E', 'https://example.com/p/006',
+     2800,  3100,  3400,  3200,  3800,  3050
+UNION ALL SELECT
+    'P007', 'Monitor 27"',     'Electronics', 499.00,  0.25, 79840, 'Active',
+    'https://placehold.co/24x24/4472C4/FFF?text=E', 'https://example.com/p/007',
+    11200, 12800, 14500, 13200, 15800, 12340
+UNION ALL SELECT
+    'P008', 'Filing Cabinet',  'Furniture',   229.00, -0.12,  4580, 'Discontinued',
+    'https://placehold.co/24x24/E07B39/FFF?text=F', 'https://example.com/p/008',
+      900,   850,   760,   640,   580,   850;
 
--- 3. Table with Summaries (Grand Total)
-CREATE VISUAL SummaryTable AS TABLE (
-    SOURCE = #sales,
-    TITLE = 'Table with Totals',
-    SUMMARY (
-        GRAND_TOTAL = ON,
-        SUM(Revenue) AS 'Total Revenue',
-        AVG(Margin) AS 'Average Margin'
+-- ═════════════════════════════════════════════════════════════════════════════
+-- PAGE 1 — Cell Formatting: FORMAT / ALIGN / DATA_BAR / COLOR_SCALE
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- FORMAT applies a .NET format string to numeric cells.
+-- ALIGN sets column text alignment: left (default) | center | right.
+-- Column headers are clickable — click to sort ascending/descending.
+CREATE VISUAL FormatAlign AS TABLE (
+    SOURCE = #products,
+    TITLE  = '1A  FORMAT & ALIGN',
+    MAPPINGS (
+        product,
+        category,
+        price   FORMAT 'C2'  ALIGN 'right'  AS 'Price',
+        margin  FORMAT 'P1'  ALIGN 'right'  AS 'Margin %',
+        revenue FORMAT 'N0'  ALIGN 'right'  AS 'Revenue'
     )
 );
 
--- 4. Table with Conditional Formatting
-CREATE VISUAL FormattedTable AS TABLE (
-    SOURCE = #sales,
-    TITLE = 'Table with Conditional Formatting',
+-- DATA_BAR renders a proportional fill bar behind the cell value.
+-- Bar width scales across the column min–max range.
+-- Optional COLOR '#hex' overrides the default bar color.
+CREATE VISUAL DataBars AS TABLE (
+    SOURCE = #products,
+    TITLE  = '1B  DATA_BAR Fill Bars',
+    MAPPINGS (
+        product,
+        revenue FORMAT 'N0' ALIGN 'right' DATA_BAR COLOR '#4472C4'  AS 'Revenue (custom color)',
+        margin  FORMAT 'P1' ALIGN 'right' DATA_BAR                  AS 'Margin (default color)'
+    )
+);
+
+-- COLOR_SCALE interpolates a gradient background across a column min–max range.
+-- FROM = color at minimum value, TO = color at maximum value.
+CREATE VISUAL ColorScale AS TABLE (
+    SOURCE = #products,
+    TITLE  = '1C  COLOR_SCALE Gradient Heatmap',
+    MAPPINGS (
+        product,
+        category,
+        margin  FORMAT 'P1' ALIGN 'right'
+            COLOR_SCALE FROM '#FFAAAA' TO '#AAFFAA'  AS 'Margin (red→green)',
+        revenue FORMAT 'N0' ALIGN 'right'
+            COLOR_SCALE FROM '#FFFFFF' TO '#4472C4'  AS 'Revenue (white→blue)'
+    )
+);
+
+-- SPARKLINE renders a mini inline chart from a group of value columns.
+-- Source columns are listed inside SPARKLINE(); they are hidden from the table.
+-- Chart types: LINE (default) | BAR | AREA.
+CREATE VISUAL Sparklines AS TABLE (
+    SOURCE = #products,
+    TITLE  = '1D  SPARKLINE Mini Trend Charts',
+    MAPPINGS (
+        product,
+        category,
+        revenue FORMAT 'N0' ALIGN 'right'                        AS 'Total',
+        SPARKLINE(jan, feb, mar, apr, may, jun) LINE             AS 'H1 Trend (Line)',
+        SPARKLINE(jan, feb, mar, apr, may, jun) BAR              AS 'H1 Trend (Bar)',
+        SPARKLINE(jan, feb, mar, apr, may, jun) AREA             AS 'H1 Trend (Area)'
+    )
+);
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- PAGE 2 — Rich Content: IMAGE / HYPERLINK / FORMATTING + FONT_COLOR
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- IMAGE renders the cell value as an <img> tag (expects a URL).
+-- WIDTH n sets a fixed pixel width.  Only http/https URLs are permitted.
+-- HYPERLINK renders the cell as a clickable <a> link.
+-- LABEL 'text' replaces the raw URL with a readable label.
+CREATE VISUAL ImageHyperlink AS TABLE (
+    SOURCE = #products,
+    TITLE  = '2A  IMAGE & HYPERLINK Cell Renderers',
+    MAPPINGS (
+        logo_url    IMAGE WIDTH 24        AS 'Logo',
+        product                           AS 'Product',
+        category,
+        status,
+        product_url HYPERLINK LABEL 'View →'  AS 'Link'
+    )
+);
+
+-- FORMATTING applies row-level background and optional FONT_COLOR rules.
+-- Rules evaluate top-down; first match wins.
+-- WHEN can be omitted (legacy) but is recommended for clarity.
+CREATE VISUAL FontColorFormatting AS TABLE (
+    SOURCE = #products,
+    TITLE  = '2B  FORMATTING with FONT_COLOR',
+    MAPPINGS (
+        product,
+        category,
+        margin  FORMAT 'P1' ALIGN 'right'  AS 'Margin %',
+        revenue FORMAT 'N0' ALIGN 'right'  AS 'Revenue',
+        status
+    ),
     FORMATTING (
-        Margin < 0 THEN 'red',
-        Margin >= 0.2 THEN '#28a745',
-        Revenue > 1000 THEN 'yellow'
+        WHEN margin  < 0        THEN '#FFE4E1' FONT_COLOR '#C0392B',
+        WHEN margin  >= 0.30    THEN '#E8F5E9' FONT_COLOR '#1B5E20',
+        WHEN revenue > 50000    THEN '#FFF9C4' FONT_COLOR '#7B6700'
     )
 );
 
--- 5. Table with Custom Grid and Options
-CREATE VISUAL StyledTable AS TABLE (
-    SOURCE = #sales,
-    TITLE = 'Styled Table (Custom Grid)',
+-- ═════════════════════════════════════════════════════════════════════════════
+-- PAGE 3 — Full Kitchen Sink + OPTIONS
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- All mapping features combined in one visual.
+CREATE VISUAL FullKitchenSink AS TABLE (
+    SOURCE = #products,
+    TITLE  = '3A  All Features Combined',
+    MAPPINGS (
+        logo_url    IMAGE WIDTH 24                                         AS 'Logo',
+        product                                                            AS 'Product',
+        category,
+        price   FORMAT 'C2' ALIGN 'right'                                  AS 'Price',
+        revenue FORMAT 'N0' ALIGN 'right' DATA_BAR COLOR '#4472C4'        AS 'Revenue',
+        margin  FORMAT 'P1' ALIGN 'right'
+            COLOR_SCALE FROM '#FFAAAA' TO '#AAFFAA'                        AS 'Margin',
+        product_url HYPERLINK LABEL 'View'                                 AS 'Link',
+        SPARKLINE(jan, feb, mar, apr, may, jun) LINE                       AS 'H1 Trend'
+    ),
+    FORMATTING (
+        WHEN margin  < 0      THEN '#FFE4E1' FONT_COLOR '#C0392B',
+        WHEN revenue > 50000  THEN '#E8F5E9' FONT_COLOR '#1B5E20'
+    ),
     OPTIONS (
-        GRID = (HEADER, FOOTER, LEFT),
-        SHOW_NO_DATA_PLACEHOLDER = ON,
-        FORMAT = 'C2' -- Applies to numeric columns generally? (Wait, usually it's per column, but guide says CARD, TABLE)
+        STRIPED     = ON,
+        SEARCH      = ON,
+        PAGE_SIZE   = 5,
+        GRAND_TOTAL = SUM
     )
 );
 
--- Page Layout
-CREATE PAGE TableKitchenSink AS (
-    STRUCTURE = 'A / B / C / D',
+-- OPTIONS: PAGE_SIZE limits rows per page (pagination controls appear automatically).
+-- STRIPED = ON (default) adds alternating row shading.
+-- SEARCH = ON (default) adds a client-side search box above the table.
+-- GRAND_TOTAL = SUM|AVG|COUNT appends a footer row with per-column aggregates.
+CREATE VISUAL OptionsDemo AS TABLE (
+    SOURCE = #products,
+    TITLE  = '3B  OPTIONS: PAGE_SIZE / STRIPED / SEARCH / GRAND_TOTAL',
+    MAPPINGS (
+        product                                 AS 'Product',
+        category,
+        revenue FORMAT 'N0' ALIGN 'right'       AS 'Revenue',
+        margin  FORMAT 'P1' ALIGN 'right'       AS 'Margin %'
+    ),
+    OPTIONS (
+        PAGE_SIZE   = 3,
+        STRIPED     = ON,
+        SEARCH      = ON,
+        GRAND_TOTAL = SUM
+    )
+);
+
+-- ── Pages & Navigation ────────────────────────────────────────────────────────
+
+CREATE PAGE CellFormatting AS (
+    STRUCTURE = 'A B / C D',
     MAP (
-        'A' = BasicTable,
-        'B' = SummaryTable,
-        'C' = FormattedTable,
-        'D' = StyledTable
+        'A' = FormatAlign,
+        'B' = DataBars,
+        'C' = ColorScale,
+        'D' = Sparklines
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = TableKitchenSink, PAGES (TableKitchenSink));
+CREATE PAGE RichContent AS (
+    STRUCTURE = 'A B',
+    MAP (
+        'A' = ImageHyperlink,
+        'B' = FontColorFormatting
+    )
+);
+
+CREATE PAGE CombinedAndOptions AS (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = FullKitchenSink,
+        'B' = OptionsDemo
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (
+    DEFAULT = CellFormatting,
+    PAGES   (CellFormatting, RichContent, CombinedAndOptions)
+);

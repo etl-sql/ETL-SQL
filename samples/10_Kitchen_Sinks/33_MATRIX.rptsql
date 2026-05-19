@@ -1,0 +1,195 @@
+-- Kitchen Sink: MATRIX Visual
+-- Demonstrates all MATRIX features added in v0.8.0-beta.3:
+--   Basic pivot (ROW + COL + VALUE)
+--   Multiple row/column dimensions (ROW1/ROW2, COL1/COL2) with expand/collapse
+--   Multiple VALUE columns (VALUE2 etc.) for side-by-side measures
+--   SUBTOTALS = ON for per-group subtotal rows
+--   AXIS_SORT = DESC to sort pivot columns by aggregate value
+
+SET REPORT TITLE = 'Kitchen Sink: MATRIX Visual';
+SET REPORT DESCRIPTION = 'Pivot table features: multi-dimension grouping, multiple measures, subtotals, and column sorting.';
+
+-- ── Shared mock data ──────────────────────────────────────────────────────────
+-- 24 rows: 4 product categories × 3 regions × 2 halves.
+-- West region has deliberately higher revenue so AXIS_SORT DESC puts it first.
+
+SELECT 'Electronics' AS category, 'North' AS region, 'H1' AS half, 45000 AS revenue,  420 AS units INTO #sales
+UNION ALL SELECT 'Electronics', 'North', 'H2', 52000,  480
+UNION ALL SELECT 'Electronics', 'South', 'H1', 38000,  360
+UNION ALL SELECT 'Electronics', 'South', 'H2', 41000,  390
+UNION ALL SELECT 'Electronics', 'West',  'H1', 67000,  620
+UNION ALL SELECT 'Electronics', 'West',  'H2', 71000,  660
+UNION ALL SELECT 'Furniture',   'North', 'H1', 28000,  110
+UNION ALL SELECT 'Furniture',   'North', 'H2', 31000,  125
+UNION ALL SELECT 'Furniture',   'South', 'H1', 22000,   88
+UNION ALL SELECT 'Furniture',   'South', 'H2', 25000,  100
+UNION ALL SELECT 'Furniture',   'West',  'H1', 35000,  140
+UNION ALL SELECT 'Furniture',   'West',  'H2', 39000,  156
+UNION ALL SELECT 'Clothing',    'North', 'H1', 18000,  810
+UNION ALL SELECT 'Clothing',    'North', 'H2', 21000,  950
+UNION ALL SELECT 'Clothing',    'South', 'H1', 15000,  675
+UNION ALL SELECT 'Clothing',    'South', 'H2', 17000,  765
+UNION ALL SELECT 'Clothing',    'West',  'H1', 24000, 1080
+UNION ALL SELECT 'Clothing',    'West',  'H2', 28000, 1260
+UNION ALL SELECT 'Food',        'North', 'H1', 31000, 2100
+UNION ALL SELECT 'Food',        'North', 'H2', 35000, 2400
+UNION ALL SELECT 'Food',        'South', 'H1', 27000, 1820
+UNION ALL SELECT 'Food',        'South', 'H2', 29000, 1960
+UNION ALL SELECT 'Food',        'West',  'H1', 42000, 2850
+UNION ALL SELECT 'Food',        'West',  'H2', 46000, 3120;
+
+-- Multi-dimension data: category + sub-category rows × region + half columns
+SELECT 'Electronics' AS category, 'Laptops'    AS subcategory, 'North' AS region, 'H1' AS half, 28000 AS revenue INTO #sales2
+UNION ALL SELECT 'Electronics', 'Laptops',    'North', 'H2', 33000
+UNION ALL SELECT 'Electronics', 'Laptops',    'South', 'H1', 24000
+UNION ALL SELECT 'Electronics', 'Laptops',    'South', 'H2', 26000
+UNION ALL SELECT 'Electronics', 'Peripherals','North', 'H1', 17000
+UNION ALL SELECT 'Electronics', 'Peripherals','North', 'H2', 19000
+UNION ALL SELECT 'Electronics', 'Peripherals','South', 'H1', 14000
+UNION ALL SELECT 'Electronics', 'Peripherals','South', 'H2', 15000
+UNION ALL SELECT 'Furniture',   'Desks',      'North', 'H1', 18000
+UNION ALL SELECT 'Furniture',   'Desks',      'North', 'H2', 21000
+UNION ALL SELECT 'Furniture',   'Desks',      'South', 'H1', 14000
+UNION ALL SELECT 'Furniture',   'Desks',      'South', 'H2', 16000
+UNION ALL SELECT 'Furniture',   'Chairs',     'North', 'H1', 10000
+UNION ALL SELECT 'Furniture',   'Chairs',     'North', 'H2', 10000
+UNION ALL SELECT 'Furniture',   'Chairs',     'South', 'H1',  8000
+UNION ALL SELECT 'Furniture',   'Chairs',     'South', 'H2',  9000;
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- PAGE 1 — Basic Pivot & Multi-Dimension Grouping
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- Basic MATRIX: one ROW dimension, one COL dimension, one VALUE measure.
+-- Default AGGREGATE = SUM, column keys sorted alphabetically.
+-- Click column headers to expand/collapse multi-level groups.
+CREATE VISUAL BasicMatrix AS MATRIX (
+    SOURCE = #sales,
+    TITLE  = '1A  Basic Pivot — Category × Region',
+    MAPPINGS (
+        ROW   = category,
+        COL   = region,
+        VALUE = revenue
+    ),
+    OPTIONS (AGGREGATE = SUM, GRAND_TOTAL = ON)
+);
+
+-- AGGREGATE controls how values are combined per cell.
+-- COUNT counts the number of source rows matching each cell.
+CREATE VISUAL CountMatrix AS MATRIX (
+    SOURCE = #sales,
+    TITLE  = '1B  AGGREGATE = COUNT — Transactions per Cell',
+    MAPPINGS (
+        ROW   = category,
+        COL   = region,
+        VALUE = revenue
+    ),
+    OPTIONS (AGGREGATE = COUNT)
+);
+
+-- Multi-dimension MATRIX: ROW1/ROW2 create a hierarchical row tree.
+-- COL1/COL2 create a hierarchical column tree.
+-- Click the +/- toggle buttons to expand or collapse group levels.
+CREATE VISUAL MultiDimMatrix AS MATRIX (
+    SOURCE = #sales2,
+    TITLE  = '1C  Multi-Dimension — (Category / Sub-cat) × (Region / Half)',
+    MAPPINGS (
+        ROW1  = category,
+        ROW2  = subcategory,
+        COL1  = region,
+        COL2  = half,
+        VALUE = revenue
+    ),
+    OPTIONS (AGGREGATE = SUM, GRAND_TOTAL = ON)
+);
+
+-- ═════════════════════════════════════════════════════════════════════════════
+-- PAGE 2 — Multiple Values / SUBTOTALS / AXIS_SORT
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- VALUE2 (and VALUE3..VALUE5) add additional measure columns.
+-- Each pivot column gets one sub-column per measure.
+-- A value sub-header row appears below the column dimension headers.
+CREATE VISUAL MultiValueMatrix AS MATRIX (
+    SOURCE = #sales,
+    TITLE  = '2A  Multiple VALUES — Revenue & Units side-by-side',
+    MAPPINGS (
+        ROW    = category,
+        COL    = region,
+        VALUE  = revenue,
+        VALUE2 = units
+    ),
+    OPTIONS (AGGREGATE = SUM, GRAND_TOTAL = ON)
+);
+
+-- SUBTOTALS = ON appends a subtotal row after each expanded row group.
+-- Most useful with ROW1/ROW2 hierarchies but works with single-level too.
+CREATE VISUAL SubtotalsMatrix AS MATRIX (
+    SOURCE = #sales2,
+    TITLE  = '2B  SUBTOTALS = ON — Sub-totals after each Category group',
+    MAPPINGS (
+        ROW1  = category,
+        ROW2  = subcategory,
+        COL   = region,
+        VALUE = revenue
+    ),
+    OPTIONS (AGGREGATE = SUM, GRAND_TOTAL = ON, SUBTOTALS = ON)
+);
+
+-- AXIS_SORT = DESC sorts pivot column keys by their aggregate value sum descending
+-- instead of alphabetically.  Useful for "top region first" layouts.
+-- Here West has the highest total revenue so it appears as the first column.
+CREATE VISUAL AxisSortMatrix AS MATRIX (
+    SOURCE = #sales,
+    TITLE  = '2C  AXIS_SORT = DESC — Columns ordered by total revenue (West first)',
+    MAPPINGS (
+        ROW   = category,
+        COL   = region,
+        VALUE = revenue
+    ),
+    OPTIONS (AGGREGATE = SUM, GRAND_TOTAL = ON, AXIS_SORT = DESC)
+);
+
+-- Full kitchen sink: all MATRIX options in one visual.
+CREATE VISUAL FullMatrixSink AS MATRIX (
+    SOURCE = #sales,
+    TITLE  = '2D  All Options Combined',
+    MAPPINGS (
+        ROW    = category,
+        COL    = region,
+        VALUE  = revenue,
+        VALUE2 = units
+    ),
+    OPTIONS (
+        AGGREGATE   = SUM,
+        GRAND_TOTAL = ON,
+        SUBTOTALS   = ON,
+        AXIS_SORT   = DESC
+    )
+);
+
+-- ── Pages & Navigation ────────────────────────────────────────────────────────
+
+CREATE PAGE BasicAndMultiDim AS (
+    STRUCTURE = 'A B / C C',
+    MAP (
+        'A' = BasicMatrix,
+        'B' = CountMatrix,
+        'C' = MultiDimMatrix
+    )
+);
+
+CREATE PAGE MultiValueAndSorting AS (
+    STRUCTURE = 'A B / C D',
+    MAP (
+        'A' = MultiValueMatrix,
+        'B' = SubtotalsMatrix,
+        'C' = AxisSortMatrix,
+        'D' = FullMatrixSink
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (
+    DEFAULT = BasicAndMultiDim,
+    PAGES   (BasicAndMultiDim, MultiValueAndSorting)
+);
