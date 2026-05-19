@@ -160,6 +160,7 @@ namespace ETL_SQL.Data
         public int SpillChunkCount => _spillChunkNames.Count;
         public long SpillTotalBytes { get; private set; } = 0;
         private long _totalRowCount = 0;
+        public long EstimatedRowCount => _totalRowCount;
         private IExecutionContext? _executionContext;
         public IExecutionContext? ExecutionContext 
         { 

@@ -94,7 +94,20 @@ namespace ETL_SQL.Engine.Engines
                 // large) streams through without pre-buffering. When a right side exceeds the memory
                 // grant, StreamSingleJoin automatically delegates to ExternalJoinEngine for that pair.
                 // Intentional materialization: GROUP BY / WINDOW / ORDER BY require random access.
-                allRows = await _joinEngine.ApplyJoinsStreaming(inputStream, stmt.Joins, stmt).ToListAsync();
+
+                // Phase 4 (runtime): Apply LeftSingle predicates to the input stream before any hash
+                // table is built, reducing the number of rows probed through each right-side table.
+                var leftPreds = PredicatePushdownOptimizer.GetSingleSourcePredicates(logicalPlan, fromName)
+                    .Select(p => p.Predicate).ToList();
+                var joinInput = leftPreds.Count > 0
+                    ? WhereStream(inputStream, CombineAnds(leftPreds), _context)
+                    : inputStream;
+
+                allRows = await _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt).ToListAsync();
+
+                // Phase 1b (runtime): Drop columns not referenced by any downstream clause.
+                // Reduces in-memory working set before GROUP BY / WINDOW / ORDER BY.
+                PruneColumns(allRows, logicalPlan.RequiredColumns);
             }
             else if (streamAggregate)
             {
@@ -110,15 +123,21 @@ namespace ETL_SQL.Engine.Engines
                 try
                 {
                     int count = 0;
+                    long aggGrantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
                     while (count < _context.JoinSpillThreshold && await enumerator.MoveNextAsync())
                     {
                         bufferedForSpill.Add(enumerator.Current);
                         count++;
+                        // Early spill if byte grant exceeded before the row-count backstop fires.
+                        if (count % 1000 == 0 && RowWidthEstimator.EstimateTotalBytes(bufferedForSpill) > aggGrantBytes)
+                            break;
                     }
 
-                    if (count >= _context.JoinSpillThreshold)
+                    bool aggNeedsSpill = count >= _context.JoinSpillThreshold
+                        || RowWidthEstimator.EstimateTotalBytes(bufferedForSpill) > aggGrantBytes;
+                    if (aggNeedsSpill)
                     {
-                        _logger.Info("[SELECT] Aggregate threshold reached ({Threshold}). Switching to ExternalAggregateEngine.", _context.JoinSpillThreshold);
+                        _logger.Info("[SELECT] Aggregate threshold reached ({Count} rows, grant={GrantMB} MB). Switching to ExternalAggregateEngine.", count, _context.OperatorMemoryGrantMB);
                         var externalAgg = new ExternalAggregateEngine(_context, _logger);
                         var combinedStream = PrependRows(bufferedForSpill, ContinueStream(enumerator));
                         // Must materialize inside the try block: ContinueStream captures the enumerator,
@@ -294,7 +313,7 @@ namespace ETL_SQL.Engine.Engines
             // 6. OFFSET / LIMIT
             // Phase 7: Flush any pending external engine stream (e.g. external agg with no ORDER BY).
             await MaterializeEngineStream();
-            allRows = await ApplyLimits(allRows, stmt);
+            allRows = await ApplyLimits(allRows, stmt, colNames, finalColumns);
 
             // Final Projection & Batching
             var seenRows = stmt.IsDistinct ? new HashSet<string>() : null;
@@ -491,7 +510,8 @@ namespace ETL_SQL.Engine.Engines
             return RowWidthEstimator.EstimateTotalBytes(rows) > grantBytes;
         }
 
-        private async Task<List<Row>> ApplyLimits(List<Row> rows, SelectStatement stmt)
+        private async Task<List<Row>> ApplyLimits(List<Row> rows, SelectStatement stmt,
+            List<string>? colNames = null, List<SelectColumn>? finalColumns = null)
         {
             if (stmt.Offset != null)
             {
@@ -511,8 +531,25 @@ namespace ETL_SQL.Engine.Engines
                 take = Convert.ToInt32(await _context.EvaluateValue(stmt.LimitCount, new Row()));
             }
 
-            if (take >= 0) rows = rows.Take(take).ToList();
-            return rows;
+            if (take < 0) return rows;
+
+            if (stmt.WithTies && stmt.OrderBy != null && colNames != null && finalColumns != null && take < rows.Count)
+            {
+                var taken = rows.Take(take).ToList();
+                var lastKeys = await ExtractSortKeys(taken[^1], stmt.OrderBy, colNames, finalColumns);
+                for (int i = take; i < rows.Count; i++)
+                {
+                    var keys = await ExtractSortKeys(rows[i], stmt.OrderBy, colNames, finalColumns);
+                    bool tied = true;
+                    for (int j = 0; j < stmt.OrderBy.Count; j++)
+                        if (_context.CompareConstants(keys[j], lastKeys[j]) != 0) { tied = false; break; }
+                    if (!tied) break;
+                    taken.Add(rows[i]);
+                }
+                return taken;
+            }
+
+            return rows.Take(take).ToList();
         }
 
         private static async IAsyncEnumerable<Row> PrependRows(IEnumerable<Row> buffered, IAsyncEnumerable<Row> remaining)
@@ -535,6 +572,35 @@ namespace ETL_SQL.Engine.Engines
         {
             foreach (var r in rows) yield return r;
             await Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Builds a single AND expression from a list of predicates.
+        /// </summary>
+        private static Expression CombineAnds(List<Expression> preds)
+            => preds.Count == 1
+                ? preds[0]
+                : preds.Skip(1).Aggregate(preds[0],
+                    (acc, p) => (Expression)new BinaryExpression(acc, TokenType.AND, p));
+
+        /// <summary>
+        /// Nulls out column values that are not referenced by any downstream clause
+        /// (WHERE / JOIN / GROUP BY / ORDER BY / SELECT projection).
+        /// The column slot stays in the schema (Row has no public remove API) but the object
+        /// reference is cleared, freeing GC pressure on wide join results.
+        /// A null <paramref name="required"/> set (e.g. SELECT *) means pruning is skipped.
+        /// </summary>
+        private static void PruneColumns(List<Row> rows, HashSet<string>? required)
+        {
+            if (required == null || rows.Count == 0) return;
+            // All rows produced by a join share the same schema — compute the drop list once.
+            var toDrop = rows[0].GetColumnNames()
+                .Where(k => !RequiredColumnAnalyzer.IsRequired(k, required))
+                .ToList();
+            if (toDrop.Count == 0) return;
+            foreach (var row in rows)
+                foreach (var k in toDrop)
+                    row[k] = null;
         }
     }
 }

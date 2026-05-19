@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Spill;
+using ETL_SQL.Engine.Planning;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -115,8 +116,11 @@ namespace ETL_SQL.Engine.Engines
                     var rightColSet = joinRows.Count > 0 ? BuildBareColumnSet(joinRows[0]) : null;
                     bool hasEquality = TryExtractEqualityKeys(effectiveJoin.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight, leftColSet, rightColSet);
 
-                    // HYPER-SCALE: Check for disk-spilling threshold
-                    if (hasEquality && (allBufferedRows.Count > _context.JoinSpillThreshold || joinRows.Count > _context.JoinSpillThreshold))
+                    // HYPER-SCALE: Check for disk-spilling threshold (row-count backstop + byte-based grant).
+                    long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+                    bool joinExceedsRowLimit = allBufferedRows.Count > _context.JoinSpillThreshold || joinRows.Count > _context.JoinSpillThreshold;
+                    bool joinExceedsByteGrant = RowWidthEstimator.EstimateTotalBytes(allBufferedRows) + RowWidthEstimator.EstimateTotalBytes(joinRows) > grantBytes;
+                    if (hasEquality && (joinExceedsRowLimit || joinExceedsByteGrant))
                     {
                         _logger.WriteLine($"[yellow]HYPER-SCALE: Memory threshold exceeded ({Math.Max(allBufferedRows.Count, joinRows.Count)} rows). Triggering External Disk-Spilling Join.[/]");
 
@@ -653,8 +657,47 @@ namespace ETL_SQL.Engine.Engines
             TableSchema? schema = leftRows.Count > 0 && rightRows.Count > 0
                 ? BuildCombinedSchema(leftRows[0], rightRows[0]) : null;
             var results = new List<Row>();
-            await foreach (var r in PerformHashJoinStream(leftRows.ToAsyncEnumerable(), rightRows, join, leftKeys, rightKeys, schema)) results.Add(r);
+
+            // For INNER JOIN, build the hash table on the smaller side — smaller hash table = better cache locality.
+            if (join.JoinType.Equals("INNER JOIN", StringComparison.OrdinalIgnoreCase)
+                && leftRows.Count > 0 && leftRows.Count < rightRows.Count)
+            {
+                await foreach (var r in PerformHashJoinBuildOnLeft(leftRows, rightRows.ToAsyncEnumerable(), join, leftKeys, rightKeys, schema))
+                    results.Add(r);
+            }
+            else
+            {
+                await foreach (var r in PerformHashJoinStream(leftRows.ToAsyncEnumerable(), rightRows, join, leftKeys, rightKeys, schema))
+                    results.Add(r);
+            }
             return results;
+        }
+
+        // Builds hash table on the smaller left side and probes with the right stream.
+        // Output column order is left-then-right, identical to PerformHashJoinStream — safe for INNER JOIN only.
+        private async IAsyncEnumerable<Row> PerformHashJoinBuildOnLeft(
+            IEnumerable<Row> leftBuild, IAsyncEnumerable<Row> rightProbe, JoinClause join,
+            List<string> leftKeys, List<string> rightKeys, TableSchema? combinedSchema)
+        {
+            var hashTable = new Dictionary<CompoundKey, List<Row>>();
+            foreach (var r in leftBuild)
+            {
+                var key = GetHashKey(r, leftKeys);
+                if (!hashTable.TryGetValue(key, out var list)) { list = new List<Row>(); hashTable[key] = list; }
+                list.Add(r);
+            }
+
+            await foreach (var right in rightProbe)
+            {
+                var key = GetHashKey(right, rightKeys);
+                if (!hashTable.TryGetValue(key, out var matches)) continue;
+                foreach (var left in matches)
+                {
+                    var combined = CombineRows(left, right, combinedSchema);
+                    if (await _context.EvaluateCondition(join.Condition, combined))
+                        yield return combined;
+                }
+            }
         }
 
         private async IAsyncEnumerable<Row> PerformHashJoinStream(IAsyncEnumerable<Row> leftStream, List<Row> rightRows, JoinClause join, List<string> leftKeys, List<string> rightKeys, TableSchema? combinedSchema = null)

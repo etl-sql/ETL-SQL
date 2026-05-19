@@ -160,6 +160,22 @@ namespace ETL_SQL.Benchmarks
         [Benchmark(Description = "UnionAll — two filtered streams concatenated (streaming candidate)")]
         public async Task UnionAll() => await _evaluator.Evaluate(_unionAllScript);
 
+        [GlobalCleanup]
+        public void ReportExtraMetrics()
+        {
+            var proc = System.Diagnostics.Process.GetCurrentProcess();
+            proc.Refresh();
+            var mem = GC.GetGCMemoryInfo();
+            long lohBytes = mem.GenerationInfo.Length > 3 ? mem.GenerationInfo[3].SizeAfterBytes : -1;
+            Console.WriteLine($"// [ExtraMetrics] WorkingSet={proc.WorkingSet64 / 1024 / 1024} MB, " +
+                $"ManagedHeap={GC.GetTotalMemory(false) / 1024 / 1024} MB, " +
+                $"LOH≈{(lohBytes >= 0 ? lohBytes / 1024 : -1)} KB, " +
+                $"SpillBytes={_evaluator.Telemetry.TotalSpilledBytes}, " +
+                $"SortSpills={_evaluator.Telemetry.SortSpillCount}, " +
+                $"RowsProcessed={_evaluator.Telemetry.RowsProcessed}, " +
+                $"RetainedRows={_evaluator.LastResult?.Rows.Count ?? 0}");
+        }
+
         private static Script Parse(string sql) => new Parser(new Lexer(sql).Tokenize()).Parse();
     }
 

@@ -274,5 +274,123 @@ namespace ETL_SQL.Tests.Statements
             Assert.Equal("A", r.Rows[0]["name"]);
             Assert.Equal("B", r.Rows[1]["name"]);
         }
+
+        // ─── Group 6: QUALIFY after window ────────────────────────────────────────
+
+        [Fact]
+        public async Task Qualify_RowNumber_FiltersToTopPerPartition()
+        {
+            var ev = Ev();
+            await TestHelpers.Execute(ev, @"
+                CREATE TABLE #t (cat VARCHAR, val INT);
+                INSERT INTO #t VALUES ('A',10),('A',30),('A',20),('B',5),('B',15);
+            ");
+            // Window engine only evaluates functions listed in SELECT; include rn so QUALIFY can filter on it.
+            var r = await Q(ev, @"
+                SELECT cat, val, ROW_NUMBER() OVER (PARTITION BY cat ORDER BY val DESC) AS rn
+                FROM #t
+                QUALIFY rn = 1
+                ORDER BY cat;");
+            Assert.Equal(2, r.Rows.Count);
+            Assert.Equal("A", r.Rows[0]["cat"]); Assert.Equal(30m, r.Rows[0]["val"]);
+            Assert.Equal("B", r.Rows[1]["cat"]); Assert.Equal(15m, r.Rows[1]["val"]);
+        }
+
+        [Fact]
+        public async Task Qualify_Alias_ReferencesWindowResultByAlias()
+        {
+            var ev = Ev();
+            await TestHelpers.Execute(ev, @"
+                CREATE TABLE #t (id INT, grp INT, val INT);
+                INSERT INTO #t VALUES (1,1,100),(2,1,200),(3,1,300),(4,2,10),(5,2,20);
+            ");
+            // QUALIFY with an alias referencing the window column
+            var r = await Q(ev, @"
+                SELECT id, grp, val, RANK() OVER (PARTITION BY grp ORDER BY val DESC) AS rnk
+                FROM #t
+                QUALIFY rnk <= 2
+                ORDER BY grp, rnk;");
+            Assert.Equal(4, r.Rows.Count);
+            // grp 1: val 300 (rnk=1), 200 (rnk=2)
+            Assert.Equal(300m, r.Rows[0]["val"]); Assert.Equal(1m, r.Rows[0]["rnk"]);
+            Assert.Equal(200m, r.Rows[1]["val"]); Assert.Equal(2m, r.Rows[1]["rnk"]);
+            // grp 2: val 20 (rnk=1), 10 (rnk=2)
+            Assert.Equal(20m,  r.Rows[2]["val"]); Assert.Equal(1m, r.Rows[2]["rnk"]);
+            Assert.Equal(10m,  r.Rows[3]["val"]); Assert.Equal(2m, r.Rows[3]["rnk"]);
+        }
+
+        // ─── Group 7: CUBE grouping set ───────────────────────────────────────────
+
+        [Fact]
+        public async Task Cube_TwoColumns_ProducesAllCombinations()
+        {
+            var ev = Ev();
+            await TestHelpers.Execute(ev, @"
+                CREATE TABLE #t (region VARCHAR, cat VARCHAR, val INT);
+                INSERT INTO #t VALUES ('East','A',10),('East','B',20),('West','A',30),('West','B',40);
+            ");
+            // CUBE(region, cat) produces: (E,A),(E,B),(W,A),(W,B),(E,null),(W,null),(null,A),(null,B),(null,null)
+            var r = await Q(ev, @"
+                SELECT region, cat, SUM(val) AS total
+                FROM #t
+                GROUP BY CUBE(region, cat);");
+            // All 4 combos + 2 region subtotals + 2 cat subtotals + 1 grand total = 9 rows
+            Assert.Equal(9, r.Rows.Count);
+            // Grand total row: region=null, cat=null, total=100
+            var grand = r.Rows.FirstOrDefault(row =>
+                (row["region"] == null || row["region"] == DBNull.Value) &&
+                (row["cat"]    == null || row["cat"]    == DBNull.Value));
+            Assert.NotNull(grand);
+            Assert.Equal(100m, grand["total"]);
+        }
+
+        // ─── Group 8: NULL semantics in DISTINCT ──────────────────────────────────
+
+        [Fact]
+        public async Task Distinct_NullTreatedAsSingleGroup()
+        {
+            var ev = Ev();
+            await TestHelpers.Execute(ev, @"
+                CREATE TABLE #t (val INT);
+                INSERT INTO #t VALUES (NULL),(NULL),(1),(1),(2);
+            ");
+            // Two NULLs → one NULL; two 1s → one 1; 2 stays
+            var r = await Q(ev, "SELECT DISTINCT val FROM #t ORDER BY val;");
+            Assert.Equal(3, r.Rows.Count);
+            Assert.Null(r.Rows[0]["val"]);       // NULL first
+            Assert.Equal(1m, r.Rows[1]["val"]);
+            Assert.Equal(2m, r.Rows[2]["val"]);
+        }
+
+        [Fact]
+        public async Task Distinct_MultiColumnWithNull_CollapsesOnAllColumns()
+        {
+            var ev = Ev();
+            await TestHelpers.Execute(ev, @"
+                CREATE TABLE #t (a INT, b INT);
+                INSERT INTO #t VALUES (1,NULL),(1,NULL),(2,3),(2,3),(1,2);
+            ");
+            // Three distinct combos: (1,null), (2,3), (1,2)
+            var r = await Q(ev, "SELECT DISTINCT a, b FROM #t ORDER BY a, b;");
+            Assert.Equal(3, r.Rows.Count);
+        }
+
+        // ─── Group 9: WITH TIES ───────────────────────────────────────────────────
+
+        [Fact]
+        public async Task Top_WithTies_IncludesTiedRows()
+        {
+            var ev = Ev();
+            await TestHelpers.Execute(ev, @"
+                CREATE TABLE #t (id INT, score INT);
+                INSERT INTO #t VALUES (1,100),(2,90),(3,90),(4,80);
+            ");
+            // TOP n WITH TIES is the supported syntax; LIMIT n WITH TIES is not parsed.
+            // Top 2 scores are 100 and 90; since two rows tie at 90, all 3 qualifying rows are returned.
+            var r = await Q(ev, "SELECT TOP 2 WITH TIES id, score FROM #t ORDER BY score DESC;");
+            Assert.Equal(3, r.Rows.Count);
+            Assert.Equal(100m, r.Rows[0]["score"]);
+            Assert.All(r.Rows.Skip(1), row => Assert.Equal(90m, row["score"]));
+        }
     }
 }

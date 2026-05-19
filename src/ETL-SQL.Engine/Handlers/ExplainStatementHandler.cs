@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Analysis.Explain;
 using ETL_SQL.Data;
 using Spectre.Console.Rendering;
@@ -22,11 +23,13 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (ExplainStatement)statement;
             
             var plan = new DataTable();
-            var columns = new List<string> { "ID", "Operation", "Details", "Cost", "Mode" };
+            var columns = new List<string> { "ID", "Operation", "Details", "Cost", "Mode", "Est. Rows" };
             if (stmt.IsAnalyze)
             {
                 columns.Add("Actual Rows");
                 columns.Add("Actual Time (ms)");
+                columns.Add("Spill Bytes");
+                columns.Add("Spill Count");
             }
             plan.SetColumns(columns.ToArray());
             
@@ -39,40 +42,66 @@ namespace ETL_SQL.Engine.Handlers
             // If ANALYZE, run the actual query first to collect metrics
             long actualRows = 0;
             long actualTime = 0;
+            long spillBytes = 0;
+            int spillCount = 0;
             if (stmt.IsAnalyze)
             {
                 var oldProfiling = context.Telemetry.IsProfiling;
                 var oldRedirect = context.RedirectOutput;
                 context.Telemetry.IsProfiling = true;
-                context.RedirectOutput = true; // Don't print the actual rows to console
+                context.RedirectOutput = true;
+
+                long spillBefore = context.Telemetry.TotalSpilledBytes;
+                int sortSpillBefore = context.Telemetry.SortSpillCount;
 
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
                     await foreach (var batch in context.ExecuteQuery(stmt.Query))
-                    {
                         actualRows += batch.Rows.Count;
-                    }
                 }
                 finally
                 {
                     sw.Stop();
                     actualTime = sw.ElapsedMilliseconds;
+                    spillBytes = context.Telemetry.TotalSpilledBytes - spillBefore;
+                    spillCount = context.Telemetry.SortSpillCount - sortSpillBefore;
                     context.Telemetry.IsProfiling = oldProfiling;
                     context.RedirectOutput = oldRedirect;
                 }
             }
 
             await new ExplainPlanBuilder().BuildAsync(stmt.Query, plan, context, metrics);
-            
+
             if (stmt.IsAnalyze)
             {
-                // For now, map the total metrics to the final step of the plan
+                // Initialize ANALYZE columns on all rows.
+                foreach (var planRow in plan.Rows)
+                {
+                    planRow["Actual Rows"] = "--";
+                    planRow["Actual Time (ms)"] = "--";
+                    planRow["Spill Bytes"] = 0L;
+                    planRow["Spill Count"] = 0;
+                }
+
+                // Assign total elapsed time and row count to the last plan row.
                 var lastRow = plan.Rows.LastOrDefault();
                 if (lastRow != null)
                 {
                     lastRow["Actual Rows"] = actualRows;
                     lastRow["Actual Time (ms)"] = actualTime;
+                }
+
+                // Assign spill stats to the Sort row; fall back to last row if no Sort present.
+                if (spillBytes > 0 || spillCount > 0)
+                {
+                    var sortRow = plan.Rows.LastOrDefault(r => r["Operation"]?.ToString() == "Sort")
+                                  ?? lastRow;
+                    if (sortRow != null)
+                    {
+                        sortRow["Spill Bytes"] = spillBytes;
+                        sortRow["Spill Count"] = spillCount;
+                    }
                 }
             }
 
@@ -92,12 +121,15 @@ namespace ETL_SQL.Engine.Handlers
                     .AddColumn("Operation")
                     .AddColumn("Details")
                     .AddColumn("Cost", c => c.RightAligned())
-                    .AddColumn("Mode");
+                    .AddColumn("Mode")
+                    .AddColumn("Est. Rows", c => c.RightAligned());
 
                 if (stmt.IsAnalyze)
                 {
                     table.AddColumn("Actual Rows", c => c.RightAligned());
                     table.AddColumn("Actual Time", c => c.RightAligned());
+                    table.AddColumn("Spill Bytes", c => c.RightAligned());
+                    table.AddColumn("Spill Count", c => c.RightAligned());
                 }
 
                 foreach (var row in plan.Rows)
@@ -106,6 +138,7 @@ namespace ETL_SQL.Engine.Handlers
                     var modeMarkup = modeRaw == "BLOCKING"
                         ? new Markup("[yellow]BLOCKING[/]")
                         : (IRenderable)new Text(modeRaw);
+                    var estRows = new Text(row["Est. Rows"]?.ToString() ?? "--");
 
                     if (stmt.IsAnalyze)
                     {
@@ -115,8 +148,11 @@ namespace ETL_SQL.Engine.Handlers
                             new Text(row["Details"]?.ToString() ?? ""),
                             new Text(row["Cost"]?.ToString() ?? ""),
                             modeMarkup,
-                            new Text(row["Actual Rows"]?.ToString() ?? "-"),
-                            new Text(row["Actual Time (ms)"]?.ToString() ?? "-")
+                            estRows,
+                            new Text(row["Actual Rows"]?.ToString() ?? "--"),
+                            new Text(row["Actual Time (ms)"]?.ToString() ?? "--"),
+                            new Text(row["Spill Bytes"]?.ToString() ?? "0"),
+                            new Text(row["Spill Count"]?.ToString() ?? "0")
                         );
                     }
                     else
@@ -126,7 +162,8 @@ namespace ETL_SQL.Engine.Handlers
                             new Text(row["Operation"]?.ToString() ?? ""),
                             new Text(row["Details"]?.ToString() ?? ""),
                             new Text(row["Cost"]?.ToString() ?? ""),
-                            modeMarkup
+                            modeMarkup,
+                            estRows
                         );
                     }
                 }

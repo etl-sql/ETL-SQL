@@ -68,7 +68,7 @@ All runtime logic that evaluates a parsed `Script`.
 
 - **`Evaluator`** — the central execution context. Holds all session state and dispatches statements.
 - **Statement handlers** — one `IStatementHandler` per statement type, registered via DI and injected into `Evaluator`.
-- **`SelectStatementHandler`** — the most complex handler; owns the pushdown decision, in-process query pipeline, external aggregation spill, and CTE resolution.
+- **`SelectStatementHandler`** — owns the pushdown decision and CTE resolution; delegates in-process execution to `SelectExecutionEngine`, which drives the logical optimizer (`PredicatePushdownOptimizer`), the streaming pipeline, and all external engine dispatch.
 - **`ExternalAggregateEngine`** — disk-spill aggregation for large GROUP BY operations.
 - **`DataSourceManager`** — resolves table references to `IDataSource` instances.
 - **`SchemaManager`** — handles `CREATE TABLE`, `DROP TABLE`, `CREATE INDEX`, etc.
@@ -536,17 +536,17 @@ Queries that cannot use this path (and still buffer first):
 
 ### External engines — thresholds and behaviour
 
-Four external engines activate when the estimated working set exceeds configured limits. The decision is **dual-threshold**: both row count and byte-based memory grant are checked; whichever triggers first activates the external engine.
+Four external engines activate when the estimated working set exceeds configured limits. The decision is **dual-threshold**: both a row-count backstop and a byte-based memory grant are checked independently; whichever triggers first activates the external engine.
 
 | Config key | Default | Role |
 |---|---|---|
 | `Engine:JoinSpillThreshold` | 10,000 rows | Row-count backstop for join/aggregate/sort |
 | `Engine:WindowSpillThreshold` | 10,000 rows | Row-count backstop for window functions |
-| `Engine:OperatorMemoryGrantMB` | 256 MB | Byte-based grant; wide rows spill earlier |
+| `Engine:OperatorMemoryGrantMB` | 256 MB | Byte-based grant; wide rows spill earlier than the row-count backstop |
 | `Engine:ExternalSort:ChunkSize` | 10,000 rows | Sorted chunk size for ExternalSortEngine |
 | `Engine:ExternalHashPartitions` | 32 | Partitions per external hash operation |
 
-`RowWidthEstimator` samples up to 100 rows to derive an average row width, then projects total bytes as `count × avgWidth`. If the projection exceeds `OperatorMemoryGrantMB`, the external engine is used even if the row count is below threshold.
+`RowWidthEstimator` samples up to 100 rows to derive an average row width, then projects total bytes as `count × avgWidth`. If the projection exceeds `OperatorMemoryGrantMB`, the external engine activates even when the row count is below threshold.
 
 All external engines write through `ISpillStore` (AES-256 encrypted, GZip compressed by default) to `%TEMP%\ETL-SQL\Spill\<session-guid>\` and increment `Evaluator.TotalSpilledBytes`. See [SpillStore](#spillstore--encrypted-spill-io) below for the security model.
 
@@ -554,7 +554,7 @@ All external engines write through `ISpillStore` (AES-256 encrypted, GZip compre
 
 | Trigger | Chunk size | Algorithm |
 |---|---|---|
-| `ShouldSpill(allRows)` in ORDER BY path | `ExternalSort:ChunkSize` rows | External k-way merge sort |
+| `ShouldSpill(allRows)` — row count OR byte grant | `ExternalSort:ChunkSize` rows | External k-way merge sort |
 
 Sorted chunks are written via `SpillStore` (encrypted + compressed), then merged in a single k-way pass. **Not triggered** when Top-N heap applies (ORDER BY + LIMIT without window/qualify/distinct).
 
@@ -562,18 +562,18 @@ Sorted chunks are written via `SpillStore` (encrypted + compressed), then merged
 
 | Trigger | Partition count | Algorithm |
 |---|---|---|
-| Left input > `JoinSpillThreshold` rows | 32 | Hash partitioning + in-memory join per partition |
+| Either side > `JoinSpillThreshold` rows OR combined byte estimate > `OperatorMemoryGrantMB` | 32 | Hash partitioning + in-memory join per partition |
 
-`SelectExecutionEngine` buffers the left side up to `JoinSpillThreshold` rows. If the threshold is hit, both sides are hash-partitioned to disk and each partition pair is joined in-memory. Called from `SelectExecutionEngine` (not `JoinEngine`) when the streaming threshold fires.
+`JoinEngine` evaluates the dual-threshold check before dispatching: `joinExceedsRowLimit || joinExceedsByteGrant`. When triggered, both sides are hash-partitioned to disk and each partition pair is joined in-memory. For INNER JOINs that stay in-memory, `JoinEngine` additionally selects the smaller side as the hash-table build side, reducing the hash-table footprint and improving cache locality.
 
 **ExternalAggregateEngine** (`ETL-SQL.Engine/Engines/ExternalAggregateEngine.cs`)
 
 | Trigger | Partition count | Algorithm |
 |---|---|---|
-| **Streaming path (no joins)** | 32 | Always used (unconditional disk spill) |
-| **Buffered path (with joins)** | 32 | `ShouldSpill(allRows)` — row count or bytes |
+| **Streaming path (no joins)** | 32 | Row count or byte grant exceeded while buffering initial sample |
+| **Buffered path (with joins)** | 32 | `ShouldSpill(allRows)` — row count OR byte grant |
 
-Rows are routed to one of 32 partition files by the hash of their GROUP BY key(s). Each partition is then aggregated in-memory by `AggregateEngine`. Because partitioning is always done via file I/O, `TotalSpilledBytes` always increases when `ExternalAggregateEngine` runs.
+For the streaming path, rows are buffered until either `JoinSpillThreshold` rows are accumulated OR the byte estimate of the buffer exceeds `OperatorMemoryGrantMB`. At that point the entire stream (buffered prefix + remaining input) is handed to `ExternalAggregateEngine`. Rows are routed to one of 32 partition files by GROUP BY key hash; each partition is aggregated in-memory by `AggregateEngine`. Because partitioning is always done via file I/O, `TotalSpilledBytes` always increases when `ExternalAggregateEngine` runs.
 
 ### SpillStore — encrypted spill I/O
 
@@ -632,4 +632,25 @@ Both default to `true`. Setting either to `false` triggers a linter warning (`Sp
 
 `context.LastResult` is always capped at `MaxLastResultRows` (50,000) for display — the full row count is available via `TotalRowsMatched` regardless of the cap.
 
-There is currently no configuration for the external engine thresholds (100k) or partition counts (32). These are compile-time constants in each engine class.
+All threshold values (`JoinSpillThreshold`, `WindowSpillThreshold`, `OperatorMemoryGrantMB`, `ExternalSort:ChunkSize`) are read from `appsettings.json → Engine` at startup via `DefaultThresholds` and can be tuned per deployment. The hash partition count (32) is the only compile-time constant.
+
+### EXPLAIN and EXPLAIN ANALYZE
+
+`EXPLAIN <query>` generates a static plan table without executing the query. `EXPLAIN ANALYZE <query>` runs the query and augments the plan with actual metrics.
+
+**Plan columns:**
+
+| Column | Always | ANALYZE only | Description |
+|---|---|---|---|
+| `ID` | ✓ | | Operator sequence number |
+| `Operation` | ✓ | | Scan / Hash Join / Filter / Aggregate / Sort / Top/Limit / … |
+| `Details` | ✓ | | Source name, join condition, sort keys, etc. |
+| `Cost` | ✓ | | Relative estimated cost units |
+| `Mode` | ✓ | | `STREAMING` or `BLOCKING` |
+| `Est. Rows` | ✓ | | Estimated input rows (exact for `InMemoryDataSource`, `--` otherwise) |
+| `Actual Rows` | | ✓ | Rows returned by the final operator |
+| `Actual Time (ms)` | | ✓ | Wall-clock time for the entire query |
+| `Spill Bytes` | | ✓ | `TotalSpilledBytes` delta for the query, reported on the Sort row |
+| `Spill Count` | | ✓ | `SortSpillCount` delta, reported on the Sort row |
+
+Spill metrics are statement-level totals mapped to the Sort plan row (the most common spill point). Per-operator spill attribution requires adding SpillStore call-site counters to each external engine — a future enhancement.

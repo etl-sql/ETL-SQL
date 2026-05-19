@@ -20,7 +20,8 @@ namespace ETL_SQL.Analysis.Explain
                     ["ID"] = id.Value++,
                     ["Operation"] = $"Set Operation ({setOp.Operation.ToString().Replace("_", " ")})",
                     ["Details"] = string.Empty,
-                    ["Cost"] = 0
+                    ["Cost"] = 0,
+                    ["Est. Rows"] = "--"
                 });
             }
         }
@@ -46,7 +47,8 @@ namespace ETL_SQL.Analysis.Explain
                 }
             }
 
-            await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = op, ["Details"] = details, ["Cost"] = op == "Index Seek" ? 1 : 2, ["Mode"] = "STREAMING" });
+            long estRows = source is InMemoryDataSource mem2 ? mem2.EstimatedRowCount : -1;
+            await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = op, ["Details"] = details, ["Cost"] = op == "Index Seek" ? 1 : 2, ["Mode"] = "STREAMING", ["Est. Rows"] = estRows >= 0 ? estRows : (object)"--" });
             metrics.PartitionsCount++;
 
             if (select.Joins != null)
@@ -82,7 +84,8 @@ namespace ETL_SQL.Analysis.Explain
 
                     if (isHash && joinOp != "Index Join") joinDetails += $", Hash Keys: {string.Join(", ", hashKeysLeft)}";
 
-                    await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = joinOp, ["Details"] = joinDetails, ["Cost"] = joinOp == "Index Join" ? 3 : isHash ? 5 : 10, ["Mode"] = "BLOCKING" });
+                    long estJoinRows = joinSource is InMemoryDataSource memJoin2 ? memJoin2.EstimatedRowCount : -1;
+                    await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = joinOp, ["Details"] = joinDetails, ["Cost"] = joinOp == "Index Join" ? 3 : isHash ? 5 : 10, ["Mode"] = "BLOCKING", ["Est. Rows"] = estJoinRows >= 0 ? estJoinRows : (object)"--" });
                 }
             }
 
@@ -90,7 +93,7 @@ namespace ETL_SQL.Analysis.Explain
             {
                 var detailsWhere = select.WhereClause.ToSql();
                 if (detailsWhere.Contains("SELECT")) detailsWhere += " [Subquery]";
-                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Filter", ["Details"] = detailsWhere, ["Cost"] = 2, ["Mode"] = "STREAMING" });
+                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Filter", ["Details"] = detailsWhere, ["Cost"] = 2, ["Mode"] = "STREAMING", ["Est. Rows"] = "--" });
             }
 
             bool hasAgg = select.Columns.Any(c => IsAggregate(c.Expression));
@@ -99,17 +102,17 @@ namespace ETL_SQL.Analysis.Explain
                 var detailsAgg = select.GroupBy != null && select.GroupBy.Count > 0
                     ? "Group By: " + string.Join(", ", select.GroupBy.Select(g => g.ToSql()))
                     : "Global Aggregate";
-                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Aggregate", ["Details"] = detailsAgg, ["Cost"] = 5, ["Mode"] = "BLOCKING" });
+                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Aggregate", ["Details"] = detailsAgg, ["Cost"] = 5, ["Mode"] = "BLOCKING", ["Est. Rows"] = "--" });
             }
 
             if (select.IsDistinct)
             {
-                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Distinct", ["Details"] = string.Empty, ["Cost"] = 3, ["Mode"] = "BLOCKING" });
+                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Distinct", ["Details"] = string.Empty, ["Cost"] = 3, ["Mode"] = "BLOCKING", ["Est. Rows"] = "--" });
             }
 
             if (select.Columns.Any(c => c.Expression is FunctionCallExpression f && f.Window != null))
             {
-                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Window Calculation", ["Details"] = string.Empty, ["Cost"] = 4, ["Mode"] = "BLOCKING" });
+                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Window Calculation", ["Details"] = string.Empty, ["Cost"] = 4, ["Mode"] = "BLOCKING", ["Est. Rows"] = "--" });
             }
 
             bool hasTopN = (select.LimitCount != null || select.TopCount != null) && !select.IsTopPercent && !select.WithTies && !select.IsDistinct && select.QualifyClause == null && !hasAgg;
@@ -117,12 +120,12 @@ namespace ETL_SQL.Analysis.Explain
             {
                 var detailsSort = string.Join(", ", select.OrderBy.Select(o => o.ToSql()));
                 var sortMode = hasTopN ? "STREAMING" : "BLOCKING";
-                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Sort", ["Details"] = detailsSort, ["Cost"] = hasTopN ? 3 : 10, ["Mode"] = sortMode });
+                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Sort", ["Details"] = detailsSort, ["Cost"] = hasTopN ? 3 : 10, ["Mode"] = sortMode, ["Est. Rows"] = "--" });
             }
 
             if (select.LimitCount != null || select.TopCount != null)
             {
-                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Top/Limit", ["Details"] = string.Empty, ["Cost"] = 1, ["Mode"] = "STREAMING" });
+                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Top/Limit", ["Details"] = string.Empty, ["Cost"] = 1, ["Mode"] = "STREAMING", ["Est. Rows"] = "--" });
             }
 
             if (select.IsRecursive) metrics.RecursiveDepth = Math.Max(metrics.RecursiveDepth, context.MaxRecursiveDepth > 0 ? context.MaxRecursiveDepth : 1);
