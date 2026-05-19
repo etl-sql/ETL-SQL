@@ -7,6 +7,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Engine.Planning;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -39,13 +40,14 @@ namespace ETL_SQL.Engine.Engines
             List<SelectColumn> finalColumns,
             List<string> colNames)
         {
-            // Qualify bare identifiers in the WHERE clause (e.g. e8 → t8.e8) so the pushdown
-            // optimizer can recognize column ownership in unqualified comma-join predicates.
+            // Qualify bare identifiers (e.g. col → alias.col) so the predicate optimizer
+            // can attribute each predicate to the correct source alias.
             stmt = await IdentifierQualifier.QualifyAsync(stmt, _context);
 
-            // Convert comma-join CROSS JOINs to INNER JOINs where WHERE predicates match,
-            // preventing O(n^k) Cartesian-product materialization.
-            stmt = CrossJoinPredicatePushdown.Optimize(stmt);
+            // Logical optimizer: classify WHERE predicates by scope and promote eligible
+            // CROSS JOIN → INNER JOIN rewrites (subsumes CrossJoinPredicatePushdown).
+            var logicalPlan = PredicatePushdownOptimizer.Optimize(stmt);
+            stmt = logicalPlan.Statement;
 
             string fromName = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
             bool hasAggInColumns = stmt.Columns.Any(c => _aggregateEngine.IsAggregate(c.Expression));
