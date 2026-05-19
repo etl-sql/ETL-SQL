@@ -44,14 +44,14 @@ ETL-SQL follows a T-SQL-like dialect with extensions and restrictions. For full 
 | **[Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md)** | All data types, `CAST`/`TRY_CAST`, string/date/math/regex/window/JSON/XML functions with full signatures and examples |
 | **[Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md)** | File/directory operations, `SEND FILE`/`RECEIVE FILE`, `SEND EMAIL`, lineage/tagging, SSH key generation, Docker integration, profiling |
 | **[Lineage.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Lineage.md)** | `TAG`, `LINEAGE`, `SET LINEAGE`, lineage capture patterns, metadata tagging on rows and pipelines |
-| **[RelativeDate_Parameters.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/RelativeDate_Parameters.md)** | Relative date parameter syntax, `@TODAY`, `@NOW`, offset expressions, use in `WHERE` clauses and report filters |
+| **[RelativeDate_Parameters.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/RelativeDate_Parameters.md)** | Relative date parameter syntax, `D` (today), `N` (now), offset expressions, use in `WHERE` clauses and report filters |
 | **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** | `.rptsql` file structure, all visual types, MAPPINGS roles, STYLE/THEME, CONTAINER/NAVIGATION syntax, filter visuals, multi-report hosting |
 
 Key syntax facts:
 - **Variables**: `@VariableName` — always prefix with `@`, case-insensitive
 - **Temp tables**: `#TableName` — prefix with `#` for in-memory engine-side tables
 - **Encrypted strings**: `'ENC:base64...'` — set session password first with `USE PASSWORD = '...'`
-- **Connectors**: Supported types are `MSSQL`, `POSTGRES`, `ORACLE`, `ODBC`, `FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `API`/`REST`, `SFTP`, `FTP`, `AZURE_BLOB`, `SMTP`, `DIRECTORY` (and `MOCKDB` for test/mock workloads)
+- **Connectors**: Supported types are `MSSQL`, `POSTGRES`, `ORACLE`, `ODBC`, `SNOWFLAKE`, `BIGQUERY`, `FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `API`/`REST`, `SFTP`, `FTP`, `AZURE_BLOB`, `SMTP`, `DIRECTORY`, `REPORTPORTAL`, `ORCHESTRATOR` (and `MOCKDB` for test/mock workloads)
 - **Suspension**: `WAITFOR DELAY 'hh:mm:ss'` — fixed pause; `WAITFOR TIME 'hh:mm:ss'` — pause until clock time
 
 > [!NOTE]
@@ -69,13 +69,13 @@ Key syntax facts:
 - **File structure**: normal ETL-SQL data prep statements first, then `CREATE VISUAL`, `CREATE PAGE`, `CREATE DATASET`, `CREATE CONTAINER`, `CREATE NAVIGATION` at the end
 - **Report metadata**: `SET REPORT TITLE = '...'` and `SET REPORT DESCRIPTION = '...'` (optional, appear before visuals)
 - **Visual types**: `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `FUNNEL`, `GAUGE`, `WATERFALL`, `BUBBLE`, `RADAR`, `CANDLESTICK`, `MAP`, `SANKEY`, `SUNBURST`, `NETWORK`, `TRELLIS`, `MATRIX`, `GANTT`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, `TEXTBOX`, `NUMBERBOX`, `CHECKBOX`
-- **SLICER pattern** — SOURCE provides the option list; ACTIONS binds to a parameter:
+- **Interactive bindings** — If a control has a `SOURCE` (like `SLICER`), bind the parameter to the mapped column name. If it lacks a `SOURCE` (like `DATEPICKER` or `SLIDER`), you **must** bind it to the literal keyword `value`:
   ```sql
-  CREATE VISUAL RegionFilter AS SLICER (
-    SOURCE  = (SELECT DISTINCT region FROM #summary ORDER BY region),
-    MAPPINGS (VALUE = region),
-    ACTIONS  (ON_CHANGE = SET_PARAMETER(@region, region))
-  );
+  -- Slicer (has SOURCE)
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region))
+  
+  -- Datepicker (no SOURCE)
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@startDate, value))
   ```
 - **STRUCTURE** is a CSS grid-template-areas string:
   ```sql
@@ -83,7 +83,7 @@ Key syntax facts:
   ```
 - **MAP slots are quoted strings**: `MAP ('A' = VisualName, 'B' = OtherVisual)`
 - **Buttons use the page-style form**: `CREATE BUTTON ButtonName AS (...)`; do not use typed button aliases.
-- **ENCRYPT modes**: `ENCRYPT = MACHINE` (no creds), `ENCRYPT = PASSWORD, PASSWORD = '...'`, or `ENCRYPT = KEYFILE, KEYFILE = '...'`
+- **CREATE DATASET ENCRYPT modes**: `ENCRYPT = MACHINE` (no creds), `ENCRYPT = PASSWORD, PASSWORD = '...'`, or `ENCRYPT = KEYFILE, KEYFILE = '...'`. (Note: This is different from the `WITH(ENCRYPT=ON, PASSWORD='...')` syntax used for file connectors).
 - **Filter types** (`DATEPICKER`, `SLIDER`, `SEARCH`) do not require a `SOURCE` clause
 - **MULTISELECT** requires a `SOURCE` clause for its option list
 - **STYLE** cascades: page-level `STYLE (THEME = dark)` applies to all charts; visual-level `STYLE` overrides it
@@ -308,7 +308,7 @@ Before moving source files, projects, report runtime assets, or host-owned behav
 | Forgetting `IF FILE_EXISTS()` before `COPY FILE` or `ENCRYPT FILE` | Check existence first to avoid silent no-ops or errors |
 | Using `Logger.Instance` in C# engine code | Use injected `ILogger` from `IExecutionContext` |
 | Declaring `class` for AST nodes in C# | Use `record` types for all AST nodes |
-| Writing `WAITFOR (SELECT ...)` | This form does not exist; use `WHILE` + `WAITFOR DELAY` for polling |
+| Writing `WAITFOR (SELECT ...)` | This form does not exist; use `WAITFOR (condition)` for simple scalar checks, or `WHILE` + `WAITFOR DELAY` for complex polling |
 | Using `MySQL` as a connector token | MySQL is not a supported connector; use `ODBC` with a MySQL driver instead |
 | Writing `FROM FLATFILE` or `FROM FILE` in a `CREATE CONNECTION` | `FLATFILE` is the **connector type**; `FILE` is the **table alias** used in queries — `CREATE CONNECTION src ON FLATFILE('my.csv'); SELECT * FROM src` |
 
