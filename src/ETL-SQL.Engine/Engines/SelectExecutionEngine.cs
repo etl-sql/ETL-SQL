@@ -144,7 +144,18 @@ namespace ETL_SQL.Engine.Engines
             else
             {
                 allRows = new List<Row>();
-                await foreach (var r in inputStream) allRows.Add(r);
+                if (!whereApplied && stmt.WhereClause != null)
+                {
+                    // Apply WHERE during materialization so unmatched rows are never buffered.
+                    // This matters most for ORDER BY / DISTINCT queries with selective predicates.
+                    await foreach (var r in WhereStream(inputStream, stmt.WhereClause, _context))
+                        allRows.Add(r);
+                    whereApplied = true;
+                }
+                else
+                {
+                    await foreach (var r in inputStream) allRows.Add(r);
+                }
             }
 
             // 1. WHERE
