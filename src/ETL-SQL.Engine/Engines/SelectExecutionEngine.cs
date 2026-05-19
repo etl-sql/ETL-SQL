@@ -330,7 +330,17 @@ namespace ETL_SQL.Engine.Engines
                     }
                     if (expr is IdentifierExpression id && colNames.Contains(id.Name, StringComparer.OrdinalIgnoreCase))
                     {
-                        keys[i] = row[id.Name];
+                        // Alias already materialised (post-agg/window) → read directly.
+                        // Otherwise evaluate the SELECT expression against the pre-projection row.
+                        if (row.HasColumn(id.Name))
+                            keys[i] = row[id.Name];
+                        else
+                        {
+                            var colIdx = colNames.FindIndex(c => c.Equals(id.Name, StringComparison.OrdinalIgnoreCase));
+                            keys[i] = colIdx >= 0
+                                ? await _context.EvaluateValue(finalColumns[colIdx].Expression, row)
+                                : null;
+                        }
                     }
                     else if (expr is IdentifierExpression idAlias && finalColumns.FirstOrDefault(c => string.Equals(c.Alias, idAlias.Name, StringComparison.OrdinalIgnoreCase)) is SelectColumn col)
                     {
