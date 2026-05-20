@@ -1,0 +1,64 @@
+-- ==============================================================================
+-- manufacturing_report.rptsql
+-- Paginated report consuming the master Parquet dataset.
+-- ==============================================================================
+
+SET REPORT TITLE = 'Manufacturing Analytics';
+SET REPORT DESCRIPTION = 'Hourly overview of machine telemetry and status.';
+
+-- 1. Create the dataset from the master Parquet file.
+-- This dataset acts as the semantic layer for the report visuals.
+CREATE CONNECTION parquet_conn ON PARQUET() WITH(PATH='/data/manufacturing_master.parquet');
+
+CREATE DATASET &manufacturing_data 
+  REFRESH EVERY '1h'
+AS (
+    SELECT * FROM parquet_conn
+);
+
+-- 2. Define Interactive Parameters
+-- Users can filter by Start and End dates to view specific hours.
+DECLARE @start_time DATETIME INPUT;
+DECLARE @end_time   DATETIME INPUT;
+
+-- 3. Define the paginated table visual
+CREATE VISUAL TelemetryTable AS TABLE (
+    SOURCE = (
+        SELECT 
+            MachineID,
+            EventTime,
+            Temperature,
+            Pressure,
+            Status
+        FROM &manufacturing_data
+        WHERE (@start_time IS NULL OR EventTime >= @start_time)
+          AND (@end_time IS NULL OR EventTime <= @end_time)
+        ORDER BY EventTime DESC
+    ),
+    OPTIONS (
+        PAGINATION = ON
+    )
+);
+
+-- 4. Define Filters
+CREATE VISUAL StartTimeFilter AS DATEPICKER (
+    TITLE = 'Start Date',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@start_time, value))
+);
+
+CREATE VISUAL EndTimeFilter AS DATEPICKER (
+    TITLE = 'End Date',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@end_time, value))
+);
+
+-- 5. Layout
+CREATE PAGE MainLayout AS (
+    TITLE = 'Machine Telemetry',
+    STRUCTURE = 'A B / C C',
+    MAP (
+        'A' = StartTimeFilter,
+        'B' = EndTimeFilter,
+        'C' = TelemetryTable
+    ),
+    STYLE (THEME = dark)
+);

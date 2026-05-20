@@ -146,3 +146,115 @@ West
 West
 3
 0
+
+# Advanced Window Frames: ROWS BETWEEN
+query TII
+SELECT region, month, SUM(amount) OVER (
+    PARTITION BY region
+    ORDER BY month
+    ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
+) AS rolling_3_month
+FROM sales ORDER BY region, month;
+----
+East
+1
+250
+East
+2
+370
+East
+3
+270
+West
+1
+380
+West
+2
+590
+West
+3
+390
+
+# Advanced Window Frames: EXCLUDE CURRENT ROW
+query TII
+SELECT region, month, SUM(amount) OVER (
+    PARTITION BY region
+    ORDER BY month
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+    EXCLUDE CURRENT ROW
+) AS other_months_sum
+FROM sales ORDER BY region, month;
+----
+East
+1
+270
+East
+2
+220
+East
+3
+250
+West
+1
+390
+West
+2
+410
+West
+3
+380
+
+# Analytic Functions
+query TIII
+SELECT region, month, amount,
+       FIRST_VALUE(amount) OVER (PARTITION BY region ORDER BY month) AS fv,
+       LAST_VALUE(amount) OVER (PARTITION BY region ORDER BY month ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS lv
+FROM sales ORDER BY region, month;
+----
+East
+1
+100
+100
+120
+East
+2
+150
+100
+120
+East
+3
+120
+100
+120
+West
+1
+200
+200
+210
+West
+2
+180
+200
+210
+West
+3
+210
+200
+210
+
+# NTILE
+query TII
+SELECT player, score, NTILE(2) OVER (ORDER BY score DESC) AS quartile FROM scores ORDER BY score DESC;
+----
+Alice
+100
+1
+Carol
+95
+1
+Bob
+90
+2
+Dave
+80
+2

@@ -13,99 +13,124 @@ Statements are the top-level actions in an ETL-SQL script.
 
 | Command | Category | Documentation | Help File |
 | :--- | :--- | :--- | :--- |
-| `SELECT` | DML / Query | [Grammar.md](../Docs/Reference/Grammar.md) | [SELECT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT.md) |
-| `INSERT` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [INSERT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/INSERT.md) |
-| `UPDATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [UPDATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/UPDATE.md) |
-| `DELETE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [DELETE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
-| `MERGE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [MERGE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/MERGE.md) |
-| `TRUNCATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [TRUNCATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRUNCATE.md) |
-| `CREATE CONNECTION` | DDL / Conn | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `ALTER CONNECTION` | DDL / Conn | [Grammar.md](../Docs/Reference/Grammar.md) | [ALTER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/ALTER.md) |
-| `DROP CONNECTION` | DDL / Conn | [Grammar.md](../Docs/Reference/Grammar.md) | [DROP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
-| `CREATE TABLE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `ALTER TABLE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [ALTER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/ALTER.md) |
-| `DROP TABLE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [DROP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
-| `DECLARE` | Variables | [Grammar.md](../Docs/Reference/Grammar.md) | [DECLARE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DECLARE.md) |
-| `SET @var` | Variables | [Grammar.md](../Docs/Reference/Grammar.md) | [SET.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SET.md) |
-| `IF / ELSE` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [IF.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/IF.md) |
-| `WHILE` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [WHILE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WHILE.md) |
-| `FOR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [FOR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/FOR.md) |
-| `FOREACH` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [FOREACH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/FOREACH.md) |
-| `TRY / CATCH` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [TRY.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRY.md) |
-| `WAITFOR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [WAITFOR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WAITFOR.md) |
-| `BREAK` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [BREAK.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/BREAK.md) |
-| `CONTINUE` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [CONTINUE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CONTINUE.md) |
-| `RETURN` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [RETURN.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RETURN.md) |
-| `THROW` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [THROW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/THROW.md) |
-| `BEGIN TRANSACTION` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [TRANSACTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
-| `COMMIT` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [TRANSACTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
-| `ROLLBACK` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [TRANSACTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
-| `PRINT` | IO | [Grammar.md](../Docs/Reference/Grammar.md) | [PRINT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PRINT.md) |
-| `EXECUTE` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [EXECUTE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/EXECUTE.md) |
-| `RUN SCRIPT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [RUN.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RUN.md) |
-| `PARALLEL` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [PARALLEL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PARALLEL.md) |
-| `GO` | Scripting | [Grammar.md](../Docs/Reference/Grammar.md) | [GO.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/GO.md) |
-| `ASSERT` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | [ASSERT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/ASSERT.md) |
+| `SELECT` | DML / Query | [Grammar.md](../Docs/Reference/Grammar.md) | [SELECT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT.md) |
+| `INSERT` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [INSERT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/INSERT.md) |
+| `UPDATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [UPDATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/UPDATE.md) |
+| `DELETE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [DELETE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
+| `MERGE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [MERGE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/MERGE.md) |
+| `TRUNCATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [TRUNCATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/TRUNCATE.md) |
+| `CREATE CONNECTION` | DDL / Conn | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `ALTER CONNECTION` | DDL / Conn | [Grammar.md](../Docs/Reference/Grammar.md) | [ALTER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ALTER.md) |
+| `DROP CONNECTION` | DDL / Conn | [Grammar.md](../Docs/Reference/Grammar.md) | [DROP.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
+| `CREATE TABLE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `ALTER TABLE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [ALTER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ALTER.md) |
+| `DROP TABLE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [DROP.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
+| `DECLARE` | Variables | [Grammar.md](../Docs/Reference/Grammar.md) | [DECLARE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DECLARE.md) |
+| `SET @var` | Variables | [Grammar.md](../Docs/Reference/Grammar.md) | [SET.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SET.md) |
+| `IF / ELSE` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [IF.md](../src/ETL-SQL.Core/Resources/Help/Keywords/IF.md) |
+| `WHILE` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [WHILE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/WHILE.md) |
+| `FOR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [FOR.md](../src/ETL-SQL.Core/Resources/Help/Keywords/FOR.md) |
+| `FOREACH` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [FOREACH.md](../src/ETL-SQL.Core/Resources/Help/Keywords/FOREACH.md) |
+| `TRY / CATCH` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [TRY.md](../src/ETL-SQL.Core/Resources/Help/Keywords/TRY.md) |
+| `WAITFOR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [WAITFOR.md](../src/ETL-SQL.Core/Resources/Help/Keywords/WAITFOR.md) |
+| `BREAK` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [BREAK.md](../src/ETL-SQL.Core/Resources/Help/Keywords/BREAK.md) |
+| `CONTINUE` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [CONTINUE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CONTINUE.md) |
+| `RETURN` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [RETURN.md](../src/ETL-SQL.Core/Resources/Help/Keywords/RETURN.md) |
+| `THROW` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [THROW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/THROW.md) |
+| `BEGIN TRANSACTION` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [TRANSACTION.md](../src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
+| `COMMIT` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [TRANSACTION.md](../src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
+| `ROLLBACK` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [TRANSACTION.md](../src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
+| `PRINT` | IO | [Grammar.md](../Docs/Reference/Grammar.md) | [PRINT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PRINT.md) |
+| `EXECUTE` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [EXECUTE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/EXECUTE.md) |
+| `RUN SCRIPT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [RUN.md](../src/ETL-SQL.Core/Resources/Help/Keywords/RUN.md) |
+| `PARALLEL` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [PARALLEL.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PARALLEL.md) |
+| `GO` | Scripting | [Grammar.md](../Docs/Reference/Grammar.md) | [GO.md](../src/ETL-SQL.Core/Resources/Help/Keywords/GO.md) |
+| `ASSERT` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | [ASSERT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ASSERT.md) |
 | `EXPECT SCHEMA` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | - |
-| `LINT` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | [LINT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/LINT.md) |
+| `LINT` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | [LINT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/LINT.md) |
 | `EXPLAIN` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | - |
-| `SHOW PROFILE` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
-| `SHOW VARIABLES` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
-| `SHOW LOCAL VARIABLES`| Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
-| `SHOW CONNECTION <conn> CONFIG` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [CONFIG.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CONFIG.md) |
-| `SHOW CONNECTIONS` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
-| `CLEAR SESSION` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [CLEAR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CLEAR.md) |
-| `USE PASSWORD` | Session / Security | [Grammar.md](../Docs/Reference/Grammar.md) | [USE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
-| `USE SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [USE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
-| `CREATE SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `DROP SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [DROP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
-| `REQUIRE VERSION` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [REQUIRE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/REQUIRE.md) |
-| `BULK INSERT` | File IO | [Grammar.md](../Docs/Reference/Grammar.md) | [BULK.INSERT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/BULK.INSERT.md) |
-| `COPY FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [COPY.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/COPY.md) |
-| `MOVE FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [MOVE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/MOVE.md) |
-| `DELETE FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DELETE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
-| `ENCRYPT FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [ENCRYPT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/ENCRYPT.md) |
-| `SEND FILE` | File IO / Conn | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [SEND/FILE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/SEND/FILE.md) |
-| `RECEIVE FILE` | File IO / Conn | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [RECEIVE/FILE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/RECEIVE/FILE.md) |
-| `SEND EMAIL` | Notifications | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [SEND/EMAIL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/SEND/EMAIL.md) |
-| `DOCKER` | Containers | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DOCKER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
-| `CREATE JOB` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [SCHEDULE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SCHEDULE.md) |
+| `SHOW PROFILE` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `SHOW VARIABLES` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `SHOW LOCAL VARIABLES`| Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `SHOW CONNECTION <conn> CONFIG` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [CONFIG.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CONFIG.md) |
+| `SHOW CONNECTIONS` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `CLEAR SESSION` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [CLEAR.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CLEAR.md) |
+| `USE PASSWORD` | Session / Security | [Grammar.md](../Docs/Reference/Grammar.md) | [USE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
+| `USE SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [USE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
+| `CREATE SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `DROP SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [DROP.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
+| `REQUIRE VERSION` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [REQUIRE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/REQUIRE.md) |
+| `BULK INSERT` | File IO | [Grammar.md](../Docs/Reference/Grammar.md) | [BULK.INSERT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/BULK.INSERT.md) |
+| `COPY FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [COPY.md](../src/ETL-SQL.Core/Resources/Help/Keywords/COPY.md) |
+| `MOVE FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [MOVE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/MOVE.md) |
+| `DELETE FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DELETE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
+| `ENCRYPT FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [ENCRYPT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ENCRYPT.md) |
+| `SEND FILE` | File IO / Conn | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [SEND/FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/SEND/FILE.md) |
+| `RECEIVE FILE` | File IO / Conn | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [RECEIVE/FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/RECEIVE/FILE.md) |
+| `SEND EMAIL` | Notifications | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [SEND/EMAIL.md](../src/ETL-SQL.Core/Resources/Help/Operations/SEND/EMAIL.md) |
+| `DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
+| `CREATE JOB` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [SCHEDULE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SCHEDULE.md) |
 | `KILL JOB` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | - |
-| `CREATE INDEX` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `CREATE PROCEDURE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `CREATE FUNCTION` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `GENERATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [GENERATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/GENERATE.md) |
-| `CASE` | Expressions | [Grammar.md](../Docs/Reference/Grammar.md) | [CASE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CASE.md) |
-| `WITH` | CTE | [Grammar.md](../Docs/Reference/Grammar.md) | [WITH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
-| `WITH RECURSIVE` | CTE | [Grammar.md](../Docs/Reference/Grammar.md) | [WITH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
-| `PIVOT` / `UNPIVOT` | DML / Transform | [Grammar.md](../Docs/Reference/Grammar.md) | [PIVOT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
+| `CREATE INDEX` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `CREATE PROCEDURE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `CREATE FUNCTION` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `GENERATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [GENERATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/GENERATE.md) |
+| `CASE` | Expressions | [Grammar.md](../Docs/Reference/Grammar.md) | [CASE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CASE.md) |
+| `WITH` | CTE | [Grammar.md](../Docs/Reference/Grammar.md) | [WITH.md](../src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
+| `WITH RECURSIVE` | CTE | [Grammar.md](../Docs/Reference/Grammar.md) | [WITH.md](../src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
+| `PIVOT` / `UNPIVOT` | DML / Transform | [Grammar.md](../Docs/Reference/Grammar.md) | [PIVOT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
 | `MATCH_RECOGNIZE` | DML / Pattern Matching | [Grammar.md](../Docs/Reference/Grammar.md#59-match_recognize) | - |
-| `EXPORT REPORT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [EXPORT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/EXPORT.md) |
-| `SUBSCRIPTION` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [SUBSCRIPTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SUBSCRIPTION.md) |
-| `RELDATE` | Variables | [RelativeDate_Parameters.md](../Docs/Reference/RelativeDate_Parameters.md) | [RELDATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RELDATE.md) |
+| `EXPORT REPORT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [EXPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/EXPORT.md) |
+| `SUBSCRIPTION` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [SUBSCRIPTION.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SUBSCRIPTION.md) |
+| `RELDATE` | Variables | [RelativeDate_Parameters.md](../Docs/Reference/RelativeDate_Parameters.md) | [RELDATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/RELDATE.md) |
 | `RAISEERROR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `HELP` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `ANALYZE` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | - |
-| `RENAME FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [RENAME.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RENAME.md) |
-| `COMPRESS FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [COMPRESS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/COMPRESS.md) |
-| `DECOMPRESS FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DECOMPRESS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DECOMPRESS.md) |
-| `DECRYPT FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DECRYPT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DECRYPT.md) |
-| `CREATE DIRECTORY` | Dir IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
-| `COPY DIRECTORY` | Dir IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [COPY.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/COPY.md) |
-| `MOVE DIRECTORY` | Dir IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [MOVE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/MOVE.md) |
-| `RENAME DIRECTORY` | Dir IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [RENAME.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RENAME.md) |
-| `DELETE DIRECTORY` | Dir IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DELETE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
-| `DELETE DIRECTORY_CONTENTS`| Dir IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | - |
-| `COMPRESS DIRECTORY` | Dir IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [COMPRESS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/COMPRESS.md) |
-| `DECOMPRESS DIRECTORY` | Dir IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DECOMPRESS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DECOMPRESS.md) |
-| `ENCRYPT DIRECTORY` | Dir IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [ENCRYPT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/ENCRYPT.md) |
-| `DECRYPT DIRECTORY` | Dir IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DECRYPT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DECRYPT.md) |
-| `CREATE SSH_KEY_PAIR` | Security | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [SSH_KEY_PAIR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SSH_KEY_PAIR.md) |
-| `CREATE PGP_KEY_PAIR` | Security | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [PGP_KEY_PAIR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PGP_KEY_PAIR.md) |
-| `START DOCKER` | Containers | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DOCKER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DOCKER.md) |
-| `STOP DOCKER` | Containers | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DOCKER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DOCKER.md) |
-| `PAUSE DOCKER` | Containers | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DOCKER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DOCKER.md) |
-| `CLOSE DOCKER` | Containers | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DOCKER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DOCKER.md) |
+| `RENAME FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [RENAME.md](../src/ETL-SQL.Core/Resources/Help/Keywords/RENAME.md) |
+| `COMPRESS FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [COMPRESS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/COMPRESS.md) |
+| `DECOMPRESS FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DECOMPRESS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DECOMPRESS.md) |
+| `DECRYPT FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DECRYPT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DECRYPT.md) |
+| `CREATE DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `COPY DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [COPY.md](../src/ETL-SQL.Core/Resources/Help/Keywords/COPY.md) |
+| `MOVE DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [MOVE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/MOVE.md) |
+| `RENAME DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [RENAME.md](../src/ETL-SQL.Core/Resources/Help/Keywords/RENAME.md) |
+| `DELETE DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DELETE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
+| `DELETE DIRECTORY_CONTENTS`| Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | - |
+| `COMPRESS DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [COMPRESS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/COMPRESS.md) |
+| `DECOMPRESS DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DECOMPRESS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DECOMPRESS.md) |
+| `ENCRYPT DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [ENCRYPT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ENCRYPT.md) |
+| `DECRYPT DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DECRYPT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DECRYPT.md) |
+| `CREATE SSH_KEY_PAIR` | Security | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [SSH_KEY_PAIR.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SSH_KEY_PAIR.md) |
+| `CREATE PGP_KEY_PAIR` | Security | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [PGP_KEY_PAIR.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PGP_KEY_PAIR.md) |
+| `START DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DOCKER.md) |
+| `STOP DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DOCKER.md) |
+| `PAUSE DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DOCKER.md) |
+| `CLOSE DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DOCKER.md) |
+| `CREATE USER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `ALTER USER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `DROP USER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `CREATE GROUP` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `DROP GROUP` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `ADD USER TO GROUP` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `CREATE FOLDER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `DROP FOLDER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `GRANT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `REVOKE` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `PUBLISH REPORT` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `ALTER REPORT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `DROP REPORT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `REFRESH REPORT` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `REFRESH DATASET` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `ALTER DATASET` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `DROP DATASET` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `REBUILD SNAPSHOT` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `DROP SNAPSHOT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `CREATE REFRESH JOB` | Portal / Orchestrator | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `DROP REFRESH JOB` | Portal / Orchestrator | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `SHOW USERS` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `SHOW REPORTS` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `DISCONNECT USER` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `REVOKE TOKENS FOR USER` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
 
 ---
 
@@ -115,25 +140,27 @@ Connectors define how to communicate with external data sources.
 
 | Connector | Type | Help File | Supported Options |
 | :--- | :--- | :--- | :--- |
-| `MSSQL` | SQL | [MSSQL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/MSSQL.md) | HOST, DATABASE, USER, PASSWORD, TRUSTED_CONNECTION, ... |
-| `POSTGRES` | SQL | [POSTGRES.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/POSTGRES.md) | HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, ... |
-| `ORACLE` | SQL | [ORACLE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/ORACLE.md) | HOST, PORT, SERVICE_NAME, USER, PASSWORD, ... |
-| `ODBC` | SQL | [ODBC.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/ODBC.md) | DSN, DRIVER, SERVER, DATABASE, UID, PWD, ... |
+| `MSSQL` | SQL | [MSSQL.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MSSQL.md) | HOST, DATABASE, USER, PASSWORD, TRUSTED_CONNECTION, ... |
+| `POSTGRES` | SQL | [POSTGRES.md](../src/ETL-SQL.Core/Resources/Help/Connectors/POSTGRES.md) | HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, ... |
+| `ORACLE` | SQL | [ORACLE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ORACLE.md) | HOST, PORT, SERVICE_NAME, USER, PASSWORD, ... |
+| `ODBC` | SQL | [ODBC.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ODBC.md) | DSN, DRIVER, SERVER, DATABASE, UID, PWD, ... |
 | `SNOWFLAKE` | SQL | - | ACCOUNT, WAREHOUSE, DATABASE, SCHEMA, ... |
 | `BIGQUERY` | SQL | - | PROJECT_ID, DATASET_ID, KEY_FILE, ... |
-| `FLATFILE` | File | [FLATFILE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/FLATFILE.md) | PATH, FORMAT, DELIMITER, HEADER, ENCODING, ... |
-| `EXCEL` | File | [EXCEL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/EXCEL.md) | PATH, SHEET, RANGE, HEADER, ... |
-| `JSON` | File | [JSON.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/JSON.md) | PATH, ROOT_PATH, ENCODING, ... |
-| `XML` | File | [XML.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/XML.md) | PATH, ROOT_PATH, ENCODING, ... |
-| `PARQUET` | File | [PARQUET.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/PARQUET.md) | PATH, COMPRESSION, ... |
-| `AVRO` | File | [AVRO.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/AVRO.md) | PATH, ... |
-| `SFTP` | Transfer | [SFTP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/SFTP.md) | HOST, PORT, USER, PASSWORD, KEYFILE, PASSPHRASE |
-| `FTP` | Transfer | [FTP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/FTP.md) | HOST, PORT, USER, PASSWORD, USE_SSL |
-| `AZURE_BLOB` | Transfer | [AZURE_BLOB.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/AZURE_BLOB.md) | ACCOUNT_NAME, ACCOUNT_KEY, CONTAINER |
-| `API` / `REST` | Service | [API.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/API.md) | URL, METHOD, AUTH_TYPE, TOKEN, BODY, ROOT_PATH, ... |
-| `SMTP` | Service | [SMTP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/SMTP.md) | HOST, PORT, USER, PASSWORD, USE_SSL, DEFAULT_FROM |
-| `DIRECTORY` | Service | [DIRECTORY.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/DIRECTORY.md) | PATH, RECURSIVE, ... |
-| `MOCKDB` | Testing | [MOCKDB.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/MOCKDB.md) | - |
+| `FLATFILE` | File | [FLATFILE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/FLATFILE.md) | PATH, FORMAT, DELIMITER, HEADER, ENCODING, ... |
+| `EXCEL` | File | [EXCEL.md](../src/ETL-SQL.Core/Resources/Help/Connectors/EXCEL.md) | PATH, SHEET, RANGE, HEADER, ... |
+| `JSON` | File | [JSON.md](../src/ETL-SQL.Core/Resources/Help/Connectors/JSON.md) | PATH, ROOT_PATH, ENCODING, ... |
+| `XML` | File | [XML.md](../src/ETL-SQL.Core/Resources/Help/Connectors/XML.md) | PATH, ROOT_PATH, ENCODING, ... |
+| `PARQUET` | File | [PARQUET.md](../src/ETL-SQL.Core/Resources/Help/Connectors/PARQUET.md) | PATH, COMPRESSION, ... |
+| `AVRO` | File | [AVRO.md](../src/ETL-SQL.Core/Resources/Help/Connectors/AVRO.md) | PATH, ... |
+| `SFTP` | Transfer | [SFTP.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SFTP.md) | HOST, PORT, USER, PASSWORD, KEYFILE, PASSPHRASE |
+| `FTP` | Transfer | [FTP.md](../src/ETL-SQL.Core/Resources/Help/Connectors/FTP.md) | HOST, PORT, USER, PASSWORD, USE_SSL |
+| `AZURE_BLOB` | Transfer | [AZURE_BLOB.md](../src/ETL-SQL.Core/Resources/Help/Connectors/AZURE_BLOB.md) | ACCOUNT_NAME, ACCOUNT_KEY, CONTAINER |
+| `API` / `REST` | Service | [API.md](../src/ETL-SQL.Core/Resources/Help/Connectors/API.md) | URL, METHOD, AUTH_TYPE, TOKEN, BODY, ROOT_PATH, ... |
+| `SMTP` | Service | [SMTP.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SMTP.md) | HOST, PORT, USER, PASSWORD, USE_SSL, DEFAULT_FROM |
+| `DIRECTORY` | Service | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Connectors/DIRECTORY.md) | PATH, RECURSIVE, ... |
+| `MOCKDB` | Testing | [MOCKDB.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MOCKDB.md) | - |
+| `REPORTPORTAL` | Admin Service | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | HOST, PORT, USER, PASSWORD |
+| `ORCHESTRATOR` | Admin Service | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#82-orchestrator-orchestrator) | HOST, PORT, API_KEY |
 
 ### 2.1 File-Based Table Alias
 `FILE` is the default table name used when querying any file-based connection (e.g. `SELECT * FROM src` where `src` is a FLATFILE connection).
@@ -761,53 +788,53 @@ Specific to `.rptsql` files and the reporting engine.
 ### 8.1 Report Objects
 | Command | Purpose | Help File |
 | :--- | :--- | :--- |
-| `CREATE VISUAL` | Defines a chart or filter | [VISUAL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/VISUAL.md) |
-| `CREATE DATASET` | Defines a data source for visuals | [DATASET.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/DATASET.md) |
-| `CREATE PAGE` | Defines a dashboard page layout | [PAGE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/PAGE.md) |
-| `CREATE CONTAINER` | Groups visuals in a layout | [CONTAINER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/CONTAINER.md) |
-| `CREATE NAVIGATION` | Defines sidebar/top-nav links | [NAVIGATION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/NAVIGATION.md) |
-| `CREATE STYLE` | Defines CSS/Theme overrides | [STYLE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/STYLE.md) |
-| `CREATE BUTTON` | Defines a clickable button | [BUTTON.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/BUTTON.md) |
-| `ACTIONS` block | Interactive event bindings | [ACTIONS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/ACTIONS.md) |
-| `INTERACTIONS` block | Cross-visual filtering rules | [INTERACTIONS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Report/INTERACTIONS.md) |
+| `CREATE VISUAL` | Defines a chart or filter | [VISUAL.md](../src/ETL-SQL.Core/Resources/Help/Report/VISUAL.md) |
+| `CREATE DATASET` | Defines a data source for visuals | [DATASET.md](../src/ETL-SQL.Core/Resources/Help/Report/DATASET.md) |
+| `CREATE PAGE` | Defines a dashboard page layout | [PAGE.md](../src/ETL-SQL.Core/Resources/Help/Report/PAGE.md) |
+| `CREATE CONTAINER` | Groups visuals in a layout | [CONTAINER.md](../src/ETL-SQL.Core/Resources/Help/Report/CONTAINER.md) |
+| `CREATE NAVIGATION` | Defines sidebar/top-nav links | [NAVIGATION.md](../src/ETL-SQL.Core/Resources/Help/Report/NAVIGATION.md) |
+| `CREATE STYLE` | Defines CSS/Theme overrides | [STYLE.md](../src/ETL-SQL.Core/Resources/Help/Report/STYLE.md) |
+| `CREATE BUTTON` | Defines a clickable button | [BUTTON.md](../src/ETL-SQL.Core/Resources/Help/Report/BUTTON.md) |
+| `ACTIONS` block | Interactive event bindings | [ACTIONS.md](../src/ETL-SQL.Core/Resources/Help/Report/ACTIONS.md) |
+| `INTERACTIONS` block | Cross-visual filtering rules | [INTERACTIONS.md](../src/ETL-SQL.Core/Resources/Help/Report/INTERACTIONS.md) |
 
 ### 8.2 Visual Types
 | Type | Category | Help File |
 | :--- | :--- | :--- |
-| `BAR` / `HBAR` | Chart | [BAR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/BAR.md) / [HBAR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/HBAR.md) |
-| `LINE` | Chart | [LINE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/LINE.md) |
-| `PIE` / `DONUT` | Chart | [PIE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/PIE.md) / [DONUT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/DONUT.md) |
-| `GAUGE` | Chart | [GAUGE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/GAUGE.md) |
-| `HEATMAP` | Chart | [HEATMAP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/HEATMAP.md) |
-| `SCATTER` | Chart | [SCATTER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/SCATTER.md) |
-| `GANTT` | Chart | [GANTT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/GANTT.md) |
-| `WATERFALL` | Chart | [WATERFALL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/WATERFALL.md) |
-| `FUNNEL` | Chart | [FUNNEL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/FUNNEL.md) |
-| `BOXPLOT` | Chart | [BOXPLOT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/BOXPLOT.md) |
-| `BUBBLE` | Chart | [BUBBLE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/BUBBLE.md) |
-| `CANDLESTICK` | Chart | [CANDLESTICK.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/CANDLESTICK.md) |
-| `COMBO` | Chart | [COMBO.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/COMBO.md) |
-| `TREEMAP` | Chart | [TREEMAP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TREEMAP.md) |
-| `RADAR` | Chart | [RADAR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/RADAR.md) |
-| `SANKEY` | Chart | [SANKEY.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/SANKEY.md) |
-| `SUNBURST` | Chart | [SUNBURST.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/SUNBURST.md) |
-| `NETWORK` | Chart | [NETWORK.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/NETWORK.md) |
-| `TRELLIS` | Chart | [TRELLIS.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TRELLIS.md) |
-| `MATRIX` | Data | [MATRIX.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/MATRIX.md) |
-| `TABLE` | Data | [TABLE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TABLE.md) |
-| `CARD` | KPI with value, label, goal/progress, and delta support | [CARD.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/CARD.md) |
-| `MAP` | Chart | [MAP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/MAP.md) |
-| `TEXT` | Static | [TEXT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TEXT.md) |
-| `IMAGE` | Static | [IMAGE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/IMAGE.md) |
-| `SLICER` | Filter | [SLICER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/SLICER.md) |
-| `DATEPICKER` | Filter | [DATEPICKER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/DATEPICKER.md) |
-| `RELDATEPICKER` | Filter | [RELDATEPICKER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/RELDATEPICKER.md) |
-| `SEARCH` | Filter | [SEARCH.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/SEARCH.md) |
-| `SLIDER` | Filter | [SLIDER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/SLIDER.md) |
-| `MULTISELECT` | Filter | [MULTISELECT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/MULTISELECT.md) |
-| `CHECKBOX` | Control | [CHECKBOX.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/CHECKBOX.md) |
-| `TEXTBOX` | Control | [TEXTBOX.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/TEXTBOX.md) |
-| `NUMBERBOX` | Control | [NUMBERBOX.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Visuals/NUMBERBOX.md) |
+| `BAR` / `HBAR` | Chart | [BAR.md](../src/ETL-SQL.Core/Resources/Help/Visuals/BAR.md) / [HBAR.md](../src/ETL-SQL.Core/Resources/Help/Visuals/HBAR.md) |
+| `LINE` | Chart | [LINE.md](../src/ETL-SQL.Core/Resources/Help/Visuals/LINE.md) |
+| `PIE` / `DONUT` | Chart | [PIE.md](../src/ETL-SQL.Core/Resources/Help/Visuals/PIE.md) / [DONUT.md](../src/ETL-SQL.Core/Resources/Help/Visuals/DONUT.md) |
+| `GAUGE` | Chart | [GAUGE.md](../src/ETL-SQL.Core/Resources/Help/Visuals/GAUGE.md) |
+| `HEATMAP` | Chart | [HEATMAP.md](../src/ETL-SQL.Core/Resources/Help/Visuals/HEATMAP.md) |
+| `SCATTER` | Chart | [SCATTER.md](../src/ETL-SQL.Core/Resources/Help/Visuals/SCATTER.md) |
+| `GANTT` | Chart | [GANTT.md](../src/ETL-SQL.Core/Resources/Help/Visuals/GANTT.md) |
+| `WATERFALL` | Chart | [WATERFALL.md](../src/ETL-SQL.Core/Resources/Help/Visuals/WATERFALL.md) |
+| `FUNNEL` | Chart | [FUNNEL.md](../src/ETL-SQL.Core/Resources/Help/Visuals/FUNNEL.md) |
+| `BOXPLOT` | Chart | [BOXPLOT.md](../src/ETL-SQL.Core/Resources/Help/Visuals/BOXPLOT.md) |
+| `BUBBLE` | Chart | [BUBBLE.md](../src/ETL-SQL.Core/Resources/Help/Visuals/BUBBLE.md) |
+| `CANDLESTICK` | Chart | [CANDLESTICK.md](../src/ETL-SQL.Core/Resources/Help/Visuals/CANDLESTICK.md) |
+| `COMBO` | Chart | [COMBO.md](../src/ETL-SQL.Core/Resources/Help/Visuals/COMBO.md) |
+| `TREEMAP` | Chart | [TREEMAP.md](../src/ETL-SQL.Core/Resources/Help/Visuals/TREEMAP.md) |
+| `RADAR` | Chart | [RADAR.md](../src/ETL-SQL.Core/Resources/Help/Visuals/RADAR.md) |
+| `SANKEY` | Chart | [SANKEY.md](../src/ETL-SQL.Core/Resources/Help/Visuals/SANKEY.md) |
+| `SUNBURST` | Chart | [SUNBURST.md](../src/ETL-SQL.Core/Resources/Help/Visuals/SUNBURST.md) |
+| `NETWORK` | Chart | [NETWORK.md](../src/ETL-SQL.Core/Resources/Help/Visuals/NETWORK.md) |
+| `TRELLIS` | Chart | [TRELLIS.md](../src/ETL-SQL.Core/Resources/Help/Visuals/TRELLIS.md) |
+| `MATRIX` | Data | [MATRIX.md](../src/ETL-SQL.Core/Resources/Help/Visuals/MATRIX.md) |
+| `TABLE` | Data | [TABLE.md](../src/ETL-SQL.Core/Resources/Help/Visuals/TABLE.md) |
+| `CARD` | KPI with value, label, goal/progress, and delta support | [CARD.md](../src/ETL-SQL.Core/Resources/Help/Visuals/CARD.md) |
+| `MAP` | Chart | [MAP.md](../src/ETL-SQL.Core/Resources/Help/Visuals/MAP.md) |
+| `TEXT` | Static | [TEXT.md](../src/ETL-SQL.Core/Resources/Help/Visuals/TEXT.md) |
+| `IMAGE` | Static | [IMAGE.md](../src/ETL-SQL.Core/Resources/Help/Visuals/IMAGE.md) |
+| `SLICER` | Filter | [SLICER.md](../src/ETL-SQL.Core/Resources/Help/Visuals/SLICER.md) |
+| `DATEPICKER` | Filter | [DATEPICKER.md](../src/ETL-SQL.Core/Resources/Help/Visuals/DATEPICKER.md) |
+| `RELDATEPICKER` | Filter | [RELDATEPICKER.md](../src/ETL-SQL.Core/Resources/Help/Visuals/RELDATEPICKER.md) |
+| `SEARCH` | Filter | [SEARCH.md](../src/ETL-SQL.Core/Resources/Help/Visuals/SEARCH.md) |
+| `SLIDER` | Filter | [SLIDER.md](../src/ETL-SQL.Core/Resources/Help/Visuals/SLIDER.md) |
+| `MULTISELECT` | Filter | [MULTISELECT.md](../src/ETL-SQL.Core/Resources/Help/Visuals/MULTISELECT.md) |
+| `CHECKBOX` | Control | [CHECKBOX.md](../src/ETL-SQL.Core/Resources/Help/Visuals/CHECKBOX.md) |
+| `TEXTBOX` | Control | [TEXTBOX.md](../src/ETL-SQL.Core/Resources/Help/Visuals/TEXTBOX.md) |
+| `NUMBERBOX` | Control | [NUMBERBOX.md](../src/ETL-SQL.Core/Resources/Help/Visuals/NUMBERBOX.md) |
 
 ---
 

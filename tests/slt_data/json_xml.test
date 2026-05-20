@@ -1,0 +1,62 @@
+# JSON and XML processing tests
+
+statement ok
+CREATE TABLE docs(id INT, payload STRING);
+
+statement ok
+INSERT INTO docs VALUES
+  (1, '{"name": "Alice", "age": 30, "address": {"city": "Seattle"}}'),
+  (2, '{"name": "Bob", "tags": ["developer", "sql"]}'),
+  (3, 'invalid json');
+
+# ISJSON
+query I
+SELECT ISJSON(payload) FROM docs ORDER BY id;
+----
+1
+1
+0
+
+# JSON_VALUE - extract scalar
+query T
+SELECT JSON_VALUE(payload, '$.name') FROM docs WHERE ISJSON(payload) = 1 ORDER BY id;
+----
+Alice
+Bob
+
+# JSON_VALUE - nested
+query T
+SELECT JSON_VALUE(payload, '$.address.city') FROM docs WHERE id = 1;
+----
+Seattle
+
+# JSON_VALUE - missing key should return NULL
+query T
+SELECT JSON_VALUE(payload, '$.missing') FROM docs WHERE id = 1;
+----
+NULL
+
+# JSON_QUERY - extract object/array
+query T
+SELECT JSON_QUERY(payload, '$.address') FROM docs WHERE id = 1;
+----
+{"city": "Seattle"}
+
+query T
+SELECT JSON_QUERY(payload, '$.tags') FROM docs WHERE id = 2;
+----
+["developer", "sql"]
+
+# XML
+statement ok
+CREATE TABLE xml_docs(id INT, doc STRING);
+
+statement ok
+INSERT INTO xml_docs VALUES
+  (1, '<root><item id="1">First</item><item id="2">Second</item></root>');
+
+# XMLVALUE
+query T
+SELECT XMLVALUE(doc, '/root/item[@id="1"]') FROM xml_docs;
+----
+First

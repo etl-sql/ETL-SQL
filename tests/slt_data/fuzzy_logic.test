@@ -1,0 +1,62 @@
+# Fuzzy Logic and Record Linkage Tests
+statement ok
+CREATE TABLE fuzzy(id INT, name STRING, alias STRING);
+
+statement ok
+INSERT INTO fuzzy VALUES
+  (1, 'John Smith', 'Jon Smythe'),
+  (2, 'Robert', 'Rupert'),
+  (3, 'McDonalds', 'MacDonalds'),
+  (4, 'Apple Inc.', 'Apple Corporation');
+
+# SOUNDEX
+query TT
+SELECT SOUNDEX(name), SOUNDEX(alias) FROM fuzzy ORDER BY id;
+----
+J500
+J500
+R163
+R163
+M235
+M235
+A140
+A140
+
+# LEVENSHTEIN distance
+query I
+SELECT LEVENSHTEIN(name, alias) FROM fuzzy ORDER BY id;
+----
+3
+3
+2
+11
+
+# SIMILARITY (e.g. Jaro-Winkler or trigram similarity)
+query I
+SELECT CASE WHEN SIMILARITY(name, alias) > 0.8 THEN 1 ELSE 0 END FROM fuzzy ORDER BY id;
+----
+1
+0
+1
+0
+
+# METAPHONE
+query T
+SELECT METAPHONE(name) FROM fuzzy ORDER BY id LIMIT 1;
+----
+JNSM
+
+# DMETAPHONE (Double Metaphone)
+query T
+SELECT DMETAPHONE(name) FROM fuzzy ORDER BY id LIMIT 1;
+----
+JNSM
+
+# NORMALIZE
+query T
+SELECT NORMALIZE(name) FROM fuzzy ORDER BY id;
+----
+JOHNSMITH
+ROBERT
+MCDONALDS
+APPLE

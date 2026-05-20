@@ -1,0 +1,60 @@
+# PIVOT and UNPIVOT
+
+statement ok
+CREATE TABLE monthly_sales(year INT, month STRING, amount INT);
+
+statement ok
+INSERT INTO monthly_sales VALUES
+  (2023, 'Jan', 100),
+  (2023, 'Feb', 150),
+  (2023, 'Mar', 200),
+  (2024, 'Jan', 110),
+  (2024, 'Feb', 160);
+
+# PIVOT rows to columns
+query IIII
+SELECT * FROM monthly_sales
+PIVOT (
+  SUM(amount)
+  FOR month IN ('Jan', 'Feb', 'Mar')
+) AS pvt
+ORDER BY year;
+----
+2023
+100
+150
+200
+2024
+110
+160
+NULL
+
+# UNPIVOT columns to rows
+statement ok
+CREATE TABLE wide_sales(year INT, q1 INT, q2 INT);
+
+statement ok
+INSERT INTO wide_sales VALUES
+  (2023, 100, 150),
+  (2024, 110, 160);
+
+query ITI
+SELECT year, quarter, amount FROM wide_sales
+UNPIVOT (
+  amount
+  FOR quarter IN (q1, q2)
+) AS unpvt
+ORDER BY year, quarter;
+----
+2023
+q1
+100
+2023
+q2
+150
+2024
+q1
+110
+2024
+q2
+160

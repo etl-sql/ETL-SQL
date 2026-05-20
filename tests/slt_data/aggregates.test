@@ -78,3 +78,39 @@ query I
 SELECT COALESCE(SUM(x), 0) FROM t4;
 ----
 0
+
+# FILTER clause
+statement ok
+CREATE TABLE sales_agg(region STRING, amount INT);
+
+statement ok
+INSERT INTO sales_agg VALUES ('East', 100), ('East', 50), ('West', 200), ('West', -50);
+
+query I
+SELECT SUM(amount) FILTER (WHERE amount > 0) FROM sales_agg;
+----
+350
+
+# GROUPING SETS / ROLLUP
+query TI
+SELECT region, SUM(amount) FROM sales_agg GROUP BY ROLLUP(region) ORDER BY region;
+----
+East
+150
+West
+150
+NULL
+300
+
+# Multiple DISTINCTs in one query
+statement ok
+CREATE TABLE multi_dist(a INT, b INT);
+
+statement ok
+INSERT INTO multi_dist VALUES (1, 10), (1, 20), (2, 20), (2, 20);
+
+query II
+SELECT COUNT(DISTINCT a), COUNT(DISTINCT b) FROM multi_dist;
+----
+2
+2

@@ -1,0 +1,36 @@
+-- ==============================================================================
+-- setup_orchestrator.etlsql
+-- Registers the Orchestrator jobs and publishes the report dataset.
+-- @requires: orchestrator
+-- ==============================================================================
+
+-- 1. Create connection to the Orchestrator Service
+CREATE CONNECTION orch ON ORCHESTRATOR(HOST='localhost', PORT=8080);
+
+-- 2. Schedule Job 1: Generate Data (Top of the hour)
+CREATE JOB 'GenerateManufacturingData' AT orch 
+WITH (SCHEDULE = '0 * * * *') AS
+    RUN SCRIPT '/samples/integration/generate_manufacturing.etlsql';
+
+-- 3. Schedule Job 2: Append to Parquet (5 minutes past the hour)
+CREATE JOB 'AppendToParquet' AT orch 
+WITH (SCHEDULE = '5 * * * *') AS
+    RUN SCRIPT '/samples/integration/append_to_parquet.etlsql';
+
+PRINT 'Orchestrator Jobs created successfully.';
+
+-- 4. Publish the Report and Dataset to the Portal
+-- The dataset definition is embedded in the report, so publishing the report registers the dataset.
+CREATE CONNECTION portal ON REPORTPORTAL(HOST='localhost', USER='admin', PASSWORD='admin_password');
+
+EXECUTE portal BEGIN
+    PUBLISH REPORT 'Manufacturing Analytics' 
+        FROM '/samples/integration/manufacturing_report.rptsql'
+        IN FOLDER '/Public';
+
+    -- Make the embedded dataset publicly accessible to others
+    ALTER DATASET 'manufacturing_data' IN FOLDER '/Public'
+        SET ACCESS = PUBLIC;
+END;
+
+PRINT 'Report and Dataset published successfully.';
