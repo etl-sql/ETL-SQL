@@ -29,15 +29,14 @@ namespace ETL_SQL.TUI.UI
             _lastScript = script;
 
             // Only clear if the script actually contains connection or table definitions
-            // to avoid clearing manual/global connections during partial script edits.
             if (script.Contains("CREATE CONNECTION", StringComparison.OrdinalIgnoreCase) || 
                 script.Contains("CREATE TABLE #", StringComparison.OrdinalIgnoreCase))
             {
                 _connections.Clear();
             }
 
-            // Regex-based connection discovery 
-            var matches = Regex.Matches(script, @"CREATE\s+CONNECTION\s+(\w+)\s+ON\s+(\w+)(?:\s*\(?\s*['""]?([^'""\);]*)['""]?\s*\)?)?(?:\s+WITH\s*\((.*?)\))?", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            // Enhanced Regex: captures name, type, and optional target (with or without parens/quotes)
+            var matches = Regex.Matches(script, @"CREATE\s+CONNECTION\s+(\w+)\s+ON\s+(\w+)\s*(?:\(\s*['""]?([^'""\)]*)['""]?\s*\))?(?:\s+WITH\s*\((.*?)\))?", RegexOptions.IgnoreCase | RegexOptions.Singleline);
             foreach (Match match in matches)
             {
                 var name = match.Groups[1].Value;

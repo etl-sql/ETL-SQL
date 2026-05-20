@@ -85,7 +85,8 @@ namespace ETL_SQL.Tests.Integration
                 { "T", new AliasInfo("#T", "T") } 
             };
             string line = "SELECT * FROM #T T";
-            string highlighted = ETLSuggestEngine.HighlightLine(line);
+            bool ends;
+            string highlighted = ETLSuggestEngine.HighlightLine(line, 0, 1000, false, out ends);
             
             Assert.Contains("[bold blue]SELECT[/]", highlighted);
         }
@@ -96,7 +97,8 @@ namespace ETL_SQL.Tests.Integration
             var sugg = await ETLSuggestEngine.GetSuggestionsAsync("SEL", "SEL", new Dictionary<string, IDataSource>());
             Assert.True(sugg.Any(s => s.Text == "SELECT"), "Should suggest SELECT from consolidated list");
             
-            var highlight = ETLSuggestEngine.HighlightLine("SELECT CAST(1 AS INT)");
+            bool dummy;
+            var highlight = ETLSuggestEngine.HighlightLine("SELECT CAST(1 AS INT)", 0, 1000, false, out dummy);
             Assert.True(highlight.Contains("[bold blue]SELECT[/]") && highlight.Contains("[yellow]CAST[/]"), "Should highlight keywords and functions");
         }
 

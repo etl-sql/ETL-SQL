@@ -39,3 +39,7 @@ CREATE JOB 'KitchenSinkJob' ON SCHEDULE EVERY 5 MINUTES AS RUN SCRIPT 'sub_scrip
 PRINT 'Job Created. Verifying Listing...';
 SHOW JOBS;
 SHOW JOB HISTORY;
+
+-- 5. Cleanup
+PRINT 'Cleaning up...';
+DROP JOB 'KitchenSinkJob';

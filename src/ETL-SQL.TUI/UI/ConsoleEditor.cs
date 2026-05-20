@@ -324,20 +324,25 @@ namespace ETL_SQL.TUI.UI
             return true;
         }
 
-        /// <summary>Executes the entire script or the current selection.</summary>
+        /// <summary>Executes the entire script.</summary>
         public async Task RunScript()
         {
+            _renderer.ShowStatus("Executing script...");
+            await ExecuteSource(_buffer.GetText());
+        }
+
+        /// <summary>Executes only the currently selected text.</summary>
+        public async Task RunSelectedText()
+        {
             var selectedText = _buffer.GetSelectedText();
-            if (!string.IsNullOrEmpty(selectedText))
+            if (string.IsNullOrEmpty(selectedText))
             {
-                _renderer.ShowStatus("Executing selection...");
-                await ExecuteSource(selectedText);
+                _renderer.ShowStatus("No text selected.");
+                return;
             }
-            else
-            {
-                _renderer.ShowStatus("Executing script...");
-                await ExecuteSource(_buffer.GetText());
-            }
+
+            _renderer.ShowStatus("Executing selection...");
+            await ExecuteSource(selectedText);
         }
 
         /// <summary>Executes only the line at the current cursor position.</summary>
@@ -345,6 +350,7 @@ namespace ETL_SQL.TUI.UI
         {
             var lines = _buffer.Lines;
             var currentLine = lines[_buffer.CursorLine];
+            _renderer.ShowStatus($"Executing line {_buffer.CursorLine + 1}...");
             await ExecuteSource(currentLine);
         }
 
@@ -410,7 +416,18 @@ namespace ETL_SQL.TUI.UI
 
                 var execSw = System.Diagnostics.Stopwatch.StartNew();
                 _evaluator.Telemetry.IsProfiling = true; // Enable profiling by default in IDE mode for Performance Dashboard
-                await _evaluator.Evaluate(script);
+                var oldScriptPath = _evaluator.CurrentScriptPath;
+                var oldWorkingDirectory = _evaluator.WorkingDirectory;
+                ApplyEditorExecutionPath();
+                try
+                {
+                    await _evaluator.Evaluate(script);
+                }
+                finally
+                {
+                    _evaluator.CurrentScriptPath = oldScriptPath;
+                    _evaluator.WorkingDirectory = oldWorkingDirectory;
+                }
                 execSw.Stop();
                 _evaluator.Telemetry.LastExecutionTimeMs = execSw.ElapsedMilliseconds;
 
@@ -421,6 +438,8 @@ namespace ETL_SQL.TUI.UI
                     _renderer.ResultScrollRow = 0;
                     _renderer.ResultScrollCol = 0;
                     _renderer.FilterText = "";
+                    _renderer.ResultsVisible = true;
+                    _renderer.PerformanceVisible = false;
                 }
 
                 totalSw.Stop();
@@ -455,6 +474,25 @@ namespace ETL_SQL.TUI.UI
             {
                 _renderer.MessageScrollRow = int.MaxValue; // Auto-scroll to latest messages
                 RenderCurrent();
+            }
+        }
+
+        private void ApplyEditorExecutionPath()
+        {
+            if (string.IsNullOrWhiteSpace(_filePath) || _filePath == "untitled.etlsql")
+            {
+                _evaluator.CurrentScriptPath = null;
+                _evaluator.WorkingDirectory = Directory.GetCurrentDirectory();
+                return;
+            }
+
+            var fullPath = Path.GetFullPath(_filePath);
+            _evaluator.CurrentScriptPath = fullPath;
+
+            var directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                _evaluator.WorkingDirectory = directory;
             }
         }
 

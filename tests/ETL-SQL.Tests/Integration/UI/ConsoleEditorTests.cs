@@ -88,7 +88,8 @@ namespace ETL_SQL.Tests.Integration
         {
             var script = "SELECT * FROM T1 AS MyAlias";
             var aliases = ETLSuggestEngine.ParseAliases(script);
-            var highlighted = ETLSuggestEngine.HighlightLine("SELECT * FROM MyAlias", aliases);
+            bool ends;
+            var highlighted = ETLSuggestEngine.HighlightLine("SELECT * FROM MyAlias", 0, 1000, false, out ends, aliases);
             Assert.Contains("[purple]MyAlias[/]", highlighted);
             Assert.Contains("[bold blue]SELECT[/]", highlighted);
         }
@@ -106,14 +107,16 @@ namespace ETL_SQL.Tests.Integration
             // Case 1: FROM orders
             var script1 = "SELECT * FROM orders";
             var aliases1 = ETLSuggestEngine.ParseAliases(script1);
-            var high1 = ETLSuggestEngine.HighlightLine("SELECT * FROM orders", aliases1);
+            bool dummy;
+            var high1 = ETLSuggestEngine.HighlightLine("SELECT * FROM orders", 0, 1000, false, out dummy, aliases1);
             Assert.Contains("[cyan]orders[/]", high1);
             Assert.Contains("[bold blue]SELECT[/]", high1);
 
             // Case 2: FROM orders o
             var script2 = "SELECT * FROM orders o";
             var aliases2 = ETLSuggestEngine.ParseAliases(script2);
-            var high2 = ETLSuggestEngine.HighlightLine("SELECT * FROM orders o", aliases2);
+            bool dummy2;
+            var high2 = ETLSuggestEngine.HighlightLine("SELECT * FROM orders o", 0, 1000, false, out dummy2, aliases2);
             Assert.Contains("[cyan]orders[/]", high2);
             Assert.Contains("[purple]o[/]", high2);
         }
@@ -159,14 +162,22 @@ namespace ETL_SQL.Tests.Integration
             editor._buffer.CursorLine = 0;
             editor._renderer.Headless = true;
             
-            // Toggle focus (F6 cycles: Editor -> Execution Tree -> Messages -> Results -> Performance -> Editor)
-            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // To Execution Tree
-            Assert.Equal(EditorFocus.ExecutionTree, editor._renderer.Focus);
+            // Focus starts at Editor
+            Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
 
-            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // To Messages
+            // Press F6 -> since no special panel is visible, toggles to Messages
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false));
             Assert.Equal(EditorFocus.Messages, editor._renderer.Focus);
 
-            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // To Results
+            // Press F6 again -> toggles back to Editor
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false));
+            Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
+
+            // Make results visible
+            editor._renderer.ResultsVisible = true;
+
+            // Press F6 -> toggles to Results
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false));
             Assert.Equal(EditorFocus.Results, editor._renderer.Focus);
             Assert.True(editor._renderer.ResultsFocus);
 
@@ -174,11 +185,8 @@ namespace ETL_SQL.Tests.Integration
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.UpArrow, false, false, false));
             Assert.Equal(0, editor._buffer.CursorLine);
 
-            // Cycle back to editor (Results -> Performance -> Editor)
-            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // To Performance
-            Assert.Equal(EditorFocus.Performance, editor._renderer.Focus);
-
-            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // To Editor
+            // Press F6 -> toggles back to Editor
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false));
             Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
             Assert.False(editor._renderer.ResultsFocus);
         }
@@ -200,6 +208,39 @@ namespace ETL_SQL.Tests.Integration
             
             // ScrollLine should have updated to include line 50
             Assert.InRange(editor._renderer.ScrollLine, 40, 50);
+        }
+
+        [Fact]
+        public void TestResultsScrollClamping()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._renderer.Headless = true;
+            editor._renderer.ResultsVisible = true;
+
+            // Mock a result set with 4 rows
+            var dataTable = new DataTable();
+            dataTable.SetColumns(new[] { "Col1" });
+            dataTable.Rows.Add(new Row(dataTable.Schema, new object?[] { "Val1" }));
+            dataTable.Rows.Add(new Row(dataTable.Schema, new object?[] { "Val2" }));
+            dataTable.Rows.Add(new Row(dataTable.Schema, new object?[] { "Val3" }));
+            dataTable.Rows.Add(new Row(dataTable.Schema, new object?[] { "Val4" }));
+            dataTable.TotalRowsMatched = 4;
+            editor._evaluator.LastResultSets.Add(dataTable);
+
+            // Attempt to scroll to 3 (index of 4th row)
+            editor._renderer.ResultScrollRow = 3;
+            // Render should perform the clamp
+            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 80, 20);
+
+            // It should be clamped to 3 (rowCount - 1), NOT to 0 as previously
+            Assert.Equal(3, editor._renderer.ResultScrollRow);
+
+            // Attempt to scroll past the limit (e.g., 5)
+            editor._renderer.ResultScrollRow = 5;
+            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 80, 20);
+
+            // It should clamp to 3
+            Assert.Equal(3, editor._renderer.ResultScrollRow);
         }
 
         [Fact]
@@ -248,8 +289,7 @@ namespace ETL_SQL.Tests.Integration
             editor._buffer.Load(new[] { "SELECT 1" });
             editor._renderer.Headless = true;
 
-            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // Execution tree
-            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // Messages
+            editor._renderer.Focus = EditorFocus.Messages;
             editor._renderer.ResultScrollRow = 7;
 
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.PageDown, false, false, true));
@@ -258,7 +298,7 @@ namespace ETL_SQL.Tests.Integration
             Assert.Equal(10, editor._renderer.MessageScrollRow);
             Assert.Equal(7, editor._renderer.ResultScrollRow);
 
-            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // Results
+            editor._renderer.Focus = EditorFocus.Results;
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.PageDown, false, false, true));
 
             Assert.Equal(17, editor._renderer.ResultScrollRow);

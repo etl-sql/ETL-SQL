@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 using Spectre.Console;
 
@@ -68,115 +69,163 @@ namespace ETL_SQL.TUI.UI
         /// <summary>Scans the script for table aliases and their base table mappings.</summary>
         public static Dictionary<string, AliasInfo> ParseAliases(string script) => AliasScanner.Scan(script);
 
-        /// <summary>Applies Spectre.Console markup to a single line for syntax highlighting in the TUI.</summary>
-        /// <param name="line">The raw script line.</param>
+        /// <summary>Applies Spectre.Console markup to a script line for syntax highlighting in the TUI.</summary>
+        /// <param name="fullLine">The full raw script line (not just the visible part).</param>
+        /// <param name="scrollCol">The horizontal scroll offset.</param>
+        /// <param name="width">The width of the visible editor area.</param>
+        /// <param name="startsInMultiline">Whether the line starts inside a multiline comment.</param>
+        /// <param name="endsInMultiline">Output: whether the line ends inside a multiline comment.</param>
         /// <param name="aliases">Optional pre-scanned aliases for semantic highlighting.</param>
-        /// <returns>A string with Spectre.Console color tags.</returns>
-        public static string HighlightLine(string line, IDictionary<string, AliasInfo>? aliases = null)
+        /// <returns>A string with Spectre.Console color tags, clipped to the visible area.</returns>
+        public static string HighlightLine(string fullLine, int scrollCol, int width, bool startsInMultiline, out bool endsInMultiline, IDictionary<string, AliasInfo>? aliases = null)
         {
-            if (string.IsNullOrWhiteSpace(line)) return line;
-            
-            var result = new System.Text.StringBuilder();
-            // Regex to capture comments, strings, identifiers, whitespace, and symbols
-            var matches = Regex.Matches(line, @"(--.*|\/\*[\s\S]*?\*\/|'[^']*'|""[^""]*""|\[[^\]]*\]|[#@\w\.]+|\s+|[^\w\s])");
-            
-            foreach (Match m in matches)
+            endsInMultiline = startsInMultiline;
+            if (string.IsNullOrEmpty(fullLine)) return "";
+
+            var tokens = new List<(int Start, int Length, string MarkupPrefix)>();
+            int pos = 0;
+
+            while (pos < fullLine.Length)
             {
-                var word = m.Value;
-                
-                // 1. Comments (with Tag Support)
-                if (word.StartsWith("--"))
+                if (endsInMultiline)
                 {
-                    result.Append($"[grey70]{Markup.Escape(word)}[/]");
-                    continue;
-                }
-                if (word.StartsWith("/*"))
-                {
-                    // Check for tags: /* @tag: value; */
-                    var tagRegex = new Regex(@"(@[a-zA-Z0-9_]+):\s*([^;]+);", RegexOptions.Compiled);
-                    var tagMatches = tagRegex.Matches(word);
-
-                    if (tagMatches.Count > 0)
+                    int endIdx = fullLine.IndexOf("*/", pos);
+                    if (endIdx >= 0)
                     {
-                        int lastPos = 0;
-                        foreach (Match tm in tagMatches)
-                        {
-                            // Text before the tag
-                            string pre = word.Substring(lastPos, tm.Index - lastPos);
-                            if (pre.Length > 0) result.Append($"[grey70]{Markup.Escape(pre)}[/]");
-
-                            // @tag (Purple)
-                            result.Append($"[mediumpurple]{Markup.Escape(tm.Groups[1].Value)}[/]");
-                            result.Append($"[grey70]:[/] ");
-
-                            // value (Orange)
-                            result.Append($"[darkorange3]{Markup.Escape(tm.Groups[2].Value.Trim())}[/]");
-                            result.Append($"[grey70];[/]");
-
-                            lastPos = tm.Index + tm.Length;
-                        }
-                        // Text after the last tag
-                        if (lastPos < word.Length) result.Append($"[grey70]{Markup.Escape(word.Substring(lastPos))}[/]");
+                        TokenizeComment(fullLine.Substring(pos, endIdx + 2 - pos), pos, tokens);
+                        pos = endIdx + 2;
+                        endsInMultiline = false;
                     }
                     else
                     {
-                        result.Append($"[grey70]{Markup.Escape(word)}[/]");
+                        TokenizeComment(fullLine.Substring(pos), pos, tokens);
+                        pos = fullLine.Length;
                     }
                     continue;
                 }
 
-                // 2. Strings (Orange)
-                if (word.StartsWith("'") || word.StartsWith("\""))
+                // Main tokenization regex
+                var match = Regex.Match(fullLine.Substring(pos), @"^(--.*|\/\*[\s\S]*?\*\/|\/\*[\s\S]*|'[^']*'|""[^""]*""|\[[^\]]*\]|[#@\w\.]+|\s+|.)");
+                if (!match.Success)
                 {
-                    result.Append($"[darkorange3]{Markup.Escape(word)}[/]");
+                    tokens.Add((pos, 1, ""));
+                    pos++;
+                    continue;
                 }
-                // 3. Brackets (Identified objects)
+
+                string word = match.Value;
+                if (word.StartsWith("--"))
+                {
+                    TokenizeComment(word, pos, tokens);
+                }
+                else if (word.StartsWith("/*"))
+                {
+                    TokenizeComment(word, pos, tokens);
+                    if (!word.EndsWith("*/")) endsInMultiline = true;
+                }
+                else if (word.StartsWith("'") || word.StartsWith("\""))
+                {
+                    tokens.Add((pos, word.Length, "darkorange3"));
+                }
                 else if (word.StartsWith("["))
                 {
-                    result.Append($"[cyan]{Markup.Escape(word)}[/]");
+                    tokens.Add((pos, word.Length, "cyan"));
                 }
-                // 4. Special internal keywords (Docker, etc)
                 else if (word.Equals("DOCKER", StringComparison.OrdinalIgnoreCase) || word.Contains("CONNECTION_STRING", StringComparison.OrdinalIgnoreCase))
                 {
-                    result.Append($"[orange1]{word}[/]");
+                    tokens.Add((pos, word.Length, "orange1"));
                 }
-                // 5. Categorized Keywords
-                else if (LanguageMetadata.DmlKeywords.Contains(word))
-                    result.Append($"[bold blue]{word}[/]");
-                else if (LanguageMetadata.DdlKeywords.Contains(word))
-                    result.Append($"[bold plum1]{word}[/]");
-                else if (LanguageMetadata.ControlFlowKeywords.Contains(word))
-                    result.Append($"[bold gold1]{word}[/]");
-                else if (LanguageMetadata.JoinKeywords.Contains(word))
-                    result.Append($"[bold springgreen3]{word}[/]");
-                else if (LanguageMetadata.OperatorKeywords.Contains(word))
-                    result.Append($"[bold plum3]{word}[/]");
-                else if (LanguageMetadata.Keywords.Contains(word))
-                    result.Append($"[blue]{word}[/]");
-                // 6. Data Types
+                else if (LanguageMetadata.DmlKeywords.Contains(word.ToUpper()))
+                    tokens.Add((pos, word.Length, "bold blue"));
+                else if (LanguageMetadata.DdlKeywords.Contains(word.ToUpper()))
+                    tokens.Add((pos, word.Length, "bold plum1"));
+                else if (LanguageMetadata.ControlFlowKeywords.Contains(word.ToUpper()))
+                    tokens.Add((pos, word.Length, "bold gold1"));
+                else if (LanguageMetadata.JoinKeywords.Contains(word.ToUpper()))
+                    tokens.Add((pos, word.Length, "bold springgreen3"));
+                else if (LanguageMetadata.OperatorKeywords.Contains(word.ToUpper()))
+                    tokens.Add((pos, word.Length, "bold plum3"));
+                else if (LanguageMetadata.Keywords.Contains(word.ToUpper()))
+                    tokens.Add((pos, word.Length, "blue"));
                 else if (LanguageMetadata.IsDataType(word))
-                    result.Append($"[mediumpurple]{word}[/]");
-                // 7. Functions
+                    tokens.Add((pos, word.Length, "mediumpurple"));
                 else if (LanguageMetadata.IsFunction(word))
-                    result.Append($"[yellow]{word}[/]");
-                // 8. Variables
+                    tokens.Add((pos, word.Length, "yellow"));
                 else if (word.StartsWith("@"))
-                    result.Append($"[green]{word}[/]");
-                // 9. Aliases & Tables
+                    tokens.Add((pos, word.Length, "green"));
                 else if (aliases != null && aliases.TryGetValue(word, out var info))
                 {
                     if (info.HasExplicitAlias && word.Equals(info.Alias, StringComparison.OrdinalIgnoreCase))
-                        result.Append($"[purple]{word}[/]");
+                        tokens.Add((pos, word.Length, "purple"));
                     else if (!info.HasExplicitAlias || word.Equals(info.TableName, StringComparison.OrdinalIgnoreCase))
-                        result.Append($"[cyan]{word}[/]");
+                        tokens.Add((pos, word.Length, "cyan"));
                     else
-                        result.Append(Markup.Escape(word));
+                        tokens.Add((pos, word.Length, ""));
                 }
-                // 10. Default
                 else
-                    result.Append(Markup.Escape(word));
+                {
+                    tokens.Add((pos, word.Length, ""));
+                }
+                pos += word.Length;
             }
+
+            // Clip and build markup
+            var result = new StringBuilder();
+            int visibleEnd = scrollCol + width;
+
+            foreach (var t in tokens)
+            {
+                int tokenEnd = t.Start + t.Length;
+                if (tokenEnd <= scrollCol || t.Start >= visibleEnd) continue;
+
+                int clipStart = Math.Max(t.Start, scrollCol);
+                int clipEnd = Math.Min(tokenEnd, visibleEnd);
+                string visiblePart = fullLine.Substring(clipStart, clipEnd - clipStart);
+
+                if (!string.IsNullOrEmpty(t.MarkupPrefix)) result.Append($"[{t.MarkupPrefix}]");
+                result.Append(Markup.Escape(visiblePart));
+                if (!string.IsNullOrEmpty(t.MarkupPrefix)) result.Append("[/]");
+            }
+
             return result.ToString();
+        }
+
+        private static void TokenizeComment(string text, int offset, List<(int Start, int Length, string MarkupPrefix)> tokens)
+        {
+            var tagRegex = new Regex(@"(@\w+):\s*([^;*]+)(;)?", RegexOptions.Compiled);
+            var matches = tagRegex.Matches(text);
+
+            if (matches.Count == 0)
+            {
+                tokens.Add((offset, text.Length, "grey70"));
+                return;
+            }
+
+            int lastPos = 0;
+            foreach (Match m in matches)
+            {
+                if (m.Index > lastPos)
+                    tokens.Add((offset + lastPos, m.Index - lastPos, "grey70"));
+
+                // @tag (Purple)
+                tokens.Add((offset + m.Index, m.Groups[1].Length, "mediumpurple"));
+                
+                // : (Gray)
+                tokens.Add((offset + m.Index + m.Groups[1].Length, 1, "grey70"));
+
+                // value (Orange)
+                int valueStart = m.Groups[2].Index;
+                tokens.Add((offset + valueStart, m.Groups[2].Length, "darkorange3"));
+
+                // ; (Gray)
+                if (m.Groups[3].Success)
+                    tokens.Add((offset + m.Groups[3].Index, 1, "grey70"));
+
+                lastPos = m.Index + m.Length;
+            }
+
+            if (lastPos < text.Length)
+                tokens.Add((offset + lastPos, text.Length - lastPos, "grey70"));
         }
 
 

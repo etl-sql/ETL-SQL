@@ -27,9 +27,13 @@ namespace ETL_SQL.Engine.Handlers
             IEnumerable<IDataSource> sourcesToQuery;
             if (stmt.ConnectionName != null)
             {
-                if (!context.Connections.TryGetValue(stmt.ConnectionName, out var source))
-                    throw new ExecutionException($"Connection '{stmt.ConnectionName}' not found.");
-                sourcesToQuery = new[] { source };
+                var conn = context.Connections.FirstOrDefault(c => c.Key.Equals(stmt.ConnectionName, StringComparison.OrdinalIgnoreCase)).Value;
+                if (conn == null)
+                {
+                    var available = string.Join(", ", context.Connections.Keys);
+                    throw new ExecutionException($"Connection '{stmt.ConnectionName}' not found in the current session. Available: [{available}]");
+                }
+                sourcesToQuery = new[] { conn };
             }
             else
             {

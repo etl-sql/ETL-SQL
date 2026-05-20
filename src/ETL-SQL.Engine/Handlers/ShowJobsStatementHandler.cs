@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
@@ -22,6 +24,33 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ShowJobsStatement)statement;
+
+            if (stmt.At != null)
+            {
+                // Robust multi-pass lookup
+                IDataSource? conn = null;
+                
+                // 1. Exact match
+                if (context.Connections.TryGetValue(stmt.At, out conn)) { }
+                // 2. Case-insensitive match
+                else
+                {
+                    conn = context.Connections.FirstOrDefault(c => c.Key.Equals(stmt.At, StringComparison.OrdinalIgnoreCase)).Value;
+                }
+                
+                if (conn == null)
+                {
+                    var available = string.Join(", ", context.Connections.Keys);
+                    throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"Connection '{stmt.At}' not found in current session. Registered connections: [{available}]");
+                }
+                    
+                if (conn is not IPortalAdminConnection adminConn)
+                    throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"Connection '{stmt.At}' (Type: {conn.ConnectorType}) does not support orchestrator operations.");
+                
+                await adminConn.ExecuteAdminStatementAsync(stmt, context);
+                return;
+            }
+
             var jobs = await _store.GetActiveJobsAsync();
             
             var table = new DataTable();
@@ -59,6 +88,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 context.LastResult = table;
                 context.LastResultSets.Add(table);
+                context.OnResultSet?.Invoke(table);
             }
         }
     }

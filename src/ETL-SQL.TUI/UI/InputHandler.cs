@@ -80,6 +80,7 @@ namespace ETL_SQL.TUI.UI
             if (key.Key == ConsoleKey.F5)
             {
                 if (key.Modifiers.HasFlag(ConsoleModifiers.Shift)) await _editor.RunStatementAtCursor(); 
+                else if (key.Modifiers.HasFlag(ConsoleModifiers.Control)) await _editor.RunSelectedText();
                 else await _editor.RunScript();
                 return;
             }
@@ -154,23 +155,28 @@ namespace ETL_SQL.TUI.UI
             }
 
 
-            // F6/F3 - Focus Toggle (Cycles: Editor -> Execution Tree -> Messages -> Results -> Performance)
-            if (key.Key == ConsoleKey.F6 || key.Key == ConsoleKey.F3)
+            // F6 - Focus Toggle (Switches between Editor and the active lower panel)
+            if (key.Key == ConsoleKey.F6)
             {
-                _renderer.Focus = _renderer.Focus switch
+                if (_renderer.Focus == EditorFocus.Editor)
                 {
-                    EditorFocus.Editor => EditorFocus.ExecutionTree,
-                    EditorFocus.ExecutionTree => EditorFocus.Messages,
-                    EditorFocus.Messages => EditorFocus.Results,
-                    EditorFocus.Results => EditorFocus.Performance,
-                    EditorFocus.Performance => EditorFocus.Editor,
-                    _ => EditorFocus.Editor
-                };
-
-                // Auto-show panels when focused
-                if (_renderer.Focus == EditorFocus.Results) { _renderer.ResultsVisible = true; _renderer.PerformanceVisible = false; }
-                else if (_renderer.Focus == EditorFocus.Performance) { _renderer.PerformanceVisible = true; _renderer.ResultsVisible = false; }
-                else if (_renderer.Focus == EditorFocus.ExecutionTree || _renderer.Focus == EditorFocus.Messages) { _renderer.ResultsVisible = false; _renderer.PerformanceVisible = false; }
+                    if (_renderer.ResultsVisible)
+                    {
+                        _renderer.Focus = EditorFocus.Results;
+                    }
+                    else if (_renderer.PerformanceVisible)
+                    {
+                        _renderer.Focus = EditorFocus.Performance;
+                    }
+                    else
+                    {
+                        _renderer.Focus = EditorFocus.Messages;
+                    }
+                }
+                else
+                {
+                    _renderer.Focus = EditorFocus.Editor;
+                }
 
                 _renderer.AutocompleteVisible = false;
                 _renderer.ForceFullRepaint();
@@ -489,7 +495,16 @@ namespace ETL_SQL.TUI.UI
                 case ConsoleKey.Home: _renderer.ResultScrollRow = 0; break;
                 case ConsoleKey.End: 
                     if (_editor._evaluator.LastResultSets.Count > 0) 
-                        _renderer.ResultScrollRow = _editor._evaluator.LastResultSets[_renderer.ActiveResultSetIndex].Rows.Count; 
+                    {
+                        var res = _editor._evaluator.LastResultSets[_renderer.ActiveResultSetIndex];
+                        int rowCount = res.Rows.Count;
+                        if (!string.IsNullOrEmpty(_renderer.FilterText))
+                        {
+                            rowCount = res.Rows.Count(row => res.ColumnNames.Any(c =>
+                                (row[c]?.ToString() ?? "").Contains(_renderer.FilterText, StringComparison.OrdinalIgnoreCase)));
+                        }
+                        _renderer.ResultScrollRow = Math.Max(0, rowCount - 1); 
+                    }
                     break;
                 case ConsoleKey.Tab:
                     if (_editor._evaluator.LastResultSets.Count > 1) {

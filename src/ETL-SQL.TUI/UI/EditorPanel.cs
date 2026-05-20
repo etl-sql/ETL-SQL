@@ -22,6 +22,21 @@ namespace ETL_SQL.TUI.UI
             int gutterWidth = (_buffer.Lines.Count).ToString().Length + 2;
             int editorWidth = width - gutterWidth - 1;
 
+            // Pre-calculate multiline comment state for the start of the viewport
+            bool inMultiline = false;
+            for (int i = 0; i < _renderer.ScrollLine; i++)
+            {
+                string l = _buffer.Lines[i];
+                int pos = 0;
+                while (pos < l.Length)
+                {
+                    int next = l.IndexOf(inMultiline ? "*/" : "/*", pos);
+                    if (next < 0) break;
+                    inMultiline = !inMultiline;
+                    pos = next + 2;
+                }
+            }
+
             for (int i = 0; i < height; i++)
             {
                 int row = y + i;
@@ -31,11 +46,8 @@ namespace ETL_SQL.TUI.UI
 
                 if (lineIdx < _buffer.Lines.Count)
                 {
-                    var line = _buffer.Lines[lineIdx];
-                    string visibleLine = line.Length > _renderer.ScrollCol 
-                        ? line.Substring(_renderer.ScrollCol, Math.Min(line.Length - _renderer.ScrollCol, editorWidth)) 
-                        : "";
-                    string highlighted = RenderLineWithSelection(lineIdx, visibleLine);
+                    var fullLine = _buffer.Lines[lineIdx];
+                    string highlighted = RenderLineWithSelection(lineIdx, fullLine, editorWidth, ref inMultiline);
                     
                     _renderer.SetLinePhysicalShift(lineIdx, 0);
 
@@ -46,41 +58,71 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
-        private string RenderLineWithSelection(int lineIdx, string visibleLine)
+        private string RenderLineWithSelection(int lineIdx, string fullLine, int editorWidth, ref bool inMultiline)
         {
+            bool startsInComment = inMultiline;
+            // HighlightLine handles clipping and updates inMultiline (via out endsInMultiline)
+            string highlighted = ETLSuggestEngine.HighlightLine(fullLine, _renderer.ScrollCol, editorWidth, startsInComment, out inMultiline);
+
+            if (!_buffer.SelectionStartLine.HasValue && !_buffer.IsMultiLineMode) return highlighted;
+
+            // Handle selection/cursors (this part still needs to work with the highlighted result)
+            // For simplicity in this TUI, we'll re-run highlighting if there's a selection to avoid complex markup splicing.
+            // But we must ensure the 'inMultiline' state is preserved correctly.
+            
             var secondary = _buffer.SecondaryCursors.FirstOrDefault(c => c.Line == lineIdx);
             bool hasSecondary = _buffer.IsMultiLineMode && _buffer.SecondaryCursors.Any(c => c.Line == lineIdx);
 
             if (!_buffer.SelectionStartLine.HasValue)
             {
-                if (!hasSecondary) return ETLSuggestEngine.HighlightLine(visibleLine);
+                if (!hasSecondary) return highlighted;
+                
                 int relCol = secondary.Col - _renderer.ScrollCol;
-                if (relCol < 0 || relCol >= visibleLine.Length) return ETLSuggestEngine.HighlightLine(visibleLine);
+                if (relCol < 0 || relCol >= editorWidth || secondary.Col >= fullLine.Length) return highlighted;
 
-                string b = visibleLine.Substring(0, relCol);
-                string c = visibleLine[relCol].ToString();
+                // Naive cursor injection: we re-highlight segments around the cursor
+                string b = fullLine.Substring(0, secondary.Col);
+                string c = fullLine[secondary.Col].ToString();
                 if (string.IsNullOrWhiteSpace(c)) c = " ";
-                string a = visibleLine.Substring(relCol + 1);
+                string a = fullLine.Substring(secondary.Col + 1);
 
-                return ETLSuggestEngine.HighlightLine(b) + "[reverse]" + Markup.Escape(c) + "[/]" + ETLSuggestEngine.HighlightLine(a);
+                bool dummy;
+                string hb = ETLSuggestEngine.HighlightLine(b, _renderer.ScrollCol, editorWidth, startsInComment, out dummy);
+                string hc = "[reverse]" + Markup.Escape(c) + "[/]";
+                string ha = ETLSuggestEngine.HighlightLine(a, Math.Max(0, _renderer.ScrollCol - secondary.Col - 1), editorWidth, dummy, out _);
+
+                return hb + hc + ha;
             }
 
             var (startL, startC, endL, endC) = _buffer.GetSelectionBounds();
-            if (lineIdx < startL || lineIdx > endL) return ETLSuggestEngine.HighlightLine(visibleLine);
+            if (lineIdx < startL || lineIdx > endL) return highlighted;
 
             int lineStart = (lineIdx == startL) ? startC : 0;
-            int lineEnd = (lineIdx == endL) ? endC : _buffer.Lines[lineIdx].Length;
+            int lineEnd = (lineIdx == endL) ? endC : fullLine.Length;
 
             int relStart = Math.Max(0, lineStart - _renderer.ScrollCol);
-            int relEnd = Math.Min(visibleLine.Length, lineEnd - _renderer.ScrollCol);
+            int relEnd = Math.Min(editorWidth, lineEnd - _renderer.ScrollCol);
 
-            if (relEnd < 0 || relStart >= visibleLine.Length) return ETLSuggestEngine.HighlightLine(visibleLine);
+            // If selection is off-screen
+            if (lineEnd <= _renderer.ScrollCol || lineStart >= _renderer.ScrollCol + editorWidth) return highlighted;
 
-            string beforeS = visibleLine.Substring(0, relStart);
-            string selectedS = visibleLine.Substring(relStart, relEnd - relStart);
-            string afterS = visibleLine.Substring(relEnd);
+            // Complex selection rendering over highlighted text is difficult without a full token model.
+            // For now, we'll fall back to plain selection if it's active on this line to ensure it's visible.
+            string visibleLine = fullLine.Length > _renderer.ScrollCol 
+                ? fullLine.Substring(_renderer.ScrollCol, Math.Min(fullLine.Length - _renderer.ScrollCol, editorWidth)) 
+                : "";
 
-            return ETLSuggestEngine.HighlightLine(beforeS) + "[black on white]" + Markup.Escape(selectedS) + "[/]" + ETLSuggestEngine.HighlightLine(afterS);
+            int vRelStart = Math.Max(0, lineStart - _renderer.ScrollCol);
+            int vRelEnd = Math.Min(visibleLine.Length, lineEnd - _renderer.ScrollCol);
+
+            string vBeforeS = visibleLine.Substring(0, vRelStart);
+            string vSelectedS = visibleLine.Substring(vRelStart, vRelEnd - vRelStart);
+            string vAfterS = visibleLine.Substring(vRelEnd);
+
+            bool d1, d2;
+            return ETLSuggestEngine.HighlightLine(fullLine.Substring(0, lineStart), _renderer.ScrollCol, editorWidth, startsInComment, out d1)
+                 + "[black on white]" + Markup.Escape(vSelectedS) + "[/]"
+                 + ETLSuggestEngine.HighlightLine(fullLine.Substring(lineEnd), 0, editorWidth, d1, out d2);
         }
     }
 }
