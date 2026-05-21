@@ -82,8 +82,9 @@ namespace ETL_SQL.TUI.UI
             endsInMultiline = startsInMultiline;
             if (string.IsNullOrEmpty(fullLine)) return "";
 
-            var tokens = new List<(int Start, int Length, string MarkupPrefix)>();
+            var tokens = new List<(int Start, int Length, string MarkupPrefix, bool IsSecret)>();
             int pos = 0;
+            string lastWord = "";
 
             while (pos < fullLine.Length)
             {
@@ -108,12 +109,14 @@ namespace ETL_SQL.TUI.UI
                 var match = Regex.Match(fullLine.Substring(pos), @"^(--.*|\/\*[\s\S]*?\*\/|\/\*[\s\S]*|'[^']*'|""[^""]*""|\[[^\]]*\]|[#@\w\.]+|\s+|.)");
                 if (!match.Success)
                 {
-                    tokens.Add((pos, 1, ""));
+                    tokens.Add((pos, 1, "", false));
                     pos++;
                     continue;
                 }
 
                 string word = match.Value;
+                bool isSecret = false;
+
                 if (word.StartsWith("--"))
                 {
                     TokenizeComment(word, pos, tokens);
@@ -125,47 +128,63 @@ namespace ETL_SQL.TUI.UI
                 }
                 else if (word.StartsWith("'") || word.StartsWith("\""))
                 {
-                    tokens.Add((pos, word.Length, "darkorange3"));
+                    if (lastWord == "PASSWORD" || lastWord == "API_KEY" || lastWord == "SECRET" || lastWord == "CONNECTION_STRING")
+                    {
+                        isSecret = true;
+                    }
+                    tokens.Add((pos, word.Length, "darkorange3", isSecret));
                 }
                 else if (word.StartsWith("["))
                 {
-                    tokens.Add((pos, word.Length, "cyan"));
+                    tokens.Add((pos, word.Length, "cyan", false));
                 }
                 else if (word.Equals("DOCKER", StringComparison.OrdinalIgnoreCase) || word.Contains("CONNECTION_STRING", StringComparison.OrdinalIgnoreCase))
                 {
-                    tokens.Add((pos, word.Length, "orange1"));
+                    tokens.Add((pos, word.Length, "orange1", false));
                 }
                 else if (LanguageMetadata.DmlKeywords.Contains(word.ToUpper()))
-                    tokens.Add((pos, word.Length, "bold blue"));
+                    tokens.Add((pos, word.Length, "bold blue", false));
                 else if (LanguageMetadata.DdlKeywords.Contains(word.ToUpper()))
-                    tokens.Add((pos, word.Length, "bold plum1"));
+                    tokens.Add((pos, word.Length, "bold plum1", false));
                 else if (LanguageMetadata.ControlFlowKeywords.Contains(word.ToUpper()))
-                    tokens.Add((pos, word.Length, "bold gold1"));
+                    tokens.Add((pos, word.Length, "bold gold1", false));
                 else if (LanguageMetadata.JoinKeywords.Contains(word.ToUpper()))
-                    tokens.Add((pos, word.Length, "bold springgreen3"));
+                    tokens.Add((pos, word.Length, "bold springgreen3", false));
                 else if (LanguageMetadata.OperatorKeywords.Contains(word.ToUpper()))
-                    tokens.Add((pos, word.Length, "bold plum3"));
+                    tokens.Add((pos, word.Length, "bold plum3", false));
                 else if (LanguageMetadata.Keywords.Contains(word.ToUpper()))
-                    tokens.Add((pos, word.Length, "blue"));
+                    tokens.Add((pos, word.Length, "blue", false));
                 else if (LanguageMetadata.IsDataType(word))
-                    tokens.Add((pos, word.Length, "mediumpurple"));
+                    tokens.Add((pos, word.Length, "mediumpurple", false));
                 else if (LanguageMetadata.IsFunction(word))
-                    tokens.Add((pos, word.Length, "yellow"));
+                    tokens.Add((pos, word.Length, "yellow", false));
                 else if (word.StartsWith("@"))
-                    tokens.Add((pos, word.Length, "green"));
+                    tokens.Add((pos, word.Length, "green", false));
                 else if (aliases != null && aliases.TryGetValue(word, out var info))
                 {
                     if (info.HasExplicitAlias && word.Equals(info.Alias, StringComparison.OrdinalIgnoreCase))
-                        tokens.Add((pos, word.Length, "purple"));
+                        tokens.Add((pos, word.Length, "purple", false));
                     else if (!info.HasExplicitAlias || word.Equals(info.TableName, StringComparison.OrdinalIgnoreCase))
-                        tokens.Add((pos, word.Length, "cyan"));
+                        tokens.Add((pos, word.Length, "cyan", false));
                     else
-                        tokens.Add((pos, word.Length, ""));
+                        tokens.Add((pos, word.Length, "", false));
                 }
                 else
                 {
-                    tokens.Add((pos, word.Length, ""));
+                    tokens.Add((pos, word.Length, "", false));
                 }
+
+                // Update last word state for sensitive field detection
+                string trimmed = word.Trim();
+                if (!string.IsNullOrEmpty(trimmed) && !trimmed.StartsWith("--") && !trimmed.StartsWith("/"))
+                {
+                    // Only update lastWord if it's a potential identifier/keyword
+                    if (Regex.IsMatch(trimmed, @"^[a-zA-Z_][a-zA-Z0-9_]*$"))
+                    {
+                        lastWord = trimmed.ToUpperInvariant();
+                    }
+                }
+
                 pos += word.Length;
             }
 
@@ -180,7 +199,23 @@ namespace ETL_SQL.TUI.UI
 
                 int clipStart = Math.Max(t.Start, scrollCol);
                 int clipEnd = Math.Min(tokenEnd, visibleEnd);
-                string visiblePart = fullLine.Substring(clipStart, clipEnd - clipStart);
+                
+                string visiblePart;
+                if (t.IsSecret && t.Length >= 2)
+                {
+                    // Mask everything between the quotes, preserving length for cursor stability
+                    var sb = new StringBuilder();
+                    for (int i = clipStart; i < clipEnd; i++)
+                    {
+                        if (i == t.Start || i == tokenEnd - 1) sb.Append(fullLine[i]);
+                        else sb.Append('*');
+                    }
+                    visiblePart = sb.ToString();
+                }
+                else
+                {
+                    visiblePart = fullLine.Substring(clipStart, clipEnd - clipStart);
+                }
 
                 if (!string.IsNullOrEmpty(t.MarkupPrefix)) result.Append($"[{t.MarkupPrefix}]");
                 result.Append(Markup.Escape(visiblePart));
@@ -190,14 +225,14 @@ namespace ETL_SQL.TUI.UI
             return result.ToString();
         }
 
-        private static void TokenizeComment(string text, int offset, List<(int Start, int Length, string MarkupPrefix)> tokens)
+        private static void TokenizeComment(string text, int offset, List<(int Start, int Length, string MarkupPrefix, bool IsSecret)> tokens)
         {
             var tagRegex = new Regex(@"(@\w+):\s*([^;*]+)(;)?", RegexOptions.Compiled);
             var matches = tagRegex.Matches(text);
 
             if (matches.Count == 0)
             {
-                tokens.Add((offset, text.Length, "grey70"));
+                tokens.Add((offset, text.Length, "grey70", false));
                 return;
             }
 
@@ -205,27 +240,27 @@ namespace ETL_SQL.TUI.UI
             foreach (Match m in matches)
             {
                 if (m.Index > lastPos)
-                    tokens.Add((offset + lastPos, m.Index - lastPos, "grey70"));
+                    tokens.Add((offset + lastPos, m.Index - lastPos, "grey70", false));
 
                 // @tag (Purple)
-                tokens.Add((offset + m.Index, m.Groups[1].Length, "mediumpurple"));
+                tokens.Add((offset + m.Index, m.Groups[1].Length, "mediumpurple", false));
                 
                 // : (Gray)
-                tokens.Add((offset + m.Index + m.Groups[1].Length, 1, "grey70"));
+                tokens.Add((offset + m.Index + m.Groups[1].Length, 1, "grey70", false));
 
                 // value (Orange)
                 int valueStart = m.Groups[2].Index;
-                tokens.Add((offset + valueStart, m.Groups[2].Length, "darkorange3"));
+                tokens.Add((offset + valueStart, m.Groups[2].Length, "darkorange3", false));
 
                 // ; (Gray)
                 if (m.Groups[3].Success)
-                    tokens.Add((offset + m.Groups[3].Index, 1, "grey70"));
+                    tokens.Add((offset + m.Groups[3].Index, 1, "grey70", false));
 
                 lastPos = m.Index + m.Length;
             }
 
             if (lastPos < text.Length)
-                tokens.Add((offset + lastPos, text.Length - lastPos, "grey70"));
+                tokens.Add((offset + lastPos, text.Length - lastPos, "grey70", false));
         }
 
 
