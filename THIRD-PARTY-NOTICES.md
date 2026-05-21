@@ -20,7 +20,8 @@ candidates for an About screen or small product footer credit:
 | Apache ECharts | Report Portal, Report Player, VS Code report preview | Visualizations powered by Apache ECharts. |
 | Tabulator | Report table/grid views | Table views powered by Tabulator. |
 | Spectre.Console | CLI/TUI terminal rendering | Terminal experience powered by Spectre.Console. |
-| QuestPDF | PDF report export | PDF export powered by QuestPDF. |
+| PDFsharp + MigraDoc | PDF report export | PDF export powered by PDFsharp and MigraDoc. |
+| Svg.Skia | PDF chart rendering | SVG chart rasterization for PDF export. |
 
 Avoid wording that implies these projects endorse ETL-SQL.
 
@@ -71,7 +72,8 @@ projects. License values are taken from local package metadata when available.
 | Parquet.Net | MIT | Parquet connector support. |
 | PgpCore | MIT | PGP encryption/decryption support. |
 | Polly | BSD-3-Clause | Resilience policies. |
-| QuestPDF | package license file | PDF export. Review QuestPDF license terms before commercial release. |
+| PDFsharp-MigraDoc | MIT | PDF export. |
+| Svg.Skia | MIT | SVG rasterization for PDF chart rendering. |
 | Serilog and Serilog.* | Apache-2.0 | Structured logging. |
 | Snappier | BSD-3-Clause | Snappy compression support. |
 | Snowflake.Data | Apache-2.0 | Snowflake connector support. |
@@ -130,7 +132,7 @@ Before shipping a public release:
 4. Include this file in binary archives, installers, containers, and extension
    packages.
 5. Review packages with non-standard or file-based license metadata, especially
-   QuestPDF, Oracle.ManagedDataAccess.Core, Apache.Arrow, Apache.Avro,
+   Oracle.ManagedDataAccess.Core, Apache.Arrow, Apache.Avro,
    Docker.DotNet, and OmniSharp.Extensions.LanguageServer.
 6. Add an About or Third-Party Notices link in the Report Portal, Report Player,
    TUI, CLI, and VS Code extension where practical.

@@ -252,7 +252,7 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
                   <span className="ml-2 text-[var(--muted)] text-[11px] shrink-0">{line.stats}</span>
                 )}
                 {line.error && (
-                  <span className="ml-2 text-red-400/70 text-[10px] italic truncate" title={line.error}>
+                  <span className="ml-2 text-red-400/70 text-[10px] italic break-all select-text">
                     — {line.error}
                   </span>
                 )}

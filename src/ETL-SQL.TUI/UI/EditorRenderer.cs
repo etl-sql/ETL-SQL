@@ -60,6 +60,7 @@ namespace ETL_SQL.TUI.UI
         public bool ResultsVisible { get; set; } = false;
         public bool CompareMode { get; set; } = false;
         public int CompareFocusIndex { get; set; } = 0;
+        public EditorFocus ActiveLowerTab { get; set; } = EditorFocus.Messages;
         private int _lastMessageCount = 0;
         public List<int> CompareScrollRows { get; set; } = new();
         public List<string> CompareFilters { get; set; } = new();
@@ -150,15 +151,25 @@ namespace ETL_SQL.TUI.UI
                 if (buffer.CursorLine < ScrollLine) ScrollLine = buffer.CursorLine;
                 if (buffer.CursorLine >= ScrollLine + editorAreaHeight) ScrollLine = buffer.CursorLine - editorAreaHeight + 1;
 
+            if (ActiveResultSetIndex >= evaluator.LastResultSets.Count)
+                ActiveResultSetIndex = Math.Max(0, evaluator.LastResultSets.Count - 1);
+
             // Scroll limits
             if (PerformanceVisible)
             {
-                int maxPerf = Math.Max(0, evaluator.Telemetry.ProfileMetrics.Count - (lowerAreaHeight - 4));
+                int maxPerf = Math.Max(0, evaluator.Telemetry.ProfileMetrics.Count - 1);
                 ResultScrollRow = Math.Clamp(ResultScrollRow, 0, maxPerf);
             }
-            else if (ResultsVisible && evaluator.LastResult != null)
+            else if (ResultsVisible && evaluator.LastResultSets.Count > 0)
             {
-                int maxResult = Math.Max(0, evaluator.LastResult.Rows.Count - (lowerAreaHeight - 4));
+                var res = evaluator.LastResultSets[ActiveResultSetIndex];
+                int rowCount = res.Rows.Count;
+                if (!string.IsNullOrEmpty(FilterText))
+                {
+                    rowCount = res.Rows.Count(row => res.ColumnNames.Any(c =>
+                        (row[c]?.ToString() ?? "").Contains(FilterText, StringComparison.OrdinalIgnoreCase)));
+                }
+                int maxResult = Math.Max(0, rowCount - 1);
                 ResultScrollRow = Math.Clamp(ResultScrollRow, 0, maxResult);
             }
             else
@@ -185,9 +196,6 @@ namespace ETL_SQL.TUI.UI
                 TreeScrollRow    = Math.Clamp(TreeScrollRow, 0, maxTree);
             }
 
-            if (ActiveResultSetIndex >= evaluator.LastResultSets.Count)
-                ActiveResultSetIndex = Math.Max(0, evaluator.LastResultSets.Count - 1);
-
             // Ensure compare scroll/filter arrays are sized to match result sets
             if (CompareMode)
             {
@@ -210,7 +218,7 @@ namespace ETL_SQL.TUI.UI
                 _console.ClearLine(0, 0, totalWidth);
                 string fileLabel = string.IsNullOrEmpty(filePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(filePath);
                 string headerBase = $" ETL-SQL IDE | {fileLabel}{(isDirty ? "*" : "")}";
-                string focusInfo = Focus == EditorFocus.Editor ? " [bold yellow](FOCUSED)[/]" : " [grey](F3 to focus)[/]";
+                string focusInfo = Focus == EditorFocus.Editor ? " [bold yellow](FOCUSED)[/]" : " [grey](F6 to focus)[/]";
                 
                 _console.Markup($"[white on grey15]{Markup.Escape(headerBase)} [/]{focusInfo}");
                 
@@ -232,7 +240,7 @@ namespace ETL_SQL.TUI.UI
                 else if (ResultsVisible)
                     _resultsPanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight, ResultScrollRow);
                 else
-                    _messageTreePanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight, TreeScrollRow, MessageScrollRow, Focus);
+                    _messageTreePanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight, TreeScrollRow, MessageScrollRow, ActiveLowerTab);
             }
         }
 
@@ -460,7 +468,14 @@ namespace ETL_SQL.TUI.UI
         private void RenderHelpOverlay(int totalWidth, int totalHeight)
         {
             // Live state annotations
-            string focusState  = ResultsFocus    ? "[bold yellow]RESULTS[/]"  : "[grey]EDITOR[/]";
+            string focusState  = Focus switch {
+                EditorFocus.Editor => "[grey]EDITOR[/]",
+                EditorFocus.Results => "[bold yellow]RESULTS[/]",
+                EditorFocus.Performance => "[bold magenta]PERF[/]",
+                EditorFocus.Messages => "[bold yellow]MESSAGES[/]",
+                EditorFocus.ExecutionTree => "[bold cyan]PIPELINE[/]",
+                _ => "[grey]EDITOR[/]"
+            };
             string panelState  = PerformanceVisible ? "[bold cyan]PERF[/]"
                                : ResultsVisible     ? "[bold yellow]RESULTS[/]"
                                :                      "[grey]PIPELINE[/]";
@@ -487,7 +502,7 @@ namespace ETL_SQL.TUI.UI
             }
 
             Section("View");
-            RowAnnotated("F6",             "Toggle focus: Editor / Results", $"now: {focusState}");
+            RowAnnotated("F6",             "Toggle focus: Editor / Active panel", $"now: {focusState}");
             RowAnnotated("F4",             "Cycle lower panel",              $"now: {panelState}");
             Row("Ctrl+M",                  "Maximize / Restore lower panel");
             Row("F7",                      "Enter / exit Compare mode (2+ result sets)");

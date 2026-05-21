@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -14,7 +15,11 @@ namespace ETL_SQL.Engine.Handlers
         public Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (UsePasswordStatement)statement;
-            context.ScriptPassword = stmt.Password;
+            if (stmt.Prompt)
+                context.ScriptPassword = PasswordPrompt.ReadPassword("ETL-SQL password: ");
+            else
+                context.ScriptPassword = stmt.Password;
+
 
             if (context.IsVerbose)
             {

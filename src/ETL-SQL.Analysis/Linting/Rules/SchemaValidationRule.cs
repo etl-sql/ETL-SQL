@@ -16,14 +16,115 @@ namespace ETL_SQL.Analysis.Linting.Rules
             var results = new List<LintResult>();
             if (context.Metadata == null) return results;
 
+            var scriptConnections = CollectConnections(script);
+
             foreach (var statement in script.Statements)
             {
-                await AnalyzeStatementAsync(statement, context, results);
+                await AnalyzeStatementAsync(statement, context, results, scriptConnections);
             }
             return results;
         }
 
-        private async Task AnalyzeStatementAsync(Statement statement, ILintContext context, List<LintResult> results)
+        private Dictionary<string, CreateConnectionStatement> CollectConnections(Script script)
+        {
+            var connections = new Dictionary<string, CreateConnectionStatement>(StringComparer.OrdinalIgnoreCase);
+            CollectConnectionsFromStatements(script.Statements, connections);
+            return connections;
+        }
+
+        private void CollectConnectionsFromStatements(IEnumerable<Statement> statements, Dictionary<string, CreateConnectionStatement> connections)
+        {
+            foreach (var stmt in statements)
+            {
+                if (stmt is CreateConnectionStatement conn)
+                {
+                    connections[conn.ConnectionName] = conn;
+                }
+                else if (stmt is BlockStatement block)
+                {
+                    CollectConnectionsFromStatements(block.Statements, connections);
+                }
+                else if (stmt is IfStatement ifStmt)
+                {
+                    CollectConnectionsFromStatements(new[] { ifStmt.IfBody }, connections);
+                    if (ifStmt.ElseIfClauses != null)
+                    {
+                        foreach (var ei in ifStmt.ElseIfClauses)
+                        {
+                            CollectConnectionsFromStatements(new[] { ei.Body }, connections);
+                        }
+                    }
+                    if (ifStmt.ElseBody != null)
+                    {
+                        CollectConnectionsFromStatements(new[] { ifStmt.ElseBody }, connections);
+                    }
+                }
+                else if (stmt is WhileStatement whileStmt)
+                {
+                    CollectConnectionsFromStatements(new[] { whileStmt.Body }, connections);
+                }
+                else if (stmt is ForStatement forStmt)
+                {
+                    CollectConnectionsFromStatements(new[] { forStmt.Body }, connections);
+                }
+                else if (stmt is ForeachStatement foreachStmt)
+                {
+                    CollectConnectionsFromStatements(new[] { foreachStmt.Body }, connections);
+                }
+                else if (stmt is TryCatchStatement tryCatch)
+                {
+                    CollectConnectionsFromStatements(new[] { tryCatch.TryBody }, connections);
+                    CollectConnectionsFromStatements(new[] { tryCatch.CatchBody }, connections);
+                }
+            }
+        }
+
+        private string? ResolvePath(string path, string documentUri)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+
+            if (System.IO.Path.IsPathRooted(path))
+            {
+                return path;
+            }
+
+            if (!string.IsNullOrWhiteSpace(documentUri))
+            {
+                try
+                {
+                    string baseDir = "";
+                    if (documentUri.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var uri = new Uri(documentUri);
+                        baseDir = System.IO.Path.GetDirectoryName(uri.LocalPath) ?? "";
+                    }
+                    else if (System.IO.Path.IsPathRooted(documentUri))
+                    {
+                        baseDir = System.IO.Path.GetDirectoryName(documentUri) ?? "";
+                    }
+
+                    if (!string.IsNullOrEmpty(baseDir))
+                    {
+                        return System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDir, path));
+                    }
+                }
+                catch
+                {
+                    // Ignore URI/Path exceptions
+                }
+            }
+
+            try
+            {
+                return System.IO.Path.GetFullPath(path);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private async Task AnalyzeStatementAsync(Statement statement, ILintContext context, List<LintResult> results, Dictionary<string, CreateConnectionStatement> scriptConnections)
         {
             if (statement is SelectStatement select)
             {
@@ -32,11 +133,11 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 // 1. Resolve Tables in FROM and JOIN
                 if (select.FromTable != null)
                 {
-                    await ValidateTableRefAsync(select.FromTable, context, results, tablesInScope);
+                    await ValidateTableRefAsync(select.FromTable, context, results, tablesInScope, scriptConnections, isInsert: false);
                 }
                 foreach (var join in select.Joins)
                 {
-                    await ValidateTableRefAsync(join.Table, context, results, tablesInScope);
+                    await ValidateTableRefAsync(join.Table, context, results, tablesInScope, scriptConnections, isInsert: false);
                 }
 
                 // 2. Validate Columns
@@ -52,15 +153,23 @@ namespace ETL_SQL.Analysis.Linting.Rules
             else if (statement is InsertStatement insert)
             {
                 var tablesInScope = new List<(string Conn, string Table, string? Alias)>();
-                await ValidateTableRefAsync(insert.TargetTable, context, results, tablesInScope);
-                if (insert.SelectQuery != null) await AnalyzeStatementAsync(insert.SelectQuery, context, results);
+                await ValidateTableRefAsync(insert.TargetTable, context, results, tablesInScope, scriptConnections, isInsert: true);
+                if (insert.SelectQuery != null) await AnalyzeStatementAsync(insert.SelectQuery, context, results, scriptConnections);
                 if (insert.Columns != null && tablesInScope.Any())
                 {
                     var scope = tablesInScope[0];
                     var cols = (await context.Metadata!.GetColumnsAsync(scope.Conn, scope.Table)).ToList();
                     
                     // Relaxed validation for file connectors: if no columns are found, assume implied schema creation
-                    var connType = context.Metadata!.GetConnectionType(scope.Conn);
+                    string? connType = null;
+                    if (scriptConnections.TryGetValue(scope.Conn, out var connStmt))
+                    {
+                        connType = connStmt.ConnectionType;
+                    }
+                    else
+                    {
+                        connType = context.Metadata!.GetConnectionType(scope.Conn);
+                    }
                     if (cols.Count == 0 && IsFileConnector(connType))
                     {
                         return;
@@ -84,7 +193,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
             else if (statement is UpdateStatement update)
             {
                 var tablesInScope = new List<(string Conn, string Table, string? Alias)>();
-                await ValidateTableRefAsync(update.TargetTable, context, results, tablesInScope);
+                await ValidateTableRefAsync(update.TargetTable, context, results, tablesInScope, scriptConnections, isInsert: false);
                 foreach (var assign in update.Assignments)
                 {
                     await ValidateExpressionAsync(assign.Value, context, results, tablesInScope);
@@ -110,16 +219,40 @@ namespace ETL_SQL.Analysis.Linting.Rules
             else if (statement is DeleteStatement delete)
             {
                 var tablesInScope = new List<(string Conn, string Table, string? Alias)>();
-                await ValidateTableRefAsync(delete.TargetTable, context, results, tablesInScope);
+                await ValidateTableRefAsync(delete.TargetTable, context, results, tablesInScope, scriptConnections, isInsert: false);
                 if (delete.WhereClause != null) await ValidateExpressionAsync(delete.WhereClause, context, results, tablesInScope);
             }
             else if (statement is BlockStatement block)
             {
-                foreach (var s in block.Statements) await AnalyzeStatementAsync(s, context, results);
+                foreach (var s in block.Statements) await AnalyzeStatementAsync(s, context, results, scriptConnections);
+            }
+            else if (statement is IfStatement ifStmt)
+            {
+                await AnalyzeStatementAsync(ifStmt.IfBody, context, results, scriptConnections);
+                if (ifStmt.ElseIfClauses != null)
+                    foreach (var ei in ifStmt.ElseIfClauses) await AnalyzeStatementAsync(ei.Body, context, results, scriptConnections);
+                if (ifStmt.ElseBody != null) await AnalyzeStatementAsync(ifStmt.ElseBody, context, results, scriptConnections);
+            }
+            else if (statement is WhileStatement whileStmt)
+            {
+                await AnalyzeStatementAsync(whileStmt.Body, context, results, scriptConnections);
+            }
+            else if (statement is ForStatement forStmt)
+            {
+                await AnalyzeStatementAsync(forStmt.Body, context, results, scriptConnections);
+            }
+            else if (statement is ForeachStatement foreachStmt)
+            {
+                await AnalyzeStatementAsync(foreachStmt.Body, context, results, scriptConnections);
+            }
+            else if (statement is TryCatchStatement tryCatch)
+            {
+                await AnalyzeStatementAsync(tryCatch.TryBody, context, results, scriptConnections);
+                await AnalyzeStatementAsync(tryCatch.CatchBody, context, results, scriptConnections);
             }
         }
 
-        private async Task ValidateTableRefAsync(TableReference tableRef, ILintContext context, List<LintResult> results, List<(string Conn, string Table, string? Alias)> tablesInScope)
+        private async Task ValidateTableRefAsync(TableReference tableRef, ILintContext context, List<LintResult> results, List<(string Conn, string Table, string? Alias)> tablesInScope, Dictionary<string, CreateConnectionStatement> scriptConnections, bool isInsert)
         {
             if (tableRef.Subquery != null)
             {
@@ -128,7 +261,16 @@ namespace ETL_SQL.Analysis.Linting.Rules
             }
 
             var connName = tableRef.ConnectionName ?? context.Metadata!.GetConnections().FirstOrDefault() ?? "DEFAULT";
-            var connType = context.Metadata!.GetConnectionType(connName);
+            string? connType = null;
+            CreateConnectionStatement? connStmt = null;
+            if (scriptConnections.TryGetValue(connName, out connStmt))
+            {
+                connType = connStmt.ConnectionType;
+            }
+            else
+            {
+                connType = context.Metadata!.GetConnectionType(connName);
+            }
             
             // Skip validation for engine-side temporary tables (#) or built-in DUAL
             if ((tableRef.ConnectionName == null && tableRef.TableName.StartsWith("#")) || 
@@ -139,9 +281,41 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 return;
             }
 
+            if (IsFileConnector(connType))
+            {
+                if (connStmt != null && connStmt.TargetExpression is LiteralExpression targetLit && targetLit.Value is string targetPath)
+                {
+                    if (!isInsert)
+                    {
+                        var resolvedPath = ResolvePath(targetPath, context.DocumentUri);
+                        if (!string.IsNullOrEmpty(resolvedPath))
+                        {
+                            try
+                            {
+                                if (!System.IO.File.Exists(resolvedPath))
+                                {
+                                    results.Add(new LintResult
+                                    {
+                                        RuleName = Name,
+                                        Severity = LintSeverity.Warning,
+                                        Message = $"File '{targetPath}' for connection '{connName}' does not exist.",
+                                        LineNumber = tableRef.Line,
+                                        ColumnNumber = tableRef.Column
+                                    });
+                                }
+                            }
+                            catch
+                            {
+                                // Ignore
+                            }
+                        }
+                    }
+                }
+            }
+
             if (string.Equals(tableRef.TableName, "FILE", StringComparison.OrdinalIgnoreCase))
             {
-                if (IsFileConnector(context.Metadata!.GetConnectionType(connName)))
+                if (IsFileConnector(connType))
                 {
                     tablesInScope.Add((connName, tableRef.TableName, tableRef.Alias));
                     return;

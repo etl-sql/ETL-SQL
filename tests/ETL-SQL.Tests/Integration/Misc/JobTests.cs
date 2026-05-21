@@ -31,7 +31,9 @@ namespace ETL_SQL.Tests.Integration
 
             services.AddSingleton<ETL_SQL.Common.ILogger>(new ETL_SQL.Common.EngineLogger());
             var dbName = $"test_jobs_{Guid.NewGuid()}.db";
-            services.AddSingleton<IJobHistoryStore>(new SQLiteJobHistoryStore(dbName));
+            var store = new SQLiteJobHistoryStore(dbName);
+            services.AddSingleton<IJobHistoryStore>(store);
+            services.AddSingleton<IBundleStore>(store);
             services.AddSingleton<SchedulerService>();
             
             var registry = new FunctionRegistry();

@@ -49,7 +49,8 @@ namespace ETL_SQL.Common
         {
             "FLATFILE", "CSV", "EXCEL", "JSON", "XML", "AVRO", "PARQUET",
             "MSSQL", "ORACLE", "POSTGRES", "MOCKDB", "ODBC",
-            "SFTP", "FTP", "FTP_CONN", "AZURE_BLOB", "SMTP", "DOCKER", "DIRECTORY"
+            "SFTP", "FTP", "FTP_CONN", "AZURE_BLOB", "SMTP", "DOCKER", "DIRECTORY",
+            "REPORTPORTAL", "REPORT_PORTAL", "ORCHESTRATOR", "ORCH"
         };
 
         public static readonly HashSet<string> Keywords = new(StringComparer.OrdinalIgnoreCase)
@@ -73,7 +74,8 @@ namespace ETL_SQL.Common
             "PASSWORD", "SHOW_PASSWORD", "OUTPUT", "INPUT", "REQUIRED", "PARALLEL", "RUN", "SCRIPT", "USE", "START", "STOP", "PAUSE", "KILL",
             "BULK", "LOAD", "BATCHSIZE", "MAXERRORS", "FIELDTERMINATOR", "ROWTERMINATOR", "FIRSTROW", "DATA_SOURCE",
             "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND", "INCLUDE_NULL_VALUES", "WITHOUT_ARRAY_WRAPPER",
-            "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT", "VERSION",
+            "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT", "VERSION", "TRIGGER",
+
             "SETS", "SESSION", "SESSIONS", "CONNECTIONS", "VARIABLES", "LOCAL", "ANALYZE", "TABLES", "COLUMNS", "TAGS", "TAG", "VALUE", "BITS", "ALGORITHM", "PASSPHRASE", "COMMENT", "CONFIG", "PGP_KEY",
             "SUBSTRING", "POSITION", "OVERLAY", "EXTRACT", "TRIM", "PLACING", "LEADING", "TRAILING", "BOTH",
             "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE", "REQUIRE", "SAFE", "ZONES",

@@ -329,6 +329,12 @@ namespace ETL_SQL.Core.Parser.Components
             }
             if (Match(TokenType.PASSWORD))
             {
+                if (MatchIdentifier("PROMPT"))
+                {
+                    if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+                    return new UsePasswordStatement(prompt: true) { Line = startToken.Line, Column = startToken.Column };
+                }
+
                 Consume(TokenType.EQUALS, "Expected '=' after USE PASSWORD");
                 var password = Consume(TokenType.STRING_LITERAL, "Expected password string").Value;
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
@@ -408,6 +414,37 @@ namespace ETL_SQL.Core.Parser.Components
                     throw new SyntaxException("Expected HISTORY after SHOW JOB", _parser.Current.Line, _parser.Current.Column);
             }
             else if (Match(TokenType.JOBS))       stmt = new ShowJobsStatement();
+            else if (MatchIdentifier("PUBLISHED"))
+            {
+                ConsumeIdentifierValue("BUNDLES", "Expected BUNDLES after SHOW PUBLISHED");
+                stmt = new ShowPublishedBundlesStatement();
+            }
+            else if (MatchIdentifier("BUNDLE"))
+            {
+                if (MatchIdentifier("VERSIONS"))
+                {
+                    var bundleName = Consume(TokenType.STRING_LITERAL, "Expected bundle name string after SHOW BUNDLE VERSIONS").Value;
+                    stmt = new ShowBundleVersionsStatement(bundleName);
+                }
+                else if (MatchIdentifier("FILES"))
+                {
+                    var bundleName = Consume(TokenType.STRING_LITERAL, "Expected bundle name string after SHOW BUNDLE FILES").Value;
+                    Consume(TokenType.VERSION, "Expected VERSION after bundle name");
+                    var version = int.Parse(Consume(TokenType.NUMBER, "Expected bundle version number").Value);
+                    stmt = new ShowBundleFilesStatement(bundleName, version);
+                }
+                else if (MatchIdentifier("DEPENDENCIES"))
+                {
+                    var bundleName = Consume(TokenType.STRING_LITERAL, "Expected bundle name string after SHOW BUNDLE DEPENDENCIES").Value;
+                    Consume(TokenType.VERSION, "Expected VERSION after bundle name");
+                    var version = int.Parse(Consume(TokenType.NUMBER, "Expected bundle version number").Value);
+                    stmt = new ShowBundleDependenciesStatement(bundleName, version);
+                }
+                else
+                {
+                    throw new SyntaxException("Expected VERSIONS, FILES, or DEPENDENCIES after SHOW BUNDLE", _parser.Current.Line, _parser.Current.Column);
+                }
+            }
             else if (Match(TokenType.CONNECTIONS)) stmt = new ShowConnectionsStatement();
             else if (Match(TokenType.CONNECTION))
             {
@@ -614,6 +651,22 @@ namespace ETL_SQL.Core.Parser.Components
             if (stmt == null)
                 throw new SyntaxException("Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, VARIABLES, SCRIPT TAGS, TAGS, VERSION, LINEAGE, or DATASETS after SHOW", _parser.Current.Line, _parser.Current.Column);
 
+            if ((stmt is ShowJobsStatement || stmt is ShowJobHistoryStatement || stmt is ShowPublishedBundlesStatement ||
+                 stmt is ShowBundleVersionsStatement || stmt is ShowBundleFilesStatement || stmt is ShowBundleDependenciesStatement) && Match(TokenType.AT))
+            {
+                var atConn = ConsumeIdentifier("Expected connection name after AT").Value;
+                stmt = stmt switch
+                {
+                    ShowJobsStatement j       => j with { At = atConn },
+                    ShowJobHistoryStatement h => h with { At = atConn },
+                    ShowPublishedBundlesStatement b => b with { At = atConn },
+                    ShowBundleVersionsStatement v => v with { At = atConn },
+                    ShowBundleFilesStatement f => f with { At = atConn },
+                    ShowBundleDependenciesStatement d => d with { At = atConn },
+                    _                        => stmt
+                };
+            }
+
             if (Match(TokenType.INTO))
             {
                 var tempTable = ConsumeIdentifier("Expected temporary table name after INTO").Value;
@@ -637,6 +690,10 @@ namespace ETL_SQL.Core.Parser.Components
                     ShowSafeZonesStatement ssz   => ssz with { IntoTable = tempTable },
                     ShowSessionsStatement sess   => sess with { IntoTable = tempTable },
                     ShowDatasetsStatement sds    => sds with { IntoTable = tempTable },
+                    ShowPublishedBundlesStatement spb => spb with { IntoTable = tempTable },
+                    ShowBundleVersionsStatement sbv => sbv with { IntoTable = tempTable },
+                    ShowBundleFilesStatement sbf => sbf with { IntoTable = tempTable },
+                    ShowBundleDependenciesStatement sbd => sbd with { IntoTable = tempTable },
                     ShowPortalReportsStatement sprs => sprs with { IntoTable = tempTable },
                     ShowPortalReportStatement spr => spr with { IntoTable = tempTable },
                     ShowPortalReportHistoryStatement sprh => sprh with { IntoTable = tempTable },

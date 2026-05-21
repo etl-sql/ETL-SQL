@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
@@ -38,6 +39,12 @@ namespace ETL_SQL.Engine.Handlers
 
             if (!evaluator.Connections.TryGetValue(connectionName, out var dataSource))
                 throw new ExecutionException($"Connection not found: {connectionName}");
+
+            if (dataSource is IPortalAdminConnection adminConn)
+            {
+                await ExecuteAdminBlockAsync(stmt, adminConn, connectionName, context);
+                return;
+            }
 
             if (dataSource is not IDatabaseSource databaseSource)
                 throw new ExecutionException($"Connection '{connectionName}' does not support native SQL pushdown.");
@@ -110,6 +117,37 @@ namespace ETL_SQL.Engine.Handlers
             {
                 evaluator.LastResult = null;
                 evaluator.LastResultSets.Clear();
+            }
+        }
+
+        private async Task ExecuteAdminBlockAsync(ExecutePushdownStatement stmt, IPortalAdminConnection adminConn, string connectionName, IExecutionContext context)
+        {
+            if (string.IsNullOrWhiteSpace(stmt.SqlText))
+            {
+                _logger.WriteLine("Admin block is empty, skipping.", ConsoleColor.Yellow);
+                return;
+            }
+
+            Script parsed;
+            try
+            {
+                var tokens = new Lexer(stmt.SqlText).Tokenize();
+                parsed = new Parser(tokens, stmt.SqlText).Parse();
+            }
+            catch (Exception ex)
+            {
+                throw new ExecutionException($"Failed to parse admin block for '{connectionName}': {ex.Message}");
+            }
+
+            context.Log($"Executing admin block on {connectionName}...");
+            foreach (var innerStmt in parsed.Statements)
+            {
+                if (context.IsWhatIf)
+                {
+                    _logger.WriteLine($"WHAT IF: Would execute portal admin statement {innerStmt.GetType().Name} on {connectionName}", ConsoleColor.Yellow);
+                    continue;
+                }
+                await adminConn.ExecuteAdminStatementAsync(innerStmt, context);
             }
         }
 

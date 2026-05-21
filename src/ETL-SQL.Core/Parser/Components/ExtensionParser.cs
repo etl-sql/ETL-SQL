@@ -602,7 +602,8 @@ namespace ETL_SQL.Core.Parser.Components
                 try { sqlText = _parser.CaptureRawBlock(); }
                 catch (SyntaxException) { unbalanced = true; }
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-                return new ExecutePushdownStatement(identifierExpr, sqlText, remoteIntoTable, remoteParameters) { Line = startToken.Line, Column = startToken.Column, HasUnbalancedBlocks = unbalanced };
+                return new ExecutePushdownStatement(identifierExpr, sqlText, remoteIntoTable, remoteParameters)
+                    { Line = startToken.Line, Column = startToken.Column, HasUnbalancedBlocks = unbalanced };
             }
 
             if (_parser.Current.Type == TokenType.LPAREN)

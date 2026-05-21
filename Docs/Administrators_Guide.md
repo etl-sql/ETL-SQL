@@ -199,6 +199,17 @@ The portal rejects script, snapshot, map, and dataset paths that resolve outside
 
 Use resource settings to keep one report or job from consuming the whole host.
 
+### Orchestrator Lockbox Bundles
+
+Published Orchestrator bundles are stored in the Orchestrator SQLite database as immutable versions. Back up the database together with any configured lockbox key material.
+
+| Mode | Operational note |
+|---|---|
+| `ENCRYPT = MACHINE` | Default single-host mode. Bundle secrets are protected by the Orchestrator host identity. Restoring to another host may require republishing or re-entering secrets. |
+| `ENCRYPT = KEYFILE` | Portable/cluster-friendly mode. Back up the keyfile separately from the database and restrict file permissions to the Orchestrator service account. |
+
+Do not delete bundle versions referenced by active or historical jobs unless the retirement is deliberate and audited. `EXPORT SCRIPT` can recover script text and folder structure from a published bundle, but it will not reveal decrypted secrets.
+
 ### Portal Report Execution
 
 ```json

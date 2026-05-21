@@ -181,6 +181,64 @@ Exit codes are suitable for use in CI/CD pipeline gating.
 
 Jobs are scheduled from within your `.etlsql` scripts using the `CREATE JOB` statement. Once registered, they are stored in a SQLite database and executed automatically by the background scheduler — no cron job or Windows Task Scheduler entry is required.
 
+### 3.0 Live Files vs Published Bundles
+
+Orchestrator jobs support two script management models:
+
+| Model | Syntax | Behavior |
+|---|---|---|
+| Live file | `RUN SCRIPT 'C:\ETL\main.etlsql'` | Reads the file from disk each time the job runs. File edits affect the next run. Use this for development or dynamic script dispatch. |
+| Published bundle | `RUN SCRIPT 'orch://finance-load@3/main.etlsql'` | Runs an immutable script version stored in the Orchestrator lockbox. Use this for production jobs that must not change until republished. |
+
+Unversioned published paths such as `orch://finance-load/main.etlsql` resolve to the latest published version for manual runs. When used in `CREATE JOB` or `ALTER JOB`, the Orchestrator resolves the latest version once and stores the pinned path, for example `orch://finance-load@3/main.etlsql`.
+
+### 3.0.1 Publishing Scripts
+
+```sql
+PUBLISH BUNDLE 'finance-load'
+FROM 'C:\ETL\finance'
+ENTRY 'main.etlsql'
+WITH (PASSWORD = 'publish-password', ENCRYPT = MACHINE);
+```
+
+`PUBLISH BUNDLE` stores an immutable bundle version. When `FROM` points at a directory, every `.etlsql` and `.rptsql` file under that directory is included, and literal relative `RUN SCRIPT 'child.etlsql'` dependencies are validated recursively. When `FROM` points at a single file, the bundle contains that entry file and its literal dependency closure. If the bundle content is unchanged from the latest version, the existing version is reused. If any file changed, the version increments.
+
+Dynamic paths cannot be published:
+
+```sql
+RUN SCRIPT @nextScript;                 -- publish-time failure
+RUN SCRIPT @folder + '\load.etlsql';    -- publish-time failure
+```
+
+Use live file mode for scripts that intentionally choose sub-scripts at runtime.
+
+### 3.0.2 Passwords And Secrets
+
+Publish-time passwords unlock existing `ENC:` values. Published copies are stored without `USE PASSWORD` statements, and secrets are re-encrypted for the Orchestrator lockbox. Source files are not modified.
+
+`USE PASSWORD = 'literal'` is accepted for local/testing convenience, but it stores the password in source. Prefer `USE PASSWORD PROMPT` interactively, or provide the password on the publish command. Published scheduled jobs must not rely on runtime password prompts.
+
+File encryption/decryption operations in published scripts must use explicit encrypted passwords or key references. They cannot rely on an implicit session password fallback.
+
+### 3.0.3 Export And Recovery
+
+```sql
+EXPORT SCRIPT 'orch://finance-load@3/main.etlsql'
+TO 'C:\Recovered\finance-load';
+```
+
+`EXPORT SCRIPT` recovers the bundled script files and relative folder structure. It does not decrypt or reveal secrets; recovered scripts may require secrets to be re-entered before use.
+
+### 3.0.4 Bundle Inspection
+
+```sql
+SHOW PUBLISHED BUNDLES;
+SHOW BUNDLE VERSIONS 'finance-load';
+SHOW BUNDLE FILES 'finance-load' VERSION 3;
+SHOW BUNDLE DEPENDENCIES 'finance-load' VERSION 3;
+VALIDATE BUNDLE 'finance-load' FROM 'C:\ETL\finance' ENTRY 'main.etlsql';
+```
+
 ### 3.1 `CREATE JOB` — Schedule a Job
 
 ```sql

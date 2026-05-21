@@ -19,12 +19,12 @@ AS (
 );
 
 -- Adjust EventTime to be scattered within the current hour (random minute offset up to 60 mins ago)
-UPDATE #machine_data 
-SET EventTime = DATEADD(MINUTE, -(CAST(RAND() * 60 AS INT)), GETDATE());
+--UPDATE #machine_data 
+--SET EventTime = DATEADD(MINUTE, -(CAST(RAND() * 60 AS INT)), GETDATE());
 
 -- Calculate output filename: /data/manufacturing_yyyyMMdd_HH.csv
 DECLARE @timestamp STRING = FORMAT(GETDATE(), 'yyyyMMdd_HH');
-DECLARE @filename  STRING = '/data/manufacturing_' + @timestamp + '.csv';
+DECLARE @filename  STRING = '/app/data/manufacturing_' + @timestamp + '.csv';
 
 PRINT 'Exporting to ' + @filename + '...';
 

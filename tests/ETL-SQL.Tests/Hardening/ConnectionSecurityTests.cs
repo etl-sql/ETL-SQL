@@ -39,6 +39,32 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public async Task ConnectionEncryptionRule_Flags_Plaintext_ApiKeyOption()
+        {
+            var sql = "CREATE CONNECTION c ON MSSQL() WITH(API_KEY='secret');";
+            var script = Parse(sql);
+            var rule = new ConnectionEncryptionRule();
+            var results = await rule.AnalyzeAsync(script, new TestLintContext());
+
+            Assert.Single(results);
+            Assert.Equal("SEC-PLAIN-CONN", results.First().Code);
+            Assert.Contains("plaintext password or credential", results.First().Message);
+        }
+
+        [Fact]
+        public async Task ConnectionEncryptionRule_Flags_Plaintext_ApiKeyOptionNoUnderscore()
+        {
+            var sql = "CREATE CONNECTION c ON MSSQL() WITH(APIKEY='secret');";
+            var script = Parse(sql);
+            var rule = new ConnectionEncryptionRule();
+            var results = await rule.AnalyzeAsync(script, new TestLintContext());
+
+            Assert.Single(results);
+            Assert.Equal("SEC-PLAIN-CONN", results.First().Code);
+            Assert.Contains("plaintext password or credential", results.First().Message);
+        }
+
+        [Fact]
         public async Task ConnectionEncryptionRule_Ignores_Encrypted_Credentials()
         {
             var sql = @"
@@ -73,6 +99,22 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Contains("PASSWORD='ENC:", encrypted);
             Assert.DoesNotContain("PASSWORD='secret'", encrypted);
             Assert.Contains("SERVER='.'", encrypted);
+        }
+
+        [Fact]
+        public void SecurityService_EncryptScript_Transforms_Plaintext_ApiKeyOptions()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            
+            var sql1 = "CREATE CONNECTION c ON MSSQL() WITH(SERVER='.', API_KEY='secret');";
+            var encrypted1 = service.EncryptScript(sql1, "master");
+            Assert.Contains("API_KEY='ENC:", encrypted1);
+            Assert.DoesNotContain("API_KEY='secret'", encrypted1);
+
+            var sql2 = "CREATE CONNECTION c ON MSSQL() WITH(SERVER='.', APIKEY='secret');";
+            var encrypted2 = service.EncryptScript(sql2, "master");
+            Assert.Contains("APIKEY='ENC:", encrypted2);
+            Assert.DoesNotContain("APIKEY='secret'", encrypted2);
         }
 
         [Fact]

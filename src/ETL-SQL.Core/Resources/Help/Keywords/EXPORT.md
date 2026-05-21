@@ -18,6 +18,9 @@ EXPORT #orders TO MyDB.dbo.OrdersArchive;
 
 -- Export to SFTP
 EXPORT #report TO SftpConn:'reports/daily.csv';
+
+-- Recover a published Orchestrator bundle
+EXPORT SCRIPT 'orch://finance-load@3/main.etlsql' TO 'C:\Recovered\finance-load';
 ```
 
 ## Options
@@ -33,4 +36,5 @@ EXPORT #report TO SftpConn:'reports/daily.csv';
 - For database destinations, the target table must exist unless the connection supports auto-create.
 - SFTP, S3, and API connection types are supported as destinations.
 - To control column order or filter rows before export, `SELECT ... INTO #subset` first.
+- `EXPORT SCRIPT` preserves published bundle relative paths but does not decrypt or reveal secrets; recovered scripts may require credentials to be re-entered.
 - See: CREATE CONNECTION, SELECT

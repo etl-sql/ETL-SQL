@@ -121,6 +121,17 @@ namespace ETL_SQL.Data
         Dictionary<string, string[]> GetAllConnectorOptionValues();
     }
 
+    /// <summary>
+    /// Implemented by data sources that support portal or orchestrator admin scripting.
+    /// When <see cref="ExecuteRemoteBlockStatementHandler"/> finds an active connection that
+    /// implements this interface, it delegates each inner statement to
+    /// <see cref="ExecuteAdminStatementAsync"/> instead of compiling to SQL.
+    /// </summary>
+    public interface IPortalAdminConnection : IDataSource
+    {
+        Task ExecuteAdminStatementAsync(Statement statement, IExecutionContext context);
+    }
+
     public class ConnectorRegistry : IConnectorRegistry
     {
         public static IConnectorRegistry? Instance { get; internal set; }

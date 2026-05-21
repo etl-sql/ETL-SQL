@@ -366,11 +366,13 @@ namespace ETL_SQL.Core
     {
         public Expression ConnectionName { get; }
         public BlockStatement Body { get; }
+        public TableReference? IntoTable { get; }
 
-        public ExecuteRemoteBlockStatement(Expression connectionName, BlockStatement body)
+        public ExecuteRemoteBlockStatement(Expression connectionName, BlockStatement body, TableReference? intoTable = null)
         {
             ConnectionName = connectionName;
             Body = body;
+            IntoTable = intoTable;
         }
     }
 
@@ -630,6 +632,26 @@ namespace ETL_SQL.Core
     }
 
     public record KillJobStatement(Expression JobIdExpr) : Statement;
+
+    public record DropJobStatement(string Name, bool IfExists) : Statement;
+
+    /// <summary>ENABLE JOB 'name'; — enables a disabled job in the scheduler.</summary>
+    public record EnableJobStatement(string Name) : Statement
+    {
+        public string? At { get; set; }
+    }
+
+    /// <summary>DISABLE JOB 'name'; — disables a job without deleting it.</summary>
+    public record DisableJobStatement(string Name) : Statement
+    {
+        public string? At { get; set; }
+    }
+
+    /// <summary>TRIGGER JOB 'name'; — immediately queues a one-off run of the job.</summary>
+    public record TriggerJobStatement(string Name) : Statement
+    {
+        public string? At { get; set; }
+    }
 
     public record TruncateTableStatement : Statement
     {
@@ -985,6 +1007,27 @@ namespace ETL_SQL.Core
             Parameters = parameters;
         }
     }
+
+    public enum BundleSecretMode { None, Prompt, Literal }
+
+    public record PublishBundleStatement(
+        string BundleName,
+        Expression SourcePath,
+        string EntryPath,
+        BundleSecretMode PasswordMode = BundleSecretMode.None,
+        string? Password = null,
+        string EncryptionMode = "MACHINE",
+        string? KeyFile = null,
+        string? Description = null) : Statement;
+
+    public record ValidateBundleStatement(
+        string BundleName,
+        Expression SourcePath,
+        string EntryPath,
+        BundleSecretMode PasswordMode = BundleSecretMode.None,
+        string? Password = null) : Statement;
+
+    public record ExportScriptStatement(Expression SourcePath, Expression TargetPath) : Statement;
 
     public record SetVariableStatement(Expression Target, Expression Value) : Statement
     {
@@ -1912,6 +1955,8 @@ namespace ETL_SQL.Core
         public Statement Script { get; }
         public int MaxRetries { get; }
         public int RetryDelaySeconds { get; }
+        /// <summary>True when parsed as CREATE OR ALTER JOB — upsert semantics.</summary>
+        public bool IsOrAlter { get; init; }
 
         public CreateJobStatement(string jobName, ScheduleInfo schedule, Statement script, int maxRetries = 0, int retryDelaySeconds = 30)
         {
@@ -1920,6 +1965,27 @@ namespace ETL_SQL.Core
             Script = script;
             MaxRetries = maxRetries;
             RetryDelaySeconds = retryDelaySeconds;
+        }
+    }
+
+    /// <summary>
+    /// ALTER JOB &lt;name&gt; [ON SCHEDULE EVERY n unit [AT 'time']] [AS &lt;statement&gt;];
+    /// Modifies an existing job's schedule and/or script body.
+    /// Fails at execution time if the job does not exist.
+    /// </summary>
+    public record AlterJobStatement : Statement
+    {
+        public string JobName { get; }
+        /// <summary>New schedule — null means leave the existing schedule unchanged.</summary>
+        public ScheduleInfo? Schedule { get; }
+        /// <summary>New script body — null means leave the existing script unchanged.</summary>
+        public Statement? Script { get; }
+
+        public AlterJobStatement(string jobName, ScheduleInfo? schedule, Statement? script)
+        {
+            JobName = jobName;
+            Schedule = schedule;
+            Script = script;
         }
     }
 
@@ -1941,12 +2007,14 @@ namespace ETL_SQL.Core
     {
         public string? JobName { get; }
         public string? IntoTable { get; set; }
+        public string? At { get; set; }
         public ShowJobHistoryStatement(string? jobName = null) { JobName = jobName; }
     }
 
     public record ShowJobsStatement : Statement
     {
         public string? IntoTable { get; set; }
+        public string? At { get; set; }
     }
 
     public record ShowVersionStatement : Statement
@@ -2046,14 +2114,42 @@ namespace ETL_SQL.Core
         public UseSetsStatement(string name) { Name = name; }
     }
 
-    /// <summary>USE PASSWORD = 'password'</summary>
+    /// <summary>USE PASSWORD = 'password' or USE PASSWORD PROMPT</summary>
     public record UsePasswordStatement : Statement
     {
-        public string Password { get; }
+        public string? Password { get; }
+        public bool Prompt { get; }
         public UsePasswordStatement(string password) { Password = password; }
+        public UsePasswordStatement(bool prompt) { Prompt = prompt; }
         
-        public string ToSql(bool mask) => $"USE PASSWORD = '{(mask ? "********" : Password.Replace("'", "''"))}';";
+        public string ToSql(bool mask) => Prompt
+            ? "USE PASSWORD PROMPT;"
+            : $"USE PASSWORD = '{(mask ? "********" : (Password ?? "").Replace("'", "''"))}';";
         public override string ToSql() => AstSerializer.Format(this); // Always masked in serialization
+    }
+
+    public record ShowPublishedBundlesStatement : Statement
+    {
+        public string? IntoTable { get; set; }
+        public string? At { get; set; }
+    }
+
+    public record ShowBundleVersionsStatement(string BundleName) : Statement
+    {
+        public string? IntoTable { get; set; }
+        public string? At { get; set; }
+    }
+
+    public record ShowBundleFilesStatement(string BundleName, int Version) : Statement
+    {
+        public string? IntoTable { get; set; }
+        public string? At { get; set; }
+    }
+
+    public record ShowBundleDependenciesStatement(string BundleName, int Version) : Statement
+    {
+        public string? IntoTable { get; set; }
+        public string? At { get; set; }
     }
 
     /// <summary>SET SHOW_PASSWORD ON/OFF</summary>
@@ -2110,6 +2206,8 @@ namespace ETL_SQL.Core
     public record AddUserToPortalGroupStatement(string Username, string GroupName) : Statement;
 
     public record CreatePortalFolderStatement(string Path) : Statement;
+
+    public record AlterPortalFolderStatement(string Path, string? NewName, string? NewParentPath) : Statement;
 
     public record DropPortalFolderStatement(string Path, bool Cascade) : Statement;
 

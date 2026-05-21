@@ -548,6 +548,33 @@ DROP JOB IF EXISTS CleanupJob;        -- Remove a job
 --   POST http://localhost:5001/api/scheduled-jobs/{job_name}/kill
 ```
 
+### 7.3 Published Orchestrator Bundles
+
+Use published bundles when scheduled jobs must be insulated from file-system edits.
+
+```sql
+PUBLISH BUNDLE 'daily-load'
+FROM 'C:\ETL\daily'
+ENTRY 'main.etlsql'
+WITH (PASSWORD = 'publish-password', ENCRYPT = MACHINE);
+
+CREATE JOB DailyLoad ON SCHEDULE EVERY 1 DAY AT '02:00' AS
+    RUN SCRIPT 'orch://daily-load/main.etlsql';
+```
+
+The unversioned path resolves to the latest bundle for manual runs. Scheduled jobs are stored with a pinned version.
+
+```sql
+RUN SCRIPT 'orch://daily-load@2/main.etlsql';
+EXPORT SCRIPT 'orch://daily-load@2/main.etlsql' TO 'C:\Recovered\daily-load';
+SHOW PUBLISHED BUNDLES;
+SHOW BUNDLE VERSIONS 'daily-load';
+SHOW BUNDLE FILES 'daily-load' VERSION 2;
+SHOW BUNDLE DEPENDENCIES 'daily-load' VERSION 2;
+```
+
+Directory publishes include every `.etlsql` and `.rptsql` file under the source directory. Single-file publishes include the entry file and literal `RUN SCRIPT 'child.etlsql'` dependency closure. Dynamic script paths fail validation and should remain in live file mode.
+
 ---
 
 ## 8. Diagnostics & Execution Profiling

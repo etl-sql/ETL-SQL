@@ -27,6 +27,8 @@ using ETL_SQL.Connectors.Avro;
 using ETL_SQL.Connectors.Email;
 using ETL_SQL.Connectors.Snowflake;
 using ETL_SQL.Connectors.BigQuery;
+using ETL_SQL.Connectors.ReportPortal;
+using ETL_SQL.Connectors.Orchestrator;
 using ETL_SQL.Connectors;
 
 namespace ETL_SQL.Orchestrator
@@ -91,6 +93,8 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IConnector, SmtpConnector>();
             services.AddSingleton<IConnector, SnowflakeConnector>();
             services.AddSingleton<IConnector, BigQueryConnector>();
+            services.AddSingleton<IConnector, ReportPortalConnector>();
+            services.AddSingleton<IConnector, OrchestratorConnector>();
             
             services.AddSingleton<IConnector>(sp => new FtpConnector(
                 configuration["Connectors:Ftp:Host"] ?? "localhost",
@@ -133,7 +137,9 @@ namespace ETL_SQL.Orchestrator
             }
 
             // 4. Orchestration & Storage
-            services.AddSingleton<IJobHistoryStore, SQLiteJobHistoryStore>();
+            services.AddSingleton<SQLiteJobHistoryStore>();
+            services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
+            services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
             services.AddSingleton<JobThrottle>();
             services.AddSingleton<SchedulerService>();

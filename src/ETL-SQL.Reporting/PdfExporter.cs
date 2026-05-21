@@ -2,57 +2,97 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using QuestPDF.Fluent;
-using QuestPDF.Helpers;
-using QuestPDF.Infrastructure;
+using System.Text;
+using MigraDoc.DocumentObjectModel;
+using MigraDoc.DocumentObjectModel.Tables;
+using MigraDoc.Rendering;
+using SkiaSharp;
+using Svg.Skia;
 
 namespace ETL_SQL.Reporting
 {
     /// <summary>
-    /// Exports a <see cref="ReportManifest"/> to a PDF byte array using QuestPDF.
-    /// Charts are rendered as SVG via <see cref="SvgChartRenderer"/>.
-    /// No headless browser required.
+    /// Exports a <see cref="ReportManifest"/> to a PDF byte array using PDFsharp + MigraDoc.
+    /// Charts are rendered as SVG via <see cref="SvgChartRenderer"/> then rasterized to PNG
+    /// via Svg.Skia for embedding. No headless browser required.
     /// </summary>
     public class PdfExporter
     {
+        private static readonly Color _greyDark2  = Color.FromRgb(0x61, 0x61, 0x61);
+        private static readonly Color _greyDark1  = Color.FromRgb(0x75, 0x75, 0x75);
+        private static readonly Color _greyLight3 = Color.FromRgb(0xF5, 0xF5, 0xF5);
+        private static readonly Color _greyLight2 = Color.FromRgb(0xEE, 0xEE, 0xEE);
+        private static readonly Color _greyMedium = Color.FromRgb(0x9E, 0x9E, 0x9E);
+        private static readonly Color _redDark2   = Color.FromRgb(0xC6, 0x28, 0x28);
+
+        private const double ContentWidthPt  = 500.0;
+        private const int    SvgNativeWidth  = 600;
+        private const int    SvgNativeHeight = 350;
+
         private readonly SvgChartRenderer _svg = new();
 
         public byte[] Export(ReportManifest manifest)
         {
-            QuestPDF.Settings.License = LicenseType.Community;
-
-            return Document.Create(container =>
+            var tempFiles = new List<string>();
+            try
             {
-                container.Page(page =>
-                {
-                    page.Size(PageSizes.A4);
-                    page.Margin(36, Unit.Point);
-                    page.DefaultTextStyle(x => x.FontFamily("Arial").FontSize(10));
+                var document = BuildDocument(manifest, tempFiles);
+                var renderer = new PdfDocumentRenderer { Document = document };
+                renderer.RenderDocument();
+                using var ms = new MemoryStream();
+                renderer.PdfDocument.Save(ms);
+                return ms.ToArray();
+            }
+            finally
+            {
+                foreach (var tmp in tempFiles)
+                    try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* best-effort */ }
+            }
+        }
 
-                    page.Content().Column(col =>
-                    {
-                        // ── Report header ────────────────────────────────────
-                        col.Item()
-                            .Text(manifest.Title ?? Path.GetFileNameWithoutExtension(manifest.Source))
-                            .FontSize(20).Bold();
+        private Document BuildDocument(ReportManifest manifest, List<string> tempFiles)
+        {
+            var document = new Document();
+            var style    = document.Styles["Normal"]!;
+            style.Font.Name = "Arial";
+            style.Font.Size = Unit.FromPoint(10);
 
-                        if (!string.IsNullOrWhiteSpace(manifest.Description))
-                            col.Item().PaddingTop(4).Text(manifest.Description)
-                                .FontColor(Colors.Grey.Darken2);
+            var section = document.AddSection();
+            section.PageSetup.PageFormat   = PageFormat.A4;
+            section.PageSetup.TopMargin    = Unit.FromPoint(36);
+            section.PageSetup.BottomMargin = Unit.FromPoint(36);
+            section.PageSetup.LeftMargin   = Unit.FromPoint(36);
+            section.PageSetup.RightMargin  = Unit.FromPoint(36);
 
-                        col.Item().PaddingTop(4)
-                            .Text($"Generated: {manifest.BuiltAt:yyyy-MM-dd HH:mm} UTC")
-                            .FontSize(8).FontColor(Colors.Grey.Darken1);
+            // ── Report header ─────────────────────────────────────────────────
+            var titlePara = section.AddParagraph(
+                manifest.Title ?? Path.GetFileNameWithoutExtension(manifest.Source));
+            titlePara.Format.Font.Size = Unit.FromPoint(20);
+            titlePara.Format.Font.Bold = true;
 
-                        col.Item().PaddingVertical(10)
-                            .LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
+            if (!string.IsNullOrWhiteSpace(manifest.Description))
+            {
+                var descPara = section.AddParagraph(manifest.Description);
+                descPara.Format.SpaceBefore = Unit.FromPoint(4);
+                descPara.Format.Font.Color  = _greyDark2;
+            }
 
-                        // ── Visuals ──────────────────────────────────────────
-                        foreach (var visual in GetVisualsInOrder(manifest))
-                            RenderVisual(col, visual);
-                    });
-                });
-            }).GeneratePdf();
+            var tsPara = section.AddParagraph($"Generated: {manifest.BuiltAt:yyyy-MM-dd HH:mm} UTC");
+            tsPara.Format.SpaceBefore = Unit.FromPoint(4);
+            tsPara.Format.Font.Size   = Unit.FromPoint(8);
+            tsPara.Format.Font.Color  = _greyDark1;
+
+            var sep = section.AddParagraph();
+            sep.Format.SpaceBefore              = Unit.FromPoint(10);
+            sep.Format.SpaceAfter               = Unit.FromPoint(10);
+            sep.Format.Borders.Bottom.Width     = Unit.FromPoint(1);
+            sep.Format.Borders.Bottom.Color     = _greyLight2;
+
+            // ── Visuals ───────────────────────────────────────────────────────
+            foreach (var visual in GetVisualsInOrder(manifest))
+                RenderVisual(section, visual, tempFiles);
+
+            return document;
         }
 
         private static IEnumerable<VisualManifest> GetVisualsInOrder(ReportManifest manifest)
@@ -63,7 +103,6 @@ namespace ETL_SQL.Reporting
             var result = new List<VisualManifest>();
 
             foreach (var page in manifest.Pages)
-            {
                 foreach (var (_, vName) in page.SlotMap.OrderBy(kv => kv.Key))
                 {
                     if (!seen.Add(vName)) continue;
@@ -71,7 +110,6 @@ namespace ETL_SQL.Reporting
                         string.Equals(x.Name, vName, StringComparison.OrdinalIgnoreCase));
                     if (v != null) result.Add(v);
                 }
-            }
 
             foreach (var v in manifest.Visuals)
                 if (seen.Add(v.Name)) result.Add(v);
@@ -79,131 +117,179 @@ namespace ETL_SQL.Reporting
             return result;
         }
 
-        private void RenderVisual(ColumnDescriptor col, VisualManifest v)
+        private void RenderVisual(Section section, VisualManifest v, List<string> tempFiles)
         {
-            col.Item().PaddingTop(16).Text(v.Name).FontSize(13).Bold();
+            var heading = section.AddParagraph(v.Name);
+            heading.Format.SpaceBefore = Unit.FromPoint(16);
+            heading.Format.Font.Size   = Unit.FromPoint(13);
+            heading.Format.Font.Bold   = true;
 
             if (v.Error != null)
             {
-                col.Item().PaddingTop(4).Text($"Error: {v.Error}").FontColor(Colors.Red.Darken2);
+                var errPara = section.AddParagraph($"Error: {v.Error}");
+                errPara.Format.SpaceBefore = Unit.FromPoint(4);
+                errPara.Format.Font.Color  = _redDark2;
                 return;
             }
 
             switch (v.VisualType.ToUpperInvariant())
             {
-                case "TABLE":
-                    RenderTable(col, v);
-                    break;
-                case "CARD":
-                    RenderCard(col, v);
-                    break;
-                case "TEXT":
-                    RenderText(col, v);
-                    break;
+                case "TABLE":  RenderTable(section, v);             break;
+                case "CARD":   RenderCard(section, v);              break;
+                case "TEXT":   RenderText(section, v);              break;
                 case "SLICER":
-                    col.Item().PaddingTop(4).Text("[Slicer — interactive only]")
-                        .FontColor(Colors.Grey.Darken1).Italic();
+                    var sp = section.AddParagraph("[Slicer — interactive only]");
+                    sp.Format.SpaceBefore = Unit.FromPoint(4);
+                    sp.Format.Font.Color  = _greyDark1;
+                    sp.Format.Font.Italic = true;
                     break;
                 default:
-                    RenderChart(col, v);
+                    RenderChart(section, v, tempFiles);
                     break;
             }
         }
 
-        private void RenderChart(ColumnDescriptor col, VisualManifest v)
+        private void RenderChart(Section section, VisualManifest v, List<string> tempFiles)
         {
             var svgStr = _svg.Render(v);
             if (svgStr != null)
             {
-                // Scale SVG (native 600×350) to fit A4 content width (~500pt)
-                col.Item().PaddingTop(8).Width(500).Height(292).Svg(svgStr);
+                var png = SvgToPng(svgStr);
+                if (png.Length > 0)
+                {
+                    var tmp = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".png");
+                    File.WriteAllBytes(tmp, png);
+                    tempFiles.Add(tmp);
+                    var img = section.AddImage(tmp);
+                    img.Width           = Unit.FromPoint(ContentWidthPt);
+                    img.LockAspectRatio = true;
+                }
             }
             else if (v.Rows.Count > 0)
             {
-                RenderTable(col, v);
+                RenderTable(section, v);
             }
             else
             {
-                col.Item().PaddingTop(4).Text("No data").Italic().FontColor(Colors.Grey.Medium);
+                var nd = section.AddParagraph("No data");
+                nd.Format.SpaceBefore = Unit.FromPoint(4);
+                nd.Format.Font.Italic = true;
+                nd.Format.Font.Color  = _greyMedium;
             }
         }
 
-        private static void RenderTable(ColumnDescriptor col, VisualManifest v)
+        private static void RenderTable(Section section, VisualManifest v)
         {
             if (v.Columns.Count == 0)
             {
-                col.Item().PaddingTop(4).Text("No data").Italic().FontColor(Colors.Grey.Medium);
+                var nd = section.AddParagraph("No data");
+                nd.Format.SpaceBefore = Unit.FromPoint(4);
+                nd.Format.Font.Italic = true;
+                nd.Format.Font.Color  = _greyMedium;
                 return;
             }
 
-            int cap = Math.Min(v.Rows.Count, 500);
+            section.AddParagraph(); // visual gap before table
 
-            col.Item().PaddingTop(8).Table(table =>
+            int    cap      = Math.Min(v.Rows.Count, 500);
+            double colWidth = ContentWidthPt / v.Columns.Count;
+            var    table    = section.AddTable();
+
+            foreach (var _ in v.Columns)
+                table.AddColumn(Unit.FromPoint(colWidth));
+
+            var header = table.AddRow();
+            header.Shading.Color = _greyLight3;
+            for (int ci = 0; ci < v.Columns.Count; ci++)
             {
-                table.ColumnsDefinition(cols =>
-                {
-                    foreach (var _ in v.Columns)
-                        cols.RelativeColumn();
-                });
+                var p = header.Cells[ci].AddParagraph(v.Columns[ci]);
+                p.Format.Font.Bold = true;
+                p.Format.Font.Size = Unit.FromPoint(9);
+            }
 
-                table.Header(header =>
+            for (int i = 0; i < cap; i++)
+            {
+                var row  = v.Rows[i];
+                var dRow = table.AddRow();
+                dRow.Borders.Bottom.Width = Unit.FromPoint(0.5);
+                dRow.Borders.Bottom.Color = _greyLight2;
+                for (int ci = 0; ci < v.Columns.Count; ci++)
                 {
-                    foreach (var colName in v.Columns)
-                    {
-                        header.Cell()
-                            .Background(Colors.Grey.Lighten3)
-                            .Padding(3)
-                            .Text(colName).Bold().FontSize(9);
-                    }
-                });
-
-                for (int i = 0; i < cap; i++)
-                {
-                    var row = v.Rows[i];
-                    for (int ci = 0; ci < v.Columns.Count; ci++)
-                    {
-                        string cell = ci < row.Count ? row[ci] ?? "" : "";
-                        table.Cell()
-                            .BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2)
-                            .Padding(3)
-                            .Text(cell).FontSize(9);
-                    }
+                    var text = ci < row.Count ? row[ci] ?? "" : "";
+                    dRow.Cells[ci].AddParagraph(text).Format.Font.Size = Unit.FromPoint(9);
                 }
+            }
 
-                if (v.Rows.Count > cap)
-                {
-                    table.Cell()
-                        .ColumnSpan((uint)v.Columns.Count)
-                        .Padding(3)
-                        .Text($"… {v.Rows.Count - cap:N0} more rows not shown")
-                        .Italic().FontSize(8).FontColor(Colors.Grey.Darken1);
-                }
-            });
+            if (v.Rows.Count > cap)
+            {
+                var moreRow = table.AddRow();
+                moreRow.Cells[0].MergeRight = v.Columns.Count - 1;
+                var p = moreRow.Cells[0].AddParagraph($"… {v.Rows.Count - cap:N0} more rows not shown");
+                p.Format.Font.Size   = Unit.FromPoint(8);
+                p.Format.Font.Italic = true;
+                p.Format.Font.Color  = _greyDark1;
+            }
         }
 
-        private static void RenderCard(ColumnDescriptor col, VisualManifest v)
+        private static void RenderCard(Section section, VisualManifest v)
         {
             if (v.Rows.Count > 0 && v.Rows[0].Count > 0)
             {
                 var label = v.Columns.Count > 0 ? v.Columns[0] : v.Name;
                 var value = v.Rows[0][0] ?? "";
-                col.Item().PaddingTop(8).Column(inner =>
-                {
-                    inner.Item().Text(label).FontSize(9).FontColor(Colors.Grey.Darken1);
-                    inner.Item().Text(value).FontSize(22).Bold();
-                });
+
+                var labelPara = section.AddParagraph(label);
+                labelPara.Format.SpaceBefore = Unit.FromPoint(8);
+                labelPara.Format.Font.Size   = Unit.FromPoint(9);
+                labelPara.Format.Font.Color  = _greyDark1;
+
+                var valuePara = section.AddParagraph(value);
+                valuePara.Format.Font.Size = Unit.FromPoint(22);
+                valuePara.Format.Font.Bold = true;
             }
             else
             {
-                col.Item().PaddingTop(4).Text("No data").Italic().FontColor(Colors.Grey.Medium);
+                var nd = section.AddParagraph("No data");
+                nd.Format.SpaceBefore = Unit.FromPoint(4);
+                nd.Format.Font.Italic = true;
+                nd.Format.Font.Color  = _greyMedium;
             }
         }
 
-        private static void RenderText(ColumnDescriptor col, VisualManifest v)
+        private static void RenderText(Section section, VisualManifest v)
         {
             v.Options.TryGetValue("VALUE", out var textContent);
             if (!string.IsNullOrWhiteSpace(textContent))
-                col.Item().PaddingTop(8).Text(textContent).FontSize(10);
+            {
+                var p = section.AddParagraph(textContent);
+                p.Format.SpaceBefore = Unit.FromPoint(8);
+                p.Format.Font.Size   = Unit.FromPoint(10);
+            }
+        }
+
+        private static byte[] SvgToPng(string svgContent)
+        {
+            using var svg    = new SKSvg();
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(svgContent));
+            if (svg.Load(stream) == null) return Array.Empty<byte>();
+
+            var bounds = svg.Picture!.CullRect;
+            float scaleX = bounds.Width  > 0 ? SvgNativeWidth  / bounds.Width  : 1f;
+            float scaleY = bounds.Height > 0 ? SvgNativeHeight / bounds.Height : 1f;
+
+            var info = new SKImageInfo(SvgNativeWidth, SvgNativeHeight);
+            using var surface = SKSurface.Create(info);
+            if (surface == null) return Array.Empty<byte>();
+
+            surface.Canvas.Clear(SKColors.White);
+            surface.Canvas.Save();
+            surface.Canvas.Scale(scaleX, scaleY);
+            surface.Canvas.DrawPicture(svg.Picture);
+            surface.Canvas.Restore();
+
+            using var image = surface.Snapshot();
+            using var data  = image.Encode(SKEncodedImageFormat.Png, 100);
+            return data?.ToArray() ?? Array.Empty<byte>();
         }
     }
 }

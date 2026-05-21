@@ -15,10 +15,13 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Reporting;
+using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Orchestrator.Service
 {
@@ -121,7 +124,7 @@ namespace ETL_SQL.Orchestrator.Service
             }).WithName("listScheduledJobs");
 
             app.MapPost("/api/scheduled-jobs", async (HttpContext ctx, CreateScheduledJobRequest req,
-                IJobHistoryStore store, IConfiguration cfg) =>
+                IJobHistoryStore store, IBundleStore bundleStore, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 if (string.IsNullOrWhiteSpace(req.Name))
@@ -135,9 +138,10 @@ namespace ETL_SQL.Orchestrator.Service
                 if (!validUnits.Contains((req.Unit ?? "").ToUpperInvariant()))
                     return Results.BadRequest(new { Error = $"Unit must be one of: {string.Join(", ", validUnits)}" });
 
+                var scriptText = await PinBundlePathsAsync(req.ScriptText, bundleStore);
                 var job = new JobDefinition(
                     req.Name,
-                    req.ScriptText,
+                    scriptText,
                     req.Interval,
                     (req.Unit ?? "HOUR").ToUpperInvariant(),
                     req.AtTime,
@@ -154,7 +158,7 @@ namespace ETL_SQL.Orchestrator.Service
             }).WithName("createScheduledJob");
 
             app.MapPut("/api/scheduled-jobs/{name}", async (HttpContext ctx, string name,
-                UpdateScheduledJobRequest req, IJobHistoryStore store, IConfiguration cfg) =>
+                UpdateScheduledJobRequest req, IJobHistoryStore store, IBundleStore bundleStore, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
 
@@ -164,9 +168,10 @@ namespace ETL_SQL.Orchestrator.Service
                 if (existing == null)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
 
+                var pinnedScript = req.ScriptText != null ? await PinBundlePathsAsync(req.ScriptText, bundleStore) : null;
                 var updated = existing with
                 {
-                    Script            = req.ScriptText        ?? existing.Script,
+                    Script            = pinnedScript          ?? existing.Script,
                     Interval          = req.Interval          ?? existing.Interval,
                     Unit              = req.Unit != null ? req.Unit.ToUpperInvariant() : existing.Unit,
                     AtTime            = req.AtTime            ?? existing.AtTime,
@@ -201,6 +206,14 @@ namespace ETL_SQL.Orchestrator.Service
                 var history = await store.GetHistoryAsync(Uri.UnescapeDataString(name), limit);
                 return Results.Ok(history);
             }).WithName("getScheduledJobHistory");
+
+            app.MapGet("/api/history", async (HttpContext ctx, IJobHistoryStore store,
+                IConfiguration cfg, string? jobName = null, int limit = 100) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var history = await store.GetHistoryAsync(jobName, limit);
+                return Results.Ok(history);
+            }).WithName("getAllJobHistory");
 
             app.MapPost("/api/scheduled-jobs/{name}/trigger", async (HttpContext ctx, string name,
                 SchedulerService scheduler, IJobHistoryStore store, IConfiguration cfg) =>
@@ -269,6 +282,65 @@ namespace ETL_SQL.Orchestrator.Service
                 return Results.Ok(new { Path = path, Content = content });
             }).WithName("getScriptContent");
 
+            // ── Published bundle lockbox ───────────────────────────────────
+
+            app.MapGet("/api/bundles", async (HttpContext ctx, IBundleStore store, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                return Results.Ok(await store.GetBundlesAsync());
+            }).WithName("listBundles");
+
+            app.MapPost("/api/bundles", async (HttpContext ctx, PublishBundleApiRequest req,
+                IBundleStore store, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (req.Bundle == null)
+                    return Results.BadRequest(new { Error = "Bundle is required." });
+                if (string.IsNullOrWhiteSpace(req.Bundle.BundleName))
+                    return Results.BadRequest(new { Error = "BundleName is required." });
+                if (string.IsNullOrWhiteSpace(req.Bundle.EntryPath))
+                    return Results.BadRequest(new { Error = "EntryPath is required." });
+                if (req.Bundle.Files == null || req.Bundle.Files.Count == 0)
+                    return Results.BadRequest(new { Error = "At least one file is required." });
+
+                var reencrypted = BundlePublishSupport.ReEncryptRequest(req.Bundle, req.Password, SecurityService.GetMachineKey());
+                var version = await store.PublishBundleAsync(reencrypted);
+                return Results.Ok(version);
+            }).WithName("publishBundle");
+
+            app.MapGet("/api/bundles/{name}/versions", async (HttpContext ctx, string name,
+                IBundleStore store, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                return Results.Ok(await store.GetVersionsAsync(Uri.UnescapeDataString(name)));
+            }).WithName("listBundleVersions");
+
+            app.MapGet("/api/bundles/{name}/versions/{version:int}", async (HttpContext ctx, string name, int version,
+                IBundleStore store, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var result = await store.GetVersionAsync(Uri.UnescapeDataString(name), version);
+                return result == null ? Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." }) : Results.Ok(result);
+            }).WithName("getBundleVersion");
+
+            app.MapGet("/api/bundles/{name}/versions/{version:int}/files", async (HttpContext ctx, string name, int version,
+                IBundleStore store, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (await store.GetVersionAsync(Uri.UnescapeDataString(name), version) == null)
+                    return Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." });
+                return Results.Ok(await store.GetFilesAsync(Uri.UnescapeDataString(name), version));
+            }).WithName("listBundleFiles");
+
+            app.MapGet("/api/bundles/{name}/versions/{version:int}/dependencies", async (HttpContext ctx, string name, int version,
+                IBundleStore store, IConfiguration cfg) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (await store.GetVersionAsync(Uri.UnescapeDataString(name), version) == null)
+                    return Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." });
+                return Results.Ok(await store.GetDependenciesAsync(Uri.UnescapeDataString(name), version));
+            }).WithName("listBundleDependencies");
+
             // ── Service management ────────────────────────────────────────────
 
             app.MapGet("/management/status", (HttpContext ctx, IConfiguration cfg) =>
@@ -308,6 +380,21 @@ namespace ETL_SQL.Orchestrator.Service
 
         private static string GetScriptRoot(IConfiguration cfg) =>
             cfg["Orchestrator:ScriptRoot"] ?? AppDomain.CurrentDomain.BaseDirectory;
+
+        private static async Task<string> PinBundlePathsAsync(string scriptText, IBundleStore store)
+        {
+            var parsed = new Parser(new Lexer(scriptText).Tokenize(), scriptText).Parse();
+            if (parsed.Statements.Count != 1 || parsed.Statements[0] is not RunScriptStatement run)
+                return scriptText;
+            if (run.PathExpression is not LiteralExpression lit || lit.Value is not string path)
+                return scriptText;
+            if (!BundleUri.TryParse(path, out var uri) || uri == null || uri.Version.HasValue)
+                return scriptText;
+            var latest = await store.GetLatestVersionAsync(uri.BundleName);
+            return latest == null
+                ? scriptText
+                : new RunScriptStatement(new LiteralExpression(uri.ToPinnedString(latest.Version), TokenType.STRING_LITERAL), run.Parameters).ToSql();
+        }
 
         // ── Ad-hoc job runner (unchanged) ─────────────────────────────────────
 
@@ -396,6 +483,11 @@ namespace ETL_SQL.Orchestrator.Service
             int?    MaxRetries        = null,
             int?    RetryDelaySeconds = null,
             string? HashPolicy        = null
+        );
+
+        private sealed record PublishBundleApiRequest(
+            BundlePublishRequest Bundle,
+            string? Password = null
         );
 
         private sealed class JobEntry(string jobId, CancellationTokenSource cts)

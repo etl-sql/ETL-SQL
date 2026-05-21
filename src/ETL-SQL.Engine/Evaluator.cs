@@ -769,8 +769,8 @@ namespace ETL_SQL.Engine
             }
             catch (ReturnException ex)
             {
-                if (ex.Value != null) Spectre.Console.AnsiConsole.MarkupLine($"[cyan][RETURN][/] {Spectre.Console.Markup.Escape(ex.Value?.ToString() ?? "")}");
-                else Spectre.Console.AnsiConsole.MarkupLine("[cyan][RETURN][/]");
+                if (ex.Value != null) Spectre.Console.AnsiConsole.MarkupLine($"[cyan][[RETURN]][/] {Spectre.Console.Markup.Escape(ex.Value?.ToString() ?? "")}");
+                else Spectre.Console.AnsiConsole.MarkupLine("[cyan][[RETURN]][/]");
             }
             finally
             {

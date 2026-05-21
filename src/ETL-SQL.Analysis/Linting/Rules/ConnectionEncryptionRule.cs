@@ -142,20 +142,31 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 }
             }
 
-            // 2. Check Options (PASSWORD)
-            if (conn.Options != null && conn.Options.TryGetValue("PASSWORD", out var pwdExpr) && pwdExpr is LiteralExpression pwdLit && pwdLit.Value is string pwdStr)
+            // 2. Check Options (PASSWORD, API_KEY, APIKEY)
+            if (conn.Options != null)
             {
-                if (!string.IsNullOrEmpty(pwdStr) && !pwdStr.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
+                var sensitiveKeys = new[] { "PASSWORD", "API_KEY", "APIKEY" };
+                foreach (var key in sensitiveKeys)
                 {
-                    results.Add(new LintResult
+                    if (conn.Options.TryGetValue(key, out var valExpr) && valExpr is LiteralExpression valLit && valLit.Value is string valStr)
                     {
-                        RuleName = Name,
-                        Code = "SEC-PLAIN-CONN",
-                        Severity = LintSeverity.Warning,
-                        Message = $"Connection '{conn.ConnectionName}' uses a plaintext password. Use a Master Password to encrypt this for better security.",
-                        LineNumber = conn.Line,
-                        ColumnNumber = conn.Column
-                    });
+                        if (!string.IsNullOrEmpty(valStr) && !valStr.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var msg = key == "PASSWORD"
+                                ? $"Connection '{conn.ConnectionName}' uses a plaintext password. Use a Master Password to encrypt this for better security."
+                                : $"Connection '{conn.ConnectionName}' uses a plaintext password or credential. Use a Master Password to encrypt this for better security.";
+
+                            results.Add(new LintResult
+                            {
+                                RuleName = Name,
+                                Code = "SEC-PLAIN-CONN",
+                                Severity = LintSeverity.Warning,
+                                Message = msg,
+                                LineNumber = conn.Line,
+                                ColumnNumber = conn.Column
+                            });
+                        }
+                    }
                 }
             }
         }

@@ -55,6 +55,7 @@ namespace ETL_SQL.Tests.Hardening
             services.AddTransient<ETL_SQL.Engine.Services.ReportRegistry>();
             services.AddTransient<IReportContext, ETL_SQL.Engine.Services.ReportRegistry>();
             services.AddSingleton<IJobHistoryStore>(new Mock<IJobHistoryStore>().Object);
+            services.AddSingleton<IBundleStore>(new Mock<IBundleStore>().Object);
             services.AddSingleton<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
             services.AddSingleton<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry, ETL_SQL.Core.Metadata.LanguageHelpRegistry>();
 

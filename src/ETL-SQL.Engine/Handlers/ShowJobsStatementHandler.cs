@@ -51,7 +51,7 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
 
-            var jobs = await _store.GetActiveJobsAsync();
+            var jobs = await _store.GetAllJobsAsync();
             
             var table = new DataTable();
             table.AddColumn("Name");
@@ -59,6 +59,7 @@ namespace ETL_SQL.Engine.Handlers
             table.AddColumn("LastRun");
             table.AddColumn("NextRun");
             table.AddColumn("Script");
+            table.AddColumn("Enable");
 
             foreach (var job in jobs)
             {
@@ -68,6 +69,7 @@ namespace ETL_SQL.Engine.Handlers
                 row["LastRun"] = job.LastRun;
                 row["NextRun"] = job.NextRun;
                 row["Script"] = job.Script;
+                row["Enable"] = job.IsEnabled ? 1 : 0;
                 await table.AddRowAsync(row);
             }
 

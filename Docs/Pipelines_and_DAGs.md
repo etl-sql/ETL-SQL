@@ -2,6 +2,8 @@
 
 ETL-SQL handles pipeline coordination with normal script control flow: `RUN SCRIPT`, `PARALLEL`, `IF`, `TRY...CATCH`, scheduler jobs, and file or data readiness checks. This guide shows how to model DAG-style dependencies without introducing a separate workflow language.
 
+Published Orchestrator bundles require literal `RUN SCRIPT 'child.etlsql'` dependencies so the full graph can be versioned. Pipelines that choose sub-scripts dynamically with variables or expressions should remain in live file mode.
+
 ---
 
 ## 1. Modularizing with `RUN SCRIPT`

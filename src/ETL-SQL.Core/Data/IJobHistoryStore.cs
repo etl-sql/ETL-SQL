@@ -39,6 +39,7 @@ namespace ETL_SQL.Core.Data
 
         // Job Management
         Task SaveJobAsync(JobDefinition job);
+        Task<JobDefinition?> GetJobAsync(string name);
         Task<IEnumerable<JobDefinition>> GetActiveJobsAsync();
         Task<IEnumerable<JobDefinition>> GetAllJobsAsync();
         Task DeleteJobAsync(string name);

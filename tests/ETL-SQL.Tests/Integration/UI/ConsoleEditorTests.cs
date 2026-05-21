@@ -165,7 +165,7 @@ namespace ETL_SQL.Tests.Integration
             // Focus starts at Editor
             Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
 
-            // Press F6 -> since no special panel is visible, toggles to Messages
+            // Press F6 -> since no special panel is visible, toggles to the active lower tab
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false));
             Assert.Equal(EditorFocus.Messages, editor._renderer.Focus);
 
@@ -189,6 +189,22 @@ namespace ETL_SQL.Tests.Integration
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false));
             Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
             Assert.False(editor._renderer.ResultsFocus);
+        }
+
+        [Fact]
+        public async Task TestRunScriptKeepsEditorFocusAndActivatesExecutionTreeTab()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._buffer.Load(new[] { "SELECT 1;" });
+            editor._renderer.Headless = true;
+
+            Assert.Equal(EditorFocus.Messages, editor._renderer.ActiveLowerTab);
+            Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F5, false, false, false));
+
+            Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
+            Assert.Equal(EditorFocus.ExecutionTree, editor._renderer.ActiveLowerTab);
         }
 
         [Fact]

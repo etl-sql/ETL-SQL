@@ -86,8 +86,8 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.FUNCTION))  return ParseCreateFunction(startToken, mode);
             if (Match(TokenType.JOB))
             {
-                if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for JOB. Use DROP and CREATE.", _parser.Current.Line, _parser.Current.Column);
-                return ParseCreateJob(startToken);
+                var stmt = ParseCreateJob(startToken);
+                return orAlter ? (Statement)(stmt with { IsOrAlter = true }) : stmt;
             }
 
             if (Match(TokenType.DIRECTORY))
@@ -170,12 +170,66 @@ namespace ETL_SQL.Core.Parser.Components
             }
             if (Match(TokenType.TEMPLATE))   return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Template);
 
+            // Orchestrator job management
+            if (Match(TokenType.JOB)) return ParseAlterJob(startToken);
+
             // Portal admin
             if (Match(TokenType.USER))         return _parent.PortalParser.ParseAlterUser(startToken);
+            if (Match(TokenType.FOLDER))       return _parent.PortalParser.ParseAlterFolder(startToken);
             if (Match(TokenType.REPORT))       return _parent.PortalParser.ParseAlterReport(startToken);
             if (Match(TokenType.SUBSCRIPTION)) return _parent.PortalParser.ParseAlterSubscription(startToken);
 
-            throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, TABLE, or REPORT object after ALTER", _parser.Current.Line, _parser.Current.Column);
+            throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, TABLE, JOB, or REPORT object after ALTER", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        /// <summary>
+        /// ALTER JOB &lt;name&gt; [ON SCHEDULE EVERY n unit [AT 'time']] [AS &lt;statement&gt;];
+        /// At least one of schedule or script must be provided.
+        /// </summary>
+        private Statement ParseAlterJob(Token startToken)
+        {
+            var jobName = ConsumeIdentifier("Expected job name after ALTER JOB").Value;
+
+            ScheduleInfo? schedule = null;
+            Statement? script = null;
+
+            // Form 1: ALTER JOB name ON SCHEDULE EVERY n unit [AT 'time'] [AS script]
+            if (Match(TokenType.ON))
+            {
+                Consume(TokenType.SCHEDULE, "Expected SCHEDULE after ON");
+                schedule = ParseSchedule();
+                if (Match(TokenType.AS))
+                    script = _parser.ParseStatement();
+            }
+            // Form 2: ALTER JOB name SET SCHEDULE = EVERY n unit [AT 'time']
+            else if (Match(TokenType.SET))
+            {
+                if (MatchIdentifier("SCHEDULE") || Match(TokenType.SCHEDULE))
+                {
+                    Match(TokenType.EQUALS);
+                    schedule = ParseSchedule();
+                }
+                else if (Match(TokenType.AS))
+                {
+                    script = _parser.ParseStatement();
+                }
+                else
+                    throw new SyntaxException("Expected SCHEDULE or AS after ALTER JOB ... SET", _parser.Current.Line, _parser.Current.Column);
+            }
+            // Form 3: ALTER JOB name AS script  (replace script only)
+            else if (Match(TokenType.AS))
+            {
+                script = _parser.ParseStatement();
+            }
+            else
+            {
+                throw new SyntaxException(
+                    "Expected ON SCHEDULE, SET, or AS after ALTER JOB name",
+                    _parser.Current.Line, _parser.Current.Column);
+            }
+
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+            return new AlterJobStatement(jobName, schedule, script) { Line = startToken.Line, Column = startToken.Column };
         }
 
         public Statement ParseDrop(Token startToken)
@@ -297,9 +351,11 @@ namespace ETL_SQL.Core.Parser.Components
             }
             else if (Match(TokenType.JOB))
             {
+                if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
                 var name = ConsumeIdentifier("Expected job name to drop").Value;
+                if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-                return new DropReportObjectStatement { ObjectType = ReportObjectType.Dataset, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column }; // Check if this is right for JOB
+                return new DropJobStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
             }
 
             // Portal admin
@@ -1067,7 +1123,7 @@ namespace ETL_SQL.Core.Parser.Components
             return new CreateSshKeyPairStatement(path!, bits, algorithm, passphrase, comment) { Line = startToken.Line, Column = startToken.Column };
         }
 
-        private Statement ParseCreateJob(Token startToken)
+        private CreateJobStatement ParseCreateJob(Token startToken)
         {
             var jobName = ConsumeIdentifier("Expected job name").Value;
             Consume(TokenType.ON, "Expected ON after job name");

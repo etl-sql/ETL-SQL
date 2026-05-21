@@ -38,7 +38,7 @@ namespace ETL_SQL.Services
         private readonly ILogger _logger;
         [GeneratedRegex(@"(CREATE\s+CONNECTION\s+\w+\s+ON\s+\w+\s*\()(.*?)(\))(?:\s+WITH\s*\((.*?)\))?", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
         private static partial Regex ConnRegex();
-        [GeneratedRegex(@"(PASSWORD\s*=\s*)(['""])(.*?)\2", RegexOptions.IgnoreCase)]
+        [GeneratedRegex(@"((?:PASSWORD|API_KEY|APIKEY)\s*=\s*)(['""])(.*?)\2", RegexOptions.IgnoreCase)]
         private static partial Regex PasswordOptionRegex();
         [GeneratedRegex(@"(['""])ENC:[A-Za-z0-9+/=]*\1")]
         private static partial Regex EncRegex();

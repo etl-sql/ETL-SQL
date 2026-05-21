@@ -965,6 +965,17 @@ EXEC LoadRegion 'South', '2026-01-01';
 > [!TIP]
 > For the full scheduling reference — `SHOW JOBS`, `DROP JOB`, `KILL JOB`, CI/CD integration, and Windows Service deployment — see the [Orchestrator's Guide](Orchestrators_Guide.md).
 
+Published Orchestrator bundles let production jobs run immutable script versions instead of live disk files:
+
+```sql
+PUBLISH BUNDLE 'nightly-load' FROM 'C:\ETL\nightly' ENTRY 'main.etlsql';
+
+CREATE JOB NightlyLoad ON SCHEDULE EVERY 1 DAY AT '02:00' AS
+    RUN SCRIPT 'orch://nightly-load/main.etlsql';
+```
+
+The job stores a pinned version such as `orch://nightly-load@1/main.etlsql`. Dynamic `RUN SCRIPT @path` dependencies cannot be published; keep those scripts in live file mode.
+
 ---
 
 ## 11. Metadata, Lineage & Tags

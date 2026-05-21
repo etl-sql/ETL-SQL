@@ -5,31 +5,44 @@
 -- ==============================================================================
 
 -- 1. Create connection to the Orchestrator Service
-CREATE CONNECTION orch ON ORCHESTRATOR(HOST='localhost', PORT=8080);
+DROP CONNECTION IF EXISTS orch;
+CREATE CONNECTION orch ON ORCHESTRATOR() WITH(HOST='localhost', PORT=5001, API_KEY='MyAdminpass1!');
+SHOW JOBS AT orch;
+SHOW JOB HISTORY AT orch;
 
--- 2. Schedule Job 1: Generate Data (Top of the hour)
-CREATE JOB 'GenerateManufacturingData' AT orch 
-WITH (SCHEDULE = '0 * * * *') AS
-    RUN SCRIPT '/samples/integration/generate_manufacturing.etlsql';
 
--- 3. Schedule Job 2: Append to Parquet (5 minutes past the hour)
-CREATE JOB 'AppendToParquet' AT orch 
-WITH (SCHEDULE = '5 * * * *') AS
-    RUN SCRIPT '/samples/integration/append_to_parquet.etlsql';
+EXECUTE orch
+BEGIN
+    -- 2. Publish the integration scripts into the remote Orchestrator lockbox.
+    --    Unversioned orch:// paths below are pinned to the latest published version
+    --    when the scheduled jobs are created or updated.
+    PUBLISH BUNDLE 'manufacturing-integration'
+        FROM '/samples/integration'
+        ENTRY 'generate_manufacturing.etlsql';
+
+    -- 3. Schedule Job 1: Generate Data (Top of the hour)
+    CREATE OR ALTER JOB GenerateManufacturingData ON SCHEDULE EVERY 1 HOUR AS
+        RUN SCRIPT 'orch://manufacturing-integration/generate_manufacturing.etlsql';
+
+    -- 4. Schedule Job 2: Append to Parquet (5 minutes past the hour)
+    CREATE OR ALTER JOB AppendToParquet ON SCHEDULE EVERY 1 HOUR AT '00:05' AS
+        RUN SCRIPT 'orch://manufacturing-integration/append_to_parquet.etlsql';
+END;
 
 PRINT 'Orchestrator Jobs created successfully.';
 
--- 4. Publish the Report and Dataset to the Portal
+-- 5. Publish the Report and Dataset to the Portal
 -- The dataset definition is embedded in the report, so publishing the report registers the dataset.
-CREATE CONNECTION portal ON REPORTPORTAL(HOST='localhost', USER='admin', PASSWORD='admin_password');
+CREATE CONNECTION portal ON REPORTPORTAL() WITH(HOST='localhost', PORT=5000, USER='admin', PASSWORD='ENC:AcXpkzRvNuWD9MmDBeh4jMAn50dmS3lO6i7qnAivqNSTixlWa7r7t9PHG6p45zqIRYDzI81GlAnnTV/gdiamiuI=');
 
-EXECUTE portal BEGIN
+EXECUTE portal 
+BEGIN
     PUBLISH REPORT 'Manufacturing Analytics' 
-        FROM '/samples/integration/manufacturing_report.rptsql'
-        IN FOLDER '/Public';
+        FROM '/app/Reports/integration/manufacturing_report.rptsql'
+        IN FOLDER '/Finance';
 
     -- Make the embedded dataset publicly accessible to others
-    ALTER DATASET 'manufacturing_data' IN FOLDER '/Public'
+    ALTER DATASET 'manufacturing_data' IN FOLDER '/Finance'
         SET ACCESS = PUBLIC;
 END;
 

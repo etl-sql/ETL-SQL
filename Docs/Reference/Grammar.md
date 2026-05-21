@@ -1718,64 +1718,108 @@ SELECT SYSDATE AT TIME ZONE @tz;
 
 ## 15. Job Scheduling
 
-### 15.1 `CREATE JOB` â€” Local Orchestrator
-Registers a job with the local Orchestrator service.
+### 15.1 `CREATE JOB` — Core Orchestrator
+Registers a job with the Core Orchestrator service. Job names must be unquoted identifiers.
 
 ```sql
 -- EVERY interval syntax
 CREATE JOB CleanupJob ON SCHEDULE EVERY 30 MINUTES AS
     RUN SCRIPT 'scripts/cleanup.etlsql';
 
-CREATE JOB NightlyArchive ON SCHEDULE EVERY 1 DAY AT '02:00' AS
+-- With MAX_RETRIES and RETRY_DELAY (WITH clause must precede the AS block)
+CREATE JOB NightlyArchive 
+    ON SCHEDULE EVERY 1 DAY AT '02:00'
+    WITH (MAX_RETRIES = 3, RETRY_DELAY = 60)
+AS
 BEGIN
     INSERT INTO archive SELECT * FROM prod.logs WHERE log_date < DATEADD(DAY,-30,GETDATE());
     DELETE FROM prod.logs WHERE log_date < DATEADD(DAY,-30,GETDATE());
 END;
-
--- Cron syntax (equivalent; both forms are valid)
-CREATE JOB WeeklyReport WITH (SCHEDULE = '0 8 * * MON') AS
-    RUN SCRIPT 'scripts/weekly_report.etlsql';
 ```
 
-**Schedule intervals (EVERY form):** `SECONDS`, `MINUTES`, `HOURS`, `DAYS`  
-**Cron syntax:** standard 5-field cron expression in the `WITH (SCHEDULE = '...')` form.
+### 15.1.1 Published Script Bundles
 
-### 15.2 `CREATE JOB` â€” Remote Orchestrator
-Targets a specific remote Orchestrator using `AT <alias>`. The alias must be a connection created with `ON ORCHESTRATOR(...)`.
+Published bundles store immutable script versions in the Orchestrator lockbox.
 
 ```sql
-CREATE JOB 'NightlyArchive' AT orch ON SCHEDULE EVERY 1 DAY AT '02:00' AS
-    RUN SCRIPT '/scripts/nightly_archive.etlsql';
+PUBLISH BUNDLE 'finance-load'
+FROM 'C:\ETL\finance'
+ENTRY 'main.etlsql'
+WITH (PASSWORD = 'publish-password', ENCRYPT = MACHINE);
 
-CREATE JOB 'WeeklyReport' AT orch WITH (SCHEDULE = '0 8 * * MON') AS
-    RUN SCRIPT '/scripts/weekly_report.etlsql';
+VALIDATE BUNDLE 'finance-load'
+FROM 'C:\ETL\finance'
+ENTRY 'main.etlsql';
+
+RUN SCRIPT 'orch://finance-load@3/main.etlsql';
 ```
+
+`PUBLISH BUNDLE` includes every `.etlsql` and `.rptsql` file under a directory source. For a single-file source, it includes the entry file and its literal relative `RUN SCRIPT` dependencies. Dynamic dependencies such as `RUN SCRIPT @path` fail at publish time and should use live file mode instead.
+
+Unversioned `orch://finance-load/main.etlsql` resolves to the latest version for manual execution. Inside `CREATE JOB` or `ALTER JOB`, the engine resolves it once and stores the pinned version.
+
+```sql
+CREATE JOB NightlyFinance ON SCHEDULE EVERY 1 DAY AT '02:00' AS
+    RUN SCRIPT 'orch://finance-load/main.etlsql';
+-- Stored as orch://finance-load@<latest>/main.etlsql
+```
+
+Bundle inspection and recovery:
+
+```sql
+SHOW PUBLISHED BUNDLES;
+SHOW BUNDLE VERSIONS 'finance-load';
+SHOW BUNDLE FILES 'finance-load' VERSION 3;
+SHOW BUNDLE DEPENDENCIES 'finance-load' VERSION 3;
+
+EXPORT SCRIPT 'orch://finance-load@3/main.etlsql'
+TO 'C:\Recovered\finance-load';
+```
+
+**Schedule intervals:** `SECOND`, `SECONDS`, `MINUTE`, `MINUTES`, `HOUR`, `HOURS`, `DAY`, `DAYS`. An optional time string (e.g. `'02:00'`) can follow the `AT` keyword for daily schedules.  
+**Options (WITH clause):** `MAX_RETRIES` (default 0) and `RETRY_DELAY` or `RETRY_DELAY_SECONDS` (default 30 seconds). Both values must be integers.
 
 > [!NOTE]
-> `CREATE OR ALTER` is not supported for jobs. Use `DROP JOB` and then `CREATE JOB` or use `ALTER JOB` to modify schedule/properties.
+> Standard `CREATE JOB` statements do not support cron strings or the `AT <alias>` clause. Cron expressions are only supported in Portal Refresh Jobs (see §15.3).
 
-### 15.3 Job Management
+### 15.2 Remote Orchestrator Job Creation
+To create a job on a remote orchestrator, wrap the `CREATE JOB` statement inside an `EXECUTE <alias> BEGIN ... END` block. The alias must be a connection configured with `ON ORCHESTRATOR()`.
 
 ```sql
--- Local
-ALTER JOB CleanupJob    SET SCHEDULE = EVERY 1 HOUR;
-ALTER JOB WeeklyReport  SET SCHEDULE = '0 9 * * MON';   -- cron form
-ENABLE  JOB CleanupJob;
-DISABLE JOB CleanupJob;
-DROP    JOB IF EXISTS CleanupJob;
-TRIGGER JOB CleanupJob;         -- manual one-off run (does not affect next scheduled run)
-KILL    JOB <HistoryId>;        -- cancel a running instance by its history ID
+EXECUTE orch_conn BEGIN
+    CREATE JOB NightlyArchive ON SCHEDULE EVERY 1 DAY AT '02:00' AS
+        RUN SCRIPT '/scripts/nightly_archive.etlsql';
+END;
+```
 
+### 15.3 Portal Refresh Jobs (Cron Scheduling)
+Portal Refresh Jobs are distinct administrative tasks for updating report portal datasets and are defined inside `EXECUTE portal BEGIN ... END` blocks using standard cron strings:
+
+```sql
+EXECUTE portal_conn BEGIN
+    CREATE REFRESH JOB FOR REPORT 'FinanceSales' SCHEDULE '0 2 * * *' AT orch_conn;
+END;
+```
+
+### 15.4 Job Management
+
+```sql
+-- Drop a job (names must be unquoted identifiers; IF EXISTS is not supported)
+DROP JOB CleanupJob;
+
+-- Cancel a running job instance by its execution/history ID expression
+KILL JOB 1023;
+KILL JOB @historyId;
+
+-- Query jobs and history
 SHOW JOBS;
 SHOW JOB HISTORY;
 SHOW JOB HISTORY NightlyArchive;
-SHOW ACTIVE JOBS;               -- running instances only
 
-SHOW JOBS    INTO #jobs;
+-- Direct output to a temporary table
+SHOW JOBS INTO #jobs;
 SHOW JOB HISTORY INTO #history;
 ```
-
----
 
 ## 16. File Operations
 

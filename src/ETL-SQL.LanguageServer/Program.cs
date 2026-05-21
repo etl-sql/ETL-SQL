@@ -95,6 +95,9 @@ namespace ETL_SQL.LSP
                         services.AddSingleton<ISystemResources, DefaultSystemResources>();
                         services.AddSingleton<IBufferManager, ETL_SQL.Orchestrator.Execution.BufferManager>();
                         services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));
+                        services.AddSingleton<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>();
+                        services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>());
+                        services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>());
                         
                         services.AddTransient<IReportContext, Engine.Services.ReportRegistry>();
                         services.AddTransient<Engine.Services.EvaluatorComponentRegistry>();

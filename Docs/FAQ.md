@@ -211,6 +211,17 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > ```sql
 > SET PROFILING ON;
 > RUN SCRIPT 'C:\Scripts\my_pipeline.etlsql';
+
+**Q: Why did `PUBLISH BUNDLE` fail on `RUN SCRIPT @path`?**
+> Published bundles must know every sub-script at publish time so the Orchestrator can version and store the full dependency graph. Dynamic script paths cannot be packaged safely. Use live mode for those jobs:
+>
+> ```sql
+> CREATE JOB MyJob ON SCHEDULE EVERY 1 DAY AS
+>     RUN SCRIPT 'C:\Scripts\my_pipeline.etlsql';
+> ```
+
+**Q: Can I recover a script after publishing if I lose the source files?**
+> Yes. Use `EXPORT SCRIPT 'orch://bundle@version/main.etlsql' TO 'C:\Recovered\bundle';`. The export recovers script text and relative paths, but it does not decrypt or reveal secrets. Re-enter credentials before running recovered scripts.
 > SET PROFILING OFF;
 >
 > -- View the 10 slowest statements

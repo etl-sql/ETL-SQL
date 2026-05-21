@@ -106,6 +106,7 @@ namespace ETL_SQL.Data
                                       kv.Key.Contains("CONNECTIONSTRING", StringComparison.OrdinalIgnoreCase) ||
                                       kv.Key.Contains("SECRET", StringComparison.OrdinalIgnoreCase) ||
                                       kv.Key.Contains("APIKEY", StringComparison.OrdinalIgnoreCase) ||
+                                      kv.Key.Contains("API_KEY", StringComparison.OrdinalIgnoreCase) ||
                                       kv.Key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase) ||
                                       kv.Key.Contains("CREDENTIAL", StringComparison.OrdinalIgnoreCase) ||
                                       kv.Key.Contains("PRIVATEKEY", StringComparison.OrdinalIgnoreCase) ||

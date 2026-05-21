@@ -5,6 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orchestrator — ETL-SQL Portal</title>
   <link rel="stylesheet" href="/css/portal.css">
+  <style>
+    .orch-stat-button {
+      appearance: none;
+      font: inherit;
+      cursor: pointer;
+      transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+    .orch-stat-button:hover {
+      border-color: var(--portal-danger);
+      box-shadow: 0 2px 10px rgba(185, 28, 28, .12);
+      transform: translateY(-1px);
+    }
+    .orch-stat-button:focus-visible {
+      outline: 2px solid var(--portal-danger);
+      outline-offset: 2px;
+    }
+    .orch-stat-chip.active-filter {
+      border-color: var(--portal-danger);
+      background: var(--portal-danger-soft);
+    }
+    .orch-card-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .orch-filter-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--portal-danger-soft);
+      color: var(--portal-danger);
+      font-size: .78em;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+  </style>
 </head>
 <body>
 <div class="app-shell">
@@ -32,6 +73,7 @@
         <div class="orch-service-chip" id="serviceChip">
           <span class="orch-status-dot" id="statusDot"></span>
           <span id="statusLabel">Checking…</span>
+          <button class="btn btn-sm btn-outline" id="refreshJobsBtn" title="Reload jobs">↻ Refresh</button>
           <button class="btn btn-sm btn-outline" id="restartBtn" style="display:none">Restart</button>
           <button class="btn btn-sm btn-outline" id="stopBtn" style="display:none" title="Graceful stop — service restarts if OS-managed">Stop</button>
         </div>
@@ -47,10 +89,10 @@
           <span class="orch-stat-value" id="completedCount">—</span>
           <span class="orch-stat-label">Done Today</span>
         </div>
-        <div class="orch-stat-chip danger">
+        <button class="orch-stat-chip orch-stat-button danger" id="failedTodayFilterBtn" type="button" title="Show jobs with failures today">
           <span class="orch-stat-value" id="failedCount">—</span>
           <span class="orch-stat-label">Failed Today</span>
-        </div>
+        </button>
         <span class="topbar-spacer"></span>
         <button class="btn btn-primary btn-sm" id="newJobBtn">+ New Job</button>
       </div>
@@ -80,8 +122,12 @@
       <div class="card">
         <div class="card-header">
           <div>
-            <span class="section-kicker">All jobs</span>
-            <h3>Scheduled Jobs</h3>
+            <span class="section-kicker" id="jobsSectionKicker">All jobs</span>
+            <h3 id="jobsSectionTitle">Scheduled Jobs</h3>
+          </div>
+          <div class="orch-card-actions" id="jobsFilterActions" style="display:none">
+            <span class="orch-filter-pill" id="jobsFilterLabel"></span>
+            <button class="btn btn-sm btn-outline" id="clearJobsFilterBtn" type="button">Clear</button>
           </div>
         </div>
         <div id="jobsTableWrap">
@@ -228,6 +274,9 @@ try {
 } catch { window.location.href = '/login.html'; }
 
 document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
+document.getElementById('refreshJobsBtn').addEventListener('click', () => loadJobs());
+document.getElementById('failedTodayFilterBtn').addEventListener('click', () => showFailedTodayJobs());
+document.getElementById('clearJobsFilterBtn').addEventListener('click', () => clearJobsFilter());
 
 // ── API helpers ────────────────────────────────────────────────────────────────
 const BASE = '/api/orchestrator';
@@ -273,6 +322,9 @@ let ganttChart = null;
 let sparklineChart = null;
 let online = false;
 let pollHandle = null;
+let jobsFilter = 'all';
+let todayFailedJobNames = new Set();
+let todayFailedHistoryByJob = new Map();
 
 // ── Polling ────────────────────────────────────────────────────────────────────
 async function poll() {
@@ -305,33 +357,83 @@ function updateMetrics(m) {
 async function loadJobs() {
   try {
     allJobs = await api.jobs() ?? [];
-    renderJobsTable(allJobs);
-    renderGantt(allJobs);
     await updateTodayCounts(allJobs);
-  } catch {
+    renderJobsTable(getVisibleJobs());
+    renderGantt(allJobs);
+  } catch (err) {
+    const detail = err?.message ? escHtml(err.message) : 'Unknown error';
     document.getElementById('jobsTableWrap').innerHTML =
-      '<p style="padding:12px;color:var(--portal-muted)">Unable to load jobs — is the Orchestrator running?</p>';
+      `<div style="padding:12px;color:var(--portal-muted)">
+        <p style="margin:0 0 8px 0">Unable to load jobs.</p>
+        <p style="margin:0 0 12px 0">The Orchestrator endpoint returned an error even though the service appears to be up.</p>
+        <p style="margin:0 0 12px 0;font-size:.85em">${detail}</p>
+        <button class="btn btn-sm btn-outline" id="jobsRetryBtn">Retry</button>
+      </div>`;
+    document.getElementById('jobsRetryBtn')?.addEventListener('click', () => loadJobs());
   }
 }
 
 async function updateTodayCounts(jobs) {
   const today = new Date().toDateString();
   let completed = 0, failed = 0;
+  todayFailedJobNames = new Set();
+  todayFailedHistoryByJob = new Map();
   for (const job of jobs) {
     try {
-      const hist = await api.history(job.Name, 20) ?? [];
-      completed += hist.filter(h => h.Status === 'SUCCESS'  && new Date(h.StartTime).toDateString() === today).length;
-      failed    += hist.filter(h => h.Status === 'FAILURE'  && new Date(h.StartTime).toDateString() === today).length;
+      const name = jobValue(job, 'Name');
+      const hist = await api.history(name, 20) ?? [];
+      const todaysFailures = hist.filter(h => jobValue(h, 'Status') === 'FAILURE' && isToday(jobValue(h, 'StartTime'), today));
+      completed += hist.filter(h => jobValue(h, 'Status') === 'SUCCESS' && isToday(jobValue(h, 'StartTime'), today)).length;
+      failed += todaysFailures.length;
+      if (todaysFailures.length) {
+        todayFailedJobNames.add(name);
+        todayFailedHistoryByJob.set(name, todaysFailures);
+      }
     } catch {}
   }
   document.getElementById('completedCount').textContent = completed;
   document.getElementById('failedCount').textContent    = failed;
+  document.getElementById('failedTodayFilterBtn').classList.toggle('active-filter', jobsFilter === 'failedToday');
+}
+
+function isToday(value, todayText = new Date().toDateString()) {
+  if (!value) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.toDateString() === todayText;
+}
+
+function getVisibleJobs() {
+  if (jobsFilter === 'failedToday') {
+    return allJobs.filter(j => todayFailedJobNames.has(jobValue(j, 'Name')));
+  }
+  return allJobs;
+}
+
+function showFailedTodayJobs() {
+  jobsFilter = 'failedToday';
+  renderJobsTable(getVisibleJobs());
+  document.getElementById('failedTodayFilterBtn').classList.add('active-filter');
+
+  const firstFailed = getVisibleJobs()[0];
+  if (firstFailed) {
+    openDetail(firstFailed, todayFailedHistoryByJob.get(jobValue(firstFailed, 'Name')) ?? null);
+  } else {
+    closeDetail();
+  }
+}
+
+function clearJobsFilter() {
+  jobsFilter = 'all';
+  renderJobsTable(allJobs);
+  document.getElementById('failedTodayFilterBtn').classList.remove('active-filter');
 }
 
 // ── Jobs table ─────────────────────────────────────────────────────────────────
 function fmtSchedule(j) {
-  let s = `Every ${j.Interval} ${j.Unit.toLowerCase()}`;
-  if (j.AtTime) s += ` at ${j.AtTime}`;
+  const explicit = jobValue(j, 'Schedule');
+  if (explicit) return explicit;
+  let s = `Every ${jobValue(j, 'Interval')} ${String(jobValue(j, 'Unit') || '').toLowerCase()}`.trim();
+  if (jobValue(j, 'AtTime')) s += ` at ${jobValue(j, 'AtTime')}`;
   return s;
 }
 
@@ -348,13 +450,17 @@ function statusBadge(enabled) {
 }
 
 function lastRunBadge(job) {
-  return job.LastRun ? fmtDt(job.LastRun) : '<span style="color:var(--portal-muted)">Never</span>';
+  return jobValue(job, 'LastRun') ? fmtDt(jobValue(job, 'LastRun')) : '<span style="color:var(--portal-muted)">Never</span>';
 }
 
 function renderJobsTable(jobs) {
   const wrap = document.getElementById('jobsTableWrap');
+  renderJobsFilterHeader(jobs.length);
   if (!jobs.length) {
-    wrap.innerHTML = '<div class="empty-state" style="padding:32px 0;text-align:center;color:var(--portal-muted)">No jobs defined. Click <strong>+ New Job</strong> to create one.</div>';
+    const emptyText = jobsFilter === 'failedToday'
+      ? 'No jobs have failed today.'
+      : 'No jobs defined. Click <strong>+ New Job</strong> to create one.';
+    wrap.innerHTML = `<div class="empty-state" style="padding:32px 0;text-align:center;color:var(--portal-muted)">${emptyText}</div>`;
     return;
   }
   wrap.innerHTML = `
@@ -366,20 +472,20 @@ function renderJobsTable(jobs) {
       </tr></thead>
       <tbody>
       ${jobs.map(j => `
-        <tr class="job-row${selectedJob?.Name === j.Name ? ' selected' : ''}" data-name="${escHtml(j.Name)}">
-          <td><strong>${escHtml(j.Name)}</strong></td>
+        <tr class="job-row${jobValue(selectedJob, 'Name') === jobValue(j, 'Name') ? ' selected' : ''}" data-name="${escHtml(jobValue(j, 'Name'))}">
+          <td><strong>${escHtml(jobValue(j, 'Name'))}</strong></td>
           <td>${escHtml(fmtSchedule(j))}</td>
-          <td>${statusBadge(j.IsEnabled)}</td>
+          <td>${statusBadge(jobBool(j, 'IsEnabled'))}</td>
           <td>${lastRunBadge(j)}</td>
-          <td>${j.NextRun ? fmtDt(j.NextRun) : '—'}</td>
+          <td>${jobValue(j, 'NextRun') ? fmtDt(jobValue(j, 'NextRun')) : '—'}</td>
           <td>
             <div class="table-actions">
-              <button class="btn btn-sm btn-outline" data-action="trigger" data-name="${escHtml(j.Name)}" title="Run now">▶ Run</button>
-              <button class="btn btn-sm btn-outline" data-action="toggle" data-name="${escHtml(j.Name)}" data-enabled="${j.IsEnabled}">
-                ${j.IsEnabled ? 'Disable' : 'Enable'}
+              <button class="btn btn-sm btn-outline" data-action="trigger" data-name="${escHtml(jobValue(j, 'Name'))}" title="Run now">▶ Run</button>
+              <button class="btn btn-sm btn-outline" data-action="toggle" data-name="${escHtml(jobValue(j, 'Name'))}" data-enabled="${jobBool(j, 'IsEnabled')}">
+                ${jobBool(j, 'IsEnabled') ? 'Disable' : 'Enable'}
               </button>
-              <button class="btn btn-sm btn-outline" data-action="kill" data-name="${escHtml(j.Name)}" title="Cancel running instance">Kill</button>
-              <button class="btn btn-sm btn-outline btn-danger-outline" data-action="delete" data-name="${escHtml(j.Name)}">Delete</button>
+              <button class="btn btn-sm btn-outline" data-action="kill" data-name="${escHtml(jobValue(j, 'Name'))}" title="Cancel running instance">Kill</button>
+              <button class="btn btn-sm btn-outline btn-danger-outline" data-action="delete" data-name="${escHtml(jobValue(j, 'Name'))}">Delete</button>
             </div>
           </td>
         </tr>`).join('')}
@@ -391,7 +497,7 @@ function renderJobsTable(jobs) {
     row.addEventListener('click', e => {
       if (e.target.closest('button')) return;
       const name = row.dataset.name;
-      const job  = allJobs.find(j => j.Name === name);
+      const job  = allJobs.find(j => jobValue(j, 'Name') === name);
       if (job) openDetail(job);
     });
   });
@@ -399,6 +505,25 @@ function renderJobsTable(jobs) {
   wrap.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', e => { e.stopPropagation(); handleAction(btn); });
   });
+}
+
+function renderJobsFilterHeader(visibleCount) {
+  const actions = document.getElementById('jobsFilterActions');
+  const label = document.getElementById('jobsFilterLabel');
+  const kicker = document.getElementById('jobsSectionKicker');
+  const title = document.getElementById('jobsSectionTitle');
+
+  if (jobsFilter === 'failedToday') {
+    kicker.textContent = 'Failed today';
+    title.textContent = `${visibleCount} Scheduled ${visibleCount === 1 ? 'Job' : 'Jobs'}`;
+    label.textContent = 'Failure filter';
+    actions.style.display = '';
+  } else {
+    kicker.textContent = 'All jobs';
+    title.textContent = 'Scheduled Jobs';
+    label.textContent = '';
+    actions.style.display = 'none';
+  }
 }
 
 async function handleAction(btn) {
@@ -438,8 +563,8 @@ function renderGantt(jobs) {
     ganttChart = echarts.init(el);
     ganttChart.on('click', params => {
       if (params.componentType === 'series') {
-        const name = params.data[3];
-        const job  = allJobs.find(j => j.Name === name);
+        const name = params.data?.[3];
+        const job  = allJobs.find(j => jobValue(j, 'Name') === name);
         if (job) openDetail(job);
       }
     });
@@ -451,25 +576,25 @@ function renderGantt(jobs) {
 
   const MIN_BAR_MS = 5 * 60 * 1000; // 5-min minimum width
 
-  const jobNames = jobs.map(j => j.Name);
+  const jobNames = jobs.map(j => jobValue(j, 'Name'));
   const barData  = [];
 
   jobs.forEach((job, idx) => {
-    const start = job.NextRun ? new Date(job.NextRun).getTime() : null;
+    const start = jobValue(job, 'NextRun') ? new Date(jobValue(job, 'NextRun')).getTime() : null;
     if (!start || start < startOfDay || start > endOfDay) return;
 
     const end   = start + MIN_BAR_MS;
-    const color = job.IsEnabled ? '#2563eb' : '#7a8798';
-    barData.push([idx, start, end, job.Name, color]);
+    const color = jobBool(job, 'IsEnabled') ? '#2563eb' : '#7a8798';
+    barData.push([idx, start, end, jobValue(job, 'Name'), color]);
   });
 
   const option = {
     tooltip: {
       formatter: params => {
         const [, s, , name] = params.data;
-        const job = allJobs.find(j => j.Name === name);
+        const job = allJobs.find(j => jobValue(j, 'Name') === name);
         if (!job) return name;
-        return `<strong>${name}</strong><br/>${fmtSchedule(job)}<br/>Next: ${fmtDt(job.NextRun)}`;
+        return `<strong>${name}</strong><br/>${fmtSchedule(job)}<br/>Next: ${fmtDt(jobValue(job, 'NextRun'))}`;
       }
     },
     grid: { left: 160, right: 20, top: 10, bottom: 30 },
@@ -490,7 +615,7 @@ function renderGantt(jobs) {
         return {
           type: 'rect',
           shape: { x: start[0], y: start[1] - h / 2, width: Math.max(end[0] - start[0], 4), height: h },
-          style: { fill: params.data[4], opacity: 0.85 }
+          style: { fill: api.value(4), opacity: 0.85 }
         };
       },
       data:    barData,
@@ -502,25 +627,29 @@ function renderGantt(jobs) {
 }
 
 // ── Detail panel ───────────────────────────────────────────────────────────────
-async function openDetail(job) {
+async function openDetail(job, historyOverride = null) {
   selectedJob = job;
-  document.getElementById('detailJobName').textContent  = job.Name;
+  document.getElementById('detailJobName').textContent  = jobValue(job, 'Name');
   document.getElementById('detailSchedule').textContent = fmtSchedule(job);
-  document.getElementById('detailLastRun').textContent  = fmtDt(job.LastRun);
-  document.getElementById('detailNextRun').textContent  = fmtDt(job.NextRun);
-  document.getElementById('detailScript').textContent   = job.Script || '—';
+  document.getElementById('detailLastRun').textContent  = fmtDt(jobValue(job, 'LastRun'));
+  document.getElementById('detailNextRun').textContent  = fmtDt(jobValue(job, 'NextRun'));
+  document.getElementById('detailScript').textContent   = jobValue(job, 'Script') || '—';
   document.getElementById('historyTableWrap').innerHTML =
     '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading…</span></div>';
   document.getElementById('detailPanel').classList.add('open');
 
   // Update selected row highlight
   document.querySelectorAll('tr.job-row').forEach(r => r.classList.remove('selected'));
-  document.querySelector(`tr.job-row[data-name="${escHtml(job.Name)}"]`)?.classList.add('selected');
+  document.querySelector(`tr.job-row[data-name="${cssEscape(jobValue(job, 'Name'))}"]`)?.classList.add('selected');
 
   try {
-    const hist = await api.history(job.Name, 30) ?? [];
+    const hist = historyOverride ?? await api.history(jobValue(job, 'Name'), 30) ?? [];
     renderHistoryTable(hist);
-    renderSparkline(hist);
+    if (historyOverride) {
+      document.getElementById('sparklineSection').style.display = 'none';
+    } else {
+      renderSparkline(hist);
+    }
   } catch { document.getElementById('historyTableWrap').innerHTML = '<p style="color:var(--portal-muted);padding:8px">Failed to load history.</p>'; }
 }
 
@@ -536,18 +665,18 @@ function renderHistoryTable(entries) {
     return;
   }
   const rows = entries.slice(0, 20).map(h => {
-    const dur = h.EndTime && h.StartTime
-      ? ((new Date(h.EndTime) - new Date(h.StartTime)) / 1000).toFixed(1) + 's'
-      : (h.Status === 'RUNNING' ? 'running…' : '—');
-    const ram = h.PeakMemoryBytes > 0 ? (h.PeakMemoryBytes / 1048576).toFixed(1) + 'MB' : '—';
-    const cls = { SUCCESS: 'success', FAILURE: 'failure', RUNNING: 'running', BLOCKED: 'blocked', CANCELLED: 'cancelled' }[h.Status] ?? '';
+    const dur = jobValue(h, 'EndTime') && jobValue(h, 'StartTime')
+      ? ((new Date(jobValue(h, 'EndTime')) - new Date(jobValue(h, 'StartTime'))) / 1000).toFixed(1) + 's'
+      : (jobValue(h, 'Status') === 'RUNNING' ? 'running…' : '—');
+    const ram = jobValue(h, 'PeakMemoryBytes') > 0 ? (jobValue(h, 'PeakMemoryBytes') / 1048576).toFixed(1) + 'MB' : '—';
+    const cls = { SUCCESS: 'success', FAILURE: 'failure', RUNNING: 'running', BLOCKED: 'blocked', CANCELLED: 'cancelled' }[jobValue(h, 'Status')] ?? '';
     return `<tr>
-      <td><span class="status-badge ${cls}">${h.Status}</span></td>
-      <td>${fmtDt(h.StartTime)}</td>
+      <td><span class="status-badge ${cls}">${jobValue(h, 'Status')}</span></td>
+      <td>${fmtDt(jobValue(h, 'StartTime'))}</td>
       <td>${dur}</td>
-      <td>${h.RowsProcessed > 0 ? h.RowsProcessed.toLocaleString() : '—'}</td>
+      <td>${jobValue(h, 'RowsProcessed') > 0 ? Number(jobValue(h, 'RowsProcessed')).toLocaleString() : '—'}</td>
       <td>${ram}</td>
-      <td style="color:var(--portal-danger);font-size:.8em;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(h.ErrorMessage ?? '')}">${h.ErrorMessage ? escHtml(h.ErrorMessage.substring(0, 60)) : ''}</td>
+      <td style="color:var(--portal-danger);font-size:.8em;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(jobValue(h, 'ErrorMessage') ?? '')}">${jobValue(h, 'ErrorMessage') ? escHtml(String(jobValue(h, 'ErrorMessage')).substring(0, 60)) : ''}</td>
     </tr>`;
   }).join('');
   document.getElementById('historyTableWrap').innerHTML = `
@@ -560,7 +689,7 @@ function renderHistoryTable(entries) {
 }
 
 function renderSparkline(entries) {
-  const finished = entries.filter(h => h.EndTime && h.StartTime && h.Status !== 'RUNNING').slice(0, 30).reverse();
+  const finished = entries.filter(h => jobValue(h, 'EndTime') && jobValue(h, 'StartTime') && jobValue(h, 'Status') !== 'RUNNING').slice(0, 30).reverse();
   if (!sparklineChart) {
     sparklineChart = echarts.init(document.getElementById('sparklineChart'));
   }
@@ -569,7 +698,7 @@ function renderSparkline(entries) {
     return;
   }
   document.getElementById('sparklineSection').style.display = '';
-  const data = finished.map(h => +((new Date(h.EndTime) - new Date(h.StartTime)) / 1000).toFixed(1));
+  const data = finished.map(h => +((new Date(jobValue(h, 'EndTime')) - new Date(jobValue(h, 'StartTime'))) / 1000).toFixed(1));
   sparklineChart.setOption({
     grid: { left: 40, right: 10, top: 5, bottom: 20 },
     xAxis: { type: 'category', show: false },
@@ -724,6 +853,23 @@ function showToast(msg, isError = false) {
 function escHtml(s) {
   if (s == null) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function cssEscape(s) {
+  if (window.CSS?.escape) return CSS.escape(String(s));
+  return String(s).replace(/["\\]/g, '\\$&');
+}
+
+function jobValue(job, key) {
+  if (!job) return '';
+  const lower = key.charAt(0).toLowerCase() + key.slice(1);
+  const upper = key.charAt(0).toUpperCase() + key.slice(1);
+  return job[key] ?? job[lower] ?? job[upper] ?? '';
+}
+
+function jobBool(job, key) {
+  const value = jobValue(job, key);
+  return value === true || value === 'true' || value === 1 || value === '1';
 }
 
 // ── Init & polling loop ────────────────────────────────────────────────────────

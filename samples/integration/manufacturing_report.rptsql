@@ -8,7 +8,7 @@ SET REPORT DESCRIPTION = 'Hourly overview of machine telemetry and status.';
 
 -- 1. Create the dataset from the master Parquet file.
 -- This dataset acts as the semantic layer for the report visuals.
-CREATE CONNECTION parquet_conn ON PARQUET() WITH(PATH='/data/manufacturing_master.parquet');
+CREATE CONNECTION parquet_conn ON PARQUET() WITH(PATH='/app/data/manufacturing_master.parquet');
 
 CREATE DATASET &manufacturing_data 
   REFRESH EVERY '1h'

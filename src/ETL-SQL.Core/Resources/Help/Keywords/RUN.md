@@ -5,6 +5,7 @@ Executes another ETL-SQL script file, optionally passing parameters in or out.
 ```sql
 -- Basic call
 RUN SCRIPT 'path/to/subscript.etlsql';
+RUN SCRIPT 'orch://bundle@3/path/to/subscript.etlsql';
 
 -- Pass input parameters
 RUN SCRIPT 'loaders/load_sales.etlsql' WITH (
@@ -18,6 +19,10 @@ RUN SCRIPT 'utils/get_row_count.etlsql' WITH (
   @count  = @out
 );
 ```
+
+Published Orchestrator paths use the `orch://` scheme. A pinned path (`orch://bundle@3/file.etlsql`) runs that immutable bundle version. An unversioned path (`orch://bundle/file.etlsql`) resolves to the latest version during manual execution.
+
+Only literal `RUN SCRIPT 'child.etlsql'` dependencies can be included in published bundles. Dynamic paths such as `RUN SCRIPT @path` must remain in live file mode.
 
 ## Notes
 - Paths are resolved relative to the calling script's location unless absolute.

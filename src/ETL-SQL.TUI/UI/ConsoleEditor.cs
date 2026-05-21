@@ -431,15 +431,18 @@ namespace ETL_SQL.TUI.UI
                 execSw.Stop();
                 _evaluator.Telemetry.LastExecutionTimeMs = execSw.ElapsedMilliseconds;
 
-                // After each run, show the last result set (most recently executed query)
+                // After each run, default to showing the execution tree and messages
+                _renderer.ResultsVisible = false;
+                _renderer.PerformanceVisible = false;
+                _renderer.ActiveLowerTab = EditorFocus.ExecutionTree;
+                _renderer.Focus = EditorFocus.Editor;
+
                 if (_evaluator.LastResultSets.Count > 0)
                 {
                     _renderer.ActiveResultSetIndex = _evaluator.LastResultSets.Count - 1;
                     _renderer.ResultScrollRow = 0;
                     _renderer.ResultScrollCol = 0;
                     _renderer.FilterText = "";
-                    _renderer.ResultsVisible = true;
-                    _renderer.PerformanceVisible = false;
                 }
 
                 totalSw.Stop();

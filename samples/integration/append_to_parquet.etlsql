@@ -7,8 +7,8 @@
 -- The current time is HH:05. The file from the current hour has the same HH timestamp.
 -- Example: At 01:05, FORMAT yields '01'. The file generated at 01:00 also used '01'.
 DECLARE @timestamp STRING = FORMAT(GETDATE(), 'yyyyMMdd_HH');
-DECLARE @csv_file  STRING = '/data/manufacturing_' + @timestamp + '.csv';
-DECLARE @parquet_master STRING = '/data/manufacturing_master.parquet';
+DECLARE @csv_file  STRING = '/app/data/manufacturing_' + @timestamp + '.csv';
+DECLARE @parquet_master STRING = '/app/data/manufacturing_master.parquet';
 
 IF NOT FILE_EXISTS(@csv_file)
 BEGIN

@@ -70,8 +70,11 @@ namespace ETL_SQL.Engine.Planning
 
                 if (sources.Count == 0)
                 {
-                    // No table qualifier — classify as left-single (will be applied to FROM source).
-                    output.Add(new LogicalPredicate(pred, PredicateScope.LeftSingle, leftAlias));
+                    // Unqualified — the identifier qualifier could not attribute this predicate to a
+                    // specific source (e.g. schema unavailable for the connection type at plan time).
+                    // Keep post-join so we don't accidentally pre-filter the FROM-side rows using a
+                    // column that actually lives on a right-side table, which would produce 0 rows.
+                    output.Add(new LogicalPredicate(pred, PredicateScope.Conservative, null));
                 }
                 else if (sources.Count == 1 && sources.Contains(leftAlias))
                 {
@@ -138,6 +141,13 @@ namespace ETL_SQL.Engine.Planning
                     var tables = predicates[i].GetSourceTables()
                                               .ToHashSet(StringComparer.OrdinalIgnoreCase);
                     if (!tables.Contains(rightAlias)) continue;
+
+                    // Only promote true cross-table predicates (referencing both sides) to INNER
+                    // JOIN conditions. A predicate that only references the right table (e.g.
+                    // t7.e7=280) is a single-table filter, not a join predicate — pushing it as
+                    // the join condition breaks hash-join key construction and yields 0 rows.
+                    // Leave single-table right-side predicates in the WHERE clause.
+                    if (!tables.Overlaps(leftTables)) continue;
 
                     var available = new HashSet<string>(leftTables, StringComparer.OrdinalIgnoreCase);
                     available.Add(rightAlias);

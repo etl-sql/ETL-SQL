@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -12,6 +13,9 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Engine.Services;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Connectors.Orchestrator
 {
@@ -78,6 +82,13 @@ namespace ETL_SQL.Connectors.Orchestrator
                 case EnableJobStatement s:             await EnableDisableJobAsync(s.Name, enable: true, context); break;
                 case DisableJobStatement s:            await EnableDisableJobAsync(s.Name, enable: false, context); break;
                 case TriggerJobStatement s:            await TriggerJobAsync(s.Name, context); break;
+                case PublishBundleStatement s:         await PublishBundleAsync(s, context); break;
+                case ValidateBundleStatement s:        await ValidateBundleAsync(s, context); break;
+                case ExportScriptStatement s:          await ExportScriptAsync(s, context); break;
+                case ShowPublishedBundlesStatement s:  await FetchPublishedBundlesAsync(s, context); break;
+                case ShowBundleVersionsStatement s:    await FetchBundleVersionsAsync(s, context); break;
+                case ShowBundleFilesStatement s:       await FetchBundleFilesAsync(s, context); break;
+                case ShowBundleDependenciesStatement s: await FetchBundleDependenciesAsync(s, context); break;
                 case ShowJobsStatement s:               await FetchJobsAsync(s, context); break;
                 case ShowJobHistoryStatement s:         await FetchJobHistoryAsync(s, context); break;
                 default:
@@ -181,6 +192,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             table.AddColumn("LastRun");
             table.AddColumn("NextRun");
             table.AddColumn("Script");
+            table.AddColumn("Enable");
 
             foreach (var job in jobs)
             {
@@ -190,6 +202,7 @@ namespace ETL_SQL.Connectors.Orchestrator
                 row["LastRun"] = job.LastRun;
                 row["NextRun"] = job.NextRun;
                 row["Script"] = job.Script;
+                row["Enable"] = job.IsEnabled ? 1 : 0;
                 await table.AddRowAsync(row);
             }
 
@@ -240,6 +253,189 @@ namespace ETL_SQL.Connectors.Orchestrator
             }
 
             await WriteResultAsync(table, stmt.IntoTable, context);
+        }
+
+        private async Task PublishBundleAsync(PublishBundleStatement stmt, IExecutionContext context)
+        {
+            var source = (await context.EvaluateValue(stmt.SourcePath, new Row()))?.ToString()
+                ?? throw new ExecutionException("PUBLISH BUNDLE source path evaluated to null.");
+            var password = stmt.PasswordMode == BundleSecretMode.Prompt
+                ? PasswordPrompt.ReadPassword($"Publish password for bundle '{stmt.BundleName}': ")
+                : stmt.Password;
+
+            var preflight = await BundlePublishSupport.PreflightAsync(
+                stmt.BundleName,
+                context.ResolvePath(source),
+                stmt.EntryPath,
+                password,
+                SecurityService.GetMachineKey(),
+                rewriteSecrets: false);
+
+            var request = new PublishBundleApiRequest(
+                new BundlePublishRequest(
+                    stmt.BundleName,
+                    preflight.EntryPath,
+                    preflight.Files,
+                    preflight.Dependencies,
+                    preflight.ContentHash,
+                    stmt.EncryptionMode.ToUpperInvariant(),
+                    stmt.KeyFile,
+                    Environment.UserName,
+                    stmt.Description),
+                password);
+
+            var resp = await _http.PostAsJsonAsync("api/bundles", request, _json);
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+            }
+            var version = await resp.Content.ReadFromJsonAsync<BundleVersionInfo>(_json);
+            _logger.WriteLine($"Published bundle '{stmt.BundleName}' version {version?.Version ?? 0} to Orchestrator.", ConsoleColor.Green);
+        }
+
+        private async Task ValidateBundleAsync(ValidateBundleStatement stmt, IExecutionContext context)
+        {
+            var source = (await context.EvaluateValue(stmt.SourcePath, new Row()))?.ToString()
+                ?? throw new ExecutionException("VALIDATE BUNDLE source path evaluated to null.");
+            var password = stmt.PasswordMode == BundleSecretMode.Prompt
+                ? PasswordPrompt.ReadPassword($"Publish password for bundle '{stmt.BundleName}': ")
+                : stmt.Password;
+            var preflight = await BundlePublishSupport.PreflightAsync(
+                stmt.BundleName,
+                context.ResolvePath(source),
+                stmt.EntryPath,
+                password,
+                SecurityService.GetMachineKey(),
+                rewriteSecrets: false);
+            _logger.WriteLine($"Bundle '{stmt.BundleName}' validated for remote publish: {preflight.Files.Count} file(s), {preflight.Dependencies.Count} dependency edge(s).", ConsoleColor.Green);
+        }
+
+        private async Task ExportScriptAsync(ExportScriptStatement stmt, IExecutionContext context)
+        {
+            var source = (await context.EvaluateValue(stmt.SourcePath, new Row()))?.ToString()
+                ?? throw new ExecutionException("EXPORT SCRIPT source evaluated to null.");
+            var target = (await context.EvaluateValue(stmt.TargetPath, new Row()))?.ToString()
+                ?? throw new ExecutionException("EXPORT SCRIPT target evaluated to null.");
+
+            if (!BundleUri.TryParse(source, out var uri) || uri == null)
+                throw new ExecutionException("EXPORT SCRIPT source must be an orch://bundle@version/path.etlsql path.");
+            var version = uri.Version ?? await FetchLatestBundleVersionNumberAsync(uri.BundleName);
+            var files = await GetBundleFilesAsync(uri.BundleName, version);
+            var targetDir = context.ResolvePath(target);
+            System.IO.Directory.CreateDirectory(targetDir);
+            foreach (var file in files)
+            {
+                var outPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(targetDir, file.VirtualPath.Replace('/', System.IO.Path.DirectorySeparatorChar)));
+                if (!outPath.StartsWith(System.IO.Path.GetFullPath(targetDir), StringComparison.OrdinalIgnoreCase))
+                    throw new ExecutionException($"EXPORT SCRIPT refused path outside target directory: {file.VirtualPath}");
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(outPath)!);
+                await File.WriteAllTextAsync(outPath, file.Content);
+            }
+            _logger.WriteLine($"Exported remote bundle '{uri.BundleName}' version {version} to {targetDir}. Re-enter any secrets before running recovered scripts.", ConsoleColor.Green);
+        }
+
+        private async Task FetchPublishedBundlesAsync(ShowPublishedBundlesStatement stmt, IExecutionContext context)
+        {
+            var bundles = await GetJsonAsync<BundleVersionInfo[]>("api/bundles") ?? [];
+            await WriteBundleVersionsAsync(bundles, stmt.IntoTable, context);
+        }
+
+        private async Task FetchBundleVersionsAsync(ShowBundleVersionsStatement stmt, IExecutionContext context)
+        {
+            var versions = await GetJsonAsync<BundleVersionInfo[]>($"api/bundles/{Uri.EscapeDataString(stmt.BundleName)}/versions") ?? [];
+            await WriteBundleVersionsAsync(versions, stmt.IntoTable, context);
+        }
+
+        private async Task FetchBundleFilesAsync(ShowBundleFilesStatement stmt, IExecutionContext context)
+        {
+            var files = await GetBundleFilesAsync(stmt.BundleName, stmt.Version);
+            var table = new DataTable();
+            table.AddColumn("BundleName");
+            table.AddColumn("Version");
+            table.AddColumn("VirtualPath");
+            table.AddColumn("ContentHash");
+            table.AddColumn("SizeBytes");
+            table.AddColumn("ContentType");
+            foreach (var file in files)
+            {
+                var row = new Row();
+                row["BundleName"] = file.BundleName;
+                row["Version"] = file.Version;
+                row["VirtualPath"] = file.VirtualPath;
+                row["ContentHash"] = file.ContentHash;
+                row["SizeBytes"] = file.SizeBytes;
+                row["ContentType"] = file.ContentType;
+                await table.AddRowAsync(row);
+            }
+            await WriteResultAsync(table, stmt.IntoTable, context);
+        }
+
+        private async Task FetchBundleDependenciesAsync(ShowBundleDependenciesStatement stmt, IExecutionContext context)
+        {
+            var deps = await GetJsonAsync<BundleDependencyInfo[]>($"api/bundles/{Uri.EscapeDataString(stmt.BundleName)}/versions/{stmt.Version}/dependencies") ?? [];
+            var table = new DataTable();
+            table.AddColumn("BundleName");
+            table.AddColumn("Version");
+            table.AddColumn("FromPath");
+            table.AddColumn("ToPath");
+            foreach (var dep in deps)
+            {
+                var row = new Row();
+                row["BundleName"] = dep.BundleName;
+                row["Version"] = dep.Version;
+                row["FromPath"] = dep.FromPath;
+                row["ToPath"] = dep.ToPath;
+                await table.AddRowAsync(row);
+            }
+            await WriteResultAsync(table, stmt.IntoTable, context);
+        }
+
+        private async Task<int> FetchLatestBundleVersionNumberAsync(string bundleName)
+        {
+            var versions = await GetJsonAsync<BundleVersionInfo[]>($"api/bundles/{Uri.EscapeDataString(bundleName)}/versions") ?? [];
+            var latest = versions.OrderByDescending(v => v.Version).FirstOrDefault()
+                ?? throw new ExecutionException($"Bundle '{bundleName}' was not found.");
+            return latest.Version;
+        }
+
+        private async Task<BundleFileInfo[]> GetBundleFilesAsync(string bundleName, int version)
+            => await GetJsonAsync<BundleFileInfo[]>($"api/bundles/{Uri.EscapeDataString(bundleName)}/versions/{version}/files") ?? [];
+
+        private async Task<T?> GetJsonAsync<T>(string url)
+        {
+            var resp = await _http.GetAsync(url);
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+            }
+            return await resp.Content.ReadFromJsonAsync<T>(_json);
+        }
+
+        private static async Task WriteBundleVersionsAsync(IEnumerable<BundleVersionInfo> versions, string? intoTable, IExecutionContext context)
+        {
+            var table = new DataTable();
+            table.AddColumn("BundleName");
+            table.AddColumn("Version");
+            table.AddColumn("EntryPath");
+            table.AddColumn("ContentHash");
+            table.AddColumn("PublishedAt");
+            table.AddColumn("Publisher");
+            table.AddColumn("Description");
+            foreach (var version in versions)
+            {
+                var row = new Row();
+                row["BundleName"] = version.BundleName;
+                row["Version"] = version.Version;
+                row["EntryPath"] = version.EntryPath;
+                row["ContentHash"] = version.ContentHash;
+                row["PublishedAt"] = version.PublishedAt;
+                row["Publisher"] = version.Publisher;
+                row["Description"] = version.Description;
+                await table.AddRowAsync(row);
+            }
+            await WriteResultAsync(table, intoTable, context);
         }
 
         private static async Task WriteResultAsync(DataTable table, string? intoTable, IExecutionContext context)
@@ -323,5 +519,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             }
             _logger.WriteLine($"Job '{jobName}' triggered for immediate execution.", ConsoleColor.Green);
         }
+
+        private sealed record PublishBundleApiRequest(BundlePublishRequest Bundle, string? Password = null);
     }
 }

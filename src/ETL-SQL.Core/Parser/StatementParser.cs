@@ -79,15 +79,45 @@ namespace ETL_SQL.Core.Parser
             _dispatchMap[TokenType.CLOSE]         = () => ExtensionParser.ParseDockerVerb(DockerAction.Close);
             _dispatchMap[TokenType.DOCKER]        = () => ExtensionParser.ParseDockerVerb(DockerAction.Start); // Fallback
             _dispatchMap[TokenType.STYLE]         = () => { var t = _parser.Previous; return ReportParser.ParseStyleStatement(t); };
-            _dispatchMap[TokenType.EXPORT]        = () => { var t = _parser.Previous; return ParseExportReport(t); };
+            _dispatchMap[TokenType.EXPORT]        = () =>
+            {
+                var t = _parser.Previous;
+                if (_parser.Current.Type == TokenType.SCRIPT || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("SCRIPT", StringComparison.OrdinalIgnoreCase)))
+                {
+                    _parser.Advance();
+                    return ParseExportScript(t);
+                }
+                return ParseExportReport(t);
+            };
+            _dispatchMap[TokenType.ENABLE]        = () => ParseEnableJob();
+            _dispatchMap[TokenType.DISABLE]       = () => ParseDisableJob();
+            _dispatchMap[TokenType.TRIGGER]       = () => ParseTriggerJob();
 
             // Portal admin statements (valid inside EXECUTE portal BEGIN…END)
             _dispatchMap[TokenType.GRANT]        = () => { var t = _parser.Previous; return PortalParser.ParseGrant(t); };
             _dispatchMap[TokenType.REVOKE]       = () => { var t = _parser.Previous; return PortalParser.ParseRevoke(t); };
-            _dispatchMap[TokenType.PUBLISH]      = () => { var t = _parser.Previous; return PortalParser.ParsePublishReport(t); };
+            _dispatchMap[TokenType.PUBLISH]      = () =>
+            {
+                var t = _parser.Previous;
+                if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("BUNDLE", StringComparison.OrdinalIgnoreCase))
+                {
+                    _parser.Advance();
+                    return PortalParser.ParsePublishBundle(t);
+                }
+                return PortalParser.ParsePublishReport(t);
+            };
             _dispatchMap[TokenType.FAVORITE]     = () => { var t = _parser.Previous; return PortalParser.ParseFavoriteReport(t, favorite: true); };
             _dispatchMap[TokenType.UNFAVORITE]   = () => { var t = _parser.Previous; return PortalParser.ParseFavoriteReport(t, favorite: false); };
-            _dispatchMap[TokenType.VALIDATE]     = () => { var t = _parser.Previous; return PortalParser.ParseValidateReport(t); };
+            _dispatchMap[TokenType.VALIDATE]     = () =>
+            {
+                var t = _parser.Previous;
+                if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("BUNDLE", StringComparison.OrdinalIgnoreCase))
+                {
+                    _parser.Advance();
+                    return PortalParser.ParseValidateBundle(t);
+                }
+                return PortalParser.ParseValidateReport(t);
+            };
             _dispatchMap[TokenType.DISCONNECT]   = () => { var t = _parser.Previous; return PortalParser.ParseDisconnectUser(t); };
             _dispatchMap[TokenType.RESTART]      = () => { var t = _parser.Previous; return PortalParser.ParseRestartPortal(t); };
             _dispatchMap[TokenType.SHUTDOWN]     = () => { var t = _parser.Previous; return PortalParser.ParseShutdownPortal(t); };
@@ -271,7 +301,8 @@ namespace ETL_SQL.Core.Parser
                    type == TokenType.RECEIVE_FILE || type == TokenType.FILE_RECEIVE || type == TokenType.WITH ||
                    type == TokenType.STYLE || type == TokenType.COMPRESS || type == TokenType.DECOMPRESS ||
                    type == TokenType.COMPRESS_FILE || type == TokenType.DECOMPRESS_FILE ||
-                   type == TokenType.COMPRESS_DIRECTORY || type == TokenType.DECOMPRESS_DIRECTORY;
+                   type == TokenType.COMPRESS_DIRECTORY || type == TokenType.DECOMPRESS_DIRECTORY ||
+                   type == TokenType.ENABLE || type == TokenType.DISABLE || type == TokenType.TRIGGER;
         }
 
         public ForeignKeyReference ParseForeignKeyReference() => DataParser.ParseForeignKeyReference();
@@ -293,9 +324,64 @@ namespace ETL_SQL.Core.Parser
 
             _parser.Consume(TokenType.TO, "Expected TO");
             var outputPath = _parser.ParseExpression();
-            return new ExportReportStatement(reportPath, format, outputPath)
+             return new ExportReportStatement(reportPath, format, outputPath)
                 { Line = t.Line, Column = t.Column };
         }
+
+        private Statement ParseExportScript(Token t)
+        {
+            var sourcePath = _parser.ParseExpression();
+            _parser.Consume(TokenType.TO, "Expected TO");
+            var targetPath = _parser.ParseExpression();
+            return new ExportScriptStatement(sourcePath, targetPath)
+            {
+                Line = t.Line,
+                Column = t.Column
+            };
+        }
+
+        private Statement ParseEnableJob()
+        {
+            _parser.Consume(TokenType.JOB, "Expected 'JOB' after 'ENABLE'");
+            var nameTok = _parser.ConsumeIdentifier("Expected job name");
+            string? atConn = null;
+            if (_parser.Match(TokenType.AT))
+            {
+                var connTok = _parser.ConsumeIdentifier("Expected connection name after AT");
+                atConn = connTok.Value;
+            }
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+            return new EnableJobStatement(nameTok.Value) { At = atConn, Line = nameTok.Line, Column = nameTok.Column };
+        }
+
+        private Statement ParseDisableJob()
+        {
+            _parser.Consume(TokenType.JOB, "Expected 'JOB' after 'DISABLE'");
+            var nameTok = _parser.ConsumeIdentifier("Expected job name");
+            string? atConn = null;
+            if (_parser.Match(TokenType.AT))
+            {
+                var connTok = _parser.ConsumeIdentifier("Expected connection name after AT");
+                atConn = connTok.Value;
+            }
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+            return new DisableJobStatement(nameTok.Value) { At = atConn, Line = nameTok.Line, Column = nameTok.Column };
+        }
+
+        private Statement ParseTriggerJob()
+        {
+            _parser.Consume(TokenType.JOB, "Expected 'JOB' after 'TRIGGER'");
+            var nameTok = _parser.ConsumeIdentifier("Expected job name");
+            string? atConn = null;
+            if (_parser.Match(TokenType.AT))
+            {
+                var connTok = _parser.ConsumeIdentifier("Expected connection name after AT");
+                atConn = connTok.Value;
+            }
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+            return new TriggerJobStatement(nameTok.Value) { At = atConn, Line = nameTok.Line, Column = nameTok.Column };
+        }
+
 
         private Statement ParseStatementWithCte()
         {

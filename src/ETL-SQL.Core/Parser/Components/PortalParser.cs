@@ -142,6 +142,34 @@ namespace ETL_SQL.Core.Parser.Components
             { Line = start.Line, Column = start.Column };
         }
 
+        // ALTER FOLDER '/path' RENAME TO 'new-name' | SET PARENT = '/new-parent'
+        public Statement ParseAlterFolder(Token start)
+        {
+            string path = ConsumeStringLiteral("Expected folder path string literal");
+            string? newName = null, newParentPath = null;
+            do
+            {
+                if (MatchIdentifier("RENAME"))
+                {
+                    Consume(TokenType.TO, "Expected TO after RENAME");
+                    newName = ConsumeStringLiteral("Expected new folder name string literal");
+                }
+                else if (Match(TokenType.SET))
+                {
+                    string key = Advance().Value.ToUpperInvariant();
+                    Consume(TokenType.EQUALS, "Expected '='");
+                    if (key == "PARENT")
+                        newParentPath = ConsumeStringLiteral("Expected parent path string literal");
+                    else
+                        throw new SyntaxException($"Unknown ALTER FOLDER option: {key}", _parser.Current.Line, _parser.Current.Column);
+                }
+                else break;
+            } while (Match(TokenType.COMMA));
+            Match(TokenType.SEMICOLON);
+            return new AlterPortalFolderStatement(path, newName, newParentPath)
+            { Line = start.Line, Column = start.Column };
+        }
+
         // DROP FOLDER '/path' [CASCADE]
         public Statement ParseDropFolder(Token start)
         {
@@ -204,6 +232,16 @@ namespace ETL_SQL.Core.Parser.Components
                 string token = ConsumeStringLiteral("Expected embed token string literal");
                 Match(TokenType.SEMICOLON);
                 return new RevokePortalEmbedTokenStatement(token)
+                { Line = start.Line, Column = start.Column };
+            }
+
+            if (Match(TokenType.TOKENS))
+            {
+                Consume(TokenType.FOR, "Expected FOR");
+                Consume(TokenType.USER, "Expected USER");
+                string username = ConsumeStringLiteral("Expected username string literal");
+                Match(TokenType.SEMICOLON);
+                return new RevokePortalTokensStatement(username)
                 { Line = start.Line, Column = start.Column };
             }
 
@@ -377,6 +415,126 @@ namespace ETL_SQL.Core.Parser.Components
             Match(TokenType.SEMICOLON);
             return new ValidatePortalReportStatement(scriptPath, intoTable)
             { Line = start.Line, Column = start.Column };
+        }
+
+        // PUBLISH BUNDLE 'name' FROM 'sourcePath' ENTRY 'entryPath' [WITH (...)]
+        public Statement ParsePublishBundle(Token start)
+        {
+            string bundleName = ConsumeStringLiteral("Expected bundle name string literal");
+            ConsumeIdentifierValue("FROM", "Expected FROM");
+            Expression sourcePath = ParseExpression();
+            ConsumeIdentifierValue("ENTRY", "Expected ENTRY");
+            string entryPath = ConsumeStringLiteral("Expected entry path string literal");
+
+            BundleSecretMode passwordMode = BundleSecretMode.None;
+            string? password = null;
+            string encryptionMode = "MACHINE";
+            string? keyFile = null;
+            string? description = null;
+
+            if (Match(TokenType.WITH))
+            {
+                Consume(TokenType.LPAREN, "Expected '('");
+                ParseOptionList(() =>
+                {
+                    string key = Advance().Value;
+                    Consume(TokenType.EQUALS, "Expected '='");
+                    switch (key.ToUpperInvariant())
+                    {
+                        case "PASSWORD":
+                            if (MatchIdentifier("PROMPT"))
+                            {
+                                passwordMode = BundleSecretMode.Prompt;
+                            }
+                            else
+                            {
+                                passwordMode = BundleSecretMode.Literal;
+                                password = ConsumeStringLiteral("Expected password string literal");
+                            }
+                            break;
+                        case "ENCRYPT":
+                            if (_parser.Current.Type == TokenType.IDENTIFIER)
+                                encryptionMode = Advance().Value;
+                            else
+                                encryptionMode = ConsumeStringLiteral("Expected encryption mode");
+                            break;
+                        case "KEYFILE":
+                            keyFile = ConsumeStringLiteral("Expected keyfile path string literal");
+                            break;
+                        case "DESCRIPTION":
+                            description = ConsumeStringLiteral("Expected description string literal");
+                            break;
+                        default:
+                            ParseExpression();
+                            break;
+                    }
+                });
+            }
+
+            return new PublishBundleStatement(
+                bundleName,
+                sourcePath,
+                entryPath,
+                passwordMode,
+                password,
+                encryptionMode,
+                keyFile,
+                description)
+            {
+                Line = start.Line,
+                Column = start.Column
+            };
+        }
+
+        // VALIDATE BUNDLE 'name' FROM 'sourcePath' ENTRY 'entryPath' [WITH (...)]
+        public Statement ParseValidateBundle(Token start)
+        {
+            string bundleName = ConsumeStringLiteral("Expected bundle name string literal");
+            ConsumeIdentifierValue("FROM", "Expected FROM");
+            Expression sourcePath = ParseExpression();
+            ConsumeIdentifierValue("ENTRY", "Expected ENTRY");
+            string entryPath = ConsumeStringLiteral("Expected entry path string literal");
+
+            BundleSecretMode passwordMode = BundleSecretMode.None;
+            string? password = null;
+
+            if (Match(TokenType.WITH))
+            {
+                Consume(TokenType.LPAREN, "Expected '('");
+                ParseOptionList(() =>
+                {
+                    string key = Advance().Value;
+                    Consume(TokenType.EQUALS, "Expected '='");
+                    switch (key.ToUpperInvariant())
+                    {
+                        case "PASSWORD":
+                            if (MatchIdentifier("PROMPT"))
+                            {
+                                passwordMode = BundleSecretMode.Prompt;
+                            }
+                            else
+                            {
+                                passwordMode = BundleSecretMode.Literal;
+                                password = ConsumeStringLiteral("Expected password string literal");
+                            }
+                            break;
+                        default:
+                            ParseExpression();
+                            break;
+                    }
+                });
+            }
+
+            return new ValidateBundleStatement(
+                bundleName,
+                sourcePath,
+                entryPath,
+                passwordMode,
+                password)
+            {
+                Line = start.Line,
+                Column = start.Column
+            };
         }
 
         // CREATE SHARE LINK FOR REPORT 'name' [EXPIRES '2026-12-31T23:59:59Z'] [INTO #share]

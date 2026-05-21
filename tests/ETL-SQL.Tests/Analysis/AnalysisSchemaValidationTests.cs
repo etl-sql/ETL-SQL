@@ -91,6 +91,52 @@ namespace ETL_SQL.Tests.Analysis
             Assert.Single(warnings);
         }
 
+        [Fact]
+        public async Task TestSelectFromMissingFile_RaisesWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new SchemaValidationRule());
+
+            var metadata = new MockFileMetadataProvider();
+            var context = new DefaultLintContext { Metadata = metadata, DocumentUri = "file:///C:/test_dir/script.etlsql" };
+
+            var missingFile = $"missing-file-{Guid.NewGuid()}.csv";
+            var sql = $@"
+                CREATE CONNECTION MockGenerator ON FLATFILE('{missingFile}');
+                SELECT * FROM MockGenerator.FILE;
+            ";
+
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, context);
+
+            // Should have 1 warning about file not existing
+            var warnings = results.Where(r => r.Message.Contains($"File '{missingFile}' for connection 'MockGenerator' does not exist.")).ToList();
+            Assert.Single(warnings);
+        }
+
+        [Fact]
+        public async Task TestInsertIntoMissingFile_NoMissingFileWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new SchemaValidationRule());
+
+            var metadata = new MockFileMetadataProvider();
+            var context = new DefaultLintContext { Metadata = metadata, DocumentUri = "file:///C:/test_dir/script.etlsql" };
+
+            var missingFile = $"missing-file-{Guid.NewGuid()}.csv";
+            var sql = $@"
+                CREATE CONNECTION MockGenerator ON FLATFILE('{missingFile}');
+                INSERT INTO MockGenerator.FILE (TransactionID, Amount) VALUES ('TXN1', 100);
+            ";
+
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, context);
+
+            // Should NOT have a warning about file not existing
+            var warnings = results.Where(r => r.Message.Contains("does not exist")).ToList();
+            Assert.Empty(warnings);
+        }
+
         public class MockFileMetadataProvider : IMetadataProvider
         {
             public Dictionary<string, List<string>> Columns { get; set; } = new(StringComparer.OrdinalIgnoreCase);

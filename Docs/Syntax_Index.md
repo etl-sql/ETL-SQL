@@ -43,6 +43,9 @@ Statements are the top-level actions in an ETL-SQL script.
 | `PRINT` | IO | [Grammar.md](../Docs/Reference/Grammar.md) | [PRINT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PRINT.md) |
 | `EXECUTE` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [EXECUTE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/EXECUTE.md) |
 | `RUN SCRIPT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [RUN.md](../src/ETL-SQL.Core/Resources/Help/Keywords/RUN.md) |
+| `PUBLISH BUNDLE` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `VALIDATE BUNDLE` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `EXPORT SCRIPT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [EXPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/EXPORT.md) |
 | `PARALLEL` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [PARALLEL.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PARALLEL.md) |
 | `GO` | Scripting | [Grammar.md](../Docs/Reference/Grammar.md) | [GO.md](../src/ETL-SQL.Core/Resources/Help/Keywords/GO.md) |
 | `ASSERT` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | [ASSERT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ASSERT.md) |
@@ -677,12 +680,13 @@ CREATE TABLE name ( col type [OPTIONS], ... ) [WITH ( ... )]
 
 ### 6.3 CREATE JOB
 ```sql
-CREATE JOB name AS ... WITH ( ... )
+CREATE JOB name ON SCHEDULE EVERY n unit [AT 'time'] [WITH (option = value, ...)] AS statement
 ```
 | Option | Default | Description |
 | :--- | :--- | :--- |
-| `MAX_RETRIES` | 0 | Number of retry attempts on failure |
-| `RETRY_DELAY` | '00:01:00' | Delay between retries (hh:mm:ss) |
+| `MAX_RETRIES` | 0 | Number of retry attempts on failure (integer) |
+| `RETRY_DELAY` | 30 | Delay between retries in seconds (integer) |
+| `RETRY_DELAY_SECONDS` | 30 | Alias for RETRY_DELAY |
 
 ### 6.4 CREATE SSH_KEY_PAIR / PGP_KEY_PAIR
 ```sql
@@ -851,33 +855,43 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `DROP GROUP` | Portal | Deletes a security group |
 | `ADD USER ... TO GROUP` | Portal | Manages group membership |
 | `CREATE FOLDER` | Portal | Adds a navigation folder |
+| `ALTER FOLDER` | Portal | Renames a folder or moves it to a new parent |
 | `DROP FOLDER` | Portal | Deletes a navigation folder |
 | `GRANT` | Portal | Assigns folder or dataset permissions |
 | `REVOKE` | Portal | Removes folder or dataset permissions |
 | `PUBLISH REPORT` | Portal | Deploys a report script |
 | `ALTER REPORT` | Portal | Modifies report metadata |
 | `DROP REPORT` | Portal | Deletes a report |
-| `CREATE REFRESH JOB`| Portal | Schedules automated snapshot refresh |
+| `CREATE REFRESH JOB` | Portal | Schedules automated snapshot refresh |
 | `REFRESH REPORT` | Portal | Manually starts a report refresh cycle |
 | `REFRESH DATASET` | Portal | Marks a portal dataset stale and queues refresh when possible |
 | `ALTER DATASET` | Portal | Updates portal dataset access/TTL metadata |
 | `DROP DATASET` | Portal | Removes a portal dataset registry entry |
 | `DROP REFRESH JOB` | Portal | Removes a refresh schedule |
 | `REBUILD SNAPSHOT` | Portal | Forces a data refresh |
-| `DROP SNAPSHOT` | Portal | Deletes existing snapshot data |
+| `DROP SNAPSHOT` | Portal | Not supported — no portal endpoint exists; use REBUILD SNAPSHOT |
 | `CREATE SUBSCRIPTION`| Portal | Schedules email/PDF report delivery |
 | `ALTER SUBSCRIPTION` | Portal | Modifies subscription settings |
 | `DROP SUBSCRIPTION` | Portal | Deletes a subscription |
-| `DISCONNECT USER` | Portal | Force-closes an active session |
+| `DISCONNECT USER` | Portal | _(v1.1 — requires portal endpoint addition)_ |
 | `REVOKE TOKENS` | Portal | Invalidates all user authentication tokens |
-| `RESTART PORTAL` | Portal | Restarts the portal web service |
-| `SHUTDOWN PORTAL` | Portal | Stops the portal web service |
-| `CREATE JOB` | Orch | Schedules a recurring script task |
-| `KILL JOB` | Orch | Stops a running background task |
-| `SHOW USERS` | Portal | Lists all registered users |
-| `SHOW REPORTS` | Portal | Lists reports in a folder |
-| `SHOW ACTIVE SESSIONS`| Portal| Lists current web sessions |
-| `SHOW JOBS` | Orch | Lists scheduled background tasks |
+| `RESTART PORTAL` | Portal | _(v1.1 — requires portal endpoint addition)_ |
+| `SHUTDOWN PORTAL` | Portal | _(v1.1 — requires portal endpoint addition)_ |
+| `CREATE JOB`          | Orch     | Schedules a recurring script task |
+| `DROP JOB`            | Orch     | Deletes a scheduled script task |
+| `KILL JOB`            | Orch     | Stops a running background task |
+| `PUBLISH BUNDLE`      | Orch     | Stores versioned scripts in the Orchestrator lockbox |
+| `VALIDATE BUNDLE`     | Orch     | Checks bundle dependencies without publishing |
+| `EXPORT SCRIPT`       | Orch     | Recovers published bundle files to disk |
+| `SHOW USERS`          | Portal   | Lists all registered users |
+| `SHOW REPORTS`        | Portal   | Lists reports in a folder |
+| `SHOW ACTIVE SESSIONS`| Portal   | _(v1.1 — requires portal endpoint addition)_ |
+| `SHOW JOBS`           | Orch     | Lists scheduled background tasks |
+| `SHOW JOB HISTORY`    | Orch     | Lists history of executed background tasks |
+| `SHOW PUBLISHED BUNDLES` | Orch  | Lists latest published bundle versions |
+| `SHOW BUNDLE VERSIONS` | Orch    | Lists all versions for a bundle |
+| `SHOW BUNDLE FILES`   | Orch     | Lists files in a bundle version |
+| `SHOW BUNDLE DEPENDENCIES` | Orch | Lists packaged `RUN SCRIPT` dependencies |
 | `SHOW TABLES` | Diagnostics | Lists tables in a connection |
 | `SHOW COLUMNS` | Diagnostics | Lists columns in a table |
 | `SHOW TAGS` | Lineage | Lists tags on a table/column |

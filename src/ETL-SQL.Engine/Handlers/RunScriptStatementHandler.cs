@@ -5,8 +5,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -36,17 +38,44 @@ namespace ETL_SQL.Engine.Handlers
                 throw new ExecutionException("Script path expression evaluated to null.");
             
             string scriptPath = pathObj.ToString()!;
-            scriptPath = context.ResolvePath(scriptPath);
 
-            _logger.Debug("Running sub-script: {ScriptPath}", scriptPath);
+            if (context.CurrentScriptPath != null &&
+                BundleUri.TryParse(context.CurrentScriptPath, out var currentUri) &&
+                currentUri != null &&
+                !BundleUri.TryParse(scriptPath, out _))
+            {
+                scriptPath = BundleUri.CombineRelative(currentUri, scriptPath);
+            }
 
-            if (!File.Exists(scriptPath))
-                throw new ExecutionException($"Script file not found: {scriptPath}");
+            string source;
+            string currentPathForContext;
+            if (BundleUri.TryParse(scriptPath, out var uri) && uri != null)
+            {
+                var store = context.ServiceProvider.GetService<IBundleStore>()
+                    ?? throw new ExecutionException("RUN SCRIPT orch:// failed: no bundle store is registered.");
+                var version = uri.Version ?? (await store.GetLatestVersionAsync(uri.BundleName))?.Version
+                    ?? throw new ExecutionException($"RUN SCRIPT orch:// failed: bundle '{uri.BundleName}' was not found.");
+                var file = await store.GetFileAsync(uri.BundleName, version, uri.Path)
+                    ?? throw new ExecutionException($"RUN SCRIPT orch:// failed: script '{uri.Path}' was not found in bundle '{uri.BundleName}' version {version}.");
+                source = file.Content;
+                currentPathForContext = uri.ToPinnedString(version);
+            }
+            else
+            {
+                scriptPath = context.ResolvePath(scriptPath);
+
+                _logger.Debug("Running sub-script: {ScriptPath}", scriptPath);
+
+                if (!File.Exists(scriptPath))
+                    throw new ExecutionException($"Script file not found: {scriptPath}");
+
+                source = await File.ReadAllTextAsync(scriptPath);
+                currentPathForContext = Path.GetFullPath(scriptPath);
+            }
 
             string? oldPath = context.CurrentScriptPath;
-            context.CurrentScriptPath = Path.GetFullPath(scriptPath);
+            context.CurrentScriptPath = currentPathForContext;
             
-            var source = await File.ReadAllTextAsync(scriptPath);
             var tokens = new Lexer(source).Tokenize();
             var script = new Parser(tokens).Parse();
 

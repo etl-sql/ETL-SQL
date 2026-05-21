@@ -87,11 +87,25 @@ namespace ETL_SQL.Core.Formatting
             DockerActionStatement          s => FormatDockerAction(s),
 
             // ── Jobs & scheduling ──
-            CreateJobStatement             s => $"CREATE JOB {s.JobName} ON SCHEDULE {s.Schedule.ToSql()} AS {s.Script.ToSql()}",
-            ShowJobHistoryStatement        s => (s.JobName != null ? $"SHOW JOB HISTORY {s.JobName}" : "SHOW JOB HISTORY") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
-            ShowJobsStatement              s => "SHOW JOBS" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+            CreateJobStatement             s => $"{(s.IsOrAlter ? "CREATE OR ALTER" : "CREATE")} JOB {s.JobName} ON SCHEDULE {s.Schedule.ToSql()} AS {s.Script.ToSql()}",
+            DropJobStatement               s => $"DROP JOB {(s.IfExists ? "IF EXISTS " : "")}{s.Name};",
+            AlterJobStatement              s => $"ALTER JOB {s.JobName}" + (s.Schedule != null ? $" ON SCHEDULE {s.Schedule.ToSql()}" : "") + (s.Script != null ? $" AS {s.Script.ToSql()}" : "") + ";",
+            EnableJobStatement             s => $"ENABLE JOB {s.Name}" + (s.At != null ? $" AT {s.At}" : "") + ";",
+            DisableJobStatement            s => $"DISABLE JOB {s.Name}" + (s.At != null ? $" AT {s.At}" : "") + ";",
+            TriggerJobStatement            s => $"TRIGGER JOB {s.Name}" + (s.At != null ? $" AT {s.At}" : "") + ";",
+            ShowJobHistoryStatement        s => (s.JobName != null ? $"SHOW JOB HISTORY {s.JobName}" : "SHOW JOB HISTORY") + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+            ShowJobsStatement              s => "SHOW JOBS" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+
+            // ── Bundles & scripts ──
+            PublishBundleStatement         s => FormatPublishBundle(s),
+            ValidateBundleStatement        s => FormatValidateBundle(s),
+            ExportScriptStatement          s => FormatExportScript(s),
 
             // ── SHOW ──
+            ShowPublishedBundlesStatement  s => "SHOW PUBLISHED BUNDLES" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+            ShowBundleVersionsStatement    s => $"SHOW BUNDLE VERSIONS '{s.BundleName.Replace("'", "''")}'" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+            ShowBundleFilesStatement       s => $"SHOW BUNDLE FILES '{s.BundleName.Replace("'", "''")}' VERSION {s.Version}" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+            ShowBundleDependenciesStatement s => $"SHOW BUNDLE DEPENDENCIES '{s.BundleName.Replace("'", "''")}' VERSION {s.Version}" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
             ShowConnectionsStatement       s => "SHOW CONNECTIONS" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
             ShowConnectionConfigStatement  s => $"SHOW CONNECTION {s.ConnectionName} CONFIG" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
             ShowTablesStatement            s => (s.ConnectionName != null ? $"SHOW TABLES ON {s.ConnectionName}" : "SHOW TABLES") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
@@ -914,6 +928,64 @@ namespace ETL_SQL.Core.Formatting
                 _ => "CREATE"
             };
             return $"{modeStr} THEME {s.Name} AS ({props});";
+        }
+
+        private static string FormatPublishBundle(PublishBundleStatement s)
+        {
+            var options = new List<string>();
+            if (s.PasswordMode == BundleSecretMode.Prompt)
+            {
+                options.Add("PASSWORD = PROMPT");
+            }
+            else if (s.PasswordMode == BundleSecretMode.Literal && s.Password != null)
+            {
+                options.Add($"PASSWORD = '{s.Password.Replace("'", "''")}'");
+            }
+
+            if (!string.IsNullOrEmpty(s.EncryptionMode))
+            {
+                options.Add($"ENCRYPT = {s.EncryptionMode}");
+            }
+
+            if (!string.IsNullOrEmpty(s.KeyFile))
+            {
+                options.Add($"KEYFILE = '{s.KeyFile.Replace("'", "''")}'");
+            }
+
+            if (!string.IsNullOrEmpty(s.Description))
+            {
+                options.Add($"DESCRIPTION = '{s.Description.Replace("'", "''")}'");
+            }
+
+            var optionsStr = options.Count > 0
+                ? " WITH (" + string.Join(", ", options) + ")"
+                : "";
+
+            return $"PUBLISH BUNDLE '{s.BundleName.Replace("'", "''")}' FROM {s.SourcePath.ToSql()} ENTRY '{s.EntryPath.Replace("'", "''")}'{optionsStr};";
+        }
+
+        private static string FormatValidateBundle(ValidateBundleStatement s)
+        {
+            var options = new List<string>();
+            if (s.PasswordMode == BundleSecretMode.Prompt)
+            {
+                options.Add("PASSWORD = PROMPT");
+            }
+            else if (s.PasswordMode == BundleSecretMode.Literal && s.Password != null)
+            {
+                options.Add($"PASSWORD = '{s.Password.Replace("'", "''")}'");
+            }
+
+            var optionsStr = options.Count > 0
+                ? " WITH (" + string.Join(", ", options) + ")"
+                : "";
+
+            return $"VALIDATE BUNDLE '{s.BundleName.Replace("'", "''")}' FROM {s.SourcePath.ToSql()} ENTRY '{s.EntryPath.Replace("'", "''")}'{optionsStr};";
+        }
+
+        private static string FormatExportScript(ExportScriptStatement s)
+        {
+            return $"EXPORT SCRIPT {s.SourcePath.ToSql()} TO {s.TargetPath.ToSql()};";
         }
     }
 }

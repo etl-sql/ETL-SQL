@@ -24,6 +24,8 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Connectors.Rest;
 using ETL_SQL.Connectors.Odbc;
+using ETL_SQL.Connectors.ReportPortal;
+using ETL_SQL.Connectors.Orchestrator;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Execution;
@@ -109,6 +111,8 @@ namespace ETL_SQL.TUI
             services.AddSingleton<IConnector, SmtpConnector>();
             services.AddSingleton<IConnector, RestConnector>();
             services.AddSingleton<IConnector, OdbcConnector>();
+            services.AddSingleton<IConnector, ReportPortalConnector>();
+            services.AddSingleton<IConnector, OrchestratorConnector>();
 
             var ftpHost = configuration["Connectors:Ftp:Host"]      ?? "localhost";
             var ftpUser = configuration["Connectors:Ftp:Username"]   ?? "anonymous";
@@ -148,7 +152,9 @@ namespace ETL_SQL.TUI
             services.AddSingleton<BufferManager>();
             services.AddSingleton<IBufferManager>(sp => sp.GetRequiredService<BufferManager>());
 
-            services.AddSingleton<IJobHistoryStore>(_ => new SQLiteJobHistoryStore());
+            services.AddSingleton<SQLiteJobHistoryStore>();
+            services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
+            services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<SchedulerService>();
             services.AddTransient<IScriptExecutor, ScriptExecutorAdapter>();
 

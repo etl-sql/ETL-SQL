@@ -10,7 +10,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// <summary>
     /// SQLite-backed implementation of the job history store, managing job definitions and execution logs.
     /// </summary>
-    public class SQLiteJobHistoryStore : IJobHistoryStore
+    public class SQLiteJobHistoryStore : IJobHistoryStore, IBundleStore
     {
         private readonly string _connectionString;
         private bool _initialized;
@@ -73,8 +73,43 @@ namespace ETL_SQL.Orchestrator.Storage
                     RowsProcessed INTEGER DEFAULT 0
                 );";
 
+            var createBundleTables = @"
+                CREATE TABLE IF NOT EXISTS BundleVersions (
+                    BundleName TEXT NOT NULL,
+                    Version INTEGER NOT NULL,
+                    EntryPath TEXT NOT NULL,
+                    ContentHash TEXT NOT NULL,
+                    PublishedAt TEXT NOT NULL,
+                    Publisher TEXT,
+                    Description TEXT,
+                    EncryptionMode TEXT NOT NULL DEFAULT 'MACHINE',
+                    EncryptionMetadata TEXT,
+                    PRIMARY KEY (BundleName, Version)
+                );
+
+                CREATE TABLE IF NOT EXISTS BundleFiles (
+                    BundleName TEXT NOT NULL,
+                    Version INTEGER NOT NULL,
+                    VirtualPath TEXT NOT NULL,
+                    Content TEXT NOT NULL,
+                    ContentHash TEXT NOT NULL,
+                    SizeBytes INTEGER NOT NULL,
+                    ContentType TEXT NOT NULL,
+                    PRIMARY KEY (BundleName, Version, VirtualPath),
+                    FOREIGN KEY (BundleName, Version) REFERENCES BundleVersions(BundleName, Version)
+                );
+
+                CREATE TABLE IF NOT EXISTS BundleDependencies (
+                    BundleName TEXT NOT NULL,
+                    Version INTEGER NOT NULL,
+                    FromPath TEXT NOT NULL,
+                    ToPath TEXT NOT NULL,
+                    PRIMARY KEY (BundleName, Version, FromPath, ToPath),
+                    FOREIGN KEY (BundleName, Version) REFERENCES BundleVersions(BundleName, Version)
+                );";
+
             using var command = connection.CreateCommand();
-            command.CommandText = createJobsTable + createHistoryTable;
+            command.CommandText = createJobsTable + createHistoryTable + createBundleTables;
             await command.ExecuteNonQueryAsync();
 
             // 8B-2: Schema migration — add resource tracking columns if missing
@@ -251,6 +286,35 @@ namespace ETL_SQL.Orchestrator.Storage
             return jobs;
         }
 
+        public async Task<JobDefinition?> GetJobAsync(string name)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT * FROM Jobs WHERE Name = @name COLLATE NOCASE LIMIT 1;";
+            command.Parameters.AddWithValue("@name", name);
+
+            using var reader = await command.ExecuteReaderAsync();
+            if (!await reader.ReadAsync()) return null;
+
+            return new JobDefinition(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetInt32(2),
+                reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : DateTime.Parse(reader.GetString(5)),
+                reader.IsDBNull(6) ? null : DateTime.Parse(reader.GetString(6)),
+                reader.GetInt32(7) == 1,
+                reader.IsDBNull(8) ? 0 : reader.GetInt32(8),
+                reader.IsDBNull(9) ? 30 : reader.GetInt32(9),
+                reader.IsDBNull(10) ? null : reader.GetString(10),
+                reader.IsDBNull(11) ? "Warn" : reader.GetString(11)
+            );
+        }
+
         public async Task DeleteJobAsync(string name)
         {
             await EnsureInitializedAsync();
@@ -370,5 +434,224 @@ namespace ETL_SQL.Orchestrator.Storage
             }
             return entries;
         }
+
+        public async Task<BundleVersionInfo> PublishBundleAsync(BundlePublishRequest request)
+        {
+            await EnsureInitializedAsync();
+            var latest = await GetLatestVersionAsync(request.BundleName);
+            if (latest != null && string.Equals(latest.ContentHash, request.ContentHash, StringComparison.OrdinalIgnoreCase))
+                return latest;
+
+            var nextVersion = (latest?.Version ?? 0) + 1;
+            var publishedAt = DateTime.Now;
+
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var transaction = connection.BeginTransaction();
+            try
+            {
+                using (var cmd = connection.CreateCommand())
+                {
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = @"
+                        INSERT INTO BundleVersions
+                            (BundleName, Version, EntryPath, ContentHash, PublishedAt, Publisher, Description, EncryptionMode, EncryptionMetadata)
+                        VALUES
+                            ($bundle, $version, $entry, $hash, $published, $publisher, $description, $mode, $metadata);";
+                    cmd.Parameters.AddWithValue("$bundle", request.BundleName);
+                    cmd.Parameters.AddWithValue("$version", nextVersion);
+                    cmd.Parameters.AddWithValue("$entry", NormalizeVirtualPath(request.EntryPath));
+                    cmd.Parameters.AddWithValue("$hash", request.ContentHash);
+                    cmd.Parameters.AddWithValue("$published", publishedAt.ToString("O"));
+                    cmd.Parameters.AddWithValue("$publisher", (object?)request.Publisher ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$description", (object?)request.Description ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$mode", request.EncryptionMode);
+                    cmd.Parameters.AddWithValue("$metadata", (object?)request.EncryptionMetadata ?? DBNull.Value);
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                foreach (var file in request.Files)
+                {
+                    using var cmd = connection.CreateCommand();
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = @"
+                        INSERT INTO BundleFiles
+                            (BundleName, Version, VirtualPath, Content, ContentHash, SizeBytes, ContentType)
+                        VALUES
+                            ($bundle, $version, $path, $content, $hash, $size, $type);";
+                    cmd.Parameters.AddWithValue("$bundle", request.BundleName);
+                    cmd.Parameters.AddWithValue("$version", nextVersion);
+                    cmd.Parameters.AddWithValue("$path", NormalizeVirtualPath(file.VirtualPath));
+                    cmd.Parameters.AddWithValue("$content", file.Content);
+                    cmd.Parameters.AddWithValue("$hash", file.ContentHash);
+                    cmd.Parameters.AddWithValue("$size", file.SizeBytes);
+                    cmd.Parameters.AddWithValue("$type", file.ContentType);
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                foreach (var dep in request.Dependencies)
+                {
+                    using var cmd = connection.CreateCommand();
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = @"
+                        INSERT OR IGNORE INTO BundleDependencies
+                            (BundleName, Version, FromPath, ToPath)
+                        VALUES
+                            ($bundle, $version, $from, $to);";
+                    cmd.Parameters.AddWithValue("$bundle", request.BundleName);
+                    cmd.Parameters.AddWithValue("$version", nextVersion);
+                    cmd.Parameters.AddWithValue("$from", NormalizeVirtualPath(dep.FromPath));
+                    cmd.Parameters.AddWithValue("$to", NormalizeVirtualPath(dep.ToPath));
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+
+            return new BundleVersionInfo(request.BundleName, nextVersion, NormalizeVirtualPath(request.EntryPath),
+                request.ContentHash, publishedAt, request.Publisher, request.Description);
+        }
+
+        public async Task<BundleVersionInfo?> GetLatestVersionAsync(string bundleName)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"SELECT BundleName, Version, EntryPath, ContentHash, PublishedAt, Publisher, Description
+                                FROM BundleVersions WHERE BundleName = $bundle COLLATE NOCASE
+                                ORDER BY Version DESC LIMIT 1;";
+            cmd.Parameters.AddWithValue("$bundle", bundleName);
+            using var reader = await cmd.ExecuteReaderAsync();
+            return await reader.ReadAsync() ? ReadBundleVersion(reader) : null;
+        }
+
+        public async Task<BundleVersionInfo?> GetVersionAsync(string bundleName, int version)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"SELECT BundleName, Version, EntryPath, ContentHash, PublishedAt, Publisher, Description
+                                FROM BundleVersions WHERE BundleName = $bundle COLLATE NOCASE AND Version = $version LIMIT 1;";
+            cmd.Parameters.AddWithValue("$bundle", bundleName);
+            cmd.Parameters.AddWithValue("$version", version);
+            using var reader = await cmd.ExecuteReaderAsync();
+            return await reader.ReadAsync() ? ReadBundleVersion(reader) : null;
+        }
+
+        public async Task<BundleFileInfo?> GetFileAsync(string bundleName, int version, string virtualPath)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"SELECT BundleName, Version, VirtualPath, Content, ContentHash, SizeBytes, ContentType
+                                FROM BundleFiles
+                                WHERE BundleName = $bundle COLLATE NOCASE AND Version = $version AND VirtualPath = $path COLLATE NOCASE
+                                LIMIT 1;";
+            cmd.Parameters.AddWithValue("$bundle", bundleName);
+            cmd.Parameters.AddWithValue("$version", version);
+            cmd.Parameters.AddWithValue("$path", NormalizeVirtualPath(virtualPath));
+            using var reader = await cmd.ExecuteReaderAsync();
+            return await reader.ReadAsync() ? ReadBundleFile(reader) : null;
+        }
+
+        public async Task<IEnumerable<BundleVersionInfo>> GetBundlesAsync()
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"SELECT bv.BundleName, bv.Version, bv.EntryPath, bv.ContentHash, bv.PublishedAt, bv.Publisher, bv.Description
+                                FROM BundleVersions bv
+                                INNER JOIN (
+                                    SELECT BundleName, MAX(Version) AS Version FROM BundleVersions GROUP BY BundleName
+                                ) latest ON latest.BundleName = bv.BundleName AND latest.Version = bv.Version
+                                ORDER BY bv.BundleName COLLATE NOCASE;";
+            return await ReadBundleVersionsAsync(cmd);
+        }
+
+        public async Task<IEnumerable<BundleVersionInfo>> GetVersionsAsync(string bundleName)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"SELECT BundleName, Version, EntryPath, ContentHash, PublishedAt, Publisher, Description
+                                FROM BundleVersions WHERE BundleName = $bundle COLLATE NOCASE
+                                ORDER BY Version DESC;";
+            cmd.Parameters.AddWithValue("$bundle", bundleName);
+            return await ReadBundleVersionsAsync(cmd);
+        }
+
+        public async Task<IEnumerable<BundleFileInfo>> GetFilesAsync(string bundleName, int version)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"SELECT BundleName, Version, VirtualPath, Content, ContentHash, SizeBytes, ContentType
+                                FROM BundleFiles WHERE BundleName = $bundle COLLATE NOCASE AND Version = $version
+                                ORDER BY VirtualPath COLLATE NOCASE;";
+            cmd.Parameters.AddWithValue("$bundle", bundleName);
+            cmd.Parameters.AddWithValue("$version", version);
+            var files = new List<BundleFileInfo>();
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) files.Add(ReadBundleFile(reader));
+            return files;
+        }
+
+        public async Task<IEnumerable<BundleDependencyInfo>> GetDependenciesAsync(string bundleName, int version)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"SELECT BundleName, Version, FromPath, ToPath
+                                FROM BundleDependencies WHERE BundleName = $bundle COLLATE NOCASE AND Version = $version
+                                ORDER BY FromPath COLLATE NOCASE, ToPath COLLATE NOCASE;";
+            cmd.Parameters.AddWithValue("$bundle", bundleName);
+            cmd.Parameters.AddWithValue("$version", version);
+            var deps = new List<BundleDependencyInfo>();
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                deps.Add(new BundleDependencyInfo(reader.GetString(0), reader.GetInt32(1), reader.GetString(2), reader.GetString(3)));
+            return deps;
+        }
+
+        private static async Task<IEnumerable<BundleVersionInfo>> ReadBundleVersionsAsync(SqliteCommand cmd)
+        {
+            var versions = new List<BundleVersionInfo>();
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) versions.Add(ReadBundleVersion(reader));
+            return versions;
+        }
+
+        private static BundleVersionInfo ReadBundleVersion(SqliteDataReader reader) => new(
+            reader.GetString(0),
+            reader.GetInt32(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            DateTime.Parse(reader.GetString(4)),
+            reader.IsDBNull(5) ? null : reader.GetString(5),
+            reader.IsDBNull(6) ? null : reader.GetString(6));
+
+        private static BundleFileInfo ReadBundleFile(SqliteDataReader reader) => new(
+            reader.GetString(0),
+            reader.GetInt32(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetInt64(5),
+            reader.GetString(6));
+
+        private static string NormalizeVirtualPath(string path)
+            => path.Replace('\\', '/').TrimStart('/');
     }
 }

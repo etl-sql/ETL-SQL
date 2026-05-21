@@ -909,7 +909,102 @@ HELP CONNECTION FLATFILE;
 
 ---
 
-## 8. Quick Reference Table
+## 8. Admin Service Connectors
+
+Admin service connectors do not transfer data — they control remote services. Statements inside `EXECUTE <alias> BEGIN...END` blocks are dispatched to the service's REST API rather than compiled to SQL.
+
+### 8.1 Report Portal (`REPORTPORTAL`)
+Alias: `REPORT_PORTAL`
+
+Connects to an ETL-SQL Report Portal service for scripted administration: user/group management, folder ACL, report publishing, dataset refresh, snapshots, and more.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `HOST` | Portal base URL (e.g. `http://portal-server:5000`) | Yes |
+| `PORT` | Override port when `HOST` has no port | No |
+| `USER` | Portal admin username | Yes |
+| `PASSWORD` | Portal admin password (use `ENC:` in production) | Yes |
+
+```sql
+CREATE CONNECTION portal ON REPORTPORTAL()
+    WITH(HOST     = 'http://portal.corp.example:5000',
+         USER     = 'admin',
+         PASSWORD = ENC:U2FsdGVkX1+...);
+
+EXECUTE portal BEGIN
+    -- User management
+    CREATE USER 'jsmith' WITH EMAIL='j@corp.com', ROLE='Viewer';
+    ALTER USER 'jsmith' SET ROLE = 'Editor';
+    DROP USER 'jsmith';
+
+    -- Group management
+    CREATE GROUP 'DataTeam' WITH DESCRIPTION='Data Engineering';
+    ADD USER 'alice' TO GROUP 'DataTeam';
+    DROP GROUP 'DataTeam';
+
+    -- Folder management & ACL
+    CREATE FOLDER '/Finance/Reports';
+    ALTER FOLDER '/Finance/Reports' RENAME TO 'Archived Reports';
+    ALTER FOLDER '/Finance/Reports' SET PARENT = '/Archive';
+    GRANT VIEW ON FOLDER '/Finance/Reports' TO GROUP 'DataTeam';
+    REVOKE VIEW ON FOLDER '/Finance/Reports' FROM GROUP 'DataTeam';
+    DROP FOLDER '/Finance/Reports' CASCADE;
+
+    -- Report lifecycle
+    PUBLISH REPORT 'Monthly Sales'
+        FROM SCRIPT 'reports/monthly_sales.rsql'
+        IN FOLDER '/Finance/Reports';
+    ALTER REPORT 'Monthly Sales' SET FOLDER = '/Finance/Archived';
+    REFRESH REPORT 'Monthly Sales';
+    REBUILD SNAPSHOT FOR REPORT 'Monthly Sales';
+    DROP REPORT 'Monthly Sales' CASCADE;
+
+    -- Dataset management
+    REFRESH DATASET 'sales_ds' IN FOLDER '/Finance';
+    ALTER DATASET 'sales_ds' IN FOLDER '/Finance'
+        WITH SCHEDULE='0 2 * * *';
+    DROP DATASET 'sales_ds' IN FOLDER '/Finance';
+
+    -- Refresh jobs (routed to Orchestrator)
+    CREATE REFRESH JOB FOR REPORT 'Monthly Sales'
+        SCHEDULE '0 2 * * *' AT orch;
+    DROP REFRESH JOB FOR REPORT 'Monthly Sales';
+
+    -- Discovery
+    SHOW USERS;
+    SHOW REPORTS IN FOLDER '/Finance/Reports';
+END;
+```
+
+> [!NOTE]
+> JWT authentication is acquired automatically on first use and refreshed as needed. The `PASSWORD` value is never logged or stored in session state.
+
+### 8.2 Orchestrator (`ORCHESTRATOR`)
+Alias: `ORCH`
+
+Connects to an ETL-SQL Orchestrator service for remote job management via API key authentication.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `HOST` | Orchestrator base URL (e.g. `http://orch-server:5001`) | Yes |
+| `PORT` | Override port when `HOST` has no port | No |
+| `API_KEY` | Orchestrator API key (use `ENC:` in production) | No |
+
+```sql
+CREATE CONNECTION orch ON ORCHESTRATOR()
+    WITH(HOST    = 'http://orchestrator.corp.example:5001',
+         API_KEY = ENC:U2FsdGVkX1+...);
+
+EXECUTE orch BEGIN
+    CREATE REFRESH JOB FOR REPORT 'Monthly Sales'
+        SCHEDULE '0 2 * * *';
+    DROP REFRESH JOB FOR REPORT 'Monthly Sales';
+END;
+```
+
+---
+
+## 9. Quick Reference Table
 
 | Token | Aliases | Type | Pushdown | Transactional |
 | :--- | :--- | :--- | :---: | :---: |
@@ -929,4 +1024,6 @@ HELP CONNECTION FLATFILE;
 | `FTP` | `FTP_CONN`, `FTPS` | Protocol | — | — |
 | `AZURE_BLOB` | `BLOB` | Protocol | — | — |
 | `SMTP` | `EMAIL` | Protocol | — | — |
+| `REPORTPORTAL` | `REPORT_PORTAL` | Admin Service | — | — |
+| `ORCHESTRATOR` | `ORCH` | Admin Service | — | — |
 | `DIRECTORY` | — | File | — | — |

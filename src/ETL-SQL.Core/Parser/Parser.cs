@@ -36,8 +36,10 @@ namespace ETL_SQL.Core.Parser
             TokenType.EVERY,
             TokenType.STEP, TokenType.TOP, TokenType.BOTTOM, TokenType.LEFT, TokenType.RIGHT,
             TokenType.ASC, TokenType.DESC, TokenType.FIRST, TokenType.NEXT, TokenType.ONLY,
-            TokenType.NO, TokenType.OTHERS
+            TokenType.NO, TokenType.OTHERS,
+            TokenType.ENABLE, TokenType.DISABLE, TokenType.TRIGGER
         };
+
 
         private static readonly HashSet<TokenType> DataTypeTokens = new()
         {

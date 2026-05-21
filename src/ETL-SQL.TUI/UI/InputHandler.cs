@@ -170,11 +170,13 @@ namespace ETL_SQL.TUI.UI
                     }
                     else
                     {
-                        _renderer.Focus = EditorFocus.Messages;
+                        _renderer.Focus = _renderer.ActiveLowerTab;
                     }
                 }
                 else
                 {
+                    if (_renderer.Focus == EditorFocus.ExecutionTree || _renderer.Focus == EditorFocus.Messages)
+                        _renderer.ActiveLowerTab = _renderer.Focus;
                     _renderer.Focus = EditorFocus.Editor;
                 }
 
@@ -297,8 +299,8 @@ namespace ETL_SQL.TUI.UI
             return;
         }
 
-        if (_renderer.CompareMode)
-            {
+            if (_renderer.CompareMode)
+                {
                 HandleCompareKey(key);
                 return;
             }

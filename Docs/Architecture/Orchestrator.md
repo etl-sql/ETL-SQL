@@ -500,6 +500,28 @@ RUN SCRIPT 'C:\ETL\Transforms\normalize.etlsql' WITH (@region = @region_var);
 
 **Scope isolation:** Variables declared inside the sub-script (without explicit `OUTPUT`) are invisible to the caller after it returns. Only parameters and explicitly `OUTPUT`-marked variables are returned.
 
+### 9.1 Published Bundle VFS
+
+`RUN SCRIPT` also resolves Orchestrator virtual paths:
+
+```sql
+RUN SCRIPT 'orch://finance-load@3/main.etlsql';
+```
+
+The VFS is backed by SQLite lockbox tables:
+
+| Table | Purpose |
+|---|---|
+| `BundleVersions` | One row per immutable bundle version, including entry path, content hash, publish metadata, and encryption metadata |
+| `BundleFiles` | Script/config file content for each bundle version, keyed by normalized virtual path |
+| `BundleDependencies` | Literal `RUN SCRIPT` dependency edges discovered during publish |
+
+Relative `RUN SCRIPT` calls inside an `orch://` script resolve within the same bundle version. Unversioned `orch://bundle/path` resolves to the latest version for manual runs. `CREATE JOB` and `ALTER JOB` pin unversioned paths to the current latest version before storing the job definition.
+
+Dynamic `RUN SCRIPT` expressions cannot be published because the dependency graph cannot be sealed. They fail during `PUBLISH BUNDLE` or `VALIDATE BUNDLE` and must use live file mode.
+
+Publish-time passwords are used only to unwrap existing `ENC:` values. Published copies remove `USE PASSWORD` statements and store secrets re-encrypted for the Orchestrator lockbox.
+
 ---
 
 ## 10. `PARALLEL` Block Scheduling

@@ -53,6 +53,9 @@ foreach ($script in $etlScripts) {
         elseif ($service -eq 'portal') {
             $available = $false  # portal management scripts require a running portal instance
         }
+        elseif ($service -eq 'orchestrator') {
+            $available = $false  # orchestrator scripts require a running Orchestrator service
+        }
         if (-not $available) {
             Write-Host "SKIPPED ($service unavailable)" -ForegroundColor Yellow
             $skipped++

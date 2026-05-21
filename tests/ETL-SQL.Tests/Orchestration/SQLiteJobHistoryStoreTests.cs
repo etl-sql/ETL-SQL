@@ -41,6 +41,94 @@ namespace ETL_SQL.Tests.Orchestration
             await _store.InitializeAsync();
         }
 
+        [Fact]
+        public async Task PublishBundle_UnchangedContent_ReusesLatestVersion()
+        {
+            await _store.InitializeAsync();
+            var request = new BundlePublishRequest(
+                "finance-load",
+                "main.etlsql",
+                new[]
+                {
+                    new BundlePublishFile("main.etlsql", "PRINT 'hi';", "sha256:file1", 11, "application/etlsql")
+                },
+                Array.Empty<BundleDependencyInfo>(),
+                "sha256:bundle1",
+                "MACHINE",
+                null,
+                "tester",
+                null);
+
+            var first = await _store.PublishBundleAsync(request);
+            var second = await _store.PublishBundleAsync(request);
+
+            Assert.Equal(1, first.Version);
+            Assert.Equal(1, second.Version);
+            Assert.Single(await _store.GetVersionsAsync("finance-load"));
+        }
+
+        [Fact]
+        public async Task PublishBundle_ChangedContent_IncrementsVersion()
+        {
+            await _store.InitializeAsync();
+            var first = await _store.PublishBundleAsync(new BundlePublishRequest(
+                "finance-load",
+                "main.etlsql",
+                new[] { new BundlePublishFile("main.etlsql", "PRINT 'one';", "sha256:file1", 12, "application/etlsql") },
+                Array.Empty<BundleDependencyInfo>(),
+                "sha256:bundle1",
+                "MACHINE",
+                null,
+                "tester",
+                null));
+
+            var second = await _store.PublishBundleAsync(new BundlePublishRequest(
+                "finance-load",
+                "main.etlsql",
+                new[] { new BundlePublishFile("main.etlsql", "PRINT 'two';", "sha256:file2", 12, "application/etlsql") },
+                Array.Empty<BundleDependencyInfo>(),
+                "sha256:bundle2",
+                "MACHINE",
+                null,
+                "tester",
+                null));
+
+            Assert.Equal(1, first.Version);
+            Assert.Equal(2, second.Version);
+            var latest = await _store.GetLatestVersionAsync("finance-load");
+            Assert.NotNull(latest);
+            Assert.Equal(2, latest!.Version);
+        }
+
+        [Fact]
+        public async Task PublishBundle_StoresFilesAndDependencies()
+        {
+            await _store.InitializeAsync();
+            await _store.PublishBundleAsync(new BundlePublishRequest(
+                "finance-load",
+                "main.etlsql",
+                new[]
+                {
+                    new BundlePublishFile("main.etlsql", "RUN SCRIPT 'lib/util.etlsql';", "sha256:file1", 28, "application/etlsql"),
+                    new BundlePublishFile("lib/util.etlsql", "PRINT 'util';", "sha256:file2", 13, "application/etlsql")
+                },
+                new[] { new BundleDependencyInfo("finance-load", 0, "main.etlsql", "lib/util.etlsql") },
+                "sha256:bundle1",
+                "MACHINE",
+                null,
+                "tester",
+                null));
+
+            var file = await _store.GetFileAsync("finance-load", 1, "lib\\util.etlsql");
+            var deps = (await _store.GetDependenciesAsync("finance-load", 1)).ToList();
+
+            Assert.NotNull(file);
+            Assert.Equal("lib/util.etlsql", file!.VirtualPath);
+            Assert.Single(deps);
+            Assert.Equal("main.etlsql", deps[0].FromPath);
+            Assert.Equal("lib/util.etlsql", deps[0].ToPath);
+        }
+
         // ── SaveJobAsync / GetAllJobsAsync ───────────────────────────────────────
 
         [Fact]

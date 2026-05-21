@@ -141,6 +141,54 @@ namespace ETL_SQL.Tests.Core
         }
 
         [Fact]
+        public void ParseBundlePublishValidateExportAndShowStatements()
+        {
+            var source = @"
+PUBLISH BUNDLE 'finance-load' FROM 'C:\ETL\finance' ENTRY 'main.etlsql' WITH (PASSWORD = '1234', ENCRYPT = MACHINE);
+VALIDATE BUNDLE 'finance-load' FROM 'C:\ETL\finance' ENTRY 'main.etlsql';
+EXPORT SCRIPT 'orch://finance-load@1/main.etlsql' TO 'C:\Recovered\finance';
+SHOW PUBLISHED BUNDLES;
+SHOW BUNDLE VERSIONS 'finance-load';
+SHOW BUNDLE FILES 'finance-load' VERSION 1;
+SHOW BUNDLE DEPENDENCIES 'finance-load' VERSION 1;";
+            var script = new Parser(new Lexer(source).Tokenize()).Parse();
+
+            Assert.Empty(script.Diagnostics);
+            Assert.IsType<PublishBundleStatement>(script.Statements[0]);
+            Assert.IsType<ValidateBundleStatement>(script.Statements[1]);
+            Assert.IsType<ExportScriptStatement>(script.Statements[2]);
+            Assert.IsType<ShowPublishedBundlesStatement>(script.Statements[3]);
+            Assert.IsType<ShowBundleVersionsStatement>(script.Statements[4]);
+            Assert.IsType<ShowBundleFilesStatement>(script.Statements[5]);
+            Assert.IsType<ShowBundleDependenciesStatement>(script.Statements[6]);
+
+            // Assert round-trip SQL serialization
+            Assert.Equal("PUBLISH BUNDLE 'finance-load' FROM 'C:\\ETL\\finance' ENTRY 'main.etlsql' WITH (PASSWORD = '1234', ENCRYPT = MACHINE);", script.Statements[0].ToSql());
+            Assert.Equal("VALIDATE BUNDLE 'finance-load' FROM 'C:\\ETL\\finance' ENTRY 'main.etlsql';", script.Statements[1].ToSql());
+            Assert.Equal("EXPORT SCRIPT 'orch://finance-load@1/main.etlsql' TO 'C:\\Recovered\\finance';", script.Statements[2].ToSql());
+            Assert.Equal("SHOW PUBLISHED BUNDLES;", script.Statements[3].ToSql());
+            Assert.Equal("SHOW BUNDLE VERSIONS 'finance-load';", script.Statements[4].ToSql());
+            Assert.Equal("SHOW BUNDLE FILES 'finance-load' VERSION 1;", script.Statements[5].ToSql());
+            Assert.Equal("SHOW BUNDLE DEPENDENCIES 'finance-load' VERSION 1;", script.Statements[6].ToSql());
+
+            // Validate PASSWORD = PROMPT
+            var promptSrc = "PUBLISH BUNDLE 'finance-load' FROM 'C:\\ETL\\finance' ENTRY 'main.etlsql' WITH (PASSWORD = PROMPT);";
+            var promptScript = new Parser(new Lexer(promptSrc).Tokenize()).Parse();
+            Assert.Empty(promptScript.Diagnostics);
+            var pubPrompt = Assert.IsType<PublishBundleStatement>(promptScript.Statements[0]);
+            Assert.Equal(BundleSecretMode.Prompt, pubPrompt.PasswordMode);
+            Assert.Equal("PUBLISH BUNDLE 'finance-load' FROM 'C:\\ETL\\finance' ENTRY 'main.etlsql' WITH (PASSWORD = PROMPT, ENCRYPT = MACHINE);", pubPrompt.ToSql());
+        }
+
+        [Fact]
+        public void ParseUsePasswordPrompt()
+        {
+            var script = new Parser(new Lexer("USE PASSWORD PROMPT;").Tokenize()).Parse();
+            var stmt = Assert.IsType<UsePasswordStatement>(script.Statements[0]);
+            Assert.True(stmt.Prompt);
+        }
+
+        [Fact]
         public void TestParseShowLineageForms()
         {
             var script = Parse(@"
@@ -166,6 +214,56 @@ SHOW LINEAGE FOR #Target COLUMN Revenue INTO #lineage;
             Assert.Equal("#Target", table.TargetTable?.TableName);
             Assert.Equal("Revenue", table.ColumnName);
             Assert.Equal("#lineage", table.IntoTable);
+        }
+
+        [Fact]
+        public void TestParseEnableDisableTriggerJob()
+        {
+            // 1. Without AT
+            var script = Parse(@"
+ENABLE JOB JobA;
+DISABLE JOB JobB;
+TRIGGER JOB JobC;
+");
+            Assert.Equal(3, script.Statements.Count);
+
+            var enable = Assert.IsType<EnableJobStatement>(script.Statements[0]);
+            Assert.Equal("JobA", enable.Name);
+            Assert.Null(enable.At);
+            Assert.Equal("ENABLE JOB JobA;", enable.ToSql());
+
+            var disable = Assert.IsType<DisableJobStatement>(script.Statements[1]);
+            Assert.Equal("JobB", disable.Name);
+            Assert.Null(disable.At);
+            Assert.Equal("DISABLE JOB JobB;", disable.ToSql());
+
+            var trigger = Assert.IsType<TriggerJobStatement>(script.Statements[2]);
+            Assert.Equal("JobC", trigger.Name);
+            Assert.Null(trigger.At);
+            Assert.Equal("TRIGGER JOB JobC;", trigger.ToSql());
+
+            // 2. With AT
+            var scriptWithAt = Parse(@"
+ENABLE JOB JobA AT remote_conn;
+DISABLE JOB JobB AT remote_conn;
+TRIGGER JOB JobC AT remote_conn;
+");
+            Assert.Equal(3, scriptWithAt.Statements.Count);
+
+            var enableAt = Assert.IsType<EnableJobStatement>(scriptWithAt.Statements[0]);
+            Assert.Equal("JobA", enableAt.Name);
+            Assert.Equal("remote_conn", enableAt.At);
+            Assert.Equal("ENABLE JOB JobA AT remote_conn;", enableAt.ToSql());
+
+            var disableAt = Assert.IsType<DisableJobStatement>(scriptWithAt.Statements[1]);
+            Assert.Equal("JobB", disableAt.Name);
+            Assert.Equal("remote_conn", disableAt.At);
+            Assert.Equal("DISABLE JOB JobB AT remote_conn;", disableAt.ToSql());
+
+            var triggerAt = Assert.IsType<TriggerJobStatement>(scriptWithAt.Statements[2]);
+            Assert.Equal("JobC", triggerAt.Name);
+            Assert.Equal("remote_conn", triggerAt.At);
+            Assert.Equal("TRIGGER JOB JobC AT remote_conn;", triggerAt.ToSql());
         }
 
         private static Script Parse(string source)

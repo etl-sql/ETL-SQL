@@ -1,300 +1,878 @@
 {
   "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\17_TABLE.rptsql",
-  "builtAt": "2026-05-14T18:09:59.9765562Z",
+  "builtAt": "2026-05-19T20:32:40.7662424Z",
   "title": "Kitchen Sink: TABLE Visual",
-  "description": "Comprehensive demonstration of TABLE capabilities, including conditional formatting and summaries.",
+  "description": "Every TABLE mapping option, cell renderer, and conditional formatting feature in one place.",
   "visuals": [
     {
-      "name": "BasicTable",
+      "name": "FormatAlign",
       "visualType": "TABLE",
       "chartConfig": null,
       "columns": [
-        "ID",
-        "Channel",
-        "Revenue",
-        "Margin",
-        "Date"
+        "product",
+        "category",
+        "Price",
+        "Margin %",
+        "Revenue"
       ],
       "rows": [
         [
-          "101",
-          "Direct",
-          "500.00",
-          "0.15",
-          "2026-05-01"
+          "Laptop Pro",
+          "Electronics",
+          "1299.00",
+          "0.32",
+          "58455"
         ],
         [
-          "102",
-          "Social",
-          "300.00",
-          "-0.05",
-          "2026-05-02"
+          "Wireless Mouse",
+          "Electronics",
+          "29.99",
+          "0.18",
+          "12150"
         ],
         [
-          "103",
-          "Search",
-          "800.00",
-          "0.20",
-          "2026-05-03"
+          "Office Chair",
+          "Furniture",
+          "349.00",
+          "-0.04",
+          "6980"
         ],
         [
-          "104",
-          "Referral",
-          "150.00",
+          "Standing Desk",
+          "Furniture",
+          "699.00",
+          "0.21",
+          "34950"
+        ],
+        [
+          "Notebook",
+          "Stationery",
+          "4.99",
+          "0.45",
+          "2245"
+        ],
+        [
+          "Ergo Keyboard",
+          "Electronics",
+          "149.00",
           "0.08",
-          "2026-05-04"
+          "19350"
         ],
         [
-          "105",
-          "Email",
-          "250.00",
-          "0.12",
-          "2026-05-05"
-        ],
-        [
-          "106",
-          "Direct",
-          "1200.00",
+          "Monitor 27\u0022",
+          "Electronics",
+          "499.00",
           "0.25",
-          "2026-05-06"
+          "79840"
+        ],
+        [
+          "Filing Cabinet",
+          "Furniture",
+          "229.00",
+          "-0.12",
+          "4580"
         ]
       ],
+      "columnMeta": [
+        null,
+        null,
+        {
+          "format": "C2",
+          "align": "right"
+        },
+        {
+          "format": "P1",
+          "align": "right"
+        },
+        {
+          "format": "N0",
+          "align": "right"
+        }
+      ],
       "options": {
-        "title": "Basic Data Table"
+        "title": "1A  FORMAT \u0026 ALIGN",
+        "mapping:product": "product",
+        "mapping:category": "category",
+        "mapping:price": "price",
+        "mapping:margin": "margin",
+        "mapping:revenue": "revenue"
       },
       "error": null,
       "actions": [],
       "styles": {}
     },
     {
-      "name": "SummaryTable",
+      "name": "DataBars",
       "visualType": "TABLE",
       "chartConfig": null,
       "columns": [
-        "ID",
-        "Channel",
-        "Revenue",
-        "Margin",
-        "Date"
+        "product",
+        "Revenue (custom color)",
+        "Margin (default color)"
       ],
       "rows": [
         [
-          "101",
-          "Direct",
-          "500.00",
-          "0.15",
-          "2026-05-01"
+          "Laptop Pro",
+          "58455",
+          "0.32"
         ],
         [
-          "102",
-          "Social",
-          "300.00",
-          "-0.05",
-          "2026-05-02"
+          "Wireless Mouse",
+          "12150",
+          "0.18"
         ],
         [
-          "103",
-          "Search",
-          "800.00",
-          "0.20",
-          "2026-05-03"
+          "Office Chair",
+          "6980",
+          "-0.04"
         ],
         [
-          "104",
-          "Referral",
-          "150.00",
-          "0.08",
-          "2026-05-04"
+          "Standing Desk",
+          "34950",
+          "0.21"
         ],
         [
-          "105",
-          "Email",
-          "250.00",
-          "0.12",
-          "2026-05-05"
+          "Notebook",
+          "2245",
+          "0.45"
         ],
         [
-          "106",
-          "Direct",
-          "1200.00",
-          "0.25",
-          "2026-05-06"
+          "Ergo Keyboard",
+          "19350",
+          "0.08"
+        ],
+        [
+          "Monitor 27\u0022",
+          "79840",
+          "0.25"
+        ],
+        [
+          "Filing Cabinet",
+          "4580",
+          "-0.12"
         ]
       ],
+      "columnMeta": [
+        null,
+        {
+          "format": "N0",
+          "align": "right",
+          "dataBar": true,
+          "dataBarColor": "#4472C4",
+          "dataBarMin": 2245,
+          "dataBarMax": 79840
+        },
+        {
+          "format": "P1",
+          "align": "right",
+          "dataBar": true,
+          "dataBarMin": -0.12,
+          "dataBarMax": 0.45
+        }
+      ],
       "options": {
-        "title": "Table with Totals"
+        "title": "1B  DATA_BAR Fill Bars",
+        "mapping:product": "product",
+        "mapping:revenue": "revenue",
+        "mapping:margin": "margin"
       },
       "error": null,
       "actions": [],
-      "styles": {},
-      "summaryData": {
-        "aggregates": [
-          {
-            "column": "Revenue",
-            "aggregate": "SUM",
-            "value": "3200",
-            "alias": "Total Revenue"
-          },
-          {
-            "column": "Margin",
-            "aggregate": "AVG",
-            "value": "0.125",
-            "alias": "Average Margin"
-          }
-        ],
-        "grandTotals": {
-          "ID": "621",
-          "Revenue": "3200",
-          "Margin": "0.75"
-        }
-      }
+      "styles": {}
     },
     {
-      "name": "FormattedTable",
+      "name": "ColorScale",
       "visualType": "TABLE",
       "chartConfig": null,
       "columns": [
-        "ID",
-        "Channel",
-        "Revenue",
-        "Margin",
-        "Date"
+        "product",
+        "category",
+        "Margin (red\u2192green)",
+        "Revenue (white\u2192blue)"
       ],
       "rows": [
         [
-          "101",
-          "Direct",
-          "500.00",
-          "0.15",
-          "2026-05-01"
+          "Laptop Pro",
+          "Electronics",
+          "0.32",
+          "58455"
         ],
         [
-          "102",
-          "Social",
-          "300.00",
-          "-0.05",
-          "2026-05-02"
+          "Wireless Mouse",
+          "Electronics",
+          "0.18",
+          "12150"
         ],
         [
-          "103",
-          "Search",
-          "800.00",
-          "0.20",
-          "2026-05-03"
+          "Office Chair",
+          "Furniture",
+          "-0.04",
+          "6980"
         ],
         [
-          "104",
-          "Referral",
-          "150.00",
+          "Standing Desk",
+          "Furniture",
+          "0.21",
+          "34950"
+        ],
+        [
+          "Notebook",
+          "Stationery",
+          "0.45",
+          "2245"
+        ],
+        [
+          "Ergo Keyboard",
+          "Electronics",
           "0.08",
-          "2026-05-04"
+          "19350"
         ],
         [
-          "105",
-          "Email",
-          "250.00",
-          "0.12",
-          "2026-05-05"
-        ],
-        [
-          "106",
-          "Direct",
-          "1200.00",
+          "Monitor 27\u0022",
+          "Electronics",
           "0.25",
-          "2026-05-06"
+          "79840"
+        ],
+        [
+          "Filing Cabinet",
+          "Furniture",
+          "-0.12",
+          "4580"
+        ]
+      ],
+      "columnMeta": [
+        null,
+        null,
+        {
+          "format": "P1",
+          "align": "right",
+          "colorScaleFrom": "#FFAAAA",
+          "colorScaleTo": "#AAFFAA",
+          "colorScaleMin": -0.12,
+          "colorScaleMax": 0.45
+        },
+        {
+          "format": "N0",
+          "align": "right",
+          "colorScaleFrom": "#FFFFFF",
+          "colorScaleTo": "#4472C4",
+          "colorScaleMin": 2245,
+          "colorScaleMax": 79840
+        }
+      ],
+      "options": {
+        "title": "1C  COLOR_SCALE Gradient Heatmap",
+        "mapping:product": "product",
+        "mapping:category": "category",
+        "mapping:margin": "margin",
+        "mapping:revenue": "revenue"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "Sparklines",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "product",
+        "category",
+        "Total",
+        "H1 Trend (Line)",
+        "Trend",
+        "H1 Trend (Area)"
+      ],
+      "rows": [
+        [
+          "Laptop Pro",
+          "Electronics",
+          "58455",
+          "[7200,8400,9800,10200,11500,11355]",
+          "[7200,8400,9800,10200,11500,11355]",
+          "[7200,8400,9800,10200,11500,11355]"
+        ],
+        [
+          "Wireless Mouse",
+          "Electronics",
+          "12150",
+          "[1800,2100,1950,2400,2600,1300]",
+          "[1800,2100,1950,2400,2600,1300]",
+          "[1800,2100,1950,2400,2600,1300]"
+        ],
+        [
+          "Office Chair",
+          "Furniture",
+          "6980",
+          "[1400,1200,1600,900,800,1080]",
+          "[1400,1200,1600,900,800,1080]",
+          "[1400,1200,1600,900,800,1080]"
+        ],
+        [
+          "Standing Desk",
+          "Furniture",
+          "34950",
+          "[4200,5100,6300,7400,7800,4150]",
+          "[4200,5100,6300,7400,7800,4150]",
+          "[4200,5100,6300,7400,7800,4150]"
+        ],
+        [
+          "Notebook",
+          "Stationery",
+          "2245",
+          "[600,520,450,400,180,95]",
+          "[600,520,450,400,180,95]",
+          "[600,520,450,400,180,95]"
+        ],
+        [
+          "Ergo Keyboard",
+          "Electronics",
+          "19350",
+          "[2800,3100,3400,3200,3800,3050]",
+          "[2800,3100,3400,3200,3800,3050]",
+          "[2800,3100,3400,3200,3800,3050]"
+        ],
+        [
+          "Monitor 27\u0022",
+          "Electronics",
+          "79840",
+          "[11200,12800,14500,13200,15800,12340]",
+          "[11200,12800,14500,13200,15800,12340]",
+          "[11200,12800,14500,13200,15800,12340]"
+        ],
+        [
+          "Filing Cabinet",
+          "Furniture",
+          "4580",
+          "[900,850,760,640,580,850]",
+          "[900,850,760,640,580,850]",
+          "[900,850,760,640,580,850]"
+        ]
+      ],
+      "columnMeta": [
+        null,
+        null,
+        {
+          "format": "N0",
+          "align": "right"
+        },
+        {
+          "cellRenderer": "sparkline",
+          "sparklineType": "line"
+        },
+        {
+          "cellRenderer": "sparkline",
+          "sparklineType": "line"
+        },
+        {
+          "cellRenderer": "sparkline",
+          "sparklineType": "area"
+        }
+      ],
+      "options": {
+        "title": "1D  SPARKLINE Mini Trend Charts",
+        "mapping:product": "product",
+        "mapping:category": "category",
+        "mapping:revenue": "revenue",
+        "mapping:sparkline": "$sparkline",
+        "mapping:bar": "BAR"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "ImageHyperlink",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "Logo",
+        "Product",
+        "category",
+        "status",
+        "Link"
+      ],
+      "rows": [
+        [
+          "https://placehold.co/24x24/4472C4/FFF?text=E",
+          "Laptop Pro",
+          "Electronics",
+          "Active",
+          "https://example.com/p/001"
+        ],
+        [
+          "https://placehold.co/24x24/4472C4/FFF?text=E",
+          "Wireless Mouse",
+          "Electronics",
+          "Active",
+          "https://example.com/p/002"
+        ],
+        [
+          "https://placehold.co/24x24/E07B39/FFF?text=F",
+          "Office Chair",
+          "Furniture",
+          "Low Stock",
+          "https://example.com/p/003"
+        ],
+        [
+          "https://placehold.co/24x24/E07B39/FFF?text=F",
+          "Standing Desk",
+          "Furniture",
+          "Active",
+          "https://example.com/p/004"
+        ],
+        [
+          "https://placehold.co/24x24/28A745/FFF?text=S",
+          "Notebook",
+          "Stationery",
+          "Active",
+          "https://example.com/p/005"
+        ],
+        [
+          "https://placehold.co/24x24/4472C4/FFF?text=E",
+          "Ergo Keyboard",
+          "Electronics",
+          "Active",
+          "https://example.com/p/006"
+        ],
+        [
+          "https://placehold.co/24x24/4472C4/FFF?text=E",
+          "Monitor 27\u0022",
+          "Electronics",
+          "Active",
+          "https://example.com/p/007"
+        ],
+        [
+          "https://placehold.co/24x24/E07B39/FFF?text=F",
+          "Filing Cabinet",
+          "Furniture",
+          "Discontinued",
+          "https://example.com/p/008"
+        ]
+      ],
+      "columnMeta": [
+        {
+          "cellRenderer": "image",
+          "imageWidth": 24
+        },
+        null,
+        null,
+        null,
+        {
+          "cellRenderer": "hyperlink",
+          "hyperlinkLabel": "View \u2192"
+        }
+      ],
+      "options": {
+        "title": "2A  IMAGE \u0026 HYPERLINK Cell Renderers",
+        "mapping:logo_url": "logo_url",
+        "mapping:product": "product",
+        "mapping:category": "category",
+        "mapping:status": "status",
+        "mapping:product_url": "product_url"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "FontColorFormatting",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "product",
+        "category",
+        "Margin %",
+        "Revenue",
+        "status"
+      ],
+      "rows": [
+        [
+          "Laptop Pro",
+          "Electronics",
+          "0.32",
+          "58455",
+          "Active"
+        ],
+        [
+          "Wireless Mouse",
+          "Electronics",
+          "0.18",
+          "12150",
+          "Active"
+        ],
+        [
+          "Office Chair",
+          "Furniture",
+          "-0.04",
+          "6980",
+          "Low Stock"
+        ],
+        [
+          "Standing Desk",
+          "Furniture",
+          "0.21",
+          "34950",
+          "Active"
+        ],
+        [
+          "Notebook",
+          "Stationery",
+          "0.45",
+          "2245",
+          "Active"
+        ],
+        [
+          "Ergo Keyboard",
+          "Electronics",
+          "0.08",
+          "19350",
+          "Active"
+        ],
+        [
+          "Monitor 27\u0022",
+          "Electronics",
+          "0.25",
+          "79840",
+          "Active"
+        ],
+        [
+          "Filing Cabinet",
+          "Furniture",
+          "-0.12",
+          "4580",
+          "Discontinued"
         ]
       ],
       "rowStyles": [
+        "#E8F5E9",
         null,
-        "red",
-        "#28a745",
+        "#FFE4E1",
+        null,
+        "#E8F5E9",
+        null,
+        "#FFF9C4",
+        "#FFE4E1"
+      ],
+      "rowFontStyles": [
+        "#1B5E20",
+        null,
+        "#C0392B",
+        null,
+        "#1B5E20",
+        null,
+        "#7B6700",
+        "#C0392B"
+      ],
+      "columnMeta": [
         null,
         null,
-        "#28a745"
+        {
+          "format": "P1",
+          "align": "right"
+        },
+        {
+          "format": "N0",
+          "align": "right"
+        },
+        null
       ],
       "options": {
-        "title": "Table with Conditional Formatting"
+        "title": "2B  FORMATTING with FONT_COLOR",
+        "mapping:product": "product",
+        "mapping:category": "category",
+        "mapping:margin": "margin",
+        "mapping:revenue": "revenue",
+        "mapping:status": "status"
       },
       "error": null,
       "actions": [],
       "styles": {}
     },
     {
-      "name": "StyledTable",
+      "name": "FullKitchenSink",
       "visualType": "TABLE",
       "chartConfig": null,
       "columns": [
-        "ID",
-        "Channel",
+        "Logo",
+        "Product",
+        "category",
+        "Price",
         "Revenue",
         "Margin",
-        "Date"
+        "Link",
+        "H1 Trend"
       ],
       "rows": [
         [
-          "101",
-          "Direct",
-          "500.00",
-          "0.15",
-          "2026-05-01"
+          "https://placehold.co/24x24/4472C4/FFF?text=E",
+          "Laptop Pro",
+          "Electronics",
+          "1299.00",
+          "58455",
+          "0.32",
+          "https://example.com/p/001",
+          "[7200,8400,9800,10200,11500,11355]"
         ],
         [
-          "102",
-          "Social",
-          "300.00",
-          "-0.05",
-          "2026-05-02"
+          "https://placehold.co/24x24/4472C4/FFF?text=E",
+          "Wireless Mouse",
+          "Electronics",
+          "29.99",
+          "12150",
+          "0.18",
+          "https://example.com/p/002",
+          "[1800,2100,1950,2400,2600,1300]"
         ],
         [
-          "103",
-          "Search",
-          "800.00",
-          "0.20",
-          "2026-05-03"
+          "https://placehold.co/24x24/E07B39/FFF?text=F",
+          "Office Chair",
+          "Furniture",
+          "349.00",
+          "6980",
+          "-0.04",
+          "https://example.com/p/003",
+          "[1400,1200,1600,900,800,1080]"
         ],
         [
-          "104",
-          "Referral",
-          "150.00",
+          "https://placehold.co/24x24/E07B39/FFF?text=F",
+          "Standing Desk",
+          "Furniture",
+          "699.00",
+          "34950",
+          "0.21",
+          "https://example.com/p/004",
+          "[4200,5100,6300,7400,7800,4150]"
+        ],
+        [
+          "https://placehold.co/24x24/28A745/FFF?text=S",
+          "Notebook",
+          "Stationery",
+          "4.99",
+          "2245",
+          "0.45",
+          "https://example.com/p/005",
+          "[600,520,450,400,180,95]"
+        ],
+        [
+          "https://placehold.co/24x24/4472C4/FFF?text=E",
+          "Ergo Keyboard",
+          "Electronics",
+          "149.00",
+          "19350",
           "0.08",
-          "2026-05-04"
+          "https://example.com/p/006",
+          "[2800,3100,3400,3200,3800,3050]"
         ],
         [
-          "105",
-          "Email",
-          "250.00",
-          "0.12",
-          "2026-05-05"
-        ],
-        [
-          "106",
-          "Direct",
-          "1200.00",
+          "https://placehold.co/24x24/4472C4/FFF?text=E",
+          "Monitor 27\u0022",
+          "Electronics",
+          "499.00",
+          "79840",
           "0.25",
-          "2026-05-06"
+          "https://example.com/p/007",
+          "[11200,12800,14500,13200,15800,12340]"
+        ],
+        [
+          "https://placehold.co/24x24/E07B39/FFF?text=F",
+          "Filing Cabinet",
+          "Furniture",
+          "229.00",
+          "4580",
+          "-0.12",
+          "https://example.com/p/008",
+          "[900,850,760,640,580,850]"
         ]
       ],
+      "rowStyles": [
+        "#E8F5E9",
+        null,
+        "#FFE4E1",
+        null,
+        null,
+        null,
+        "#E8F5E9",
+        "#FFE4E1"
+      ],
+      "rowFontStyles": [
+        "#1B5E20",
+        null,
+        "#C0392B",
+        null,
+        null,
+        null,
+        "#1B5E20",
+        "#C0392B"
+      ],
+      "columnMeta": [
+        {
+          "cellRenderer": "image",
+          "imageWidth": 24
+        },
+        null,
+        null,
+        {
+          "format": "C2",
+          "align": "right"
+        },
+        {
+          "format": "N0",
+          "align": "right",
+          "dataBar": true,
+          "dataBarColor": "#4472C4",
+          "dataBarMin": 2245,
+          "dataBarMax": 79840
+        },
+        {
+          "format": "P1",
+          "align": "right",
+          "colorScaleFrom": "#FFAAAA",
+          "colorScaleTo": "#AAFFAA",
+          "colorScaleMin": -0.12,
+          "colorScaleMax": 0.45
+        },
+        {
+          "cellRenderer": "hyperlink",
+          "hyperlinkLabel": "View"
+        },
+        {
+          "cellRenderer": "sparkline",
+          "sparklineType": "line"
+        }
+      ],
       "options": {
-        "title": "Styled Table (Custom Grid)",
-        "GRID": "HEADER,FOOTER,LEFT",
-        "SHOW_NO_DATA_PLACEHOLDER": "True",
-        "FORMAT": "C2"
+        "title": "3A  All Features Combined",
+        "STRIPED": "True",
+        "SEARCH": "True",
+        "PAGE_SIZE": "5",
+        "GRAND_TOTAL": "SUM",
+        "mapping:logo_url": "logo_url",
+        "mapping:product": "product",
+        "mapping:category": "category",
+        "mapping:price": "price",
+        "mapping:revenue": "revenue",
+        "mapping:margin": "margin",
+        "mapping:product_url": "product_url",
+        "mapping:sparkline": "$sparkline"
       },
       "error": null,
       "actions": [],
-      "styles": {},
-      "gridStyle": "HEADER,FOOTER,LEFT"
+      "styles": {}
+    },
+    {
+      "name": "OptionsDemo",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "Product",
+        "category",
+        "Revenue",
+        "Margin %"
+      ],
+      "rows": [
+        [
+          "Laptop Pro",
+          "Electronics",
+          "58455",
+          "0.32"
+        ],
+        [
+          "Wireless Mouse",
+          "Electronics",
+          "12150",
+          "0.18"
+        ],
+        [
+          "Office Chair",
+          "Furniture",
+          "6980",
+          "-0.04"
+        ],
+        [
+          "Standing Desk",
+          "Furniture",
+          "34950",
+          "0.21"
+        ],
+        [
+          "Notebook",
+          "Stationery",
+          "2245",
+          "0.45"
+        ],
+        [
+          "Ergo Keyboard",
+          "Electronics",
+          "19350",
+          "0.08"
+        ],
+        [
+          "Monitor 27\u0022",
+          "Electronics",
+          "79840",
+          "0.25"
+        ],
+        [
+          "Filing Cabinet",
+          "Furniture",
+          "4580",
+          "-0.12"
+        ]
+      ],
+      "columnMeta": [
+        null,
+        null,
+        {
+          "format": "N0",
+          "align": "right"
+        },
+        {
+          "format": "P1",
+          "align": "right"
+        }
+      ],
+      "options": {
+        "title": "3B  OPTIONS: PAGE_SIZE / STRIPED / SEARCH / GRAND_TOTAL",
+        "PAGE_SIZE": "3",
+        "STRIPED": "True",
+        "SEARCH": "True",
+        "GRAND_TOTAL": "SUM",
+        "mapping:product": "product",
+        "mapping:category": "category",
+        "mapping:revenue": "revenue",
+        "mapping:margin": "margin"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
     }
   ],
   "pages": [
     {
-      "name": "TableKitchenSink",
-      "structure": "A / B / C / D",
+      "name": "CellFormatting",
+      "structure": "A B / C D",
       "slotMap": {
-        "A": "BasicTable",
-        "B": "SummaryTable",
-        "C": "FormattedTable",
-        "D": "StyledTable"
+        "A": "FormatAlign",
+        "B": "DataBars",
+        "C": "ColorScale",
+        "D": "Sparklines"
+      }
+    },
+    {
+      "name": "RichContent",
+      "structure": "A B",
+      "slotMap": {
+        "A": "ImageHyperlink",
+        "B": "FontColorFormatting"
+      }
+    },
+    {
+      "name": "CombinedAndOptions",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "FullKitchenSink",
+        "B": "OptionsDemo"
       }
     }
   ],
@@ -304,9 +882,11 @@
       "name": "MainNav",
       "navType": "TAB",
       "orientation": "HORIZONTAL",
-      "defaultPage": "TableKitchenSink",
+      "defaultPage": "CellFormatting",
       "pages": [
-        "TableKitchenSink"
+        "CellFormatting",
+        "RichContent",
+        "CombinedAndOptions"
       ]
     }
   ],
@@ -316,11 +896,11 @@
     "@selected_value": "",
     "@drill_value": "",
     "@param_value": "",
-    "@@ROWCOUNT": "6"
+    "@@ROWCOUNT": "8"
   },
   "parameterMetadata": {},
   "telemetry": {
-    "rowsProcessed": 6,
+    "rowsProcessed": 8,
     "totalSpilledBytes": 0,
     "subqueryCacheHits": 0,
     "subqueryCacheMisses": 0,
@@ -330,64 +910,94 @@
   },
   "messages": [
     {
-      "message": "[03d5e560] [SELECT] Executing SelectStatement. Session: 03d5e560",
+      "message": "[efd4c8a2] [SELECT] Executing SelectStatement. Session: efd4c8a2",
       "color": "white",
-      "timestamp": "2026-05-14T18:09:59.9426068Z"
+      "timestamp": "2026-05-19T20:32:40.7327395Z"
     },
     {
-      "message": "[03d5e560] 6 rows affected.",
+      "message": "[efd4c8a2] 8 rows affected.",
       "color": "white",
-      "timestamp": "2026-05-14T18:09:59.9643677Z"
+      "timestamp": "2026-05-19T20:32:40.7545184Z"
     },
     {
-      "message": "[03d5e560] Visual \u0027BasicTable\u0027 created.",
+      "message": "[efd4c8a2] Visual \u0027FormatAlign\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T18:09:59.9669597Z"
+      "timestamp": "2026-05-19T20:32:40.757616Z"
     },
     {
-      "message": "[03d5e560] Visual \u0027SummaryTable\u0027 created.",
+      "message": "[efd4c8a2] Visual \u0027DataBars\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T18:09:59.9688012Z"
+      "timestamp": "2026-05-19T20:32:40.758783Z"
     },
     {
-      "message": "[03d5e560] Visual \u0027FormattedTable\u0027 created.",
+      "message": "[efd4c8a2] Visual \u0027ColorScale\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T18:09:59.9688382Z"
+      "timestamp": "2026-05-19T20:32:40.7588298Z"
     },
     {
-      "message": "[03d5e560] Visual \u0027StyledTable\u0027 created.",
+      "message": "[efd4c8a2] Visual \u0027Sparklines\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T18:09:59.9688597Z"
+      "timestamp": "2026-05-19T20:32:40.7588632Z"
     },
     {
-      "message": "[03d5e560] Page \u0027TableKitchenSink\u0027 created.",
+      "message": "[efd4c8a2] Visual \u0027ImageHyperlink\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T18:09:59.970377Z"
+      "timestamp": "2026-05-19T20:32:40.7589366Z"
     },
     {
-      "message": "[03d5e560] Navigation \u0027MainNav\u0027 registered.",
+      "message": "[efd4c8a2] Visual \u0027FontColorFormatting\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T18:09:59.9709988Z"
+      "timestamp": "2026-05-19T20:32:40.7589756Z"
+    },
+    {
+      "message": "[efd4c8a2] Visual \u0027FullKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-19T20:32:40.7590015Z"
+    },
+    {
+      "message": "[efd4c8a2] Visual \u0027OptionsDemo\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-19T20:32:40.7591944Z"
+    },
+    {
+      "message": "[efd4c8a2] Page \u0027CellFormatting\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-19T20:32:40.7602693Z"
+    },
+    {
+      "message": "[efd4c8a2] Page \u0027RichContent\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-19T20:32:40.7603223Z"
+    },
+    {
+      "message": "[efd4c8a2] Page \u0027CombinedAndOptions\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-19T20:32:40.7603517Z"
+    },
+    {
+      "message": "[efd4c8a2] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-19T20:32:40.7609743Z"
     }
   ],
   "executionTree": [
     {
-      "id": "e315d86f-b42d-4a60-be0a-20cac3b3037e",
+      "id": "d64aa5b9-e9b3-4216-afd5-dbd81ea9a2b8",
       "name": "Script Execution",
       "status": "Completed",
       "rowsProcessed": 0,
-      "durationMs": 36.9211,
+      "durationMs": 36.9668,
       "iterationCount": 1,
       "isParallelBlock": false,
       "velocity": 0,
       "error": null,
       "children": [
         {
-          "id": "2ae7b1d4-e1ac-42d2-b2ed-b473ec1c0af4",
+          "id": "fb179025-a874-462b-a01b-91f9cc8610cf",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.2532,
+          "durationMs": 1.2152,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -395,11 +1005,11 @@
           "children": []
         },
         {
-          "id": "daa04906-f278-4b6d-9719-fe2b90c4a57c",
+          "id": "9acdb8ea-3560-41f0-81e7-0ad9a212ced2",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0332,
+          "durationMs": 0.0303,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -407,23 +1017,23 @@
           "children": []
         },
         {
-          "id": "6c237a98-29d6-4abb-a172-f718775fe600",
+          "id": "75743d61-6ce3-4b40-84b2-dae24920236b",
           "name": "SetOperation",
           "status": "Completed",
-          "rowsProcessed": 12,
-          "durationMs": 24.3913,
+          "rowsProcessed": 16,
+          "durationMs": 24.6093,
           "iterationCount": 1,
           "isParallelBlock": false,
-          "velocity": 491.97869732240594,
+          "velocity": 650.1607116008988,
           "error": null,
           "children": []
         },
         {
-          "id": "fcd95d75-2009-46b6-ab91-5bbd4b1dd66d",
+          "id": "4ae4ec46-00c9-42f4-a170-6d58e48c00d2",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.7926,
+          "durationMs": 0.8264,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -431,11 +1041,11 @@
           "children": []
         },
         {
-          "id": "12abe189-e6cc-4cfd-9102-c38bfdec71c2",
+          "id": "aa74eda3-9aa0-4b30-8fe2-9dc090f9c53c",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0824,
+          "durationMs": 0.4483,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -443,11 +1053,11 @@
           "children": []
         },
         {
-          "id": "12de939b-c714-4b9a-a9f9-e8949dbaa61a",
+          "id": "94813f2e-6109-4d2d-8868-d80be91fc664",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.024,
+          "durationMs": 0.0279,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -455,11 +1065,11 @@
           "children": []
         },
         {
-          "id": "91cbc9a6-947e-45a4-9955-ed4f665d19dc",
+          "id": "c57ad6b0-8873-403c-8622-8f0cb852c189",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0165,
+          "durationMs": 0.0212,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -467,11 +1077,59 @@
           "children": []
         },
         {
-          "id": "452ce359-04cf-4ab4-80e9-19c4970ff5cd",
+          "id": "6788d3fe-eb8e-4ad1-844a-01354c55ab91",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0584,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d0007d8c-0f24-4096-968b-a579b41a3fa4",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.025,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "4820f959-df2c-4124-bbe5-ca5e66a15ff7",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0166,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "f86cd935-a67f-41e2-a747-8913c78e9562",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0545,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "fa6b1438-ce59-4ce4-875d-2d4ae39d650e",
           "name": "CreatePage",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.2552,
+          "durationMs": 0.9044,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -479,11 +1137,35 @@
           "children": []
         },
         {
-          "id": "17028800-2373-4167-a801-20e2c617c9b4",
+          "id": "d455f8cc-520d-4897-b4b5-9db3a9468ac3",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0389,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "418d040a-4770-4e0a-8c61-4992e8190487",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0243,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8bce6601-e233-412b-b107-6527ced54c93",
           "name": "CreateNavigation",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2732,
+          "durationMs": 0.2724,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
