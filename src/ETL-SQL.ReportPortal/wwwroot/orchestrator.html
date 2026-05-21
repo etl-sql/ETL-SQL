@@ -52,12 +52,18 @@
 
   <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
   <header class="topbar">
-    <span class="topbar-brand"><span class="brand-mark">E</span> ETL-SQL <span>Portal</span></span>
+    <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
     <nav class="topbar-nav">
-      <a href="/index.html">Reports</a>
+      <span class="report-nav-group">
+        <a href="/index.html" class="report-nav-root" aria-haspopup="true">Reports</a>
+        <span class="report-nav-submenu" aria-label="Reporting views">
+          <a href="/index.html#favorites">Favorites</a>
+          <a href="/index.html#recent">Recently Viewed</a>
+          <a href="/index.html#subscriptions">My Subscriptions</a>
+        </span>
+      </span>
       <a href="/orchestrator.html" class="active">Orchestrator</a>
       <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
-      <a href="/third-party-notices" target="_blank" rel="noopener">Third-party notices</a>
     </nav>
     <span class="topbar-spacer"></span>
     <span class="topbar-user" id="topbarUser"></span>
@@ -171,6 +177,10 @@
 
   </div><!-- /app-body -->
 </div><!-- /app-shell -->
+<div class="portal-corner-links">
+  <span class="portal-brand-footer"></span>
+  <a class="portal-legal-link" href="/third-party-notices" target="_blank" rel="noopener">Third-party notices</a>
+</div>
 
 <!-- ── Create Job modal ─────────────────────────────────────────────────── -->
 <div id="createJobModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="createJobTitle">
@@ -256,9 +266,11 @@
 <script src="/js/echarts.min.js"></script>
 <script type="module">
 import { auth, authApi } from '/js/api.js';
+import { applyPortalBranding } from '/js/branding.js';
 
 // ── Auth guard ─────────────────────────────────────────────────────────────────
 if (!auth.isLoggedIn()) window.location.href = '/login.html';
+applyPortalBranding();
 
 let isAdmin = false;
 try {

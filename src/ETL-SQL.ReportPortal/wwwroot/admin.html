@@ -11,12 +11,18 @@
 
   <!-- ── Top bar ────────────────────────────────────────────────────────── -->
   <header class="topbar">
-    <span class="topbar-brand"><span class="brand-mark">E</span> ETL-SQL <span>Portal</span></span>
+    <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
     <nav class="topbar-nav">
-      <a href="/index.html">Reports</a>
+      <span class="report-nav-group">
+        <a href="/index.html" class="report-nav-root" aria-haspopup="true">Reports</a>
+        <span class="report-nav-submenu" aria-label="Reporting views">
+          <a href="/index.html#favorites">Favorites</a>
+          <a href="/index.html#recent">Recently Viewed</a>
+          <a href="/index.html#subscriptions">My Subscriptions</a>
+        </span>
+      </span>
       <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
       <a href="/admin.html" class="active">Admin</a>
-      <a href="/third-party-notices" target="_blank" rel="noopener">Third-party notices</a>
     </nav>
     <span class="topbar-spacer"></span>
     <span class="topbar-user" id="topbarUser"></span>
@@ -432,6 +438,38 @@
             <button class="btn btn-primary btn-sm" id="orchSaveBtn">Save</button>
           </div>
         </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <span class="section-kicker">Branding</span>
+              <h3>Portal Identity</h3>
+            </div>
+          </div>
+          <p class="text-sm text-muted" style="margin:0 0 1.25rem">
+            Configure the portal name, toolbar logo URL, and footer text shown to users.
+          </p>
+          <div class="form-row">
+            <div class="form-group" style="flex:1">
+              <label>Portal Name</label>
+              <input id="brand-name" type="text" maxlength="80" placeholder="ETL-SQL Portal">
+            </div>
+            <div class="form-group" style="flex:1">
+              <label>Logo URL</label>
+              <input id="brand-logo" type="url" maxlength="500" placeholder="/images/company-logo.png">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:2">
+              <label>Footer Text</label>
+              <input id="brand-footer" type="text" maxlength="120" placeholder="Company analytics portal">
+            </div>
+          </div>
+          <div id="brand-error" class="error-msg"></div>
+          <div class="form-actions">
+            <button class="btn btn-primary btn-sm" id="brandSaveBtn">Save Branding</button>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -459,6 +497,10 @@
     <input type="hidden" id="editParamsReportId">
   </div>
 </div>
+<div class="portal-corner-links">
+  <span class="portal-brand-footer"></span>
+  <a class="portal-legal-link" href="/third-party-notices" target="_blank" rel="noopener">Third-party notices</a>
+</div>
 <!-- Script Browser modal -->
 <div id="scriptBrowserModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="scriptBrowserTitle">
   <div class="modal-card modal-lg">
@@ -481,8 +523,10 @@
 
 <script type="module">
 import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi } from '/js/api.js';
+import { applyPortalBranding } from '/js/branding.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
+applyPortalBranding();
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 try {
@@ -1458,6 +1502,14 @@ async function loadSettings() {
     document.getElementById('orch-error').classList.remove('show');
     document.getElementById('orch-test-result').textContent = '';
   } catch { }
+
+  try {
+    const branding = await adminApi.getBrandingSettings();
+    document.getElementById('brand-name').value = branding.displayName || '';
+    document.getElementById('brand-logo').value = branding.logoUrl || '';
+    document.getElementById('brand-footer').value = branding.footerText || '';
+    document.getElementById('brand-error').classList.remove('show');
+  } catch { }
 }
 
 document.getElementById('orchSaveBtn').addEventListener('click', async () => {
@@ -1491,6 +1543,22 @@ document.getElementById('orchTestBtn').addEventListener('click', async () => {
       : '<span class="chip chip-inactive">Offline — service unreachable</span>';
   } catch {
     $result.innerHTML = '<span class="chip chip-inactive">Connection failed</span>';
+  }
+});
+
+document.getElementById('brandSaveBtn').addEventListener('click', async () => {
+  const displayName = document.getElementById('brand-name').value.trim() || null;
+  const logoUrl = document.getElementById('brand-logo').value.trim() || null;
+  const footerText = document.getElementById('brand-footer').value.trim() || null;
+  const $err = document.getElementById('brand-error');
+  $err.classList.remove('show');
+  try {
+    await adminApi.updateBrandingSettings({ displayName, footerText, logoUrl });
+    await loadSettings();
+    await applyPortalBranding();
+  } catch (err) {
+    $err.textContent = err.message || 'Failed to save branding.';
+    $err.classList.add('show');
   }
 });
 

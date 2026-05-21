@@ -22,13 +22,16 @@ Must be included in the documentation. `C:\Users\chuck\scratch\ETL-SQL\Docs\Synt
 - [X] **Need to improve the messaging**  When running a select, insert, update, delete, show the messages should show the number or rows returned.  When create/alter/create or alter/drop it should show the objects created.
 - [x] **Disabled jobs still show**  Disabled jobs should still show up in SHOW JOBS.  We just need to add a column Enable (1=yes, 0=no)
 - [ ] **Orchestrator job error**  I currently have two jobs deployed on http://localhost:5001.  They are giving error messages: Basepath argument is not fully qualified. (Parameter 'basePath').  The source code is here: C:\Users\chuck\scratch\ETL-SQL\samples\integration\setup_orchestrator.etlsql
-- [ ] **Disable/Enable AT**  Cannot run ENABLE JOB <name> AT <connection> same for DISABLE JOB.  Getting this error: [94760039] [PARSER Error] Unexpected token type AT ('AT') at start of statement at line 1, col 29 at line 1, col 29
+- [x] **Disable/Enable AT**  Cannot run ENABLE JOB <name> AT <connection> same for DISABLE JOB.  Getting this error: [94760039] [PARSER Error] Unexpected token type AT ('AT') at start of statement at line 1, col 29 at line 1, col 29
+- [ ] **Need SHOW BUNDLES command**  SHOW BUNDLES should be an alias of SHOW PUBLISHED BUNDLES.  Since the other SHOW BUNDLE ... don't include the word PUBLISHED it may be confusing so we'll do a SHOW BUNDLES to be consistent with other commands like SHOW JOBS, SHOW CONNECTIONS,...
+- [ ] **SHOW PUBLISHED BUNDLES returns nothing** Nothing is returned no rows even though I know one was published
+- [ ] **Newer syntax not colored** Newer syntax words like PUBLISHED BUNDLE don't have color in TUI or VS Code
 
 ### Report Portal
-- [ ] **Orchestrator in portal show failed**  The portal shows the number of jobs failed but doesn't give you any way to figure out which ones.  Can we make those metrics clickable?
-- [ ] **Third Party notice less pronounced**  Right now 3rd party notice is a button like Reports, and Admin.  Let's reduce it to a hyperlink in the bottom left hand corner.
-- [ ] **Reporting menu items**  Reporting menu items favorites, recently viewed, my subscription disappear when Orchestrator or Admin is selected.  Make it more apparent they belong in reporting.  Clicking Reports flies them out of the right so you know when you click Admin they'll be sucked back into the Report button.
-- [ ] **Report portal branding** Provide a way for an admin to add branding to report portal.  Usually involves a company image and some branding text.  Thinking bottom left for the text and image.  We could also set a toolbar image size that would display next to the users?
+- [x] **Orchestrator in portal show failed**  The portal shows the number of jobs failed but doesn't give you any way to figure out which ones.  Can we make those metrics clickable?
+- [x] **Third Party notice less pronounced**  Right now 3rd party notice is a button like Reports, and Admin.  Let's reduce it to a hyperlink in the bottom left hand corner.
+- [x] **Reporting menu items**  Reporting menu items favorites, recently viewed, my subscription disappear when Orchestrator or Admin is selected.  Make it more apparent they belong in reporting.  Clicking Reports flies them out of the right so you know when you click Admin they'll be sucked back into the Report button.
+- [x] **Report portal branding** Provide a way for an admin to add branding to report portal.  Usually involves a company image and some branding text.  Thinking bottom left for the text and image.  We could also set a toolbar image size that would display next to the users?
 - [ ] **Implement Report Portal Connector — Extended Admin Scripting (v1.1)** The following portal admin statements are parsed and have AST nodes but have no connector handler (same engine gap as the primary connector TODO above). They all have corresponding REST API endpoints in the portal. Implement them as part of v1.1 once the core connector is stable:
   - **Sharing & Embedding**: `CREATE SHARE LINK FOR REPORT`, `SHOW SHARE LINKS FOR REPORT`, `REVOKE SHARE LINK`, `CREATE EMBED TOKEN FOR REPORT`, `SHOW EMBED TOKENS FOR REPORT`, `REVOKE EMBED TOKEN`
   - **Saved Views**: `CREATE SAVED VIEW`, `SHOW SAVED VIEWS FOR REPORT`, `DROP SAVED VIEW`
@@ -38,6 +41,5 @@ Must be included in the documentation. `C:\Users\chuck\scratch\ETL-SQL\Docs\Synt
   - **Report Utilities**: `FAVORITE REPORT`, `UNFAVORITE REPORT`, `VALIDATE REPORT SCRIPT`, `SHOW REPORT HISTORY`, `SHOW REPORT DEPENDENCIES`
   - **Session control**: `DISCONNECT USER`, `SHOW ACTIVE SESSIONS` (requires portal-side endpoint additions)
   - **Service control**: `RESTART PORTAL`, `SHUTDOWN PORTAL` (requires portal-side endpoint additions)
-  - [ ] **Make it more obvious that subscriptions, favorites, and recently reviewed are apart of the report button.  Its an odd transition to click Orchestrator or Admin and have those close down.
-
+  - [x] **Make it more obvious that subscriptions, favorites, and recently reviewed are apart of the report button.  Its an odd transition to click Orchestrator or Admin and have those close down.
   ### TUI

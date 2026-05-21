@@ -241,7 +241,11 @@ export const adminApi = {
 
     // orchestrator connection settings
     getOrchestratorSettings:    ()     => apiJson('/api/admin/settings/orchestrator'),
-    updateOrchestratorSettings: (body) => apiJson('/api/admin/settings/orchestrator', { method: 'PUT', body })
+    updateOrchestratorSettings: (body) => apiJson('/api/admin/settings/orchestrator', { method: 'PUT', body }),
+
+    // portal branding settings
+    getBrandingSettings:    ()     => apiJson('/api/admin/settings/branding'),
+    updateBrandingSettings: (body) => apiJson('/api/admin/settings/branding', { method: 'PUT', body })
 };
 
 // ── Install global fetch intercept for report-runtime.js ──────────────────────

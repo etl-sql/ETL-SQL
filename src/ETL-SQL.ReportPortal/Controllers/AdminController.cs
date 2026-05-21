@@ -572,6 +572,37 @@ public class AdminController(
         return NoContent();
     }
 
+    // ── Portal branding settings ──────────────────────────────────────────────
+
+    [HttpGet("settings/branding")]
+    public IActionResult GetBrandingSettings(
+        [FromServices] ETL_SQL.ReportPortal.Services.PortalBrandingSettingsService branding)
+    {
+        return Ok(branding.ToDto());
+    }
+
+    [HttpPut("settings/branding")]
+    public async Task<IActionResult> UpdateBrandingSettings(
+        [FromServices] ETL_SQL.ReportPortal.Services.PortalBrandingSettingsService branding,
+        [FromBody] Models.UpdatePortalBrandingRequest req)
+    {
+        try
+        {
+            branding.Update(req.DisplayName, req.FooterText, req.LogoUrl);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(500, new { Error = ex.Message });
+        }
+
+        await audit.LogAsync(CurrentUserId, "UPDATE_PORTAL_BRANDING", "System", null, req.DisplayName);
+        return NoContent();
+    }
+
     private static string CsvField(string? value)
     {
         if (value is null) return string.Empty;

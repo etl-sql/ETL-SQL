@@ -131,6 +131,7 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SmtpPasswordProtector>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorDbLocator>();
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.PortalBrandingSettingsService>();
 
 // ── Orchestrator Management Proxy ─────────────────────────────────────────────
 // OrchestratorSettingsService holds the active URL/key and persists UI-configured

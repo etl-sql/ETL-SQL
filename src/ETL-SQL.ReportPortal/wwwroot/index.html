@@ -11,17 +11,20 @@
 
   <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
   <header class="topbar">
-    <span class="topbar-brand"><span class="brand-mark">E</span> ETL-SQL <span>Portal</span></span>
+    <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
     <nav class="topbar-nav">
-      <a href="/index.html" class="active" id="navReports">Reports</a>
-      <a href="#" id="navFavorites">Favorites</a>
-      <a href="#" id="navRecent">Recently Viewed</a>
-      <a href="#" id="navSubscriptions">My Subscriptions</a>
+      <span class="report-nav-group">
+        <a href="/index.html" class="active report-nav-root" id="navReports" aria-haspopup="true">Reports</a>
+        <span class="report-nav-submenu" aria-label="Reporting views">
+          <a href="#favorites" id="navFavorites">Favorites</a>
+          <a href="#recent" id="navRecent">Recently Viewed</a>
+          <a href="#subscriptions" id="navSubscriptions">My Subscriptions</a>
+        </span>
+      </span>
     </nav>
     <nav class="topbar-nav">
       <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
       <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
-      <a href="/third-party-notices" target="_blank" rel="noopener">Third-party notices</a>
     </nav>
     <span class="topbar-spacer"></span>
     <span class="topbar-user" id="topbarUser"></span>
@@ -50,6 +53,10 @@
       </div>
     </main>
   </div>
+</div>
+<div class="portal-corner-links">
+  <span class="portal-brand-footer"></span>
+  <a class="portal-legal-link" href="/third-party-notices" target="_blank" rel="noopener">Third-party notices</a>
 </div>
 
 <!-- ── Export modal ─────────────────────────────────────────────────────── -->
@@ -208,8 +215,10 @@
 
 <script type="module">
 import { auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
+import { applyPortalBranding } from '/js/branding.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
+applyPortalBranding();
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 let currentFolderId   = null;
@@ -255,6 +264,8 @@ window.addEventListener('popstate', e => {
   }
 });
 
+window.addEventListener('hashchange', () => openReportHashView());
+
 async function init() {
   try {
     const payload = JSON.parse(atob(auth.getToken().split('.')[1]));
@@ -271,20 +282,40 @@ async function init() {
   document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
   document.getElementById('navSubscriptions').addEventListener('click', e => {
     e.preventDefault();
+    setReportHash('subscriptions');
     showMySubscriptions();
   });
   document.getElementById('navRecent').addEventListener('click', e => {
     e.preventDefault();
+    setReportHash('recent');
     showRecentlyViewed();
   });
   document.getElementById('navFavorites').addEventListener('click', e => {
     e.preventDefault();
+    setReportHash('favorites');
     showFavorites();
   });
 
   wireSubscribeModal();
   wireEditParamsModal();
   await loadFolderTree();
+  openReportHashView();
+}
+
+function setReportHash(hash) {
+  const next = `#${hash}`;
+  if (window.location.hash !== next) history.replaceState(history.state, '', next);
+}
+
+function openReportHashView() {
+  const view = window.location.hash.replace(/^#/, '').toLowerCase();
+  if (view === 'subscriptions') {
+    showMySubscriptions();
+  } else if (view === 'recent') {
+    showRecentlyViewed();
+  } else if (view === 'favorites') {
+    showFavorites();
+  }
 }
 
 // ── Folder tree ────────────────────────────────────────────────────────────────

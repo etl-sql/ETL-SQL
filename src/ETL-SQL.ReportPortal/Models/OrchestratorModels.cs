@@ -76,3 +76,9 @@ public record UpdateOrchestratorSettingsRequest(
     string? ApiUrl,
     string? ApiKey
 );
+
+public record UpdatePortalBrandingRequest(
+    string? DisplayName,
+    string? FooterText,
+    string? LogoUrl
+);
