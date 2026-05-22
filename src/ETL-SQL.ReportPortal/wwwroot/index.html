@@ -216,9 +216,11 @@
 <script type="module">
 import { auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
 import { applyPortalBranding } from '/js/branding.js';
+import { wireReportNav } from '/js/nav.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
+wireReportNav();
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 let currentFolderId   = null;

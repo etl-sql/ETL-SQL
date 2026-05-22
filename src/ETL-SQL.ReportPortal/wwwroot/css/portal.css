@@ -95,7 +95,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .report-nav-group { position: relative; display: inline-flex; align-items: center; }
 .report-nav-root::after { content: "›"; display: inline-block; margin-left: 7px; color: var(--portal-topbar-muted); }
 .report-nav-submenu {
-  position: absolute; left: calc(100% + 4px); top: 50%; transform: translateY(-50%) scaleX(.96);
+  position: absolute; left: 100%; top: 50%; transform: translateY(-50%) scaleX(.96);
   transform-origin: left center; display: flex; align-items: center; gap: 4px;
   padding: 3px; border-radius: var(--portal-radius-sm);
   background: rgba(24, 35, 54, .96); border: 1px solid rgba(255,255,255,.12);
@@ -104,7 +104,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   z-index: 260;
 }
 .report-nav-group:hover .report-nav-submenu,
-.report-nav-group:focus-within .report-nav-submenu {
+.report-nav-group:focus-within .report-nav-submenu,
+.report-nav-group.open .report-nav-submenu {
   opacity: 1; pointer-events: auto; transform: translateY(-50%) scaleX(1);
 }
 .report-nav-submenu a { padding: 6px 9px; font-size: .82em; }
@@ -488,7 +489,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     transform-origin: top left; flex-direction: column; align-items: stretch;
   }
   .report-nav-group:hover .report-nav-submenu,
-  .report-nav-group:focus-within .report-nav-submenu {
+  .report-nav-group:focus-within .report-nav-submenu,
+  .report-nav-group.open .report-nav-submenu {
     transform: translateY(0) scaleY(1);
   }
   .topbar-user { max-width: 150px; }
