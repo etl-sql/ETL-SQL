@@ -61,6 +61,8 @@ namespace ETL_SQL.Connectors.Postgres
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 var result = await cmd.ExecuteScalarAsync();
                 return result?.ToString() ?? "Unknown PostgreSQL Version";
+            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+                throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
             } finally {
                 if (!isShared) await conn.DisposeAsync();
             }
@@ -149,6 +151,10 @@ namespace ETL_SQL.Connectors.Postgres
                         await writer.WriteLineAsync(string.Join("\t", values));
                     }
                 }
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
             }
             finally
             {
@@ -240,62 +246,90 @@ namespace ETL_SQL.Connectors.Postgres
         {
             if (string.IsNullOrEmpty(_tableName)) return Enumerable.Empty<string>();
 
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync();
-            await using var cmd = new NpgsqlCommand($"SELECT * FROM {QuoteIdentifier(_tableName)} LIMIT 0", conn);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            var columns = new List<string>();
-            for (int i = 0; i < reader.FieldCount; i++)
+            try
             {
-                columns.Add(reader.GetName(i));
+                await using var conn = new NpgsqlConnection(_connectionString);
+                await conn.OpenAsync();
+                await using var cmd = new NpgsqlCommand($"SELECT * FROM {QuoteIdentifier(_tableName)} LIMIT 0", conn);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                var columns = new List<string>();
+                for (int i = 0; i < reader.FieldCount; i++)
+                {
+                    columns.Add(reader.GetName(i));
+                }
+                return columns;
             }
-            return columns;
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
+            }
         }
 
         public async Task<IEnumerable<string>> GetTablesAsync()
         {
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync();
-            await using var cmd = new NpgsqlCommand("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') AND table_type = 'BASE TABLE'", conn);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            var tables = new List<string>();
-            while (await reader.ReadAsync())
+            try
             {
-                var schema = reader.GetString(0);
-                var table = reader.GetString(1);
-                tables.Add(schema == "public" ? table : $"{schema}.{table}");
+                await using var conn = new NpgsqlConnection(_connectionString);
+                await conn.OpenAsync();
+                await using var cmd = new NpgsqlCommand("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') AND table_type = 'BASE TABLE'", conn);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                var tables = new List<string>();
+                while (await reader.ReadAsync())
+                {
+                    var schema = reader.GetString(0);
+                    var table = reader.GetString(1);
+                    tables.Add(schema == "public" ? table : $"{schema}.{table}");
+                }
+                return tables.Distinct();
             }
-            return tables.Distinct();
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
+            }
         }
 
         public async Task<IEnumerable<string>> GetViewsAsync()
         {
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync();
-            await using var cmd = new NpgsqlCommand("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') AND table_type = 'VIEW'", conn);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            var views = new List<string>();
-            while (await reader.ReadAsync())
+            try
             {
-                var schema = reader.GetString(0);
-                var table = reader.GetString(1);
-                views.Add(schema == "public" ? table : $"{schema}.{table}");
+                await using var conn = new NpgsqlConnection(_connectionString);
+                await conn.OpenAsync();
+                await using var cmd = new NpgsqlCommand("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') AND table_type = 'VIEW'", conn);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                var views = new List<string>();
+                while (await reader.ReadAsync())
+                {
+                    var schema = reader.GetString(0);
+                    var table = reader.GetString(1);
+                    views.Add(schema == "public" ? table : $"{schema}.{table}");
+                }
+                return views.Distinct();
             }
-            return views.Distinct();
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
+            }
         }
 
         public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
         {
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync();
-            await using var cmd = new NpgsqlCommand($"SELECT * FROM {QuoteIdentifier(tableName)} LIMIT 0", conn);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            var columns = new List<string>();
-            for (int i = 0; i < reader.FieldCount; i++)
+            try
             {
-                columns.Add(reader.GetName(i));
+                await using var conn = new NpgsqlConnection(_connectionString);
+                await conn.OpenAsync();
+                await using var cmd = new NpgsqlCommand($"SELECT * FROM {QuoteIdentifier(tableName)} LIMIT 0", conn);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                var columns = new List<string>();
+                for (int i = 0; i < reader.FieldCount; i++)
+                {
+                    columns.Add(reader.GetName(i));
+                }
+                return columns;
             }
-            return columns;
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
+            }
         }
 
         public object? Snapshot() => null;
@@ -304,29 +338,59 @@ namespace ETL_SQL.Connectors.Postgres
         public async Task BeginTransactionAsync()
         {
             if (_activeTransaction != null) return;
-            _transactionalConnection = new NpgsqlConnection(_connectionString);
-            await _transactionalConnection.OpenAsync();
-            _activeTransaction = await _transactionalConnection.BeginTransactionAsync();
+            var conn = new NpgsqlConnection(_connectionString);
+            try
+            {
+                await conn.OpenAsync();
+                _transactionalConnection = conn;
+                _activeTransaction = await _transactionalConnection.BeginTransactionAsync();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                await conn.DisposeAsync();
+                _transactionalConnection = null;
+                throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
+            }
         }
 
         public async Task CommitAsync()
         {
             if (_activeTransaction == null) return;
-            await _activeTransaction.CommitAsync();
-            await _activeTransaction.DisposeAsync();
-            if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
-            _activeTransaction = null;
-            _transactionalConnection = null;
+            try
+            {
+                await _activeTransaction.CommitAsync();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
+            }
+            finally
+            {
+                await _activeTransaction.DisposeAsync();
+                if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
+                _activeTransaction = null;
+                _transactionalConnection = null;
+            }
         }
 
         public async Task RollbackAsync()
         {
             if (_activeTransaction == null) return;
-            await _activeTransaction.RollbackAsync();
-            await _activeTransaction.DisposeAsync();
-            if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
-            _activeTransaction = null;
-            _transactionalConnection = null;
+            try
+            {
+                await _activeTransaction.RollbackAsync();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
+            }
+            finally
+            {
+                await _activeTransaction.DisposeAsync();
+                if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
+                _activeTransaction = null;
+                _transactionalConnection = null;
+            }
         }
 
         private async Task<(NpgsqlConnection, bool isShared)> GetConnectionAsync()

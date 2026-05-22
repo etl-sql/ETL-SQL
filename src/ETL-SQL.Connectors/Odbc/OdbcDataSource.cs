@@ -52,6 +52,8 @@ namespace ETL_SQL.Connectors.Odbc
             var (conn, isShared) = await GetConnectionAsync();
             try {
                 return conn.ServerVersion ?? "Unknown ODBC Driver Version";
+            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+                throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
             } finally {
                 if (!isShared) conn.Dispose();
             }
@@ -153,6 +155,10 @@ namespace ETL_SQL.Connectors.Odbc
                 }
                 localTx?.Commit();
             }
+            catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+                localTx?.Rollback();
+                throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
+            }
             catch {
                 localTx?.Rollback();
                 throw;
@@ -250,6 +256,8 @@ namespace ETL_SQL.Connectors.Odbc
                     if (!string.IsNullOrEmpty(table)) tables.Add(table);
                 }
                 return tables;
+            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+                throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
             } finally {
                 if (!isShared) conn.Dispose();
             }
@@ -268,6 +276,8 @@ namespace ETL_SQL.Connectors.Odbc
                     if (!string.IsNullOrEmpty(view)) views.Add(view);
                 }
                 return views;
+            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+                throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
             } finally {
                 if (!isShared) conn.Dispose();
             }
@@ -286,6 +296,8 @@ namespace ETL_SQL.Connectors.Odbc
                     columns.Add(reader.GetName(i));
                 }
                 return columns;
+            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+                throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
             } finally {
                 if (!isShared) conn.Dispose();
             }
@@ -298,29 +310,58 @@ namespace ETL_SQL.Connectors.Odbc
         {
             if (_activeTransaction != null) return;
             var (conn, _) = await GetConnectionAsync();
-            _transactionalConnection = conn;
-            _activeTransaction = _transactionalConnection.BeginTransaction();
+            try
+            {
+                _transactionalConnection = conn;
+                _activeTransaction = _transactionalConnection.BeginTransaction();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                conn.Dispose();
+                _transactionalConnection = null;
+                throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
+            }
         }
 
         public Task CommitAsync()
         {
             if (_activeTransaction == null) return Task.CompletedTask;
-            _activeTransaction.Commit();
-            _activeTransaction.Dispose();
-            _transactionalConnection?.Dispose();
-            _activeTransaction = null;
-            _transactionalConnection = null;
+            try
+            {
+                _activeTransaction.Commit();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
+            }
+            finally
+            {
+                _activeTransaction.Dispose();
+                _transactionalConnection?.Dispose();
+                _activeTransaction = null;
+                _transactionalConnection = null;
+            }
             return Task.CompletedTask;
         }
 
         public Task RollbackAsync()
         {
             if (_activeTransaction == null) return Task.CompletedTask;
-            _activeTransaction.Rollback();
-            _activeTransaction.Dispose();
-            _transactionalConnection?.Dispose();
-            _activeTransaction = null;
-            _transactionalConnection = null;
+            try
+            {
+                _activeTransaction.Rollback();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
+            }
+            finally
+            {
+                _activeTransaction.Dispose();
+                _transactionalConnection?.Dispose();
+                _activeTransaction = null;
+                _transactionalConnection = null;
+            }
             return Task.CompletedTask;
         }
 

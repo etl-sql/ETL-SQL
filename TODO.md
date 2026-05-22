@@ -46,7 +46,7 @@ Must be included in the documentation. `C:\Users\chuck\scratch\ETL-SQL\Docs\Synt
 ### TUI
 
 ## Codebase Review Findings
-- [ ] **Unwrapped Database/Provider Exceptions in Connectors** *(partial: main read/raw/list/file-operation paths now wrap provider exceptions in `ExecutionException`; schema/version helper methods still need full coverage before closing)*
+- [x] **Unwrapped Database/Provider Exceptions in Connectors**
   The following connectors do not catch and wrap provider-specific exceptions (e.g., `SqlException`, `NpgsqlException`, `OracleException`, `OdbcException`, `FtpException`, `SshException`, `HttpRequestException`, `RequestFailedException`) in `ExecutionException` before crossing the connector boundary:
     - **SQL Server** ([SqlServerDataSource.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/SqlServer/SqlServerDataSource.cs))
     - **PostgreSQL** ([PostgresDataSource.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Postgres/PostgresDataSource.cs))

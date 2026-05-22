@@ -62,6 +62,8 @@ namespace ETL_SQL.Connectors.SqlServer
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 var result = await cmd.ExecuteScalarAsync();
                 return result?.ToString() ?? "Unknown SQL Server Version";
+            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+                throw ConnectorExceptionWrapper.Wrap("SQL Server", ex);
             } finally {
                 if (!isShared) await conn.DisposeAsync();
             }
@@ -163,6 +165,8 @@ namespace ETL_SQL.Connectors.SqlServer
 
                 await bulkCopy.WriteToServerAsync(dt);
             }
+            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+                throw ConnectorExceptionWrapper.Wrap("SQL Server", ex);
             } finally {
                 if (!isShared) await conn.DisposeAsync();
             }
@@ -269,50 +273,71 @@ namespace ETL_SQL.Connectors.SqlServer
         public async Task<IEnumerable<string>> GetTablesAsync()
         {
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
-            await using var conn = new SqlConnection(_connectionString);
-            await conn.OpenAsync();
-            await using var cmd = new SqlCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'", conn);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            var tables = new List<string>();
-            while (await reader.ReadAsync())
+            try
             {
-                var schema = reader.GetString(0);
-                var table = reader.GetString(1);
-                tables.Add(schema == "dbo" ? table : $"{schema}.{table}");
+                await using var conn = new SqlConnection(_connectionString);
+                await conn.OpenAsync();
+                await using var cmd = new SqlCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'", conn);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                var tables = new List<string>();
+                while (await reader.ReadAsync())
+                {
+                    var schema = reader.GetString(0);
+                    var table = reader.GetString(1);
+                    tables.Add(schema == "dbo" ? table : $"{schema}.{table}");
+                }
+                return tables.Distinct();
             }
-            return tables.Distinct();
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SQL Server", ex);
+            }
         }
 
         public async Task<IEnumerable<string>> GetViewsAsync()
         {
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
-            await using var conn = new SqlConnection(_connectionString);
-            await conn.OpenAsync();
-            await using var cmd = new SqlCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'VIEW'", conn);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            var views = new List<string>();
-            while (await reader.ReadAsync())
+            try
             {
-                var schema = reader.GetString(0);
-                var table = reader.GetString(1);
-                views.Add(schema == "dbo" ? table : $"{schema}.{table}");
+                await using var conn = new SqlConnection(_connectionString);
+                await conn.OpenAsync();
+                await using var cmd = new SqlCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'VIEW'", conn);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                var views = new List<string>();
+                while (await reader.ReadAsync())
+                {
+                    var schema = reader.GetString(0);
+                    var table = reader.GetString(1);
+                    views.Add(schema == "dbo" ? table : $"{schema}.{table}");
+                }
+                return views.Distinct();
             }
-            return views.Distinct();
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SQL Server", ex);
+            }
         }
 
         public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
         {
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
-            await using var conn = new SqlConnection(_connectionString);
-            await conn.OpenAsync();
-            await using var cmd = new SqlCommand($"SELECT TOP 0 * FROM {QuoteIdentifier(tableName)}", conn);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            var columns = new List<string>();
-            for (int i = 0; i < reader.FieldCount; i++)
+            try
             {
-                columns.Add(reader.GetName(i));
+                await using var conn = new SqlConnection(_connectionString);
+                await conn.OpenAsync();
+                await using var cmd = new SqlCommand($"SELECT TOP 0 * FROM {QuoteIdentifier(tableName)}", conn);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                var columns = new List<string>();
+                for (int i = 0; i < reader.FieldCount; i++)
+                {
+                    columns.Add(reader.GetName(i));
+                }
+                return columns;
             }
-            return columns;
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SQL Server", ex);
+            }
         }
 
         public object? Snapshot() => null;
@@ -321,29 +346,59 @@ namespace ETL_SQL.Connectors.SqlServer
         public async Task BeginTransactionAsync()
         {
             if (_activeTransaction != null) return;
-            _transactionalConnection = new SqlConnection(_connectionString);
-            await _transactionalConnection.OpenAsync();
-            _activeTransaction = (SqlTransaction)await _transactionalConnection.BeginTransactionAsync();
+            var conn = new SqlConnection(_connectionString);
+            try
+            {
+                await conn.OpenAsync();
+                _transactionalConnection = conn;
+                _activeTransaction = (SqlTransaction)await _transactionalConnection.BeginTransactionAsync();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                await conn.DisposeAsync();
+                _transactionalConnection = null;
+                throw ConnectorExceptionWrapper.Wrap("SQL Server", ex);
+            }
         }
 
         public async Task CommitAsync()
         {
             if (_activeTransaction == null) return;
-            await _activeTransaction.CommitAsync();
-            await _activeTransaction.DisposeAsync();
-            if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
-            _activeTransaction = null;
-            _transactionalConnection = null;
+            try
+            {
+                await _activeTransaction.CommitAsync();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SQL Server", ex);
+            }
+            finally
+            {
+                await _activeTransaction.DisposeAsync();
+                if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
+                _activeTransaction = null;
+                _transactionalConnection = null;
+            }
         }
 
         public async Task RollbackAsync()
         {
             if (_activeTransaction == null) return;
-            await _activeTransaction.RollbackAsync();
-            await _activeTransaction.DisposeAsync();
-            if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
-            _activeTransaction = null;
-            _transactionalConnection = null;
+            try
+            {
+                await _activeTransaction.RollbackAsync();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SQL Server", ex);
+            }
+            finally
+            {
+                await _activeTransaction.DisposeAsync();
+                if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
+                _activeTransaction = null;
+                _transactionalConnection = null;
+            }
         }
 
         private async Task<(SqlConnection, bool isShared)> GetConnectionAsync()

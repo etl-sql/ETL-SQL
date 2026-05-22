@@ -62,10 +62,17 @@ namespace ETL_SQL.Connectors.Oracle
 
         public async Task<string> GetVersionAsync()
         {
-            using var conn = await OpenConnectionAsync();
-            using var cmd = new OracleCommand("SELECT version FROM v$instance", conn);
-            var result = await cmd.ExecuteScalarAsync();
-            return result?.ToString() ?? "Unknown Oracle Version";
+            try
+            {
+                using var conn = await OpenConnectionAsync();
+                using var cmd = new OracleCommand("SELECT version FROM v$instance", conn);
+                var result = await cmd.ExecuteScalarAsync();
+                return result?.ToString() ?? "Unknown Oracle Version";
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Oracle", ex);
+            }
         }
 
         public HashSet<string> GetSupportedFunctions() => OracleSyntax.Functions;
@@ -121,41 +128,48 @@ namespace ETL_SQL.Connectors.Oracle
 
             if (!append) await TruncateAsync();
 
-            using var conn = await OpenConnectionAsync();
-
-            using var bulkCopy = new OracleBulkCopy(conn);
-            bulkCopy.DestinationTableName = _tableName;
-
-            var isFirstBatch = true;
-            System.Data.DataTable? dt = null;
-
-            await foreach (var batch in batches)
+            try
             {
-                if (batch.Rows.Count == 0) continue;
+                using var conn = await OpenConnectionAsync();
 
-                if (isFirstBatch)
-                {
-                    dt = new System.Data.DataTable();
-                    foreach (var col in batch.ColumnNames)
-                    {
-                        dt.Columns.Add(col);
-                        bulkCopy.ColumnMappings.Add(col, col);
-                    }
-                    isFirstBatch = false;
-                }
-                
-                dt!.Clear();
-                foreach (var row in batch.Rows)
-                {
-                    var dataRow = dt.NewRow();
-                    foreach (var col in batch.ColumnNames)
-                    {
-                        dataRow[col] = row.Columns.TryGetValue(col, out var val) && val != null ? val : DBNull.Value;
-                    }
-                    dt.Rows.Add(dataRow);
-                }
+                using var bulkCopy = new OracleBulkCopy(conn);
+                bulkCopy.DestinationTableName = _tableName;
 
-                bulkCopy.WriteToServer(dt);
+                var isFirstBatch = true;
+                System.Data.DataTable? dt = null;
+
+                await foreach (var batch in batches)
+                {
+                    if (batch.Rows.Count == 0) continue;
+
+                    if (isFirstBatch)
+                    {
+                        dt = new System.Data.DataTable();
+                        foreach (var col in batch.ColumnNames)
+                        {
+                            dt.Columns.Add(col);
+                            bulkCopy.ColumnMappings.Add(col, col);
+                        }
+                        isFirstBatch = false;
+                    }
+
+                    dt!.Clear();
+                    foreach (var row in batch.Rows)
+                    {
+                        var dataRow = dt.NewRow();
+                        foreach (var col in batch.ColumnNames)
+                        {
+                            dataRow[col] = row.Columns.TryGetValue(col, out var val) && val != null ? val : DBNull.Value;
+                        }
+                        dt.Rows.Add(dataRow);
+                    }
+
+                    bulkCopy.WriteToServer(dt);
+                }
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Oracle", ex);
             }
         }
 
@@ -236,45 +250,66 @@ namespace ETL_SQL.Connectors.Oracle
 
         public async Task<IEnumerable<string>> GetTablesAsync()
         {
-            using var conn = await OpenConnectionAsync();
-            using var cmd = new OracleCommand("SELECT owner, table_name FROM all_tables WHERE owner NOT IN ('SYS')", conn);
-            using var reader = await cmd.ExecuteReaderAsync();
-            var tables = new List<string>();
-            while (await reader.ReadAsync())
+            try
             {
-                var owner = reader.GetString(0);
-                var table = reader.GetString(1);
-                tables.Add($"{owner}.{table}");
+                using var conn = await OpenConnectionAsync();
+                using var cmd = new OracleCommand("SELECT owner, table_name FROM all_tables WHERE owner NOT IN ('SYS')", conn);
+                using var reader = await cmd.ExecuteReaderAsync();
+                var tables = new List<string>();
+                while (await reader.ReadAsync())
+                {
+                    var owner = reader.GetString(0);
+                    var table = reader.GetString(1);
+                    tables.Add($"{owner}.{table}");
+                }
+                return tables.Distinct();
             }
-            return tables.Distinct();
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Oracle", ex);
+            }
         }
 
         public async Task<IEnumerable<string>> GetViewsAsync()
         {
-            using var conn = await OpenConnectionAsync();
-            using var cmd = new OracleCommand("SELECT owner, view_name FROM all_views WHERE owner NOT IN ('SYS')", conn);
-            using var reader = await cmd.ExecuteReaderAsync();
-            var views = new List<string>();
-            while (await reader.ReadAsync())
+            try
             {
-                var owner = reader.GetString(0);
-                var view = reader.GetString(1);
-                views.Add($"{owner}.{view}");
+                using var conn = await OpenConnectionAsync();
+                using var cmd = new OracleCommand("SELECT owner, view_name FROM all_views WHERE owner NOT IN ('SYS')", conn);
+                using var reader = await cmd.ExecuteReaderAsync();
+                var views = new List<string>();
+                while (await reader.ReadAsync())
+                {
+                    var owner = reader.GetString(0);
+                    var view = reader.GetString(1);
+                    views.Add($"{owner}.{view}");
+                }
+                return views.Distinct();
             }
-            return views.Distinct();
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Oracle", ex);
+            }
         }
 
         public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
         {
-            using var conn = await OpenConnectionAsync();
-            using var cmd = new OracleCommand($"SELECT * FROM {QuoteIdentifier(tableName)} WHERE ROWNUM = 0", conn);
-            using var reader = await cmd.ExecuteReaderAsync();
-            var columns = new List<string>();
-            for (int i = 0; i < reader.FieldCount; i++)
+            try
             {
-                columns.Add(reader.GetName(i));
+                using var conn = await OpenConnectionAsync();
+                using var cmd = new OracleCommand($"SELECT * FROM {QuoteIdentifier(tableName)} WHERE ROWNUM = 0", conn);
+                using var reader = await cmd.ExecuteReaderAsync();
+                var columns = new List<string>();
+                for (int i = 0; i < reader.FieldCount; i++)
+                {
+                    columns.Add(reader.GetName(i));
+                }
+                return columns;
             }
-            return columns;
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Oracle", ex);
+            }
         }
 
         public object? Snapshot() => null;
