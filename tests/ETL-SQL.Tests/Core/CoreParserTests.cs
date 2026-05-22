@@ -181,6 +181,44 @@ SHOW BUNDLE DEPENDENCIES 'finance-load' VERSION 1;";
         }
 
         [Fact]
+        public void ParseShowBundlesAliasStatement()
+        {
+            var source = @"
+SHOW BUNDLES;
+SHOW BUNDLES AT my_conn;
+SHOW BUNDLES INTO #my_temp;
+SHOW BUNDLES AT my_conn INTO #my_temp;";
+            var script = new Parser(new Lexer(source).Tokenize()).Parse();
+
+            Assert.Empty(script.Diagnostics);
+            Assert.Equal(4, script.Statements.Count);
+
+            var s1 = Assert.IsType<ShowPublishedBundlesStatement>(script.Statements[0]);
+            Assert.True(s1.IsAlias);
+            Assert.Null(s1.At);
+            Assert.Null(s1.IntoTable);
+            Assert.Equal("SHOW BUNDLES;", s1.ToSql());
+
+            var s2 = Assert.IsType<ShowPublishedBundlesStatement>(script.Statements[1]);
+            Assert.True(s2.IsAlias);
+            Assert.Equal("my_conn", s2.At);
+            Assert.Null(s2.IntoTable);
+            Assert.Equal("SHOW BUNDLES AT my_conn;", s2.ToSql());
+
+            var s3 = Assert.IsType<ShowPublishedBundlesStatement>(script.Statements[2]);
+            Assert.True(s3.IsAlias);
+            Assert.Null(s3.At);
+            Assert.Equal("#my_temp", s3.IntoTable);
+            Assert.Equal("SHOW BUNDLES INTO #my_temp;", s3.ToSql());
+
+            var s4 = Assert.IsType<ShowPublishedBundlesStatement>(script.Statements[3]);
+            Assert.True(s4.IsAlias);
+            Assert.Equal("my_conn", s4.At);
+            Assert.Equal("#my_temp", s4.IntoTable);
+            Assert.Equal("SHOW BUNDLES AT my_conn INTO #my_temp;", s4.ToSql());
+        }
+
+        [Fact]
         public void ParseUsePasswordPrompt()
         {
             var script = new Parser(new Lexer("USE PASSWORD PROMPT;").Tokenize()).Parse();

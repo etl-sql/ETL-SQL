@@ -2130,6 +2130,7 @@ namespace ETL_SQL.Core
 
     public record ShowPublishedBundlesStatement : Statement
     {
+        public bool IsAlias { get; set; } = false;
         public string? IntoTable { get; set; }
         public string? At { get; set; }
     }

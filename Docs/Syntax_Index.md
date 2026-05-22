@@ -889,6 +889,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW JOBS`           | Orch     | Lists scheduled background tasks |
 | `SHOW JOB HISTORY`    | Orch     | Lists history of executed background tasks |
 | `SHOW PUBLISHED BUNDLES` | Orch  | Lists latest published bundle versions |
+| `SHOW BUNDLES`           | Orch  | Alias for `SHOW PUBLISHED BUNDLES` |
 | `SHOW BUNDLE VERSIONS` | Orch    | Lists all versions for a bundle |
 | `SHOW BUNDLE FILES`   | Orch     | Lists files in a bundle version |
 | `SHOW BUNDLE DEPENDENCIES` | Orch | Lists packaged `RUN SCRIPT` dependencies |

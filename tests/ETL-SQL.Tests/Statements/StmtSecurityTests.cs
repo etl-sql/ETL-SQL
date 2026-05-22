@@ -121,5 +121,23 @@ namespace ETL_SQL.Tests.Statements.Statements
             string resolved = eval.ResolvePath(quotedPath);
             Assert.Equal(path, resolved);
         }
+
+        [Fact]
+        public void ResolvePath_UsesWorkingDirectory_WhenCurrentScriptPathIsOrchestratorBundleUri()
+        {
+            var eval = ETL_SQL.App.DependencyInjectionSetup.BuildServiceProvider()
+                           .GetRequiredService<Evaluator>();
+            eval.SecurityService.IsTestMode = true;
+
+            var workingDirectory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"orch_{System.Guid.NewGuid():N}");
+            eval.WorkingDirectory = workingDirectory;
+            eval.CurrentScriptPath = "orch://manufacturing-integration@1/generate_manufacturing.etlsql";
+
+            var resolved = eval.ResolvePath(System.IO.Path.Combine("relative", "output.csv"));
+
+            Assert.Equal(
+                System.IO.Path.GetFullPath(System.IO.Path.Combine(workingDirectory, "relative", "output.csv")),
+                resolved);
+        }
     }
 }

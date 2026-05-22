@@ -102,7 +102,7 @@ namespace ETL_SQL.Core.Formatting
             ExportScriptStatement          s => FormatExportScript(s),
 
             // ── SHOW ──
-            ShowPublishedBundlesStatement  s => "SHOW PUBLISHED BUNDLES" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+            ShowPublishedBundlesStatement  s => (s.IsAlias ? "SHOW BUNDLES" : "SHOW PUBLISHED BUNDLES") + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
             ShowBundleVersionsStatement    s => $"SHOW BUNDLE VERSIONS '{s.BundleName.Replace("'", "''")}'" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
             ShowBundleFilesStatement       s => $"SHOW BUNDLE FILES '{s.BundleName.Replace("'", "''")}' VERSION {s.Version}" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
             ShowBundleDependenciesStatement s => $"SHOW BUNDLE DEPENDENCIES '{s.BundleName.Replace("'", "''")}' VERSION {s.Version}" + (s.At != null ? $" AT {s.At}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),

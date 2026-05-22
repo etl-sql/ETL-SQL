@@ -419,6 +419,10 @@ namespace ETL_SQL.Core.Parser.Components
                 ConsumeIdentifierValue("BUNDLES", "Expected BUNDLES after SHOW PUBLISHED");
                 stmt = new ShowPublishedBundlesStatement();
             }
+            else if (MatchIdentifier("BUNDLES"))
+            {
+                stmt = new ShowPublishedBundlesStatement { IsAlias = true };
+            }
             else if (MatchIdentifier("BUNDLE"))
             {
                 if (MatchIdentifier("VERSIONS"))

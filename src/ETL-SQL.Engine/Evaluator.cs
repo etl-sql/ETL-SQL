@@ -1197,7 +1197,8 @@ namespace ETL_SQL.Engine
             }
 
             string basePath = WorkingDirectory;
-            if (!string.IsNullOrEmpty(CurrentScriptPath))
+            if (!string.IsNullOrEmpty(CurrentScriptPath) &&
+                !BundleUri.TryParse(CurrentScriptPath, out _))
             {
                 var scriptDir = Path.GetDirectoryName(CurrentScriptPath);
                 if (!string.IsNullOrEmpty(scriptDir)) basePath = scriptDir;

@@ -1,3 +1,4 @@
+USE PASSWORD = 'pass';
 -- ==============================================================================
 -- setup_orchestrator.etlsql
 -- Registers the Orchestrator jobs and publishes the report dataset.

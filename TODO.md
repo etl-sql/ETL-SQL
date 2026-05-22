@@ -21,9 +21,9 @@ Must be included in the documentation. `C:\Users\chuck\scratch\ETL-SQL\Docs\Synt
 - [x] **API_KEY needs to be set as sensitive**  API_KEY should work just like password and be encrypted and masked.
 - [X] **Need to improve the messaging**  When running a select, insert, update, delete, show the messages should show the number or rows returned.  When create/alter/create or alter/drop it should show the objects created.
 - [x] **Disabled jobs still show**  Disabled jobs should still show up in SHOW JOBS.  We just need to add a column Enable (1=yes, 0=no)
-- [ ] **Orchestrator job error**  I currently have two jobs deployed on http://localhost:5001.  They are giving error messages: Basepath argument is not fully qualified. (Parameter 'basePath').  The source code is here: C:\Users\chuck\scratch\ETL-SQL\samples\integration\setup_orchestrator.etlsql
+- [x] **Orchestrator job error**  Fixed: published `orch://` bundle script paths are virtual paths and are no longer used as filesystem base paths during `ResolvePath`; relative paths inside published scripts now resolve from the orchestrator working directory instead of throwing `Basepath argument is not fully qualified`.  The source code is here: C:\Users\chuck\scratch\ETL-SQL\samples\integration\setup_orchestrator.etlsql
 - [x] **Disable/Enable AT**  Cannot run ENABLE JOB <name> AT <connection> same for DISABLE JOB.  Getting this error: [94760039] [PARSER Error] Unexpected token type AT ('AT') at start of statement at line 1, col 29 at line 1, col 29
-- [ ] **Need SHOW BUNDLES command**  SHOW BUNDLES should be an alias of SHOW PUBLISHED BUNDLES.  Since the other SHOW BUNDLE ... don't include the word PUBLISHED it may be confusing so we'll do a SHOW BUNDLES to be consistent with other commands like SHOW JOBS, SHOW CONNECTIONS,...
+- [x] **Need SHOW BUNDLES command**  SHOW BUNDLES should be an alias of SHOW PUBLISHED BUNDLES.  Since the other SHOW BUNDLE ... don't include the word PUBLISHED it may be confusing so we'll do a SHOW BUNDLES to be consistent with other commands like SHOW JOBS, SHOW CONNECTIONS,...
 - [ ] **SHOW PUBLISHED BUNDLES returns nothing** Nothing is returned no rows even though I know one was published
 - [ ] **Newer syntax not colored** Newer syntax words like PUBLISHED BUNDLE don't have color in TUI or VS Code
 
@@ -42,4 +42,24 @@ Must be included in the documentation. `C:\Users\chuck\scratch\ETL-SQL\Docs\Synt
   - **Session control**: `DISCONNECT USER`, `SHOW ACTIVE SESSIONS` (requires portal-side endpoint additions)
   - **Service control**: `RESTART PORTAL`, `SHUTDOWN PORTAL` (requires portal-side endpoint additions)
   - [x] **Make it more obvious that subscriptions, favorites, and recently reviewed are apart of the report button.  Its an odd transition to click Orchestrator or Admin and have those close down.
-  ### TUI
+  
+### TUI
+
+## Codebase Review Findings
+- [ ] **Unwrapped Database/Provider Exceptions in Connectors**
+  The following connectors do not catch and wrap provider-specific exceptions (e.g., `SqlException`, `NpgsqlException`, `OracleException`, `OdbcException`, `FtpException`, `SshException`, `HttpRequestException`, `RequestFailedException`) in `ExecutionException` before crossing the connector boundary:
+    - **SQL Server** ([SqlServerDataSource.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/SqlServer/SqlServerDataSource.cs))
+    - **PostgreSQL** ([PostgresDataSource.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Postgres/PostgresDataSource.cs))
+    - **Oracle** ([OracleDataSource.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Oracle/OracleDataSource.cs))
+    - **ODBC** ([OdbcDataSource.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Odbc/OdbcDataSource.cs))
+    - **FTP** ([FtpConnector.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/FtpConnector.cs))
+    - **SFTP** ([SftpConnector.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/SftpConnector.cs))
+    - **REST** ([RestConnector.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Rest/))
+    - **Azure Blob** ([AzureBlobConnector.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/AzureBlobConnector.cs))
+  This violates Section 8 of the developer guardrails in `AGENTS.md`.
+- [ ] **Blocking Semaphore Slim Wait in SpillStore**
+  In `SpillStore.EnsureInitialized` ([SpillStore.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Spill/SpillStore.cs#L74)), the semaphore is waited on synchronously using `_initLock.Wait()`. This blocking call inside synchronous property accessors like `RootPath` can lead to thread-pool starvation when executing in critical async context paths.
+- [ ] **Swallowed Exception in PortalBrandingSettingsService Constructor**
+  In `PortalBrandingSettingsService.cs` ([PortalBrandingSettingsService.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.ReportPortal/Services/PortalBrandingSettingsService.cs#L33)), the constructor catches all exceptions thrown during file reading or deserialization of `portal-branding.json` and completely swallows them (`catch { }`), hiding underlying file access or formatting corruption issues.
+- [ ] **Missing Zero-Trust Path Resolution in CreateDatasetStatementHandler**
+  In `CreateDatasetStatementHandler.WriteSidecarScript` ([CreateDatasetStatementHandler.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Handlers/CreateDatasetStatementHandler.cs#L272)), `File.WriteAllText(sidecarPath, ...)` is called directly without passing `sidecarPath` through `context.ResolvePath()`. This bypasses the Zero-Trust security boundary mandate in Section 8 of `AGENTS.md`.
