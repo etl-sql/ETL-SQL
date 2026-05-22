@@ -83,18 +83,18 @@
           <button class="btn btn-sm btn-outline" id="restartBtn" style="display:none">Restart</button>
           <button class="btn btn-sm btn-outline" id="stopBtn" style="display:none" title="Graceful stop — service restarts if OS-managed">Stop</button>
         </div>
-        <div class="orch-stat-chip running">
+        <button class="orch-stat-chip orch-stat-button running" id="activeFilterBtn" type="button" title="Show active jobs">
           <span class="orch-stat-value" id="activeCount">—</span>
           <span class="orch-stat-label">Active</span>
-        </div>
-        <div class="orch-stat-chip">
+        </button>
+        <button class="orch-stat-chip orch-stat-button" id="queuedFilterBtn" type="button" title="Show queued jobs">
           <span class="orch-stat-value" id="queuedCount">—</span>
           <span class="orch-stat-label">Queued</span>
-        </div>
-        <div class="orch-stat-chip">
+        </button>
+        <button class="orch-stat-chip orch-stat-button" id="completedTodayFilterBtn" type="button" title="Show jobs completed today">
           <span class="orch-stat-value" id="completedCount">—</span>
           <span class="orch-stat-label">Done Today</span>
-        </div>
+        </button>
         <button class="orch-stat-chip orch-stat-button danger" id="failedTodayFilterBtn" type="button" title="Show jobs with failures today">
           <span class="orch-stat-value" id="failedCount">—</span>
           <span class="orch-stat-label">Failed Today</span>
@@ -289,7 +289,10 @@ try {
 
 document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
 document.getElementById('refreshJobsBtn').addEventListener('click', () => loadJobs());
-document.getElementById('failedTodayFilterBtn').addEventListener('click', () => showFailedTodayJobs());
+document.getElementById('activeFilterBtn').addEventListener('click', () => showMetricJobs('active'));
+document.getElementById('queuedFilterBtn').addEventListener('click', () => showMetricJobs('queued'));
+document.getElementById('completedTodayFilterBtn').addEventListener('click', () => showMetricJobs('completedToday'));
+document.getElementById('failedTodayFilterBtn').addEventListener('click', () => showMetricJobs('failedToday'));
 document.getElementById('clearJobsFilterBtn').addEventListener('click', () => clearJobsFilter());
 
 // ── API helpers ────────────────────────────────────────────────────────────────
@@ -337,8 +340,8 @@ let sparklineChart = null;
 let online = false;
 let pollHandle = null;
 let jobsFilter = 'all';
-let todayFailedJobNames = new Set();
-let todayFailedHistoryByJob = new Map();
+let metricJobNames = new Map();
+let metricHistoryByJob = new Map();
 
 // ── Polling ────────────────────────────────────────────────────────────────────
 async function poll() {
@@ -390,24 +393,44 @@ async function loadJobs() {
 async function updateTodayCounts(jobs) {
   const today = new Date().toDateString();
   let completed = 0, failed = 0;
-  todayFailedJobNames = new Set();
-  todayFailedHistoryByJob = new Map();
+  metricJobNames = new Map([
+    ['active', new Set(jobs.filter(isActiveJob).map(j => jobValue(j, 'Name')))],
+    ['queued', new Set(jobs.filter(isQueuedJob).map(j => jobValue(j, 'Name')))],
+    ['completedToday', new Set()],
+    ['failedToday', new Set()]
+  ]);
+  metricHistoryByJob = new Map();
   for (const job of jobs) {
     try {
       const name = jobValue(job, 'Name');
       const hist = await api.history(name, 20) ?? [];
+      const activeRuns = hist.filter(h => jobValue(h, 'Status') === 'RUNNING');
+      const queuedRuns = hist.filter(h => jobValue(h, 'Status') === 'QUEUED' || jobValue(h, 'Status') === 'PENDING');
+      const todaysCompleted = hist.filter(h => jobValue(h, 'Status') === 'SUCCESS' && isToday(jobValue(h, 'StartTime'), today));
       const todaysFailures = hist.filter(h => jobValue(h, 'Status') === 'FAILURE' && isToday(jobValue(h, 'StartTime'), today));
-      completed += hist.filter(h => jobValue(h, 'Status') === 'SUCCESS' && isToday(jobValue(h, 'StartTime'), today)).length;
+      completed += todaysCompleted.length;
       failed += todaysFailures.length;
+      if (activeRuns.length) {
+        metricJobNames.get('active').add(name);
+        metricHistoryByJob.set(metricHistoryKey('active', name), activeRuns);
+      }
+      if (queuedRuns.length) {
+        metricJobNames.get('queued').add(name);
+        metricHistoryByJob.set(metricHistoryKey('queued', name), queuedRuns);
+      }
+      if (todaysCompleted.length) {
+        metricJobNames.get('completedToday').add(name);
+        metricHistoryByJob.set(metricHistoryKey('completedToday', name), todaysCompleted);
+      }
       if (todaysFailures.length) {
-        todayFailedJobNames.add(name);
-        todayFailedHistoryByJob.set(name, todaysFailures);
+        metricJobNames.get('failedToday').add(name);
+        metricHistoryByJob.set(metricHistoryKey('failedToday', name), todaysFailures);
       }
     } catch {}
   }
   document.getElementById('completedCount').textContent = completed;
   document.getElementById('failedCount').textContent    = failed;
-  document.getElementById('failedTodayFilterBtn').classList.toggle('active-filter', jobsFilter === 'failedToday');
+  updateMetricChipStates();
 }
 
 function isToday(value, todayText = new Date().toDateString()) {
@@ -417,20 +440,22 @@ function isToday(value, todayText = new Date().toDateString()) {
 }
 
 function getVisibleJobs() {
-  if (jobsFilter === 'failedToday') {
-    return allJobs.filter(j => todayFailedJobNames.has(jobValue(j, 'Name')));
+  if (jobsFilter !== 'all') {
+    const names = metricJobNames.get(jobsFilter) ?? new Set();
+    return allJobs.filter(j => names.has(jobValue(j, 'Name')));
   }
   return allJobs;
 }
 
-function showFailedTodayJobs() {
-  jobsFilter = 'failedToday';
+function showMetricJobs(filter) {
+  jobsFilter = filter;
   renderJobsTable(getVisibleJobs());
-  document.getElementById('failedTodayFilterBtn').classList.add('active-filter');
+  updateMetricChipStates();
 
-  const firstFailed = getVisibleJobs()[0];
-  if (firstFailed) {
-    openDetail(firstFailed, todayFailedHistoryByJob.get(jobValue(firstFailed, 'Name')) ?? null);
+  const first = getVisibleJobs()[0];
+  if (first) {
+    const name = jobValue(first, 'Name');
+    openDetail(first, metricHistoryByJob.get(metricHistoryKey(filter, name)) ?? null);
   } else {
     closeDetail();
   }
@@ -439,7 +464,33 @@ function showFailedTodayJobs() {
 function clearJobsFilter() {
   jobsFilter = 'all';
   renderJobsTable(allJobs);
-  document.getElementById('failedTodayFilterBtn').classList.remove('active-filter');
+  updateMetricChipStates();
+}
+
+function metricHistoryKey(filter, name) {
+  return `${filter}:${name}`;
+}
+
+function isActiveJob(job) {
+  const status = String(jobValue(job, 'Status') || jobValue(job, 'State') || '').toUpperCase();
+  return jobBool(job, 'IsRunning') || jobBool(job, 'IsActive') || status === 'RUNNING' || status === 'ACTIVE';
+}
+
+function isQueuedJob(job) {
+  const status = String(jobValue(job, 'Status') || jobValue(job, 'State') || '').toUpperCase();
+  return jobBool(job, 'IsQueued') || status === 'QUEUED' || status === 'PENDING';
+}
+
+function updateMetricChipStates() {
+  const chips = {
+    active: 'activeFilterBtn',
+    queued: 'queuedFilterBtn',
+    completedToday: 'completedTodayFilterBtn',
+    failedToday: 'failedTodayFilterBtn'
+  };
+  for (const [filter, id] of Object.entries(chips)) {
+    document.getElementById(id)?.classList.toggle('active-filter', jobsFilter === filter);
+  }
 }
 
 // ── Jobs table ─────────────────────────────────────────────────────────────────
@@ -471,8 +522,14 @@ function renderJobsTable(jobs) {
   const wrap = document.getElementById('jobsTableWrap');
   renderJobsFilterHeader(jobs.length);
   if (!jobs.length) {
-    const emptyText = jobsFilter === 'failedToday'
-      ? 'No jobs have failed today.'
+    const emptyMessages = {
+      active: 'No active jobs right now.',
+      queued: 'No queued jobs right now.',
+      completedToday: 'No jobs have completed today.',
+      failedToday: 'No jobs have failed today.'
+    };
+    const emptyText = jobsFilter !== 'all'
+      ? (emptyMessages[jobsFilter] ?? 'No jobs match this metric.')
       : 'No jobs defined. Click <strong>+ New Job</strong> to create one.';
     wrap.innerHTML = `<div class="empty-state" style="padding:32px 0;text-align:center;color:var(--portal-muted)">${emptyText}</div>`;
     return;
@@ -527,10 +584,16 @@ function renderJobsFilterHeader(visibleCount) {
   const kicker = document.getElementById('jobsSectionKicker');
   const title = document.getElementById('jobsSectionTitle');
 
-  if (jobsFilter === 'failedToday') {
-    kicker.textContent = 'Failed today';
+  if (jobsFilter !== 'all') {
+    const labels = {
+      active: 'Active',
+      queued: 'Queued',
+      completedToday: 'Done today',
+      failedToday: 'Failed today'
+    };
+    kicker.textContent = labels[jobsFilter] ?? 'Filtered jobs';
     title.textContent = `${visibleCount} Scheduled ${visibleCount === 1 ? 'Job' : 'Jobs'}`;
-    label.textContent = 'Failure filter';
+    label.textContent = `${labels[jobsFilter] ?? 'Metric'} filter`;
     actions.style.display = '';
   } else {
     kicker.textContent = 'All jobs';
@@ -690,12 +753,12 @@ function renderHistoryTable(entries) {
       <td>${dur}</td>
       <td>${jobValue(h, 'RowsProcessed') > 0 ? Number(jobValue(h, 'RowsProcessed')).toLocaleString() : '—'}</td>
       <td>${ram}</td>
-      <td style="color:var(--portal-danger);font-size:.8em;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(jobValue(h, 'ErrorMessage') ?? '')}">${jobValue(h, 'ErrorMessage') ? escHtml(String(jobValue(h, 'ErrorMessage')).substring(0, 60)) : ''}</td>
+      <td class="history-error-cell" title="${escHtml(jobValue(h, 'ErrorMessage') ?? '')}">${jobValue(h, 'ErrorMessage') ? escHtml(String(jobValue(h, 'ErrorMessage'))) : ''}</td>
     </tr>`;
   }).join('');
   document.getElementById('historyTableWrap').innerHTML = `
-    <div style="overflow-x:auto;max-height:260px;overflow-y:auto;">
-    <table class="data-table" style="font-size:.8em;">
+    <div class="history-table-scroll">
+    <table class="data-table history-table">
       <thead><tr><th>Status</th><th>Start</th><th>Duration</th><th>Rows</th><th>Peak RAM</th><th>Error</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
