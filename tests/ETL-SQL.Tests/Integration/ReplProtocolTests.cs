@@ -35,7 +35,7 @@ namespace ETL_SQL.Tests.Integration.Integration
             var startInfo = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = $"run --project \"{_projectPath}\" -- ui repl",
+                Arguments = $"run --no-build --project \"{_projectPath}\" -- ui repl",
                 UseShellExecute = false,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,

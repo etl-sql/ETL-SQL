@@ -448,6 +448,25 @@ export async function activate(context: vscode.ExtensionContext) {
         const { publishToPortal } = await import('./portalPublishCommand');
         await publishToPortal(context, editor.document.uri.fsPath);
     }));
+
+    context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(async (document) => {
+        if (document.languageId !== 'etlsql') {
+            return;
+        }
+        const text = document.getText();
+        const hasPlainTextCreds = /\b(PASSWORD|API_KEY|APIKEY)\s*=\s*'(?!ENC:)[^']*'/i.test(text) || 
+                                 /\bPassword\s*=\s*(?!['\s]|ENC:)[^;'\s]+/i.test(text);
+        if (hasPlainTextCreds) {
+            const encryptOption = "Encrypt Now";
+            const response = await vscode.window.showWarningMessage(
+                "This script contains plain-text credentials. Would you like to encrypt them using a master password?",
+                encryptOption
+            );
+            if (response === encryptOption) {
+                vscode.commands.executeCommand('etlsql.secureConnection', document.uri.toString());
+            }
+        }
+    }));
 }
 
 function syncConnectionsToLsp() {

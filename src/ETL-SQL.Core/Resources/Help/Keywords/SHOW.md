@@ -14,6 +14,19 @@ Subjects:
   VERSION              — engine version and build metadata
   SUBSCRIPTIONS        — defined report subscriptions
   HISTORY              — recent job execution records
+  REPORT '<name>'      — portal report metadata
+  REPORT HISTORY '<name>' — portal report refresh/history rows
+  REPORT DEPENDENCIES '<name>' — dependencies discovered for a portal report
+  SHARE LINKS FOR REPORT '<name>' — active portal share links
+  EMBED TOKENS FOR REPORT '<name>' — portal embed tokens
+  SAVED VIEWS FOR REPORT '<name>' — saved parameter views
+  ALERTS FOR REPORT '<name>' — portal report alerts
+  FAVORITES [FOR USER '<user>'] — portal favorites
+  RECENT REPORTS       — recently viewed portal reports
+  CATALOG SEARCH '<text>' — portal catalog search
+  EFFECTIVE PERMISSIONS FOR USER|REPORT|FOLDER '<target>' — resolved portal permissions
+  PORTAL USAGE METRICS — portal usage and refresh metrics
+  ACTIVE SESSIONS      — unrevoked, unexpired portal refresh sessions
 
 ```sql
 -- Inspect current variable state
@@ -31,4 +44,10 @@ SELECT statement, duration_ms FROM #perf ORDER BY duration_ms DESC;
 
 -- Check active jobs
 SHOW JOBS;
+
+EXECUTE portal BEGIN
+  SHOW FAVORITES LIMIT 25 INTO #favorites;
+  SHOW CATALOG SEARCH 'finance' INTO #catalog;
+  SHOW ACTIVE SESSIONS;
+END;
 ```

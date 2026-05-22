@@ -4,9 +4,11 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Renci.SshNet;
+using Renci.SshNet.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors
 {
@@ -131,7 +133,10 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        public async IAsyncEnumerable<FileMetaData> ListFilesAsync(string path)
+        public IAsyncEnumerable<FileMetaData> ListFilesAsync(string path) =>
+            ConnectorExceptionWrapper.WrapAsync(ListFilesCoreAsync(path), "SFTP", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<FileMetaData> ListFilesCoreAsync(string path)
         {
             await Task.CompletedTask;
             EnsureConnected();
@@ -148,33 +153,57 @@ namespace ETL_SQL.Connectors
 
         public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
         {
-            EnsureConnected();
-            if (!overwrite && await Task.Run(() => Client.Exists(remotePath)))
+            try
             {
-                throw new ExecutionException($"Remote file already exists: {remotePath}");
+                EnsureConnected();
+                if (!overwrite && await Task.Run(() => Client.Exists(remotePath)))
+                {
+                    throw new ExecutionException($"Remote file already exists: {remotePath}");
+                }
+                using var fileStream = File.OpenRead(localPath);
+                await Task.Run(() => Client.UploadFile(fileStream, remotePath));
             }
-            using var fileStream = File.OpenRead(localPath);
-            await Task.Run(() => Client.UploadFile(fileStream, remotePath));
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
         }
 
         public async Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true)
         {
-            EnsureConnected();
-            if (!overwrite && File.Exists(localPath))
+            try
             {
-                throw new ExecutionException($"Local file already exists: {localPath}");
+                EnsureConnected();
+                if (!overwrite && File.Exists(localPath))
+                {
+                    throw new ExecutionException($"Local file already exists: {localPath}");
+                }
+                using var fileStream = File.Open(localPath, overwrite ? FileMode.Create : FileMode.CreateNew);
+                await Task.Run(() => Client.DownloadFile(remotePath, fileStream));
             }
-            using var fileStream = File.Open(localPath, overwrite ? FileMode.Create : FileMode.CreateNew);
-            await Task.Run(() => Client.DownloadFile(remotePath, fileStream));
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
         }
 
         public async Task DeleteFileAsync(string remotePath)
         {
-            EnsureConnected();
-            await Task.Run(() => Client.DeleteFile(remotePath));
+            try
+            {
+                EnsureConnected();
+                await Task.Run(() => Client.DeleteFile(remotePath));
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
         }
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "SFTP", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             var table = new DataTable();
             table.ColumnNames.AddRange(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
@@ -216,5 +245,9 @@ namespace ETL_SQL.Connectors
             if (options != null && options.TryGetValue("HOST", out var host)) return host;
             return connectionString;
         }
+
+        private static bool ShouldWrapProviderException(Exception ex) =>
+            ex is SshException or SftpPathNotFoundException or SftpPermissionDeniedException
+                or System.Net.Sockets.SocketException or TimeoutException or InvalidOperationException;
     }
 }

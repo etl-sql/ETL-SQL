@@ -102,9 +102,9 @@ namespace ETL_SQL.Connectors.ReportPortal
                 case AlterPortalUserStatement s:      await AlterUserAsync(s, context); break;
                 case DropPortalUserStatement s:       await DropUserAsync(s, context); break;
                 case RevokePortalTokensStatement s:   await RevokeTokensAsync(s, context); break;
-                case DisconnectPortalUserStatement s: NotYetSupported($"DISCONNECT USER '{s.Username}'", "no portal API endpoint exists"); break;
+                case DisconnectPortalUserStatement s: await DisconnectUserAsync(s, context); break;
                 case ShowPortalUsersStatement:        await ShowUsersAsync(context); break;
-                case ShowActivePortalSessionsStatement: NotYetSupported("SHOW ACTIVE SESSIONS", "no portal API endpoint exists"); break;
+                case ShowActivePortalSessionsStatement s: await ShowActiveSessionsAsync(s, context); break;
 
                 case CreatePortalGroupStatement s:    await CreateGroupAsync(s, context); break;
                 case DropPortalGroupStatement s:      await DropGroupAsync(s, context); break;
@@ -120,12 +120,38 @@ namespace ETL_SQL.Connectors.ReportPortal
                 case AlterPortalReportStatement s:    await AlterReportAsync(s, context); break;
                 case DropPortalReportStatement s:     await DropReportAsync(s, context); break;
                 case ShowPortalReportsStatement s:    await ShowReportsAsync(s, context); break;
+                case ShowPortalReportStatement s:     await ShowReportAsync(s, context); break;
+                case FavoritePortalReportStatement s: await FavoriteReportAsync(s, context); break;
+                case UnfavoritePortalReportStatement s: await UnfavoriteReportAsync(s, context); break;
+                case ValidatePortalReportStatement s: await ValidateReportAsync(s, context); break;
+                case ShowPortalReportHistoryStatement s: await ShowReportHistoryAsync(s, context); break;
+                case ShowPortalReportDependenciesStatement s: await ShowReportDependenciesAsync(s, context); break;
+                case CreatePortalShareLinkStatement s: await CreateShareLinkAsync(s, context); break;
+                case ShowPortalShareLinksStatement s: await ShowShareLinksAsync(s, context); break;
+                case RevokePortalShareLinkStatement s: await RevokeShareLinkAsync(s, context); break;
+                case CreatePortalEmbedTokenStatement s: await CreateEmbedTokenAsync(s, context); break;
+                case ShowPortalEmbedTokensStatement s: await ShowEmbedTokensAsync(s, context); break;
+                case RevokePortalEmbedTokenStatement s: await RevokeEmbedTokenAsync(s, context); break;
+                case CreatePortalSavedViewStatement s: await CreateSavedViewAsync(s, context); break;
+                case ShowPortalSavedViewsStatement s: await ShowSavedViewsAsync(s, context); break;
+                case DropPortalSavedViewStatement s: await DropSavedViewAsync(s, context); break;
+                case CreatePortalAlertStatement s: await CreateAlertAsync(s, context); break;
+                case ShowPortalAlertsStatement s: await ShowAlertsAsync(s, context); break;
+                case DropPortalAlertStatement s: await DropAlertAsync(s, context); break;
+                case ShowPortalFavoritesStatement s: await ShowFavoritesAsync(s, context); break;
+                case ShowPortalRecentReportsStatement s: await ShowRecentReportsAsync(s, context); break;
+                case SearchPortalCatalogStatement s: await SearchCatalogAsync(s, context); break;
+                case ShowEffectivePortalPermissionsStatement s: await ShowEffectivePermissionsAsync(s, context); break;
+                case ShowPortalUsageMetricsStatement s: await ShowUsageMetricsAsync(s, context); break;
 
                 case CreatePortalRefreshJobStatement s: await CreatePortalRefreshJobAsync(s, context); break;
                 case DropPortalRefreshJobStatement s:   await DropPortalRefreshJobAsync(s, context); break;
                 case RefreshPortalReportStatement s:  await RefreshReportAsync(s, context); break;
                 case RebuildPortalSnapshotStatement s: await RebuildSnapshotAsync(s, context); break;
                 case DropPortalSnapshotStatement s:   await DropSnapshotAsync(s, context); break;
+                case CreatePortalSubscriptionStatement s: await CreateSubscriptionAsync(s, context); break;
+                case AlterPortalSubscriptionStatement s: await AlterSubscriptionAsync(s, context); break;
+                case DropPortalSubscriptionStatement s: await DropSubscriptionAsync(s, context); break;
 
                 case AlterPortalDatasetStatement s:   await AlterDatasetAsync(s, context); break;
                 case RefreshPortalDatasetStatement s: await RefreshDatasetAsync(s, context); break;
@@ -133,8 +159,8 @@ namespace ETL_SQL.Connectors.ReportPortal
                 case GrantPortalDatasetPermissionStatement s: await GrantDatasetPermissionAsync(s, context); break;
                 case RevokePortalDatasetPermissionStatement s: await RevokeDatasetPermissionAsync(s, context); break;
 
-                case RestartPortalStatement:  NotYetSupported("RESTART PORTAL",  "no portal API endpoint exists"); break;
-                case ShutdownPortalStatement: NotYetSupported("SHUTDOWN PORTAL", "no portal API endpoint exists"); break;
+                case RestartPortalStatement:  await RestartPortalAsync(context); break;
+                case ShutdownPortalStatement: await ShutdownPortalAsync(context); break;
 
                 default:
                     throw new ExecutionException(
@@ -197,6 +223,13 @@ namespace ETL_SQL.Connectors.ReportPortal
                 $"Tokens revoked for user '{stmt.Username}'.");
         }
 
+        private async Task DisconnectUserAsync(DisconnectPortalUserStatement stmt, IExecutionContext context)
+        {
+            var userId = await LookupUserIdAsync(stmt.Username);
+            await CallAsync(HttpMethod.Post, $"api/admin/users/{userId}/disconnect", null,
+                $"Active sessions disconnected for user '{stmt.Username}'.");
+        }
+
         private async Task ShowUsersAsync(IExecutionContext context)
         {
             var resp = await _http.GetAsync("api/admin/users");
@@ -222,6 +255,9 @@ namespace ETL_SQL.Connectors.ReportPortal
             context.LastResultSets.Add(table);
             context.LastResult = table;
         }
+
+        private async Task ShowActiveSessionsAsync(ShowActivePortalSessionsStatement stmt, IExecutionContext context) =>
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, "api/admin/sessions", null), stmt.IntoTable, context);
 
         // ── Groups ────────────────────────────────────────────────────────────────
 
@@ -370,6 +406,197 @@ namespace ETL_SQL.Connectors.ReportPortal
             context.LastResult = table;
         }
 
+        private async Task ShowReportAsync(ShowPortalReportStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/reports/{reportId}", null), stmt.IntoTable, context);
+        }
+
+        private async Task FavoriteReportAsync(FavoritePortalReportStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            if (!string.IsNullOrWhiteSpace(stmt.Username))
+            {
+                var userId = await LookupUserIdAsync(stmt.Username);
+                await CallAsync(HttpMethod.Post, $"api/admin/users/{userId}/favorites/{reportId}", null,
+                    $"Report '{stmt.ReportName}' favorited for user '{stmt.Username}'.");
+                return;
+            }
+
+            await CallAsync(HttpMethod.Post, $"api/reports/{reportId}/favorite", null,
+                $"Report '{stmt.ReportName}' favorited.");
+        }
+
+        private async Task UnfavoriteReportAsync(UnfavoritePortalReportStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            if (!string.IsNullOrWhiteSpace(stmt.Username))
+            {
+                var userId = await LookupUserIdAsync(stmt.Username);
+                await CallAsync(HttpMethod.Delete, $"api/admin/users/{userId}/favorites/{reportId}", null,
+                    $"Report '{stmt.ReportName}' unfavorited for user '{stmt.Username}'.");
+                return;
+            }
+
+            await CallAsync(HttpMethod.Delete, $"api/reports/{reportId}/favorite", null,
+                $"Report '{stmt.ReportName}' unfavorited.");
+        }
+
+        private async Task ValidateReportAsync(ValidatePortalReportStatement stmt, IExecutionContext context)
+        {
+            var json = await SendJsonAsync(HttpMethod.Post, "api/reports/validate", new { ScriptPath = stmt.ScriptPath });
+            await PublishJsonResultAsync(json, stmt.IntoTable, context);
+        }
+
+        private async Task ShowReportHistoryAsync(ShowPortalReportHistoryStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/reports/{reportId}/history", null), stmt.IntoTable, context);
+        }
+
+        private async Task ShowReportDependenciesAsync(ShowPortalReportDependenciesStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/reports/{reportId}/dependencies", null), stmt.IntoTable, context);
+        }
+
+        private async Task CreateShareLinkAsync(CreatePortalShareLinkStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            var json = await SendJsonAsync(HttpMethod.Post, $"api/reports/{reportId}/share-links", new { ExpiresAt = stmt.ExpiresAt });
+            await PublishJsonResultAsync(json, stmt.IntoTable, context);
+        }
+
+        private async Task ShowShareLinksAsync(ShowPortalShareLinksStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/reports/{reportId}/share-links", null), stmt.IntoTable, context);
+        }
+
+        private async Task RevokeShareLinkAsync(RevokePortalShareLinkStatement stmt, IExecutionContext context)
+        {
+            var (reportId, token) = await LookupReportTokenAsync("share-links", stmt.Token);
+            await CallAsync(HttpMethod.Delete, $"api/reports/{reportId}/share-links/{Uri.EscapeDataString(token)}", null,
+                $"Share link '{stmt.Token}' revoked.");
+        }
+
+        private async Task CreateEmbedTokenAsync(CreatePortalEmbedTokenStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            var json = await SendJsonAsync(HttpMethod.Post, $"api/reports/{reportId}/embed-tokens", new { Name = stmt.Name, ExpiresAt = stmt.ExpiresAt });
+            await PublishJsonResultAsync(json, stmt.IntoTable, context);
+        }
+
+        private async Task ShowEmbedTokensAsync(ShowPortalEmbedTokensStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/reports/{reportId}/embed-tokens", null), stmt.IntoTable, context);
+        }
+
+        private async Task RevokeEmbedTokenAsync(RevokePortalEmbedTokenStatement stmt, IExecutionContext context)
+        {
+            var (reportId, token) = await LookupReportTokenAsync("embed-tokens", stmt.Token);
+            await CallAsync(HttpMethod.Delete, $"api/reports/{reportId}/embed-tokens/{Uri.EscapeDataString(token)}", null,
+                $"Embed token '{stmt.Token}' revoked.");
+        }
+
+        private async Task CreateSavedViewAsync(CreatePortalSavedViewStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            var json = await SendJsonAsync(HttpMethod.Post, $"api/reports/{reportId}/saved-views", new
+            {
+                Name = stmt.Name,
+                Parameters = BuildParameterDictionary(stmt.Parameters),
+                Filters = (Dictionary<string, string>?)null,
+                IsDefault = stmt.IsDefault
+            });
+            await PublishJsonResultAsync(json, stmt.IntoTable, context);
+        }
+
+        private async Task ShowSavedViewsAsync(ShowPortalSavedViewsStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/reports/{reportId}/saved-views", null), stmt.IntoTable, context);
+        }
+
+        private async Task DropSavedViewAsync(DropPortalSavedViewStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            var viewId = await LookupNamedChildIdAsync($"api/reports/{reportId}/saved-views", stmt.Name, "saved view");
+            await CallAsync(HttpMethod.Delete, $"api/reports/{reportId}/saved-views/{viewId}", null,
+                $"Saved view '{stmt.Name}' dropped for report '{stmt.ReportName}'.");
+        }
+
+        private async Task CreateAlertAsync(CreatePortalAlertStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            var json = await SendJsonAsync(HttpMethod.Post, $"api/reports/{reportId}/alerts", new
+            {
+                Name = stmt.Name,
+                VisualName = stmt.VisualName,
+                Operator = stmt.Operator,
+                Threshold = stmt.Threshold,
+                Recipient = stmt.Recipient,
+                SmtpAlias = stmt.SmtpAlias
+            });
+            await PublishJsonResultAsync(json, null, context);
+        }
+
+        private async Task ShowAlertsAsync(ShowPortalAlertsStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/reports/{reportId}/alerts", null), stmt.IntoTable, context);
+        }
+
+        private async Task DropAlertAsync(DropPortalAlertStatement stmt, IExecutionContext context)
+        {
+            var reportId = await LookupReportIdAsync(stmt.ReportName);
+            var alertId = await LookupNamedChildIdAsync($"api/reports/{reportId}/alerts", stmt.Name, "alert");
+            await CallAsync(HttpMethod.Delete, $"api/reports/{reportId}/alerts/{alertId}", null,
+                $"Alert '{stmt.Name}' dropped for report '{stmt.ReportName}'.");
+        }
+
+        private async Task ShowFavoritesAsync(ShowPortalFavoritesStatement stmt, IExecutionContext context)
+        {
+            var limit = stmt.Limit ?? 50;
+            var url = string.IsNullOrWhiteSpace(stmt.Username)
+                ? $"api/catalog/favorites?limit={limit}"
+                : $"api/admin/users/{await LookupUserIdAsync(stmt.Username)}/favorites?limit={limit}";
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, url, null), stmt.IntoTable, context);
+        }
+
+        private async Task ShowRecentReportsAsync(ShowPortalRecentReportsStatement stmt, IExecutionContext context)
+        {
+            var limit = stmt.Limit ?? 20;
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/catalog/recent?limit={limit}", null), stmt.IntoTable, context);
+        }
+
+        private async Task SearchCatalogAsync(SearchPortalCatalogStatement stmt, IExecutionContext context)
+        {
+            var limit = stmt.Limit ?? 50;
+            var query = Uri.EscapeDataString(stmt.Query);
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/catalog/search?q={query}&limit={limit}", null), stmt.IntoTable, context);
+        }
+
+        private async Task ShowEffectivePermissionsAsync(ShowEffectivePortalPermissionsStatement stmt, IExecutionContext context)
+        {
+            var targetType = stmt.TargetType.ToUpperInvariant();
+            string url = targetType switch
+            {
+                "USER" => $"api/admin/permissions/effective/user/{await LookupUserIdAsync(stmt.Target)}",
+                "REPORT" => $"api/admin/permissions/effective/report/{await LookupReportIdAsync(stmt.Target)}",
+                "FOLDER" => $"api/admin/permissions/effective/folder/{await LookupFolderIdAsync(stmt.Target)}",
+                _ => throw new ExecutionException($"Unsupported effective permissions target type '{stmt.TargetType}'.")
+            };
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, url, null), stmt.IntoTable, context);
+        }
+
+        private async Task ShowUsageMetricsAsync(ShowPortalUsageMetricsStatement stmt, IExecutionContext context)
+        {
+            var days = stmt.Days ?? 30;
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/admin/metrics/usage?days={days}", null), stmt.IntoTable, context);
+        }
+
         // ── Refresh Jobs ──────────────────────────────────────────────────────────
 
         private async Task CreatePortalRefreshJobAsync(CreatePortalRefreshJobStatement stmt, IExecutionContext context)
@@ -412,6 +639,58 @@ namespace ETL_SQL.Connectors.ReportPortal
             throw new ExecutionException(
                 $"DROP SNAPSHOT '{stmt.ReportName}': no portal endpoint exists for this operation. " +
                 "Use REBUILD SNAPSHOT to replace the snapshot, or remove it manually via the portal UI.");
+        }
+
+        // ── Subscriptions ────────────────────────────────────────────────────────
+
+        private async Task CreateSubscriptionAsync(CreatePortalSubscriptionStatement stmt, IExecutionContext context)
+        {
+            if (stmt.Format == PortalSubscriptionFormat.Both)
+                throw new ExecutionException("Remote CREATE SUBSCRIPTION FORMAT BOTH is not supported by the portal API yet. Create separate PDF and CSV subscriptions.");
+            if (stmt.IsGroup)
+                throw new ExecutionException("Remote CREATE SUBSCRIPTION DELIVER TO GROUP is not supported by the portal API yet. Create per-recipient subscriptions.");
+
+            var reportId = await LookupReportIdAsync(stmt.ReportPath);
+            var req = new
+            {
+                ReportId = reportId,
+                Name = stmt.Name,
+                Schedule = stmt.OnRefresh ? "Daily" : stmt.Schedule,
+                Format = FormatSubscription(stmt.Format),
+                SmtpAlias = stmt.SmtpAlias,
+                RecipientEmail = stmt.Recipient,
+                AtTime = (string?)null,
+                Parameters = BuildParameterDictionary(stmt.Parameters)
+            };
+            var json = await SendJsonAsync(HttpMethod.Post, "api/subscriptions", req);
+            await PublishJsonResultAsync(json, null, context);
+
+            if (stmt.OnRefresh)
+                await CallAsync(HttpMethod.Put, $"api/subscriptions/{TryGet(json, "id")}", new { DeliverOnRefresh = true },
+                    $"Subscription '{stmt.Name ?? stmt.ReportPath}' set to deliver on refresh.");
+        }
+
+        private async Task AlterSubscriptionAsync(AlterPortalSubscriptionStatement stmt, IExecutionContext context)
+        {
+            if (stmt.NewFormat == PortalSubscriptionFormat.Both)
+                throw new ExecutionException("Remote ALTER SUBSCRIPTION FORMAT BOTH is not supported by the portal API yet. Use PDF or CSV.");
+
+            var req = new
+            {
+                Schedule = stmt.NewSchedule,
+                IsActive = stmt.SetActive,
+                Format = stmt.NewFormat is null ? null : FormatSubscription(stmt.NewFormat.Value),
+                SmtpAlias = stmt.NewSmtpAlias,
+                Parameters = stmt.Parameters is null ? null : BuildParameterDictionary(stmt.Parameters)
+            };
+            var json = await SendJsonAsync(HttpMethod.Put, $"api/subscriptions/{stmt.SubscriptionId}", req);
+            await PublishJsonResultAsync(json, null, context);
+        }
+
+        private async Task DropSubscriptionAsync(DropPortalSubscriptionStatement stmt, IExecutionContext context)
+        {
+            await CallAsync(HttpMethod.Delete, $"api/subscriptions/{stmt.SubscriptionId}", null,
+                $"Subscription {stmt.SubscriptionId} dropped.");
         }
 
         // ── Datasets ──────────────────────────────────────────────────────────────
@@ -516,12 +795,24 @@ namespace ETL_SQL.Connectors.ReportPortal
             var resp = await _http.GetAsync("api/admin/reports");
             resp.EnsureSuccessStatusCode();
             var reports = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
-            var report = reports.FirstOrDefault(r =>
-                r.TryGetProperty("name", out var v) &&
-                v.GetString()?.Equals(name, StringComparison.OrdinalIgnoreCase) == true);
-            if (report.ValueKind == JsonValueKind.Undefined)
+            var target = name.Trim();
+            var matches = reports.Where(r =>
+            {
+                var reportName = r.TryGetProperty("name", out var n) ? n.GetString() : null;
+                var folderPath = r.TryGetProperty("folderPath", out var fp)
+                    ? fp.GetString()
+                    : r.TryGetProperty("folder", out var f) ? f.GetString() : null;
+                var combined = !string.IsNullOrWhiteSpace(folderPath) && !string.IsNullOrWhiteSpace(reportName)
+                    ? (folderPath!.EndsWith('/') ? folderPath + reportName : $"{folderPath}/{reportName}")
+                    : reportName;
+                return reportName?.Equals(target, StringComparison.OrdinalIgnoreCase) == true
+                    || combined?.Equals(target, StringComparison.OrdinalIgnoreCase) == true;
+            }).ToList();
+            if (matches.Count == 0)
                 throw new ExecutionException($"Portal report '{name}' not found.");
-            return report.GetProperty("id").GetInt32();
+            if (matches.Count > 1)
+                throw new ExecutionException($"Portal report name '{name}' is ambiguous. Rename one report or use a unique name.");
+            return matches[0].GetProperty("id").GetInt32();
         }
 
         private async Task<int> LookupDatasetIdAsync(string name, string folderPath)
@@ -568,6 +859,160 @@ namespace ETL_SQL.Connectors.ReportPortal
             }
 
             _logger.WriteLine(successMessage, ConsoleColor.Green);
+        }
+
+        private async Task<JsonElement> SendJsonAsync(HttpMethod method, string url, object? body)
+        {
+            using var req = new HttpRequestMessage(method, url);
+            if (body is not null)
+            {
+                req.Content = new StringContent(
+                    JsonSerializer.Serialize(body, _json),
+                    Encoding.UTF8,
+                    "application/json");
+            }
+
+            using var resp = await _http.SendAsync(req);
+            var bodyText = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode)
+                throw new ExecutionException($"Portal API error ({(int)resp.StatusCode} {resp.StatusCode}): {SanitizeBody(bodyText)}");
+
+            if (string.IsNullOrWhiteSpace(bodyText))
+            {
+                using var empty = JsonDocument.Parse("{}");
+                return empty.RootElement.Clone();
+            }
+
+            using var doc = JsonDocument.Parse(bodyText);
+            return doc.RootElement.Clone();
+        }
+
+        private async Task PublishJsonResultAsync(JsonElement json, string? intoTable, IExecutionContext context)
+        {
+            var table = await JsonToTableAsync(json);
+            context.LastResultSets.Clear();
+            context.LastResultSets.Add(table);
+            context.LastResult = table;
+            context.OnResultSet?.Invoke(table);
+
+            if (intoTable is not null)
+            {
+                if (!context.Connections.ContainsKey(intoTable))
+                    context.Connections[intoTable] = new InMemoryDataSource();
+                var destination = await context.ResolveDataSourceAsync(new TableReference(intoTable));
+                await destination.WriteBatches(new[] { table }.ToAsyncEnumerable());
+            }
+        }
+
+        private static async Task<DataTable> JsonToTableAsync(JsonElement json)
+        {
+            var elements = json.ValueKind == JsonValueKind.Array
+                ? json.EnumerateArray().ToList()
+                : [json];
+
+            var columns = elements
+                .Where(e => e.ValueKind == JsonValueKind.Object)
+                .SelectMany(e => e.EnumerateObject().Select(p => p.Name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (columns.Count == 0)
+                columns.Add("Value");
+
+            var table = new DataTable();
+            table.SetColumns(columns);
+            foreach (var element in elements)
+            {
+                var row = new Row(table.Schema);
+                if (element.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var column in columns)
+                    {
+                        row[column] = element.TryGetProperty(column, out var value)
+                            ? JsonValueToObject(value)
+                            : null;
+                    }
+                }
+                else
+                {
+                    row["Value"] = JsonValueToObject(element);
+                }
+                await table.AddRowAsync(row);
+            }
+            return table;
+        }
+
+        private static object? JsonValueToObject(JsonElement value) => value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number => value.TryGetInt64(out var l) ? l : value.GetDecimal(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            JsonValueKind.Undefined => null,
+            _ => value.GetRawText()
+        };
+
+        private async Task<(int ReportId, string Token)> LookupReportTokenAsync(string tokenKind, string token)
+        {
+            var reports = await SendJsonAsync(HttpMethod.Get, "api/admin/reports", null);
+            var matches = new List<(int ReportId, string Token)>();
+            foreach (var report in reports.EnumerateArray())
+            {
+                var reportId = report.GetProperty("id").GetInt32();
+                var children = await SendJsonAsync(HttpMethod.Get, $"api/reports/{reportId}/{tokenKind}", null);
+                foreach (var child in children.EnumerateArray())
+                {
+                    if (child.TryGetProperty("token", out var tokenProp)
+                        && tokenProp.GetString()?.Equals(token, StringComparison.OrdinalIgnoreCase) == true)
+                    {
+                        matches.Add((reportId, tokenProp.GetString()!));
+                    }
+                }
+            }
+
+            return matches.Count switch
+            {
+                0 => throw new ExecutionException($"Portal {tokenKind} token '{token}' not found."),
+                1 => matches[0],
+                _ => throw new ExecutionException($"Portal {tokenKind} token '{token}' is ambiguous.")
+            };
+        }
+
+        private async Task<int> LookupNamedChildIdAsync(string url, string name, string kind)
+        {
+            var json = await SendJsonAsync(HttpMethod.Get, url, null);
+            var matches = json.EnumerateArray()
+                .Where(e => e.TryGetProperty("name", out var n)
+                    && n.GetString()?.Equals(name, StringComparison.OrdinalIgnoreCase) == true)
+                .ToList();
+            if (matches.Count == 0)
+                throw new ExecutionException($"Portal {kind} '{name}' not found.");
+            if (matches.Count > 1)
+                throw new ExecutionException($"Portal {kind} '{name}' is ambiguous.");
+            return matches[0].GetProperty("id").GetInt32();
+        }
+
+        private static Dictionary<string, string> BuildParameterDictionary(IReadOnlyList<SubscriptionParameter> parameters) =>
+            parameters.ToDictionary(p => p.Name, p => p.Value, StringComparer.OrdinalIgnoreCase);
+
+        private static string FormatSubscription(PortalSubscriptionFormat format) => format switch
+        {
+            PortalSubscriptionFormat.Pdf => "PDF",
+            PortalSubscriptionFormat.Csv => "CSV",
+            _ => throw new ExecutionException($"Unsupported subscription format '{format}'.")
+        };
+
+        private async Task RestartPortalAsync(IExecutionContext context)
+        {
+            await CallAsync(HttpMethod.Post, "api/admin/service/restart", null,
+                "Portal restart requested.");
+        }
+
+        private async Task ShutdownPortalAsync(IExecutionContext context)
+        {
+            await CallAsync(HttpMethod.Post, "api/admin/service/shutdown", null,
+                "Portal shutdown requested.");
         }
 
         private void NotYetSupported(string statement, string reason)

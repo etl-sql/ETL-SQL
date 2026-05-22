@@ -202,6 +202,15 @@ namespace ETL_SQL.Tests.Analysis
             Assert.Empty(results);
         }
 
+        [Fact]
+        public async Task PushdownValidation_SemicolonsInNativeBlock_NoWarning()
+        {
+            var rule = new PushdownValidationRule();
+            var results = await Lint(rule,
+                "EXECUTE myconn INTO #out BEGIN SELECT Id FROM Orders; SELECT Name FROM Customers; END;");
+            Assert.Empty(results);
+        }
+
         // ── DatabaseQualificationRule ─────────────────────────────────────────
 
         [Fact]

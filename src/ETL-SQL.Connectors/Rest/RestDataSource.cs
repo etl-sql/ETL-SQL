@@ -9,6 +9,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors.Rest
 {
@@ -50,7 +51,10 @@ namespace ETL_SQL.Connectors.Rest
 
         public IDataSource WithTable(string tableName) => this;
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "REST", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             var request = BuildRequest();
             var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
@@ -79,16 +83,23 @@ namespace ETL_SQL.Connectors.Rest
 
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
-            var request = BuildRequest();
-            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-            if (!response.IsSuccessStatusCode) return Enumerable.Empty<string>();
+            try
+            {
+                var request = BuildRequest();
+                var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+                if (!response.IsSuccessStatusCode) return Enumerable.Empty<string>();
 
-            using var stream = await response.Content.ReadAsStreamAsync();
+                using var stream = await response.Content.ReadAsStreamAsync();
             
-            string? rootPath = null;
-            _options?.TryGetValue("ROOT_PATH", out rootPath);
+                string? rootPath = null;
+                _options?.TryGetValue("ROOT_PATH", out rootPath);
 
-            return await JsonExtractor.GetColumnsAsync(stream, rootPath);
+                return await JsonExtractor.GetColumnsAsync(stream, rootPath);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("REST", ex);
+            }
         }
 
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "ENDPOINT" });
@@ -101,7 +112,10 @@ namespace ETL_SQL.Connectors.Rest
         public async Task<string> GetVersionAsync() => await Task.FromResult("REST API Connector 1.0");
         public HashSet<string> GetSupportedFunctions() => new(StringComparer.OrdinalIgnoreCase);
 
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters), "REST", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
         {
             if (sql.Trim().ToUpperInvariant() == "SELECT * FROM ENDPOINT")
             {
@@ -168,5 +182,8 @@ namespace ETL_SQL.Connectors.Rest
 
             return request;
         }
+
+        private static bool ShouldWrapProviderException(Exception ex) =>
+            ex is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException;
     }
 }

@@ -4,7 +4,7 @@ CREATE SUBSCRIPTION ['<name>']
   FOR REPORT '<script-path>'
   DELIVER TO '<email>'
   SCHEDULE '<cron>'
-  FORMAT PDF|CSV|BOTH
+FORMAT PDF|CSV|BOTH
   AT <smtp-alias>
   [ PARAMETERS (@param = 'value', ...) ];
 
@@ -14,6 +14,10 @@ ALTER SUBSCRIPTION <id> SET
 DROP SUBSCRIPTION <id>;
 
 SHOW SUBSCRIPTIONS [FOR REPORT '<path>'] [INTO #temp];
+
+Remote REPORTPORTAL execution currently supports PDF and CSV delivery. `FORMAT BOTH`
+is parsed by the language but remote portal creation rejects it until the portal
+delivery API can generate both attachments in one subscription.
 
 RELDATE parameter values (resolved fresh on each delivery):
   'D-1'   Yesterday    'W-1'  Start of last week

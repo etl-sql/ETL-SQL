@@ -13,14 +13,7 @@
   <header class="topbar">
     <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
     <nav class="topbar-nav">
-      <span class="report-nav-group">
-        <a href="/index.html" class="active report-nav-root" id="navReports" aria-haspopup="true">Reports</a>
-        <span class="report-nav-submenu" aria-label="Reporting views">
-          <a href="#favorites" id="navFavorites">Favorites</a>
-          <a href="#recent" id="navRecent">Recently Viewed</a>
-          <a href="#subscriptions" id="navSubscriptions">My Subscriptions</a>
-        </span>
-      </span>
+      <a href="/index.html" class="active" id="navReports">Reports</a>
     </nav>
     <nav class="topbar-nav">
       <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
@@ -35,6 +28,24 @@
   <div class="app-body">
     <!-- Sidebar: folder tree -->
     <aside class="sidebar" id="sidebar">
+      <div class="sidebar-nav" aria-label="Report views">
+        <a href="/index.html" class="sidebar-nav-item" id="navReportHome">
+          <span class="sidebar-nav-icon sidebar-nav-icon-library" aria-hidden="true"></span>
+          <span>Report Library</span>
+        </a>
+        <a href="#favorites" class="sidebar-nav-item" id="navFavorites">
+          <span class="sidebar-nav-icon sidebar-nav-icon-favorite" aria-hidden="true"></span>
+          <span>Favorites</span>
+        </a>
+        <a href="#recent" class="sidebar-nav-item" id="navRecent">
+          <span class="sidebar-nav-icon sidebar-nav-icon-recent" aria-hidden="true"></span>
+          <span>Recently Viewed</span>
+        </a>
+        <a href="#subscriptions" class="sidebar-nav-item" id="navSubscriptions">
+          <span class="sidebar-nav-icon sidebar-nav-icon-subscriptions" aria-hidden="true"></span>
+          <span>My Subscriptions</span>
+        </a>
+      </div>
       <div class="sidebar-hdr">
         <span>Folders</span>
         <span class="sidebar-hint">Report library</span>
@@ -216,11 +227,9 @@
 <script type="module">
 import { auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
 import { applyPortalBranding } from '/js/branding.js';
-import { wireReportNav } from '/js/nav.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
-wireReportNav();
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 let currentFolderId   = null;
@@ -241,9 +250,9 @@ window.addEventListener('message', e => {
     const state = { view: 'report', id: currentReportId, page: currentActivePage,
                     folderId: currentFolderId, folderName: currentFolderName };
     if (e.data.userTriggered) {
-      history.pushState(state, '');
+      history.pushState(state, '', window.location.pathname);
     } else {
-      history.replaceState(state, '');
+      history.replaceState(state, '', window.location.pathname);
     }
   }
 });
@@ -282,6 +291,11 @@ async function init() {
   } catch {}
 
   document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
+  document.getElementById('navReportHome').addEventListener('click', e => {
+    e.preventDefault();
+    history.replaceState(history.state, '', window.location.pathname);
+    showReportLibraryHome();
+  });
   document.getElementById('navSubscriptions').addEventListener('click', e => {
     e.preventDefault();
     setReportHash('subscriptions');
@@ -317,7 +331,38 @@ function openReportHashView() {
     showRecentlyViewed();
   } else if (view === 'favorites') {
     showFavorites();
+  } else {
+    setSidebarViewActive('library');
   }
+}
+
+function setSidebarViewActive(view) {
+  const activeId = {
+    library: 'navReportHome',
+    favorites: 'navFavorites',
+    recent: 'navRecent',
+    subscriptions: 'navSubscriptions'
+  }[view];
+  document.querySelectorAll('.sidebar-nav-item').forEach(el =>
+    el.classList.toggle('active', el.id === activeId));
+}
+
+function clearFolderSelection() {
+  document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
+}
+
+function showReportLibraryHome() {
+  clearFolderSelection();
+  setSidebarViewActive('library');
+  currentFolderId = null;
+  currentFolderName = '';
+  currentReportId = null;
+  document.getElementById('mainContent').innerHTML = `
+    <div class="empty-state empty-state-panel">
+      <div class="empty-state-icon empty-state-icon-folder" aria-hidden="true"></div>
+      <h2>Select a folder</h2>
+      <p>Choose a report folder from the library to view available reports.</p>
+    </div>`;
 }
 
 // ── Folder tree ────────────────────────────────────────────────────────────────
@@ -368,6 +413,7 @@ function renderFolderChildren($parent, nodes, depth) {
 }
 
 function selectFolder(id, name) {
+  setSidebarViewActive('library');
   document.querySelectorAll('.folder-item').forEach(el =>
     el.classList.toggle('active', el.dataset.id == id));
   currentFolderId   = id;
@@ -378,8 +424,9 @@ function selectFolder(id, name) {
 
 // ── Report list ────────────────────────────────────────────────────────────────
 async function loadReportList(folderId, folderName, pushState = true) {
+  setSidebarViewActive('library');
   if (pushState) {
-    history.pushState({ view: 'folder', folderId, folderName }, '');
+    history.pushState({ view: 'folder', folderId, folderName }, '', window.location.pathname);
   }
   const $main = document.getElementById('mainContent');
   $main.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading reports…</span></div>`;
@@ -510,7 +557,8 @@ function wireLibraryToolbar() {
 
 // ── Recently viewed ───────────────────────────────────────────────────────────
 async function showRecentlyViewed() {
-  document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
+  clearFolderSelection();
+  setSidebarViewActive('recent');
   currentFolderId = null;
   currentFolderName = 'Recently Viewed';
   const $main = document.getElementById('mainContent');
@@ -530,7 +578,8 @@ async function showRecentlyViewed() {
 }
 
 async function showFavorites() {
-  document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
+  clearFolderSelection();
+  setSidebarViewActive('favorites');
   currentFolderId = null;
   currentFolderName = 'Favorites';
   const $main = document.getElementById('mainContent');
@@ -711,7 +760,8 @@ async function openReport(id, isPushState = true, initialPage = null) {
   if (isPushState) {
     history.pushState(
       { view: 'report', id, page: initialPage, folderId: currentFolderId, folderName: currentFolderName },
-      '');
+      '',
+      window.location.pathname);
   }
   const $main = document.getElementById('mainContent');
   $main.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading report…</span></div>`;
@@ -1179,7 +1229,10 @@ function wireSubscribeModal() {
 
 // ── My Subscriptions view ──────────────────────────────────────────────────────
 async function showMySubscriptions() {
-  document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
+  clearFolderSelection();
+  setSidebarViewActive('subscriptions');
+  currentFolderId = null;
+  currentFolderName = 'My Subscriptions';
   const $main = document.getElementById('mainContent');
   $main.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading subscriptions…</span></div>`;
 

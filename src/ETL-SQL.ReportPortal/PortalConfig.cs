@@ -7,6 +7,7 @@ public class PortalConfig
     public string SnapshotDirectory { get; set; } = "./Snapshots";
     public string MapRootPath { get; set; } = "./data/maps";
     public string DatasetRootPath { get; set; } = "./data/datasets";
+    public bool AllowServiceControl { get; set; } = false;
     public ResourcesConfig Resources { get; set; } = new();
     public JwtConfig       Jwt       { get; set; } = new();
     public IdentityConfig  Identity  { get; set; } = new();

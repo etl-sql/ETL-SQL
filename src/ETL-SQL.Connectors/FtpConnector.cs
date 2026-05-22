@@ -6,6 +6,7 @@ using FluentFTP;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors
 {
@@ -89,7 +90,10 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        public async IAsyncEnumerable<FileMetaData> ListFilesAsync(string path)
+        public IAsyncEnumerable<FileMetaData> ListFilesAsync(string path) =>
+            ConnectorExceptionWrapper.WrapAsync(ListFilesCoreAsync(path), "FTP", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<FileMetaData> ListFilesCoreAsync(string path)
         {
             await Task.CompletedTask;
             EnsureConnected();
@@ -106,32 +110,56 @@ namespace ETL_SQL.Connectors
 
         public Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
         {
-            EnsureConnected();
-            var existsMode = overwrite ? FtpRemoteExists.Overwrite : FtpRemoteExists.Skip;
-            var status = _client!.UploadFile(localPath, remotePath, existsMode);
-            if (status == FtpStatus.Skipped && !overwrite) throw new ExecutionException($"Remote file already exists (overwrite=OFF): {remotePath}");
-            if (status == FtpStatus.Failed) throw new ExecutionException($"Failed to upload file to FTP: {remotePath}");
-            return Task.CompletedTask;
+            try
+            {
+                EnsureConnected();
+                var existsMode = overwrite ? FtpRemoteExists.Overwrite : FtpRemoteExists.Skip;
+                var status = _client!.UploadFile(localPath, remotePath, existsMode);
+                if (status == FtpStatus.Skipped && !overwrite) throw new ExecutionException($"Remote file already exists (overwrite=OFF): {remotePath}");
+                if (status == FtpStatus.Failed) throw new ExecutionException($"Failed to upload file to FTP: {remotePath}");
+                return Task.CompletedTask;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("FTP", ex);
+            }
         }
 
         public Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true)
         {
-            EnsureConnected();
-            var existsMode = overwrite ? FtpLocalExists.Overwrite : FtpLocalExists.Skip;
-            var status = _client!.DownloadFile(localPath, remotePath, existsMode);
-            if (status == FtpStatus.Skipped && !overwrite) throw new ExecutionException($"Local file already exists (overwrite=OFF): {localPath}");
-            if (status == FtpStatus.Failed) throw new ExecutionException($"Failed to download file from FTP: {remotePath}");
-            return Task.CompletedTask;
+            try
+            {
+                EnsureConnected();
+                var existsMode = overwrite ? FtpLocalExists.Overwrite : FtpLocalExists.Skip;
+                var status = _client!.DownloadFile(localPath, remotePath, existsMode);
+                if (status == FtpStatus.Skipped && !overwrite) throw new ExecutionException($"Local file already exists (overwrite=OFF): {localPath}");
+                if (status == FtpStatus.Failed) throw new ExecutionException($"Failed to download file from FTP: {remotePath}");
+                return Task.CompletedTask;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("FTP", ex);
+            }
         }
 
         public Task DeleteFileAsync(string remotePath)
         {
-            EnsureConnected();
-            _client!.DeleteFile(remotePath);
-            return Task.CompletedTask;
+            try
+            {
+                EnsureConnected();
+                _client!.DeleteFile(remotePath);
+                return Task.CompletedTask;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("FTP", ex);
+            }
         }
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "FTP", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             var table = new DataTable();
             table.ColumnNames.AddRange(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
@@ -170,5 +198,9 @@ namespace ETL_SQL.Connectors
             if (options != null && options.TryGetValue("HOST", out var host)) return host;
             return connectionString;
         }
+
+        private static bool ShouldWrapProviderException(Exception ex) =>
+            ex.GetType().Namespace?.StartsWith("FluentFTP", StringComparison.Ordinal) == true
+                || ex is System.Net.Sockets.SocketException or TimeoutException or InvalidOperationException;
     }
 }

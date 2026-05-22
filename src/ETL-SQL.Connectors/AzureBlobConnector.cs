@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors
 {
@@ -100,7 +102,10 @@ namespace ETL_SQL.Connectors
             return _client.GetBlobContainerClient(_containerName);
         }
 
-        public async IAsyncEnumerable<FileMetaData> ListFilesAsync(string path)
+        public IAsyncEnumerable<FileMetaData> ListFilesAsync(string path) =>
+            ConnectorExceptionWrapper.WrapAsync(ListFilesCoreAsync(path), "Azure Blob", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<FileMetaData> ListFilesCoreAsync(string path)
         {
             var container = GetContainer();
             await foreach (var blob in container.GetBlobsAsync(BlobTraits.None, BlobStates.None, path, default))
@@ -118,31 +123,55 @@ namespace ETL_SQL.Connectors
 
         public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
         {
-            var container = GetContainer();
-            var blobClient = container.GetBlobClient(remotePath);
-            using var fileStream = File.OpenRead(localPath);
-            await blobClient.UploadAsync(fileStream, overwrite: overwrite);
+            try
+            {
+                var container = GetContainer();
+                var blobClient = container.GetBlobClient(remotePath);
+                using var fileStream = File.OpenRead(localPath);
+                await blobClient.UploadAsync(fileStream, overwrite: overwrite);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Azure Blob", ex);
+            }
         }
 
         public async Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true)
         {
-            if (!overwrite && File.Exists(localPath))
+            try
             {
-                throw new ExecutionException($"Local file already exists (overwrite=OFF): {localPath}");
+                if (!overwrite && File.Exists(localPath))
+                {
+                    throw new ExecutionException($"Local file already exists (overwrite=OFF): {localPath}");
+                }
+                var container = GetContainer();
+                var blobClient = container.GetBlobClient(remotePath);
+                await blobClient.DownloadToAsync(localPath);
             }
-            var container = GetContainer();
-            var blobClient = container.GetBlobClient(remotePath);
-            await blobClient.DownloadToAsync(localPath);
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Azure Blob", ex);
+            }
         }
 
         public async Task DeleteFileAsync(string remotePath)
         {
-            var container = GetContainer();
-            var blobClient = container.GetBlobClient(remotePath);
-            await blobClient.DeleteIfExistsAsync();
+            try
+            {
+                var container = GetContainer();
+                var blobClient = container.GetBlobClient(remotePath);
+                await blobClient.DeleteIfExistsAsync();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Azure Blob", ex);
+            }
         }
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Azure Blob", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             var table = new DataTable();
             table.ColumnNames.AddRange(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
@@ -189,5 +218,8 @@ namespace ETL_SQL.Connectors
 
             return null;
         }
+
+        private static bool ShouldWrapProviderException(Exception ex) =>
+            ex is RequestFailedException or InvalidOperationException;
     }
 }

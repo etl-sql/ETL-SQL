@@ -88,7 +88,7 @@ namespace ETL_SQL.LSP
 
                 if (entry.Metadata.Count > 0)
                 {
-                    md.Add("### Metadata");
+                    md.Add("#### Metadata");
                     foreach (var m in entry.Metadata)
                     {
                         var key = m.Key.Equals("d", StringComparison.OrdinalIgnoreCase) ? "Description" : m.Key;
@@ -105,14 +105,14 @@ namespace ETL_SQL.LSP
 
                 var renderer = new LineageGraphRenderer();
                 string graph = renderer.Render(state.Lineage, entry.TargetTable, entry.TargetColumn);
-                md.Add("### Lineage Graph");
+                md.Add("#### Lineage Graph");
                 md.Add($"```text\n{graph.TrimEnd()}\n```");
             }
 
             if (datasetEntry != null)
             {
                 if (md.Count > 0) md.Add("---");
-                md.Add($"### Dataset `{datasetEntry.Name}`");
+                md.Add($"#### Dataset `{datasetEntry.Name}`");
                 md.Add($"- **Folder**: `{datasetEntry.FolderPath}`");
                 md.Add($"- **Access**: {datasetEntry.AccessLevel}");
                 md.Add($"- **Rows**: {datasetEntry.RowCount:N0}");
@@ -129,15 +129,15 @@ namespace ETL_SQL.LSP
             if (functionHelp != null)
             {
                 if (md.Count > 0) md.Add("---");
-                md.Add("### Function Help");
-                md.Add(functionHelp);
+                md.Add("#### Function Help");
+                md.Add(ScaleDownHeaders(functionHelp));
             }
 
             if (keywordHelp != null)
             {
                 if (md.Count > 0) md.Add("---");
-                md.Add("### Help");
-                md.Add(keywordHelp);
+                md.Add("#### Help");
+                md.Add(ScaleDownHeaders(keywordHelp));
             }
 
             var content = new MarkedStringsOrMarkupContent(new MarkupContent
@@ -147,6 +147,32 @@ namespace ETL_SQL.LSP
             });
 
             return Task.FromResult<Hover?>(new Hover { Contents = content });
+        }
+
+        private string ScaleDownHeaders(string markdown)
+        {
+            if (string.IsNullOrEmpty(markdown)) return markdown;
+            
+            var lines = markdown.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (line.StartsWith("#"))
+                {
+                    int hashCount = 0;
+                    while (hashCount < line.Length && line[hashCount] == '#')
+                    {
+                        hashCount++;
+                    }
+                    
+                    if (hashCount > 0 && hashCount < line.Length && line[hashCount] == ' ')
+                    {
+                        int newHashCount = Math.Min(6, hashCount + 3);
+                        lines[i] = new string('#', newHashCount) + line.Substring(hashCount);
+                    }
+                }
+            }
+            return string.Join("\n", lines);
         }
 
         public HoverRegistrationOptions GetRegistrationOptions(HoverCapability capability, ClientCapabilities clientCapabilities)

@@ -80,24 +80,19 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 var lexer = new Lexer(sql);
                 var tokens = lexer.Tokenize();
                 var parser = new ETL_SQL.Core.Parser.Parser(tokens, sql);
+                var parsedScript = parser.Parse();
                 
-                // We attempt to parse the entire block as a collection of statements.
-                // If it fails, it might be native SQL we don't support, but we report it as an info/warning.
-                while (parser.Current.Type != TokenType.EOF)
+                foreach (var diag in parsedScript.Diagnostics)
                 {
-                    parser.ParseStatement();
+                    results.Add(new LintResult
+                    {
+                        RuleName = Name,
+                        Severity = LintSeverity.Warning, // Warning because it might be valid native SQL
+                        Message = $"Syntactic check of pushdown block failed. This may be due to native SQL syntax or a syntax error: {diag.Message}",
+                        LineNumber = node.Line + diag.Line - 1,
+                        ColumnNumber = diag.Column
+                    });
                 }
-            }
-            catch (SyntaxException ex)
-            {
-                results.Add(new LintResult
-                {
-                    RuleName = Name,
-                    Severity = LintSeverity.Warning, // Warning because it might be valid native SQL
-                    Message = $"Syntactic check of pushdown block failed. This may be due to native SQL syntax or a syntax error: {ex.Message}",
-                    LineNumber = node.Line + ex.Line - 1,
-                    ColumnNumber = ex.Column
-                });
             }
             catch (Exception ex)
             {

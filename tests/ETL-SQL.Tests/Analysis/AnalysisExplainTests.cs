@@ -100,5 +100,24 @@ namespace ETL_SQL.Tests.Analysis
             Assert.Contains("Operation", results.ColumnNames);
             Assert.Contains("Cost", results.ColumnNames);
         }
+
+        [Fact]
+        public async Task TestExplain_OnResultSet_Invoked()
+        {
+            var eval = await GetEvaluator();
+            var sql = @"
+                CREATE TABLE #T (ID INT);
+                EXPLAIN SELECT * FROM #T;
+            ";
+
+            DataTable? plan = null;
+            eval.OnResultSet = (dt) => { plan = dt; };
+
+            await eval.Evaluate(Parse(sql));
+
+            Assert.NotNull(plan);
+            Assert.Contains("Operation", plan.ColumnNames);
+            Assert.Contains("Cost", plan.ColumnNames);
+        }
     }
 }

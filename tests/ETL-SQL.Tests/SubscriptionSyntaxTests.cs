@@ -218,6 +218,14 @@ namespace ETL_SQL.Tests
             Assert.Equal("@cutoff", stmt.Parameters![0].Name);
         }
 
+        [Fact]
+        public void ShowActiveSessions_WithInto_ParsesTarget()
+        {
+            var script = TestHelpers.Parse("SHOW ACTIVE SESSIONS INTO #sessions;");
+            var stmt = Assert.IsType<ShowActivePortalSessionsStatement>(Assert.Single(script.Statements));
+            Assert.Equal("#sessions", stmt.IntoTable);
+        }
+
         // ── Helpers ───────────────────────────────────────────────────────────────
 
         private static CreatePortalSubscriptionStatement ParseCreate(string sql)

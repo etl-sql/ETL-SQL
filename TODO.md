@@ -1,12 +1,12 @@
 # ETL-SQL Development
 ## Bugs
 ### VS Code
-- [ ] **Not seeing EXPLAIN showing** When running EXPLAIN on a query I would expect to see results.
-- [ ] **Performance tab scrollbar** The performance tab does not have a scrollbar so often can't see half of what is being shown without increasing the height of the panel.
+- [x] **Not seeing EXPLAIN showing** When running EXPLAIN on a query I would expect to see results.
+- [x] **Performance tab scrollbar** The performance tab does not have a scrollbar so often can't see half of what is being shown without increasing the height of the panel.
 - [x] **Orchestrator and ReportPortal queries not working** C:\Users\chuck\scratch\ETL-SQL\samples\integration\setup_orchestrator.etlsql message says: Connection 'portal' does not support native SQL pushdown.
-- [ ] **Linter message** On file: :\Users\chuck\scratch\ETL-SQL\samples\integration\setup_orchestrator.etlsql getting Syntactic check of pushdown block failed. This may be due to native SQL syntax or a syntax error: Unexpected token type SEMICOLON (';') at start of statement at line 1, col 111
-- [ ] **When saving this script it should require a password**  Script clearly has a plain text password, on save it should ask for a master password.
-- [ ] **Reduce fonts in help popups** The help fonts are too big when compared to the rest of the text see screenshot: C:\Users\chuck\scratch\ETL-SQL\brain\Screenshot 2026-05-10 155716.png
+- [x] **Linter message** On file: :\Users\chuck\scratch\ETL-SQL\samples\integration\setup_orchestrator.etlsql getting Syntactic check of pushdown block failed. This may be due to native SQL syntax or a syntax error: Unexpected token type SEMICOLON (';') at start of statement at line 1, col 111
+- [x] **When saving this script it should require a password**  Script clearly has a plain text password, on save it should ask for a master password.
+- [x] **Reduce fonts in help popups** The help fonts are too big when compared to the rest of the text see screenshot: C:\Users\chuck\scratch\ETL-SQL\brain\Screenshot 2026-05-10 155716.png
 
 ### General
 - [x] **Implement Remote Orchestrator & Report Portal Connectors** The `ORCHESTRATOR` and `REPORTPORTAL` connection types are documented in the grammar but are missing from the C# engine execution layer. This blocks the entire remote administrative ecosystem. The following specific statement handlers need to be implemented:
@@ -24,8 +24,8 @@ Must be included in the documentation. `C:\Users\chuck\scratch\ETL-SQL\Docs\Synt
 - [x] **Orchestrator job error**  Fixed: published `orch://` bundle script paths are virtual paths and are no longer used as filesystem base paths during `ResolvePath`; relative paths inside published scripts now resolve from the orchestrator working directory instead of throwing `Basepath argument is not fully qualified`.  The source code is here: C:\Users\chuck\scratch\ETL-SQL\samples\integration\setup_orchestrator.etlsql
 - [x] **Disable/Enable AT**  Cannot run ENABLE JOB <name> AT <connection> same for DISABLE JOB.  Getting this error: [94760039] [PARSER Error] Unexpected token type AT ('AT') at start of statement at line 1, col 29 at line 1, col 29
 - [x] **Need SHOW BUNDLES command**  SHOW BUNDLES should be an alias of SHOW PUBLISHED BUNDLES.  Since the other SHOW BUNDLE ... don't include the word PUBLISHED it may be confusing so we'll do a SHOW BUNDLES to be consistent with other commands like SHOW JOBS, SHOW CONNECTIONS,...
-- [ ] **SHOW PUBLISHED BUNDLES returns nothing** Nothing is returned no rows even though I know one was published
-- [ ] **Newer syntax not colored** Newer syntax words like PUBLISHED BUNDLE don't have color in TUI or VS Code
+- [x] **SHOW PUBLISHED BUNDLES returns nothing** Nothing is returned no rows even though I know one was published
+- [x] **Newer syntax not colored** Newer syntax words like PUBLISHED BUNDLE don't have color in TUI or VS Code
 
 ### Report Portal
 - [x] **Orchestrator in portal show failed**  The portal shows the number of jobs failed but doesn't give you any way to figure out which ones.  Can we make those metrics clickable?
@@ -46,7 +46,7 @@ Must be included in the documentation. `C:\Users\chuck\scratch\ETL-SQL\Docs\Synt
 ### TUI
 
 ## Codebase Review Findings
-- [ ] **Unwrapped Database/Provider Exceptions in Connectors**
+- [ ] **Unwrapped Database/Provider Exceptions in Connectors** *(partial: main read/raw/list/file-operation paths now wrap provider exceptions in `ExecutionException`; schema/version helper methods still need full coverage before closing)*
   The following connectors do not catch and wrap provider-specific exceptions (e.g., `SqlException`, `NpgsqlException`, `OracleException`, `OdbcException`, `FtpException`, `SshException`, `HttpRequestException`, `RequestFailedException`) in `ExecutionException` before crossing the connector boundary:
     - **SQL Server** ([SqlServerDataSource.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/SqlServer/SqlServerDataSource.cs))
     - **PostgreSQL** ([PostgresDataSource.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Postgres/PostgresDataSource.cs))
@@ -57,9 +57,9 @@ Must be included in the documentation. `C:\Users\chuck\scratch\ETL-SQL\Docs\Synt
     - **REST** ([RestConnector.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Rest/))
     - **Azure Blob** ([AzureBlobConnector.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/AzureBlobConnector.cs))
   This violates Section 8 of the developer guardrails in `AGENTS.md`.
-- [ ] **Blocking Semaphore Slim Wait in SpillStore**
+- [x] **Blocking Semaphore Slim Wait in SpillStore**
   In `SpillStore.EnsureInitialized` ([SpillStore.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Spill/SpillStore.cs#L74)), the semaphore is waited on synchronously using `_initLock.Wait()`. This blocking call inside synchronous property accessors like `RootPath` can lead to thread-pool starvation when executing in critical async context paths.
-- [ ] **Swallowed Exception in PortalBrandingSettingsService Constructor**
+- [x] **Swallowed Exception in PortalBrandingSettingsService Constructor**
   In `PortalBrandingSettingsService.cs` ([PortalBrandingSettingsService.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.ReportPortal/Services/PortalBrandingSettingsService.cs#L33)), the constructor catches all exceptions thrown during file reading or deserialization of `portal-branding.json` and completely swallows them (`catch { }`), hiding underlying file access or formatting corruption issues.
-- [ ] **Missing Zero-Trust Path Resolution in CreateDatasetStatementHandler**
+- [x] **Missing Zero-Trust Path Resolution in CreateDatasetStatementHandler**
   In `CreateDatasetStatementHandler.WriteSidecarScript` ([CreateDatasetStatementHandler.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Handlers/CreateDatasetStatementHandler.cs#L272)), `File.WriteAllText(sidecarPath, ...)` is called directly without passing `sidecarPath` through `context.ResolvePath()`. This bypasses the Zero-Trust security boundary mandate in Section 8 of `AGENTS.md`.

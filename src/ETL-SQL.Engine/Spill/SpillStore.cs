@@ -39,7 +39,7 @@ namespace ETL_SQL.Engine.Spill
         private byte[]? _cachedSessionKey;
         private string? _cachedSessionId;
         private bool _usingTemporaryFallback;
-        private readonly SemaphoreSlim _initLock = new(1, 1);
+        private readonly object _initLock = new();
         private readonly IExecutionContext _context;
         private bool _disposed;
 
@@ -71,8 +71,7 @@ namespace ETL_SQL.Engine.Spill
                 return;
             }
 
-            _initLock.Wait();
-            try
+            lock (_initLock)
             {
                 if (CacheMatchesContext())
                 {
@@ -117,10 +116,6 @@ namespace ETL_SQL.Engine.Spill
                     _cachedSessionKey = RandomNumberGenerator.GetBytes(32);
                     Directory.CreateDirectory(_cachedRootPath);
                 }
-            }
-            finally
-            {
-                _initLock.Release();
             }
         }
 
@@ -215,8 +210,6 @@ namespace ETL_SQL.Engine.Spill
             }
 
             if (_cachedSessionKey != null) System.Array.Clear(_cachedSessionKey);
-            _initLock.Dispose();
-
             _disposed = true;
             GC.SuppressFinalize(this);
         }

@@ -59,7 +59,10 @@ namespace ETL_SQL.Connectors.Odbc
 
         public HashSet<string> GetSupportedFunctions() => OdbcSyntax.Functions;
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "ODBC", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for ODBC data source read.");
@@ -160,7 +163,10 @@ namespace ETL_SQL.Connectors.Odbc
             }
         }
 
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters), "ODBC", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
         {
             var (conn, isShared) = await GetConnectionAsync();
             try {
@@ -325,11 +331,19 @@ namespace ETL_SQL.Connectors.Odbc
                 throw new ExecutionException("Connection string is missing for ODBC data source.");
             
             var conn = new OdbcConnection(_connectionString);
-            await ConnectorRetryPolicy.ForOdbc(_logger)
-                .ExecuteAsync(async ct => {
-                    await Task.Run(() => conn.Open(), ct);
-                });
-            return (conn, false);
+            try
+            {
+                await ConnectorRetryPolicy.ForOdbc(_logger)
+                    .ExecuteAsync(async ct => {
+                        await Task.Run(() => conn.Open(), ct);
+                    });
+                return (conn, false);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                conn.Dispose();
+                throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
+            }
         }
 
         public async Task TruncateAsync()
@@ -347,5 +361,8 @@ namespace ETL_SQL.Connectors.Odbc
             _activeTransaction = null;
             _transactionalConnection = null;
         }
+
+        private static bool ShouldWrapProviderException(Exception ex) =>
+            ex is OdbcException or InvalidOperationException;
     }
 }

@@ -112,69 +112,71 @@ namespace ETL_SQL.Engine.Handlers
             context.LastResult = plan;
             context.LastResultSets.Add(plan);
             
-            if (!context.RedirectOutput)
+            if (stmt.IntoTable != null)
             {
-                var table = new Table()
-                    .Border(TableBorder.Rounded)
-                    .Title(stmt.IsAnalyze ? "[bold yellow]Execution Plan (ANALYZE)[/]" : "[bold yellow]Execution Plan[/]")
-                    .AddColumn("ID")
-                    .AddColumn("Operation")
-                    .AddColumn("Details")
-                    .AddColumn("Cost", c => c.RightAligned())
-                    .AddColumn("Mode")
-                    .AddColumn("Est. Rows", c => c.RightAligned());
-
-                if (stmt.IsAnalyze)
+                var destination = await context.ResolveDataSourceAsync(stmt.IntoTable);
+                await destination.WriteBatches(new List<DataTable> { plan }.ToAsyncEnumerable());
+                context.Log($"Query plan stored in {stmt.IntoTable.TableName}.");
+            }
+            else
+            {
+                context.OnResultSet?.Invoke(plan);
+                if (!context.RedirectOutput)
                 {
-                    table.AddColumn("Actual Rows", c => c.RightAligned());
-                    table.AddColumn("Actual Time", c => c.RightAligned());
-                    table.AddColumn("Spill Bytes", c => c.RightAligned());
-                    table.AddColumn("Spill Count", c => c.RightAligned());
-                }
-
-                foreach (var row in plan.Rows)
-                {
-                    var modeRaw = row["Mode"]?.ToString() ?? "";
-                    var modeMarkup = modeRaw == "BLOCKING"
-                        ? new Markup("[yellow]BLOCKING[/]")
-                        : (IRenderable)new Text(modeRaw);
-                    var estRows = new Text(row["Est. Rows"]?.ToString() ?? "--");
+                    var table = new Table()
+                        .Border(TableBorder.Rounded)
+                        .Title(stmt.IsAnalyze ? "[bold yellow]Execution Plan (ANALYZE)[/]" : "[bold yellow]Execution Plan[/]")
+                        .AddColumn("ID")
+                        .AddColumn("Operation")
+                        .AddColumn("Details")
+                        .AddColumn("Cost", c => c.RightAligned())
+                        .AddColumn("Mode")
+                        .AddColumn("Est. Rows", c => c.RightAligned());
 
                     if (stmt.IsAnalyze)
                     {
-                        table.AddRow(
-                            new Text(row["ID"]?.ToString() ?? ""),
-                            new Text(row["Operation"]?.ToString() ?? ""),
-                            new Text(row["Details"]?.ToString() ?? ""),
-                            new Text(row["Cost"]?.ToString() ?? ""),
-                            modeMarkup,
-                            estRows,
-                            new Text(row["Actual Rows"]?.ToString() ?? "--"),
-                            new Text(row["Actual Time (ms)"]?.ToString() ?? "--"),
-                            new Text(row["Spill Bytes"]?.ToString() ?? "0"),
-                            new Text(row["Spill Count"]?.ToString() ?? "0")
-                        );
+                        table.AddColumn("Actual Rows", c => c.RightAligned());
+                        table.AddColumn("Actual Time", c => c.RightAligned());
+                        table.AddColumn("Spill Bytes", c => c.RightAligned());
+                        table.AddColumn("Spill Count", c => c.RightAligned());
                     }
-                    else
+
+                    foreach (var row in plan.Rows)
                     {
-                        table.AddRow(
-                            new Text(row["ID"]?.ToString() ?? ""),
-                            new Text(row["Operation"]?.ToString() ?? ""),
-                            new Text(row["Details"]?.ToString() ?? ""),
-                            new Text(row["Cost"]?.ToString() ?? ""),
-                            modeMarkup,
-                            estRows
-                        );
+                        var modeRaw = row["Mode"]?.ToString() ?? "";
+                        var modeMarkup = modeRaw == "BLOCKING"
+                            ? new Markup("[yellow]BLOCKING[/]")
+                            : (IRenderable)new Text(modeRaw);
+                        var estRows = new Text(row["Est. Rows"]?.ToString() ?? "--");
+
+                        if (stmt.IsAnalyze)
+                        {
+                            table.AddRow(
+                                new Text(row["ID"]?.ToString() ?? ""),
+                                new Text(row["Operation"]?.ToString() ?? ""),
+                                new Text(row["Details"]?.ToString() ?? ""),
+                                new Text(row["Cost"]?.ToString() ?? ""),
+                                modeMarkup,
+                                estRows,
+                                new Text(row["Actual Rows"]?.ToString() ?? "--"),
+                                new Text(row["Actual Time (ms)"]?.ToString() ?? "--"),
+                                new Text(row["Spill Bytes"]?.ToString() ?? "0"),
+                                new Text(row["Spill Count"]?.ToString() ?? "0")
+                            );
+                        }
+                        else
+                        {
+                            table.AddRow(
+                                new Text(row["ID"]?.ToString() ?? ""),
+                                new Text(row["Operation"]?.ToString() ?? ""),
+                                new Text(row["Details"]?.ToString() ?? ""),
+                                new Text(row["Cost"]?.ToString() ?? ""),
+                                modeMarkup,
+                                estRows
+                            );
+                        }
                     }
-                }
-                if (stmt.IntoTable != null)
-                {
-                    var destination = await context.ResolveDataSourceAsync(stmt.IntoTable);
-                    await destination.WriteBatches(new List<DataTable> { plan }.ToAsyncEnumerable());
-                    context.Log($"Query plan stored in {stmt.IntoTable.TableName}.");
-                }
-                else
-                {
+
                     AnsiConsole.Write(table);
                     AnsiConsole.MarkupLine($"[grey]Total Plan Cost:[/] [yellow]{metrics.DurationMs}[/]");
                     if (stmt.IsAnalyze)

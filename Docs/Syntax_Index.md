@@ -862,6 +862,24 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `PUBLISH REPORT` | Portal | Deploys a report script |
 | `ALTER REPORT` | Portal | Modifies report metadata |
 | `DROP REPORT` | Portal | Deletes a report |
+| `SHOW REPORT` | Portal | Shows report metadata |
+| `SHOW REPORT HISTORY` | Portal | Shows report refresh/history rows |
+| `SHOW REPORT DEPENDENCIES` | Portal | Shows report dependencies |
+| `FAVORITE REPORT` | Portal | Marks a report as a favorite |
+| `UNFAVORITE REPORT` | Portal | Removes a report favorite |
+| `VALIDATE REPORT SCRIPT` | Portal | Validates a report script without publishing |
+| `CREATE SHARE LINK` | Portal | Creates a share link for a report |
+| `SHOW SHARE LINKS` | Portal | Lists report share links |
+| `REVOKE SHARE LINK` | Portal | Revokes a share link token |
+| `CREATE EMBED TOKEN` | Portal | Creates an embed token for a report |
+| `SHOW EMBED TOKENS` | Portal | Lists report embed tokens |
+| `REVOKE EMBED TOKEN` | Portal | Revokes an embed token |
+| `CREATE SAVED VIEW` | Portal | Saves report parameter/filter values |
+| `SHOW SAVED VIEWS` | Portal | Lists saved views for a report |
+| `DROP SAVED VIEW` | Portal | Deletes a saved report view |
+| `CREATE ALERT` | Portal | Creates a report alert |
+| `SHOW ALERTS` | Portal | Lists report alerts |
+| `DROP ALERT` | Portal | Deletes a report alert |
 | `CREATE REFRESH JOB` | Portal | Schedules automated snapshot refresh |
 | `REFRESH REPORT` | Portal | Manually starts a report refresh cycle |
 | `REFRESH DATASET` | Portal | Marks a portal dataset stale and queues refresh when possible |
@@ -873,10 +891,10 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `CREATE SUBSCRIPTION`| Portal | Schedules email/PDF report delivery |
 | `ALTER SUBSCRIPTION` | Portal | Modifies subscription settings |
 | `DROP SUBSCRIPTION` | Portal | Deletes a subscription |
-| `DISCONNECT USER` | Portal | _(v1.1 — requires portal endpoint addition)_ |
+| `DISCONNECT USER` | Portal | Revokes active refresh sessions for a user |
 | `REVOKE TOKENS` | Portal | Invalidates all user authentication tokens |
-| `RESTART PORTAL` | Portal | _(v1.1 — requires portal endpoint addition)_ |
-| `SHUTDOWN PORTAL` | Portal | _(v1.1 — requires portal endpoint addition)_ |
+| `RESTART PORTAL` | Portal | Requests process stop for external supervisor restart; requires `Portal:AllowServiceControl=true` |
+| `SHUTDOWN PORTAL` | Portal | Requests portal process shutdown; requires `Portal:AllowServiceControl=true` |
 | `CREATE JOB`          | Orch     | Schedules a recurring script task |
 | `DROP JOB`            | Orch     | Deletes a scheduled script task |
 | `KILL JOB`            | Orch     | Stops a running background task |
@@ -885,7 +903,12 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `EXPORT SCRIPT`       | Orch     | Recovers published bundle files to disk |
 | `SHOW USERS`          | Portal   | Lists all registered users |
 | `SHOW REPORTS`        | Portal   | Lists reports in a folder |
-| `SHOW ACTIVE SESSIONS`| Portal   | _(v1.1 — requires portal endpoint addition)_ |
+| `SHOW FAVORITES`      | Portal   | Lists favorite reports |
+| `SHOW RECENT REPORTS` | Portal   | Lists recently viewed reports |
+| `SHOW CATALOG SEARCH` | Portal   | Searches the portal catalog |
+| `SHOW EFFECTIVE PERMISSIONS` | Portal | Shows resolved portal permissions |
+| `SHOW PORTAL USAGE METRICS` | Portal | Shows usage and refresh health metrics |
+| `SHOW ACTIVE SESSIONS`| Portal   | Lists unrevoked, unexpired portal refresh sessions |
 | `SHOW JOBS`           | Orch     | Lists scheduled background tasks |
 | `SHOW JOB HISTORY`    | Orch     | Lists history of executed background tasks |
 | `SHOW PUBLISHED BUNDLES` | Orch  | Lists latest published bundle versions |

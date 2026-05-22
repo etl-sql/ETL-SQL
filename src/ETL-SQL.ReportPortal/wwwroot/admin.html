@@ -13,14 +13,7 @@
   <header class="topbar">
     <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
     <nav class="topbar-nav">
-      <span class="report-nav-group">
-        <a href="/index.html" class="report-nav-root" aria-haspopup="true">Reports</a>
-        <span class="report-nav-submenu" aria-label="Reporting views">
-          <a href="/index.html#favorites">Favorites</a>
-          <a href="/index.html#recent">Recently Viewed</a>
-          <a href="/index.html#subscriptions">My Subscriptions</a>
-        </span>
-      </span>
+      <a href="/index.html">Reports</a>
       <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
       <a href="/admin.html" class="active">Admin</a>
     </nav>
@@ -524,11 +517,9 @@
 <script type="module">
 import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi } from '/js/api.js';
 import { applyPortalBranding } from '/js/branding.js';
-import { wireReportNav } from '/js/nav.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
-wireReportNav();
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 try {

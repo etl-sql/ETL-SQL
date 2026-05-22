@@ -68,7 +68,10 @@ namespace ETL_SQL.Connectors.Postgres
 
         public HashSet<string> GetSupportedFunctions() => PostgresSyntax.Functions;
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "PostgreSQL", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Postgres data source read.");
@@ -154,7 +157,10 @@ namespace ETL_SQL.Connectors.Postgres
             }
         }
 
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters), "PostgreSQL", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
         {
             var (conn, isShared) = await GetConnectionAsync();
             
@@ -327,9 +333,17 @@ namespace ETL_SQL.Connectors.Postgres
         {
             if (_transactionalConnection != null) return (_transactionalConnection, true);
             var conn = new NpgsqlConnection(_connectionString);
-            await ConnectorRetryPolicy.ForPostgres(_logger)
-                .ExecuteAsync(async ct => await conn.OpenAsync(ct));
-            return (conn, false);
+            try
+            {
+                await ConnectorRetryPolicy.ForPostgres(_logger)
+                    .ExecuteAsync(async ct => await conn.OpenAsync(ct));
+                return (conn, false);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                await conn.DisposeAsync();
+                throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
+            }
         }
 
         public async Task TruncateAsync()
@@ -360,5 +374,8 @@ namespace ETL_SQL.Connectors.Postgres
             _activeTransaction = null;
             _transactionalConnection = null;
         }
+
+        private static bool ShouldWrapProviderException(Exception ex) =>
+            ex is NpgsqlException or InvalidOperationException;
     }
 }

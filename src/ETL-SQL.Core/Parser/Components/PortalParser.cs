@@ -613,7 +613,7 @@ namespace ETL_SQL.Core.Parser.Components
             decimal threshold = ParseDecimalLiteral("Expected numeric alert threshold");
             string? recipient = null;
             string? smtpAlias = null;
-            if (MatchIdentifier("DELIVER"))
+            if (Match(TokenType.DELIVER) || MatchIdentifier("DELIVER"))
             {
                 Consume(TokenType.TO, "Expected TO");
                 recipient = ConsumeStringLiteral("Expected alert recipient string literal");

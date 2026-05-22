@@ -711,6 +711,7 @@ namespace ETL_SQL.Core.Parser.Components
                     SearchPortalCatalogStatement spc => spc with { IntoTable = tempTable },
                     ShowEffectivePortalPermissionsStatement sepp => sepp with { IntoTable = tempTable },
                     ShowPortalUsageMetricsStatement spum => spum with { IntoTable = tempTable },
+                    ShowActivePortalSessionsStatement saps => saps with { IntoTable = tempTable },
                     LineageStatement lin         => lin with { IntoTable = tempTable },
                     _                            => stmt
                 };

@@ -37,7 +37,7 @@ namespace ETL_SQL.Core.Parser
             TokenType.STEP, TokenType.TOP, TokenType.BOTTOM, TokenType.LEFT, TokenType.RIGHT,
             TokenType.ASC, TokenType.DESC, TokenType.FIRST, TokenType.NEXT, TokenType.ONLY,
             TokenType.NO, TokenType.OTHERS,
-            TokenType.ENABLE, TokenType.DISABLE, TokenType.TRIGGER
+            TokenType.ENABLE, TokenType.DISABLE, TokenType.TRIGGER, TokenType.EXPORT
         };
 
 

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
@@ -16,7 +17,9 @@ namespace ETL_SQL.ReportPortal.Controllers;
 public class AdminController(
     UserManager<PortalUser> userManager,
     PortalDbContext          db,
-    AuditService             audit) : ControllerBase
+    AuditService             audit,
+    PortalConfig             config,
+    IHostApplicationLifetime lifetime) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -157,6 +160,102 @@ public class AdminController(
         foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "REVOKE_TOKENS", "User", id.ToString());
+        return NoContent();
+    }
+
+    [HttpGet("sessions")]
+    public async Task<IActionResult> GetActiveSessions()
+    {
+        var now = DateTime.UtcNow;
+        var sessions = await db.RefreshTokens
+            .Include(t => t.User)
+            .Where(t => t.RevokedAt == null && t.ExpiresAt > now)
+            .OrderBy(t => t.ExpiresAt)
+            .Select(t => new
+            {
+                t.Id,
+                t.UserId,
+                Username = t.User.UserName,
+                t.ExpiresAt
+            })
+            .ToListAsync();
+
+        return Ok(sessions);
+    }
+
+    [HttpPost("users/{id:int}/disconnect")]
+    public async Task<IActionResult> DisconnectUser(int id)
+    {
+        if (!await db.Users.AnyAsync(u => u.Id == id)) return NotFound();
+
+        var tokens = await db.RefreshTokens
+            .Where(t => t.UserId == id && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
+            .ToListAsync();
+        foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "DISCONNECT_USER", "User", id.ToString());
+        return Ok(new { Revoked = tokens.Count });
+    }
+
+    [HttpGet("users/{userId:int}/favorites")]
+    public async Task<IActionResult> GetUserFavorites(int userId, [FromQuery] int limit = 50)
+    {
+        if (!await db.Users.AnyAsync(u => u.Id == userId)) return NotFound();
+        limit = Math.Clamp(limit, 1, 100);
+
+        var reports = await db.ReportFavorites
+            .Include(f => f.Report).ThenInclude(r => r.Folder)
+            .Where(f => f.UserId == userId && !f.Report.IsDeleted)
+            .OrderByDescending(f => f.CreatedAt)
+            .Take(limit)
+            .Select(f => f.Report)
+            .ToListAsync();
+
+        return Ok(reports.Select(r => new
+        {
+            Type = "Report",
+            r.Id,
+            r.Name,
+            Path = CombinePath(r.Folder.Path, r.Name),
+            r.FolderId,
+            r.Description,
+            r.Tags,
+            r.Category,
+            r.Owner,
+            r.Certification,
+            r.LastViewedAt,
+            r.LastRefreshStatus,
+            r.LastRefreshError,
+            r.LastRefreshDurationMs,
+            IsFavorite = true
+        }));
+    }
+
+    [HttpPost("users/{userId:int}/favorites/{reportId:int}")]
+    public async Task<IActionResult> FavoriteReportForUser(int userId, int reportId)
+    {
+        if (!await db.Users.AnyAsync(u => u.Id == userId)) return NotFound(new { error = "User not found" });
+        if (!await db.Reports.AnyAsync(r => r.Id == reportId && !r.IsDeleted)) return NotFound(new { error = "Report not found" });
+        if (!await db.ReportFavorites.AnyAsync(f => f.UserId == userId && f.ReportId == reportId))
+        {
+            db.ReportFavorites.Add(new ReportFavorite { UserId = userId, ReportId = reportId });
+            await db.SaveChangesAsync();
+            await audit.LogAsync(CurrentUserId, "FAVORITE_REPORT_FOR_USER", "Report", reportId.ToString(), userId.ToString());
+        }
+        return NoContent();
+    }
+
+    [HttpDelete("users/{userId:int}/favorites/{reportId:int}")]
+    public async Task<IActionResult> UnfavoriteReportForUser(int userId, int reportId)
+    {
+        var favorite = await db.ReportFavorites.FirstOrDefaultAsync(f => f.UserId == userId && f.ReportId == reportId);
+        if (favorite is not null)
+        {
+            db.ReportFavorites.Remove(favorite);
+            await db.SaveChangesAsync();
+            await audit.LogAsync(CurrentUserId, "UNFAVORITE_REPORT_FOR_USER", "Report", reportId.ToString(), userId.ToString());
+        }
         return NoContent();
     }
 
@@ -570,6 +669,38 @@ public class AdminController(
         settings.Update(req.ApiUrl, req.ApiKey);
         await audit.LogAsync(CurrentUserId, "UPDATE_ORCHESTRATOR_SETTINGS", "System", null, req.ApiUrl);
         return NoContent();
+    }
+
+    // ── Service control ────────────────────────────────────────────────────────
+
+    [HttpPost("service/restart")]
+    public async Task<IActionResult> RestartService()
+    {
+        if (!config.AllowServiceControl)
+            return StatusCode(403, new { error = "Portal service control is disabled. Set Portal:AllowServiceControl=true to enable it." });
+
+        await audit.LogAsync(CurrentUserId, "RESTART_PORTAL", "System", null);
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(250);
+            lifetime.StopApplication();
+        });
+        return Ok(new { message = "Portal restart requested. The external service supervisor must restart the process." });
+    }
+
+    [HttpPost("service/shutdown")]
+    public async Task<IActionResult> ShutdownService()
+    {
+        if (!config.AllowServiceControl)
+            return StatusCode(403, new { error = "Portal service control is disabled. Set Portal:AllowServiceControl=true to enable it." });
+
+        await audit.LogAsync(CurrentUserId, "SHUTDOWN_PORTAL", "System", null);
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(250);
+            lifetime.StopApplication();
+        });
+        return Ok(new { message = "Portal shutdown requested." });
     }
 
     // ── Portal branding settings ──────────────────────────────────────────────

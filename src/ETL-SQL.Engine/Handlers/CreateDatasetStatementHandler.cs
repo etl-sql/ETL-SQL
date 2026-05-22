@@ -114,7 +114,7 @@ namespace ETL_SQL.Engine.Handlers
             var parquetPath = registry.BuildDatasetFilePath(stmt.TempTableName, folderPath);
 
             await WriteToParquet(stmt.TempTableName, parquetPath, stmt, context);
-            WriteSidecarScript(stmt, parquetPath);
+            WriteSidecarScript(stmt, parquetPath, context);
 
             await registry.RegisterOrUpdate(new DatasetMetadata
             {
@@ -243,11 +243,11 @@ namespace ETL_SQL.Engine.Handlers
             await context.EvaluateStatement(jobStmt);
         }
 
-        private void WriteSidecarScript(CreateDatasetStatement stmt, string parquetPath)
+        private void WriteSidecarScript(CreateDatasetStatement stmt, string parquetPath, IExecutionContext context)
         {
             try
             {
-                var sidecarPath = Path.ChangeExtension(parquetPath, ".etlsql");
+                var sidecarPath = context.ResolvePath(Path.ChangeExtension(parquetPath, ".etlsql"));
                 var connAlias   = $"__ds_{MakeSafeAlias(stmt.TempTableName)}__";
                 var encLabel    = EncryptLabel(stmt.EncryptionMode);
 

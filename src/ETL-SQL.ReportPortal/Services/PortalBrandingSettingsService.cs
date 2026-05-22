@@ -11,13 +11,15 @@ public class PortalBrandingSettingsService
 {
     private readonly string _settingsPath;
     private readonly object _lock = new();
+    private readonly ILogger<PortalBrandingSettingsService> _logger;
 
     public string? DisplayName { get; private set; }
     public string? FooterText { get; private set; }
     public string? LogoUrl { get; private set; }
 
-    public PortalBrandingSettingsService(PortalConfig config)
+    public PortalBrandingSettingsService(PortalConfig config, ILogger<PortalBrandingSettingsService> logger)
     {
+        _logger = logger;
         var dbDir = Path.GetDirectoryName(Path.GetFullPath(config.DatabasePath)) ?? ".";
         _settingsPath = Path.Combine(dbDir, "portal-branding.json");
 
@@ -30,7 +32,10 @@ public class PortalBrandingSettingsService
             FooterText = Clean(persisted?.FooterText);
             LogoUrl = Clean(persisted?.LogoUrl);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Portal branding settings could not be loaded from {Path}. Defaults will be used.", _settingsPath);
+        }
     }
 
     public void Update(string? displayName, string? footerText, string? logoUrl)

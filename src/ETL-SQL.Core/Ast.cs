@@ -2340,7 +2340,7 @@ namespace ETL_SQL.Core
 
     public record ShowPortalUsageMetricsStatement(int? Days, string? IntoTable = null) : Statement;
 
-    public record ShowActivePortalSessionsStatement : Statement;
+    public record ShowActivePortalSessionsStatement(string? IntoTable = null) : Statement;
 
     public record ValidatePortalReportStatement(string ScriptPath, string? IntoTable = null) : Statement;
 }

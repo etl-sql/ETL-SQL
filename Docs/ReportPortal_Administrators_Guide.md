@@ -587,6 +587,8 @@ The optional `'<name>'` is a human-readable label shown in subscription lists. I
 
 Parameter values are stored as strings and must be single-quoted. Use the report script's defaults when you want an unset parameter.
 
+When these statements are executed remotely through a `REPORTPORTAL` connection, `FORMAT PDF` and `FORMAT CSV` are supported. `FORMAT BOTH` and `DELIVER TO GROUP` remain language syntax for planned portal delivery support, but the remote connector rejects them until the portal API can generate both attachments and expand group recipients.
+
 **Examples:**
 
 ```sql
@@ -702,7 +704,113 @@ DROP SUBSCRIPTION <id>;
 
 ---
 
-## 9. Health Monitoring
+## 9. Extended Admin Scripting
+
+The Report Portal connector supports script-first administration inside a remote block:
+
+```sql
+CREATE CONNECTION portal AS REPORTPORTAL (
+    HOST = 'http://localhost:5000',
+    USERNAME = 'admin',
+    PASSWORD = ENC:...
+);
+
+EXECUTE portal BEGIN
+    SHOW USERS;
+    SHOW REPORTS;
+END;
+```
+
+Result-producing commands can write to a temp table with `INTO #table` and also update `@@RESULT` / `@@RESULTSETS`.
+
+### 9.1 Report Operations
+
+```sql
+EXECUTE portal BEGIN
+    SHOW REPORT 'Daily Sales' INTO #report;
+    SHOW REPORT HISTORY 'Daily Sales' INTO #history;
+    SHOW REPORT DEPENDENCIES 'Daily Sales' INTO #deps;
+    VALIDATE REPORT SCRIPT 'C:\Reports\daily_sales.rptsql' INTO #validation;
+
+    FAVORITE REPORT 'Daily Sales';
+    FAVORITE REPORT 'Daily Sales' FOR USER 'alice';
+    SHOW FAVORITES LIMIT 25 INTO #favorites;
+    SHOW FAVORITES FOR USER 'alice' LIMIT 25;
+    UNFAVORITE REPORT 'Daily Sales' FOR USER 'alice';
+END;
+```
+
+Name lookups are case-insensitive. If multiple reports share the same name, the connector raises an ambiguity error instead of choosing one.
+
+### 9.2 Sharing, Embedding, Saved Views, and Alerts
+
+```sql
+EXECUTE portal BEGIN
+    CREATE SHARE LINK FOR REPORT 'Daily Sales' EXPIRES '2026-12-31T23:59:59Z' INTO #share;
+    SHOW SHARE LINKS FOR REPORT 'Daily Sales';
+    REVOKE SHARE LINK '<token>';
+
+    CREATE EMBED TOKEN FOR REPORT 'Daily Sales' NAME 'Finance Wallboard' INTO #embed;
+    SHOW EMBED TOKENS FOR REPORT 'Daily Sales';
+    REVOKE EMBED TOKEN '<token>';
+
+    CREATE SAVED VIEW 'EMEA' FOR REPORT 'Daily Sales'
+        PARAMETERS (@region = 'EMEA', @start = 'D-1');
+    SHOW SAVED VIEWS FOR REPORT 'Daily Sales';
+    DROP SAVED VIEW 'EMEA' FOR REPORT 'Daily Sales';
+
+    CREATE ALERT 'HighFailures' FOR REPORT 'Ops'
+        WHEN VISUAL 'FailureCard' > 10
+        DELIVER TO 'ops@example.com'
+        AT corporate-smtp;
+    SHOW ALERTS FOR REPORT 'Ops';
+    DROP ALERT 'HighFailures' FOR REPORT 'Ops';
+END;
+```
+
+### 9.3 Catalog, Permissions, Metrics, and Sessions
+
+```sql
+EXECUTE portal BEGIN
+    SHOW RECENT REPORTS LIMIT 20 INTO #recent;
+    SHOW CATALOG SEARCH 'finance' LIMIT 50 INTO #catalog;
+    SHOW EFFECTIVE PERMISSIONS FOR USER 'alice' INTO #perms;
+    SHOW EFFECTIVE PERMISSIONS FOR REPORT 'Daily Sales';
+    SHOW EFFECTIVE PERMISSIONS FOR FOLDER '/Finance';
+    SHOW PORTAL USAGE METRICS FOR 30 DAYS INTO #metrics;
+    SHOW ACTIVE SESSIONS INTO #sessions;
+
+    DISCONNECT USER 'alice';
+    REVOKE TOKENS FOR USER 'alice';
+END;
+```
+
+`SHOW ACTIVE SESSIONS` reports unrevoked, unexpired refresh tokens. `DISCONNECT USER` revokes those active refresh sessions; already-issued access tokens still expire on their normal JWT lifetime.
+
+### 9.4 Service Control
+
+```sql
+EXECUTE portal BEGIN
+    RESTART PORTAL;
+    SHUTDOWN PORTAL;
+END;
+```
+
+Service-control commands require an Admin user and are disabled by default. Enable them only for trusted automation:
+
+```json
+{
+  "Portal": {
+    "AllowServiceControl": true
+  }
+}
+```
+
+`RESTART PORTAL` requests process shutdown so Docker, systemd, Windows Service, or another supervisor can start it again. The portal does not self-spawn a replacement process.
+
+---
+
+## 10. Health Monitoring
 
 `GET /health` returns a JSON document with the overall portal status and the state of each subsystem.
 

@@ -47,9 +47,17 @@ namespace ETL_SQL.Connectors.Oracle
         private async Task<OracleConnection> OpenConnectionAsync()
         {
             var conn = new OracleConnection(_connectionString);
-            await ConnectorRetryPolicy.ForOracle(_logger)
-                .ExecuteAsync(async ct => await conn.OpenAsync(ct));
-            return conn;
+            try
+            {
+                await ConnectorRetryPolicy.ForOracle(_logger)
+                    .ExecuteAsync(async ct => await conn.OpenAsync(ct));
+                return conn;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                conn.Dispose();
+                throw ConnectorExceptionWrapper.Wrap("Oracle", ex);
+            }
         }
 
         public async Task<string> GetVersionAsync()
@@ -62,7 +70,10 @@ namespace ETL_SQL.Connectors.Oracle
 
         public HashSet<string> GetSupportedFunctions() => OracleSyntax.Functions;
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Oracle", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Oracle data source read.");
@@ -148,7 +159,10 @@ namespace ETL_SQL.Connectors.Oracle
             }
         }
 
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters), "Oracle", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
         {
             using var conn = await OpenConnectionAsync();
 
@@ -285,5 +299,8 @@ namespace ETL_SQL.Connectors.Oracle
         {
             await Task.CompletedTask;
         }
+
+        private static bool ShouldWrapProviderException(Exception ex) =>
+            ex is OracleException or InvalidOperationException;
     }
 }
