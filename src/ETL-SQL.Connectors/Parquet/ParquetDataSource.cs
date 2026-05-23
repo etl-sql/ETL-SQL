@@ -7,6 +7,8 @@ using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Connectors.Shared;
 using Parquet;
 using Parquet.Data;
 using Parquet.Schema;
@@ -47,7 +49,10 @@ namespace ETL_SQL.Connectors.Parquet
             _encryption = new EncryptionOptions(options);
         }
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Parquet", ex => ex is not ExecutionException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
 

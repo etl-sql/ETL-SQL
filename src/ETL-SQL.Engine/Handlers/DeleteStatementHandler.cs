@@ -67,7 +67,7 @@ namespace ETL_SQL.Engine.Handlers
 
                 // 1. Read existing and filter
                 int deletedCount = 0;
-                var batches = connection.ReadBatches();
+                var batches = connection.ReadBatches(context.BatchSize);
                 var rowInfos = new List<(Row? Before, Row? After, string? Action)>();
 
                 async IAsyncEnumerable<DataTable> FilterBatches()

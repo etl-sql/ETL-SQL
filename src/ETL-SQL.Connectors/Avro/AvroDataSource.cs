@@ -6,6 +6,8 @@ using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Connectors.Shared;
 using Avro;
 using Avro.File;
 using Avro.Generic;
@@ -50,7 +52,10 @@ namespace ETL_SQL.Connectors.Avro
             _encryption = new EncryptionOptions(options);
         }
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Avro", ex => ex is not ExecutionException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             string effectivePath = _filePath;
             string? tempFile = null;

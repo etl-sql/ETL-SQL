@@ -79,7 +79,7 @@ namespace ETL_SQL.Engine.Handlers
 
                 // 2. Read batches from source, transform, and stream to temp
                 int updatedCount = 0;
-                var batches = connection.ReadBatches();
+                var batches = connection.ReadBatches(context.BatchSize);
                 var rowInfos = new List<(Row? Before, Row? After, string? Action)>();
                 
                 async IAsyncEnumerable<DataTable> ProcessBatches()

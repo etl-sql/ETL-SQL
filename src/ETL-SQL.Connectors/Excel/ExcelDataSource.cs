@@ -8,6 +8,8 @@ using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors.Excel
 {
@@ -57,7 +59,10 @@ namespace ETL_SQL.Connectors.Excel
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
         }
 
-        public async IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatches(int batchSize = 10000) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Excel", ex => ex is not ExecutionException);
+
+        private async IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatchesCore(int batchSize)
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
 
