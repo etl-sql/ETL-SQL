@@ -53,6 +53,7 @@ namespace ETL_SQL.TUI.UI
                 _evaluator.IsVerbose = _ctx.IsVerbose;
                 _evaluator.RedirectOutput = true;
                 _evaluator.SessionId = _ctx.SessionId;
+                _evaluator.MasterPassword = _ctx.Password;
                 _evaluator.DisplayExecuteTree = true;
                 _evaluator.Telemetry.IsProfiling = true;
                 
@@ -164,6 +165,8 @@ namespace ETL_SQL.TUI.UI
                                 _evaluator!.WorkingDirectory = cmd.WorkspaceRoot;
                             if (cmd.ScriptPath != null)
                                 _evaluator!.CurrentScriptPath = cmd.ScriptPath;
+                            if (!string.IsNullOrEmpty(cmd.MasterPassword))
+                                _evaluator!.MasterPassword = cmd.MasterPassword;
                             
                             _evaluator!.InteractiveMode = cmd.InteractiveMode;
 
@@ -469,6 +472,7 @@ namespace ETL_SQL.TUI.UI
             public string? Format { get; set; }
             public string? ScriptPath { get; set; }
             public string? WorkspaceRoot { get; set; }
+            public string? MasterPassword { get; set; }
             public bool InteractiveMode { get; set; }
         }
     }

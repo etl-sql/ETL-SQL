@@ -16,10 +16,15 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (UsePasswordStatement)statement;
             if (stmt.Prompt)
-                context.ScriptPassword = PasswordPrompt.ReadPassword("ETL-SQL password: ");
+            {
+                context.ScriptPassword = !string.IsNullOrEmpty(context.MasterPassword)
+                    ? context.MasterPassword
+                    : PasswordPrompt.ReadPassword("ETL-SQL password: ");
+            }
             else
+            {
                 context.ScriptPassword = stmt.Password;
-
+            }
 
             if (context.IsVerbose)
             {

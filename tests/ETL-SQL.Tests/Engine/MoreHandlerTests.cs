@@ -572,6 +572,17 @@ namespace ETL_SQL.Tests.Engine
             await Run("USE PASSWORD = 'mypassword';");
         }
 
+        [Fact]
+        public async Task UsePasswordPrompt_UsesProvidedMasterPassword()
+        {
+            var eval = Eval();
+            eval.MasterPassword = "prompt-password";
+
+            await eval.Evaluate(Parse("USE PASSWORD PROMPT;"));
+
+            Assert.Equal("prompt-password", eval.ScriptPassword);
+        }
+
         // ── FILE_EXISTS / DIRECTORY_EXISTS functions ──────────────────────────
 
         [Fact]

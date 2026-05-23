@@ -22,6 +22,7 @@ interface CommandRequest {
     scriptPath?: string;
     workspaceRoot?: string;
     interactiveMode?: boolean;
+    masterPassword?: string;
     onMessage?: (msg: EngineMessage) => void;
     resolve: (val?: void) => void;
     reject: (err?: unknown) => void;
@@ -29,6 +30,7 @@ interface CommandRequest {
 
 export interface ReplLaunchOptions {
     env?: NodeJS.ProcessEnv;
+    masterPassword?: string;
 }
 
 export class ReplManager {
@@ -77,7 +79,7 @@ export class ReplManager {
         }
 
         return new Promise((resolve, reject) => {
-            this._commandQueue.push({ script, scriptPath, workspaceRoot, interactiveMode, onMessage, resolve, reject });
+            this._commandQueue.push({ script, scriptPath, workspaceRoot, interactiveMode, masterPassword: launchOptions?.masterPassword, onMessage, resolve, reject });
             
             const startExecution = async () => {
                 try {
@@ -246,14 +248,20 @@ export class ReplManager {
         };
 
         this._outputChannel?.appendLine(`[PROCESS] Running script (${cmd.script.length} bytes)...`);
-        const payload = JSON.stringify({ 
+        const command = { 
             Action: "run", 
             Script: cmd.script, 
             ScriptPath: cmd.scriptPath, 
             WorkspaceRoot: cmd.workspaceRoot,
-            InteractiveMode: cmd.interactiveMode 
+            InteractiveMode: cmd.interactiveMode,
+            MasterPassword: cmd.masterPassword
+        };
+        const payload = JSON.stringify(command);
+        const loggedPayload = JSON.stringify({
+            ...command,
+            MasterPassword: command.MasterPassword ? '********' : undefined
         });
-        this._outputChannel?.appendLine(`[REPL] STDIN write: ${payload}`);
+        this._outputChannel?.appendLine(`[REPL] STDIN write: ${loggedPayload}`);
         const ok = this._process?.stdin?.write(payload + "\r\n", 'utf8');
         this._outputChannel?.appendLine(`[REPL] STDIN ok: ${ok}`);
     }

@@ -368,16 +368,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Security: Secure Connections command (Quick Fix target)
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.secureConnection', async (uri: string) => {
-        const password = await vscode.window.showInputBox({
-            password: true,
-            prompt: "Enter Master Password to encrypt connections in this script",
-            placeHolder: "Password"
-        });
-
-        if (!password) {
-            return;
-        }
-
         const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri) 
                     || vscode.window.activeTextEditor;
         
@@ -386,9 +376,30 @@ export async function activate(context: vscode.ExtensionContext) {
             return;
         }
 
+        const text = editor.document.getText();
+        const noSaveSensitive = lastOnOffSetting(text, 'NO_SAVE_SENSITIVE');
+        const noSaveConnection = lastOnOffSetting(text, 'NO_SAVE_CONNECTION');
+        const connectionEncryption = lastOnOffSetting(text, 'CONNECTION_ENCRYPTION');
+        const hasPlainTextCreds = /\b(PASSWORD|API_KEY|APIKEY)\s*=\s*'(?!ENC:)[^']*'/i.test(text) ||
+                                  /\bPassword\s*=\s*(?!['\s]|ENC:)[^;'\s]+/i.test(text);
+        const hasConnection = /\bCREATE\s+CONNECTION\b/i.test(text);
+        const literalUsePassword = text.match(/\bUSE\s+PASSWORD\s*=\s*(['"])([\s\S]*?)\1\s*;?/i)?.[2];
+        const needsPassword = !noSaveConnection && ((connectionEncryption && hasConnection) || (!noSaveSensitive && hasPlainTextCreds));
+        const password = needsPassword
+            ? literalUsePassword ?? await vscode.window.showInputBox({
+                password: true,
+                prompt: "Enter Master Password to encrypt connections in this script",
+                placeHolder: "Password"
+            })
+            : "";
+
+        if (needsPassword && !password) {
+            return;
+        }
+
         try {
             const response = await client.sendRequest('etlsql/encryptScript', {
-                text: editor.document.getText(),
+                text: text,
                 password: password
             }) as { encryptedText: string };
 
@@ -402,7 +413,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     editBuilder.replace(fullRange, response.encryptedText);
                 });
                 
-                vscode.window.showInformationMessage("Connections secured successfully.");
+                vscode.window.showInformationMessage("Script secrets secured successfully.");
             }
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
@@ -454,12 +465,42 @@ export async function activate(context: vscode.ExtensionContext) {
             return;
         }
         const text = document.getText();
+        const allowPlaintextSecretsPattern = /\bSET\s+ALLOW_PLAINTEXT_SECRETS\s*(?:=\s*)?(ON|OFF)\b/gi;
+        const noSaveSensitivePattern = /\bSET\s+NO_SAVE_SENSITIVE\s*(?:=\s*)?(ON|OFF)\b/gi;
+        const noSaveConnectionPattern = /\bSET\s+NO_SAVE_CONNECTION\s*(?:=\s*)?(ON|OFF)\b/gi;
+        const connectionEncryptionPattern = /\bSET\s+CONNECTION_ENCRYPTION\s*(?:=\s*)?(ON|OFF)\b/gi;
+        let allowPlaintextSecrets = false;
+        let noSaveSensitive = false;
+        let noSaveConnection = false;
+        let connectionEncryption = false;
+        let allowPlaintextSecretsMatch: RegExpExecArray | null;
+        while ((allowPlaintextSecretsMatch = allowPlaintextSecretsPattern.exec(text)) !== null) {
+            allowPlaintextSecrets = allowPlaintextSecretsMatch[1].toUpperCase() === 'ON';
+        }
+        let match: RegExpExecArray | null;
+        while ((match = noSaveSensitivePattern.exec(text)) !== null) {
+            noSaveSensitive = match[1].toUpperCase() === 'ON';
+        }
+        while ((match = noSaveConnectionPattern.exec(text)) !== null) {
+            noSaveConnection = match[1].toUpperCase() === 'ON';
+        }
+        while ((match = connectionEncryptionPattern.exec(text)) !== null) {
+            connectionEncryption = match[1].toUpperCase() === 'ON';
+        }
         const hasPlainTextCreds = /\b(PASSWORD|API_KEY|APIKEY)\s*=\s*'(?!ENC:)[^']*'/i.test(text) || 
                                  /\bPassword\s*=\s*(?!['\s]|ENC:)[^;'\s]+/i.test(text);
-        if (hasPlainTextCreds) {
-            const encryptOption = "Encrypt Now";
+        const hasLiteralUsePassword = /\bUSE\s+PASSWORD\s*=\s*(['"])[\s\S]*?\1\s*;?/i.test(text);
+        const hasConnection = /\bCREATE\s+CONNECTION\b/i.test(text);
+        if (allowPlaintextSecrets && !noSaveSensitive && !noSaveConnection && !connectionEncryption && (hasPlainTextCreds || hasLiteralUsePassword)) {
+            vscode.window.showWarningMessage(
+                "ALLOW_PLAINTEXT_SECRETS is ON. Plaintext secrets may remain in this file and should not be committed."
+            );
+            return;
+        }
+        if (hasPlainTextCreds || hasLiteralUsePassword || noSaveSensitive || noSaveConnection || (connectionEncryption && hasConnection)) {
+            const encryptOption = "Apply Save Policy";
             const response = await vscode.window.showWarningMessage(
-                "This script contains plain-text credentials. Would you like to encrypt them using a master password?",
+                "This script contains save-time security work. Would you like to apply the script save policy now?",
                 encryptOption
             );
             if (response === encryptOption) {
@@ -475,6 +516,18 @@ function syncConnectionsToLsp() {
         client.sendNotification('etlsql/setConnections', { connections });
         sidebarProvider.postMessage({ type: 'connections', connections });
     }
+}
+
+function lastOnOffSetting(text: string, settingName: string): boolean {
+    const pattern = /\bSET\s+([A-Z_]+)\s*(?:=\s*)?(ON|OFF)\b/gi;
+    let value = false;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+        if (match[1].toUpperCase() === settingName) {
+            value = match[2].toUpperCase() === 'ON';
+        }
+    }
+    return value;
 }
 
 // Removed syncDebugModeToLsp
@@ -562,7 +615,7 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
                 workspaceRoot,
                 undefined,
                 undefined,
-                masterPassword ? { env: { ETL_SQL_MASTER_PASSWORD: masterPassword } } : undefined
+                masterPassword ? { env: { ETL_SQL_MASTER_PASSWORD: masterPassword }, masterPassword } : undefined
             );
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
