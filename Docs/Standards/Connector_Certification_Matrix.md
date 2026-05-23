@@ -61,7 +61,7 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 | **Rule 4** — File I/O via ResolvePath | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Rule 5** — Provider exceptions wrapped as ExecutionException | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Rule 6** — Sensitive options masked | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
-| **Rule 7** — O(1) memory streaming via ReadBatches | ✓ | ~ | ✓ | ~ | ✓ | ✓ | ✓ |
+| **Rule 7** — O(1) memory streaming via ReadBatches | ✓ | ~ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Rule 8** — IDatabaseSource + pushdown | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
 | **Rule 9** — GetExcludedKeywords declared | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
 | **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -70,14 +70,14 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 | **T4** — Exception wrapping test | ✓ | ~ | ✓ | ✓ | ~ | ~ | ✓ |
 | **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Overall** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **~ GA (gaps)** | **~ GA (gaps)** | **~ GA (gaps)** | **✓ GA** |
+| **Overall** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **~ GA (gaps)** | **✓ GA** |
 
 ### Excel Notes
 - `ExcelDataReader` does not expose async read APIs. Rule 2 compliance is documented as an accepted exception; reads are offloaded to `Task.Run` to avoid blocking the async call chain.
 - Large multi-sheet files may accumulate rows before yielding. Rule 7 should be verified for workbooks over 100k rows.
 
 ### XML Notes
-- DOM-based parsing accumulates the full document before streaming rows — this violates Rule 7 for large files. Track as a known defect; streaming XmlReader refactor is planned.
+- Refactored to streaming `XmlReader` in 0.7.x: `ReadBatches` performs two lightweight passes (schema discovery + data yield) without loading the full document into memory. Rule 7 compliant.
 
 ### Parquet / Avro Notes
 - Apache.Parquet and Avro.Net libraries do not provide granular async row-level APIs. Exception wrapping and negative path tests need to be added.

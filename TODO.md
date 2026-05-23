@@ -168,7 +168,7 @@
 - [ ] **Connector certification gap remediation** *(see `Docs/Standards/Connector_Certification_Matrix.md` for full detail)*
 
   **High risk**
-  - [ ] **XML streaming refactor** — XML connector accumulates the full document in a DOM before yielding rows (Rule 7 violation). Refactor to streaming `XmlReader` so large XML files do not materialize fully in memory.
+  - [x] **XML streaming refactor** — XML connector accumulates the full document in a DOM before yielding rows (Rule 7 violation). Refactor to streaming `XmlReader` so large XML files do not materialize fully in memory.
   - [ ] **BigQuery CI tests** — Smoke test, credential masking test (T3), and exception wrapping test (T4) are missing. Add a Testcontainers-based BigQuery emulator or GCP sandbox CI step. Currently rated **Preview**; must reach GA before enabling by default.
 
   **Medium risk**

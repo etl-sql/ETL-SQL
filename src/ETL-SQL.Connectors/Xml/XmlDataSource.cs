@@ -3,6 +3,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
@@ -75,52 +76,30 @@ namespace ETL_SQL.Connectors.Xml
 
             try
             {
-                XDocument doc;
-                using (var stream = new StreamReader(effectivePath, _encoding))
-                {
-                    doc = await XDocument.LoadAsync(stream, LoadOptions.None, default);
-                }
-
-                var elements = GetElements(doc).ToList();
-                if (elements.Count == 0) yield break;
-
-                // Pass 1: Discover Schema
-                var allColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var element in elements)
-                {
-                    foreach (var attr in element.Attributes()) allColumns.Add(attr.Name.LocalName);
-                    foreach (var sub in element.Elements())
-                    {
-                        if (!sub.HasElements) allColumns.Add(sub.Name.LocalName);
-                    }
-                }
+                // Pass 1 — stream through once to discover column names (no data retained)
+                var columnNames = await DiscoverColumnsAsync(effectivePath);
+                if (columnNames.Count == 0) yield break;
 
                 var schema = new TableSchema();
-                foreach (var col in allColumns.OrderBy(c => c))
-                {
-                    schema.AddColumn(col);
-                }
+                foreach (var col in columnNames) schema.AddColumn(col);
 
-                // Pass 2: Populate Batches
+                // Pass 2 — stream through again, yielding one batch at a time
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(schema.ColumnNames);
                 var activeSchema = currentBatch.Schema;
 
-                foreach (var element in elements)
+                await foreach (var record in StreamRecordsAsync(effectivePath))
                 {
                     var row = currentBatch.NewRow();
-                    foreach (var attr in element.Attributes())
+                    foreach (var (name, value) in record.Attributes)
                     {
-                        int idx = activeSchema.GetIndex(attr.Name.LocalName);
-                        if (idx >= 0) row[idx] = attr.Value;
+                        int idx = activeSchema.GetIndex(name);
+                        if (idx >= 0) row[idx] = value;
                     }
-                    foreach (var sub in element.Elements())
+                    foreach (var (name, value) in record.Children)
                     {
-                        if (!sub.HasElements)
-                        {
-                            int idx = activeSchema.GetIndex(sub.Name.LocalName);
-                            if (idx >= 0) row[idx] = _trim ? sub.Value.Trim() : sub.Value;
-                        }
+                        int idx = activeSchema.GetIndex(name);
+                        if (idx >= 0) row[idx] = _trim ? value.Trim() : value;
                     }
 
                     await currentBatch.AddRowAsync(row);
@@ -133,14 +112,153 @@ namespace ETL_SQL.Connectors.Xml
                 }
 
                 if (currentBatch.Rows.Count > 0)
-                {
                     yield return currentBatch;
-                }
             }
             finally
             {
                 if (isTemp) TempFileHelper.SafeDelete(effectivePath, _logger);
             }
+        }
+
+        // ── Streaming helpers ─────────────────────────────────────────────────
+
+        private readonly record struct XmlRecord(
+            List<(string Name, string Value)> Attributes,
+            List<(string Name, string Value)> Children);
+
+        private async Task<List<string>> DiscoverColumnsAsync(string path)
+        {
+            var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            await foreach (var record in StreamRecordsAsync(path))
+            {
+                foreach (var (name, _) in record.Attributes) columns.Add(name);
+                foreach (var (name, _) in record.Children)   columns.Add(name);
+            }
+            return columns.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        /// <summary>
+        /// Streams one <see cref="XmlRecord"/> per repeating element without loading
+        /// the full document into memory. Both attribute values and direct leaf-child
+        /// text values are captured; nested elements are skipped (same behaviour as
+        /// the previous XDocument implementation).
+        /// </summary>
+        private async IAsyncEnumerable<XmlRecord> StreamRecordsAsync(string path)
+        {
+            var settings = new XmlReaderSettings { Async = true };
+            using var fileStream = File.OpenRead(path);
+            using var textReader = new StreamReader(fileStream, _encoding);
+            using var reader = XmlReader.Create(textReader, settings);
+
+            int containerDepth = await NavigateToContainerAsync(reader);
+            if (containerDepth < 0) yield break;
+
+            while (await reader.ReadAsync())
+            {
+                // Back past the container — done
+                if (reader.Depth <= containerDepth) break;
+
+                if (reader.NodeType != XmlNodeType.Element || reader.Depth != containerDepth + 1)
+                    continue;
+
+                var attrs = new List<(string, string)>();
+                for (int i = 0; i < reader.AttributeCount; i++)
+                {
+                    reader.MoveToAttribute(i);
+                    attrs.Add((reader.LocalName, reader.Value));
+                }
+                reader.MoveToElement();
+
+                var children = new List<(string, string)>();
+                if (!reader.IsEmptyElement)
+                {
+                    // ReadSubtree positions the sub-reader on the record element (depth 0
+                    // within the subtree); direct children are at subtree depth 1.
+                    using var sub = reader.ReadSubtree();
+                    await sub.ReadAsync(); // consume the record element itself
+
+                    string? childName = null;
+                    bool childHasElements = false;
+                    var childText = new System.Text.StringBuilder();
+
+                    while (await sub.ReadAsync())
+                    {
+                        switch (sub.NodeType)
+                        {
+                            case XmlNodeType.Element when sub.Depth == 1:
+                                FlushChild(children, childName, childHasElements, childText);
+                                childName = sub.LocalName;
+                                childHasElements = false;
+                                childText.Clear();
+                                break;
+                            case XmlNodeType.Element when sub.Depth > 1:
+                                childHasElements = true;
+                                break;
+                            case XmlNodeType.Text or XmlNodeType.CDATA when sub.Depth == 1:
+                                childText.Append(sub.Value);
+                                break;
+                            case XmlNodeType.EndElement when sub.Depth == 1:
+                                FlushChild(children, childName, childHasElements, childText);
+                                childName = null;
+                                childHasElements = false;
+                                childText.Clear();
+                                break;
+                        }
+                    }
+                }
+
+                yield return new XmlRecord(attrs, children);
+            }
+        }
+
+        private static void FlushChild(
+            List<(string, string)> children, string? name, bool hasElements, System.Text.StringBuilder text)
+        {
+            if (name != null && !hasElements)
+                children.Add((name, text.ToString()));
+        }
+
+        /// <summary>
+        /// Advances <paramref name="reader"/> to the container element whose direct
+        /// children are the repeating record elements, honoring <see cref="_rootPath"/>.
+        /// Returns the depth of that container, or -1 if navigation fails.
+        /// </summary>
+        private async Task<int> NavigateToContainerAsync(XmlReader reader)
+        {
+            // Advance to the document root element
+            while (await reader.ReadAsync())
+            {
+                if (reader.NodeType == XmlNodeType.Element) break;
+            }
+            if (reader.EOF) return -1;
+
+            if (string.IsNullOrEmpty(_rootPath))
+                return reader.Depth; // records are direct children of the document root
+
+            var parts = _rootPath.Split(new[] { '.', '/' }, StringSplitOptions.RemoveEmptyEntries);
+            int startIdx = 0;
+
+            // If the first segment names the root element, skip it — we're already there
+            if (parts.Length > 0 && reader.LocalName.Equals(parts[0], StringComparison.OrdinalIgnoreCase))
+                startIdx = 1;
+
+            for (int i = startIdx; i < parts.Length; i++)
+            {
+                var target = parts[i];
+                bool found = false;
+                while (await reader.ReadAsync())
+                {
+                    if (reader.NodeType == XmlNodeType.Element &&
+                        reader.LocalName.Equals(target, StringComparison.OrdinalIgnoreCase))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) return -1;
+            }
+
+            return reader.Depth;
         }
 
         private async Task<string> GetEffectivePathAsync()
@@ -167,32 +285,7 @@ namespace ETL_SQL.Connectors.Xml
             return _filePath;
         }
 
-        private IEnumerable<XElement> GetElements(XDocument doc)
-        {
-            if (string.IsNullOrEmpty(_rootPath))
-            {
-                return doc.Root?.Elements() ?? Enumerable.Empty<XElement>();
-            }
-            
-            var current = doc.Root;
-            var parts = _rootPath.Split(new[] { '.', '/' }, StringSplitOptions.RemoveEmptyEntries);
-            
-            for (int i = 0; i < parts.Length; i++)
-            {
-                if (current == null) break;
-                var part = parts[i];
-
-                // If the first part matches the root element name, we skip it as the base reference
-                if (i == 0 && current.Name.LocalName.Equals(part, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                current = current.Element(part);
-            }
-
-            return current?.Elements() ?? Enumerable.Empty<XElement>();
-        }
-
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             bool alreadyXml = false;
             string? singleXml = null;
