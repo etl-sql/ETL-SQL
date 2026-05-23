@@ -220,6 +220,6 @@ namespace ETL_SQL.Connectors
         }
 
         private static bool ShouldWrapProviderException(Exception ex) =>
-            ex is RequestFailedException or InvalidOperationException;
+            ex is RequestFailedException or InvalidOperationException or AggregateException;
     }
 }

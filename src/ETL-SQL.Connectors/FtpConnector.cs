@@ -201,6 +201,7 @@ namespace ETL_SQL.Connectors
 
         private static bool ShouldWrapProviderException(Exception ex) =>
             ex.GetType().Namespace?.StartsWith("FluentFTP", StringComparison.Ordinal) == true
-                || ex is System.Net.Sockets.SocketException or TimeoutException or InvalidOperationException;
+                || ex is System.Net.Sockets.SocketException or TimeoutException or InvalidOperationException
+                || ex is System.IO.IOException;
     }
 }

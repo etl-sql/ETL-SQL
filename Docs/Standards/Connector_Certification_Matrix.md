@@ -27,7 +27,7 @@ These connectors implement `IDatabaseSource` with `SupportsSqlPushdown = true`.
 | **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ | ~ |
 | **T2** — Negative path tests | ✓ | ✓ | ~ | ~ | ✓ | ~ |
 | **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ | ~ |
-| **T4** — Exception wrapping test | ✓ | ✓ | ~ | ~ | ✓ | ~ |
+| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ~ |
 | **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -67,7 +67,7 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 | **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **T2** — Negative path tests (ResolvePath) | ✓ | ✓ | ✓ | ✓ | ~ | ~ | ✓ |
-| **T4** — Exception wrapping test | ✓ | ~ | ✓ | ✓ | ~ | ~ | ✓ |
+| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Overall** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **~ GA (gaps)** | **✓ GA** |
@@ -80,7 +80,7 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 - Refactored to streaming `XmlReader` in 0.7.x: `ReadBatches` performs two lightweight passes (schema discovery + data yield) without loading the full document into memory. Rule 7 compliant.
 
 ### Parquet / Avro Notes
-- Apache.Parquet and Avro.Net libraries do not provide granular async row-level APIs. Exception wrapping and negative path tests need to be added.
+- Apache.Parquet and Avro.Net libraries do not provide granular async row-level APIs. Exception wrapping tests added (T4 ✓). Negative path tests still missing.
 
 ---
 
@@ -101,7 +101,7 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 | **T1** — Smoke test present | ✓ | ✓ | ~ | ✓ | ~ |
 | **T2** — Negative path / credential tests | ✓ | ~ | ~ | ~ | N/A |
 | **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T4** — Exception wrapping test | ✓ | ~ | ~ | ~ | ~ |
+| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -116,7 +116,7 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 - Smoke test for actual delivery requires a test SMTP server — currently untested in CI. Use `MailHog` or `Greenmail` as a Testcontainer to add coverage.
 
 ### FTP / AZURE_BLOB Notes
-- Exception wrapping and negative credential tests need to be added for both.
+- Exception wrapping tests added (T4 ✓). Negative credential tests (bad SAS token, expired key) are still missing for AZURE_BLOB.
 
 ---
 
@@ -136,7 +136,7 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 | **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ |
 | **T1** — Smoke test present | ~ | ~ |
 | **T3** — Credential masking test | ✓ | N/A |
-| **T4** — Exception wrapping test | ~ | ~ |
+| **T4** — Exception wrapping test | ✓ | ✓ |
 | **Structured WITH() properties** | ✓ | ✓ |
 | **ENC: support** | ✓ | N/A |
 | **ALTER CONNECTION support** | ✓ | N/A |
@@ -167,7 +167,7 @@ Sorted by estimated risk:
 | :--- | :--- | :---: | :--- |
 | XML DOM accumulates full document (Rule 7) | XML | High | Refactor to streaming `XmlReader` |
 | BigQuery CI tests missing | BIGQUERY | High | Add Testcontainers or GCP emulator |
-| Exception wrapping tests missing | ORACLE, ODBC, EXCEL, PARQUET, AVRO, FTP, AZURE_BLOB, API, SMTP, REPORTPORTAL, ORCHESTRATOR | Medium | Add T4 tests per connector |
+| Exception wrapping tests missing | BIGQUERY | Medium | Add T4 test (blocked by missing CI environment) |
 | SMTP CI smoke test missing | SMTP | Medium | Add MailHog Testcontainer |
 | AZURE_BLOB negative credential tests | AZURE_BLOB | Medium | Add negative auth tests |
 | ODBC GetExcludedKeywords empty by design | ODBC | Low | Document accepted exception in connector source |

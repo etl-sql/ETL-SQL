@@ -143,15 +143,22 @@ namespace ETL_SQL.Connectors.Email
             int port = _options.TryGetValue("PORT", out var p) && int.TryParse(p, out var pt) ? pt : 587; // Security: Default to 587 (STARTTLS) instead of 25 (plaintext)
             bool useSsl = _options.TryGetValue("USE_SSL", out var ssl) && bool.TryParse(ssl, out var s) && s;
 
-            await client.ConnectAsync(host, port, useSsl);
-
-            if (_options.TryGetValue("USERNAME", out var user) && _options.TryGetValue("PASSWORD", out var pass))
+            try
             {
-                await client.AuthenticateAsync(user, pass);
-            }
+                await client.ConnectAsync(host, port, useSsl);
 
-            await client.SendAsync(message);
-            await client.DisconnectAsync(true);
+                if (_options.TryGetValue("USERNAME", out var user) && _options.TryGetValue("PASSWORD", out var pass))
+                {
+                    await client.AuthenticateAsync(user, pass);
+                }
+
+                await client.SendAsync(message);
+                await client.DisconnectAsync(true);
+            }
+            catch (Exception ex) when (ex is not ETL_SQL.Core.Common.Exceptions.ExecutionException)
+            {
+                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"SMTP connector error: {ex.Message}", ex);
+            }
         }
 
         public Task TruncateAsync() => Task.CompletedTask;

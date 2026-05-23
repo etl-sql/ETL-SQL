@@ -172,7 +172,7 @@
   - [ ] **BigQuery CI tests** — Smoke test, credential masking test (T3), and exception wrapping test (T4) are missing. Add a Testcontainers-based BigQuery emulator or GCP sandbox CI step. Currently rated **Preview**; must reach GA before enabling by default.
 
   **Medium risk**
-  - [ ] **Exception wrapping tests (T4) — 11 connectors** — The following connectors are missing T4 (exception wrapping) tests: ORACLE, ODBC, EXCEL, PARQUET, AVRO, FTP, AZURE_BLOB, API, SMTP, REPORTPORTAL, ORCHESTRATOR. Add at least one test per connector that injects a provider-level exception and asserts it surfaces as `ExecutionException` with a sanitized message.
+  - [x] **Exception wrapping tests (T4) — 11 connectors** — T4 tests added for ORACLE, ODBC, EXCEL, PARQUET, AVRO, FTP, AZURE_BLOB, API, SMTP, REPORTPORTAL, and ORCHESTRATOR in `ConnectorExceptionWrappingTests.cs`. All 11 pass.
   - [ ] **SMTP Docker smoke test** — SMTP delivery is untested in CI. Add a `MailHog` or `Greenmail` Testcontainer fixture (similar to the new `SftpFixture`) and cover at least one successful send and one credential-error negative path.
   - [ ] **AZURE_BLOB negative credential and path tests** — Negative auth tests (bad SAS token, expired key) and ResolvePath boundary tests are missing. Add alongside the existing blob smoke tests.
 

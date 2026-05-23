@@ -77,7 +77,9 @@ namespace ETL_SQL.Connectors.ReportPortal
             if (_token is not null && DateTime.UtcNow < _tokenExpiry.AddMinutes(-5)) return;
 
             var req = new { Username = _username, Password = _password };
-            var resp = await _http.PostAsJsonAsync("api/auth/login", req);
+            HttpResponseMessage resp;
+            try { resp = await _http.PostAsJsonAsync("api/auth/login", req); }
+            catch (HttpRequestException ex) { throw new ExecutionException($"Portal connection error: {ex.Message}", ex); }
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
@@ -835,21 +837,28 @@ namespace ETL_SQL.Connectors.ReportPortal
         private async Task CallAsync(HttpMethod method, string url, object? body, string successMessage)
         {
             HttpResponseMessage resp;
-            if (body is not null)
+            try
             {
-                var req = new HttpRequestMessage(method, url)
+                if (body is not null)
                 {
-                    Content = new StringContent(
-                        JsonSerializer.Serialize(body, _json),
-                        Encoding.UTF8,
-                        "application/json")
-                };
-                resp = await _http.SendAsync(req);
+                    var req = new HttpRequestMessage(method, url)
+                    {
+                        Content = new StringContent(
+                            JsonSerializer.Serialize(body, _json),
+                            Encoding.UTF8,
+                            "application/json")
+                    };
+                    resp = await _http.SendAsync(req);
+                }
+                else
+                {
+                    var req = new HttpRequestMessage(method, url);
+                    resp = await _http.SendAsync(req);
+                }
             }
-            else
+            catch (HttpRequestException ex)
             {
-                var req = new HttpRequestMessage(method, url);
-                resp = await _http.SendAsync(req);
+                throw new ExecutionException($"Portal connection error: {ex.Message}", ex);
             }
 
             if (!resp.IsSuccessStatusCode)
@@ -872,7 +881,10 @@ namespace ETL_SQL.Connectors.ReportPortal
                     "application/json");
             }
 
-            using var resp = await _http.SendAsync(req);
+            HttpResponseMessage resp;
+            try { resp = await _http.SendAsync(req); }
+            catch (HttpRequestException ex) { throw new ExecutionException($"Portal connection error: {ex.Message}", ex); }
+            using var _ = resp;
             var bodyText = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
                 throw new ExecutionException($"Portal API error ({(int)resp.StatusCode} {resp.StatusCode}): {SanitizeBody(bodyText)}");

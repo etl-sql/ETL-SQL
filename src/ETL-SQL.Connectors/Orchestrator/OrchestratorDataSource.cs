@@ -109,7 +109,7 @@ namespace ETL_SQL.Connectors.Orchestrator
                 AtTime     = atTime
             };
             var content = new StringContent(JsonSerializer.Serialize(req, _json), Encoding.UTF8, "application/json");
-            var resp = await _http.PostAsync("api/scheduled-jobs", content);
+            var resp = await SendHttpAsync(() => _http.PostAsync("api/scheduled-jobs", content));
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
@@ -166,7 +166,7 @@ namespace ETL_SQL.Connectors.Orchestrator
                 AtTime     = schedule?.AtTime
             };
             var content = new StringContent(JsonSerializer.Serialize(req, _json), Encoding.UTF8, "application/json");
-            var resp = await _http.PostAsync("api/scheduled-jobs", content);
+            var resp = await SendHttpAsync(() => _http.PostAsync("api/scheduled-jobs", content));
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
@@ -177,7 +177,7 @@ namespace ETL_SQL.Connectors.Orchestrator
 
         private async Task FetchJobsAsync(ShowJobsStatement stmt, IExecutionContext context)
         {
-            var resp = await _http.GetAsync("api/scheduled-jobs");
+            var resp = await SendHttpAsync(() => _http.GetAsync("api/scheduled-jobs"));
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
@@ -217,7 +217,7 @@ namespace ETL_SQL.Connectors.Orchestrator
                 ? $"api/history?jobName={Uri.EscapeDataString(stmt.JobName)}"
                 : "api/history";
 
-            var resp = await _http.GetAsync(url);
+            var resp = await SendHttpAsync(() => _http.GetAsync(url));
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
@@ -284,7 +284,7 @@ namespace ETL_SQL.Connectors.Orchestrator
                     stmt.Description),
                 password);
 
-            var resp = await _http.PostAsJsonAsync("api/bundles", request, _json);
+            var resp = await SendHttpAsync(() => _http.PostAsJsonAsync("api/bundles", request, _json));
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
@@ -404,7 +404,7 @@ namespace ETL_SQL.Connectors.Orchestrator
 
         private async Task<T?> GetJsonAsync<T>(string url)
         {
-            var resp = await _http.GetAsync(url);
+            var resp = await SendHttpAsync(() => _http.GetAsync(url));
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
@@ -458,7 +458,7 @@ namespace ETL_SQL.Connectors.Orchestrator
         private async Task DropJobAsync(DropPortalRefreshJobStatement stmt, IExecutionContext context)
         {
             var jobName = Uri.EscapeDataString($"REFRESH:{stmt.ReportName}");
-            var resp = await _http.DeleteAsync($"api/scheduled-jobs/{jobName}");
+            var resp = await SendHttpAsync(() => _http.DeleteAsync($"api/scheduled-jobs/{jobName}"));
             if (!resp.IsSuccessStatusCode && resp.StatusCode != System.Net.HttpStatusCode.NotFound)
             {
                 var body = await resp.Content.ReadAsStringAsync();
@@ -479,7 +479,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             };
             var encoded = Uri.EscapeDataString(stmt.JobName);
             var content = new StringContent(JsonSerializer.Serialize(req, _json), Encoding.UTF8, "application/json");
-            var resp = await _http.PutAsync($"api/scheduled-jobs/{encoded}", content);
+            var resp = await SendHttpAsync(() => _http.PutAsync($"api/scheduled-jobs/{encoded}", content));
             if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
                 throw new ExecutionException($"ALTER JOB failed: job '{stmt.JobName}' not found in Orchestrator. Use CREATE JOB to create it.");
             if (!resp.IsSuccessStatusCode)
@@ -495,7 +495,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             var req = new { IsEnabled = (bool?)enable };
             var encoded = Uri.EscapeDataString(jobName);
             var content = new StringContent(JsonSerializer.Serialize(req, _json), Encoding.UTF8, "application/json");
-            var resp = await _http.PutAsync($"api/scheduled-jobs/{encoded}", content);
+            var resp = await SendHttpAsync(() => _http.PutAsync($"api/scheduled-jobs/{encoded}", content));
             if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
                 throw new ExecutionException($"{(enable ? "ENABLE" : "DISABLE")} JOB failed: job '{jobName}' not found.");
             if (!resp.IsSuccessStatusCode)
@@ -509,7 +509,7 @@ namespace ETL_SQL.Connectors.Orchestrator
         private async Task TriggerJobAsync(string jobName, IExecutionContext context)
         {
             var encoded = Uri.EscapeDataString(jobName);
-            var resp = await _http.PostAsync($"api/scheduled-jobs/{encoded}/trigger", null);
+            var resp = await SendHttpAsync(() => _http.PostAsync($"api/scheduled-jobs/{encoded}/trigger", null));
             if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
                 throw new ExecutionException($"TRIGGER JOB failed: job '{jobName}' not found.");
             if (!resp.IsSuccessStatusCode)
@@ -518,6 +518,13 @@ namespace ETL_SQL.Connectors.Orchestrator
                 throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
             }
             _logger.WriteLine($"Job '{jobName}' triggered for immediate execution.", ConsoleColor.Green);
+        }
+
+        private async Task<HttpResponseMessage> SendHttpAsync(Func<Task<HttpResponseMessage>> send)
+        {
+            try { return await send(); }
+            catch (HttpRequestException ex)
+            { throw new ExecutionException($"Orchestrator connection error: {ex.Message}", ex); }
         }
 
         private sealed record PublishBundleApiRequest(BundlePublishRequest Bundle, string? Password = null);
