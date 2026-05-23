@@ -25,8 +25,10 @@ CREATE VISUAL RegionSales AS TABLE (
 );
 
 -- 3. Layout
-CREATE PAGE Main AS (
-    STRUCTURE = 'A',
-    MAP ('A' = RegionSales),
+CREATE PAGE Main AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = RegionSales)
+    ),
     STYLE (PADDING = '20px')
 );

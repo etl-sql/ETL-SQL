@@ -184,7 +184,7 @@ namespace ETL_SQL.Analysis.Explain
             if (expr is FunctionCallExpression f)
             {
                 var name = f.FunctionName.ToUpperInvariant();
-                return name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX";
+                return name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX" || name == "TOTAL" || name == "GROUP_CONCAT";
             }
 
             if (expr is BinaryExpression b) return IsAggregate(b.Left) || IsAggregate(b.Right);

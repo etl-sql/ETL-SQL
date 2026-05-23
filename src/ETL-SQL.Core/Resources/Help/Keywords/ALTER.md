@@ -1,5 +1,5 @@
-# ALTER TABLE
-Modifies the schema of an existing #temp table by adding or removing columns.
+# ALTER
+Modifies an existing object.
 
 ## Syntax
 ```sql
@@ -11,6 +11,12 @@ ALTER TABLE #staging ADD COLUMN loaded_at DATE = TODAY();
 
 -- Drop a column
 ALTER TABLE #staging DROP COLUMN region;
+
+-- Replace a session-scoped query view definition
+ALTER VIEW ActiveOrders AS
+SELECT order_id, amount
+FROM #orders
+WHERE status = 'Active';
 ```
 
 ## Notes
@@ -19,4 +25,5 @@ ALTER TABLE #staging DROP COLUMN region;
 - Dropping a column permanently removes it and all its data from the in-memory table.
 - Column names are case-insensitive.
 - ALTER TABLE applies only to #temp tables, not external connection tables.
-- See: CREATE TABLE, SELECT INTO
+- `ALTER VIEW` requires the view to exist. Use `CREATE OR ALTER VIEW` for idempotent scripts.
+- See: CREATE TABLE, CREATE VIEW, SELECT INTO

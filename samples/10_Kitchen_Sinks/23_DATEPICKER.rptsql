@@ -24,7 +24,7 @@ CREATE VISUAL DateResult AS CARD (
 );
 
 -- Page Layout
-CREATE PAGE DateKitchenSink AS (
+CREATE PAGE DateKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = SingleDatePicker,

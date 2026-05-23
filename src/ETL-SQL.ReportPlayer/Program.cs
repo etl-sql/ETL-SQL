@@ -208,7 +208,7 @@ if (multiMode)
         var updates = (body.Params ?? new List<ParameterUpdateRequest>())
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name!, p.Value ?? ""));
-        return Results.Json(await svc.SetParametersAsync(updates, body.IsInteraction), noCache);
+        return Results.Json(await svc.SetParametersAsync(updates, body.IsInteraction, body.PageName), noCache);
     });
 
     app.MapPost("/reports/{name}/api/run-script",
@@ -289,7 +289,7 @@ else
         var updates = (body.Params ?? new List<ParameterUpdateRequest>())
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name!, p.Value ?? ""));
-        return Results.Json(await svc.SetParametersAsync(updates, body.IsInteraction), noCache);
+        return Results.Json(await svc.SetParametersAsync(updates, body.IsInteraction, body.PageName), noCache);
     });
 
     app.MapPost("/api/drill", async (HttpContext ctx, DashboardService svc) =>
@@ -656,6 +656,7 @@ public class ParameterBatchRequest
 {
     public List<ParameterUpdateRequest>? Params { get; set; }
     public bool    IsInteraction { get; set; }
+    public string? PageName { get; set; }
 }
 
 public class RunScriptRequest

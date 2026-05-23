@@ -560,6 +560,7 @@ namespace ETL_SQL.Core
         public List<string>? Columns { get; }
         public List<List<Expression>>? Values { get; }
         public OutputClause? Output { get; set; }
+        public bool IsReplace { get; set; } = false;
 
         public InsertStatement(TableReference targetTable, Statement query)
         {
@@ -939,6 +940,13 @@ namespace ETL_SQL.Core
         public string FunctionName { get; }
         public bool IfExists { get; }
         public DropFunctionStatement(string name, bool ifExists) { FunctionName = name; IfExists = ifExists; }
+    }
+
+    public record DropViewStatement : Statement
+    {
+        public string ViewName { get; }
+        public bool IfExists { get; }
+        public DropViewStatement(string name, bool ifExists) { ViewName = name; IfExists = ifExists; }
     }
 
     public record DropIndexStatement : Statement
@@ -1326,6 +1334,20 @@ namespace ETL_SQL.Core
             Parameters = parameters;
             ReturnType = returnType;
             Body = body;
+            Mode = mode;
+        }
+    }
+
+    public record CreateViewStatement : Statement
+    {
+        public string ViewName { get; }
+        public Statement Query { get; }
+        public ObjectCreationMode Mode { get; }
+
+        public CreateViewStatement(string name, Statement query, ObjectCreationMode mode = ObjectCreationMode.Create)
+        {
+            ViewName = name;
+            Query = query;
             Mode = mode;
         }
     }
@@ -2041,6 +2063,11 @@ namespace ETL_SQL.Core
         public ShowTablesStatement(string? connectionName = null) { ConnectionName = connectionName; }
     }
 
+    public record ShowViewsStatement : Statement
+    {
+        public string? IntoTable { get; init; }
+    }
+
     public record ShowColumnsStatement : Statement
     {
         public TableReference Table { get; }
@@ -2153,8 +2180,28 @@ namespace ETL_SQL.Core
         public string? At { get; set; }
     }
 
-    /// <summary>SET SHOW_PASSWORD ON/OFF</summary>
+    /// <summary>SET SHOW_SECRETS ON/OFF (alias: SET SHOW_PASSWORD)</summary>
     public record SetShowPasswordStatement(bool Enabled) : Statement
+    {
+    }
+
+    /// <summary>SET ALLOW_PLAINTEXT_SECRETS ON/OFF</summary>
+    public record SetAllowPlaintextSecretsStatement(bool Enabled) : Statement
+    {
+    }
+
+    /// <summary>SET NO_SAVE_SENSITIVE ON/OFF</summary>
+    public record SetNoSaveSensitiveStatement(bool Enabled) : Statement
+    {
+    }
+
+    /// <summary>SET NO_SAVE_CONNECTION ON/OFF</summary>
+    public record SetNoSaveConnectionStatement(bool Enabled) : Statement
+    {
+    }
+
+    /// <summary>SET CONNECTION_ENCRYPTION ON/OFF</summary>
+    public record SetConnectionEncryptionStatement(bool Enabled) : Statement
     {
     }
 

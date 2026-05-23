@@ -26,8 +26,8 @@ SELECT ABS(b) FROM t1 ORDER BY b;
 query R
 SELECT ROUND(c, 1) FROM t1 ORDER BY c;
 ----
-0.7
-123.5
+0.700
+123.500
 
 query I
 SELECT LEN(a) FROM t1 ORDER BY a;

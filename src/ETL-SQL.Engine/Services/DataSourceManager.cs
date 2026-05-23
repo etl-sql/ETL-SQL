@@ -22,6 +22,7 @@ namespace ETL_SQL.Engine.Services
         private readonly ILogger _logger = logger;
         private readonly Evaluator _evaluator = evaluator;
         private readonly ExpressionEvaluator _expressionEvaluator = expressionEvaluator;
+        private readonly Stack<string> _viewResolutionStack = new();
 
         /// <summary>
         /// Scans all active connections for #temp tables and prepares them for session persistence.
@@ -122,6 +123,10 @@ namespace ETL_SQL.Engine.Services
                 }
                 throw new ExecutionException($"Function {table.FunctionCall.FunctionName} did not return a table.");
             }
+            else if (table.ConnectionName == null && _evaluator.TryGetView(name, out var view))
+            {
+                return new StreamingSubqueryDataSource(EvaluateViewBatches(name, view!.Query));
+            }
             else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
             {
                 return new LineageDataSource(_evaluator.LineageTracker);
@@ -180,6 +185,26 @@ namespace ETL_SQL.Engine.Services
 
             if (table.ConnectionName != null) return source.WithTable(table.TableName);
             return source;
+        }
+
+        private async IAsyncEnumerable<DataTable> EvaluateViewBatches(string viewName, Statement query)
+        {
+            if (_viewResolutionStack.Any(v => v.Equals(viewName, StringComparison.OrdinalIgnoreCase)))
+            {
+                var chain = string.Join(" -> ", _viewResolutionStack.Reverse().Append(viewName));
+                throw new ExecutionException($"Recursive view reference detected: {chain}");
+            }
+
+            _viewResolutionStack.Push(viewName);
+            try
+            {
+                await foreach (var batch in _evaluator.ExecuteQuery(query))
+                    yield return batch;
+            }
+            finally
+            {
+                _viewResolutionStack.Pop();
+            }
         }
 
         private async Task<IDataSource> BuildValuesDataSourceAsync(TableReference table)

@@ -19,18 +19,16 @@ CREATE VISUAL RegionFilter AS SLICER (
 -- Define a drawer container for filters
 CREATE CONTAINER FilterPanel AS DRAWER (
     TITLE = 'Filters',
+    ICON = 'FILTER',
     LAYOUT (
         STRUCTURE = 'A',
         MAP ('A' = RegionFilter),
         PINNABLE = ON
-    ),
-    OPTIONS (
-        ICON = 'FILTER'
     )
 );
 
 -- Page layout: A is the collapsible filter, B is the main content
-CREATE PAGE MainView AS (
+CREATE PAGE MainView AS DASHBOARD (
     STRUCTURE = 'A B',
     MAP (
         'A' = FilterPanel,

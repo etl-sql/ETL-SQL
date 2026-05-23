@@ -83,6 +83,22 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
+        public void SetShowSecrets_On_ParsesAsSetShowPasswordStatement()
+        {
+            var script = TestHelpers.Parse("SET SHOW_SECRETS ON;");
+            Assert.IsType<SetShowPasswordStatement>(script.Statements[0]);
+            Assert.True(((SetShowPasswordStatement)script.Statements[0]).Enabled);
+        }
+
+        [Fact]
+        public void SetShowSecrets_Off_ParsesAsSetShowPasswordStatement()
+        {
+            var script = TestHelpers.Parse("SET SHOW_SECRETS OFF;");
+            Assert.IsType<SetShowPasswordStatement>(script.Statements[0]);
+            Assert.False(((SetShowPasswordStatement)script.Statements[0]).Enabled);
+        }
+
+        [Fact]
         public async Task ShowProfile_AfterMockDbSelect_AddsToLastResultSets()
         {
             var eval = NewEval();

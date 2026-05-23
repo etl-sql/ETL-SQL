@@ -33,7 +33,7 @@ CREATE VISUAL StyledTreemap AS TREEMAP (
 );
 
 -- Page Layout
-CREATE PAGE TreemapKitchenSink AS (
+CREATE PAGE TreemapKitchenSink AS DASHBOARD (
     STRUCTURE = 'A B',
     MAP (
         'A' = BasicTreemap,

@@ -9,7 +9,13 @@ Syntax — engine option:
 Engine options:
   WHAT_IF = ON|OFF              — parse and plan without executing DML (default OFF)
   PROFILING = ON|OFF            — collect per-statement timing; view with SHOW PROFILE
-  SHOW_PASSWORD = ON|OFF        — include passwords in SHOW CONNECTIONS output (default OFF)
+  SHOW_PASSWORD = ON|OFF        — display SENSITIVE values in output/log views (default OFF)
+  ALLOW_PLAINTEXT_SECRETS = ON|OFF
+                                — unsafe: allow plaintext secrets to remain in saved source
+  NO_SAVE_SENSITIVE = ON|OFF    — scrub sensitive literals from saved source
+  NO_SAVE_CONNECTION = ON|OFF   — replace CREATE CONNECTION details with placeholders
+  CONNECTION_ENCRYPTION = ON|OFF
+                                — encrypt CREATE CONNECTION target/options on save
   BATCHSIZE = n                 — rows per remote fetch batch for SELECT ... FROM connection
   WEEK_START_DAY = '<day>'      — anchor day for RELDATE week expressions (default Monday)
                                    Valid: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
@@ -28,6 +34,22 @@ SET WHAT_IF = ON;
 SET PROFILING = ON;
 SELECT * FROM dbo.BigTable INTO #data;
 SHOW PROFILE;
+
+-- Display masking only; does not change save behavior
+SET SHOW_PASSWORD = ON;
+SHOW VARIABLES;
+
+-- Unsafe local-dev escape hatch for source persistence
+SET ALLOW_PLAINTEXT_SECRETS = ON;
+USE PASSWORD = 'dev-only';
+
+-- Save-time source hardening
+SET NO_SAVE_SENSITIVE = ON;
+SET NO_SAVE_CONNECTION = ON;
+
+-- Preserve connection details, but encrypted
+SET CONNECTION_ENCRYPTION = ON;
+USE PASSWORD = 'dev-only';
 
 -- Override week start for RELDATE expressions
 SET WEEK_START_DAY = 'Sunday';

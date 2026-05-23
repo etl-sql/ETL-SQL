@@ -320,7 +320,7 @@ SELECT * FROM MyTable WHERE Id = @param2; -- Should error
             var sql = @"
 CREATE VISUAL ChartA AS BAR (SOURCE (SELECT 1 AS Val));
 CREATE VISUAL ChartB AS TABLE (SOURCE (SELECT 1 AS Val));
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
     STRUCTURE = 'A B'
     ,MAP ('A' = ChartA, 'B' = ChartB)
 );";
@@ -337,7 +337,7 @@ CREATE PAGE Overview AS (
 
             var sql = @"
 CREATE VISUAL ChartA AS BAR (SOURCE (SELECT 1 AS Val));
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
     STRUCTURE = 'A B'
     ,MAP ('A' = ChartA, 'B' = NonExistent)
 );";
@@ -356,7 +356,7 @@ CREATE PAGE Overview AS (
 
             var sql = @"
 CREATE VISUAL ChartA AS BAR (SOURCE (SELECT 1 AS Val));
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
     STRUCTURE = 'A B'
     ,MAP ('A' = ChartA)
 );";
@@ -376,7 +376,7 @@ CREATE PAGE Overview AS (
             var sql = @"
 CREATE VISUAL ChartA AS BAR (SOURCE (SELECT 1 AS Val));
 CREATE VISUAL ChartB AS TABLE (SOURCE (SELECT 1 AS Val));
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
     STRUCTURE = 'A'
     ,MAP ('A' = ChartA, 'B' = ChartB)
 );";

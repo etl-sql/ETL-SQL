@@ -47,7 +47,7 @@ CREATE VISUAL StyledMap AS MAP (
 );
 
 -- Page Layout
-CREATE PAGE MapKitchenSink AS (
+CREATE PAGE MapKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B / C',
     MAP (
         'A' = BasicMap,

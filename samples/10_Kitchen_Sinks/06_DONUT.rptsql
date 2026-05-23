@@ -35,7 +35,7 @@ CREATE VISUAL StyledDonut AS DONUT (
 );
 
 -- Page Layout
-CREATE PAGE DonutKitchenSink AS (
+CREATE PAGE DonutKitchenSink AS DASHBOARD (
     STRUCTURE = 'A B',
     MAP (
         'A' = BasicDonut,

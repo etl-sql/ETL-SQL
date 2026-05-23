@@ -20,6 +20,10 @@ namespace ETL_SQL.Tests.Statements.Statements
             // Reset state between tests (SecurityService is a singleton)
             eval.SecurityService.MasterPassword = null;
             eval.ScriptPassword = null;
+            eval.AllowPlaintextSecrets = false;
+            eval.NoSaveSensitive = false;
+            eval.NoSaveConnection = false;
+            eval.ConnectionEncryption = false;
             
             return eval;
         }
@@ -41,14 +45,68 @@ namespace ETL_SQL.Tests.Statements.Statements
         public async Task TestSetShowPassword_SetsContext()
         {
             var eval = CreateEvaluator();
-            
-            var scriptOn = TestHelpers.Parse("SET SHOW_PASSWORD ON;");
+
+            var scriptOn = TestHelpers.Parse("SET SHOW_PASSWORD = ON;");
             await eval.Evaluate(scriptOn);
             Assert.True(eval.ShowPassword);
-            
+
             var scriptOff = TestHelpers.Parse("SET SHOW_PASSWORD OFF;");
             await eval.Evaluate(scriptOff);
             Assert.False(eval.ShowPassword);
+        }
+
+        [Fact]
+        public async Task TestSetShowSecrets_SetsContext()
+        {
+            var eval = CreateEvaluator();
+
+            var scriptOn = TestHelpers.Parse("SET SHOW_SECRETS = ON;");
+            await eval.Evaluate(scriptOn);
+            Assert.True(eval.ShowPassword);
+
+            var scriptOff = TestHelpers.Parse("SET SHOW_SECRETS OFF;");
+            await eval.Evaluate(scriptOff);
+            Assert.False(eval.ShowPassword);
+        }
+
+        [Fact]
+        public async Task TestSetAllowPlaintextSecrets_SetsContext()
+        {
+            var eval = CreateEvaluator();
+
+            var scriptOn = TestHelpers.Parse("SET ALLOW_PLAINTEXT_SECRETS = ON;");
+            await eval.Evaluate(scriptOn);
+            Assert.True(eval.AllowPlaintextSecrets);
+
+            var scriptOff = TestHelpers.Parse("SET ALLOW_PLAINTEXT_SECRETS OFF;");
+            await eval.Evaluate(scriptOff);
+            Assert.False(eval.AllowPlaintextSecrets);
+        }
+
+        [Fact]
+        public async Task TestSavePolicySettings_SetContext()
+        {
+            var eval = CreateEvaluator();
+
+            await eval.Evaluate(TestHelpers.Parse(@"
+                SET NO_SAVE_SENSITIVE = ON;
+                SET NO_SAVE_CONNECTION = ON;
+                SET CONNECTION_ENCRYPTION = ON;
+            "));
+
+            Assert.True(eval.NoSaveSensitive);
+            Assert.True(eval.NoSaveConnection);
+            Assert.True(eval.ConnectionEncryption);
+
+            await eval.Evaluate(TestHelpers.Parse(@"
+                SET NO_SAVE_SENSITIVE OFF;
+                SET NO_SAVE_CONNECTION OFF;
+                SET CONNECTION_ENCRYPTION OFF;
+            "));
+
+            Assert.False(eval.NoSaveSensitive);
+            Assert.False(eval.NoSaveConnection);
+            Assert.False(eval.ConnectionEncryption);
         }
 
         [Fact]

@@ -48,7 +48,7 @@ CREATE VISUAL InventoryStatus AS CARD (
     MAPPINGS (VALUE = StockVal)
 );
 
-CREATE PAGE Dashboard AS (
+CREATE PAGE Dashboard AS DASHBOARD (
     STRUCTURE = 'A B / C .',
     MAP('A' = HighSales, 'B' = LowSales, 'C' = InventoryStatus)
 );
@@ -144,7 +144,7 @@ CREATE VISUAL StaticTotal AS CARD (
     MAPPINGS (VALUE = TotalVal)
 );
 
-CREATE PAGE Main AS (
+CREATE PAGE Main AS DASHBOARD (
     STRUCTURE = 'A B',
     MAP('A' = RegionSales, 'B' = StaticTotal)
 );
@@ -208,7 +208,7 @@ CREATE VISUAL DetailByCategory AS BAR (
     INTERACTIONS (ON_SELECT = HIGHLIGHT)
 );
 
-CREATE PAGE Main AS (
+CREATE PAGE Main AS DASHBOARD (
     STRUCTURE = 'A B',
     MAP('A' = BarByRegion, 'B' = DetailByCategory)
 );
@@ -383,7 +383,7 @@ CREATE CONTAINER Shell AS BOX (
     STYLE (THEME = 'corporate', HEIGHT = '360px')
 );
 
-CREATE PAGE Dashboard AS (
+CREATE PAGE Dashboard AS DASHBOARD (
     STRUCTURE = 'A',
     MAP('A' = Shell),
     STYLE = PageDark,
@@ -612,11 +612,11 @@ CREATE VISUAL SalesCard AS CARD (
 CREATE VISUAL SalesTable AS TABLE (
     SOURCE = (SELECT Region, Sales FROM #Sales)
 );
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
     STRUCTURE = 'A',
     MAP('A' = SalesCard)
 );
-CREATE PAGE Details AS (
+CREATE PAGE Details AS DASHBOARD (
     STRUCTURE = 'A',
     MAP('A' = SalesTable)
 );",
@@ -657,7 +657,7 @@ CREATE CONTAINER Filters AS BOX (
         MAP('A' = RegionFilter, 'B' = Apply)
     )
 );
-CREATE PAGE Dashboard AS (
+CREATE PAGE Dashboard AS DASHBOARD (
     STRUCTURE = 'A / B C',
     MAP('A' = Filters, 'B' = BarByRegion, 'C' = SalesTable)
 );",

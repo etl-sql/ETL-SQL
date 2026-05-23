@@ -77,7 +77,7 @@ CREATE VISUAL SalesDetails AS TABLE (
 );
 
 -- Layout
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
     STRUCTURE = 'A B / C C / D E / F F',
     MAP (
         'A' = DateFilter,
@@ -89,7 +89,7 @@ CREATE PAGE Overview AS (
     )
 );
 
-CREATE PAGE Details AS (
+CREATE PAGE Details AS DASHBOARD (
     STRUCTURE = 'A A',
     MAP (
         'A' = SalesDetails

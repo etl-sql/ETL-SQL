@@ -36,7 +36,7 @@ CREATE VISUAL RegressionOverlays AS SCATTER (
 );
 
 -- Page Layout
-CREATE PAGE OverlaySink AS (
+CREATE PAGE OverlaySink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = BasicOverlays,

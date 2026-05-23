@@ -77,6 +77,19 @@ namespace ETL_SQL.Core
         Sankey, Sunburst, Network, Trellis, Matrix
     }
 
+    public enum PageMode
+    {
+        Dashboard,
+        Paginated
+    }
+
+    public enum VisualFetchMode
+    {
+        Auto,
+        OnLoad,
+        OnRun
+    }
+
     public enum DatasetEncryptionMode
     {
         None,
@@ -292,6 +305,7 @@ namespace ETL_SQL.Core
         public List<TableSummaryItem> Summaries        { get; init; } = new();
         public TableSummaryOptions? SummaryOptions     { get; init; }
         public Dictionary<string, string> Styles       { get; init; } = new();
+        public VisualFetchMode FetchMode               { get; init; } = VisualFetchMode.Auto;
         /// <summary>Name of a CREATE STYLE to inherit. Merged before inline Styles (inline wins).</summary>
         public string? StyleName                       { get; init; }
         public ObjectCreationMode Mode                 { get; init; } = ObjectCreationMode.Create;
@@ -303,6 +317,7 @@ namespace ETL_SQL.Core
     public record CreatePageStatement : Statement
     {
         public required string Name                           { get; init; }
+        public PageMode PageMode                              { get; init; } = PageMode.Dashboard;
         public required string Structure                      { get; init; }
         public Dictionary<string, string> SlotMap             { get; init; } = new();
         public Dictionary<string, string> Styles              { get; init; } = new();

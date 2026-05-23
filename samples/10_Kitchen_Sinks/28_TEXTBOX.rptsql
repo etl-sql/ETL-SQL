@@ -21,7 +21,7 @@ CREATE VISUAL TextboxResult AS CARD (
 );
 
 -- Page Layout
-CREATE PAGE TextboxKitchenSink AS (
+CREATE PAGE TextboxKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = NoteInput,

@@ -20,7 +20,7 @@ CREATE VISUAL CheckboxResult AS CARD (
 );
 
 -- Page Layout
-CREATE PAGE CheckboxKitchenSink AS (
+CREATE PAGE CheckboxKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = InactiveToggle,

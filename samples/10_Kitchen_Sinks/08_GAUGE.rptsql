@@ -39,7 +39,7 @@ CREATE VISUAL CustomBoundsGauge AS GAUGE (
 );
 
 -- 6. Multiple Gauges in a Row (Page Layout)
-CREATE PAGE GaugeKitchenSink AS (
+CREATE PAGE GaugeKitchenSink AS DASHBOARD (
     STRUCTURE = 'A B / C D',
     MAP (
         'A' = DefaultGauge,

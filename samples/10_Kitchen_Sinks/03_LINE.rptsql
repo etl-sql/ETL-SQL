@@ -69,7 +69,7 @@ CREATE VISUAL MovingAvgLine AS LINE (
 );
 
 -- Page Layout
-CREATE PAGE LineKitchenSink AS (
+CREATE PAGE LineKitchenSink AS DASHBOARD (
     STRUCTURE = 'A B / C D / E F',
     MAP (
         'A' = BasicLine,

@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
@@ -47,6 +48,12 @@ namespace ETL_SQL.LSP
                     .WithOutput(Console.OpenStandardOutput())
                     .ConfigureLogging(lb => lb.AddDebug().AddLanguageProtocolLogging().SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Trace))
                     .WithServices(services => {
+                        var configuration = new ConfigurationBuilder()
+                            .SetBasePath(AppContext.BaseDirectory)
+                            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                            .Build();
+                        services.AddSingleton<IConfiguration>(configuration);
+
                         var registry = new Data.ConnectorRegistry();
                         registry.Register(new MockDbConnector());
                         registry.Register(new FlatFileConnector());
@@ -91,7 +98,12 @@ namespace ETL_SQL.LSP
                         services.AddSingleton<IDockerManager, DockerContainerManager>();
                         services.AddSingleton<ISessionStateManager, Engine.Services.SessionStateManager>();
                         services.AddSingleton<Engine.Services.SessionStateManager>(sp => (Engine.Services.SessionStateManager)sp.GetRequiredService<ISessionStateManager>());
-                        services.AddSingleton<Services.SecurityService>();
+                        services.AddSingleton<Services.SecurityService>(sp =>
+                        {
+                            var sec = new Services.SecurityService(sp.GetRequiredService<Common.ILogger>());
+                            sec.UpdateFromConfiguration(configuration);
+                            return sec;
+                        });
                         services.AddSingleton<ISystemResources, DefaultSystemResources>();
                         services.AddSingleton<IBufferManager, ETL_SQL.Orchestrator.Execution.BufferManager>();
                         services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));

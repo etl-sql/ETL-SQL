@@ -56,6 +56,10 @@ namespace ETL_SQL.Engine.Handlers
             // 2. Handle SELECT INTO (Extract -> Stage -> Load)
             if (intoTable != null)
             {
+                var intoName = intoTable.ConnectionName ?? intoTable.TableName;
+                if (context.VarContext.TryGetView(intoName, out _))
+                    throw new ExecutionException($"View {intoName} is read-only and cannot be used as a SELECT INTO target.");
+
                 var destination = await context.ResolveDataSourceAsync(intoTable);
                 await destination.TruncateAsync();
 

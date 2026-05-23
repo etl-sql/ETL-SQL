@@ -328,7 +328,13 @@ namespace ETL_SQL.Engine
 
             // Fast paths to avoid async state machine for primitives
             if (expr is LiteralExpression lit)
-                return new ValueTask<object?>( (decryptSensitive && lit.Value is string s && s.StartsWith("ENC:")) ? _context.DecryptValue(s) : lit.Value );
+            {
+                if (lit.Value is string s && s.StartsWith("__HEX_BLOB__", StringComparison.Ordinal))
+                {
+                    return new ValueTask<object?>(ParseHex(s.Substring(12)));
+                }
+                return new ValueTask<object?>( (decryptSensitive && lit.Value is string enc && enc.StartsWith("ENC:")) ? _context.DecryptValue(enc) : lit.Value );
+            }
 
             if (expr is IdentifierExpression id)
                 return EvaluateIdentifier(id, context);
@@ -370,25 +376,62 @@ namespace ETL_SQL.Engine
 
         private async ValueTask<object?> EvaluateUnary(UnaryExpression un, Row context, bool decryptSensitive)
         {
-            if (un.Operator != TokenType.NOT) return null;
-            var inner = await EvaluateInternal(un.Expression, context, decryptSensitive);
-            if (inner == null || inner == DBNull.Value) return null;
-            if (inner is bool b) return (object?)!b;
-            try { return (object?)!Convert.ToBoolean(inner); } catch { return null; }
+            if (un.Operator == TokenType.NOT)
+            {
+                var inner = await EvaluateInternal(un.Expression, context, decryptSensitive);
+                if (inner == null || inner == DBNull.Value) return null;
+                if (inner is bool b) return (object?)!b;
+                try { return (object?)!Convert.ToBoolean(inner); } catch { return null; }
+            }
+            if (un.Operator == TokenType.MINUS)
+            {
+                var inner = await EvaluateInternal(un.Expression, context, decryptSensitive);
+                if (inner == null || inner == DBNull.Value) return null;
+                try
+                {
+                    decimal d = Convert.ToDecimal(inner, System.Globalization.CultureInfo.InvariantCulture);
+                    return -d;
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+            if (un.Operator == TokenType.PLUS)
+            {
+                var inner = await EvaluateInternal(un.Expression, context, decryptSensitive);
+                if (inner == null || inner == DBNull.Value) return null;
+                try
+                {
+                    return Convert.ToDecimal(inner, System.Globalization.CultureInfo.InvariantCulture);
+                }
+                catch
+                {
+                    return inner;
+                }
+            }
+            return null;
         }
 
         /// <summary>Evaluates an IN expression (list or subquery).</summary>
         private async ValueTask<object?> EvaluateIn(InExpression inExp, Row context, bool decryptSensitive = false)
         {
             var l = await EvaluateInternal(inExp.Left, context, decryptSensitive);
+            bool hasElements = false;
             bool found = false;
+            bool hasNullRight = false;
             
             if (inExp.Right is SubqueryExpression subq)
             {
                 // Use cached stream evaluation for subqueries in IN clauses
                 await foreach (var rowVal in EvaluateStreamSubquery(subq, context))
                 {
-                    if (!l.IsNull() && !rowVal.IsNull())
+                    hasElements = true;
+                    if (rowVal.IsNull())
+                    {
+                        hasNullRight = true;
+                    }
+                    else if (!l.IsNull())
                     {
                         if (IsSoftEqual(l, rowVal)) { found = true; break; }
                     }
@@ -398,8 +441,13 @@ namespace ETL_SQL.Engine
             {
                 foreach (var item in list.Items)
                 {
+                    hasElements = true;
                     var itemVal = await EvaluateInternal(item, context, decryptSensitive);
-                    if (!l.IsNull() && !itemVal.IsNull())
+                    if (itemVal.IsNull())
+                    {
+                        hasNullRight = true;
+                    }
+                    else if (!l.IsNull())
                     {
                         if (IsSoftEqual(l, itemVal)) { found = true; break; }
                     }
@@ -412,15 +460,47 @@ namespace ETL_SQL.Engine
                 {
                     foreach (var item in listVal)
                     {
-                        if (IsSoftEqual(l, item)) { found = true; break; }
+                        hasElements = true;
+                        if (item.IsNull())
+                        {
+                            hasNullRight = true;
+                        }
+                        else if (!l.IsNull())
+                        {
+                            if (IsSoftEqual(l, item)) { found = true; break; }
+                        }
                     }
                 }
                 else
                 {
-                    found = IsSoftEqual(l, rightVal);
+                    hasElements = true;
+                    if (rightVal.IsNull())
+                    {
+                        hasNullRight = true;
+                    }
+                    else if (!l.IsNull())
+                    {
+                        found = IsSoftEqual(l, rightVal);
+                    }
                 }
             }
-            return inExp.IsNot ? !found : found;
+
+            if (!hasElements)
+            {
+                return inExp.IsNot ? true : false;
+            }
+
+            if (found)
+            {
+                return inExp.IsNot ? false : true;
+            }
+
+            if (l.IsNull() || hasNullRight)
+            {
+                return null;
+            }
+
+            return inExp.IsNot ? true : false;
         }
 
         private async ValueTask<object?> EvaluateBetween(BetweenExpression bet, Row context, bool decryptSensitive = false)
@@ -431,10 +511,38 @@ namespace ETL_SQL.Engine
             var start = await EvaluateInternal(bet.Start, context, decryptSensitive);
             var end = await EvaluateInternal(bet.End, context, decryptSensitive);
 
-            if (start.IsNull() || end.IsNull()) return null;
+            // Three-valued logic for: val >= start AND val <= end
+            bool? leftCond = null;
+            if (!start.IsNull())
+            {
+                leftCond = CompareConstants(val, start) >= 0;
+            }
 
-            bool isBetween = CompareConstants(val, start) >= 0 && CompareConstants(val, end) <= 0;
-            return bet.IsNot ? !isBetween : isBetween;
+            bool? rightCond = null;
+            if (!end.IsNull())
+            {
+                rightCond = CompareConstants(val, end) <= 0;
+            }
+
+            // Evaluate leftCond AND rightCond in three-valued logic
+            bool? isBetween;
+            if (leftCond == false || rightCond == false)
+            {
+                isBetween = false;
+            }
+            else if (leftCond == null || rightCond == null)
+            {
+                isBetween = null;
+            }
+            else
+            {
+                isBetween = true;
+            }
+
+            if (isBetween == null) return null;
+
+            bool finalResult = isBetween.Value;
+            return bet.IsNot ? !finalResult : finalResult;
         }
     
 
@@ -471,6 +579,27 @@ namespace ETL_SQL.Engine
             if (context != null && context.TryGetValue(aggKey, out var aggVal)) return aggVal;
 
             var fn = f.FunctionName.ToUpperInvariant();
+
+            if (fn == "PREV")
+            {
+                if (context is MatchRecognizeRow mrRow)
+                {
+                    int offset = 1;
+                    if (f.Arguments.Count > 1)
+                    {
+                        var offsetVal = await EvaluateInternal(f.Arguments[1], context, decryptSensitive);
+                        offset = Convert.ToInt32(offsetVal);
+                    }
+                    int prevIndex = mrRow.Index - offset;
+                    if (prevIndex >= 0 && prevIndex < mrRow.Rows.Count)
+                    {
+                        var prefixedPrevRow = new MatchRecognizeRow(mrRow.Rows, prevIndex, mrRow.Variable);
+                        return await EvaluateInternal(f.Arguments[0], prefixedPrevRow, decryptSensitive);
+                    }
+                    return null;
+                }
+                return null;
+            }
             
             // ANSI String length aliases
             if (fn == "CHARACTER_LENGTH" || fn == "CHAR_LENGTH" || fn == "OCTET_LENGTH")
@@ -941,7 +1070,8 @@ namespace ETL_SQL.Engine
             // Arithmetic operators don't fall back to soft equality if null
             if (bin.Operator == TokenType.PLUS || bin.Operator == TokenType.MINUS || 
                 bin.Operator == TokenType.STAR || bin.Operator == TokenType.SLASH || 
-                bin.Operator == TokenType.MODULO) return null;
+                bin.Operator == TokenType.MODULO ||
+                bin.Operator == TokenType.LSHIFT || bin.Operator == TokenType.RSHIFT) return null;
 
             return bin.Operator switch
             {
@@ -963,6 +1093,22 @@ namespace ETL_SQL.Engine
         {
             if (input.IsNull() || pattern.IsNull()) return null;
             return Regex.IsMatch(input?.ToString() ?? "", pattern?.ToString() ?? "", options);
+        }
+
+        private static byte[] ParseHex(string hex)
+        {
+            byte[] bytes = new byte[hex.Length / 2];
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                bytes[i] = (byte)((GetHexVal(hex[i * 2]) << 4) + GetHexVal(hex[i * 2 + 1]));
+            }
+            return bytes;
+        }
+
+        private static int GetHexVal(char hex)
+        {
+            int val = (int)hex;
+            return val - (val < 58 ? 48 : (val < 97 ? 55 : 87));
         }
 
         /// <summary>Evaluates a LIKE expression.</summary>

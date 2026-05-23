@@ -39,7 +39,7 @@ CREATE VISUAL SalesByPeriod AS BAR (
     )
 );
 
-CREATE PAGE Demo AS (
+CREATE PAGE Demo AS DASHBOARD (
     STRUCTURE = 'A',
     MAP ('A' = SalesByPeriod)
 );

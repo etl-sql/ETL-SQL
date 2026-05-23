@@ -74,7 +74,7 @@ namespace ETL_SQL.LSP
     /// <summary>
     /// Implementation of specialized ETL-SQL Language Server methods for metadata discovery and configuration.
     /// </summary>
-    public class CustomMethodsHandler(IMetadataManager metadata, ILogger<CustomMethodsHandler> logger, IServiceScopeFactory scopeFactory, DatasetStore datasetStore) : ISetConnectionsHandler, IGetTablesHandler, IGetColumnsHandler, ISetDebugModeHandler, IGetViewsHandler, IGetTempTablesHandler, IEncryptScriptHandler, IGetReportManifestHandler, ISetPortalDbPathHandler
+    public class CustomMethodsHandler(IMetadataManager metadata, ILogger<CustomMethodsHandler> logger, IServiceScopeFactory scopeFactory, DatasetStore datasetStore, ETL_SQL.Services.SecurityService security) : ISetConnectionsHandler, IGetTablesHandler, IGetColumnsHandler, ISetDebugModeHandler, IGetViewsHandler, IGetTempTablesHandler, IEncryptScriptHandler, IGetReportManifestHandler, ISetPortalDbPathHandler
     {
         /// <summary>Handles toggle debug mode notification.</summary>
         public Task<Unit> Handle(SetDebugModeParams request, CancellationToken cancellationToken)
@@ -96,9 +96,7 @@ namespace ETL_SQL.LSP
         public Task<EncryptScriptResponse> Handle(EncryptScriptParams request, CancellationToken cancellationToken)
         {
             logger.LogInformation("LSP: etlsql/encryptScript requested.");
-            // We use the security service to perform the transformation
-            var security = new ETL_SQL.Services.SecurityService(ETL_SQL.Common.NullLogger.Instance);
-            var encrypted = security.EncryptScript(request.text, request.password);
+            var encrypted = security.SecureScriptForSave(request.text, request.password);
             return Task.FromResult(new EncryptScriptResponse { encryptedText = encrypted });
         }
 

@@ -35,7 +35,7 @@ if (Test-Path $trxPath) {
         $total   = [int]$counters.total
         $passed  = [int]$counters.passed
         $failed  = [int]$counters.failed
-        $skipped = [int]($counters.notExecuted ?? 0)
+        $skipped = if ($counters.notExecuted) { [int]$counters.notExecuted } else { 0 }
 
         Write-Host "SUMMARY" -ForegroundColor White
         Write-Host "  Total  : $total"

@@ -73,7 +73,7 @@ foreach ($script in $etlScripts) {
         $procInfo = New-Object System.Diagnostics.ProcessStartInfo
         $procInfo.FileName = "dotnet"
         $projectPath = Join-Path $solutionRoot "src/ETL-SQL.App"
-        $procInfo.Arguments = "run --project `"$projectPath`" -- run `"$($script.FullName)`" --silent"
+        $procInfo.Arguments = "run --no-build --project `"$projectPath`" -- run `"$($script.FullName)`" --silent"
         $procInfo.WorkingDirectory = $solutionRoot
         $procInfo.RedirectStandardOutput = $true
         $procInfo.RedirectStandardError = $true

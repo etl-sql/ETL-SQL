@@ -115,7 +115,7 @@ namespace ETL_SQL.Engine.Engines
             foreach (var part in pattern)
             {
                 int count = 0;
-                while (index < rows.Count && await IsDefined(rows[index], part.Variable, definitions))
+                while (index < rows.Count && await IsDefined(rows, index, part.Variable, definitions))
                 {
                     if (!captures.TryGetValue(part.Variable, out var list))
                     {
@@ -134,11 +134,11 @@ namespace ETL_SQL.Engine.Engines
             return index > start ? new PatternMatch(captures, index) : null;
         }
 
-        private async Task<bool> IsDefined(Row source, string variable, Dictionary<string, Expression> definitions)
+        private async Task<bool> IsDefined(List<Row> rows, int index, string variable, Dictionary<string, Expression> definitions)
         {
             if (!definitions.TryGetValue(variable, out var definition)) return true;
-            var row = WithVariablePrefix(source, variable);
-            var value = await _context.EvaluateValue(definition, row);
+            var mrRow = new MatchRecognizeRow(rows, index, variable);
+            var value = await _context.EvaluateValue(definition, mrRow);
             return value switch
             {
                 null => false,
@@ -153,8 +153,15 @@ namespace ETL_SQL.Engine.Engines
         private async Task<Row> BuildOutputRow(MatchRecognizeClause clause, List<Row> rows, PatternMatch match, int matchNumber, int? currentRowIndex)
         {
             var output = new Row();
-            output["MATCH_NUMBER"] = (decimal)matchNumber;
-            if (currentRowIndex != null) output["CLASSIFIER"] = match.Captures.First(kv => kv.Value.Contains(currentRowIndex.Value)).Key;
+            
+            if (rows.Count > 0)
+            {
+                foreach (var expr in clause.PartitionBy)
+                {
+                    string name = expr.ToSql();
+                    output[name] = await _context.EvaluateValue(expr, rows[0]);
+                }
+            }
 
             foreach (var measure in clause.Measures)
             {
@@ -252,5 +259,29 @@ namespace ETL_SQL.Engine.Engines
 
         private sealed record PatternMatch(Dictionary<string, List<int>> Captures, int EndExclusive);
         private sealed record PatternPart(string Variable, char Quantifier);
+    }
+}
+
+namespace ETL_SQL.Engine
+{
+    public class MatchRecognizeRow : Row
+    {
+        public List<Row> Rows { get; }
+        public int Index { get; }
+        public string Variable { get; }
+
+        public MatchRecognizeRow(List<Row> rows, int index, string variable)
+        {
+            Rows = rows;
+            Index = index;
+            Variable = variable;
+
+            var source = rows[index];
+            foreach (var (column, value) in source.Columns)
+            {
+                this[$"{variable}.{column.Split('.').Last()}"] = value;
+                this[column] = value;
+            }
+        }
     }
 }

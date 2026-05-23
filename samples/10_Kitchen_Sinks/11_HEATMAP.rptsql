@@ -36,7 +36,7 @@ CREATE VISUAL StyledHeatmap AS HEATMAP (
 );
 
 -- Page Layout
-CREATE PAGE HeatmapKitchenSink AS (
+CREATE PAGE HeatmapKitchenSink AS DASHBOARD (
     STRUCTURE = 'A B',
     MAP (
         'A' = BasicHeatmap,

@@ -21,6 +21,7 @@ namespace ETL_SQL.Engine.Services
         
         private readonly Dictionary<string, CreateProcedureStatement> _procedures = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, CreateFunctionStatement> _functions = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, CreateViewStatement> _views = new(StringComparer.OrdinalIgnoreCase);
  
         public IDictionary<string, object?> Variables { get { lock(_lock) { return _variables; } } }
         public IDictionary<string, VariableMetadata> VariableMetadata { get { lock(_lock) { return _variableMetadata; } } }
@@ -181,6 +182,24 @@ namespace ETL_SQL.Engine.Services
         /// <summary>Attempts to retrieve a user-defined function by name.</summary>
         public bool TryGetFunction(string name, out CreateFunctionStatement? stmt) { lock(_lock) { return _functions.TryGetValue(name, out stmt); } }
 
+        /// <summary>Registers a session-scoped query view.</summary>
+        public void SetView(string name, CreateViewStatement stmt) { lock(_lock) { _views[name] = stmt; } }
+
+        /// <summary>Removes a session-scoped query view.</summary>
+        public bool RemoveView(string name) { lock(_lock) { return _views.Remove(name); } }
+
+        /// <summary>Attempts to retrieve a session-scoped query view by name.</summary>
+        public bool TryGetView(string name, out CreateViewStatement? stmt) { lock(_lock) { return _views.TryGetValue(name, out stmt); } }
+
+        /// <summary>Returns a snapshot of all session-scoped query views.</summary>
+        public IReadOnlyDictionary<string, CreateViewStatement> GetViews()
+        {
+            lock (_lock)
+            {
+                return new Dictionary<string, CreateViewStatement>(_views, StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
         /// <summary>Creates a snapshot for parallel execution. Child gains copies of all current scopes.</summary>
         public VariableScopeManager Fork()
         {
@@ -194,6 +213,7 @@ namespace ETL_SQL.Engine.Services
                 // Shallow copy procedure/function registries
                 foreach (var kvp in _procedures) fork._procedures[kvp.Key] = kvp.Value;
                 foreach (var kvp in _functions) fork._functions[kvp.Key] = kvp.Value;
+                foreach (var kvp in _views) fork._views[kvp.Key] = kvp.Value;
 
                 // Reconstruct the scope stack as copies
                 var scopes = _scopeStack.ToArray();
@@ -285,6 +305,7 @@ namespace ETL_SQL.Engine.Services
                 _metadataStack.Clear();
                 _procedures.Clear();
                 _functions.Clear();
+                _views.Clear();
             }
         }
     }

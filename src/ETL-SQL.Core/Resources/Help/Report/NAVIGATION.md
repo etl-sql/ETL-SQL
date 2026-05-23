@@ -13,13 +13,13 @@ Types:
   LINK    — inline text links
 
 ```sql
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
   STRUCTURE = 'A', MAP ('A' = SummaryChart)
 );
-CREATE PAGE Detail AS (
+CREATE PAGE Detail AS DASHBOARD (
   STRUCTURE = 'A', MAP ('A' = DetailTable)
 );
-CREATE PAGE Trends AS (
+CREATE PAGE Trends AS DASHBOARD (
   STRUCTURE = 'A', MAP ('A' = TrendLine)
 );
 

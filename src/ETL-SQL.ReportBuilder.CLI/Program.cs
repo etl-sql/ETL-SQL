@@ -45,6 +45,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             string  format     = "md";
             bool    isInteraction = false;
             var     parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var     runPages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             for (int i = 1; i < args.Length; i++)
             {
@@ -58,6 +59,12 @@ namespace ETL_SQL.ReportBuilder.CLI
                         break;
                     case "--interaction":
                         isInteraction = true;
+                        break;
+                    case "--run-page":
+                        if (i + 1 < args.Length)
+                        {
+                            runPages.Add(args[++i]);
+                        }
                         break;
                     case "--parameter": case "-p":
                         if (i + 1 < args.Length)
@@ -84,7 +91,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             if (evaluator == null) { Console.Error.WriteLine($"error: {err}"); return 2; }
 
             var builder  = new ManifestBuilder(evaluator);
-            var manifest = await builder.BuildAsync(scriptPath, isInteraction ? parameters : null);
+            var manifest = await builder.BuildAsync(scriptPath, isInteraction ? parameters : null, runPages: runPages.Count > 0 ? runPages : null);
             manifest.IsInteraction = isInteraction;
 
             string ext = format switch { "json" => ".report.json", "pdf" => ".report.pdf", _ => ".report.md" };
@@ -465,7 +472,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             Console.WriteLine("etl-sql-report — Report-SQL build tool");
             Console.WriteLine();
             Console.WriteLine("Usage:");
-            Console.WriteLine("  etl-sql-report build   <script.rptsql> [--output <file>] [--format md|json|pdf] [--parameter @p=v]");
+            Console.WriteLine("  etl-sql-report build   <script.rptsql> [--output <file>] [--format md|json|pdf] [--parameter @p=v] [--run-page PageName]");
             Console.WriteLine("  etl-sql-report refresh <script.rptsql>");
             Console.WriteLine("  etl-sql-report serve   <script.rptsql> [--port <n>] [--no-browser]");
             Console.WriteLine("  etl-sql-report serve   --manifest reports.json [--port <n>]");
@@ -476,6 +483,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             Console.WriteLine("  --output, -o      Output file path (defaults to <script>.report.md|json|pdf).");
             Console.WriteLine("  --format, -f      Output format: md (default), json, or pdf.");
             Console.WriteLine("  --parameter, -p   Pass a variable to the script (e.g. -p @region=West).");
+            Console.WriteLine("  --run-page        Mark a paginated page as run so AUTO/ON_RUN result visuals load.");
             Console.WriteLine("  --manifest, -m    Path to reports.json for multi-report hosting.");
             Console.WriteLine("  --dir             Host all .rptsql files in the specified directory.");
             Console.WriteLine("  --open            The initial report file to open when using --dir.");

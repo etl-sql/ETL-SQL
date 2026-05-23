@@ -899,7 +899,7 @@ CREATE VISUAL DetailTable AS TABLE (
 
 -- Page layout: CSS grid structure drives placement
 -- 'A A / B C' means: row 1 = A spans 2 cols; row 2 = B left, C right
-CREATE PAGE ExecutiveDashboard AS (
+CREATE PAGE ExecutiveDashboard AS DASHBOARD (
     STRUCTURE = 'A A / B C',
     MAP ( 'A' = SalesTrend, 'B' = RegionSlicer, 'C' = SalesByCat )
 ) WITH PARAMETERS (

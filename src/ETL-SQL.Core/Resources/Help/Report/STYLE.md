@@ -8,10 +8,13 @@ Syntax:
     FONT       = 'font-name',
     FONT_SIZE  = n,
     COLORS     = ('#color1', '#color2', ...),
-    BORDER     = 'css-border-value'
+    BORDER     = 'css-border-value',
+    ALLOW_MAXIMIZE = ON | OFF
   );
 
 Apply a named style with `STYLE = StyleName` on a visual, page, container, or button. Add inline overrides with `STYLE (KEY = value, ...)`.
+
+`ALLOW_MAXIMIZE` is a visual-level viewer option. Data/chart visuals show the maximize button by default. Input/control visuals (`SLICER`, `MULTISELECT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX`) hide it by default so their controls remain unobstructed.
 
 ```sql
 CREATE STYLE Corporate (
@@ -26,6 +29,7 @@ CREATE VISUAL RevChart AS BAR (
   SOURCE   = #revenue,
   MAPPINGS (X = month, Y = amount),
   TITLE    = 'Monthly Revenue',
-  STYLE    = Corporate
+  STYLE    = Corporate,
+  STYLE    (ALLOW_MAXIMIZE = OFF)
 );
 ```

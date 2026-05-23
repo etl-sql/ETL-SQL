@@ -55,7 +55,7 @@ export class ReportPreviewPanel {
             message => {
                 switch (message.type) {
                     case 'refreshReport':
-                        this._refreshContent(message.parameters, /* usePostMessage */ true, message.isInteraction);
+                        this._refreshContent(message.parameters, /* usePostMessage */ true, message.isInteraction, message.pageName);
                         break;
                     case 'refreshVisuals':
                         this._refreshContent(undefined, /* usePostMessage */ true, true);
@@ -119,7 +119,7 @@ export class ReportPreviewPanel {
      *  usePostMessage=true sends the manifest via postMessage instead of replacing
      *  the HTML, preserving React state (e.g. slicer selection) across refreshes.
      */
-    private _refreshContent(parameters?: Record<string, string | null>, usePostMessage = false, isInteraction = false): void {
+    private _refreshContent(parameters?: Record<string, string | null>, usePostMessage = false, isInteraction = false, pageName?: string): void {
         if (parameters) {
             this._parameters = { ...this._parameters, ...parameters };
         }
@@ -129,7 +129,7 @@ export class ReportPreviewPanel {
             this._panel.webview.html = this._getLoadingHtml();
         }
 
-        this._buildManifest(isInteraction, (err, manifest) => {
+        this._buildManifest(isInteraction, pageName, (err, manifest) => {
             if (err || !manifest) {
                 this._panel.webview.html = this._getErrorHtml(err ?? 'No manifest produced');
                 return;
@@ -248,7 +248,7 @@ export class ReportPreviewPanel {
     }
 
     /** Spawns `ETL-SQL-Report build --format json` and returns the parsed manifest. */
-    private async _buildManifest(isInteraction: boolean, callback: (err: string | null, manifest: Record<string, unknown> | null) => void): Promise<void> {
+    private async _buildManifest(isInteraction: boolean, pageName: string | undefined, callback: (err: string | null, manifest: Record<string, unknown> | null) => void): Promise<void> {
         const outputPath = path.join(os.tmpdir(), `etlsql-preview-${Date.now()}.json`);
         const { exe, baseArgs } = this._resolveCliCall();
         
@@ -277,6 +277,9 @@ export class ReportPreviewPanel {
 
         if (isInteraction) {
             args.push('--interaction');
+        }
+        if (pageName) {
+            args.push('--run-page', pageName);
         }
 
         // Add parameters

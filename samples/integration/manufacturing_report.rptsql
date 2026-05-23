@@ -1,3 +1,5 @@
+-- @requires: orchestrator
+USE DATASET &manufacturing_data;
 -- ==============================================================================
 -- manufacturing_report.rptsql
 -- Paginated report consuming the master Parquet dataset.
@@ -6,15 +8,7 @@
 SET REPORT TITLE = 'Manufacturing Analytics';
 SET REPORT DESCRIPTION = 'Hourly overview of machine telemetry and status.';
 
--- 1. Create the dataset from the master Parquet file.
--- This dataset acts as the semantic layer for the report visuals.
-CREATE CONNECTION parquet_conn ON PARQUET() WITH(PATH='/app/data/manufacturing_master.parquet');
 
-CREATE DATASET &manufacturing_data 
-  REFRESH EVERY '1h'
-AS (
-    SELECT * FROM parquet_conn
-);
 
 -- 2. Define Interactive Parameters
 -- Users can filter by Start and End dates to view specific hours.
@@ -23,6 +17,7 @@ DECLARE @end_time   DATETIME INPUT;
 
 -- 3. Define the paginated table visual
 CREATE VISUAL TelemetryTable AS TABLE (
+    FETCH = ON_RUN,
     SOURCE = (
         SELECT 
             MachineID,
@@ -52,7 +47,7 @@ CREATE VISUAL EndTimeFilter AS DATEPICKER (
 );
 
 -- 5. Layout
-CREATE PAGE MainLayout AS (
+CREATE PAGE MainLayout AS PAGINATED (
     TITLE = 'Machine Telemetry',
     STRUCTURE = 'A B / C C',
     MAP (

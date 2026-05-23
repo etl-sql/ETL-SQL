@@ -99,6 +99,10 @@ namespace ETL_SQL.Core.Common
         public bool DisplayExecuteTree { get; set; }
         public bool IsVerbose { get; set; }
         public bool ShowPassword { get; set; }
+        public bool AllowPlaintextSecrets { get; set; }
+        public bool NoSaveSensitive { get; set; }
+        public bool NoSaveConnection { get; set; }
+        public bool ConnectionEncryption { get; set; }
         public bool RedirectOutput { get; set; }
         public List<LogEntry> Messages { get; } = new();
         public int MaxMessages { get; set; } = 1000;
@@ -218,6 +222,10 @@ namespace ETL_SQL.Core.Common
          public void SetFunction(string name, CreateFunctionStatement stmt) => throw new NotSupportedException();
          public bool RemoveFunction(string name) => false;
          public bool TryGetFunction(string name, out CreateFunctionStatement? stmt) { stmt = null; return false; }
+         public void SetView(string name, CreateViewStatement stmt) => throw new NotSupportedException();
+         public bool RemoveView(string name) => false;
+         public bool TryGetView(string name, out CreateViewStatement? stmt) { stmt = null; return false; }
+         public IReadOnlyDictionary<string, CreateViewStatement> GetViews() => new Dictionary<string, CreateViewStatement>(StringComparer.OrdinalIgnoreCase);
          public IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null) => new Dictionary<string, (object? Value, VariableMetadata Metadata)>();
          public void Reset() { }
 

@@ -349,6 +349,7 @@ namespace ETL_SQL.Core.Parser
         {
             var startToken = Current;
             bool isDistinct = Match(TokenType.DISTINCT);
+            if (!isDistinct) Match(TokenType.ALL);
             Expression? topCount = null;
             bool isTopPercent = false;
             bool withTies = false;
@@ -867,15 +868,15 @@ namespace ETL_SQL.Core.Parser
                 {
                     if (Match(TokenType.AS))
                     {
-                        tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, ConsumeIdentifier("Expected alias after AS").Value);
+                        tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, ConsumeIdentifier("Expected alias after AS").Value, tableRef.Subquery, tableRef.FunctionCall, tableRef.ValuesRows, tableRef.ColumnAliases);
                         // Tags after alias: mytable AS c /* @tag: val */
                         var aliasMetadata = _expressionParser.ParseMetadataTags();
                         foreach (var tag in aliasMetadata) tableRef.Metadata[tag.Key] = tag.Value;
                     }
-                    else if (IsIdentifier(Current))
+                    else if (IsIdentifier(Current) && !Current.Value.Equals("MATCH_RECOGNIZE", StringComparison.OrdinalIgnoreCase))
                     {
                         // Implicit alias
-                        tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, Advance().Value);
+                        tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, Advance().Value, tableRef.Subquery, tableRef.FunctionCall, tableRef.ValuesRows, tableRef.ColumnAliases);
                         var aliasMetadata = _expressionParser.ParseMetadataTags();
                         foreach (var tag in aliasMetadata) tableRef.Metadata[tag.Key] = tag.Value;
                     }
@@ -927,6 +928,33 @@ namespace ETL_SQL.Core.Parser
                     if (!Match(TokenType.COMMA)) break;
                 }
                 Consume(TokenType.RPAREN, "Expected ')' to close WITH options");
+                tableRef = tableRef with 
+                { 
+                    EndLine = LastTokenEndLine, 
+                    EndColumn = LastTokenEndColumn 
+                };
+            }
+
+            // Handle SQLite INDEXED BY / NOT INDEXED clauses and ignore them
+            if (Current.Type == TokenType.NOT && Peek.Type == TokenType.IDENTIFIER && Peek.Value.Equals("INDEXED", StringComparison.OrdinalIgnoreCase))
+            {
+                Advance(); // consume NOT
+                Advance(); // consume INDEXED
+                tableRef = tableRef with 
+                { 
+                    EndLine = LastTokenEndLine, 
+                    EndColumn = LastTokenEndColumn 
+                };
+            }
+            else if (Current.Type == TokenType.IDENTIFIER && Current.Value.Equals("INDEXED", StringComparison.OrdinalIgnoreCase) && Peek.Type == TokenType.BY)
+            {
+                Advance(); // consume INDEXED
+                Advance(); // consume BY
+                // Parse the index name
+                if (IsIdentifier(Current) || LanguageMetadata.IsKeyword(Current.Value) || Current.Type == TokenType.STRING_LITERAL)
+                {
+                    Advance(); // consume index name
+                }
                 tableRef = tableRef with 
                 { 
                     EndLine = LastTokenEndLine, 

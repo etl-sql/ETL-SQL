@@ -39,7 +39,7 @@ namespace ETL_SQL.ReportHosting
         private ReportManifest? _manifest;
         private Evaluator? _evaluator;
         private Dictionary<string, string> _parameters = new(StringComparer.OrdinalIgnoreCase);
-        private bool _hasAppliedParameters = false;
+        private readonly HashSet<string> _runPages = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, VisualDrillState> _drillStates = new(StringComparer.OrdinalIgnoreCase);
 
         // Background auto-refresh state
@@ -94,31 +94,47 @@ namespace ETL_SQL.ReportHosting
         /// <summary>Current parameter values (set by slicer interactions).</summary>
         public IReadOnlyDictionary<string, string> Parameters => _parameters;
 
+        private bool IsPaginatedPage(string pageName) =>
+            _manifest?.Pages.Any(p =>
+                p.Name.Equals(pageName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(p.Mode, "PAGINATED", StringComparison.OrdinalIgnoreCase)) == true;
+
+        private bool HasPaginatedPages() =>
+            _manifest?.Pages.Any(p => string.Equals(p.Mode, "PAGINATED", StringComparison.OrdinalIgnoreCase)) == true;
+
+        private void MarkAllPaginatedPagesRun()
+        {
+            if (_manifest?.Pages == null) return;
+            foreach (var page in _manifest.Pages.Where(p => string.Equals(p.Mode, "PAGINATED", StringComparison.OrdinalIgnoreCase)))
+                _runPages.Add(page.Name);
+        }
+
         /// <summary>
         /// Updates multiple parameters atomically and re-evaluates only the affected visuals.
         /// </summary>
-        public async Task<ReportManifest> SetParametersAsync(IEnumerable<(string Name, string Value)> updates, bool isInteraction = false)
+        public async Task<ReportManifest> SetParametersAsync(IEnumerable<(string Name, string Value)> updates, bool isInteraction = false, string? pageName = null)
         {
             // Warm the session on first access so interaction calls have a live evaluator to work with.
             if (_manifest == null || _evaluator == null)
                 await GetManifestAsync();
-
-            // First RUN: do a full rebuild so all deferred (VISIBLE=OFF) visuals get data in one pass
-            bool firstRun = !_hasAppliedParameters && !isInteraction;
-            if (!isInteraction) _hasAppliedParameters = true;
-
-            if (firstRun)
-            {
-                foreach (var (name, value) in updates)
-                    _parameters[name] = value;
-                return await RebuildAsync(); // _hasAppliedParameters=true → skipDeferredVisuals=false
-            }
 
             // Only update global context if NOT an interaction
             if (!isInteraction)
             {
                 foreach (var (name, value) in updates)
                     _parameters[name] = value;
+
+                if (!string.IsNullOrWhiteSpace(pageName) && IsPaginatedPage(pageName))
+                {
+                    _runPages.Add(pageName);
+                    return await RebuildAsync();
+                }
+
+                if (string.IsNullOrWhiteSpace(pageName) && HasPaginatedPages())
+                {
+                    MarkAllPaginatedPagesRun();
+                    return await RebuildAsync();
+                }
             }
 
             if (_evaluator != null && _manifest != null)
@@ -154,12 +170,23 @@ namespace ETL_SQL.ReportHosting
         /// <summary>
         /// Updates one parameter and re-evaluates only the affected visuals.
         /// </summary>
-        public async Task<ReportManifest> SetParameterAsync(string name, string value, bool isInteraction = false)
+        public async Task<ReportManifest> SetParameterAsync(string name, string value, bool isInteraction = false, string? pageName = null)
         {
             if (!isInteraction)
             {
-                _hasAppliedParameters = true;
                 _parameters[name] = value;
+
+                if (!string.IsNullOrWhiteSpace(pageName) && IsPaginatedPage(pageName))
+                {
+                    _runPages.Add(pageName);
+                    return await RebuildAsync();
+                }
+
+                if (string.IsNullOrWhiteSpace(pageName) && HasPaginatedPages())
+                {
+                    MarkAllPaginatedPagesRun();
+                    return await RebuildAsync();
+                }
             }
             
             // If we have an active evaluator and manifest from a previous run, try selective refresh
@@ -360,7 +387,7 @@ namespace ETL_SQL.ReportHosting
 
                 var builder   = new ManifestBuilder(evaluator);
                 _evaluator    = evaluator;
-                _manifest     = await builder.BuildAsync(_scriptPath, skipDeferredVisuals: !_hasAppliedParameters);
+                _manifest     = await builder.BuildAsync(_scriptPath, runPages: _runPages);
 
                 ScheduleRefresh(_manifest);
                 return _manifest;

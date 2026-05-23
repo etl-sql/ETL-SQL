@@ -53,7 +53,7 @@ CREATE BUTTON RunBtn AS (
 
 CREATE VISUAL AuditTable AS TABLE (
     TITLE = 'Filtered Event Logs',
-    VISIBLE = OFF, -- Staged mode: don't run until explicitly requested
+    FETCH = ON_RUN, -- Staged mode: don't run until explicitly requested
     SOURCE = (
         SELECT event_time, user_id, event_type, resource, status
         FROM #audit_base
@@ -66,6 +66,7 @@ CREATE VISUAL AuditTable AS TABLE (
 -- 4. Containers
 CREATE CONTAINER FilterPanel AS DRAWER (
     TITLE = 'Query Filters',
+    ICON = 'FILTER',
     LAYOUT (
         STRUCTURE = 'A B C',
         MAP (
@@ -73,9 +74,6 @@ CREATE CONTAINER FilterPanel AS DRAWER (
             'B' = EndPicker,
             'C' = RunBtn
         )
-    ),
-    OPTIONS (
-        ICON = 'FILTER'
     ),
     STYLE (
         BACKGROUND-COLOR = '#f8fafc',
@@ -87,11 +85,13 @@ CREATE CONTAINER FilterPanel AS DRAWER (
 );
 
 -- 5. Page Layout
-CREATE PAGE Main AS (
-    STRUCTURE = 'A / B',
-    MAP (
-        'A' = FilterPanel,
-        'B' = AuditTable
+CREATE PAGE Main AS PAGINATED (
+    LAYOUT (
+        STRUCTURE = 'A / B',
+        MAP (
+            'A' = FilterPanel,
+            'B' = AuditTable
+        )
     ),
     STYLE (PADDING = '30px', THEME = 'light')
 );

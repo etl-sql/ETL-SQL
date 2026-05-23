@@ -81,7 +81,7 @@ CREATE BUTTON BackButton AS (
 );
 
 -- Layout
-CREATE PAGE Main AS (
+CREATE PAGE Main AS DASHBOARD (
     STRUCTURE = 'N S E W C / T T T T T / B B . . .',
     MAP (
         'N' = KpiNorth,
@@ -94,7 +94,7 @@ CREATE PAGE Main AS (
     )
 );
 
-CREATE PAGE DeepDive AS (
+CREATE PAGE DeepDive AS DASHBOARD (
     STRUCTURE = 'K K / D D',
     MAP (
         'K' = BackButton,

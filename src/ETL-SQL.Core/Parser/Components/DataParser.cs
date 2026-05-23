@@ -84,6 +84,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
             if (Match(TokenType.PROCEDURE)) return ParseCreateProcedure(startToken, mode);
             if (Match(TokenType.FUNCTION))  return ParseCreateFunction(startToken, mode);
+            if (Match(TokenType.VIEW))      return ParseCreateView(startToken, mode);
             if (Match(TokenType.JOB))
             {
                 var stmt = ParseCreateJob(startToken);
@@ -146,7 +147,7 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.SAVED))      return _parent.PortalParser.ParseCreateSavedView(startToken);
             if (Match(TokenType.ALERT))      return _parent.PortalParser.ParseCreateAlert(startToken);
 
-            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, TEMPLATE, or THEME after CREATE", _parser.Current.Line, _parser.Current.Column);
+            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, VIEW, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, TEMPLATE, or THEME after CREATE", _parser.Current.Line, _parser.Current.Column);
         }
 
         public Statement ParseAlter(Token startToken)
@@ -154,6 +155,7 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.CONNECTION)) return ParseAlterConnection(startToken);
             if (Match(TokenType.PROCEDURE))  return ParseCreateProcedure(startToken, ObjectCreationMode.Alter);
             if (Match(TokenType.FUNCTION))   return ParseCreateFunction(startToken, ObjectCreationMode.Alter);
+            if (Match(TokenType.VIEW))       return ParseCreateView(startToken, ObjectCreationMode.Alter);
             if (Match(TokenType.TABLE))      return ParseAlterTable(startToken);
 
             // Report-SQL
@@ -179,7 +181,7 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.REPORT))       return _parent.PortalParser.ParseAlterReport(startToken);
             if (Match(TokenType.SUBSCRIPTION)) return _parent.PortalParser.ParseAlterSubscription(startToken);
 
-            throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, TABLE, JOB, or REPORT object after ALTER", _parser.Current.Line, _parser.Current.Column);
+            throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, VIEW, TABLE, JOB, or REPORT object after ALTER", _parser.Current.Line, _parser.Current.Column);
         }
 
         /// <summary>
@@ -265,6 +267,14 @@ namespace ETL_SQL.Core.Parser.Components
                 if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new DropFunctionStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
+            }
+            else if (Match(TokenType.VIEW))
+            {
+                if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+                var name = ConsumeIdentifier("Expected view name").Value;
+                if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+                if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+                return new DropViewStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
             }
             else if (Match(TokenType.INDEX))
             {
@@ -452,6 +462,17 @@ namespace ETL_SQL.Core.Parser.Components
 
         public Statement ParseInsert(Token startToken)
         {
+            bool isReplace = startToken.Type == TokenType.REPLACE;
+            if (startToken.Type == TokenType.INSERT)
+            {
+                if (_parser.Current.Type == TokenType.OR && _parser.Peek.Type == TokenType.REPLACE)
+                {
+                    Match(TokenType.OR);
+                    Match(TokenType.REPLACE);
+                    isReplace = true;
+                }
+            }
+
             Match(TokenType.INTO);
             var targetTable = ParseTableReference(false);
 
@@ -482,7 +503,7 @@ namespace ETL_SQL.Core.Parser.Components
                 } while (Match(TokenType.VALUES));
 
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-                return new InsertStatement(targetTable, columns, rows) { Line = startToken.Line, Column = startToken.Column, Output = output };
+                return new InsertStatement(targetTable, columns, rows) { Line = startToken.Line, Column = startToken.Column, Output = output, IsReplace = isReplace };
             }
             else
             {
@@ -491,12 +512,12 @@ namespace ETL_SQL.Core.Parser.Components
                     Advance();
                     var exec = _parent.ExtensionParser.ParseExecute();
                     if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-                    return new InsertStatement(targetTable, columns, exec) { Line = startToken.Line, Column = startToken.Column, Output = output };
+                    return new InsertStatement(targetTable, columns, exec) { Line = startToken.Line, Column = startToken.Column, Output = output, IsReplace = isReplace };
                 }
 
                 var query = _parser.ParseQuery();
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-                return new InsertStatement(targetTable, columns, query) { Line = startToken.Line, Column = startToken.Column, Output = output };
+                return new InsertStatement(targetTable, columns, query) { Line = startToken.Line, Column = startToken.Column, Output = output, IsReplace = isReplace };
             }
         }
 
@@ -758,6 +779,17 @@ namespace ETL_SQL.Core.Parser.Components
             var body = _parser.ParseStatement();
             Match(TokenType.SEMICOLON);
             return new CreateFunctionStatement(name, parameters, returnType, body, mode) { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        public Statement ParseCreateView(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
+        {
+            var name = ConsumeIdentifier("Expected view name").Value;
+            Consume(TokenType.AS, "Expected 'AS' after view name");
+            var query = _parser.ParseStatement();
+            if (query is not SelectStatement && query is not SetOperationStatement)
+                throw new SyntaxException("CREATE VIEW requires a SELECT query after AS", query.Line, query.Column);
+            Match(TokenType.SEMICOLON);
+            return new CreateViewStatement(name, query, mode) { Line = startToken.Line, Column = startToken.Column };
         }
 
         private Statement ParseAlterTable(Token startToken)

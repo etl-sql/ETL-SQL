@@ -53,7 +53,7 @@ CREATE VISUAL ThresholdScatter AS SCATTER (
 );
 
 -- Page Layout
-CREATE PAGE ScatterKitchenSink AS (
+CREATE PAGE ScatterKitchenSink AS DASHBOARD (
     STRUCTURE = 'A B / C D',
     MAP (
         'A' = BasicScatter,

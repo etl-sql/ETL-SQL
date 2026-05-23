@@ -31,7 +31,7 @@ CREATE VISUAL out_table AS TABLE (
     TITLE = 'Live Parameter Values'
 );
 
-CREATE PAGE Main AS (
+CREATE PAGE Main AS DASHBOARD (
     STRUCTURE = 'A B / C D',
     MAP (
         'A' = txt,

@@ -62,6 +62,12 @@
         return v === 'ON' || v === 'TRUE' || v === '1';
     }
 
+    function isOff(val) {
+        if (val === null || val === undefined) return false;
+        const v = String(val).toUpperCase();
+        return v === 'OFF' || v === 'FALSE' || v === '0';
+    }
+
     function inputTypeForParameter(meta) {
         const type = (meta && meta.type ? String(meta.type) : '').toUpperCase();
         if (['INT', 'INTEGER', 'BIGINT', 'SMALLINT', 'TINYINT', 'DECIMAL', 'NUMERIC', 'FLOAT', 'DOUBLE', 'REAL', 'MONEY'].includes(type)) {
@@ -82,8 +88,7 @@
 
     // Current report parameters (for interactive controls)
     const parameters = {};
-    const pendingParameters = {}; // Phase 2: Staged Mode
-    let isStagedMode = false;     // Phase 2: Staged Mode
+    const pendingParameters = {}; // Paginated page staged parameters
     let _refreshTimers = [];
     let _lastActivePage = null;
     let _drillInFlight = false;
@@ -232,19 +237,6 @@
 
     function renderManifest(manifest) {
         _lastManifest = manifest;
-
-        // Phase 2: Detect Staged Mode (presence of APPLY_PARAMETERS action)
-        isStagedMode = false;
-        (manifest.buttons || []).forEach(b => {
-            if ((b.actions || []).some(a => a.type === 'APPLY_PARAMETERS')) isStagedMode = true;
-        });
-        (manifest.visuals || []).forEach(v => {
-            if ((v.actions || []).some(a => a.type === 'APPLY_PARAMETERS')) isStagedMode = true;
-        });
-        if (!isStagedMode) {
-             // Clear pending if we exited staged mode (unlikely but safe)
-             for (let k in pendingParameters) delete pendingParameters[k];
-        }
 
         // Cancel any running per-page auto-refresh timers before rebuilding.
         _refreshTimers.forEach(id => clearInterval(id));
@@ -615,7 +607,20 @@
         });
     }
 
+    const NON_MAXIMIZABLE_CONTROL_TYPES = new Set([
+        'SLICER', 'MULTISELECT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER',
+        'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'
+    ]);
+
+    function shouldShowVisualToolbar(type, styles) {
+        const allowMaximize = getStyle(styles, 'ALLOW_MAXIMIZE');
+        if (isOn(allowMaximize)) return true;
+        if (isOff(allowMaximize)) return false;
+        return !NON_MAXIMIZABLE_CONTROL_TYPES.has(type);
+    }
+
     function addVisualToolbar(card) {
+        card.classList.add('has-visual-toolbar');
         const toolbar = document.createElement('div');
         toolbar.className = 'visual-toolbar';
 
@@ -705,6 +710,8 @@
         const div = document.createElement('div');
         div.className = 'page';
         if (page.name) div.id = 'page-' + page.name.toLowerCase();
+        div.dataset.pageName = page.name || '';
+        div.dataset.pageMode = (page.mode || 'DASHBOARD').toUpperCase();
 
         const content = document.createElement('div');
         content.className = 'page-grid';
@@ -1033,6 +1040,9 @@
             }
         }
         if (tooltip) card.title = tooltip;
+        if (isOff(getOption(visual.options, 'VISIBLE'))) {
+            card.style.display = 'none';
+        }
 
         const title = document.createElement('h3');
         title.textContent = visual.name;
@@ -1042,7 +1052,11 @@
         if (specificTitle) title.style.display = 'none';
 
         card.appendChild(title);
-        addVisualToolbar(card);
+
+        const type = (visual.visualType || '').toUpperCase();
+        if (shouldShowVisualToolbar(type, vstyles)) {
+            addVisualToolbar(card);
+        }
 
         if (visual.error) {
             card.appendChild(errorEl(visual.error));
@@ -1050,7 +1064,16 @@
             return;
         }
 
-        const type = (visual.visualType || '').toUpperCase();
+        // Deferred ON_RUN visuals show a placeholder until the paginated page is run.
+        if (visual.isHidden) {
+            card.classList.add('deferred-visual');
+            const ph = document.createElement('div');
+            ph.className = 'deferred-placeholder';
+            ph.textContent = 'Configure parameters above and click Run to load data.';
+            card.appendChild(ph);
+            container.appendChild(card);
+            return;
+        }
 
         // Empty state handling: If not a filter/text type and no data rows, show "No Data" icon + message.
         if (!FILTER_TYPES.has(type) && (!visual.rows || visual.rows.length === 0)) {
@@ -1059,17 +1082,6 @@
             empty.innerHTML = '<div class="empty-icon">\u2205</div>' + 
                               '<p>No data matches the current filters.</p>';
             card.appendChild(empty);
-            container.appendChild(card);
-            return;
-        }
-
-        // Deferred visuals (VISIBLE = OFF) show a placeholder until the user clicks Run
-        if (visual.isHidden) {
-            card.classList.add('deferred-visual');
-            const ph = document.createElement('div');
-            ph.className = 'deferred-placeholder';
-            ph.textContent = 'Configure parameters above and click Run to load data.';
-            card.appendChild(ph);
             container.appendChild(card);
             return;
         }
@@ -2943,16 +2955,18 @@
 
         const datePicker = document.createElement('input');
         datePicker.type = 'date';
+        datePicker.className = 'reldate-native-picker';
         if (min) datePicker.min = min;
         if (max) datePicker.max = max;
         // Synchronize initial value and parameter name for tests/sync
         if (def && /^\d{4}-\d{2}-\d{2}$/.test(def)) datePicker.value = def;
         if (param) datePicker.setAttribute('data-parameter', param);
-        datePicker.style.cssText = 'position:absolute; opacity:0; width:0; height:0; pointer-events:none;';
 
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'reldate-btn';
+        btn.title = 'Pick a date';
+        btn.setAttribute('aria-label', 'Pick a date');
         btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
         btn.addEventListener('click', () => {
             if (typeof datePicker.showPicker === 'function') datePicker.showPicker();
@@ -2964,9 +2978,16 @@
             textInput.dispatchEvent(new Event('change'));
         });
 
+        const actions = document.createElement('div');
+        actions.className = 'reldate-actions';
+        const pickerSlot = document.createElement('span');
+        pickerSlot.className = 'reldate-picker-slot';
+        pickerSlot.appendChild(btn);
+        pickerSlot.appendChild(datePicker);
+        actions.appendChild(pickerSlot);
+
         wrapper.appendChild(textInput);
-        wrapper.appendChild(datePicker);
-        wrapper.appendChild(btn);
+        wrapper.appendChild(actions);
 
         if (isWebMode && changeActions.length > 0) {
             textInput.addEventListener('change', () => {
@@ -3068,33 +3089,30 @@
 
         const hiddenDate = document.createElement('input');
         hiddenDate.type = 'date';
+        hiddenDate.className = 'reldate-native-picker';
         if (min) hiddenDate.min = min;
         if (max) hiddenDate.max = max;
         // Synchronize initial value and parameter name for tests/sync
         if (def && /^\d{4}-\d{2}-\d{2}$/.test(def)) hiddenDate.value = def;
         if (param) hiddenDate.setAttribute('data-parameter', param);
-        hiddenDate.style.cssText = 'position:absolute; opacity:0; width:0; height:0; pointer-events:none;';
 
         const calBtn = document.createElement('button');
         calBtn.type = 'button';
         calBtn.className = 'reldate-btn';
         calBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
         calBtn.title = 'Pick a date (writes ISO date)';
+        calBtn.setAttribute('aria-label', 'Pick a date');
         calBtn.addEventListener('click', () => {
             if (typeof hiddenDate.showPicker === 'function') hiddenDate.showPicker();
             else hiddenDate.focus();
         });
 
-        calBtn.style.borderTopRightRadius = '0';
-        calBtn.style.borderBottomRightRadius = '0';
-
         const infoBtn = document.createElement('button');
         infoBtn.type = 'button';
         infoBtn.className = 'reldate-btn';
-        infoBtn.style.borderLeft = 'none';
-        infoBtn.style.color = '#5470c6';
         infoBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
         infoBtn.title = 'View Relative Date Syntax Help';
+        infoBtn.setAttribute('aria-label', 'View relative date syntax help');
         infoBtn.addEventListener('click', showRelDateHelpModal);
 
         hiddenDate.addEventListener('change', () => {
@@ -3102,10 +3120,17 @@
             textInput.dispatchEvent(new Event('change'));
         });
 
+        const actions = document.createElement('div');
+        actions.className = 'reldate-actions';
+        const pickerSlot = document.createElement('span');
+        pickerSlot.className = 'reldate-picker-slot';
+        pickerSlot.appendChild(calBtn);
+        pickerSlot.appendChild(hiddenDate);
+        actions.appendChild(pickerSlot);
+        actions.appendChild(infoBtn);
+
         inputRow.appendChild(textInput);
-        inputRow.appendChild(hiddenDate);
-        inputRow.appendChild(calBtn);
-        inputRow.appendChild(infoBtn);
+        inputRow.appendChild(actions);
 
         // ── Quick-pick buttons ────────────────────────────────────────────
         const quickRow = document.createElement('div');
@@ -3707,6 +3732,21 @@
         }
     }
 
+    function getActivePage() {
+        return Array.from(document.querySelectorAll('.page'))
+            .find(page => page.style.display !== 'none') || null;
+    }
+
+    function getActivePageName() {
+        const page = getActivePage();
+        return page ? (page.dataset.pageName || null) : null;
+    }
+
+    function isActivePagePaginated() {
+        const page = getActivePage();
+        return !!page && (page.dataset.pageMode || '').toUpperCase() === 'PAGINATED';
+    }
+
     function executeAction(action, rowData, columns, visualName, visualCtx) {
         if (action.type === 'DRILL_IN') {
             const hierarchy = action.hierarchy || [];
@@ -3805,7 +3845,7 @@
             updateStagedUI();
             
             // Flush to server
-            _postParametersInternal(batch).then(m => { if (m) renderManifest(m); });
+            _postParametersInternal(batch, false, getActivePageName()).then(m => { if (m) renderManifest(m); });
         } else if (action.type === 'BACK') {
             window.history.back();
         } else if (action.type === 'REFRESH') {
@@ -3983,17 +4023,21 @@
     // Batch-update multiple parameters in a single server round-trip.
     // Batch-update multiple parameters in a single server round-trip.
     // Batch-update multiple parameters in a single server round-trip.
-    async function postParameters(params, isInteraction = false) {
-        if (isStagedMode && !isInteraction) {
-            // Stage the change
+    async function postParameters(params, isInteraction = false, stage = null) {
+        const shouldStage = stage === null
+            ? (!isInteraction && isActivePagePaginated())
+            : !!stage;
+        if (shouldStage && !isInteraction) {
+            // Paginated pages stage prompt changes until APPLY_PARAMETERS.
+            // Dashboard pages post immediately.
             Object.assign(pendingParameters, params);
             updateStagedUI();
             return Promise.resolve(null);
         }
-        return _postParametersInternal(params, isInteraction);
+        return _postParametersInternal(params, isInteraction, getActivePageName());
     }
 
-    async function _postParametersInternal(params, isInteraction = false) {
+    async function _postParametersInternal(params, isInteraction = false, pageName = null) {
         // Convert dictionary to required List<ParameterUpdateRequest> format
         const paramList = Object.entries(params).map(([name, value]) => ({
             name: name,
@@ -4006,7 +4050,8 @@
             vscode.postMessage({ 
                 type: 'refreshReport', 
                 parameters: params, // VS Code extension handles the dictionary
-                isInteraction: isInteraction 
+                isInteraction: isInteraction,
+                pageName: pageName
             });
             return null;
         }
@@ -4017,7 +4062,8 @@
                 headers: { 'Content-Type': 'application/json' },
                 body:    JSON.stringify({ 
                     params: paramList,
-                    isInteraction: isInteraction
+                    isInteraction: isInteraction,
+                    pageName: pageName
                 })
             });
             if (!res.ok) {

@@ -19,7 +19,7 @@ CREATE VISUAL RelResult AS TABLE (
 );
 
 -- Page Layout
-CREATE PAGE RelDateKitchenSink AS (
+CREATE PAGE RelDateKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = RelPicker,

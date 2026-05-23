@@ -441,7 +441,7 @@ namespace ETL_SQL.Tests.Analysis
             var rule = new CreateDirectoryInReportRule();
             var results = await Lint(rule,
                 "CREATE VISUAL v1 AS BAR (SOURCE (SELECT 1 AS n), MAPPINGS (X = n, Y = n));" +
-                "CREATE PAGE pg1 AS (STRUCTURE = 'A', MAP ('A' = v1));" +
+                "CREATE PAGE pg1 AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = v1));" +
                 "CREATE DIRECTORY '/logs';");
             Assert.NotEmpty(results);
         }
@@ -540,7 +540,7 @@ namespace ETL_SQL.Tests.Analysis
             var rule = new ReportKeywordLintRule();
             var results = await Lint(rule,
                 "CREATE VISUAL v1 AS BAR (SOURCE (SELECT 1 AS n), MAPPINGS (X = n, Y = n));" +
-                "CREATE PAGE my_dashboard AS (STRUCTURE = 'A', MAP ('A' = v1));");
+                "CREATE PAGE my_dashboard AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = v1));");
             Assert.Empty(results);
         }
 

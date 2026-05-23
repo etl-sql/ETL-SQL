@@ -48,6 +48,12 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 - Uses canonical `ACTIONS (ON_CHANGE = SET_PARAMETER(...))` bindings and `CREATE BUTTON ... AS (...)` for staged apply.
 - Places controls, buttons, and visuals directly into quoted `MAP` slots on a `CREATE PAGE`.
 
+### [08_Reporting/report_views.rptsql](../samples/08_Reporting/report_views.rptsql)
+**Purpose**: Report-SQL view reuse pattern.
+- Uses `CREATE VIEW` to define a shared filtered query once.
+- Reuses the view directly as a table visual source and inside an aggregate chart query.
+- Demonstrates that views are query aliases, not materialized report datasets.
+
 ### [10_Kitchen_Sinks/report_kitchen_sink.rptsql](../samples/10_Kitchen_Sinks/report_kitchen_sink.rptsql)
 **Purpose**: Full Report-SQL reference report for release readiness and visual/runtime coverage.
 - Demonstrates the extended visual set, named styles, datasets, buttons, navigation, containers, interactions, and advanced charts.

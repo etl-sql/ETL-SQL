@@ -95,7 +95,7 @@ namespace ETL_SQL.Core.Parser
 
         private Expression ParseComparison()
         {
-            var left = ParseTerm();
+            var left = ParseShift();
             while (_parser.Current.Type == TokenType.EQUALS || _parser.Current.Type == TokenType.NOT_EQUALS ||
                    _parser.Current.Type == TokenType.LESS_THAN || _parser.Current.Type == TokenType.GREATER_THAN ||
                    _parser.Current.Type == TokenType.LESS_EQUALS || _parser.Current.Type == TokenType.GREATER_EQUALS ||
@@ -108,6 +108,12 @@ namespace ETL_SQL.Core.Parser
                 if (_parser.Match(TokenType.NOT))
                 {
                     isNot = true;
+                    if (_parser.Current.Type == TokenType.NULL)
+                    {
+                        var nullToken = _parser.Advance();
+                        left = new IsNullExpression(left, true) { Line = nullToken.Line, Column = nullToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                        continue;
+                    }
                     if (_parser.Current.Type != TokenType.IN && _parser.Current.Type != TokenType.LIKE &&
                         _parser.Current.Type != TokenType.ILIKE && _parser.Current.Type != TokenType.BETWEEN) 
                     {
@@ -186,6 +192,19 @@ namespace ETL_SQL.Core.Parser
                     var right = ParseTerm();
                     left = new BinaryExpression(left, op, right) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
                 }
+            }
+            return left;
+        }
+
+        private Expression ParseShift()
+        {
+            var left = ParseTerm();
+            while (_parser.Current.Type == TokenType.LSHIFT || _parser.Current.Type == TokenType.RSHIFT)
+            {
+                var opToken = _parser.Advance();
+                var op = opToken.Type;
+                var right = ParseTerm();
+                left = new BinaryExpression(left, op, right) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
             return left;
         }
@@ -403,6 +422,7 @@ namespace ETL_SQL.Core.Parser
                 if (_parser.Match(TokenType.LPAREN))
                 {
                     bool isFuncDistinct = _parser.Match(TokenType.DISTINCT);
+                    if (!isFuncDistinct) _parser.Match(TokenType.ALL);
                     var args = new List<Expression>();
                     if (_parser.Current.Type != TokenType.RPAREN)
                     {

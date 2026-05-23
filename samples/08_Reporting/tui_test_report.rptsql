@@ -324,7 +324,7 @@ CREATE VISUAL ServerTopology AS NETWORK (
 );
 
 -- 3. Assemble the Page
-CREATE PAGE Dashboard AS (
+CREATE PAGE Dashboard AS DASHBOARD (
     STRUCTURE = 'A / B / C / D / E / F / G / H / I / J / K / L / M / N / O / P / Q / R / S / T / U / V / W / X / Y / Z / AA / AB / AC / AD',
     MAP (
         'A' = IntroText, 

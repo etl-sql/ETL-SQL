@@ -47,7 +47,7 @@ CREATE VISUAL StyledPie AS PIE (
 );
 
 -- Page Layout
-CREATE PAGE PieKitchenSink AS (
+CREATE PAGE PieKitchenSink AS DASHBOARD (
     STRUCTURE = 'A B / C',
     MAP (
         'A' = BasicPie,

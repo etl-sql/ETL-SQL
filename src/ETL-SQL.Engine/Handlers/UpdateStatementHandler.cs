@@ -23,6 +23,8 @@ namespace ETL_SQL.Engine.Handlers
 
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
             _logger.Debug("Updating {ConnName}", connName);
+            if (context.VarContext.TryGetView(connName, out _))
+                throw new ExecutionException($"View {connName} is read-only and cannot be used as an UPDATE target.");
             if (!context.Connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown connection: {connName}");
             _logger.Debug("Connection resolved as {ConnectionType}", connection.GetType().Name);
             if (connection is IDatabaseSource sqlConn && context.IsSqlPushdown(connName))

@@ -34,7 +34,7 @@ CREATE VISUAL StyledWaterfall AS WATERFALL (
 );
 
 -- Page Layout
-CREATE PAGE WaterfallKitchenSink AS (
+CREATE PAGE WaterfallKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = BasicWaterfall,

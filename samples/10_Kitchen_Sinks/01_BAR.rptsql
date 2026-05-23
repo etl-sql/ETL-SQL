@@ -144,7 +144,7 @@ CREATE VISUAL RankedBar AS BAR (
 );
 
 -- Page Layout
-CREATE PAGE BarKitchenSink AS (
+CREATE PAGE BarKitchenSink AS DASHBOARD (
     STRUCTURE = 'A B / C D / E F / G G / H I J',
     MAP (
         'A' = BasicBar,

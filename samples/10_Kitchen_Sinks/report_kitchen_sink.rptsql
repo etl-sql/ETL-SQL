@@ -8,12 +8,13 @@
 --   1. Overview        – KPI cards, BAR, LINE, DONUT, cross-filter table, slicers
 --   2. Trends          – COMBO, WATERFALL, SCATTER (with overlays), HBAR, BOXPLOT
 --   3. Composition     – TREEMAP, HEATMAP, FUNNEL, GAUGE, PIE (with data labels)
---   4. Controls        – MULTISELECT, DATEPICKER, SLIDER, SEARCH, TEXT, IMAGE
---   5. Detail          – SCROLL container, deep-formatted TABLE, BACK / REFRESH buttons
---   6. New Charts      – BUBBLE, RADAR, CANDLESTICK
---   7. Maps            – MAP choropleth (US States, World)
---   8. Drilldown       – DRILL_IN hierarchy demo
---   9. Advanced Charts – SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX, GANTT, SCATTER BRUSH
+--   4. Controls        – MULTISELECT, DATEPICKER, RELDATEPICKER, SLIDER, SEARCH, input controls
+--   5. Detail          – SCROLL container, formatted TABLE, monthly BAR detail
+--   6. Feature Lab     – rich table cells, run-to-data controls, viewer actions
+--   7. Business Signals – BUBBLE, RADAR, CANDLESTICK
+--   8. Maps            – MAP choropleth (US States, World)
+--   9. Drilldown       – DRILL_IN hierarchy demo
+--  10. Flow & Planning – SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX, GANTT, SCATTER BRUSH
 -- ============================================================================
 
 -- ============================================================================
@@ -87,6 +88,8 @@ GROUP BY
 -- 1d. Top-level KPIs (single-row)
 SELECT
     SUM(Revenue)                                            AS GrandRevenue,
+    CAST(1500000 AS DECIMAL)                                AS RevenueGoal,
+    CAST(SUM(Revenue) - 1250000 AS DECIMAL)                 AS RevenueDelta,
     SUM(Qty)                                                AS GrandQty,
     SUM(DiscountAmt)                                        AS GrandDiscount,
     SUM(Returned)                                           AS TotalReturns,
@@ -335,8 +338,13 @@ INTO #trellis_data
 FROM #sales
 GROUP BY Region, Category;
 
--- 1ab. Matrix: category × region revenue cross-tab
-SELECT Category AS Category, Region AS Region, CAST(SUM(Revenue) AS DECIMAL) AS Revenue
+-- 1ab. Matrix: category x region multi-measure cross-tab
+SELECT
+    Category AS Category,
+    Region AS Region,
+    CAST(SUM(Revenue) AS DECIMAL) AS Revenue,
+    SUM(Qty) AS Units,
+    COUNT(*) AS Txns
 INTO #matrix_data
 FROM #sales
 GROUP BY Category, Region;
@@ -347,6 +355,56 @@ UNION ALL SELECT 'Data Pipeline',  '2026-02-01', '2026-04-15', '#91cc75'
 UNION ALL SELECT 'Report Build',   '2026-03-15', '2026-05-31', '#fac858'
 UNION ALL SELECT 'UAT',            '2026-05-01', '2026-06-15', '#ee6666'
 UNION ALL SELECT 'Deploy',         '2026-06-01', '2026-06-30', '#73c0de';
+
+-- 1ad. Rich TABLE feature lab: images, links, data bars, color scales, sparklines
+SELECT
+    'Electronics' AS Segment,
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36"><rect width="36" height="36" rx="8" fill="%236366f1"/><text x="18" y="23" font-size="14" font-family="Arial" fill="white" text-anchor="middle">EL</text></svg>' AS Badge,
+    'https://example.com/reports/electronics' AS LinkUrl,
+    CAST(425000 AS DECIMAL) AS Revenue,
+    CAST(0.92 AS DECIMAL) AS HealthScore,
+    68 AS Jan, 72 AS Feb, 76 AS Mar, 91 AS Apr, 102 AS May, 118 AS Jun
+INTO #feature_table
+UNION ALL SELECT
+    'Apparel',
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36"><rect width="36" height="36" rx="8" fill="%23f59e0b"/><text x="18" y="23" font-size="14" font-family="Arial" fill="white" text-anchor="middle">AP</text></svg>',
+    'https://example.com/reports/apparel',
+    CAST(312000 AS DECIMAL),
+    CAST(0.78 AS DECIMAL),
+    54, 66, 63, 72, 84, 91
+UNION ALL SELECT
+    'Home',
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36"><rect width="36" height="36" rx="8" fill="%2310b981"/><text x="18" y="23" font-size="14" font-family="Arial" fill="white" text-anchor="middle">HM</text></svg>',
+    'https://example.com/reports/home',
+    CAST(287000 AS DECIMAL),
+    CAST(0.84 AS DECIMAL),
+    48, 52, 67, 70, 74, 89
+UNION ALL SELECT
+    'Grocery',
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36"><rect width="36" height="36" rx="8" fill="%23ef4444"/><text x="18" y="23" font-size="14" font-family="Arial" fill="white" text-anchor="middle">GR</text></svg>',
+    'https://example.com/reports/grocery',
+    CAST(198000 AS DECIMAL),
+    CAST(0.61 AS DECIMAL),
+    83, 78, 64, 58, 56, 51
+UNION ALL SELECT
+    'Sporting',
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36"><rect width="36" height="36" rx="8" fill="%230ea5e9"/><text x="18" y="23" font-size="14" font-family="Arial" fill="white" text-anchor="middle">SP</text></svg>',
+    'https://example.com/reports/sporting',
+    CAST(224000 AS DECIMAL),
+    CAST(0.70 AS DECIMAL),
+    39, 44, 57, 69, 76, 82;
+
+-- 1ae. Deferred run-to-data demo target
+SELECT TOP 25
+    TxnDate,
+    Category,
+    Region,
+    Salesperson,
+    Qty,
+    Revenue
+INTO #deferred_preview
+FROM #sales
+ORDER BY Revenue DESC;
 
 -- ============================================================================
 -- Phase 2: Named Shared Styles
@@ -397,6 +455,9 @@ DECLARE @category     VARCHAR = 'All';
 DECLARE @startDate    VARCHAR = '2026-01-01';
 DECLARE @endDate      VARCHAR = '2026-12-31';
 DECLARE @minQty       INT     = 0;
+DECLARE @includeReturns BIT   = 1;
+DECLARE @minRevenue   DECIMAL = 0;
+DECLARE @analystNote  VARCHAR = 'Watch discount and return outliers';
 DECLARE @search       VARCHAR = '';
 DECLARE @relStartDate    RELDATE  = 'D-1';
 DECLARE @brush_selection VARCHAR  = '';   -- set by SCATTER BRUSH lasso on Page 9
@@ -412,46 +473,78 @@ DECLARE @relEndDate   RELDATE = 'D';
 
 -- KPI CARDS (5 metrics, with subtitles and formatted values)
 CREATE VISUAL KpiRevenue AS CARD (
-    SOURCE   = #kpis,
+    SOURCE   = (
+        SELECT
+            SUM(Revenue) AS GrandRevenue,
+            CAST(1500000 AS DECIMAL) AS RevenueGoal,
+            CAST(SUM(Revenue) - 1250000 AS DECIMAL) AS RevenueDelta
+        FROM #sales
+        WHERE @region = 'All' OR Region IN (SELECT value FROM STRING_SPLIT(@region, ','))
+    ),
     TITLE    = 'Total Revenue',
-    SUBTITLE = 'All regions, YTD',
+    SUBTITLE = 'Filtered by selected region',
     TOOLTIP  = 'Sum of all net revenue after discounts.',
-    MAPPINGS (VALUE = GrandRevenue),
-    OPTIONS  (FORMAT = 'C0'),
+    MAPPINGS (VALUE = GrandRevenue, GOAL = RevenueGoal, DELTA = RevenueDelta),
+    OPTIONS  (
+        FORMAT               = 'C0',
+        ABBREVIATE           = ON,
+        SHOW_GOAL            = ON,
+        SHOW_PERCENT_OF_GOAL = ON,
+        SHOW_PROGRESS        = ON,
+        PROGRESS_STYLE       = RING,
+        ICON_SET             = CHECKS,
+        DELTA_LABEL          = 'vs forecast'
+    ),
     STYLE    = CardGlass
 );
 
 CREATE VISUAL KpiQty AS CARD (
-    SOURCE   = #kpis,
+    SOURCE   = (
+        SELECT SUM(Qty) AS GrandQty
+        FROM #sales
+        WHERE @region = 'All' OR Region IN (SELECT value FROM STRING_SPLIT(@region, ','))
+    ),
     TITLE    = 'Units Sold',
-    SUBTITLE = 'Gross quantity shipped',
+    SUBTITLE = 'Filtered by selected region',
     MAPPINGS (VALUE = GrandQty),
     OPTIONS  (FORMAT = 'N0'),
     STYLE    = CardGlass
 );
 
 CREATE VISUAL KpiDiscount AS CARD (
-    SOURCE   = #kpis,
+    SOURCE   = (
+        SELECT SUM(DiscountAmt) AS GrandDiscount
+        FROM #sales
+        WHERE @region = 'All' OR Region IN (SELECT value FROM STRING_SPLIT(@region, ','))
+    ),
     TITLE    = 'Total Discounts',
-    SUBTITLE = 'Revenue sacrificed',
+    SUBTITLE = 'Filtered by selected region',
     MAPPINGS (VALUE = GrandDiscount),
     OPTIONS  (FORMAT = 'C0'),
     STYLE    = CardGlass
 );
 
 CREATE VISUAL KpiReturns AS CARD (
-    SOURCE   = #kpis,
+    SOURCE   = (
+        SELECT SUM(Returned) AS TotalReturns
+        FROM #sales
+        WHERE @region = 'All' OR Region IN (SELECT value FROM STRING_SPLIT(@region, ','))
+    ),
     TITLE    = 'Returns',
-    SUBTITLE = 'Transactions reversed',
+    SUBTITLE = 'Filtered by selected region',
     MAPPINGS (VALUE = TotalReturns),
     OPTIONS  (FORMAT = 'N0'),
     STYLE    = CardGlass
 );
 
 CREATE VISUAL KpiAvgTxn AS CARD (
-    SOURCE   = #kpis,
+    SOURCE   = (
+        SELECT AVG(Revenue) AS AvgTxnRevenue
+        FROM #sales
+        WHERE @region = 'All' OR Region IN (SELECT value FROM STRING_SPLIT(@region, ','))
+    ),
     TITLE    = 'Avg Txn Value',
-    SUBTITLE = 'Revenue per transaction',
+    SUBTITLE = 'Filtered by selected region',
     MAPPINGS (VALUE = AvgTxnRevenue),
     OPTIONS  (FORMAT = 'C2'),
     STYLE    = CardGlass
@@ -474,7 +567,7 @@ CREATE CONTAINER KpiStrip AS BOX (
 -- SLICER — Region filter
 CREATE VISUAL RegionSlicer AS SLICER (
     SOURCE   = #region_opts,
-    TITLE    = 'Filter by Region',
+    TITLE    = 'Overview Region Filter',
     MAPPINGS (VALUE = Region),
     ACTIONS  (ON_CHANGE = SET_PARAMETER(@region, Region)),
     DEFAULT  = 'All',
@@ -490,8 +583,8 @@ CREATE VISUAL DrillRegionDetail AS BAR (
         WHERE @region = 'All' OR Region IN (SELECT value FROM STRING_SPLIT(@region, ','))
         GROUP BY Category
     ),
-    TITLE    = 'Category Breakdown',
-    SUBTITLE = 'Click a region bar above to see cross-highlighting',
+    TITLE    = 'Category Breakdown for Selected Region',
+    SUBTITLE = 'Driven by the region slicer or a region-bar click',
     MAPPINGS (X = Category, Y = Revenue),
     INTERACTIONS (ON_SELECT = HIGHLIGHT),
     OPTIONS  (
@@ -506,11 +599,12 @@ CREATE VISUAL BarByRegion AS BAR (
     SOURCE   = (
         SELECT Region, SUM(Revenue) AS Revenue
         FROM #sales
-        WHERE @category = 'All' OR Category IN (SELECT value FROM STRING_SPLIT(@category, ','))
+        WHERE (@region = 'All' OR Region IN (SELECT value FROM STRING_SPLIT(@region, ',')))
+          AND (@category = 'All' OR Category IN (SELECT value FROM STRING_SPLIT(@category, ',')))
         GROUP BY Region
     ),
     TITLE    = 'Revenue by Region',
-    SUBTITLE = 'Click a bar to drill into category breakdown • Highlights detail table',
+    SUBTITLE = 'Use the region slicer to narrow the page, or click a bar to drill into detail',
     MAPPINGS (X = Region, Y = Revenue),
     INTERACTIONS (ON_SELECT = HIGHLIGHT),
     OPTIONS  (
@@ -565,6 +659,8 @@ CREATE VISUAL TxnTable AS TABLE (
         FROM #sales
         WHERE (@region   = 'All' OR Region IN (SELECT value FROM STRING_SPLIT(@region, ',')))
           AND (@category = 'All' OR Category = @category)
+          AND (@includeReturns = 1 OR Returned = 0)
+          AND Revenue >= @minRevenue
     ),
     TITLE    = 'Transaction Detail',
     SUBTITLE = 'Cross-filtered by chart clicks · Use slicers above to narrow results',
@@ -784,13 +880,15 @@ CREATE VISUAL DateEnd AS DATEPICKER (
 CREATE VISUAL StartPicker AS RELDATEPICKER (
   TITLE   = 'Relative Start Date (RELDATEPICKER)',
   OPTIONS (DEFAULT = 'M-1'),
-  ACTIONS (ON_CHANGE = SET_PARAMETER(@relStartDate, value))
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@relStartDate, value)),
+  STYLE   = FilterPanel
 );
 
 CREATE VISUAL EndPicker AS RELDATEPICKER (
   TITLE   = 'Relative End Date (RELDATEPICKER)',
   OPTIONS (DEFAULT = 'D-0'),
-  ACTIONS (ON_CHANGE = SET_PARAMETER(@relEndDate, value))
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@relEndDate, value)),
+  STYLE   = FilterPanel
 );
 
 -- SLIDER — Minimum quantity threshold
@@ -810,6 +908,35 @@ CREATE VISUAL TxnSearch AS SEARCH (
     DEFAULT  = '',
     ACTIONS  (ON_CHANGE = SET_PARAMETER(@search, value)),
     STYLE    = FilterPanel
+);
+
+-- CHECKBOX — Boolean toggle
+CREATE VISUAL IncludeReturnsToggle AS CHECKBOX (
+    TITLE          = 'Include Returns (CHECKBOX)',
+    LABEL_POSITION = 'LEFT',
+    ACTIONS        (ON_CHANGE = SET_PARAMETER(@includeReturns, value)),
+    STYLE          = FilterPanel
+);
+
+-- TEXTBOX — Analyst note input
+CREATE VISUAL AnalystNoteBox AS TEXTBOX (
+    TITLE          = 'Analyst Note (TEXTBOX)',
+    LABEL_POSITION = 'LEFT',
+    OPTIONS        (PLACEHOLDER = 'Type a working note...', DEFAULT = 'Watch discount and return outliers'),
+    ACTIONS        (ON_CHANGE = SET_PARAMETER(@analystNote, value)),
+    STYLE          = FilterPanel
+);
+
+-- NUMBERBOX — Minimum revenue threshold
+CREATE VISUAL RevenueFloorBox AS NUMBERBOX (
+    TITLE          = 'Min Revenue (NUMBERBOX)',
+    LABEL_POSITION = 'LEFT',
+    MIN            = 0,
+    MAX            = 10000,
+    DECIMALS       = 2,
+    OPTIONS        (PLACEHOLDER = '0.00', DEFAULT = 0),
+    ACTIONS        (ON_CHANGE = SET_PARAMETER(@minRevenue, value)),
+    STYLE          = FilterPanel
 );
 
 -- IMAGE visual — inline SVG banner (no external dependency)
@@ -839,18 +966,39 @@ This page demonstrates **every filter and input control** type available in Repo
 | End Date | `DATEPICKER` | `@endDate` |
 | Min Quantity | `SLIDER` | `@minQty` |
 | Keyword | `SEARCH` | `@search` |
+| Include Returns | `CHECKBOX` | `@includeReturns` |
+| Analyst Note | `TEXTBOX` | `@analystNote` |
+| Min Revenue | `NUMBERBOX` | `@minRevenue` |
 
 Changes to any control above propagate instantly to all dependent visuals (without a full page reload).
 
-> **Tip:** The `SLICER`, `SEARCH`, and `DATEPICKER` use `SET_PARAMETER` actions.
-> The `SLIDER` uses a `MINMAX`-compatible binding.
+> **Tip:** Filter/input visuals hide the maximize button by default so control hit targets stay clear.
+> Use `STYLE (ALLOW_MAXIMIZE = ON)` only when a control really benefits from full-screen inspection.
 '
 );
 
 -- TEXT — Buttons reference
 CREATE VISUAL ButtonsText AS TEXT (
     TITLE   = 'Action Buttons (CREATE BUTTON)',
-    CONTENT = '### Buttons\n`CREATE BUTTON` defines interactive command buttons with `ACTIONS`.\n\n| Name | Action | Purpose |\n|------|--------|---------|\n| BtnRefresh | `REFRESH_REPORT` | Force rebuild of all visual snapshots |\n| BtnBack | `BACK` | Navigate to previous browser page |\n| BtnExport | `EXPORT_CSV` | Export the transaction table |\n\nButtons can be placed in page or container `MAP` slots exactly like visuals.'
+    CONTENT = '### Buttons\n`CREATE BUTTON` defines interactive command buttons with `ACTIONS`.\n\n| Name | Action | Purpose |\n|------|--------|---------|\n| BtnRefresh | `REFRESH_REPORT` | Force rebuild of all visual snapshots |\n| BtnRefreshSelected | `REFRESH_VISUALS` | Re-query selected visuals only |\n| BtnClearFilters | `CLEAR_FILTERS` | Reset active selections and parameters |\n| BtnApplyParams | `APPLY_PARAMETERS` | Apply staged run-to-data controls |\n| BtnBack | `BACK` | Navigate to previous browser page |\n| BtnExport | `EXPORT_CSV` | Export the transaction table |\n\nButtons can be placed in page or container `MAP` slots exactly like visuals.'
+);
+
+-- TEXT — Newer feature reference
+CREATE VISUAL FeatureLabText AS TEXT (
+    TITLE   = 'Feature Lab',
+    CONTENT = '## Showcase Additions
+
+This page groups newer report capabilities that are easy to miss in normal dashboards:
+
+| Feature | Demonstrated by |
+|---------|-----------------|
+| Rich table renderers | IMAGE badges, safe hyperlinks, data bars, color scales, and sparklines |
+| Run-to-data workflow | Deferred table starts hidden until parameters are applied |
+| Targeted refresh | `REFRESH_VISUALS` updates selected visuals without a full rebuild |
+| Viewer state actions | `CLEAR_FILTERS`, `BACK`, and `EXPORT_CSV` |
+| Maximize policy | Controls hide maximize by default; data-heavy visuals can opt in with `ALLOW_MAXIMIZE = ON` |
+
+The same source data drives cards, charts, filters, rich tables, and action buttons so the report feels like one cohesive application rather than a set of isolated chart samples.'
 );
 
 -- BUTTON — Refresh data
@@ -858,6 +1006,28 @@ CREATE BUTTON BtnRefresh AS (
     TITLE   = '⟳ Refresh Data',
     TOOLTIP = 'Force a full rebuild of all visual snapshots.',
     ACTIONS (ON_CLICK = REFRESH_REPORT),
+    STYLE   = AccentButton
+);
+
+-- BUTTON — Refresh selected visuals only
+CREATE BUTTON BtnRefreshSelected AS (
+    TITLE   = 'Refresh Metrics',
+    TOOLTIP = 'Re-evaluate selected visuals without rebuilding the full report.',
+    ACTIONS (ON_CLICK = REFRESH_VISUALS(TxnTable, MonthlyTable, RichCellTable))
+);
+
+-- BUTTON — Clear filters and chart selections
+CREATE BUTTON BtnClearFilters AS (
+    TITLE   = 'Clear Filters',
+    TOOLTIP = 'Reset active visual selections and parameters.',
+    ACTIONS (ON_CLICK = CLEAR_FILTERS)
+);
+
+-- BUTTON — Apply staged parameter changes for run-to-data demos
+CREATE BUTTON BtnApplyParams AS (
+    TITLE   = 'Apply Parameters',
+    TOOLTIP = 'Apply staged control values to deferred visuals.',
+    ACTIONS (ON_CLICK = APPLY_PARAMETERS),
     STYLE   = AccentButton
 );
 
@@ -938,17 +1108,19 @@ CREATE VISUAL TrellisRevRegion AS TRELLIS (
     STYLE    = ChartPanel
 );
 
--- MATRIX — category × region pivot table with grand total
+-- MATRIX — category x region pivot table with multiple measures, subtotals, and value sorting
 CREATE VISUAL MatrixRevenue AS MATRIX (
     SOURCE   = #matrix_data,
-    TITLE    = 'Revenue Pivot: Category × Region',
-    SUBTITLE = 'Cross-tab with SUM aggregate and grand-total row',
+    TITLE    = 'Revenue Pivot: Category x Region',
+    SUBTITLE = 'Multi-measure cross-tab with revenue, units, transactions, subtotals, and value-sorted columns',
     MAPPINGS (
-        ROW   = Category,
-        COL   = Region,
-        VALUE = Revenue
+        ROW    = Category,
+        COL    = Region,
+        VALUE  = Revenue,
+        VALUE2 = Units,
+        VALUE3 = Txns
     ),
-    OPTIONS  (AGGREGATE = SUM, GRAND_TOTAL = ON),
+    OPTIONS  (AGGREGATE = SUM, GRAND_TOTAL = ON, SUBTOTALS = ON, AXIS_SORT = DESC),
     STYLE    = ChartPanel
 );
 
@@ -1110,6 +1282,46 @@ CREATE CONTAINER AuditScroll AS SCROLL (
     )
 );
 
+-- Rich table cells: IMAGE, HYPERLINK, DATA_BAR, COLOR_SCALE, and SPARKLINE mappings
+CREATE VISUAL RichCellTable AS TABLE (
+    SOURCE   = #feature_table,
+    TITLE    = 'Rich Table Cell Renderers',
+    SUBTITLE = 'IMAGE badges, safe hyperlinks, data bars, color scales, and inline sparklines',
+    MAPPINGS (
+        Badge       IMAGE WIDTH 28 AS 'Badge',
+        Segment     AS 'Segment',
+        Revenue     FORMAT 'C0' ALIGN 'right' DATA_BAR COLOR '#7c3aed' AS 'Revenue',
+        HealthScore FORMAT 'P0' ALIGN 'right' COLOR_SCALE FROM '#fee2e2' TO '#dcfce7' AS 'Health',
+        LinkUrl     HYPERLINK LABEL 'Open' AS 'Link',
+        SPARKLINE(Jan, Feb, Mar, Apr, May, Jun) LINE AS '6-Month Sparkline'
+    ),
+    OPTIONS (
+        PAGE_SIZE   = 0,
+        SEARCH      = OFF,
+        STRIPED     = ON,
+        GRAND_TOTAL = SUM
+    ),
+    STYLE    (ALLOW_MAXIMIZE = ON)
+);
+
+-- Deferred visual: demonstrates FETCH = ON_RUN + APPLY_PARAMETERS run-to-data pattern
+CREATE VISUAL DeferredTxnPreview AS TABLE (
+    SOURCE   = #deferred_preview,
+    TITLE    = 'Deferred Transaction Preview',
+    SUBTITLE = 'Starts hidden from data fetch until Apply Parameters is clicked',
+    FETCH    = ON_RUN,
+    MAPPINGS (
+        TxnDate     AS 'Date',
+        Category    AS 'Category',
+        Region      AS 'Region',
+        Salesperson AS 'Salesperson',
+        Qty         ALIGN 'right' AS 'Qty',
+        Revenue     FORMAT 'C0' ALIGN 'right' DATA_BAR COLOR '#10b981' AS 'Revenue'
+    ),
+    OPTIONS (PAGE_SIZE = 10, SEARCH = ON),
+    STYLE   = ChartPanel
+);
+
 -- Stacked BAR — monthly revenue by region (multi-series, stacked)
 -- YrMo is an integer (YEAR*100+MONTH); CAST to VARCHAR gives sortable labels like "202601"
 CREATE VISUAL BarMonthlyByRegion AS BAR (
@@ -1166,7 +1378,7 @@ CREATE VISUAL DrillInByCategory AS BAR (
 -- ============================================================================
 
 -- ── PAGE 1: Overview ──────────────────────────────────────────────────────────
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
     TITLE     = 'Overview',
     TOOLTIP   = 'KPI strip, trend line, donut, cross-filter table, drill-down demo, and region slicer.',
     STRUCTURE = '
@@ -1187,7 +1399,7 @@ CREATE PAGE Overview AS (
 );
 
 -- ── PAGE 2: Trends ────────────────────────────────────────────────────────────
-CREATE PAGE Trends AS (
+CREATE PAGE Trends AS DASHBOARD (
     TITLE     = 'Trends',
     TOOLTIP   = 'COMBO, WATERFALL, SCATTER, HBAR, and BOXPLOT charts.',
     STRUCTURE = '
@@ -1206,7 +1418,7 @@ CREATE PAGE Trends AS (
 );
 
 -- ── PAGE 3: Composition ───────────────────────────────────────────────────────
-CREATE PAGE Composition AS (
+CREATE PAGE Composition AS DASHBOARD (
     TITLE     = 'Composition',
     TOOLTIP   = 'TREEMAP, HEATMAP, FUNNEL, GAUGE variants, and PIE with data labels.',
     STRUCTURE = 'A A B B / D E C C / F F C C',
@@ -1223,11 +1435,14 @@ CREATE PAGE Composition AS (
 
 CREATE CONTAINER ButtonBar AS BOX (
     LAYOUT (
-        STRUCTURE = 'A B C',
+        STRUCTURE = 'A B C D E F',
         MAP (
             'A' = BtnRefresh,
-            'B' = BtnBack,
-            'C' = BtnExport
+            'B' = BtnRefreshSelected,
+            'C' = BtnClearFilters,
+            'D' = BtnApplyParams,
+            'E' = BtnBack,
+            'F' = BtnExport
         )
     )
 );
@@ -1245,14 +1460,14 @@ CREATE CONTAINER DateControls AS BOX (
 );
 
 -- ── PAGE 4: Controls ──────────────────────────────────────────────────────────
-CREATE PAGE Controls AS (
+CREATE PAGE Controls AS DASHBOARD (
     TITLE     = 'Controls',
-    TOOLTIP   = 'Every filter type: SLICER, MULTISELECT, DATEPICKER, SLIDER, SEARCH, IMAGE, TEXT, and BUTTONs.',
+    TOOLTIP   = 'Every filter/input type: SLICER, MULTISELECT, DATEPICKER, RELDATEPICKER, SLIDER, SEARCH, CHECKBOX, TEXTBOX, NUMBERBOX, IMAGE, TEXT, and BUTTONs.',
     STRUCTURE = '
         A A B B /
         C D E E /
-        G G G G /
-        H H H H /
+        G H K L /
+        M M M M /
         I I I I /
         J J J J
     ',
@@ -1264,6 +1479,9 @@ CREATE PAGE Controls AS (
         'E' = DateControls,
         'G' = QtySlider,
         'H' = TxnSearch,
+        'K' = IncludeReturnsToggle,
+        'L' = RevenueFloorBox,
+        'M' = AnalystNoteBox,
         'I' = ButtonsText,
         'J' = ButtonBar
     ),
@@ -1271,9 +1489,9 @@ CREATE PAGE Controls AS (
 );
 
 -- ── PAGE 5: Detail ────────────────────────────────────────────────────────────
-CREATE PAGE Detail AS (
+CREATE PAGE Detail AS DASHBOARD (
     TITLE     = 'Detail',
-    TOOLTIP   = 'Named DATASET table, stacked BAR, SCROLL container with audit log.',
+    TOOLTIP   = 'Named DATASET table, stacked BAR, and SCROLL container for transaction-level inspection.',
     STRUCTURE = '
         A A A A /
         B B B B /
@@ -1287,10 +1505,29 @@ CREATE PAGE Detail AS (
     STYLE (THEME = dark)
 );
 
--- ── PAGE 6: New Charts ────────────────────────────────────────────────────────
-CREATE PAGE NewCharts AS (
-    TITLE     = 'New Charts',
-    TOOLTIP   = 'BUBBLE scatter with variable point size, RADAR spider chart, and CANDLESTICK OHLC price series.',
+-- ── PAGE 6: Feature Lab ──────────────────────────────────────────────────────
+CREATE PAGE FeatureLab AS PAGINATED (
+    TITLE     = 'Feature Lab',
+    TOOLTIP   = 'Rich table cells, run-to-data controls, selected refresh, clear filters, and viewer actions.',
+    STRUCTURE = '
+        A A A A /
+        B B B B /
+        C C C C /
+        D D D D
+    ',
+    MAP (
+        'A' = FeatureLabText,
+        'B' = RichCellTable,
+        'C' = DeferredTxnPreview,
+        'D' = ButtonBar
+    ),
+    STYLE (THEME = dark)
+);
+
+-- ── PAGE 7: Business Signals ─────────────────────────────────────────────────
+CREATE PAGE BusinessSignals AS DASHBOARD (
+    TITLE     = 'Business Signals',
+    TOOLTIP   = 'Salesperson performance, regional profile scoring, and price-style volatility demos.',
     STRUCTURE = '
         A A B B /
         C C C C
@@ -1303,8 +1540,8 @@ CREATE PAGE NewCharts AS (
     STYLE (THEME = dark)
 );
 
--- ── PAGE 7: Map Charts ───────────────────────────────────────────────────────
-CREATE PAGE MapCharts AS (
+-- ── PAGE 8: Map Charts ───────────────────────────────────────────────────────
+CREATE PAGE MapCharts AS DASHBOARD (
     TITLE     = 'Maps',
     TOOLTIP   = 'Choropleth MAP visuals — US states and world country revenue heat maps.',
     STRUCTURE = '
@@ -1318,10 +1555,10 @@ CREATE PAGE MapCharts AS (
     STYLE (THEME = dark)
 );
 
--- ── PAGE 9: Advanced Charts ──────────────────────────────────────────────────
-CREATE PAGE AdvancedCharts AS (
-    TITLE     = 'Advanced Charts',
-    TOOLTIP   = 'SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX, GANTT, and SCATTER BRUSH.',
+-- ── PAGE 10: Flow & Planning ─────────────────────────────────────────────────
+CREATE PAGE FlowPlanning AS DASHBOARD (
+    TITLE     = 'Flow & Planning',
+    TOOLTIP   = 'Journey flow, category hierarchy, sales network, regional small multiples, matrix, timeline, and brush selection.',
     STRUCTURE = '
         A A B B /
         C C D D /
@@ -1340,8 +1577,8 @@ CREATE PAGE AdvancedCharts AS (
     STYLE (THEME = dark)
 );
 
--- ── PAGE 8: Drill-Down Demo ───────────────────────────────────────────────────
-CREATE PAGE Drilldown AS (
+-- ── PAGE 9: Drill-Down Demo ───────────────────────────────────────────────────
+CREATE PAGE Drilldown AS DASHBOARD (
     TITLE     = 'Drilldown',
     TOOLTIP   = 'DRILL_IN demo — click a bar to drill Category > Region > Salesperson in place.',
     STRUCTURE = '
@@ -1362,7 +1599,7 @@ CREATE PAGE Drilldown AS (
 CREATE NAVIGATION MainNav AS TAB (
     ORIENTATION = HORIZONTAL,
     DEFAULT     = Overview,
-    PAGES (Overview, Trends, Composition, Controls, Detail, NewCharts, MapCharts, Drilldown, AdvancedCharts)
+    PAGES (Overview, Trends, Composition, Controls, Detail, FeatureLab, BusinessSignals, MapCharts, Drilldown, FlowPlanning)
 );
 
 -- ============================================================================

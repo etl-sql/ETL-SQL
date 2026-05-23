@@ -29,7 +29,7 @@ CREATE VISUAL StyledBoxplot AS BOXPLOT (
 );
 
 -- Page Layout
-CREATE PAGE BoxplotKitchenSink AS (
+CREATE PAGE BoxplotKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = BasicBoxplot,

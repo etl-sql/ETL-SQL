@@ -37,7 +37,7 @@ CREATE VISUAL WelcomeText AS TEXT (
 );
 
 -- Page Layout
-CREATE PAGE TextKitchenSink AS (
+CREATE PAGE TextKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B / C',
     MAP (
         'A' = BasicText,

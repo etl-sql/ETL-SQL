@@ -153,6 +153,9 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("visualType")]
         public string VisualType { get; set; } = string.Empty;
 
+        [JsonPropertyName("fetch")]
+        public string Fetch { get; set; } = "AUTO";
+
         [JsonPropertyName("titleIsMarkdown")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool TitleIsMarkdown { get; set; }
@@ -404,6 +407,9 @@ namespace ETL_SQL.Reporting
 
         [JsonPropertyName("structure")]
         public string Structure { get; set; } = string.Empty;
+
+        [JsonPropertyName("mode")]
+        public string Mode { get; set; } = "DASHBOARD";
 
         [JsonPropertyName("title")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

@@ -24,7 +24,7 @@ For current syntax, prefer [User_Manual.md](User_Manual.md), [Reference/Grammar.
 Report pages, containers, visuals, and buttons use `VISIBLE = ON|OFF` for initial visibility.
 
 ```sql
-CREATE PAGE DetailPage AS (
+CREATE PAGE DetailPage AS DASHBOARD (
     TITLE = 'Detail',
     VISIBLE = OFF,
     STRUCTURE = 'A',

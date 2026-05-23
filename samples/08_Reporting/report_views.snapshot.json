@@ -1,0 +1,227 @@
+{
+  "source": "samples\\08_Reporting\\report_views.rptsql",
+  "builtAt": "2026-05-22T21:56:42.8884185Z",
+  "title": "Report Views Example",
+  "description": "Uses CREATE VIEW to share a filtered report query across visuals.",
+  "visuals": [
+    {
+      "name": "ActiveOrdersTable",
+      "visualType": "TABLE",
+      "fetch": "AUTO",
+      "chartConfig": null,
+      "columns": [
+        "order_id",
+        "region",
+        "amount"
+      ],
+      "rows": [
+        [
+          "1",
+          "North",
+          "120"
+        ],
+        [
+          "3",
+          "North",
+          "210"
+        ],
+        [
+          "4",
+          "West",
+          "95"
+        ]
+      ],
+      "options": {
+        "title": "Active Orders"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "ActiveOrdersByRegion",
+      "visualType": "BAR",
+      "fetch": "AUTO",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Active Amount by Region\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022North\u0022,\u0022West\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022total_amount\u0022,\u0022data\u0022:[330,95]}]}",
+      "columns": [
+        "region",
+        "total_amount"
+      ],
+      "rows": [
+        [
+          "North",
+          "330"
+        ],
+        [
+          "West",
+          "95"
+        ]
+      ],
+      "options": {
+        "title": "Active Amount by Region",
+        "mapping:x": "region",
+        "mapping:y": "total_amount"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "Main",
+      "structure": "A / B",
+      "mode": "DASHBOARD",
+      "slotMap": {
+        "A": "ActiveOrdersByRegion",
+        "B": "ActiveOrdersTable"
+      }
+    }
+  ],
+  "datasets": [],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": ""
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 4,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 1
+  },
+  "messages": [
+    {
+      "message": "[d87d2893] Visual \u0027ActiveOrdersTable\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-22T21:56:42.8790013Z"
+    },
+    {
+      "message": "[d87d2893] Visual \u0027ActiveOrdersByRegion\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-22T21:56:42.8810431Z"
+    },
+    {
+      "message": "[d87d2893] Page \u0027Main\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-22T21:56:42.8825878Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "d568302f-93bb-41fd-801a-84d7d58d6599",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 30.3006,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "d0f2b5f4-5f53-4bcc-b084-cb218a34dc99",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2504,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "b3071b97-8b13-461c-a08e-519a14fa95ce",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0631,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "781d02b4-2327-4383-a626-b5c872113496",
+          "name": "CREATE TABLE #orders",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.8886,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "b2feaa76-ac22-4ad5-9b0e-92a08efa5a64",
+          "name": "INSERT INTO #orders",
+          "status": "Completed",
+          "rowsProcessed": 4,
+          "durationMs": 12.0916,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 330.80816434549604,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "26fbe083-928a-41ec-941d-1fbacf602132",
+          "name": "CreateView",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.443,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "f1bd5a81-ec79-4c77-adb2-f2c077690372",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.4615,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ce1fdbbb-45a5-424c-8ac0-bfc548ef581e",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0976,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "84676da3-bb10-4b0b-af10-149ea25e670e",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.0424,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

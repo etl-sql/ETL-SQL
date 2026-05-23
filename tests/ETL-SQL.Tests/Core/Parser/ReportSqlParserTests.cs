@@ -60,6 +60,21 @@ CREATE VISUAL PieChart AS PIE (
         }
 
         [Fact]
+        public void ParseCreateVisual_FetchMode_ParsesCorrectly()
+        {
+            var sql = @"
+CREATE VISUAL ResultTable AS TABLE (
+    SOURCE = #results,
+    FETCH = ON_RUN
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().FirstOrDefault();
+
+            Assert.NotNull(stmt);
+            Assert.Equal(VisualFetchMode.OnRun, stmt!.FetchMode);
+        }
+
+        [Fact]
         public void ParseCreateVisual_WithAxisOptions_ParsesAxisBlocks()
         {
             var sql = @"
@@ -144,7 +159,7 @@ CREATE VISUAL Slicer1 AS SLICER (
         public void ParseCreatePage_BasicLayout_ReturnsCreatePageStatement()
         {
             var sql = @"
-CREATE PAGE Dashboard AS (
+CREATE PAGE Dashboard AS DASHBOARD (
     STRUCTURE = 'AB/CC',
     MAP ('A' = SalesChart, 'B' = PieChart, 'C' = SummaryTable)
 );";
@@ -153,16 +168,38 @@ CREATE PAGE Dashboard AS (
 
             Assert.NotNull(stmt);
             Assert.Equal("Dashboard", stmt!.Name);
+            Assert.Equal(PageMode.Dashboard, stmt.PageMode);
             Assert.Equal("AB/CC", stmt.Structure);
             Assert.Equal(3, stmt.SlotMap.Count);
             Assert.Equal("SalesChart", stmt.SlotMap["A"]);
         }
 
         [Fact]
+        public void ParseCreatePage_PaginatedLayoutAndRefresh_ParsesCorrectly()
+        {
+            var sql = @"
+CREATE PAGE Detail AS PAGINATED (
+    REFRESH = 60,
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = ResultTable)
+    )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreatePageStatement>().FirstOrDefault();
+
+            Assert.NotNull(stmt);
+            Assert.Equal(PageMode.Paginated, stmt!.PageMode);
+            Assert.Equal(60, stmt.RefreshIntervalSeconds);
+            Assert.Equal("A", stmt.Structure);
+            Assert.Equal("ResultTable", stmt.SlotMap["A"]);
+        }
+
+        [Fact]
         public void ParseCreatePage_Minimal_ParsesCorrectly()
         {
             var sql = @"
-CREATE PAGE SimplePage AS (
+CREATE PAGE SimplePage AS DASHBOARD (
     STRUCTURE = 'A',
     MAP ('A' = Chart1),
     GAP = '12px'
@@ -402,15 +439,13 @@ CREATE NAVIGATION MainNav AS TAB (
             var sql = @"
 CREATE CONTAINER FilterDrawer AS DRAWER (
     TITLE = 'Filters',
+    VISIBLE = ON,
+    ICON = 'filter',
     LAYOUT (
         STRUCTURE = 'A / B',
         MAP ('A' = RegionFilter, 'B' = YearSlider),
         GAP = '8px',
         PINNABLE = OFF
-    ),
-    OPTIONS (
-        VISIBLE = ON,
-        ICON = 'filter'
     )
 );";
             var script = Parse(sql);

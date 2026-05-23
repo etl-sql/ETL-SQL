@@ -54,6 +54,7 @@ namespace ETL_SQL.Core.Parser
             _dispatchMap[TokenType.WHILE]         = () => { var t = _parser.Previous; return FlowParser.ParseWhile(t); };
             _dispatchMap[TokenType.FOREACH]       = () => FlowParser.ParseForeach();
             _dispatchMap[TokenType.INSERT]        = () => { var t = _parser.Previous; return DataParser.ParseInsert(t); };
+            _dispatchMap[TokenType.REPLACE]       = () => { var t = _parser.Previous; return DataParser.ParseInsert(t); };
             _dispatchMap[TokenType.UPDATE]        = () => { var t = _parser.Previous; return DataParser.ParseUpdate(t); };
             _dispatchMap[TokenType.MERGE]         = () => { var t = _parser.Previous; return DataParser.ParseMerge(t); };
             _dispatchMap[TokenType.PRINT]         = () => SystemParser.ParsePrint();
@@ -236,6 +237,16 @@ namespace ETL_SQL.Core.Parser
             }
 
 
+            if (type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("REINDEX", System.StringComparison.OrdinalIgnoreCase))
+            {
+                _parser.Advance();
+                if (_parser.Current.Type == TokenType.IDENTIFIER)
+                {
+                    _parser.Advance();
+                }
+                return new NoOpStatement();
+            }
+
             throw new SyntaxException($"Unexpected token type {_parser.Current.Type} ('{_parser.Current.Value}') at start of statement", _parser.Current.Line, _parser.Current.Column);
         }
 
@@ -243,7 +254,11 @@ namespace ETL_SQL.Core.Parser
         {
             if (_parser.Match(TokenType.PROFILING) || _parser.Match(TokenType.PROFILE)) return SystemParser.ParseSetProfiling();
             if (_parser.Match(TokenType.WHAT_IF)) return SystemParser.ParseSetWhatIf();
-            if (_parser.Match(TokenType.SHOW_PASSWORD)) return SystemParser.ParseSetShowPassword();
+            if (_parser.Match(TokenType.SHOW_SECRETS) || _parser.Match(TokenType.SHOW_PASSWORD)) return SystemParser.ParseSetShowPassword();
+            if (_parser.Match(TokenType.ALLOW_PLAINTEXT_SECRETS)) return SystemParser.ParseSetAllowPlaintextSecrets();
+            if (_parser.Match(TokenType.NO_SAVE_SENSITIVE)) return SystemParser.ParseSetNoSaveSensitive();
+            if (_parser.Match(TokenType.NO_SAVE_CONNECTION)) return SystemParser.ParseSetNoSaveConnection();
+            if (_parser.Match(TokenType.CONNECTION_ENCRYPTION)) return SystemParser.ParseSetConnectionEncryption();
             if (_parser.Match(TokenType.JOIN_SPILL_THRESHOLD)) return SystemParser.ParseSetThreshold(ThresholdType.JoinSpill);
             if (_parser.Match(TokenType.TEMP_TABLE_SPILL_THRESHOLD)) return SystemParser.ParseSetThreshold(ThresholdType.TempTableSpill);
             if (_parser.Match(TokenType.WINDOW_SPILL_THRESHOLD)) return SystemParser.ParseSetThreshold(ThresholdType.WindowSpill);
@@ -290,7 +305,7 @@ namespace ETL_SQL.Core.Parser
 
         public bool IsStatementStart(TokenType type)
         {
-            return type == TokenType.SELECT || type == TokenType.INSERT || type == TokenType.UPDATE ||
+            return type == TokenType.SELECT || type == TokenType.INSERT || type == TokenType.REPLACE || type == TokenType.UPDATE ||
                    type == TokenType.DELETE || type == TokenType.MERGE || type == TokenType.CREATE || type == TokenType.DROP ||
                    type == TokenType.ALTER || type == TokenType.DECLARE || type == TokenType.SET ||
                    type == TokenType.IF || type == TokenType.WHILE || type == TokenType.BEGIN ||

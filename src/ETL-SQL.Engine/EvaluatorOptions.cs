@@ -70,6 +70,10 @@ namespace ETL_SQL.Engine
         public bool RedirectOutput { get; set; }
         public int? PreviewLimit { get; set; }
         public bool ShowPassword { get; set; }
+        public bool AllowPlaintextSecrets { get; set; }
+        public bool NoSaveSensitive { get; set; }
+        public bool NoSaveConnection { get; set; }
+        public bool ConnectionEncryption { get; set; }
         public int MaxMessages { get; set; } = 1000;
     }
 }

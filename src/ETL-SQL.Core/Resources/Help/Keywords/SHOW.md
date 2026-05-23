@@ -10,6 +10,7 @@ Subjects:
   PROFILE              — per-statement timing (requires SET PROFILING = ON)
   JOBS                 — active and pending background or scheduled jobs
   TABLES [AT conn]     — tables available on a connection
+  VIEWS                — session-scoped ETL-SQL query views
   TAGS                 — lineage tags applied in the current session
   VERSION              — engine version and build metadata
   SUBSCRIPTIONS        — defined report subscriptions
@@ -35,6 +36,10 @@ SHOW VARIABLES;
 -- List tables on a connection
 SHOW TABLES AT SalesDB INTO #tbl_list;
 SELECT table_name FROM #tbl_list WHERE table_name LIKE 'Order%';
+
+-- List session query views
+SHOW VIEWS INTO #views;
+SELECT Name, Query FROM #views;
 
 -- Timing profile
 SET PROFILING = ON;

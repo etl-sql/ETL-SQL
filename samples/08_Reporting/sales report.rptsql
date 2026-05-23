@@ -97,7 +97,7 @@ CREATE NAVIGATION MainNav AS TAB (
 );
 
 -- Dashboard pages
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
   STRUCTURE = 'A B / C C / D D',
   MAP (
     'A' = KpiRow,
@@ -107,7 +107,7 @@ CREATE PAGE Overview AS (
   )
 );
 
-CREATE PAGE Trends AS (
+CREATE PAGE Trends AS DASHBOARD (
     TITLE = 'Market Trends',
     STRUCTURE = 'A / B / C',
     MAP (

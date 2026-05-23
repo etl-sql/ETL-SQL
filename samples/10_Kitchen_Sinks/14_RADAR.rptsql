@@ -33,7 +33,7 @@ CREATE VISUAL StyledRadar AS RADAR (
 );
 
 -- Page Layout
-CREATE PAGE RadarKitchenSink AS (
+CREATE PAGE RadarKitchenSink AS DASHBOARD (
     STRUCTURE = 'A B',
     MAP (
         'A' = BasicRadar,

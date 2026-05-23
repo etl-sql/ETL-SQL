@@ -136,12 +136,45 @@ namespace ETL_SQL.Core.Parser.Components
 
         public Statement ParseSetShowPassword()
         {
-            bool enabled;
-            if (Match(TokenType.ON)) enabled = true;
-            else if (Match(TokenType.OFF)) enabled = false;
-            else throw new SyntaxException("Expected ON or OFF after SET SHOW_PASSWORD", _parser.Current.Line, _parser.Current.Column);
+            var enabled = ParseOptionalEqualsOnOff("SET SHOW_PASSWORD");
             Match(TokenType.SEMICOLON);
             return new SetShowPasswordStatement(enabled);
+        }
+
+        public Statement ParseSetAllowPlaintextSecrets()
+        {
+            var enabled = ParseOptionalEqualsOnOff("SET ALLOW_PLAINTEXT_SECRETS");
+            Match(TokenType.SEMICOLON);
+            return new SetAllowPlaintextSecretsStatement(enabled);
+        }
+
+        public Statement ParseSetNoSaveSensitive()
+        {
+            var enabled = ParseOptionalEqualsOnOff("SET NO_SAVE_SENSITIVE");
+            Match(TokenType.SEMICOLON);
+            return new SetNoSaveSensitiveStatement(enabled);
+        }
+
+        public Statement ParseSetNoSaveConnection()
+        {
+            var enabled = ParseOptionalEqualsOnOff("SET NO_SAVE_CONNECTION");
+            Match(TokenType.SEMICOLON);
+            return new SetNoSaveConnectionStatement(enabled);
+        }
+
+        public Statement ParseSetConnectionEncryption()
+        {
+            var enabled = ParseOptionalEqualsOnOff("SET CONNECTION_ENCRYPTION");
+            Match(TokenType.SEMICOLON);
+            return new SetConnectionEncryptionStatement(enabled);
+        }
+
+        private bool ParseOptionalEqualsOnOff(string settingName)
+        {
+            Match(TokenType.EQUALS);
+            if (Match(TokenType.ON)) return true;
+            if (Match(TokenType.OFF)) return false;
+            throw new SyntaxException($"Expected ON or OFF after {settingName}", _parser.Current.Line, _parser.Current.Column);
         }
 
         public Statement ParseSetThreshold(ThresholdType type)
@@ -462,6 +495,10 @@ namespace ETL_SQL.Core.Parser.Components
                 if (Match(TokenType.ON)) connName = ConsumeIdentifier("Expected connection name after ON").Value;
                 stmt = new ShowTablesStatement(connName);
             }
+            else if (Match(TokenType.VIEW) || MatchIdentifier("VIEWS"))
+            {
+                stmt = new ShowViewsStatement();
+            }
             else if (Match(TokenType.COLUMNS))
             {
                 Consume(TokenType.FOR, "Expected FOR after SHOW COLUMNS");
@@ -687,6 +724,7 @@ namespace ETL_SQL.Core.Parser.Components
                     ShowScriptTagsStatement st   => st with { IntoTable = tempTable },
                     ShowJobsStatement j          => j with { IntoTable = tempTable },
                     ShowTablesStatement sts      => sts with { IntoTable = tempTable },
+                    ShowViewsStatement sv        => sv with { IntoTable = tempTable },
                     ShowColumnsStatement scols   => scols with { IntoTable = tempTable },
                     ShowTagsStatement stag       => stag with { IntoTable = tempTable },
                     ShowTagValueStatement stv    => stv with { IntoTable = tempTable },

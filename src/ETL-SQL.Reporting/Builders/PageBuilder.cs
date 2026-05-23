@@ -35,6 +35,7 @@ namespace ETL_SQL.Reporting.Builders
             var pm = new PageManifest
             {
                 Name               = name,
+                Mode               = pStmt.PageMode.ToString().ToUpperInvariant(),
                 Structure          = pStmt.Structure,
                 IsHidden           = isHidden,
                 RefreshIntervalSeconds = pStmt.RefreshIntervalSeconds,

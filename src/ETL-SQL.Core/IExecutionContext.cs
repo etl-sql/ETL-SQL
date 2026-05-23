@@ -40,6 +40,10 @@ namespace ETL_SQL.Core
         void SetFunction(string name, CreateFunctionStatement stmt);
         bool RemoveFunction(string name);
         bool TryGetFunction(string name, out CreateFunctionStatement? stmt);
+        void SetView(string name, CreateViewStatement stmt);
+        bool RemoveView(string name);
+        bool TryGetView(string name, out CreateViewStatement? stmt);
+        IReadOnlyDictionary<string, CreateViewStatement> GetViews();
         IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null);
         /// <summary>Purges all variables, procedures, and functions from the context.</summary>
         void Reset();
@@ -92,6 +96,10 @@ namespace ETL_SQL.Core
         ETL_SQL.Common.ILogger Logger { get; }
         bool IsVerbose { get; set; }
         bool ShowPassword { get; set; }
+        bool AllowPlaintextSecrets { get; set; }
+        bool NoSaveSensitive { get; set; }
+        bool NoSaveConnection { get; set; }
+        bool ConnectionEncryption { get; set; }
         bool RedirectOutput { get; set; }
         List<LogEntry> Messages { get; }
         int MaxMessages { get; set; }

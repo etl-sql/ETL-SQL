@@ -238,6 +238,13 @@ namespace ETL_SQL.Engine
         
         /// <summary>Preference for showing sensitive data in plain text in the UI.</summary>
         public bool ShowPassword { get => _options.ShowPassword; set => _options.ShowPassword = value; }
+
+        /// <summary>Unsafe local-dev escape hatch allowing plaintext secrets to remain in saved source.</summary>
+        public bool AllowPlaintextSecrets { get => _options.AllowPlaintextSecrets; set => _options.AllowPlaintextSecrets = value; }
+
+        public bool NoSaveSensitive { get => _options.NoSaveSensitive; set => _options.NoSaveSensitive = value; }
+        public bool NoSaveConnection { get => _options.NoSaveConnection; set => _options.NoSaveConnection = value; }
+        public bool ConnectionEncryption { get => _options.ConnectionEncryption; set => _options.ConnectionEncryption = value; }
         
         /// <summary>Master password for decrypting connection strings.</summary>
         public string? MasterPassword { get; set; }
@@ -401,6 +408,10 @@ namespace ETL_SQL.Engine
         public void SetFunction(string name, CreateFunctionStatement stmt) => VarContext.SetFunction(name, stmt);
         public bool RemoveFunction(string name) => VarContext.RemoveFunction(name);
         public bool TryGetFunction(string name, out CreateFunctionStatement? stmt) => VarContext.TryGetFunction(name, out stmt);
+        public void SetView(string name, CreateViewStatement stmt) => VarContext.SetView(name, stmt);
+        public bool RemoveView(string name) => VarContext.RemoveView(name);
+        public bool TryGetView(string name, out CreateViewStatement? stmt) => VarContext.TryGetView(name, out stmt);
+        public IReadOnlyDictionary<string, CreateViewStatement> GetViews() => VarContext.GetViews();
         public bool RemoveProcedure(string name) => VarContext.RemoveProcedure(name);
         public IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null) => VarContext.GetVariablesWithMetadata(predicate);
         public bool ContainsVariableInCurrentScope(string name) => VarContext.ContainsVariableInCurrentScope(name);
@@ -569,6 +580,10 @@ namespace ETL_SQL.Engine
             CaseSensitiveComparison = DefaultThresholds.CaseSensitiveComparison(config);
             LineageEnabled = DefaultThresholds.LineageEnabled(config);
             Telemetry.TelemetryEnabled = DefaultThresholds.TelemetryEnabled(config);
+            AllowPlaintextSecrets = DefaultThresholds.AllowPlaintextSecrets(config);
+            NoSaveSensitive = DefaultThresholds.NoSaveSensitive(config);
+            NoSaveConnection = DefaultThresholds.NoSaveConnection(config);
+            ConnectionEncryption = DefaultThresholds.ConnectionEncryption(config);
         }
 
         private async Task AutoExportOpenLineageAsync(System.Threading.CancellationToken ct)
@@ -900,6 +915,12 @@ namespace ETL_SQL.Engine
                     _logger.Debug("Executing {Sql}", Scrub(sql));
                 }
                 _metricsReporter.ReportPreExecutionMetrics(statement);
+            }
+
+            if (statement is NoOpStatement)
+            {
+                if (node != null) node.Status = ExecutionStatus.Completed;
+                return;
             }
 
             if (_statementHandlers.TryGetValue(statement.GetType(), out var handler))
@@ -1292,6 +1313,10 @@ namespace ETL_SQL.Engine
                 RedirectOutput = RedirectOutput,
                 IsWhatIf = IsWhatIf,
                 ShowPassword = ShowPassword,
+                AllowPlaintextSecrets = AllowPlaintextSecrets,
+                NoSaveSensitive = NoSaveSensitive,
+                NoSaveConnection = NoSaveConnection,
+                ConnectionEncryption = ConnectionEncryption,
                 BatchSize = BatchSize,
                 PreviewLimit = PreviewLimit,
                 ScriptPassword = ScriptPassword,

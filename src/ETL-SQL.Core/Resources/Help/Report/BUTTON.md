@@ -43,7 +43,7 @@ CREATE BUTTON DetailsButton AS (
   ACTIONS (ON_CLICK = NAVIGATE_PAGE(Details))
 );
 
-CREATE PAGE Summary AS (
+CREATE PAGE Summary AS DASHBOARD (
   STRUCTURE = 'A / B C D',
   MAP ('A' = SalesChart, 'B' = GoBack, 'C' = RefreshData, 'D' = ResetFilters)
 );

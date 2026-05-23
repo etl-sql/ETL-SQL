@@ -42,6 +42,7 @@ namespace ETL_SQL.Core.Parser.Components
             double? min = null, max = null;
             int? decimals = null;
             TableSummaryOptions? summaryOptions = null;
+            var fetchMode = VisualFetchMode.Auto;
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
@@ -66,6 +67,11 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     Match(TokenType.EQUALS);
                     options.Add(new VisualOption { Key = "VISIBLE", Value = ParseOnOffValue() });
+                }
+                else if (Match(TokenType.FETCH))
+                {
+                    Match(TokenType.EQUALS);
+                    fetchMode = ParseVisualFetchMode();
                 }
                 else if (Match(TokenType.MAPPINGS))
                 {
@@ -209,6 +215,7 @@ namespace ETL_SQL.Core.Parser.Components
                 Summaries       = summaries,
                 SummaryOptions  = summaryOptions,
                 Styles          = styles,
+                FetchMode       = fetchMode,
                 StyleName       = styleName,
                 Tooltip         = tooltip,
                 Mode            = mode,
@@ -219,12 +226,24 @@ namespace ETL_SQL.Core.Parser.Components
 
         // ── CREATE PAGE ───────────────────────────────────────────────────────
 
+        private PageMode ParsePageMode()
+        {
+            if (Match(TokenType.DASHBOARD)) return PageMode.Dashboard;
+            if (Match(TokenType.PAGINATED)) return PageMode.Paginated;
+
+            throw new SyntaxException(
+                "Expected DASHBOARD or PAGINATED after CREATE PAGE <name> AS.",
+                _parser.Current.Line,
+                _parser.Current.Column);
+        }
+
         public Statement ParseCreatePage(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
         {
             var name = ConsumeIdentifier("Expected page name").Value;
             Consume(TokenType.AS, "Expected AS after page name");
 
-            Consume(TokenType.LPAREN, "Expected '(' after AS");
+            var pageMode = ParsePageMode();
+            Consume(TokenType.LPAREN, "Expected '(' after page mode");
             
             string? visibility = "ON";
             string? structure = null;
@@ -283,6 +302,18 @@ namespace ETL_SQL.Core.Parser.Components
                     Match(TokenType.EQUALS);
                     visibility = ParseOnOffValue();
                 }
+                else if (Match(TokenType.REFRESH))
+                {
+                    Match(TokenType.EQUALS);
+                    int.TryParse(ConsumeReportOptionValue(), out refreshSecs);
+                }
+                else if (Match(TokenType.LAYOUT))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after LAYOUT");
+                    bool isPinnable = true;
+                    ParseContainerLayout(ref structure, slotMap, pageStyles, ref isPinnable);
+                    Consume(TokenType.RPAREN, "Expected ')' to close LAYOUT");
+                }
                 else
                 {
                     throw new SyntaxException(
@@ -292,24 +323,8 @@ namespace ETL_SQL.Core.Parser.Components
                 Match(TokenType.COMMA);
             }
             Consume(TokenType.RPAREN, "Expected ')' to close CREATE PAGE");
-
-            // Optional WITH (REFRESH = <seconds>) clause
             if (Match(TokenType.WITH))
-            {
-                Consume(TokenType.LPAREN, "Expected '(' after WITH");
-                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
-                {
-                    var optKey = _parser.Advance().Value;
-                    Consume(TokenType.EQUALS, $"Expected '=' after '{optKey}' in WITH clause");
-                    var optVal = _parser.Advance().Value;
-                    if (string.Equals(optKey, "VISIBLE", StringComparison.OrdinalIgnoreCase))
-                        visibility = optVal.ToUpperInvariant();
-                    else if (string.Equals(optKey, "REFRESH", StringComparison.OrdinalIgnoreCase))
-                        int.TryParse(optVal, out refreshSecs);
-                    Match(TokenType.COMMA);
-                }
-                Consume(TokenType.RPAREN, "Expected ')' to close WITH clause");
-            }
+                throw new SyntaxException("CREATE PAGE no longer supports WITH (...). Use REFRESH = <seconds> inside the page body.", _parser.Previous.Line, _parser.Previous.Column);
 
             Match(TokenType.SEMICOLON);
 
@@ -319,6 +334,7 @@ namespace ETL_SQL.Core.Parser.Components
             return new CreatePageStatement
             {
                 Name            = name,
+                PageMode        = pageMode,
                 Structure       = structure,
                 SlotMap         = slotMap,
                 Styles          = pageStyles,
@@ -603,6 +619,16 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     tooltip = ParseTooltipDefinition();
                 }
+                else if (Match(TokenType.VISIBLE))
+                {
+                    Match(TokenType.EQUALS);
+                    visibility = ParseOnOffValue();
+                }
+                else if (Match(TokenType.ICON))
+                {
+                    Consume(TokenType.EQUALS, "Expected '=' after ICON");
+                    icon = Consume(TokenType.STRING_LITERAL, "Expected string literal for ICON").Value;
+                }
                 else if (Match(TokenType.LAYOUT))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after LAYOUT");
@@ -697,13 +723,11 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 if (Match(TokenType.VISIBLE))
                 {
-                    Match(TokenType.EQUALS);
-                    visibility = ParseOnOffValue();
+                    throw new SyntaxException("CREATE CONTAINER VISIBLE is now a top-level clause. Use VISIBLE = ON|OFF outside OPTIONS (...).", _parser.Previous.Line, _parser.Previous.Column);
                 }
                 else if (Match(TokenType.ICON))
                 {
-                    Consume(TokenType.EQUALS, "Expected '=' after ICON");
-                    icon = Consume(TokenType.STRING_LITERAL, "Expected string literal for ICON").Value;
+                    throw new SyntaxException("CREATE CONTAINER ICON is now a top-level clause. Use ICON = 'name' outside OPTIONS (...).", _parser.Previous.Line, _parser.Previous.Column);
                 }
                 else
                 {
@@ -712,7 +736,6 @@ namespace ETL_SQL.Core.Parser.Components
                         _parser.Current.Line,
                         _parser.Current.Column);
                 }
-                Match(TokenType.COMMA);
             }
         }
 
@@ -1132,6 +1155,21 @@ namespace ETL_SQL.Core.Parser.Components
         private static bool IsPassiveVisual(VisualType visualType) => visualType is
             VisualType.Text
             or VisualType.Image;
+
+        private VisualFetchMode ParseVisualFetchMode()
+        {
+            var raw = ConsumeIdentifier("Expected AUTO, ON_LOAD, or ON_RUN after FETCH =").Value.ToUpperInvariant();
+            return raw switch
+            {
+                "AUTO" => VisualFetchMode.Auto,
+                "ON_LOAD" => VisualFetchMode.OnLoad,
+                "ON_RUN" => VisualFetchMode.OnRun,
+                _ => throw new SyntaxException(
+                    $"Unknown FETCH mode '{raw}'. Expected AUTO, ON_LOAD, or ON_RUN.",
+                    _parser.Previous.Line,
+                    _parser.Previous.Column)
+            };
+        }
 
         private VisualSourceExpression ParseVisualSource()
         {

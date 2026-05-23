@@ -11,7 +11,7 @@ Use ETL-SQL when you want SQL to be the orchestration language, not just the que
 ## Why ETL-SQL
 
 - **One language for the whole workflow**: extraction, staging, transformation, validation, file operations, email, scheduling, lineage, and reporting.
-- **Portable across sources**: MSSQL, Postgres, Oracle, ODBC, Snowflake, BigQuery, flat files, Parquet, JSON, XML, Excel, Avro, REST, SFTP, FTP, Azure Blob, SMTP, and MOCKDB.
+- **Portable across sources**: MSSQL, Postgres, Oracle, ODBC, Snowflake, BigQuery, flat files, Parquet, JSON, XML, Excel, Avro, REST, SFTP, FTP, Azure Blob, and SMTP.
 - **Engine-side control**: data flows through the ETL-SQL engine, where variables, `#temp` tables, lineage, linting, security checks, and cross-source transforms live.
 - **Zero-trust by default**: scripts run inside a sandbox with path guardrails, script immutability, resource caps, encrypted credentials, and dry-run support.
 - **Reports are scripts too**: `.rptsql` files use the same engine and add dashboards, filters, pages, containers, navigation, exports, and portal publishing.
@@ -24,7 +24,7 @@ Use ETL-SQL when you want SQL to be the orchestration language, not just the que
 
 ![VS Code demo](Docs/assets/vscode-demo.gif)
 
-*Inline diagnostics · schema autocomplete · REPL results panel · report preview · cell-by-cell notebook execution*
+*Inline diagnostics · schema autocomplete · REPL results panel · report preview · cell-by-cell notebook execution · Lineage*
 
 ### Report-SQL Dashboards
 
@@ -154,6 +154,8 @@ INTO #regions
 FROM #revenue
 ORDER BY Value;
 
+DECLARE @region varchar(200) = 'All';
+
 CREATE VISUAL RegionSlicer AS SLICER (
     SOURCE   = #regions,
     MAPPINGS (VALUE = Value),
@@ -164,7 +166,7 @@ CREATE VISUAL RevChart AS BAR (
     SOURCE   = (
         SELECT Quarter, Region, Revenue
         FROM #revenue
-        WHERE @region = 'All' OR Region = @region
+        WHERE (@region = 'All' OR Region = @region)
     ),
     MAPPINGS (X = Quarter, Y = Revenue, SERIES = Region),
     STYLE    (HEIGHT = '380px', THEME = dark)
@@ -176,12 +178,11 @@ CREATE VISUAL TotalKpi AS CARD (
     OPTIONS  (FORMAT = 'C0')
 );
 
-CREATE PAGE Sales AS (
+CREATE PAGE Sales AS DASHBOARD (
     TITLE     = 'Sales',
     STRUCTURE = 'A A / B C',
     MAP ('A' = RevChart, 'B' = RegionSlicer, 'C' = TotalKpi)
-)
-WITH PARAMETERS (@region = 'All');
+);
 ```
 
 Serve it live:
@@ -245,8 +246,8 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | Tool | Purpose |
 | :--- | :--- |
 | `ETL-SQL.exe` | Headless script executor for pipelines, CI/CD, cron, and server deployments. |
-| `ETL-SQL ui edit` | Interactive terminal IDE with editor, results, messages, autocomplete, and profiling. |
-| `etl-sql-report` | Report-SQL CLI for `build`, `refresh`, and `serve`. |
+| `ETL-SQL-TUI.exe` | Interactive terminal IDE with editor, results, messages, autocomplete, and profiling. |
+| `ETL-SQL-REPORT.exe` | Report-SQL CLI for `build`, `refresh`, and `serve`. |
 | VS Code extension | Language server, REPL panel, notebook support, schema sidebar, and report preview. |
 | Report Portal | Multi-report hosting, publishing, permissions, subscriptions, alerts, saved views, and usage metrics. |
 | Orchestrator service | Job scheduling, execution history, and always-on automation. |

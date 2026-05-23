@@ -36,7 +36,11 @@ namespace ETL_SQL.Reporting
         /// Builds the manifest by querying each visual's data source.
         /// Must be called after the script has been fully evaluated.
         /// </summary>
-        public async Task<ReportManifest> BuildAsync(string scriptSource, Dictionary<string, string>? interactionValues = null, bool skipDeferredVisuals = false)
+        public async Task<ReportManifest> BuildAsync(
+            string scriptSource,
+            Dictionary<string, string>? interactionValues = null,
+            bool skipDeferredVisuals = false,
+            IReadOnlySet<string>? runPages = null)
         {
             var manifest = new ReportManifest
             {
@@ -79,12 +83,14 @@ namespace ETL_SQL.Reporting
                     _ctx.VarContext.DeclareVariable(v, null);
             }
 
+            var deferredVisuals = DetermineDeferredVisuals(runPages);
+
             // ── Visuals ──────────────────────────────────────────────────────
             foreach (var (name, vStmt) in _ctx.ReportContext.VisualDefinitions)
             {
                 try
                 {
-                    manifest.Visuals.Add(await _visualBuilder.BuildAsync(name, vStmt, interactionValues, skipDeferredVisuals));
+                    manifest.Visuals.Add(await _visualBuilder.BuildAsync(name, vStmt, interactionValues, deferredVisuals.Contains(name)));
                 }
                 catch (Exception ex)
                 {
@@ -261,6 +267,73 @@ namespace ETL_SQL.Reporting
 
             return manifest;
         }
+
+        private HashSet<string> DetermineDeferredVisuals(IReadOnlySet<string>? runPages)
+        {
+            var deferred = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var runSet = runPages ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (pageName, page) in _ctx.ReportContext.PageDefinitions)
+            {
+                if (page.PageMode != PageMode.Paginated || runSet.Contains(pageName))
+                    continue;
+
+                foreach (var visualName in ExpandPageVisuals(page))
+                {
+                    if (!_ctx.ReportContext.VisualDefinitions.TryGetValue(visualName, out var visual))
+                        continue;
+
+                    if (visual.FetchMode == VisualFetchMode.OnLoad)
+                        continue;
+
+                    if (visual.FetchMode == VisualFetchMode.OnRun || !IsPromptVisual(visual.VisualType))
+                        deferred.Add(visualName);
+                }
+            }
+
+            return deferred;
+        }
+
+        private IEnumerable<string> ExpandPageVisuals(CreatePageStatement page)
+        {
+            var seenContainers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var target in page.SlotMap.Values)
+            {
+                foreach (var visual in ExpandObject(target, seenContainers))
+                    yield return visual;
+            }
+        }
+
+        private IEnumerable<string> ExpandObject(string name, HashSet<string> seenContainers)
+        {
+            if (_ctx.ReportContext.VisualDefinitions.ContainsKey(name))
+            {
+                yield return name;
+                yield break;
+            }
+
+            if (!_ctx.ReportContext.ContainerDefinitions.TryGetValue(name, out var container) || !seenContainers.Add(name))
+                yield break;
+
+            foreach (var child in container.SlotMap.Values)
+            {
+                foreach (var visual in ExpandObject(child, seenContainers))
+                    yield return visual;
+            }
+        }
+
+        private static bool IsPromptVisual(VisualType type) => type is
+            VisualType.Slicer
+            or VisualType.MultiSelect
+            or VisualType.DatePicker
+            or VisualType.RelDatePicker
+            or VisualType.Slider
+            or VisualType.Search
+            or VisualType.Checkbox
+            or VisualType.Textbox
+            or VisualType.Numberbox
+            or VisualType.Text
+            or VisualType.Image;
 
         /// <summary>
         /// Clears HighlightRows from a visual and regenerates its ChartConfig without the ghost overlay.

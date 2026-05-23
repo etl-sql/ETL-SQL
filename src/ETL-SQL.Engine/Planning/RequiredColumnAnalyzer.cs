@@ -76,12 +76,34 @@ namespace ETL_SQL.Engine.Planning
                     Collect(isNull.Expression, required);
                     break;
 
+                case InExpression inExp:
+                    Collect(inExp.Left, required);
+                    Collect(inExp.Right, required);
+                    break;
+
+                case BetweenExpression bet:
+                    Collect(bet.Left, required);
+                    Collect(bet.Start, required);
+                    Collect(bet.End, required);
+                    break;
+
+                case LikeExpression like:
+                    Collect(like.Left, required);
+                    Collect(like.Pattern, required);
+                    Collect(like.EscapeChar, required);
+                    break;
+
+                case UnaryExpression un:
+                    Collect(un.Expression, required);
+                    break;
+
                 case ListExpression list:
                     foreach (var item in list.Items) Collect(item, required);
                     break;
 
                 case AtTimeZoneExpression atz:
                     Collect(atz.Left, required);
+                    Collect(atz.TimeZone, required);
                     break;
 
                 case FunctionCallExpression func:

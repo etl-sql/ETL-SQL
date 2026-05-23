@@ -47,7 +47,7 @@ CREATE VISUAL SalesBar AS BAR (
   MAPPINGS (X = product, Y = revenue)
 );
 
-CREATE PAGE Main AS (
+CREATE PAGE Main AS DASHBOARD (
   STRUCTURE = 'S / C',
   MAP ('S' = RegionSlicer, 'C' = SalesBar)
 );

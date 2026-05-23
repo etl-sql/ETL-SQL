@@ -33,6 +33,20 @@ namespace ETL_SQL.Core.Data
                 if (a is Row r1 && !(b is Row)) return IsSoftEqual(r1[0], b, logger);
                 if (b is Row r2 && !(a is Row)) return IsSoftEqual(a, r2[0], logger);
 
+                if (a is byte[] || b is byte[])
+                {
+                    if (a is byte[] bytesA && b is byte[] bytesB)
+                    {
+                        if (bytesA.Length != bytesB.Length) return false;
+                        for (int i = 0; i < bytesA.Length; i++)
+                        {
+                            if (bytesA[i] != bytesB[i]) return false;
+                        }
+                        return true;
+                    }
+                    return false;
+                }
+
                 if (a.IsNull() || b.IsNull()) 
                     return a.IsNull() && b.IsNull();
 
@@ -67,6 +81,21 @@ namespace ETL_SQL.Core.Data
             if (a.IsNull() && b.IsNull()) return 0;
             if (a.IsNull()) return -1;
             if (b.IsNull()) return 1;
+
+            if (a is byte[] || b is byte[])
+            {
+                if (a is byte[] ba && b is byte[] bb)
+                {
+                    int minLen = Math.Min(ba.Length, bb.Length);
+                    for (int i = 0; i < minLen; i++)
+                    {
+                        int cmp = ba[i].CompareTo(bb[i]);
+                        if (cmp != 0) return cmp;
+                    }
+                    return ba.Length.CompareTo(bb.Length);
+                }
+                return a is byte[] ? 1 : -1;
+            }
 
             string sa = a?.ToString() ?? "";
             string sb = b?.ToString() ?? "";

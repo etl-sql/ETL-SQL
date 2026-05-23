@@ -99,9 +99,11 @@ CREATE VISUAL SalesByRegion AS BAR (
 );
 
 -- 3. Arrange on a page (STRUCTURE uses CSS grid-template-areas)
-CREATE PAGE Main AS (
-  STRUCTURE = 'A',
-  MAP ('A' = SalesByRegion)
+CREATE PAGE Main AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'A',
+    MAP ('A' = SalesByRegion)
+  )
 );
 ```
 
@@ -217,19 +219,23 @@ CREATE VISUAL RevenueByRegion AS BAR (
   STYLE    (THEME = light)
 );
 
-CREATE PAGE Overview AS (
-  STRUCTURE = 'A',
-  MAP ('A' = RevenueByRegion),
-  GAP = '16px'
+CREATE PAGE Overview AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'A',
+    MAP ('A' = RevenueByRegion),
+    GAP = '16px'
+  )
 );
 ```
 
 Syntax notes:
 
-- `CREATE PAGE <name> AS (...)` defines a report page. Containers use `LAYOUT (...)` for nested placement.
+- `CREATE PAGE <name> AS DASHBOARD (...)` defines a page that loads result visuals immediately and keeps controls live.
+- `CREATE PAGE <name> AS PAGINATED (...)` defines a page that stages prompt changes until an `APPLY_PARAMETERS` button is clicked.
+- Page layout may be written directly with `STRUCTURE`/`MAP` or inside `LAYOUT (...)`. Prefer `LAYOUT (...)` in new scripts for consistency with containers.
 - `CREATE DATASET` uses `&dataset` names only. Use `#temp` for intermediate engine tables created by `SELECT ... INTO #temp`; use `&dataset` for reusable report-owned datasets.
 - `STYLE = StyleName` applies a named style. `STYLE (key = value, ...)` applies inline overrides. A standalone `STYLE (...)` statement is not valid.
-- `SOURCE = #temp`, `SOURCE = &dataset`, and `SOURCE = (SELECT ...)` are the canonical source forms. `#temp` is engine memory; `&dataset` is a report dataset definition or portal-registered dataset.
+- `SOURCE = #temp`, `SOURCE = &dataset`, `SOURCE = ViewName`, and `SOURCE = (SELECT ...)` are the canonical source forms. `#temp` is engine memory; `&dataset` is a report dataset definition or portal-registered dataset; `ViewName` is a session-scoped ETL-SQL query view created with `CREATE VIEW`.
 
 ### Report object buckets
 
@@ -303,6 +309,7 @@ CREATE [OR ALTER] VISUAL <name> AS <TYPE> (
   [SUBTITLE = '<string>',]
   [TOOLTIP = '<string>',]
   [VISIBLE = ON|OFF,]
+  [FETCH = AUTO|ON_LOAD|ON_RUN,]
   [SUMMARY (
     [GRAND_TOTAL = ON|OFF,]
     [aggregate(column) [AS alias], ...]
@@ -317,12 +324,12 @@ CREATE [OR ALTER] VISUAL <name> AS <TYPE> (
 
 All clauses inside the outer `( )` are separated by commas. The closing `)` ends the statement. `SOURCE` is required for all types except `TEXT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, and `SEARCH`.
 
-### VISIBLE
+### VISIBLE and FETCH
 
-`VISIBLE = OFF` defers the visual's data fetch until the first user interaction (parameter change, slicer selection, or manual refresh). The visual renders a placeholder card in the browser until data arrives. `VISIBLE = ON` is the default and fetches data immediately at build time.
+`VISIBLE` controls whether the visual is shown in the UI. It does not control when the visual's data is fetched.
 
 ```sql
--- Expensive chart — skip on first load, fetch when the user picks a region
+-- Hidden helper visual; still follows normal fetch rules
 CREATE VISUAL ExpensiveBreakdown AS BAR (
   SOURCE  = (SELECT category, SUM(revenue) AS revenue
              FROM #sales WHERE region = @region GROUP BY category),
@@ -333,13 +340,21 @@ CREATE VISUAL ExpensiveBreakdown AS BAR (
 
 Accepted values: `ON` (default), `OFF`, `TRUE`, `FALSE`, `1`, `0`.
 
-> [!TIP]
-> Use `VISIBLE = OFF` on heavy visuals that depend on a parameter the user must set first (e.g. a date range or region filter). They are included in the manifest and page layout but their `SOURCE` query is skipped until the first rebuild triggered by a parameter change.
+`FETCH` controls when a visual's `SOURCE` is evaluated:
+
+| Value | Behavior |
+| :--- | :--- |
+| `AUTO` | Default. Dashboard pages load all visuals immediately; paginated pages load prompt/control visuals immediately and defer result/data visuals until Run. |
+| `ON_LOAD` | Always fetch during initial page build. Use for prompt controls or lightweight context panels that must render before Run. |
+| `ON_RUN` | Defer the visual until an `APPLY_PARAMETERS` button runs the paginated page. |
+
+Prompt/control visuals are `SLICER`, `MULTISELECT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX`, `TEXT`, and `IMAGE`. Charts, `CARD`, `TABLE`, `MATRIX`, `MAP`, and other data visuals are result visuals.
 
 ### Viewer controls
 
-The report viewer adds a maximize control to every visual card. This is a viewer capability, not Report-SQL syntax or a chart option: the script defines what the visual is, and the host decides how the user can inspect it. Maximizing a visual preserves the current manifest state and resizes charts to fit the expanded card. Press `Esc` or click the restore control to return to the page layout.
+The report viewer adds a maximize control to data and chart visuals by default. Input/control visuals (`SLICER`, `MULTISELECT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, and `NUMBERBOX`) hide maximize by default so their interactive controls are not covered.
 
+Use `STYLE (ALLOW_MAXIMIZE = ON)` to opt a control visual into maximize, or `STYLE (ALLOW_MAXIMIZE = OFF)` to hide maximize on a visual that would normally show it. Maximizing a visual preserves the current manifest state and resizes charts to fit the expanded card. Press `Esc` or click the restore control to return to the page layout.
 
 ### Visual types
 
@@ -1177,6 +1192,7 @@ STYLE (
 | `TOOLTIP` | `'Hover text'` | Visual | Floating help text. Prefer the top-level `TOOLTIP` clause. |
 | `Z-INDEX` | `100` | Any | Layer stacking order. |
 | `SHADOW` | `ON` / `OFF` | Visual | Enable/disable visual card shadow. |
+| `ALLOW_MAXIMIZE` | `ON` / `OFF` | Visual | Controls whether the viewer shows the maximize button. Data/chart visuals default `ON`; input/control visuals default `OFF`. |
 | `TITLE_MD` | `ON` / `OFF` | Any | Force Markdown resolution for the title. |
 | `SUBTITLE_MD` | `ON` / `OFF` | Any | Force Markdown resolution for the subtitle. |
 | `TOOLTIP_MD` | `ON` / `OFF` | Any | Force Markdown resolution for the tooltip text. |
@@ -1448,31 +1464,46 @@ CREATE DATASET &sales_keyfile
 
 ## CREATE PAGE
 
-Arranges visuals and containers into a named layout. Multiple pages can be defined in one script; the web dashboard renders each as a distinct section.
+Arranges visuals and containers into a named layout. Multiple pages can be defined in one script; the web dashboard renders each as a distinct section. Page mode is explicit: `DASHBOARD` pages load data immediately and respond to controls as they change; `PAGINATED` pages stage prompt changes and load result visuals when the user clicks a button with `APPLY_PARAMETERS`.
 
 ```
-CREATE [OR ALTER] PAGE <name> AS (
+CREATE [OR ALTER] PAGE <name> AS DASHBOARD|PAGINATED (
   [TITLE = '<string>',]
   [TOOLTIP = '<string>',]
-  STRUCTURE = '<grid-template-areas>',
-  MAP (
-    '<slot>' = VisualOrContainerName,
-    ...
+  [REFRESH = <seconds>,]
+  LAYOUT (
+    STRUCTURE = '<grid-template-areas>',
+    MAP (
+      '<slot>' = VisualOrContainerName,
+      ...
+    )
+    [, GAP = '<css-size>']
   )
   [, STYLE = <styleName> | STYLE (key = value, ...)]
   [, VISIBLE = ON|OFF]
-)
-[WITH (REFRESH = <seconds>)];
+);
 ```
+
+`STRUCTURE`, `MAP`, and `GAP` may also be written directly in the page body instead of inside `LAYOUT (...)`, but `LAYOUT (...)` is the preferred style for consistency with `CREATE CONTAINER`.
+
+#### DASHBOARD vs. PAGINATED
+
+Dashboard pages show all data on first render. Controls post parameter changes immediately and affected visuals refresh.
+
+Paginated pages show prompt/control visuals on first render, but result/data visuals using `FETCH = AUTO` wait until an `APPLY_PARAMETERS` button is clicked. Use `FETCH = ON_LOAD` for any result visual that should render before Run, and `FETCH = ON_RUN` to force a control or helper visual to wait until Run.
+
+`APPLY_PARAMETERS` is a run command, not a mode detector. A script can mix dashboard and paginated pages.
 
 #### VISIBLE
 
 `VISIBLE = OFF` hides the page from the navigation bar while still rendering it in the DOM. Hidden pages are only reachable via `DRILL_DOWN` or programmatic navigation.
 
 ```sql
-CREATE PAGE DetailView AS (
-  STRUCTURE = 'A',
-  MAP ('A' = DetailTable),
+CREATE PAGE DetailView AS PAGINATED (
+  LAYOUT (
+    STRUCTURE = 'A',
+    MAP ('A' = DetailTable)
+  ),
   VISIBLE = OFF
 );
 ```
@@ -1541,13 +1572,15 @@ When a parameter changes, the DashboardService re-evaluates all visuals whose in
 ### Full page example
 
 ```sql
-CREATE PAGE Overview AS (
-  STRUCTURE = 'A B / C C / D D',
-  MAP (
-    'A' = TotalRevenue,
-    'B' = RegionFilter,
-    'C' = RevenueByRegion,
-    'D' = SalesTable
+CREATE PAGE Overview AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'A B / C C / D D',
+    MAP (
+      'A' = TotalRevenue,
+      'B' = RegionFilter,
+      'C' = RevenueByRegion,
+      'D' = SalesTable
+    )
   ),
   STYLE (THEME = dark)
 );
@@ -1659,10 +1692,12 @@ CREATE VISUAL AlertKpi AS CARD (
 );
 
 -- Apply to pages and containers too
-CREATE PAGE Main AS (
-  STRUCTURE = 'A B',
+CREATE PAGE Main AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'A B',
+    MAP ('A' = RevenueKpi, 'B' = AlertKpi)
+  ),
   STYLE = PanelBorder,
-  MAP ('A' = RevenueKpi, 'B' = AlertKpi)
 );
 ```
 
@@ -1691,6 +1726,8 @@ CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|M
   [TITLE = '<string>',]
   [SUBTITLE = '<string>',]
   [TOOLTIP = '<string>',]
+  [VISIBLE = ON|OFF,]
+  [ICON = '<name>',]
   [STYLE = <styleName> | STYLE (key = value, ...),]
   LAYOUT (
     STRUCTURE = '<grid-template-areas>',
@@ -1698,10 +1735,7 @@ CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|M
     [GAP = '<css-size>',]
     [PINNABLE = ON|OFF]
   ),
-  [OPTIONS (
-    VISIBLE = ON|OFF,
-    ICON = '<name>'
-  )]
+  [OPTIONS (key = value, ...)]
 );
 ```
 
@@ -1718,13 +1752,13 @@ CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|M
 
 ### VISIBLE
 
-`VISIBLE = OFF` in `OPTIONS` hides the entire container (and all its children) until toggled via an action. For drawer containers, this controls whether the drawer starts opened or closed.
+`VISIBLE = OFF` hides the entire container (and all its children) until toggled via an action. For drawer containers, this controls whether the drawer starts opened or closed. `ICON = '<name>'` is also top-level and controls the drawer/popover trigger icon.
 
 ### Layout
 
 Containers use the same `STRUCTURE` and `MAP` logic as pages, but nested placement is always inside `LAYOUT (...)`. Every container with children must have a `STRUCTURE` and a `MAP`.
 
-Layout behavior belongs in `LAYOUT (...)`: grid structure, slot maps, gaps, responsive layout keys, and drawer pinning. `OPTIONS (...)` is reserved for non-layout container state such as visibility and trigger icon.
+Layout behavior belongs in `LAYOUT (...)`: grid structure, slot maps, gaps, responsive layout keys, and drawer pinning. `OPTIONS (...)` is reserved for type-specific container behavior; common state such as `VISIBLE`, `ICON`, `TITLE`, `SUBTITLE`, `TOOLTIP`, and `STYLE` is top-level.
 
 ```sql
 -- Single visual (single-slot STRUCTURE)
@@ -1756,7 +1790,7 @@ CREATE CONTAINER InfoPanel AS BOX (
 Reference the container in a page's `MAP` just like a visual:
 
 ```sql
-CREATE PAGE Main AS (
+CREATE PAGE Main AS DASHBOARD (
   STRUCTURE = 'A A / B C',
   MAP (
     'A' = InfoPanel,
@@ -1778,6 +1812,7 @@ Use `DRAWER` for filter panels that can float over the page and be toggled via a
 ```sql
 CREATE CONTAINER FilterDrawer AS DRAWER (
   TITLE      = 'Filters',
+  ICON       = 'filter',
   LAYOUT (
     STRUCTURE  = 'A / B / C',
     MAP (
@@ -1786,18 +1821,17 @@ CREATE CONTAINER FilterDrawer AS DRAWER (
       'C' = CategoryFilter
     ),
     PINNABLE = ON
-  ),
-  OPTIONS (
-    ICON = 'filter'
   )
 );
 
-CREATE PAGE Dashboard AS (
-  STRUCTURE = 'A A / B C',
-  MAP (
-    'A' = FilterDrawer,
-    'B' = RevenueChart,
-    'C' = SalesTable
+CREATE PAGE Dashboard AS DASHBOARD (
+  LAYOUT (
+    STRUCTURE = 'A A / B C',
+    MAP (
+      'A' = FilterDrawer,
+      'B' = RevenueChart,
+      'C' = SalesTable
+    )
   )
 );
 ```
@@ -1933,7 +1967,7 @@ CREATE BUTTON DetailsButton AS (
 Place buttons in a page layout exactly like any visual:
 
 ```sql
-CREATE PAGE Dashboard AS (
+CREATE PAGE Dashboard AS DASHBOARD (
   STRUCTURE = 'A B / C C',
   MAP (
     'A' = GoBack,
@@ -2377,7 +2411,7 @@ CREATE CONTAINER KpiRow AS BOX (
 );
 
 -- Dashboard pages
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
   STRUCTURE = 'A B / C C / D D',
   MAP (
     'A' = KpiRow,
@@ -2387,7 +2421,7 @@ CREATE PAGE Overview AS (
   )
 );
 
-CREATE PAGE Trends AS (
+CREATE PAGE Trends AS DASHBOARD (
   STRUCTURE = 'A A / B C',
   MAP (
     'A' = RevenueByRegionMonth,
@@ -2410,8 +2444,10 @@ CREATE NAVIGATION MainNav AS TAB (
 
 ### How do I create a "Run-to-Data" paginated report?
 For reports with heavy queries or many parameters, you should avoid refreshing the report on every character change. Use the **Run-to-Data** pattern:
-1.  **Use `ACTIONS (ON_CLICK = APPLY_PARAMETERS)`**: This puts the dashboard into staged mode, meaning parameters are collected but not applied until the button is clicked.
-2.  **Use `VISIBLE = OFF`**: Set the results visual (e.g., a TABLE) to `VISIBLE = OFF`. The engine will show a placeholder message ("Configure parameters and click Run") instead of loading empty data on the initial page load.
+1. Define the page as `CREATE PAGE <name> AS PAGINATED (...)`.
+2. Put prompt controls and the Run button before the result visuals in the page layout.
+3. Use `ACTIONS (ON_CLICK = APPLY_PARAMETERS)` on the Run button.
+4. Leave result visuals at `FETCH = AUTO` or set `FETCH = ON_RUN` explicitly. The engine shows a placeholder until Run is clicked.
 
 ### Why do I get a "Failed to cast" error when using `RELDATE` parameters?
 **Never explicitly `CAST` a `RELDATE` parameter to a `DATE` or `DATETIME` in your SQL.**

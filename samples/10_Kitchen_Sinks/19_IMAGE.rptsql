@@ -31,7 +31,7 @@ CREATE VISUAL DynamicImage AS IMAGE (
 );
 
 -- Page Layout
-CREATE PAGE ImageKitchenSink AS (
+CREATE PAGE ImageKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B C',
     MAP (
         'A' = RemoteImage,

@@ -204,7 +204,7 @@ CREATE VISUAL OptionsDemo AS TABLE (
 
 -- ── Pages & Navigation ────────────────────────────────────────────────────────
 
-CREATE PAGE CellFormatting AS (
+CREATE PAGE CellFormatting AS DASHBOARD (
     STRUCTURE = 'A B / C D',
     MAP (
         'A' = FormatAlign,
@@ -214,7 +214,7 @@ CREATE PAGE CellFormatting AS (
     )
 );
 
-CREATE PAGE RichContent AS (
+CREATE PAGE RichContent AS DASHBOARD (
     STRUCTURE = 'A B',
     MAP (
         'A' = ImageHyperlink,
@@ -222,7 +222,7 @@ CREATE PAGE RichContent AS (
     )
 );
 
-CREATE PAGE CombinedAndOptions AS (
+CREATE PAGE CombinedAndOptions AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = FullKitchenSink,

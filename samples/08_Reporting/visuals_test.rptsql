@@ -42,7 +42,7 @@ CREATE VISUAL SalesTable AS TABLE (
 );
 
 -- 5. Page Layout
-CREATE PAGE Main AS (
+CREATE PAGE Main AS DASHBOARD (
     STRUCTURE = 'A B C / D D',
     MAP ('A' = ShowDetails, 'B' = UserName, 'C' = SalesThreshold, 'D' = SalesTable)
 );

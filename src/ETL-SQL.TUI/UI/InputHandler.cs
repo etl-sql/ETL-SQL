@@ -86,6 +86,7 @@ namespace ETL_SQL.TUI.UI
             }
 
             // Shortcuts
+            if (key.Key == ConsoleKey.F2) { await _editor.SaveScript(key.Modifiers.HasFlag(ConsoleModifiers.Shift)); return; }
             if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.HandleExit(); return; }
             if (key.Key == ConsoleKey.A && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _buffer.SelectAll(); return; }
             if (key.Key == ConsoleKey.Z && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.Undo(); return; }

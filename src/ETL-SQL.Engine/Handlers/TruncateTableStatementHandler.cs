@@ -21,6 +21,10 @@ namespace ETL_SQL.Engine.Handlers
             if (statement is not TruncateTableStatement truncateStmt)
                 throw new ExecutionException("Invalid statement type for TruncateTableStatementHandler");
 
+            var targetName = truncateStmt.TargetTable.ConnectionName ?? truncateStmt.TargetTable.TableName;
+            if (context.VarContext.TryGetView(targetName, out _))
+                throw new ExecutionException($"View {targetName} is read-only and cannot be truncated.");
+
             var dataSource = await context.ResolveDataSourceAsync(truncateStmt.TargetTable);
             if (dataSource == null)
                 throw new ExecutionException($"Table not found: {truncateStmt.TargetTable.TableName}");

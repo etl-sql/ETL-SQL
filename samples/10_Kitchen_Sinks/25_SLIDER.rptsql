@@ -24,7 +24,7 @@ CREATE VISUAL SliderResult AS TABLE (
 );
 
 -- Page Layout
-CREATE PAGE SliderKitchenSink AS (
+CREATE PAGE SliderKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = AgeSlider,

@@ -156,6 +156,7 @@ namespace ETL_SQL.Data
         public IDataValidator? Validator { get; set; }
 
         public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
+        public bool ReplaceOnConflict { get; set; } = false;
         
         private readonly List<string> _spillChunkNames = new();
         public int SpillChunkCount => _spillChunkNames.Count;
@@ -522,6 +523,87 @@ namespace ETL_SQL.Data
                 await _lock.WaitAsync();
                 try
                 {
+                    if (ReplaceOnConflict)
+                    {
+                        var uniqueKeys = new List<List<string>>();
+                        foreach (var kv in Schema)
+                        {
+                            if (kv.Value.IsUnique || kv.Value.IsPrimaryKey)
+                            {
+                                uniqueKeys.Add(new List<string> { kv.Key });
+                            }
+                        }
+                        foreach (var tc in TableConstraints)
+                        {
+                            if (tc is TablePrimaryKeyConstraint pk)
+                            {
+                                uniqueKeys.Add(pk.Columns);
+                            }
+                            else if (tc is TableUniqueConstraint uk)
+                            {
+                                uniqueKeys.Add(uk.Columns);
+                            }
+                        }
+
+                        var rowsToDelete = new List<Row>();
+                        foreach (var newRow in b.Rows)
+                        {
+                            foreach (var keyCols in uniqueKeys)
+                            {
+                                foreach (var batch in _batches)
+                                {
+                                    foreach (var existingRow in batch.Rows)
+                                    {
+                                        bool allMatch = true;
+                                        foreach (var col in keyCols)
+                                        {
+                                            var existVal = existingRow[col];
+                                            var newVal = newRow[col];
+                                            if (existVal == null || existVal == DBNull.Value || newVal == null || newVal == DBNull.Value)
+                                            {
+                                                allMatch = false;
+                                                break;
+                                            }
+                                            if (!IsSoftEqual(existVal, newVal))
+                                            {
+                                                allMatch = false;
+                                                break;
+                                            }
+                                        }
+                                        if (allMatch && !rowsToDelete.Contains(existingRow))
+                                        {
+                                            rowsToDelete.Add(existingRow);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (rowsToDelete.Count > 0)
+                        {
+                            foreach (var batch in _batches)
+                            {
+                                foreach (var r in rowsToDelete)
+                                {
+                                    if (batch.Rows.Remove(r))
+                                    {
+                                        _totalRowCount--;
+                                    }
+                                }
+                            }
+                            if (_index.Count > 0)
+                            {
+                                foreach (var col in _index.Keys.ToList())
+                                {
+                                    if (_index.TryGetColumns(col, out var cols))
+                                    {
+                                        _index.RebuildIndex(cols!, _batches);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     foreach (var row in b.Rows) await ValidateRow(row);
 
                     long threshold = ExecutionContext?.TempTableSpillThresholdRows ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;

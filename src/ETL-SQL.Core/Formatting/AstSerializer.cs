@@ -48,11 +48,13 @@ namespace ETL_SQL.Core.Formatting
             DropConnectionStatement        s => $"DROP CONNECTION {(s.IfExists ? "IF EXISTS " : "")}{s.ConnectionName};",
             DropProcedureStatement         s => $"DROP PROCEDURE {(s.IfExists ? "IF EXISTS " : "")}{s.ProcedureName};",
             DropFunctionStatement          s => $"DROP FUNCTION {(s.IfExists ? "IF EXISTS " : "")}{s.FunctionName};",
+            DropViewStatement              s => $"DROP VIEW {(s.IfExists ? "IF EXISTS " : "")}{s.ViewName};",
             DropIndexStatement             s => $"DROP INDEX {(s.IfExists ? "IF EXISTS " : "")}{s.IndexName}{(s.Table != null ? " ON " + s.Table.ToSql() : "")};",
             TruncateTableStatement         s => $"TRUNCATE TABLE {s.TargetTable.ToSql()};",
             CreateIndexStatement           s => FormatCreateIndex(s),
             CreateProcedureStatement       s => FormatCreateProcedure(s),
             CreateFunctionStatement        s => FormatCreateFunction(s),
+            CreateViewStatement            s => FormatCreateView(s),
 
             // ── Variables & flow ──
             DeclareStatement               s => FormatDeclare(s),
@@ -135,7 +137,11 @@ namespace ETL_SQL.Core.Formatting
 
             // ── Security ──
             UsePasswordStatement           s => $"USE PASSWORD = '********';",
-            SetShowPasswordStatement       s => $"SET SHOW_PASSWORD {(s.Enabled ? "ON" : "OFF")};",
+            SetShowPasswordStatement       s => $"SET SHOW_SECRETS {(s.Enabled ? "ON" : "OFF")};",
+            SetAllowPlaintextSecretsStatement s => $"SET ALLOW_PLAINTEXT_SECRETS {(s.Enabled ? "ON" : "OFF")};",
+            SetNoSaveSensitiveStatement    s => $"SET NO_SAVE_SENSITIVE {(s.Enabled ? "ON" : "OFF")};",
+            SetNoSaveConnectionStatement   s => $"SET NO_SAVE_CONNECTION {(s.Enabled ? "ON" : "OFF")};",
+            SetConnectionEncryptionStatement s => $"SET CONNECTION_ENCRYPTION {(s.Enabled ? "ON" : "OFF")};",
 
             // ── Profiling / what-if ──
             SetProfilingStatement          s => $"SET PROFILING {(s.Enabled ? "ON" : "OFF")}",
@@ -432,6 +438,16 @@ namespace ETL_SQL.Core.Formatting
             };
             var paramsStr = string.Join(", ", s.Parameters.Select(p => p.ToSql()));
             return $"{modeStr} FUNCTION {s.FunctionName} ({paramsStr}) RETURNS {s.ReturnType} AS BEGIN ... END;";
+        }
+
+        private static string FormatCreateView(CreateViewStatement s)
+        {
+            var modeStr = s.Mode switch {
+                ObjectCreationMode.Alter         => "ALTER",
+                ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
+                _                                => "CREATE"
+            };
+            return $"{modeStr} VIEW {s.ViewName} AS {s.Query.ToSql()}";
         }
 
         private static string FormatDeclare(DeclareStatement s)

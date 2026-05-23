@@ -32,7 +32,7 @@ CREATE VISUAL StyledFunnel AS FUNNEL (
 );
 
 -- Page Layout
-CREATE PAGE FunnelKitchenSink AS (
+CREATE PAGE FunnelKitchenSink AS DASHBOARD (
     STRUCTURE = 'A B',
     MAP (
         'A' = BasicFunnel,

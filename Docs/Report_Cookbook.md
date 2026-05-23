@@ -134,7 +134,7 @@ CREATE CONTAINER KpiRow AS BOX (
   )
 );
 
-CREATE PAGE Main AS (
+CREATE PAGE Main AS DASHBOARD (
   STRUCTURE = 'A A B / C C C / D D D',
   MAP (
     'A' = KpiRow,
@@ -214,7 +214,7 @@ CREATE VISUAL PeriodTotal AS CARD (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE Trends AS (
+CREATE PAGE Trends AS DASHBOARD (
   STRUCTURE = 'A B C / D D D',
   MAP (
     'A' = PeriodTotal,
@@ -307,7 +307,7 @@ CREATE VISUAL YoyTable AS TABLE (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE YoY AS (
+CREATE PAGE YoY AS DASHBOARD (
   STRUCTURE = 'A A B / C C C',
   MAP (
     'A' = YoyLine,
@@ -381,7 +381,7 @@ CREATE VISUAL RegionReset AS SLICER (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE DrillDown AS (
+CREATE PAGE DrillDown AS DASHBOARD (
   STRUCTURE = 'A A B / C C C',
   MAP (
     'A' = RegionChart,
@@ -472,7 +472,7 @@ CREATE VISUAL UnitTrend AS LINE (
 );
 
 -- ── Pages ─────────────────────────────────────────────────────────────────
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
   STRUCTURE = 'A B / C C',
   MAP (
     'A' = TotalRev,
@@ -482,7 +482,7 @@ CREATE PAGE Overview AS (
 )
 WITH PARAMETERS (@region = 'All');
 
-CREATE PAGE Trends AS (
+CREATE PAGE Trends AS DASHBOARD (
   STRUCTURE = 'A B',
   MAP (
     'A' = RevTrend,
@@ -566,7 +566,7 @@ CREATE VISUAL LowStockTable AS TABLE (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE Inventory AS (
+CREATE PAGE Inventory AS DASHBOARD (
   STRUCTURE = 'A B C / D D D',
   MAP (
     'A' = StockHeatmap,
@@ -637,7 +637,7 @@ CREATE VISUAL RevenueGauge AS GAUGE (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE Financial AS (
+CREATE PAGE Financial AS DASHBOARD (
   STRUCTURE = 'A A B / A A C',
   MAP (
     'A' = CashFlow,
@@ -709,7 +709,7 @@ CREATE VISUAL StackedRevenue AS BAR (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE Combo AS (
+CREATE PAGE Combo AS DASHBOARD (
   STRUCTURE = 'A A / B B',
   MAP (
     'A' = RevUnitsCombo,
@@ -787,7 +787,7 @@ CREATE VISUAL PriceByCategory AS BAR (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE Catalog AS (
+CREATE PAGE Catalog AS DASHBOARD (
   STRUCTURE = 'A B C / D D E',
   MAP (
     'A' = CategoryPicker,
@@ -928,7 +928,7 @@ CREATE CONTAINER KpiRow AS BOX (
 );
 
 -- ── Page layout ───────────────────────────────────────────────────────────
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
   TITLE     = 'Sales Overview',
   STRUCTURE = 'A A / B C / D D',
   STYLE     = PanelFrame,

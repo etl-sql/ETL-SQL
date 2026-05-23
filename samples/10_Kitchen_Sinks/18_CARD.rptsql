@@ -161,7 +161,7 @@ CREATE CONTAINER KpiRow2 AS BOX (
     )
 );
 
-CREATE PAGE CardKitchenSink AS (
+CREATE PAGE CardKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B / C',
     MAP ('A' = KpiRow1, 'B' = KpiRow2, 'C' = LayerDemo)
 );

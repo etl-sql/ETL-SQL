@@ -24,7 +24,7 @@ CREATE VISUAL MultiBubble AS BUBBLE (
 );
 
 -- Page Layout
-CREATE PAGE BubbleKitchenSink AS (
+CREATE PAGE BubbleKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = BasicBubble,

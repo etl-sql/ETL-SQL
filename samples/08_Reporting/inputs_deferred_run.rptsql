@@ -16,10 +16,10 @@ CREATE BUTTON run_btn AS (
 CREATE VISUAL out_table AS TABLE (
     SOURCE = (SELECT @text_val AS [Final Value]),
     TITLE = 'Results (Only updates after Run)',
-    OPTIONS (VISIBLE = OFF)
+    FETCH = ON_RUN
 );
 
-CREATE PAGE Main AS (
+CREATE PAGE Main AS PAGINATED (
     STRUCTURE = 'A B / C',
     MAP (
         'A' = txt,

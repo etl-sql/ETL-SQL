@@ -28,7 +28,8 @@ namespace ETL_SQL.Engine.Handlers
 
                 if (!isQueryString && 
                     !context.Connections.ContainsKey(tableName) &&
-                    !context.LocalSources.ContainsKey(tableName))
+                    !context.LocalSources.ContainsKey(tableName) &&
+                    !context.VarContext.TryGetView(tableName, out _))
                 {
                     throw new ExecutionException(
                         $"CREATE VISUAL '{stmt.Name}': source temp table '{tableName}' does not exist.",

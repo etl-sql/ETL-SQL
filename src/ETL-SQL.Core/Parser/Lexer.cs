@@ -344,6 +344,12 @@ namespace ETL_SQL.Core.Parser
                     continue;
                 }
 
+                if ((CurrentChar == 'x' || CurrentChar == 'X') && Peek() == '\'')
+                {
+                    tokens.Add(ReadHexLiteral(startLine, startColumn, startOffset));
+                    continue;
+                }
+
                 if (char.IsLetter(CurrentChar) || CurrentChar == '_' || CurrentChar == '#' || CurrentChar == '@' || CurrentChar == '&')
                 {
                     tokens.Add(ReadIdentifierOrKeyword(startLine, startColumn, startOffset));
@@ -624,6 +630,24 @@ namespace ETL_SQL.Core.Parser
             }
 
             throw new SyntaxException($"Unterminated string", line, column);
+        }
+        private Token ReadHexLiteral(int line, int column, int startOffset)
+        {
+            Advance(); // skip 'x' or 'X'
+            Advance(); // skip opening '\''
+            var sb = new StringBuilder();
+            sb.Append("__HEX_BLOB__");
+            while (CurrentChar != '\0' && CurrentChar != '\'')
+            {
+                sb.Append(CurrentChar);
+                Advance();
+            }
+            if (CurrentChar == '\'')
+            {
+                Advance(); // skip closing '\''
+                return new Token(TokenType.STRING_LITERAL, sb.ToString(), line, column, _line, _column, startOffset, _position);
+            }
+            throw new SyntaxException("Unterminated hex literal", line, column);
         }
         private Token ReadQuotedIdentifier(int line, int column, char open, char close, int startOffset)
         {

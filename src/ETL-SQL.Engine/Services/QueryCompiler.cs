@@ -53,6 +53,7 @@ namespace ETL_SQL.Engine.Services
                     TokenType.EQUALS => "=", TokenType.NOT_EQUALS => "!=", TokenType.LESS_THAN => "<",
                     TokenType.GREATER_THAN => ">", TokenType.LESS_EQUALS => "<=", TokenType.GREATER_EQUALS => ">=",
                     TokenType.PLUS => "+", TokenType.MINUS => "-", TokenType.STAR => "*", TokenType.SLASH => "/",
+                    TokenType.LSHIFT => "<<", TokenType.RSHIFT => ">>",
                     _ => bin.Operator.ToString()
                 };
                 return $"({CompileExpressionInternal(bin.Left, d)} {op} {CompileExpressionInternal(bin.Right, d)})";

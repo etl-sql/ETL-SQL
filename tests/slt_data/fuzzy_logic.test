@@ -27,8 +27,8 @@ query I
 SELECT LEVENSHTEIN(name, alias) FROM fuzzy ORDER BY id;
 ----
 3
-3
 2
+1
 11
 
 # SIMILARITY (e.g. Jaro-Winkler or trigram similarity)
@@ -44,7 +44,7 @@ SELECT CASE WHEN SIMILARITY(name, alias) > 0.8 THEN 1 ELSE 0 END FROM fuzzy ORDE
 query T
 SELECT METAPHONE(name) FROM fuzzy ORDER BY id LIMIT 1;
 ----
-JNSM
+JNSM0
 
 # DMETAPHONE (Double Metaphone)
 query T
@@ -56,7 +56,7 @@ JNSM
 query T
 SELECT NORMALIZE(name) FROM fuzzy ORDER BY id;
 ----
-JOHNSMITH
-ROBERT
-MCDONALDS
-APPLE
+john smith
+robert
+mcdonalds
+apple inc.

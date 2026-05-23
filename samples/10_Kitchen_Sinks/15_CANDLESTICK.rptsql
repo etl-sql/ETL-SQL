@@ -35,7 +35,7 @@ CREATE VISUAL StyledCandle AS CANDLESTICK (
 );
 
 -- Page Layout
-CREATE PAGE CandleKitchenSink AS (
+CREATE PAGE CandleKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = BasicCandle,

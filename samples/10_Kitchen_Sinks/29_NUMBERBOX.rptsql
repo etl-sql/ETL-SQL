@@ -24,7 +24,7 @@ CREATE VISUAL NumberResult AS CARD (
 );
 
 -- Page Layout
-CREATE PAGE NumberboxKitchenSink AS (
+CREATE PAGE NumberboxKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = MinPriceInput,

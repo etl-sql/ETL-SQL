@@ -54,20 +54,18 @@ namespace ETL_SQL.TUI.UI
 
         public async Task<bool> SaveAsync(string filePath, string text, Func<string, string, bool, Task<string?>> passwordPrompt)
         {
-            if (_security.NeedsEncryption(text))
+            string password = "";
+            if (_security.RequiresSavePassword(text))
             {
-                string password = _security.MasterPassword ?? "";
+                password = _security.MasterPassword ?? _security.ExtractLiteralUsePassword(text) ?? "";
                 if (string.IsNullOrEmpty(password))
                 {
                     password = await passwordPrompt("Master Password (to encrypt script)", "", true) ?? "";
                     _security.MasterPassword = password;
                 }
-
-                if (!string.IsNullOrEmpty(password))
-                {
-                    text = _security.EncryptScript(text, password);
-                }
             }
+
+            text = _security.SecureScriptForSave(text, password);
 
             try
             {

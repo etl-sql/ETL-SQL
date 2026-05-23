@@ -50,7 +50,7 @@ CREATE VISUAL T AS TABLE (
     SOURCE = #D,
     SUMMARY (COUNT(Val) AS TotalRows)
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = T));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = T));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -72,7 +72,7 @@ CREATE VISUAL T AS TABLE (
     SOURCE = #D,
     SUMMARY (SUM(Val) AS Total)
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = T));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = T));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -92,7 +92,7 @@ CREATE VISUAL T AS TABLE (
     SOURCE = #D,
     SUMMARY (AVG(Val) AS Average)
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = T));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = T));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -113,7 +113,7 @@ CREATE VISUAL T AS TABLE (
     SOURCE = #D,
     SUMMARY (MIN(Val) AS MinVal, MAX(Val) AS MaxVal)
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = T));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = T));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -135,7 +135,7 @@ CREATE VISUAL T AS TABLE (
     SOURCE = #D,
     SUMMARY (COUNT(Val) AS 'Row Count')
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = T));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = T));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -159,7 +159,7 @@ CREATE VISUAL B AS BAR (
         DATA_LABELS = ON WITH (POSITION = 'top', COLOR = '#ff0000', FONT_SIZE = 12, FONT_WEIGHT = 'bold', FONT_FAMILY = 'Arial', FORMAT = '{value}')
     )
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = B));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = B));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -187,7 +187,7 @@ CREATE VISUAL RegionFilter AS SLICER (
     SOURCE = #Regions,
     MAPPINGS (VALUE = Region)
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = RegionFilter));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = RegionFilter));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -213,7 +213,7 @@ CREATE VISUAL RegionPicker AS SLICER (
     DEFAULT = 'All',
     ACTIONS (ON_CHANGE = SET_PARAMETER(@SelectedRegion, VALUE))
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = RegionPicker));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = RegionPicker));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -235,7 +235,7 @@ CREATE VISUAL SalesChart AS BAR (
     MAPPINGS (X = Region, Y = Total),
     ACTIONS (ON_CLICK = SET_PARAMETER(@SelectedRegion, Region))
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = SalesChart));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = SalesChart));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -258,7 +258,7 @@ CREATE VISUAL MyVis AS BAR (
     MAPPINGS (X = Region, Y = Region),
     ACTIONS (ON_CLICK = SET_PARAMETER(@Param, 'fixed'))
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = MyVis));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = MyVis));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -280,7 +280,7 @@ CREATE VISUAL ClearBtn AS BAR (
     MAPPINGS (X = Region, Y = Region),
     ACTIONS (ON_CLICK = CLEAR_FILTERS)
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = ClearBtn));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = ClearBtn));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -300,7 +300,7 @@ CREATE VISUAL Summary AS BAR (
     MAPPINGS (X = Region, Y = Total),
     ACTIONS (ON_CLICK = DRILL_DOWN(TARGET = Detail, KEY = Region))
 );
-CREATE PAGE P AS (STRUCTURE = 'A B', MAP('A' = Summary, 'B' = Detail));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A B', MAP('A' = Summary, 'B' = Detail));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -319,8 +319,8 @@ CREATE BUTTON DetailsButton AS (
     TITLE = 'Details',
     ACTIONS (ON_CLICK = NAVIGATE_PAGE(Details))
 );
-CREATE PAGE Overview AS (STRUCTURE = 'A', MAP('A' = DetailsButton));
-CREATE PAGE Details AS (STRUCTURE = 'A', MAP('A' = DetailsButton), VISIBLE = OFF);
+CREATE PAGE Overview AS DASHBOARD (STRUCTURE = 'A', MAP('A' = DetailsButton));
+CREATE PAGE Details AS DASHBOARD (STRUCTURE = 'A', MAP('A' = DetailsButton), VISIBLE = OFF);
 CREATE NAVIGATION MainNav AS TAB (
     DEFAULT = Overview,
     PAGES (Overview)
@@ -347,7 +347,7 @@ CREATE VISUAL G AS BAR (
     MAPPINGS (X = Cat, Y = Val),
     OPTIONS (GRID = 'both')
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = G));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = G));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -369,7 +369,7 @@ CREATE VISUAL Mix AS COMBO (
     MAPPINGS (X = Quarter),
     SERIES (BAR Revenue, LINE Margin)
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = Mix));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = Mix));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();
@@ -391,7 +391,7 @@ CREATE VISUAL Info AS TEXT (
     SOURCE = (SELECT '# Hello' AS Content),
     MAPPINGS (VALUE = Content)
 );
-CREATE PAGE P AS (STRUCTURE = 'A', MAP('A' = Info));
+CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP('A' = Info));
 ");
             await using var svc = Svc(path);
             var m = await svc.GetManifestAsync();

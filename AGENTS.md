@@ -297,7 +297,30 @@ Before moving source files, projects, report runtime assets, or host-owned behav
 
 ---
 
-## 12. Common Mistakes to Avoid
+## 12. Developer Workflows & Utility Scripts
+
+To assist in local development, compiling, and executing test suites, the repository includes several core scripts under the `scripts/` folder. Both PowerShell (`.ps1` for Windows) and Bash (`.sh` for Linux/macOS) scripts are provided.
+
+For full usage and script details, refer to **[scripts/README.md](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/README.md)**.
+
+### Key Scripts Reference:
+- **Build Debug Environment:** Compiles the .NET solution, Vite React UI components, and the VS Code TypeScript extension.
+  - Windows: `.\scripts\build-debug.ps1`
+  - Linux/macOS: `./scripts/build-debug.sh`
+- **Smoke Tests:** Runs targeted categories of fast smoke tests (Core, Security, Reporting, Portal).
+  - Windows: `.\scripts\test-smoke.ps1 -Lane all`
+  - Linux/macOS: `./scripts/test-smoke.sh --lane all`
+- **General Test Lanes:** Gateway script to run specific test suites (fast, engine, portal, integration, perf, full, benchmarks, slt).
+  - Windows: `.\scripts\test-lane.ps1 -Lane fast`
+  - Linux/macOS: `./scripts/test-lane.sh --lane fast`
+- **SQLite Logic Tests (SLT) Corpus:** Runs the SLT verification engine against corpus files, writing output to teed timestamped logs in `slt_results/`.
+  - Windows: `.\scripts\Test-SltCorpus.ps1 -CorpusOnly`
+  - Linux/macOS: `./scripts/Test-SltCorpus.sh --corpus-only`
+- **TRX Results Summarizer:** In Windows PowerShell, run `.\scripts\Parse-SltResults.ps1` to print a color-coded test run summary directly to the command prompt.
+
+---
+
+## 13. Common Mistakes to Avoid
 
 | Mistake | Correct pattern |
 | :--- | :--- |

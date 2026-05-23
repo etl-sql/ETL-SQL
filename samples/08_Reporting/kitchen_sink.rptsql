@@ -75,7 +75,7 @@ CREATE VISUAL sales_chart AS BAR (
 );
 
 -- 4. Layout
-CREATE PAGE Dashboard AS (
+CREATE PAGE Dashboard AS DASHBOARD (
     STRUCTURE = 'A B C / D E F / G G / H H',
     MAP (
         'A' = reg_filter,

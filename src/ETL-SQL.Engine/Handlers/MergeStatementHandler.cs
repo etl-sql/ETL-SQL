@@ -31,6 +31,8 @@ namespace ETL_SQL.Engine.Handlers
 
             string targetConnName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
             _logger.Debug("Merging into {TargetConnName}", targetConnName);
+            if (context.VarContext.TryGetView(targetConnName, out _))
+                throw new ExecutionException($"View {targetConnName} is read-only and cannot be used as a MERGE target.");
             context.LineageTracker.Record(targetConnName, stmt.GetSourceTables(), "MERGE", line: stmt.Line, column: stmt.Column);
 
             var targetSource = await context.ResolveDataSourceAsync(stmt.TargetTable);

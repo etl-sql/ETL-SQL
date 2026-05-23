@@ -1,0 +1,48 @@
+SET REPORT TITLE = 'Report Views Example';
+SET REPORT DESCRIPTION = 'Uses CREATE VIEW to share a filtered report query across visuals.';
+
+CREATE TABLE #orders (
+    order_id INT,
+    region STRING,
+    status STRING,
+    amount INT
+);
+
+INSERT INTO #orders VALUES
+    (1, 'North', 'Active', 120),
+    (2, 'South', 'Closed', 80),
+    (3, 'North', 'Active', 210),
+    (4, 'West',  'Active', 95);
+
+CREATE VIEW ActiveOrders AS
+SELECT order_id, region, amount
+FROM #orders
+WHERE status = 'Active';
+
+CREATE VISUAL ActiveOrdersTable AS TABLE (
+    TITLE = 'Active Orders',
+    SOURCE = ActiveOrders
+);
+
+CREATE VISUAL ActiveOrdersByRegion AS BAR (
+    TITLE = 'Active Amount by Region',
+    SOURCE = (
+        SELECT region, SUM(amount) AS total_amount
+        FROM ActiveOrders
+        GROUP BY region
+    ),
+    MAPPINGS (
+        X = region,
+        Y = total_amount
+    )
+);
+
+CREATE PAGE Main AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'A / B',
+        MAP (
+            'A' = ActiveOrdersByRegion,
+            'B' = ActiveOrdersTable
+        )
+    )
+);

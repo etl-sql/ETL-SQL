@@ -29,7 +29,7 @@ CREATE VISUAL FilteredTable AS TABLE (
 );
 
 -- Page Layout
-CREATE PAGE SearchKitchenSink AS (
+CREATE PAGE SearchKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = GlobalSearch,

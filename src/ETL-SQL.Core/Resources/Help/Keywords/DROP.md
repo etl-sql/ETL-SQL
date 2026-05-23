@@ -6,6 +6,7 @@ Removes a table, connection, index, or named set from the current session.
 **DROP TABLE** — remove a #temp table and release its memory/disk resources.
 **DROP CONNECTION** — deregister a named connection alias.
 **DROP INDEX** — remove an index from a #temp table.
+**DROP VIEW** — remove a session-scoped query view.
 **DROP SETS** — delete a named set defined with CREATE SETS.
 **DROP SUBSCRIPTION** — delete a portal subscription.
 **DROP SAVED VIEW** — delete a portal saved report view.
@@ -18,6 +19,8 @@ DROP TABLE #staging;
 DROP CONNECTION MyDB;
 
 DROP INDEX idx_id ON #staging;
+
+DROP VIEW IF EXISTS ActiveOrders;
 
 DROP SETS !Regions;
 

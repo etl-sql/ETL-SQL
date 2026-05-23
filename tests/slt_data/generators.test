@@ -13,12 +13,12 @@ SELECT value FROM GENERATE_SERIES(1, 5) ORDER BY value;
 query I
 SELECT value FROM GENERATE_SERIES(10, 0, -2) ORDER BY value;
 ----
-10
-8
-6
-4
-2
 0
+2
+4
+6
+8
+10
 
 # STRING_SPLIT
 query T
@@ -32,8 +32,8 @@ cherry
 query T
 SELECT value FROM NGRAMS('hello', 3) ORDER BY value;
 ----
-hel
 ell
+hel
 llo
 
 # Cross Apply with generated series

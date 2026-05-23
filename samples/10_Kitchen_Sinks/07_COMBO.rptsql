@@ -47,7 +47,7 @@ CREATE VISUAL StyledCombo AS COMBO (
 );
 
 -- Page Layout
-CREATE PAGE ComboKitchenSink AS (
+CREATE PAGE ComboKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B / C',
     MAP (
         'A' = BasicCombo,

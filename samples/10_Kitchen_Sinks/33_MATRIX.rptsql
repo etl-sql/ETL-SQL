@@ -170,7 +170,7 @@ CREATE VISUAL FullMatrixSink AS MATRIX (
 
 -- ── Pages & Navigation ────────────────────────────────────────────────────────
 
-CREATE PAGE BasicAndMultiDim AS (
+CREATE PAGE BasicAndMultiDim AS DASHBOARD (
     STRUCTURE = 'A B / C C',
     MAP (
         'A' = BasicMatrix,
@@ -179,7 +179,7 @@ CREATE PAGE BasicAndMultiDim AS (
     )
 );
 
-CREATE PAGE MultiValueAndSorting AS (
+CREATE PAGE MultiValueAndSorting AS DASHBOARD (
     STRUCTURE = 'A B / C D',
     MAP (
         'A' = MultiValueMatrix,

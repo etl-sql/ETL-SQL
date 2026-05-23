@@ -70,10 +70,18 @@ namespace ETL_SQL.Engine.Services
                 else if (!stmt.IfExists)
                     throw new ExecutionException($"Table not found: {connName}");
             }
-            else if (connections.TryGetValue(connName, out var conn) && conn is IDatabaseSource sqlConn)
+            else if (connections.TryGetValue(connName, out var conn))
             {
-                var ifExists = stmt.IfExists ? "IF EXISTS " : "";
-                await foreach(var _ in sqlConn.ExecuteRawSql($"DROP TABLE {ifExists}{_evaluator.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)};")){}
+                if (conn is IDatabaseSource sqlConn)
+                {
+                    var ifExists = stmt.IfExists ? "IF EXISTS " : "";
+                    await foreach(var _ in sqlConn.ExecuteRawSql($"DROP TABLE {ifExists}{_evaluator.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)};")){}
+                }
+                else
+                {
+                    await conn.DisposeAsync();
+                    connections.Remove(connName);
+                }
             }
             else if (!stmt.IfExists)
             {
@@ -150,7 +158,35 @@ namespace ETL_SQL.Engine.Services
                     await foreach(var _ in sqlConn.ExecuteRawSql($"DROP INDEX {ifExists}{stmt.IndexName} ON {_evaluator.GetSqlTableName(stmt.Table, sqlConn.Dialect)};")){}
                 }
             }
-            else if (!stmt.IfExists) throw new ExecutionException($"Context table required for dropping index {stmt.IndexName}");
+            else
+            {
+                bool executedAny = false;
+                foreach (var conn in connections.Values)
+                {
+                    if (conn is InMemoryDataSource)
+                    {
+                        _logger.WriteLine($"Index {stmt.IndexName} dropped from in-memory connection", ConsoleColor.Yellow);
+                        executedAny = true;
+                    }
+                    else if (conn is IDatabaseSource sqlConn)
+                    {
+                        if (_evaluator.IsWhatIf)
+                        {
+                            _logger.WriteLine($"WHAT IF: Would drop index {stmt.IndexName} from database source", ConsoleColor.Yellow);
+                            executedAny = true;
+                            continue;
+                        }
+                        var ifExists = stmt.IfExists ? "IF EXISTS " : "";
+                        await foreach (var _ in sqlConn.ExecuteRawSql($"DROP INDEX {ifExists}{stmt.IndexName};")) {}
+                        executedAny = true;
+                    }
+                }
+
+                if (!executedAny && !stmt.IfExists)
+                {
+                    throw new ExecutionException($"Context table required for dropping index {stmt.IndexName} and no active connections were found to target.");
+                }
+            }
         }
 
         /// <summary>Executes a CREATE INDEX statement.</summary>

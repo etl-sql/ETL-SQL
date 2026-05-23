@@ -4,6 +4,7 @@ Visuals are the building blocks of reports. Each visual binds a data source to a
 Syntax:
   CREATE VISUAL <name> AS <TYPE> (
     SOURCE   = #temp_table | (inline SELECT),
+    FETCH    = AUTO | ON_LOAD | ON_RUN,
     MAPPINGS (column_alias = col, ...),
     OPTIONS  (KEY = value, ...),
     ACTIONS  (ON_CHANGE = SET_PARAMETER(@var, value))
@@ -53,4 +54,6 @@ CREATE VISUAL SalesBar AS BAR (
 ```
 
 Use `AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC` on BAR/HBAR/LINE/AREA/COMBO visuals to control category order.
+Viewer maximize is shown by default for data/chart visuals and hidden by default for input/control visuals. Override with `STYLE (ALLOW_MAXIMIZE = ON|OFF)`.
+Use `FETCH = ON_RUN` for visuals that should wait for an APPLY_PARAMETERS run on a paginated page. `FETCH = AUTO` is the default: dashboards load immediately, while paginated pages load prompt controls immediately and defer result visuals.
 Use HELP VISUAL <TYPE> for type-specific mappings and options (e.g. HELP VISUAL BAR, HELP VISUAL CARD, HELP VISUAL TABLE).

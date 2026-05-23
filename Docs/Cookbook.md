@@ -743,7 +743,7 @@ CREATE VISUAL RegionTable AS TABLE (
     )
 );
 
-CREATE PAGE Main AS (STRUCTURE = 'A', MAP ('A' = RegionTable));
+CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = RegionTable));
 ```
 
 ### Detail Report (`regional_detail.rptsql`)
@@ -762,7 +762,7 @@ CREATE VISUAL TxTable AS TABLE (
     TITLE  = ('Transactions for: ' + @TargetRegion)
 );
 
-CREATE PAGE Main AS (STRUCTURE = 'A', MAP ('A' = TxTable));
+CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = TxTable));
 ```
 
 ---

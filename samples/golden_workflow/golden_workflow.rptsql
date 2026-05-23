@@ -205,7 +205,7 @@ CREATE VISUAL OrderDetail AS TABLE (
     )
 );
 
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
     STRUCTURE = 'A A A / B C D / E E F',
     MAP (
         'A' = WorkflowControls,
@@ -217,7 +217,7 @@ CREATE PAGE Overview AS (
     )
 );
 
-CREATE PAGE Quality AS (
+CREATE PAGE Quality AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = WorkflowControls,
@@ -225,7 +225,7 @@ CREATE PAGE Quality AS (
     )
 );
 
-CREATE PAGE Export AS (
+CREATE PAGE Export AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = WorkflowControls,

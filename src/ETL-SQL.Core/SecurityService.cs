@@ -42,6 +42,18 @@ namespace ETL_SQL.Services
         private static partial Regex PasswordOptionRegex();
         [GeneratedRegex(@"(['""])ENC:[A-Za-z0-9+/=]*\1")]
         private static partial Regex EncRegex();
+        [GeneratedRegex(@"\bUSE\s+PASSWORD\s*=\s*(['""]).*?\1\s*;?", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+        private static partial Regex LiteralUsePasswordRegex();
+        [GeneratedRegex(@"\bSET\s+([A-Z_]+)\s*(?:=\s*)?(ON|OFF)\b", RegexOptions.IgnoreCase)]
+        private static partial Regex SettingOnOffRegex();
+        [GeneratedRegex(@"((?:PASSWORD|PWD|API_KEY|APIKEY|TOKEN|ACCESS_TOKEN|SECRET|CLIENT_SECRET|PASSPHRASE|PRIVATE_KEY)\s*=\s*)(['""])(.*?)\2", RegexOptions.IgnoreCase)]
+        private static partial Regex SensitiveOptionRegex();
+        [GeneratedRegex(@"\b(Password|Pwd)\s*=\s*([^;'\s]+)", RegexOptions.IgnoreCase)]
+        private static partial Regex ConnectionStringPasswordRegex();
+        [GeneratedRegex(@"\bDECLARE\s+(@\w+)\s+(SENSITIVE|ENCRYPTED)\s*=\s*(['""])(.*?)\3", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+        private static partial Regex SensitiveDeclareRegex();
+        [GeneratedRegex(@"(\b[A-Z_][A-Z0-9_]*\s*=\s*)(['""])(.*?)\2", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+        private static partial Regex StringOptionRegex();
         // On case-sensitive filesystems (Linux), path prefix checks must be case-sensitive.
         private static readonly StringComparison PathComparison = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
             ? StringComparison.Ordinal
@@ -90,49 +102,56 @@ namespace ETL_SQL.Services
         public void UpdateFromConfiguration(IConfiguration configuration)
         {
             var section = configuration.GetSection("Security");
-            if (!section.Exists()) return;
-
-            // 0. Path Protection Mode
-            if (Enum.TryParse<PathProtectionMode>(section["PathProtectionMode"], true, out var mode))
+            if (section.Exists())
             {
-                ProtectionMode = mode;
-                _logger.Info("Security: Path Protection Mode set to {Mode}.", mode);
+                // 0. Path Protection Mode
+                if (Enum.TryParse<PathProtectionMode>(section["PathProtectionMode"], true, out var mode))
+                {
+                    ProtectionMode = mode;
+                    _logger.Info("Security: Path Protection Mode set to {Mode}.", mode);
+                }
+
+                // 1. Allowed Hosts (Egress Control)
+                var hosts = section.GetSection("AllowedHosts").Get<string[]>();
+                if (hosts != null && hosts.Length > 0)
+                {
+                    AllowedHosts.Clear();
+                    AllowedHosts.UnionWith(hosts);
+                    _logger.Info("Security: Loaded {Count} allowed hosts.", hosts.Length);
+                }
+
+                // 2. Approved Safe Zones (Guardrail Bypass Zones)
+                var zones = section.GetSection("ApprovedSafeZones").Get<string[]>();
+                if (zones != null && zones.Length > 0)
+                {
+                    ApprovedSafeZones.Clear();
+                    foreach (var z in zones) ApprovedSafeZones.Add(z.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    _logger.Info("Security: Loaded {Count} approved safe zones.", zones.Length);
+                }
+
+                // 3. Allowed Environment Variables (ENV() Whitelist)
+                var envVars = section.GetSection("AllowedEnvVars").Get<string[]>();
+                if (envVars != null && envVars.Length > 0)
+                {
+                    AllowedEnvVars.Clear();
+                    AllowedEnvVars.UnionWith(envVars);
+                    _logger.Info("Security: Loaded {Count} authorized environment variables.", envVars.Length);
+                }
+
+                // 4. Runaway Protection Limits
+                MaxFileOperations = int.TryParse(section["MaxFileOperationsPerScript"], out var mfo) ? mfo : DefaultMaxFileOperations;
+                MaxRecursiveDepth = int.TryParse(section["MaxRecursiveNestingDepth"], out var mrd) ? mrd : DefaultMaxRecursiveDepth;
+                MaxParallelDegree = int.TryParse(section["MaxParallelDegree"], out var mpd) ? mpd : DefaultMaxParallelDegree;
+                MaxStringResultSize = long.TryParse(section["MaxStringResultSize"], out var msr) ? msr : DefaultMaxStringResultSize;
+                RegexMatchTimeout = int.TryParse(section["RegexMatchTimeoutMs"], out var rmt) ? TimeSpan.FromMilliseconds(rmt) : DefaultRegexMatchTimeout;
+                MaxSmtpEmailsPerScript = int.TryParse(section["MaxSmtpEmailsPerScript"], out var mse) && mse >= 0 ? mse : DefaultMaxSmtpEmailsPerScript;
             }
 
-            // 1. Allowed Hosts (Egress Control)
-            var hosts = section.GetSection("AllowedHosts").Get<string[]>();
-            if (hosts != null && hosts.Length > 0)
-            {
-                AllowedHosts.Clear();
-                AllowedHosts.UnionWith(hosts);
-                _logger.Info("Security: Loaded {Count} allowed hosts.", hosts.Length);
-            }
-
-            // 2. Approved Safe Zones (Guardrail Bypass Zones)
-            var zones = section.GetSection("ApprovedSafeZones").Get<string[]>();
-            if (zones != null && zones.Length > 0)
-            {
-                ApprovedSafeZones.Clear();
-                foreach (var z in zones) ApprovedSafeZones.Add(z.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-                _logger.Info("Security: Loaded {Count} approved safe zones.", zones.Length);
-            }
-
-            // 3. Allowed Environment Variables (ENV() Whitelist)
-            var envVars = section.GetSection("AllowedEnvVars").Get<string[]>();
-            if (envVars != null && envVars.Length > 0)
-            {
-                AllowedEnvVars.Clear();
-                AllowedEnvVars.UnionWith(envVars);
-                _logger.Info("Security: Loaded {Count} authorized environment variables.", envVars.Length);
-            }
-
-            // 4. Runaway Protection Limits
-            MaxFileOperations = int.TryParse(section["MaxFileOperationsPerScript"], out var mfo) ? mfo : DefaultMaxFileOperations;
-            MaxRecursiveDepth = int.TryParse(section["MaxRecursiveNestingDepth"], out var mrd) ? mrd : DefaultMaxRecursiveDepth;
-            MaxParallelDegree = int.TryParse(section["MaxParallelDegree"], out var mpd) ? mpd : DefaultMaxParallelDegree;
-            MaxStringResultSize = long.TryParse(section["MaxStringResultSize"], out var msr) ? msr : DefaultMaxStringResultSize;
-            RegexMatchTimeout = int.TryParse(section["RegexMatchTimeoutMs"], out var rmt) ? TimeSpan.FromMilliseconds(rmt) : DefaultRegexMatchTimeout;
-            MaxSmtpEmailsPerScript = int.TryParse(section["MaxSmtpEmailsPerScript"], out var mse) && mse >= 0 ? mse : DefaultMaxSmtpEmailsPerScript;
+            var engine = configuration.GetSection("Engine");
+            DefaultAllowPlaintextSecrets = engine.GetValue<bool?>("AllowPlaintextSecrets") ?? DefaultAllowPlaintextSecrets;
+            DefaultNoSaveSensitive = engine.GetValue<bool?>("NoSaveSensitive") ?? DefaultNoSaveSensitive;
+            DefaultNoSaveConnection = engine.GetValue<bool?>("NoSaveConnection") ?? DefaultNoSaveConnection;
+            DefaultConnectionEncryption = engine.GetValue<bool?>("ConnectionEncryption") ?? DefaultConnectionEncryption;
         }
 
         // Data formats a script is expected to read or write. Any other extension is denied by default.
@@ -182,6 +201,10 @@ namespace ETL_SQL.Services
         public long MaxStringResultSize { get; set; } = DefaultMaxStringResultSize;
         public int MaxSmtpEmailsPerScript { get; set; } = DefaultMaxSmtpEmailsPerScript;
         public TimeSpan RegexMatchTimeout { get; set; } = DefaultRegexMatchTimeout;
+        public bool DefaultAllowPlaintextSecrets { get; set; }
+        public bool DefaultNoSaveSensitive { get; set; }
+        public bool DefaultNoSaveConnection { get; set; }
+        public bool DefaultConnectionEncryption { get; set; }
         public static readonly int DefaultMaxGenerateRows = 10000;
 
         public PathProtectionMode ProtectionMode { get; set; } = PathProtectionMode.Restricted;
@@ -615,6 +638,167 @@ namespace ETL_SQL.Services
                     return quote + decrypted + quote;
                 }
                 catch { return m.Value; }
+            });
+        }
+
+        /// <summary>
+        /// Returns true when a script explicitly opts into saving plaintext secrets.
+        /// </summary>
+        public bool AllowsPlaintextSecrets(string text)
+        {
+            return GetLastOnOffSetting(text, "ALLOW_PLAINTEXT_SECRETS", DefaultAllowPlaintextSecrets);
+        }
+
+        public bool NoSaveSensitiveEnabled(string text)
+            => GetLastOnOffSetting(text, "NO_SAVE_SENSITIVE", DefaultNoSaveSensitive);
+
+        public bool NoSaveConnectionEnabled(string text)
+            => GetLastOnOffSetting(text, "NO_SAVE_CONNECTION", DefaultNoSaveConnection);
+
+        public bool ConnectionEncryptionEnabled(string text)
+            => GetLastOnOffSetting(text, "CONNECTION_ENCRYPTION", DefaultConnectionEncryption);
+
+        public string? ExtractLiteralUsePassword(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return null;
+            var match = LiteralUsePasswordRegex().Match(text);
+            if (!match.Success) return null;
+            var raw = match.Value;
+            var quoteIndex = raw.IndexOf(match.Groups[1].Value, StringComparison.Ordinal);
+            var lastQuoteIndex = raw.LastIndexOf(match.Groups[1].Value, StringComparison.Ordinal);
+            if (quoteIndex < 0 || lastQuoteIndex <= quoteIndex) return null;
+            return raw.Substring(quoteIndex + 1, lastQuoteIndex - quoteIndex - 1).Replace(match.Groups[1].Value + match.Groups[1].Value, match.Groups[1].Value);
+        }
+
+        public bool RequiresSavePassword(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            if (NoSaveConnectionEnabled(text)) return false;
+            if (ConnectionEncryptionEnabled(text) && ConnRegex().IsMatch(text)) return true;
+            if (NoSaveSensitiveEnabled(text)) return false;
+            return !AllowsPlaintextSecrets(text) && NeedsEncryption(text);
+        }
+
+        /// <summary>
+        /// Rewrites literal USE PASSWORD statements to prompt form unless the script opts into plaintext secrets.
+        /// </summary>
+        public string SanitizeUsePasswordForSave(string text)
+        {
+            if (string.IsNullOrEmpty(text) || AllowsPlaintextSecrets(text)) return text;
+            return LiteralUsePasswordRegex().Replace(text, "USE PASSWORD PROMPT;");
+        }
+
+        /// <summary>
+        /// Applies the safe save transform: strip literal USE PASSWORD values and encrypt connection credentials.
+        /// </summary>
+        public string SecureScriptForSave(string text, string password)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+
+            var noSaveSensitive = NoSaveSensitiveEnabled(text);
+            var noSaveConnection = NoSaveConnectionEnabled(text);
+            var connectionEncryption = ConnectionEncryptionEnabled(text);
+            var allowPlaintext = AllowsPlaintextSecrets(text);
+
+            if (allowPlaintext && !noSaveSensitive && !noSaveConnection && !connectionEncryption)
+                return text;
+
+            var secured = (allowPlaintext && !noSaveSensitive)
+                ? text
+                : LiteralUsePasswordRegex().Replace(text, "USE PASSWORD PROMPT;");
+
+            if (noSaveConnection)
+            {
+                secured = ScrubConnectionDetails(secured);
+            }
+            else if (connectionEncryption && !string.IsNullOrEmpty(password))
+            {
+                secured = EncryptConnectionDetails(secured, password);
+            }
+            else if (!allowPlaintext && !string.IsNullOrEmpty(password))
+            {
+                secured = EncryptScript(secured, password);
+            }
+
+            if (noSaveSensitive)
+                secured = ScrubSensitiveLiterals(secured);
+
+            return secured;
+        }
+
+        private static bool GetLastOnOffSetting(string text, string settingName, bool defaultValue)
+        {
+            if (string.IsNullOrEmpty(text)) return defaultValue;
+            var value = defaultValue;
+            foreach (Match match in SettingOnOffRegex().Matches(text))
+            {
+                if (string.Equals(match.Groups[1].Value, settingName, StringComparison.OrdinalIgnoreCase))
+                    value = string.Equals(match.Groups[2].Value, "ON", StringComparison.OrdinalIgnoreCase);
+            }
+            return value;
+        }
+
+        private static string ScrubSensitiveLiterals(string text)
+        {
+            var scrubbed = SensitiveOptionRegex().Replace(text, m => $"{m.Groups[1].Value}{m.Groups[2].Value}<secret>{m.Groups[2].Value}");
+            scrubbed = ConnectionStringPasswordRegex().Replace(scrubbed, m => $"{m.Groups[1].Value}=<secret>");
+            scrubbed = SensitiveDeclareRegex().Replace(scrubbed, m => $"DECLARE {m.Groups[1].Value} {m.Groups[2].Value} = {m.Groups[3].Value}<secret>{m.Groups[3].Value}");
+            return scrubbed;
+        }
+
+        private static string ScrubConnectionDetails(string text)
+        {
+            return ConnRegex().Replace(text, m =>
+            {
+                var result = m.Value;
+                var targetWithQuotes = m.Groups[2].Value.Trim();
+                if (targetWithQuotes.Length >= 2 && (targetWithQuotes.StartsWith("'") || targetWithQuotes.StartsWith("\"")))
+                {
+                    var quote = targetWithQuotes[0].ToString();
+                    result = result.Replace(targetWithQuotes, $"{quote}<connection>{quote}");
+                }
+
+                if (m.Groups[4].Success)
+                {
+                    var options = m.Groups[4].Value;
+                    var scrubbedOptions = StringOptionRegex().Replace(options, opt => $"{opt.Groups[1].Value}{opt.Groups[2].Value}<placeholder>{opt.Groups[2].Value}");
+                    result = result.Replace(options, scrubbedOptions);
+                }
+
+                return result;
+            });
+        }
+
+        private static string EncryptConnectionDetails(string text, string password)
+        {
+            return ConnRegex().Replace(text, m =>
+            {
+                var result = m.Value;
+                var targetWithQuotes = m.Groups[2].Value.Trim();
+                if (targetWithQuotes.Length >= 2 && (targetWithQuotes.StartsWith("'") || targetWithQuotes.StartsWith("\"")))
+                {
+                    var quote = targetWithQuotes[0];
+                    var target = targetWithQuotes.Trim(quote);
+                    if (!target.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var encrypted = CryptoUtils.Encrypt(target, password);
+                        result = result.Replace(targetWithQuotes, quote + encrypted + quote);
+                    }
+                }
+
+                if (m.Groups[4].Success)
+                {
+                    var options = m.Groups[4].Value;
+                    var encryptedOptions = StringOptionRegex().Replace(options, opt =>
+                    {
+                        var value = opt.Groups[3].Value;
+                        if (value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return opt.Value;
+                        return $"{opt.Groups[1].Value}{opt.Groups[2].Value}{CryptoUtils.Encrypt(value, password)}{opt.Groups[2].Value}";
+                    });
+                    result = result.Replace(options, encryptedOptions);
+                }
+
+                return result;
             });
         }
 

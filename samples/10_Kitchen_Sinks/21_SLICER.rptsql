@@ -24,7 +24,7 @@ CREATE VISUAL SelectedResult AS CARD (
 );
 
 -- Page Layout
-CREATE PAGE SlicerKitchenSink AS (
+CREATE PAGE SlicerKitchenSink AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
         'A' = RegionFilter,

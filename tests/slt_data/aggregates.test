@@ -95,12 +95,12 @@ SELECT SUM(amount) FILTER (WHERE amount > 0) FROM sales_agg;
 query TI
 SELECT region, SUM(amount) FROM sales_agg GROUP BY ROLLUP(region) ORDER BY region;
 ----
+NULL
+300
 East
 150
 West
 150
-NULL
-300
 
 # Multiple DISTINCTs in one query
 statement ok

@@ -30,6 +30,9 @@ namespace ETL_SQL.Engine.Handlers
             
 
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
+            if (context.VarContext.TryGetView(connName, out _))
+                throw new ExecutionException($"View {connName} is read-only and cannot be used as an INSERT target.");
+
             if (stmt.TargetTable.ConnectionName == null && stmt.TargetTable.TableName.StartsWith("#") && !context.Connections.ContainsKey(connName))
             {
                 context.Connections[connName] = new InMemoryDataSource();
@@ -85,6 +88,11 @@ namespace ETL_SQL.Engine.Handlers
             if (destination == null)
                  throw new ExecutionException($"Unknown connection: {connName} at Line {stmt.Line}");
             _logger.Debug("Destination resolved as {DestinationType}", destination.GetType().Name);
+
+            if (destination is InMemoryDataSource memSource)
+            {
+                memSource.ReplaceOnConflict = stmt.IsReplace;
+            }
 
             if (destination is IDatabaseSource sqlDest && sqlDest.SupportsSqlPushdown)
             {

@@ -22,6 +22,12 @@ namespace ETL_SQL.Reporting.Builders
             {
                 Name            = name,
                 VisualType      = vStmt.VisualType.ToString().ToUpperInvariant(),
+                Fetch           = vStmt.FetchMode switch
+                {
+                    VisualFetchMode.OnLoad => "ON_LOAD",
+                    VisualFetchMode.OnRun => "ON_RUN",
+                    _ => "AUTO"
+                },
                 DefaultValue    = defVal,
                 LabelPosition   = vStmt.LabelPosition,
                 Min             = vStmt.Min,
@@ -195,20 +201,7 @@ namespace ETL_SQL.Reporting.Builders
                 }
             }
 
-            bool deferredHidden = false;
-            if (skipDeferredVisuals && vm.Options.TryGetValue("VISIBLE", out var visOpt))
-            {
-                if (visOpt.StartsWith("@"))
-                {
-                    var val = ctx.VarContext.GetVariable(visOpt);
-                    var s = val?.ToString()?.ToUpperInvariant();
-                    deferredHidden = s is "OFF" or "FALSE" or "0";
-                }
-                else
-                {
-                    deferredHidden = visOpt.ToUpperInvariant() is "OFF" or "FALSE" or "0";
-                }
-            }
+            var deferredHidden = skipDeferredVisuals;
             vm.IsHidden = deferredHidden;
 
             if (vm.Error == null && !deferredHidden)

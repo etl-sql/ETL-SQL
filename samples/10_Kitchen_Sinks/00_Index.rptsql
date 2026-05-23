@@ -45,7 +45,7 @@ CREATE VISUAL VisualIndex AS TABLE (
 );
 
 -- 3. Page Layout
-CREATE PAGE IndexPage AS (
+CREATE PAGE IndexPage AS DASHBOARD (
     STRUCTURE = 'A',
     MAP ('A' = VisualIndex)
 );

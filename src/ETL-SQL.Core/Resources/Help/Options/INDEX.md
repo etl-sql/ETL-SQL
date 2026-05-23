@@ -12,9 +12,34 @@ Execution Mode
       Enable statement-level timing. View results with SHOW PROFILE [INTO #p].
       Each row shows the statement, duration in ms, and rows affected.
 
-  SET SHOW_PASSWORD ON|OFF
+  SET SHOW_SECRETS ON|OFF  (alias: SET SHOW_PASSWORD)
       Unmask SENSITIVE/ENCRYPTED variables in SHOW VARIABLES output.
-      USE PASSWORD values are never shown regardless of this setting.
+      This is display/output behavior only; it does not permit plaintext secrets to remain
+      in saved source files.
+
+  SET ALLOW_PLAINTEXT_SECRETS ON|OFF
+      Unsafe local-development escape hatch. When OFF (default), save helpers rewrite
+      USE PASSWORD = 'literal' to USE PASSWORD PROMPT and encrypt plaintext connection
+      credentials when a master password is supplied. When ON, plaintext secrets may
+      remain in saved source and a warning is emitted when the script runs.
+      appsettings.json default: Engine:AllowPlaintextSecrets
+
+  SET NO_SAVE_SENSITIVE ON|OFF
+      Remove sensitive literals from saved source. This rewrites USE PASSWORD literals
+      to PROMPT and replaces SENSITIVE/ENCRYPTED literals plus credential-like options
+      with placeholders.
+      appsettings.json default: Engine:NoSaveSensitive
+
+  SET NO_SAVE_CONNECTION ON|OFF
+      Replace CREATE CONNECTION targets and quoted option values with placeholders on save.
+      Use this for source-controlled templates where hosts, usernames, databases, and
+      credentials should all be retyped or injected later.
+      appsettings.json default: Engine:NoSaveConnection
+
+  SET CONNECTION_ENCRYPTION ON|OFF
+      Encrypt CREATE CONNECTION targets and quoted option values on save using the
+      script/master password. NO_SAVE_CONNECTION takes precedence when both are ON.
+      appsettings.json default: Engine:ConnectionEncryption
 
 Date / Locale
 -------------
@@ -39,6 +64,10 @@ Performance Thresholds (override appsettings.json for this session)
 
 Security Overrides (all produce an audit entry; path must be within a Safe Zone)
 ---------------------------------------------------------------------------------
+  SET ALLOW_PLAINTEXT_SECRETS ON|OFF    Unsafe source-persistence override for local dev
+  SET NO_SAVE_SENSITIVE ON|OFF          Scrub sensitive literals from saved source
+  SET NO_SAVE_CONNECTION ON|OFF         Scrub connection details from saved source
+  SET CONNECTION_ENCRYPTION ON|OFF      Encrypt connection details on save
   SET ALLOW_FILE_TYPE_ACCESS ON|OFF     Allow file extensions not in the global whitelist
   SET ALLOW_FILE_TYPE_ACCESS = '.ext'   Add a specific extension to the session whitelist
   SET ALLOW_FILE_OPERATIONS = n         Override runaway file-op protection limit (default 100)

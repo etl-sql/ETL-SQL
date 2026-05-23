@@ -18,8 +18,10 @@ CREATE VISUAL DetailTable AS TABLE (
 );
 
 -- 3. Layout
-CREATE PAGE Main AS (
-    STRUCTURE = 'A',
-    MAP ('A' = DetailTable),
+CREATE PAGE Main AS PAGINATED (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = DetailTable)
+    ),
     STYLE (PADDING = '20px')
 );

@@ -7,6 +7,8 @@ using ETL_SQL.Common;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using ETL_SQL.Engine.Services;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -142,6 +144,128 @@ namespace ETL_SQL.Tests.Hardening
             Assert.True(service.NeedsEncryption("CREATE CONNECTION c ON MSSQL() WITH(PASSWORD='p');"));
             Assert.False(service.NeedsEncryption("CREATE CONNECTION c ON MSSQL('ENC:p');"));
             Assert.False(service.NeedsEncryption("CREATE CONNECTION c ON MSSQL() WITH(PASSWORD='ENC:p');"));
+        }
+
+        [Fact]
+        public void SecurityService_SecureScriptForSave_Rewrites_UsePasswordLiteral()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var secured = service.SecureScriptForSave("USE PASSWORD = 'dev-secret';\nPRINT 'ok';", "");
+
+            Assert.Contains("USE PASSWORD PROMPT;", secured);
+            Assert.DoesNotContain("dev-secret", secured);
+        }
+
+        [Fact]
+        public void SecurityService_SecureScriptForSave_Preserves_UsePasswordLiteral_WhenAllowed()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = "SET ALLOW_PLAINTEXT_SECRETS = ON;\nUSE PASSWORD = 'dev-secret';";
+            var secured = service.SecureScriptForSave(sql, "master");
+
+            Assert.Contains("USE PASSWORD = 'dev-secret';", secured);
+        }
+
+        [Fact]
+        public void SecurityService_AllowsPlaintextSecrets_UsesLastSetting()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+
+            Assert.False(service.AllowsPlaintextSecrets("SET ALLOW_PLAINTEXT_SECRETS = ON;\nSET ALLOW_PLAINTEXT_SECRETS OFF;"));
+            Assert.True(service.AllowsPlaintextSecrets("SET ALLOW_PLAINTEXT_SECRETS OFF;\nSET ALLOW_PLAINTEXT_SECRETS = ON;"));
+        }
+
+        [Fact]
+        public void SecurityService_SecureScriptForSave_NoSaveSensitive_ScrubsSecrets()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = @"
+                SET NO_SAVE_SENSITIVE = ON;
+                USE PASSWORD = 'dev-secret';
+                DECLARE @token SENSITIVE = 'abc';
+                CREATE CONNECTION c ON MSSQL('Server=.;Password=pw;') WITH(USERNAME='sa', PASSWORD='pw2', API_KEY='key');
+            ";
+
+            var secured = service.SecureScriptForSave(sql, "");
+
+            Assert.Contains("USE PASSWORD PROMPT;", secured);
+            Assert.Contains("DECLARE @token SENSITIVE = '<secret>'", secured);
+            Assert.Contains("Password=<secret>", secured);
+            Assert.Contains("PASSWORD='<secret>'", secured);
+            Assert.Contains("API_KEY='<secret>'", secured);
+            Assert.DoesNotContain("dev-secret", secured);
+            Assert.DoesNotContain("pw2", secured);
+            Assert.False(service.RequiresSavePassword(sql));
+        }
+
+        [Fact]
+        public void SecurityService_SecureScriptForSave_NoSaveConnection_ScrubsConnectionDetails()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = "SET NO_SAVE_CONNECTION = ON;\nCREATE CONNECTION c ON POSTGRES('Host=db;Username=u;Password=p;') WITH(HOST='db', USERNAME='u', DATABASE='d', PASSWORD='p');";
+
+            var secured = service.SecureScriptForSave(sql, "");
+
+            Assert.Contains("POSTGRES('<connection>')", secured);
+            Assert.Contains("HOST='<placeholder>'", secured);
+            Assert.Contains("USERNAME='<placeholder>'", secured);
+            Assert.Contains("DATABASE='<placeholder>'", secured);
+            Assert.Contains("PASSWORD='<placeholder>'", secured);
+            Assert.DoesNotContain("Host=db", secured);
+            Assert.DoesNotContain("USERNAME='u'", secured);
+        }
+
+        [Fact]
+        public void SecurityService_SecureScriptForSave_ConnectionEncryption_EncryptsFullConnection()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = "SET CONNECTION_ENCRYPTION = ON;\nCREATE CONNECTION c ON POSTGRES('Host=db;Username=u;Password=p;') WITH(HOST='db', USERNAME='u', DATABASE='d', PASSWORD='p');";
+
+            var secured = service.SecureScriptForSave(sql, "master");
+
+            Assert.Contains("POSTGRES('ENC:", secured);
+            Assert.Contains("HOST='ENC:", secured);
+            Assert.Contains("USERNAME='ENC:", secured);
+            Assert.Contains("DATABASE='ENC:", secured);
+            Assert.Contains("PASSWORD='ENC:", secured);
+            Assert.DoesNotContain("Host=db", secured);
+            Assert.DoesNotContain("USERNAME='u'", secured);
+        }
+
+        [Fact]
+        public void SavePolicyDefaults_CanBeReadFromConfiguration()
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Engine:AllowPlaintextSecrets"] = "true",
+                    ["Engine:NoSaveSensitive"] = "true",
+                    ["Engine:NoSaveConnection"] = "true",
+                    ["Engine:ConnectionEncryption"] = "true"
+                })
+                .Build();
+
+            Assert.True(DefaultThresholds.AllowPlaintextSecrets(config));
+            Assert.True(DefaultThresholds.NoSaveSensitive(config));
+            Assert.True(DefaultThresholds.NoSaveConnection(config));
+            Assert.True(DefaultThresholds.ConnectionEncryption(config));
+        }
+
+        [Fact]
+        public void SecurityService_SavePolicyDefaults_CanBeReadFromConfiguration()
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Engine:NoSaveSensitive"] = "true"
+                })
+                .Build();
+            var service = new SecurityService(NullLogger.Instance);
+
+            service.UpdateFromConfiguration(config);
+
+            Assert.True(service.NoSaveSensitiveEnabled(""));
+            Assert.Contains("<secret>", service.SecureScriptForSave("CREATE CONNECTION c ON MSSQL() WITH(PASSWORD='pw');", ""));
         }
 
         private Script Parse(string sql)

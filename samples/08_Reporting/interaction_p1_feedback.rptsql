@@ -42,7 +42,7 @@ CREATE BUTTON ResetBtn AS (
 );
 
 -- Layout
-CREATE PAGE TestPage AS (
+CREATE PAGE TestPage AS DASHBOARD (
     STRUCTURE = 'A A / B C',
     MAP (
         'A' = BarByRegion,

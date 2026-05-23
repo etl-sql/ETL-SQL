@@ -77,5 +77,17 @@ namespace ETL_SQL.Engine.Services
 
         public static bool LineageEnabled(IConfiguration? config)
             => config?.GetValue<bool?>("Engine:LineageEnabled") ?? true;
+
+        public static bool AllowPlaintextSecrets(IConfiguration? config)
+            => config?.GetValue<bool?>("Engine:AllowPlaintextSecrets") ?? false;
+
+        public static bool NoSaveSensitive(IConfiguration? config)
+            => config?.GetValue<bool?>("Engine:NoSaveSensitive") ?? false;
+
+        public static bool NoSaveConnection(IConfiguration? config)
+            => config?.GetValue<bool?>("Engine:NoSaveConnection") ?? false;
+
+        public static bool ConnectionEncryption(IConfiguration? config)
+            => config?.GetValue<bool?>("Engine:ConnectionEncryption") ?? false;
     }
 }

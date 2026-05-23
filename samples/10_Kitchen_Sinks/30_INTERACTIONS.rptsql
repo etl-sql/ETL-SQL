@@ -67,7 +67,7 @@ CREATE BUTTON ToggleBtn AS (
 );
 
 -- Page Layout
-CREATE PAGE InteractionSink AS (
+CREATE PAGE InteractionSink AS DASHBOARD (
     STRUCTURE = 'A A / B C / D E / F F',
     MAP (
         'A' = DrillinChart,

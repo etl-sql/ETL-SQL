@@ -32,7 +32,7 @@ CREATE VISUAL SelectedList AS TABLE (
 );
 
 -- Page Layout
-CREATE PAGE MultiselectKitchenSink AS (
+CREATE PAGE MultiselectKitchenSink AS DASHBOARD (
     STRUCTURE = 'A B / C',
     MAP (
         'A' = CatFilterInline,

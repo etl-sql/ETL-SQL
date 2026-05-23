@@ -551,7 +551,7 @@ Chart visuals use `echarts.init(div)` + `chart.setOption(JSON.parse(config))`. F
 Parameters are declared in `CREATE PAGE ... WITH PARAMETERS`:
 
 ```sql
-CREATE PAGE Sales AS (
+CREATE PAGE Sales AS DASHBOARD (
     STRUCTURE = 'A A / B C',
     MAP ( 'A' = RevChart, 'B' = RegionSlicer, 'C' = DetailTable )
 )
