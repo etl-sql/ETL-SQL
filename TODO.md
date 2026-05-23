@@ -26,7 +26,7 @@
     - `--profile quick|full` so first-run checks stay fast but release validation can go deeper.
   - Document it in README, User_Manual, Administrators_Guide, and Syntax/CLI reference docs.
 
-- [ ] **Connector certification matrix**
+- [x] **Connector certification matrix**
   - Goal: prove which connectors are production-tested versus syntax/plumbing-tested.
   - Create a document and test tags that classify each connector as:
     - Metadata only.
@@ -177,14 +177,14 @@
   - [ ] **AZURE_BLOB negative credential and path tests** — Negative auth tests (bad SAS token, expired key) and ResolvePath boundary tests are missing. Add alongside the existing blob smoke tests.
 
   **Low risk / documentation**
-  - [ ] **ODBC — document GetExcludedKeywords accepted exception** — `GetExcludedKeywords()` intentionally returns an empty set because the dialect varies per DSN. Add an XML doc comment in `OdbcConnector.cs` explaining this accepted exception so the matrix stays accurate.
-  - [ ] **Excel — document async accepted exception** — `ExcelDataReader` has no async read API; reads are offloaded to `Task.Run`. Add a doc comment in `ExcelConnector.cs` recording the accepted Rule 2 exception and the library version to re-evaluate.
+  - [x] **ODBC — document GetExcludedKeywords accepted exception** — Explicit override with comment added to `OdbcConnector.cs`.
+  - [x] **Excel — document async accepted exception** — Comment added to `ExcelDataSource.cs` at the `AsDataSet` call.
   - [ ] **Snowflake ADC/JWT auth — CI verification** — Application Default Credentials and JWT key-pair auth are implemented but not CI-verified (no Snowflake test account in the pipeline). Add a CI step or mock-based test that exercises the auth handshake, and document the manual verification steps needed for a full production sign-off.
 
 ## Bugs
 ### VS Code
 - [x] **Password not working**  In VS Code I added a password to encrypt a connection.  When I reopened the file and ran the script vs code asked for the password.  I put it in and it gave me this error: ETL-SQL password: requires an interactive console.
-- [ ] **Test coverage slipped below 70%** We are currently at Line coverage: 69.7% let's get back up to above 70.
+- [x] **Test coverage slipped below 70%** — Back to 70.8% after T4 exception wrapping tests were added.
 ### General
 - [ ] **Is SLT corpus complete** It seems like its only SELECT queries but I thought there was a lot more of them.  Can we validate we have a complete SLT test suite.
   - Current state: `tests/slt_data` contains many large corpus/index/evidence files, including SELECT, DML, view/drop evidence, and generated index corpus files.

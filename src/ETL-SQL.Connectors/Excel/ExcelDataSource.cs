@@ -81,6 +81,9 @@ namespace ETL_SQL.Connectors.Excel
                 using var stream = System.IO.File.OpenRead(effectivePath);
                 using var reader = ExcelReaderFactory.CreateReader(stream);
                 
+                // Accepted exception (Rule 2): ExcelDataReader has no async read API.
+                // The full sheet is loaded into a DataSet synchronously here. Re-evaluate if
+                // ExcelDataReader ever ships an async overload or we switch libraries.
                 var result = reader.AsDataSet(new ExcelDataSetConfiguration()
                 {
                     ConfigureDataTable = (_) => new ExcelDataTableConfiguration()

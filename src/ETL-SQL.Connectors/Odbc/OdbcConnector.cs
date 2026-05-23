@@ -24,6 +24,10 @@ namespace ETL_SQL.Connectors.Odbc
 
         public HashSet<string> GetSupportedFunctions() => OdbcSyntax.GetSupportedFunctions();
         public HashSet<string> GetSupportedKeywords() => OdbcSyntax.GetSupportedKeywords();
+        // Accepted exception (Rule 9): returns empty by design — ODBC wraps arbitrary third-party
+        // drivers whose SQL dialects vary per DSN. There is no single set of excluded keywords that
+        // applies to all targets, so the linter skips dialect-keyword checking for ODBC connections.
+        public HashSet<string> GetExcludedKeywords() => new(StringComparer.OrdinalIgnoreCase);
 
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
