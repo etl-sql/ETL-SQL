@@ -27,7 +27,7 @@ ETL-SQL's test suite protects a broad product surface: parser and AST behavior, 
 | Project | Current Role | Lane Treatment |
 | :--- | :--- | :--- |
 | `tests\ETL-SQL.Tests` | Main parser, engine, function, statement, reporting, hardening, integration, and regression tests. | Included in Fast/Engine; filtered by category for Integration and Perf. |
-| `tests\ETL-SQL.ReportPortal.Tests` | Hosted Report Portal API integration tests. | Included in Portal, Integration, Full, and selected Smoke checks. |
+| `tests\ETL-SQL.ReportPortal.Tests` | Hosted Report Portal API tests via `WebApplicationFactory` + SQLite. Tagged `Category=Portal`. | Included in Fast, Portal, Full, and selected Smoke checks. No Docker required. |
 | `tests\ETL-SQL.LanguageServer.Tests` | LSP metadata and smoke checks. | Included in Fast and Full. |
 | `tests\ETL-SQL.PerfTests` | xUnit performance tests. | Included only in Perf and Full. |
 | `tests\ETL-SQL.Benchmarks` | BenchmarkDotNet executable. | Run with the Benchmarks lane, not `dotnet test`. |
@@ -44,9 +44,12 @@ Use `Category` traits for lane routing:
 | `Smoke.Security` | Small security and path-boundary checks. |
 | `Smoke.Reporting` | Small report parser/runtime/manifest checks. |
 | `Smoke.Portal` | Small portal publish/execute/snapshot checks. |
-| `Integration` | Tests that should not be part of the default fast lane. |
+| `Portal` | Report Portal `WebApplicationFactory` tests. No external dependencies — use SQLite in-process. Included in the standard fast/coverage run. |
+| `Integration` | Tests that require external infrastructure (Docker containers, real SFTP/database/cloud endpoints). Excluded from the default fast lane and coverage run; run in nightly or release CI. |
 | `Performance` | Tests with performance timing/scale expectations. |
 | `SLT` | SQL Logic Test corpus tests — slow by nature, excluded from all standard lanes. Run manually with `--filter "Category=SLT"`. |
+
+**`Portal` vs `Integration`:** Portal API tests spin up the web app in-process via `WebApplicationFactory` with a temp SQLite database — no Docker needed. Tag them `Portal`. Only tag a test `Integration` when it genuinely requires an external service (Docker container, real cloud endpoint, real SFTP server). Misclassifying Portal tests as `Integration` silently excludes them from coverage.
 
 New broad layer traits can be added later, but avoid mass-tagging until each folder has been audited. The first rule is that smoke, integration, and performance labels must stay accurate.
 

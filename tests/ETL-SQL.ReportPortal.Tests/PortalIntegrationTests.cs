@@ -15,7 +15,7 @@ namespace ETL_SQL.ReportPortal.Tests;
 /// Tests run against a real in-process Kestrel + temp SQLite database.
 /// Coverage: auth → user → folder → report publish → subscription CRUD → audit log.
 /// </summary>
-[Trait("Category", "Integration")]
+[Trait("Category", "Portal")]
 public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
 {
     private readonly HttpClient _client;

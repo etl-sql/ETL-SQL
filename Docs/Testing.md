@@ -42,6 +42,64 @@ Use `scripts/test-lane.ps1` when you want a named suite rather than only smoke t
 
 `fast` is the default local correctness lane. `full` runs the normal xUnit test projects and skips the benchmark executable and deployment-only SLT corpus so `dotnet test` output stays meaningful.
 
+### Category tag reference
+
+| Category | Requires Docker? | Included in fast/coverage run? | When to use |
+| :--- | :---: | :---: | :--- |
+| *(no tag)* | No | Yes | Default — most unit and functional tests |
+| `Smoke.*` | No | Yes | Hand-picked fast confidence checks |
+| `Portal` | No | Yes | Report Portal `WebApplicationFactory` tests backed by SQLite |
+| `Integration` | **Yes** | No | Tests that need a real external service (Docker SFTP, real DB, cloud) |
+| `Performance` | No | No | Timing-sensitive assertions with scale data |
+| `SLT` | No | No | SQL Logic Test corpus — run explicitly only |
+
+> **Portal vs Integration:** `WebApplicationFactory` tests run the portal in-process with a temp SQLite database — no Docker. Tag these `Portal` so they run in normal CI. Only use `Integration` when a test genuinely needs an external container or cloud endpoint.
+
+## SFTP Integration Tests
+
+Docker-based SFTP tests live in `tests/ETL-SQL.Tests/Integration/Connectors/` and are tagged `Category=Integration`. They require Docker Desktop to be running.
+
+```powershell
+# Run Docker-dependent connector integration tests
+dotnet test ETL-SQL.slnx --filter "Category=Integration"
+
+# Run only the SFTP lane
+dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter "FullyQualifiedName~SftpIntegration"
+```
+
+The `SftpFixture` starts an `atmoz/sftp` container once per collection. Tests cover password auth, private-key auth, upload/download round-trips, list, delete, overwrite semantics, large-file checksum, `ReadBatches`, credential masking, and host allowlist enforcement. Container startup typically takes 3–8 seconds.
+
+## Code Coverage
+
+The CI minimum is **70% line coverage** across all non-integration test runs.
+
+```powershell
+# Collect coverage (Portal tests are included — they run without Docker)
+dotnet test ETL-SQL.slnx --filter "Category!=Integration&Category!=Performance&Category!=SLT" `
+    --collect:"XPlat Code Coverage" --results-directory ./coverage
+
+# Generate an HTML + text summary report
+dotnet reportgenerator `
+    -reports:"./coverage/**/coverage.cobertura.xml" `
+    -targetdir:"./coverage/report" `
+    -reporttypes:"Html;TextSummary"
+
+# Open the report
+start ./coverage/report/index.html
+```
+
+The text summary is written to `./coverage/report/Summary.txt`. Key assemblies and their coverage targets:
+
+| Assembly | Notes |
+| :--- | :--- |
+| `ETL-SQL.Core` | Parser, AST, security — keep above 80% |
+| `ETL-SQL.Engine` | Evaluator, handlers — keep above 70% |
+| `ETL-SQL.Analysis` | Linter rules — keep above 85% |
+| `ETL-SQL.Connectors` | Many DataSource classes — lowest due to provider coupling |
+| `ETL-SQL-Portal` | Covered by `Category=Portal` WebApplicationFactory tests |
+
+`Category=Integration` tests (Docker-dependent) are **excluded** from the coverage run. Do not count Docker connector tests toward the 70% gate.
+
 ## SQL Logic Tests (SLT)
 
 The SLT suite validates SQL correctness against the [SQLite Logic Test](https://www.sqlite.org/sqllogictest/doc/trunk/about.wiki) corpus. It is **not part of the default developer lane** because it takes a long time to complete — running the full corpus can exceed 15 minutes.

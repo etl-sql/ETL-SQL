@@ -16,7 +16,7 @@ namespace ETL_SQL.ReportPortal.Tests;
 /// Integration tests for DatasetController: list, metadata, rows preview,
 /// refresh, update, delete, and ACL management.
 /// </summary>
-[Trait("Category", "Integration")]
+[Trait("Category", "Portal")]
 public class DatasetControllerTests : IClassFixture<PortalWebFactory>
 {
     private readonly HttpClient _client;
