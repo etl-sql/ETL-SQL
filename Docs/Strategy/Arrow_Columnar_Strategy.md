@@ -1,5 +1,8 @@
 # Arrow Columnar Format Strategy
 
+> [!NOTE]
+> **Implemented design note.** The columnar spill format described here shipped in ETL-SQL 0.7.0. Use this file to understand the design rationale. For current spill behavior and configuration, see `Docs/Architecture/Engine.md` and `Docs/Strategy/LargeDatasets.md`.
+
 **Status:** Implemented for ETL-SQL 0.7.0 spill workloads
 **Phase:** 0.7.0  
 **Date:** 2026-04-23  

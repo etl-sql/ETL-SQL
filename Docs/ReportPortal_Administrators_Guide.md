@@ -20,6 +20,7 @@ This guide covers everything an administrator needs to deploy, configure, and op
 11. [Security Model](#11-security-model)
 12. [Quick Start: Required Steps](#12-quick-start-required-steps)
 13. [Orchestrator Management](#13-orchestrator-management)
+14. [Production Readiness Checklist](#14-production-readiness-checklist)
 
 ---
 
@@ -587,7 +588,7 @@ The optional `'<name>'` is a human-readable label shown in subscription lists. I
 
 Parameter values are stored as strings and must be single-quoted. Use the report script's defaults when you want an unset parameter.
 
-When these statements are executed remotely through a `REPORTPORTAL` connection, `FORMAT PDF` and `FORMAT CSV` are supported. `FORMAT BOTH` and `DELIVER TO GROUP` remain language syntax for planned portal delivery support, but the remote connector rejects them until the portal API can generate both attachments and expand group recipients.
+When these statements are executed remotely through a `REPORTPORTAL` connection, `FORMAT PDF` and `FORMAT CSV` are supported. `FORMAT BOTH` and `DELIVER TO GROUP` are valid ETL-SQL syntax but are not yet supported by the portal connector — the remote call will fail at runtime. Use a single format and a named recipient address until portal support for multi-format delivery and group expansion ships.
 
 **Examples:**
 
@@ -1039,3 +1040,46 @@ The job detail panel's history table includes per-execution performance data:
 | `portal-orchestrator.json` | Sidecar file next to portal database | Overrides for URL/key saved via the Admin UI; takes precedence over env vars |
 | `Orchestrator:ApiKey` | Orchestrator `appsettings.json` / env var | Key the Orchestrator validates against incoming `X-Orchestrator-Key` headers |
 | `Orchestrator:ScriptRoot` | Orchestrator `appsettings.json` / env var | Root directory for the script file browser exposed to the portal |
+
+---
+
+## 14. Production Readiness Checklist
+
+Use this checklist before promoting the Report Portal to a production or customer-facing environment. Items marked **Required** will cause data loss, security exposure, or service failure if skipped. Items marked **Recommended** reduce operational risk.
+
+### Security
+
+- [ ] **Required** — Change the default `admin` password. The factory password `Admin@12345!` must not be used in production.
+- [ ] **Required** — Replace the default JWT secret. Set `Portal__Jwt__Secret` in environment variables or `appsettings.json` to a randomly generated 256-bit value. Run `etl-sql config setup-jwt --update` to generate one.
+- [ ] **Required** — Set `Portal__Jwt__Issuer` and `Portal__Jwt__Audience` to values that match your deployment. Default `ETL-SQL-Portal` values are acceptable but should be documented.
+- [ ] **Required** — Enable HTTPS in production. Configure a reverse proxy (nginx, Caddy, IIS) or supply a TLS certificate via Kestrel. Do not run the portal over plain HTTP with real user data.
+- [ ] **Recommended** — Restrict `Security:AuthorizedHosts` in `appsettings.json` to the actual hostnames the portal will accept requests from.
+- [ ] **Recommended** — Verify that connector secrets in report scripts use `ENC:` encryption with a master password, not plaintext connection strings.
+- [ ] **Recommended** — Review folder-level permissions. Users should not have access to reports or datasets outside their role.
+
+### Data and Storage
+
+- [ ] **Required** — Confirm `Portal:DatabasePath` points to a persistent location that survives service restarts and OS reboots (not a temp directory or container ephemeral layer).
+- [ ] **Required** — Confirm `Portal:SnapshotRoot` and `Portal:ReportDataRoot` are writable and on a volume with sufficient capacity for report snapshots and dataset exports.
+- [ ] **Recommended** — Schedule regular backups of the portal SQLite database and the snapshot/data directories.
+- [ ] **Recommended** — Set `Portal:MaxSnapshotAgeDays` to automatically clean up expired snapshots.
+
+### Reliability
+
+- [ ] **Required** — Run the portal as a managed service (Windows Service or systemd unit) so it restarts automatically on host reboot or crash.
+- [ ] **Recommended** — Verify the `/health` endpoint returns `Healthy` before directing user traffic. Wire this endpoint into your load balancer or monitoring system.
+- [ ] **Recommended** — If the Orchestrator is deployed separately, confirm `Portal:Orchestrator:ApiUrl` and both `ApiKey` values match. Verify the connection via the Admin → Orchestrator page.
+- [ ] **Recommended** — Configure SMTP for subscriptions. Test an outbound email from Admin → Connections before creating live subscriptions.
+
+### Observability
+
+- [ ] **Recommended** — Enable structured logging (`Logging:LogLevel:Default` = `Information` minimum). Direct logs to a persistent file or log aggregator.
+- [ ] **Recommended** — Enable the audit log (`Portal:EnableAuditLog = true`) so report view, export, and subscription events are recorded.
+- [ ] **Recommended** — Set up a monitoring alert on the `/health` endpoint with a recovery window of ≤ 5 minutes.
+- [ ] **Recommended** — Review the Report History page after first production use to confirm snapshot refresh and subscription delivery are completing without errors.
+
+### Operational Handoff
+
+- [ ] **Recommended** — Document the deployment: service name, host, port, backup schedule, and escalation path.
+- [ ] **Recommended** — Identify who holds the admin credentials and the JWT secret, and ensure they are stored in a secrets manager (not in a shared document).
+- [ ] **Recommended** — Run `etl-sql doctor` from the host machine to confirm write access, ODBC drivers, and configuration are correct before go-live.

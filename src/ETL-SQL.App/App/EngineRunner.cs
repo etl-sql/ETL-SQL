@@ -84,7 +84,7 @@ namespace ETL_SQL.App
 
             if (ctx.Command == "doctor")
             {
-                return await RunDoctor(logger);
+                return await RunDoctor(ctx, logger);
             }
             
             if (ctx.Command == "config-setup-jwt")
@@ -535,49 +535,268 @@ namespace ETL_SQL.App
             return 1;
         }
 
-        private static async Task<int> RunDoctor(ILogger logger)
+        private static async Task<int> RunDoctor(CliContext ctx, ILogger logger)
         {
-            AnsiConsole.Write(new FigletText("ETL-SQL Doctor").Centered().Color(Color.DeepSkyBlue1));
-            AnsiConsole.Write(new Rule("[yellow]System Health Check[/]").RuleStyle("grey"));
-            Console.WriteLine();
+            bool isJson = ctx.IsJsonMode;
+            bool isStrict = ctx.DoctorStrict;
+            bool isFull = string.Equals(ctx.DoctorProfile, "full", StringComparison.OrdinalIgnoreCase);
 
-            var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey);
-            table.AddColumn("Check");
-            table.AddColumn("Result");
-            table.AddColumn("Status");
+            if (!isJson)
+            {
+                AnsiConsole.Write(new FigletText("ETL-SQL Doctor").Centered().Color(Color.DeepSkyBlue1));
+                AnsiConsole.Write(new Rule(isFull ? "[yellow]System Health Check (full)[/]" : "[yellow]System Health Check (quick)[/]").RuleStyle("grey"));
+                Console.WriteLine();
+            }
+
+            var checks = new List<(string Name, string Detail, string Status)>();
 
             // 1. OS & Runtime
             var os = Environment.OSVersion.ToString();
             var runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription;
-            table.AddRow("Operating System", os, "[green]OK[/]");
-            table.AddRow(".NET Runtime", runtime, "[green]OK[/]");
+            checks.Add(("Operating System", os, "OK"));
+            checks.Add((".NET Runtime", runtime, "OK"));
 
-            // 2. Write Permissions
+            // 2. Base directory write permissions
             bool canWrite = false;
-            try {
-                var testPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "doctor_test.tmp");
-                File.WriteAllText(testPath, "test");
+            try
+            {
+                var testPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".doctor_test.tmp");
+                await File.WriteAllTextAsync(testPath, "test");
                 File.Delete(testPath);
                 canWrite = true;
-            } catch { }
-            table.AddRow("Disk Write Access", canWrite ? "Authorized" : "Denied", canWrite ? "[green]OK[/]" : "[red]FAIL[/]");
+            }
+            catch { }
+            checks.Add(("Base Directory Write", canWrite ? AppDomain.CurrentDomain.BaseDirectory : "Denied", canWrite ? "OK" : "FAIL"));
 
-            // 3. Dependency Check (Conceptual)
-            table.AddRow("ODBC Driver Manager", "Found", "[green]OK[/]");
-            
-            // 4. Security Configuration
+            // 3. Temp directory write permissions
+            bool canWriteTemp = false;
+            try
+            {
+                var tmpPath = Path.Combine(Path.GetTempPath(), $".etlsql_doctor_{Guid.NewGuid():N}.tmp");
+                await File.WriteAllTextAsync(tmpPath, "test");
+                File.Delete(tmpPath);
+                canWriteTemp = true;
+            }
+            catch { }
+            checks.Add(("Temp Directory Write", canWriteTemp ? Path.GetTempPath() : "Denied", canWriteTemp ? "OK" : "FAIL"));
+
+            // 4. Available disk space (warn if under 500 MB on the base drive)
+            string diskStatus = "OK";
+            string diskDetail = "Unknown";
+            try
+            {
+                var drive = new DriveInfo(Path.GetPathRoot(AppDomain.CurrentDomain.BaseDirectory) ?? "/");
+                var freeMb = drive.AvailableFreeSpace / (1024 * 1024);
+                diskDetail = $"{freeMb:N0} MB free on {drive.Name}";
+                diskStatus = freeMb < 500 ? "WARN" : "OK";
+            }
+            catch (Exception ex) { diskDetail = ex.Message; diskStatus = "WARN"; }
+            checks.Add(("Disk Space", diskDetail, diskStatus));
+
+            // 5. ODBC Driver Manager
+            string odbcStatus = "OK";
+            string odbcDetail = "Found";
+            try
+            {
+                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                {
+                    var odbcDll = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "odbc32.dll");
+                    odbcDetail = File.Exists(odbcDll) ? "odbc32.dll present" : "odbc32.dll not found";
+                    if (!File.Exists(odbcDll)) odbcStatus = "WARN";
+                }
+                else
+                {
+                    odbcDetail = File.Exists("/etc/odbcinst.ini") ? "odbcinst.ini present" : "odbcinst.ini not found";
+                    if (!File.Exists("/etc/odbcinst.ini")) odbcStatus = "WARN";
+                }
+            }
+            catch { odbcDetail = "Check skipped (non-critical)"; odbcStatus = "WARN"; }
+            checks.Add(("ODBC Driver Manager", odbcDetail, odbcStatus));
+
+            // 6. AppSettings.json present
+            var appSettingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+            bool hasAppSettings = File.Exists(appSettingsPath);
+            checks.Add(("appsettings.json", hasAppSettings ? appSettingsPath : "Not found", hasAppSettings ? "OK" : "WARN"));
+
+            // 7. Security configuration
             var config = Program.ServiceProvider.GetRequiredService<IConfiguration>();
             var authHosts = config.GetSection("Security:AuthorizedHosts").Get<string[]>() ?? Array.Empty<string>();
-            table.AddRow("Authorized Hosts", $"{authHosts.Length} defined", authHosts.Length > 0 ? "[green]OK[/]" : "[yellow]WARN[/]");
+            checks.Add(("Authorized Hosts", $"{authHosts.Length} defined", authHosts.Length > 0 ? "OK" : "WARN"));
 
-            AnsiConsole.Write(table);
-
-            if (!canWrite)
+            // 8. Registered connectors
+            try
             {
-                AnsiConsole.MarkupLine("[red]CRITICAL:[/] ETL-SQL requires write access to its base directory for log and session management.");
+                var registry = Program.ServiceProvider.GetRequiredService<IConnectorRegistry>();
+                var connectorNames = registry.GetRegisteredNames();
+                checks.Add(("Registered Connectors", string.Join(", ", connectorNames), "OK"));
+            }
+            catch (Exception ex)
+            {
+                checks.Add(("Registered Connectors", $"Registry unavailable: {ex.Message}", "WARN"));
             }
 
-            return 0;
+            // 9. Orchestrator SQLite history DB
+            string dbStatus = "OK";
+            string dbDetail = "Not configured";
+            try
+            {
+                var dbPath = config["Orchestrator:HistoryDbPath"];
+                if (!string.IsNullOrEmpty(dbPath))
+                {
+                    dbDetail = dbPath;
+                    dbStatus = File.Exists(dbPath) ? "OK" : "WARN";
+                    if (!File.Exists(dbPath)) dbDetail += " (not yet created — will be created on first run)";
+                }
+                else
+                {
+                    dbStatus = "WARN";
+                    dbDetail = "Orchestrator:HistoryDbPath not set";
+                }
+            }
+            catch (Exception ex) { dbDetail = ex.Message; dbStatus = "WARN"; }
+            checks.Add(("Orchestrator History DB", dbDetail, dbStatus));
+
+            // 10. Log directory write access (quick)
+            var appLogDir = config["Logging:AppLog:Directory"] ?? "logs/app";
+            var scriptLogDir = config["Logging:ScriptLog:Directory"] ?? "logs/scripts";
+            foreach (var (label, dir) in new[] { ("App Log Dir", appLogDir), ("Script Log Dir", scriptLogDir) })
+            {
+                bool canWriteDir = false;
+                string dirDetail = dir;
+                try
+                {
+                    Directory.CreateDirectory(dir);
+                    var probe = Path.Combine(dir, $".doctor_{Guid.NewGuid():N}.tmp");
+                    await File.WriteAllTextAsync(probe, "test");
+                    File.Delete(probe);
+                    canWriteDir = true;
+                }
+                catch { }
+                checks.Add((label, dirDetail, canWriteDir ? "OK" : "WARN"));
+            }
+
+            // ── Full profile checks ──────────────────────────────────────────────
+            if (isFull)
+            {
+                // 11. Parser/lexer smoke
+                string parseStatus = "OK";
+                string parseDetail = "SELECT 1 AS n parsed successfully";
+                try
+                {
+                    var smokeScript = new Parser(new Lexer("SELECT 1 AS n;").Tokenize()).Parse();
+                    if (smokeScript.Statements.Count == 0)
+                    {
+                        parseStatus = "FAIL";
+                        parseDetail = "Parser returned 0 statements";
+                    }
+                }
+                catch (Exception ex) { parseStatus = "FAIL"; parseDetail = ex.Message; }
+                checks.Add(("Parser Smoke", parseDetail, parseStatus));
+
+                // 12. Engine execution smoke (MOCKDB)
+                string engineStatus = "OK";
+                string engineDetail = "SELECT * FROM MOCKDB executed successfully";
+                try
+                {
+                    var smokeEval = Program.ServiceProvider.GetRequiredService<Evaluator>();
+                    smokeEval.SecurityService.IsTestMode = true;
+                    var smokeScript = new Parser(new Lexer(
+                        "CREATE CONNECTION _doctor_mock ON MOCKDB(); SELECT * FROM _doctor_mock.Users;").Tokenize()).Parse();
+                    await smokeEval.Evaluate(smokeScript);
+                    engineDetail = $"MOCKDB query returned {smokeEval.LastResult?.Rows.Count ?? 0} row(s)";
+                }
+                catch (Exception ex) { engineStatus = "FAIL"; engineDetail = ex.Message; }
+                checks.Add(("Engine Smoke (MOCKDB)", engineDetail, engineStatus));
+
+                // 13. ENC: encrypt/decrypt round-trip
+                string encStatus = "OK";
+                string encDetail = "ENC: round-trip verified";
+                try
+                {
+                    var plaintext = "doctor-smoke-" + Guid.NewGuid().ToString("N");
+                    var tempPass = "doctor-temp-key";
+                    var cipher = CryptoUtils.Encrypt(plaintext, tempPass);
+                    var restored = CryptoUtils.Decrypt(cipher, tempPass);
+                    if (restored != plaintext)
+                    {
+                        encStatus = "FAIL";
+                        encDetail = "Decrypted value did not match original";
+                    }
+                }
+                catch (Exception ex) { encStatus = "FAIL"; encDetail = ex.Message; }
+                checks.Add(("ENC: Round-Trip", encDetail, encStatus));
+
+                // 14. Linter smoke
+                string lintStatus = "OK";
+                string lintDetail = "No linter errors on SELECT 1";
+                try
+                {
+                    var lintScript = new Parser(new Lexer("SELECT 1 AS n;").Tokenize()).Parse();
+                    var linter = ETL_SQL.Analysis.Linting.LinterFactory.CreateWithAllRules(Program.ServiceProvider);
+                    var lintContext = new ETL_SQL.Analysis.Linting.DefaultLintContext { DocumentUri = "doctor-smoke" };
+                    var lintResults = await linter.AnalyzeAsync(lintScript, lintContext);
+                    var errors = lintResults.Count(r => r.Severity == ETL_SQL.Analysis.Linting.LintSeverity.Error);
+                    if (errors > 0)
+                    {
+                        lintStatus = "FAIL";
+                        lintDetail = $"Linter returned {errors} error(s) on simple SELECT";
+                    }
+                }
+                catch (Exception ex) { lintStatus = "FAIL"; lintDetail = ex.Message; }
+                checks.Add(("Linter Smoke", lintDetail, lintStatus));
+            }
+
+            bool hasFailures = checks.Any(c => c.Status == "FAIL");
+            bool hasWarnings = checks.Any(c => c.Status == "WARN");
+
+            if (isJson)
+            {
+                var result = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["overall"] = hasFailures ? "FAIL" : hasWarnings ? "WARN" : "OK",
+                    ["checks"] = new System.Text.Json.Nodes.JsonArray(
+                        checks.Select(c => (System.Text.Json.Nodes.JsonNode)new System.Text.Json.Nodes.JsonObject
+                        {
+                            ["name"]   = c.Name,
+                            ["detail"] = c.Detail,
+                            ["status"] = c.Status,
+                        }).ToArray())
+                };
+                Console.WriteLine(result.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            }
+            else
+            {
+                var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey);
+                table.AddColumn("Check");
+                table.AddColumn("Detail");
+                table.AddColumn("Status");
+
+                foreach (var (name, detail, status) in checks)
+                {
+                    var statusMarkup = status switch
+                    {
+                        "OK"   => "[green]OK[/]",
+                        "WARN" => "[yellow]WARN[/]",
+                        "FAIL" => "[red]FAIL[/]",
+                        _      => status,
+                    };
+                    table.AddRow(name, Markup.Escape(detail), statusMarkup);
+                }
+
+                AnsiConsole.Write(table);
+
+                if (hasFailures)
+                    AnsiConsole.MarkupLine("\n[red]One or more checks FAILED. ETL-SQL may not function correctly.[/]");
+                else if (hasWarnings)
+                    AnsiConsole.MarkupLine("\n[yellow]One or more checks produced a WARNING. Review the items above.[/]");
+                else
+                    AnsiConsole.MarkupLine("\n[green]All checks passed.[/]");
+
+                if (isStrict && (hasFailures || hasWarnings))
+                    AnsiConsole.MarkupLine("[yellow]--strict mode: exiting with code 1 due to WARN or FAIL results.[/]");
+            }
+
+            return isStrict && (hasFailures || hasWarnings) ? 1 : 0;
         }
 
         private static void ShowThirdPartyNotices(ILogger logger)

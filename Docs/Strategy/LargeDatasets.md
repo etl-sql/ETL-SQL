@@ -1,5 +1,8 @@
 # Large Dataset Handling
 
+> [!NOTE]
+> **Implemented design note.** The large-dataset streaming and spill mechanisms described here shipped in ETL-SQL 0.7.0. Use this file for design context. For current behavior, thresholds, and configuration, see `Docs/Architecture/Engine.md`. For certified row counts and shape coverage, see `Docs/Standards/Connector_Certification_Matrix.md`.
+
 **Status:** Implemented for ETL-SQL 0.7.0
 **Phase:** 8A  
 **Date:** 2026-04-12  

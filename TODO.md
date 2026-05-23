@@ -1,6 +1,6 @@
 # ETL-SQL Development
 ## Additions
-- [ ] **SET SHOW_SECRETS**  It was thought that SET SHOW_SECRETS is a better naming over SET SHOW_PASSWORDS can we just make them aliases of each other but we'll use SHOW_SECRETS as the preferred.
+- [x] **SET SHOW_SECRETS**  It was thought that SET SHOW_SECRETS is a better naming over SET SHOW_PASSWORDS can we just make them aliases of each other but we'll use SHOW_SECRETS as the preferred.
 
 - [ ] **Expand `etl-sql doctor` into a real install validation command**
   - Current state: `etl-sql doctor` already exists in `src/ETL-SQL.App/App/EngineRunner.cs` and is wired in `CliOrchestrator.cs`.
@@ -165,9 +165,26 @@
     - Audit log includes report view/export/subscription events.
   - Add a small "portal production readiness" checklist to administrators docs.
 
+- [ ] **Connector certification gap remediation** *(see `Docs/Standards/Connector_Certification_Matrix.md` for full detail)*
+
+  **High risk**
+  - [ ] **XML streaming refactor** — XML connector accumulates the full document in a DOM before yielding rows (Rule 7 violation). Refactor to streaming `XmlReader` so large XML files do not materialize fully in memory.
+  - [ ] **BigQuery CI tests** — Smoke test, credential masking test (T3), and exception wrapping test (T4) are missing. Add a Testcontainers-based BigQuery emulator or GCP sandbox CI step. Currently rated **Preview**; must reach GA before enabling by default.
+
+  **Medium risk**
+  - [ ] **Exception wrapping tests (T4) — 11 connectors** — The following connectors are missing T4 (exception wrapping) tests: ORACLE, ODBC, EXCEL, PARQUET, AVRO, FTP, AZURE_BLOB, API, SMTP, REPORTPORTAL, ORCHESTRATOR. Add at least one test per connector that injects a provider-level exception and asserts it surfaces as `ExecutionException` with a sanitized message.
+  - [ ] **SMTP Docker smoke test** — SMTP delivery is untested in CI. Add a `MailHog` or `Greenmail` Testcontainer fixture (similar to the new `SftpFixture`) and cover at least one successful send and one credential-error negative path.
+  - [ ] **AZURE_BLOB negative credential and path tests** — Negative auth tests (bad SAS token, expired key) and ResolvePath boundary tests are missing. Add alongside the existing blob smoke tests.
+
+  **Low risk / documentation**
+  - [ ] **ODBC — document GetExcludedKeywords accepted exception** — `GetExcludedKeywords()` intentionally returns an empty set because the dialect varies per DSN. Add an XML doc comment in `OdbcConnector.cs` explaining this accepted exception so the matrix stays accurate.
+  - [ ] **Excel — document async accepted exception** — `ExcelDataReader` has no async read API; reads are offloaded to `Task.Run`. Add a doc comment in `ExcelConnector.cs` recording the accepted Rule 2 exception and the library version to re-evaluate.
+  - [ ] **Snowflake ADC/JWT auth — CI verification** — Application Default Credentials and JWT key-pair auth are implemented but not CI-verified (no Snowflake test account in the pipeline). Add a CI step or mock-based test that exercises the auth handshake, and document the manual verification steps needed for a full production sign-off.
+
 ## Bugs
 ### VS Code
 - [x] **Password not working**  In VS Code I added a password to encrypt a connection.  When I reopened the file and ran the script vs code asked for the password.  I put it in and it gave me this error: ETL-SQL password: requires an interactive console.
+- [ ] **Test coverage slipped below 70%** We are currently at Line coverage: 69.7% let's get back up to above 70.
 ### General
 - [ ] **Is SLT corpus complete** It seems like its only SELECT queries but I thought there was a lot more of them.  Can we validate we have a complete SLT test suite.
   - Current state: `tests/slt_data` contains many large corpus/index/evidence files, including SELECT, DML, view/drop evidence, and generated index corpus files.

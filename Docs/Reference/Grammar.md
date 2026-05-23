@@ -183,7 +183,7 @@ Common uses: date window boundaries, numeric filter ranges, batch size limits.
 The canonical type for variables that hold an `ENC:...` value â€” a ciphertext string produced by `ENCRYPT()` or stored in the credentials vault. This type ensures the value is protected throughout its lifecycle in the engine.
 
 **Engine Behaviors:**
-- **Runtime Masking:** The variable is marked as sensitive. `SHOW VARIABLES` and `PRINT` output will mask the value (displaying `*******` or `ENC:*******`) unless `SET SHOW_PASSWORD ON` is active.
+- **Runtime Masking:** The variable is marked as sensitive. `SHOW VARIABLES` and `PRINT` output will mask the value (displaying `*******` or `ENC:*******`) unless `SET SHOW_SECRETS ON` is active.
 - **Auto-Decryption:** The engine automatically decrypts the `ENC:` value in two scenarios:
   1. When passed to a secure connector parameter (`PASSWORD`, `API_KEY`, `SSH_KEY_PAIR.PASSPHRASE`, etc.).
   2. When evaluated in an expression that is assigned to a non-SENSITIVE target or used in a comparison.
@@ -206,11 +206,11 @@ PRINT 'The password is: ' + @pwd;
 
 Sets the `IsSensitive` runtime flag on the variable. Three effects activate immediately:
 
-1. **`SHOW VARIABLES` masking** â€” the value is replaced with `*******` in all variable listing output (unless `SET SHOW_PASSWORD ON` is active).
+1. **`SHOW VARIABLES` masking** â€” the value is replaced with `*******` in all variable listing output (unless `SET SHOW_SECRETS ON` is active).
 2. **`ENC:` auto-decryption** â€” if the value begins with `ENC:`, the engine automatically decrypts it when the variable is passed to a secure connector parameter (`PASSWORD`, `API_KEY`, `SSH_KEY_PAIR.PASSPHRASE`, etc.). This requires `USE SCRIPT PASSWORD` or a master password to be set.
 3. **Lint taint tracking** â€” if you assign a `SENSITIVE` variable into a new variable (`SET @other = @pwd`), the linter marks `@other` as sensitive too, propagating SEC-4 warnings forward.
 
-`SENSITIVE` ensures that the value is protected in output â€” `PRINT @sensitiveVar` will output `*******` unless `SET SHOW_PASSWORD ON` is active. The SEC-4 lint rule also warns you if you attempt to use these variables in insecure sinks.
+`SENSITIVE` ensures that the value is protected in output â€” `PRINT @sensitiveVar` will output `*******` unless `SET SHOW_SECRETS ON` is active. The SEC-4 lint rule also warns you if you attempt to use these variables in insecure sinks.
 
 ```sql
 DECLARE @dbPass SENSITIVE = 'ENC:abc123==';  -- masked in SHOW VARIABLES, decrypted at connect time
@@ -416,7 +416,7 @@ SET WHAT_IF OFF;
 **Allowed:** `SELECT`, `DECLARE`, `SET`, `IF`/`WHILE`, `PRINT`, `CREATE CONNECTION`.
 
 ### 2.2 `SET PROFILING`
-Enables high-resolution statement-level monitoring. See [Section 2.6](#26-observability--telemetry) for details.
+Enables high-resolution statement-level monitoring. See [Section 2.11](#211-observability--telemetry) for details.
 
 ```sql
 SET PROFILING ON;
@@ -425,18 +425,90 @@ SET PROFILING OFF;
 SHOW PROFILE INTO #perf;
 ```
 
-### 2.3 `SET SHOW_PASSWORD`
-Controls whether variables marked as `SENSITIVE` (see Â§4.1) are revealed in plain text during `SHOW VARIABLES` or `PRINT` output. Default: `OFF`.
+### 2.3 `SET SHOW_SECRETS`
+Controls display masking only. When `ON`, variables marked as `SENSITIVE` (see §4.1) may be revealed in plain text during `SHOW VARIABLES`, `PRINT`, logs, diagnostics, or exports. Default: `OFF`.
+
+`SET SHOW_PASSWORD` is accepted as an alias and behaves identically. `SHOW_SECRETS` is the preferred form.
 
 > [!IMPORTANT]
-> For security, the "System Password" set via `USE PASSWORD` is **never** revealed or echoed in any output, even when this setting is `ON`. If you lose this password, any `ENC:` strings or files encrypted with it cannot be recovered.
+> `SET SHOW_SECRETS` does not control whether plaintext secrets are allowed to remain in saved source files. Use `SET ALLOW_PLAINTEXT_SECRETS` for that unsafe local-development escape hatch. The password supplied by `USE PASSWORD` is still treated as a master/session secret and should not be printed or logged.
 
 ```sql
-SET SHOW_PASSWORD ON;
-SET SHOW_PASSWORD OFF;
+SET SHOW_SECRETS = ON;
+SHOW VARIABLES;  -- SENSITIVE values may be visible
+SET SHOW_SECRETS = OFF;
 ```
 
-### 2.4 Security Overrides
+### 2.4 `SET ALLOW_PLAINTEXT_SECRETS`
+Controls source persistence for plaintext secrets. Default: `OFF`.
+
+Admin default: `Engine:AllowPlaintextSecrets` in `appsettings.json`.
+
+When `OFF`, editors and save helpers rewrite literal master-password statements to the prompt form:
+
+```sql
+USE PASSWORD = 'dev-only';
+-- Saved as:
+USE PASSWORD PROMPT;
+```
+
+When `ON`, the script explicitly opts into preserving plaintext secrets in the saved file. This is intended only for throwaway local development and emits a warning when executed.
+
+```sql
+SET ALLOW_PLAINTEXT_SECRETS = ON;
+USE PASSWORD = 'dev-only';  -- May remain in saved source
+
+SET ALLOW_PLAINTEXT_SECRETS = OFF;
+```
+
+Published Orchestrator bundles still strip literal `USE PASSWORD` statements from the published copy regardless of this setting.
+
+### 2.5 `SET NO_SAVE_SENSITIVE`
+Controls save-time scrubbing for sensitive values. Default: `OFF`.
+
+Admin default: `Engine:NoSaveSensitive` in `appsettings.json`.
+
+When `ON`, save helpers remove plaintext sensitive values from saved source. This includes literal `USE PASSWORD` statements, `SENSITIVE`/`ENCRYPTED` declarations with literal values, credential-like `WITH()` options, and password fragments in connection strings.
+
+```sql
+SET NO_SAVE_SENSITIVE = ON;
+USE PASSWORD = 'dev-only';
+DECLARE @apiToken SENSITIVE = 'local-token';
+CREATE CONNECTION api ON REST() WITH(API_KEY = 'local-key');
+
+-- Saved source uses placeholders/prompt form instead of those values.
+```
+
+### 2.6 `SET NO_SAVE_CONNECTION`
+Controls save-time scrubbing for connection location and identity details. Default: `OFF`.
+
+Admin default: `Engine:NoSaveConnection` in `appsettings.json`.
+
+When `ON`, save helpers replace `CREATE CONNECTION` targets and quoted connection options with placeholders. This removes hosts, databases, usernames, passwords, API keys, and similar connection details from saved source.
+
+```sql
+SET NO_SAVE_CONNECTION = ON;
+CREATE CONNECTION prod ON POSTGRES('Host=db01;Username=etl;Password=pw;')
+WITH(HOST = 'db01', DATABASE = 'warehouse', USERNAME = 'etl', PASSWORD = 'pw');
+```
+
+### 2.7 `SET CONNECTION_ENCRYPTION`
+Controls save-time encryption for connection details. Default: `OFF`.
+
+Admin default: `Engine:ConnectionEncryption` in `appsettings.json`.
+
+When `ON`, save helpers encrypt the `CREATE CONNECTION` target and quoted `WITH()` option values using the script/master password. If the same file has `USE PASSWORD = 'literal'`, editors can use that value for save-time encryption and then rewrite the source to `USE PASSWORD PROMPT`.
+
+```sql
+SET CONNECTION_ENCRYPTION = ON;
+USE PASSWORD = 'dev-only';
+CREATE CONNECTION prod ON POSTGRES('Host=db01;Username=etl;Password=pw;')
+WITH(HOST = 'db01', DATABASE = 'warehouse', USERNAME = 'etl', PASSWORD = 'pw');
+```
+
+`NO_SAVE_CONNECTION` takes precedence over `CONNECTION_ENCRYPTION` because it removes connection details instead of preserving them encrypted.
+
+### 2.8 Security Overrides
 Only honored when the path is within an approved Safe Zone. All overrides produce an audit entry.
 
 | Command | Description |
@@ -446,7 +518,7 @@ Only honored when the path is within an approved Safe Zone. All overrides produc
 | `SET ALLOW_FILE_OPERATIONS = n` | Overrides the default runaway protection limit (100) for file operations |
 | `SET ALLOW_RECURSIVE_LAYERS = n` | Overrides the default recursion limit (5) for directory operations |
 
-### 2.5 Performance & Spilling Thresholds
+### 2.9 Performance & Spilling Thresholds
 Override `appsettings.json` defaults for the current session.
 
 | Command | Default | Description |
@@ -479,7 +551,7 @@ Override `appsettings.json` defaults for the current session.
 | `SET SPILL_FORMAT = 'AUTO'\|'JSON'\|'PARQUET'` | AUTO | Storage format for spilled engine data |
 
 
-### 2.6 `SET WEEK_START_DAY`
+### 2.10 `SET WEEK_START_DAY`
 Override the first day of the week for `RELDATE` week-boundary expressions (`W`, `W-1`, `WE`, `WE-1`, etc.) for the current script.
 
 ```sql
@@ -488,7 +560,7 @@ SET WEEK_START_DAY = 'Sunday';   -- valid for this script only
 
 Valid values (case-insensitive): `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday`. The engine default is `Monday`; the organisation default can be changed with `Engine.StartOfWeek` in `appsettings.json`.
 
-### 2.7 Observability & Telemetry
+### 2.11 Observability & Telemetry
 
 ETL-SQL provides two layers of performance monitoring: **Telemetry** and **Profiling**.
 
@@ -1644,6 +1716,38 @@ DROP FUNCTION  IF EXISTS CalculateTax;
 DROP PROCEDURE IF EXISTS ArchiveSales;
 ```
 
+### 12.4 `CREATE VIEW`
+
+Views are session-scoped query aliases. They store a query definition and evaluate it every time the view is referenced. They do not materialize rows; use `SELECT ... INTO #temp` or `CREATE DATASET` when you need stored results.
+
+```sql
+CREATE VIEW ActiveCustomers AS
+SELECT id, name, region
+FROM #customers
+WHERE active = 1;
+
+SELECT * FROM ActiveCustomers WHERE region = 'West';
+
+ALTER VIEW ActiveCustomers AS
+SELECT id, name, region, status
+FROM #customers
+WHERE active = 1;
+
+CREATE OR ALTER VIEW ActiveCustomers AS
+SELECT id, name, region
+FROM #customers
+WHERE active = 1;
+
+SHOW VIEWS INTO #views;
+DROP VIEW IF EXISTS ActiveCustomers;
+```
+
+Rules:
+- Views are read-only and cannot be used as `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, or `SELECT INTO` targets.
+- Views are resolved in the engine, not created in a remote database. Use `EXECUTE <conn> BEGIN CREATE VIEW ... END` for native database views.
+- CTEs and local statement sources can shadow view names inside a statement.
+- Direct or indirect recursive view references fail at execution time.
+
 ---
 
 ## 13. Transactions
@@ -2144,6 +2248,8 @@ CREATE VISUAL <name> AS <type> (
   [TITLE      = '<string>',]
   [SUBTITLE   = '<string>',]
   [TOOLTIP    = '<string>',]
+  [VISIBLE    = ON|OFF,]
+  [FETCH      = AUTO|ON_LOAD|ON_RUN,]
   [MAPPINGS   ( role = column [, ...] ),]
   [OPTIONS    ( key = value [, ...]
                 [, X_AXIS (...)] [, Y_AXIS (...)]
@@ -2160,6 +2266,8 @@ CREATE VISUAL <name> AS <type> (
 ```
 
 **Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `RADAR`, `CANDLESTICK`, `GANTT`, `SANKEY`, `SUNBURST`, `NETWORK`, `TRELLIS`, `MATRIX`, `MAP`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX`
+
+`VISIBLE` controls UI visibility only. `FETCH` controls source evaluation timing: `AUTO` follows the containing page mode, `ON_LOAD` always loads during initial build, and `ON_RUN` waits for `APPLY_PARAMETERS`.
 
 **Mapping roles by visual type:**
 
@@ -2266,26 +2374,39 @@ Input visuals (`CHECKBOX`, `TEXTBOX`, `NUMBERBOX`) and some filter types support
 
 ### A.4 `CREATE PAGE`
 ```sql
-CREATE PAGE <name> AS (
-  STRUCTURE = '<css-grid-template-areas>',
-  MAP (
-    '<slot>' = <VisualOrContainerName>
-    [, '<slot>' = <name> ...]
-  )
-  [, GAP = '<css-size>']
+CREATE PAGE <name> AS DASHBOARD|PAGINATED (
+  [TITLE = '<string>',]
+  [SUBTITLE = '<string>',]
+  [TOOLTIP = '<string>' | <ContainerName>,]
+  [VISIBLE = ON|OFF,]
+  [REFRESH = <seconds>,]
+  [
+    LAYOUT (
+      STRUCTURE = '<css-grid-template-areas>',
+      MAP ('<slot>' = <VisualOrContainerName> [, ...] )
+      [, GAP = '<css-size>']
+      [, <layout_key> = <value> ...]
+    )
+  |
+    STRUCTURE = '<css-grid-template-areas>',
+    MAP ('<slot>' = <VisualOrContainerName> [, ...] )
+    [, GAP = '<css-size>']
+  ]
   [, STYLE ( key = value [, ...] )]
 )
 ;
 ```
 
-`STRUCTURE` uses CSS grid-template-areas: space-separated slot letters per row, rows separated by `/`. Example: `'A A / B C'`.
+`STRUCTURE` uses CSS grid-template-areas: space-separated slot letters per row, rows separated by `/`. Example: `'A A / B C'`. `DASHBOARD` pages load result visuals immediately. `PAGINATED` pages stage prompt changes and load `AUTO` result visuals when `APPLY_PARAMETERS` runs. `REFRESH` is a page-body option; trailing `WITH (REFRESH = ...)` is not supported.
 
 ### A.5 `CREATE CONTAINER`
 ```sql
-CREATE CONTAINER <name> AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|MODAL|POPOVER (
+CREATE CONTAINER <name> AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|MODAL|POPOVER|LAYER (
   [TITLE = '<string>',]
   [SUBTITLE = '<string>',]
   [TOOLTIP = '<string>' | <ContainerName>,]
+  [VISIBLE = ON|OFF,]
+  [ICON = '<name>',]
   [STYLE = <styleName> | STYLE ( key = value [, ...] ),]
   LAYOUT (
     STRUCTURE = '<css-grid-template-areas>',
@@ -2294,12 +2415,11 @@ CREATE CONTAINER <name> AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|MODAL|POPOVE
     [, PINNABLE = ON|OFF]
     [, <layout_key> = <value> ...]
   ),
-  [OPTIONS (
-    VISIBLE = ON|OFF,
-    ICON = '<name>'
-  )]
+  [OPTIONS ( key = value [, ...] )]
 );
 ```
+
+`LAYER` stacks mapped children in the same region in map order. Use `STYLE (Z_INDEX = n)` on visuals/containers when an explicit stack order is required.
 
 ### A.6 `CREATE NAVIGATION`
 ```sql
@@ -2361,7 +2481,7 @@ DROP NAVIGATION    [IF EXISTS] <name>;
 DROP DATASET       [IF EXISTS] <name>;
 
 CREATE OR ALTER VISUAL     <name> AS <type> ( ... );
-CREATE OR ALTER PAGE       <name> AS ( ... );
+CREATE OR ALTER PAGE       <name> AS DASHBOARD|PAGINATED ( ... );
 CREATE OR ALTER DATASET    &<name> ... AS ( SELECT ... );
 CREATE OR ALTER STYLE      <name> ( ... );
 CREATE OR ALTER BUTTON     <name> AS ( ... );
@@ -2568,6 +2688,9 @@ EXECUTE portal BEGIN
             @region = 'All'
         );
 
+    -- Note: DELIVER TO GROUP and FORMAT BOTH are valid syntax and parse correctly,
+    -- but the REPORTPORTAL connector currently rejects them at runtime. Use
+    -- DELIVER TO '<username>' and FORMAT PDF or FORMAT CSV until portal support ships.
     CREATE SUBSCRIPTION 'MonthlyExec'
         FOR REPORT '/Finance/MonthlySales'
         DELIVER TO GROUP 'Finance'

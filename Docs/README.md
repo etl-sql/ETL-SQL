@@ -2,6 +2,21 @@
 
 This folder contains several kinds of documentation. Use this page as the starting point when deciding where a new topic belongs or where an existing topic should be maintained.
 
+## Find Docs by Goal
+
+Not sure where to start? Pick your goal:
+
+| I want to… | Start here |
+| :--- | :--- |
+| Move data like SSIS — connections, transforms, loads | [Cookbook.md](Cookbook.md) → [Reference/Data_Connectors.md](Reference/Data_Connectors.md) |
+| Build reports and dashboards like SSRS / Power BI | [Report_SQL_Guide.md](Report_SQL_Guide.md) → [Report_Cookbook.md](Report_Cookbook.md) |
+| Schedule and orchestrate jobs | [Orchestrators_Guide.md](Orchestrators_Guide.md) → [Pipelines_and_DAGs.md](Pipelines_and_DAGs.md) |
+| Secure scripts for source control (encrypt secrets, hash policy) | [User_Manual.md](User_Manual.md) § Security → [Reference/Grammar.md](Reference/Grammar.md) § USE PASSWORD |
+| Track data lineage and governance tags | [Reference/Lineage.md](Reference/Lineage.md) |
+| Troubleshoot install, connectors, or runtime issues | [FAQ.md](FAQ.md) → run `etl-sql doctor` |
+
+---
+
 ## Start Here
 
 | Need | Document |
@@ -78,6 +93,7 @@ Standards are normative rules for contributors and agents.
 | Document | Purpose |
 | :--- | :--- |
 | [Standards/Connectors_Standards.md](Standards/Connectors_Standards.md) | Connector implementation, security, and testing rules |
+| [Standards/Connector_Certification_Matrix.md](Standards/Connector_Certification_Matrix.md) | Per-connector compliance status against the 10 inviolable rules |
 | [Standards/Presentation_Standards.md](Standards/Presentation_Standards.md) | Presentation layer and UI behavior rules |
 
 ## Strategy and Design History

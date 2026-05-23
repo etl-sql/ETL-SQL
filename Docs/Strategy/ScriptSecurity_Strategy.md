@@ -1,5 +1,8 @@
 # Script Security Strategy
 
+> [!NOTE]
+> **Security design rationale.** This document records the decision to use hash pinning instead of full PKI script signing, and why. The `SET SCRIPT_HASH_POLICY` statement and `USE PASSWORD` / `ENC:` encryption features implement this rationale. For current security behavior and configuration options, see `SECURITY.md` and `Docs/Reference/Grammar.md`.
+
 ## The Question
 
 Should ETL-SQL scripts be cryptographically signed, and should the engine refuse to execute unsigned or tampered scripts?

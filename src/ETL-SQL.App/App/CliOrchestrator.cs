@@ -35,6 +35,8 @@ namespace ETL_SQL.App
         private static readonly Option<string?> ServeManifestOption = new(new[] { "--manifest", "-m" }, "Serve multiple reports defined in a JSON manifest");
         private static readonly Option<int?> ServePortOption    = new(new[] { "--port", "-p" }, "Port to listen on (default: auto-assigned ephemeral port)");
         private static readonly Option<bool>  ServeNoBrowserOption = new("--no-browser", "Do not automatically open the browser on start");
+        private static readonly Option<bool>   DoctorStrictOption   = new("--strict", "Exit with code 1 if any check produces a WARN or FAIL result.");
+        private static readonly Option<string> DoctorProfileOption  = new("--profile", () => "quick", "Check depth: 'quick' (fast config checks) or 'full' (adds engine/crypto/linter smoke tests).");
 
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
@@ -115,7 +117,11 @@ namespace ETL_SQL.App
             uiCommand.AddCommand(oldSubcommand);
             
             // 7. DOCTOR Command (Health Check)
-            var doctorCommand = new Command("doctor", "Perform a system health check to verify the environment");
+            var doctorCommand = new Command("doctor", "Perform a system health check to verify the environment")
+            {
+                DoctorStrictOption,
+                DoctorProfileOption,
+            };
             doctorCommand.SetHandler(async (context) => await Dispatch(context, "doctor", handler));
 
             // 8. CONFIG Command
@@ -215,6 +221,13 @@ namespace ETL_SQL.App
                 cliContext.ServeManifest  = res.GetValueForOption(ServeManifestOption);
                 cliContext.ServePort      = res.GetValueForOption(ServePortOption);
                 cliContext.ServeNoBrowser = res.GetValueForOption(ServeNoBrowserOption);
+            }
+            else if (commandName == "doctor")
+            {
+                cliContext.DoctorStrict = res.FindResultFor(DoctorStrictOption) != null && res.GetValueForOption(DoctorStrictOption);
+                cliContext.DoctorProfile = res.FindResultFor(DoctorProfileOption) != null
+                    ? res.GetValueForOption(DoctorProfileOption) ?? "quick"
+                    : "quick";
             }
 
             var sessionOptVal = res.FindResultFor(SessionOption) != null ? res.GetValueForOption(SessionOption) : null;

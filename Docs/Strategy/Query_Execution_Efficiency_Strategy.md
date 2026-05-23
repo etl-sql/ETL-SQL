@@ -1,6 +1,9 @@
 # Strategy: ETL-SQL Query Execution Efficiency
 ### v0.7.0 Mitigations → v0.8.x Streaming and Query Planning
 
+> [!IMPORTANT]
+> **Active performance strategy.** The v0.7.0 mitigations (spill paths, external engines, batch thresholds) are shipped. The v0.8.x streaming and query-planning phases described below are future roadmap items — do not treat them as current product reference without checking the source tree.
+
 **Status:** Active performance strategy  
 **Intent:** Stabilize large-query execution first, then reduce materialization and add a small optimizer in phases.  
 **Honest summary:** This work will primarily improve memory scalability and long-run stability. It will often improve elapsed query time by reducing allocation and GC pressure, but small queries may see neutral or slightly worse runtime if streaming overhead is added without care.

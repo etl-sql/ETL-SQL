@@ -16,6 +16,7 @@
     <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="System.Linq.Async" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+    <PackageReference Include="Testcontainers" />
     <PackageReference Include="Testcontainers.MsSql" />
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="Testcontainers.Oracle" />

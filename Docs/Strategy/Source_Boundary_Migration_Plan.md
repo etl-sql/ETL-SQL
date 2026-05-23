@@ -1,5 +1,8 @@
 # Source Boundary Migration Plan
 
+> [!NOTE]
+> **Implemented migration record.** The primary boundary separation described here has shipped. The remaining guidance on host-application ownership is still useful as a contribution standard. Current subsystem ownership is described in `Docs/Architecture/Engine.md` and the architecture docs alongside it.
+
 ETL-SQL has become more consolidated, but source-tree cleanup should stay incremental. The current priority is to make ownership boundaries obvious enough that new work lands in the right place and host applications stay thin.
 
 This plan is intentionally conservative: document the target boundaries first, keep behavior stable, then move one boundary at a time with focused tests.

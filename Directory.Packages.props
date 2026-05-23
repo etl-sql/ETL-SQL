@@ -35,6 +35,7 @@
     <PackageVersion Include="System.Data.Odbc" Version="$(MicrosoftExtensionsVersion)" />
     <PackageVersion Include="System.Linq.Async" Version="7.0.0" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Testcontainers" Version="$(TestcontainersVersion)" />
     <PackageVersion Include="Testcontainers.MsSql" Version="$(TestcontainersVersion)" />
     <PackageVersion Include="Testcontainers.Oracle" Version="$(TestcontainersVersion)" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="$(TestcontainersVersion)" />

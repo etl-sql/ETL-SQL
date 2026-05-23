@@ -19,7 +19,7 @@ Welcome to ETL-SQL. This guide is designed to help you transition from thinking 
 9. [File Operations](#9-file-operations)
 10. [Modular Scripts & Jobs](#10-modular-scripts--jobs)
 11. [Metadata, Lineage & Tags](#11-metadata-lineage--tags)
-12. [Debugging & Diagnostics](#12-debugging--diagnostics)
+12. [Debugging & Diagnostics](#12-debugging--diagnostics) — LINT, EXPLAIN, profiling, MOCKDB, `etl-sql doctor`
 13. [Zero-Trust Security](#13-zero-trust-security)
 14. [Mocking & Testing](#14-mocking--testing)
 15. [Interactive TUI Editor](#15-interactive-tui-editor)
@@ -318,6 +318,19 @@ SET WEEK_START_DAY = 'Sunday';
 Valid values: `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday`.
 
 The default can also be changed for all scripts by setting `Engine.StartOfWeek` in `appsettings.json`.
+
+Save-time security defaults can also be configured by administrators in `appsettings.json` under `Engine`. Scripts can still override these defaults with the matching `SET` command:
+
+```json
+{
+  "Engine": {
+    "AllowPlaintextSecrets": false,
+    "NoSaveSensitive": false,
+    "NoSaveConnection": false,
+    "ConnectionEncryption": false
+  }
+}
+```
 
 ### 3.3 Environment Sets — Switching DEV / QA / PROD
 
@@ -1071,6 +1084,57 @@ FROM m.Users AS u
 JOIN m.Orders AS o ON u.UserID = o.CustomerID;
 ```
 
+### 12.5 `etl-sql doctor` — Environment Health Check
+
+Before running scripts in a new environment, or when troubleshooting unexpected failures, run the health check command:
+
+```bash
+etl-sql doctor
+```
+
+The command checks the most common setup problems and prints a status table:
+
+| Check | What it validates |
+| :--- | :--- |
+| Operating System / .NET Runtime | Correct platform and runtime version |
+| Base Directory Write | Engine can write logs and session files |
+| Temp Directory Write | Engine can write spill and staging files |
+| Disk Space | At least 500 MB free on the app drive |
+| ODBC Driver Manager | `odbc32.dll` present (Windows) or `odbcinst.ini` found (Linux/Mac) |
+| appsettings.json | Configuration file is present |
+| Authorized Hosts | At least one host is allowed in the security config |
+| Registered Connectors | Connector registry loaded at least one connector |
+| Orchestrator History DB | SQLite history path is configured |
+| App / Script Log Dirs | Log directories are writable |
+
+**Options:**
+
+```bash
+# Exit with code 1 if any check is WARN or FAIL (useful in CI setup scripts)
+etl-sql doctor --strict
+
+# Run deeper smoke tests: parser, engine execution, ENC: round-trip, linter
+etl-sql doctor --profile full
+
+# Output machine-readable JSON (useful for monitoring scripts)
+etl-sql doctor --json
+
+# Combine flags
+etl-sql doctor --profile full --strict --json
+```
+
+The `--profile full` option adds four additional checks that exercise the engine itself:
+
+| Check | What it does |
+| :--- | :--- |
+| Parser Smoke | Parses `SELECT 1 AS n;` and verifies the AST is non-empty |
+| Engine Smoke (MOCKDB) | Runs a live query against the built-in MOCKDB connector |
+| ENC: Round-Trip | Encrypts and decrypts a value and verifies the result matches |
+| Linter Smoke | Runs the linter on a trivial script and verifies no errors |
+
+> [!TIP]
+> Run `etl-sql doctor --profile full` as part of first-time setup, release validation, or when migrating to a new host machine.
+
 ---
 
 ## 13. Zero-Trust Security
@@ -1392,7 +1456,7 @@ CREATE VISUAL RevenueByRegion AS BAR (
     TITLE = 'Revenue by Region'
 );
 
-CREATE PAGE Overview AS (
+CREATE PAGE Overview AS DASHBOARD (
     STRUCTURE = 'A',
     MAP ('A' = RevenueByRegion)
 );

@@ -286,3 +286,58 @@ After installation or upgrade:
 6. Confirm logs, backup jobs, and monitoring checks are collecting the expected files.
 
 For report catalog, user, group, ACL, subscription, snapshot, and export operations, continue in [ReportPortal_Administrators_Guide.md](ReportPortal_Administrators_Guide.md).
+
+---
+
+## 10. Environment Validation with `etl-sql doctor`
+
+The `etl-sql doctor` command is a built-in health check that validates the most common setup problems before you begin using the environment.
+
+### Quick check (default)
+
+```bash
+etl-sql doctor
+```
+
+Runs immediately (no database or network required) and prints a status table covering:
+
+- OS and .NET runtime version
+- Write access to the base directory, temp directory, and log directories
+- Available disk space on the app drive
+- ODBC driver manager presence
+- `appsettings.json` present and readable
+- Security authorized-hosts count
+- Connector registry loaded
+- Orchestrator history DB path configured
+
+### Full check
+
+```bash
+etl-sql doctor --profile full
+```
+
+Adds engine smoke tests that take a few seconds but exercise the runtime itself:
+
+- Parses a trivial script
+- Runs a live MOCKDB query through the engine
+- Verifies the `ENC:` encrypt/decrypt round-trip
+- Runs the linter on a simple script
+
+### CI and monitoring integration
+
+```bash
+# Fail the CI step if any check is WARN or FAIL
+etl-sql doctor --strict
+
+# Machine-readable output for monitoring scripts
+etl-sql doctor --json
+
+# Deep validation during release pipeline or first-time host setup
+etl-sql doctor --profile full --strict --json
+```
+
+**Recommended use:**
+- Run `etl-sql doctor` as the first step of any new host setup or post-upgrade verification.
+- Add `etl-sql doctor --strict` to the service startup validation in your CI/CD pipeline.
+- Use `etl-sql doctor --json` to feed a monitoring system that alerts on WARN/FAIL status.
+- See the [Production Readiness Checklist](ReportPortal_Administrators_Guide.md#14-production-readiness-checklist) in the portal admin guide for the full go-live gate.
