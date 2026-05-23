@@ -43,10 +43,9 @@ namespace ETL_SQL.Data
 
         public int AddColumn(string name)
         {
-            if (_columnToIndex.TryGetValue(name, out var index)) return index;
-            index = _columnNames.Count;
+            int index = _columnNames.Count;
             _columnNames.Add(name);
-            _columnToIndex[name] = index;
+            _columnToIndex.TryAdd(name, index);
             return index;
         }
 
@@ -306,11 +305,21 @@ namespace ETL_SQL.Data
             // 1. Migrate values from old schema if it existed
             if (oldSchema != null && oldValues != null)
             {
+                var oldOccurrences = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < Math.Min(oldSchema.ColumnCount, oldValues.Length); i++)
                 {
                     var name = oldSchema.GetName(i);
-                    int newIdx = _schema.GetIndex(name);
-                    if (newIdx >= 0) _values[newIdx] = oldValues[i];
+                    if (!oldOccurrences.TryGetValue(name, out int occurrence))
+                    {
+                        occurrence = 0;
+                    }
+                    oldOccurrences[name] = occurrence + 1;
+
+                    int newIdx = FindOccurrenceIndex(_schema, name, occurrence);
+                    if (newIdx >= 0)
+                    {
+                        _values[newIdx] = oldValues[i];
+                    }
                     else
                     {
                         // Move to dynamic columns if no longer in schema
@@ -336,6 +345,23 @@ namespace ETL_SQL.Data
                 foreach (var k in keysToRemove) _dynamicColumns.Remove(k);
                 if (_dynamicColumns.Count == 0) _dynamicColumns = null;
             }
+        }
+
+        private static int FindOccurrenceIndex(TableSchema schema, string columnName, int occurrenceIndex)
+        {
+            int currentOccurrence = 0;
+            for (int i = 0; i < schema.ColumnCount; i++)
+            {
+                if (string.Equals(schema.GetName(i), columnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (currentOccurrence == occurrenceIndex)
+                    {
+                        return i;
+                    }
+                    currentOccurrence++;
+                }
+            }
+            return -1;
         }
 
         public Row Clone()

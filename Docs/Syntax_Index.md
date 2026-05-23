@@ -77,6 +77,10 @@ Statements are the top-level actions in an ETL-SQL script.
 | `CREATE INDEX` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
 | `CREATE PROCEDURE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
 | `CREATE FUNCTION` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `CREATE VIEW` | DDL / Query Alias | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `ALTER VIEW` | DDL / Query Alias | [Grammar.md](../Docs/Reference/Grammar.md) | [ALTER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ALTER.md) |
+| `DROP VIEW` | DDL / Query Alias | [Grammar.md](../Docs/Reference/Grammar.md) | [DROP.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
+| `SHOW VIEWS` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
 | `GENERATE` | DML | [Grammar.md](../Docs/Reference/Grammar.md) | [GENERATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/GENERATE.md) |
 | `CASE` | Expressions | [Grammar.md](../Docs/Reference/Grammar.md) | [CASE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CASE.md) |
 | `WITH` | CTE | [Grammar.md](../Docs/Reference/Grammar.md) | [WITH.md](../src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
@@ -601,7 +605,12 @@ Options configured via `SET <Option> = <Value>` or `SET <Option> ON|OFF`.
 | :--- | :--- | :--- | :--- |
 | `WHAT_IF` | Execution | OFF | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
 | `PROFILING` | Execution | OFF | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
-| `SHOW_PASSWORD` | Security | OFF | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
+| `SHOW_SECRETS` | Security | OFF | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
+| `SHOW_PASSWORD` | Security | OFF — alias for `SHOW_SECRETS` | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
+| `ALLOW_PLAINTEXT_SECRETS` | Security | OFF | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
+| `NO_SAVE_SENSITIVE` | Security | OFF | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
+| `NO_SAVE_CONNECTION` | Security | OFF | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
+| `CONNECTION_ENCRYPTION` | Security | OFF | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
 | `LINEAGE` | Data | ON | [LINEAGE.md](../src/ETL-SQL.Core/Resources/Help/Operations/LINEAGE.md) |
 | `TELEMETRY` | Metrics | ON | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
 | `BATCHSIZE` | Performance | 10,000 | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
@@ -728,7 +737,7 @@ CREATE VISUAL name AS <Type> ( ... )
 | `OPTIONS` | `OPTIONS ( Key = Value, ... )` | Visual-specific settings (X_AXIS, COLORS, etc.) |
 | `ACTIONS` | `ACTIONS ( Trigger = Action, ... )` | Interactive behavior (ON_CLICK, ON_CHANGE) |
 | `INTERACTIONS` | `INTERACTIONS ( Key = Value, ... )` | Cross-visual filtering behavior |
-| `STYLE` | `STYLE = Name / ( ... )` | CSS/Theme overrides |
+| `STYLE` | `STYLE = Name / ( ... )` | CSS/theme/viewer overrides, including `ALLOW_MAXIMIZE = ON/OFF` |
 | `SERIES` | `SERIES ( Type Column, ... )` | Multi-series type mapping (BAR/LINE) |
 | `FORMATTING` | `FORMATTING ( expr THEN color, ... )` | Conditional formatting rules |
 | `OVERLAYS` | `OVERLAYS ( Type AS Style, ... )` | Trend lines, goals, and averages |
@@ -745,6 +754,7 @@ Common `OPTIONS` keys for report visuals:
 | `FORMAT` | `CARD`, `TABLE`, data labels | .NET format string such as `'N0'`, `'C2'`, `'P1'` | Numeric display format |
 | `AXIS_SORT` | `BAR`, `HBAR`, `LINE`, `AREA`, `COMBO` | `ASC`, `DESC`, `SOURCE`, `VALUE`, `VALUE_DESC` | Controls category-axis order. `ASC` type-sorts datetime, numeric, then text values; `SOURCE` preserves query order; `VALUE` and `VALUE_DESC` sort by the metric value. |
 | `ABBREVIATE` | `CARD` | `ON` / `OFF` | Shortens large numbers, such as `1250000` to `1.25M` |
+| `ALLOW_MAXIMIZE` | Visual `STYLE` | `ON` / `OFF` | Shows or hides the viewer maximize button. Data/chart visuals default `ON`; input/control visuals default `OFF`. |
 | `GOAL` | `CARD` | Numeric literal | Supplies a literal target when `MAPPINGS(GOAL = column)` is not used |
 | `SHOW_GOAL` | `CARD` | `ON` / `OFF` | Shows the target value line |
 | `SHOW_PERCENT_OF_GOAL` | `CARD` | `ON` / `OFF` | Shows percent-to-target text |
@@ -761,17 +771,23 @@ Common `OPTIONS` keys for report visuals:
 
 ### 6.7 CREATE PAGE / CONTAINER
 ```sql
-CREATE PAGE name AS ( ... ) [WITH ( ... )]
+CREATE PAGE name AS DASHBOARD|PAGINATED ( ... )
+CREATE CONTAINER name AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|MODAL|POPOVER|LAYER ( ... )
 ```
 | Option | Context | Description |
 | :--- | :--- | :--- |
 | `STRUCTURE` | Page/Container | CSS Grid template area string |
 | `MAP` | Page/Container | Mapping of grid slots to visuals/containers |
-| `LAYOUT` | Container | Inner layout configuration |
+| `LAYOUT` | Page/Container | Inner layout configuration; preferred for page layout and required for containers |
 | `GAP` | Page/Layout | Space between grid elements |
 | `PINNABLE` | Container layout | Enable/disable portal pinning |
-| `ICON` | Container | Header icon identifier |
-| `REFRESH` | Page (WITH) | Auto-refresh interval in seconds |
+| `ICON` | Container top-level | Header or trigger icon identifier |
+| `VISIBLE` | Page/Container/Visual top-level | UI visibility only; does not control fetch timing |
+| `FETCH` | Visual top-level | `AUTO`, `ON_LOAD`, or `ON_RUN` visual fetch timing |
+| `REFRESH` | Page top-level | Auto-refresh interval in seconds |
+| `DASHBOARD` | Page mode | Loads result visuals immediately and applies control changes live |
+| `PAGINATED` | Page mode | Stages prompt changes until an `APPLY_PARAMETERS` run |
+| `LAYER` | Container type | Stacks mapped visuals/containers in the same region; use `STYLE (Z_INDEX = n)` for explicit ordering |
 
 ### 6.8 CREATE NAVIGATION
 ```sql
@@ -1084,7 +1100,883 @@ Annotations used for lineage, security, and script behavior.
 | `ENC:...` | Literal | Prefix for engine-encrypted strings |
 | `BANG` / `!` | Session | Prefix for named Environment Sets (e.g. `!PROD`) |
 
+<!-- BEGIN GENERATED CANONICAL TOKEN INDEX -->
+## 18. Canonical Token Inventory
 
+> Generated from `src/ETL-SQL.Core/Common/LanguageMetadata.cs`. Run `node ./scripts/generate-syntax-index.js` after adding, removing, or renaming language tokens.
 
+### 18.1 DML Keywords
 
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `AS` | DML | Canonical language token |
+| `ASC` | DML | Canonical language token |
+| `BY` | DML | Canonical language token |
+| `CUBE` | DML | Canonical language token |
+| `DELETE` | DML | Canonical language token |
+| `DESC` | DML | Canonical language token |
+| `DISTINCT` | DML | Canonical language token |
+| `FETCH` | DML | Canonical language token |
+| `FIRST` | DML | Canonical language token |
+| `FROM` | DML | Canonical language token |
+| `GROUP` | DML | Canonical language token |
+| `GROUPING` | DML | Canonical language token |
+| `HAVING` | DML | Canonical language token |
+| `INSERT` | DML | Canonical language token |
+| `INTO` | DML | Canonical language token |
+| `LIMIT` | DML | Canonical language token |
+| `MATCHED` | DML | Canonical language token |
+| `MERGE` | DML | Canonical language token |
+| `NEXT` | DML | Canonical language token |
+| `OFFSET` | DML | Canonical language token |
+| `ONLY` | DML | Canonical language token |
+| `ORDER` | DML | Canonical language token |
+| `PERCENT` | DML | Canonical language token |
+| `PIVOT` | DML | Canonical language token |
+| `QUALIFY` | DML | Canonical language token |
+| `REPLACE` | DML | Canonical language token |
+| `ROLLUP` | DML | Canonical language token |
+| `ROW` | DML | Canonical language token |
+| `ROWS` | DML | Canonical language token |
+| `SELECT` | DML | Canonical language token |
+| `SET` | DML | Canonical language token |
+| `SOURCE` | DML | Canonical language token |
+| `TARGET` | DML | Canonical language token |
+| `TIES` | DML | Canonical language token |
+| `TOP` | DML | Canonical language token |
+| `TRUNCATE` | DML | Canonical language token |
+| `UNPIVOT` | DML | Canonical language token |
+| `UPDATE` | DML | Canonical language token |
+| `USING` | DML | Canonical language token |
+| `VALUES` | DML | Canonical language token |
+| `WHERE` | DML | Canonical language token |
 
+### 18.2 DDL Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `ADD` | DDL | Canonical language token |
+| `ALTER` | DDL | Canonical language token |
+| `CHECK` | DDL | Canonical language token |
+| `CLEAR` | DDL | Canonical language token |
+| `COLUMN` | DDL | Canonical language token |
+| `COMMIT` | DDL | Canonical language token |
+| `CONNECTION` | DDL | Canonical language token |
+| `CONSTRAINT` | DDL | Canonical language token |
+| `CONTAINER` | DDL | Canonical language token |
+| `CREATE` | DDL | Canonical language token |
+| `DATABASE` | DDL | Canonical language token |
+| `DATASET` | DDL | Canonical language token |
+| `DECLARE` | DDL | Canonical language token |
+| `DECRYPT` | DDL | Canonical language token |
+| `DIRECTORY` | DDL | Canonical language token |
+| `DIRECTORY_CONTENTS` | DDL | Canonical language token |
+| `DROP` | DDL | Canonical language token |
+| `ENCRYPT` | DDL | Canonical language token |
+| `FOREIGN` | DDL | Canonical language token |
+| `FUNCTION` | DDL | Canonical language token |
+| `INDEX` | DDL | Canonical language token |
+| `KEY` | DDL | Canonical language token |
+| `NAVIGATION` | DDL | Canonical language token |
+| `PAGE` | DDL | Canonical language token |
+| `PGP_KEY_PAIR` | DDL | Canonical language token |
+| `PRIMARY` | DDL | Canonical language token |
+| `PROCEDURE` | DDL | Canonical language token |
+| `REFERENCES` | DDL | Canonical language token |
+| `RENAME` | DDL | Canonical language token |
+| `RETURNS` | DDL | Canonical language token |
+| `ROLLBACK` | DDL | Canonical language token |
+| `SCHEMA` | DDL | Canonical language token |
+| `SSH_KEY_PAIR` | DDL | Canonical language token |
+| `STYLE` | DDL | Canonical language token |
+| `TABLE` | DDL | Canonical language token |
+| `TEMPLATE` | DDL | Canonical language token |
+| `TRAN` | DDL | Canonical language token |
+| `TRANSACTION` | DDL | Canonical language token |
+| `UNIQUE` | DDL | Canonical language token |
+| `VIEW` | DDL | Canonical language token |
+| `VIEWS` | DDL | Canonical language token |
+| `VISUAL` | DDL | Canonical language token |
+
+### 18.3 Control Flow Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `ASSERT` | Control Flow | Canonical language token |
+| `BEGIN` | Control Flow | Canonical language token |
+| `BREAK` | Control Flow | Canonical language token |
+| `CASE` | Control Flow | Canonical language token |
+| `CATCH` | Control Flow | Canonical language token |
+| `CONTINUE` | Control Flow | Canonical language token |
+| `EACH` | Control Flow | Canonical language token |
+| `ELSE` | Control Flow | Canonical language token |
+| `END` | Control Flow | Canonical language token |
+| `EXEC` | Control Flow | Canonical language token |
+| `EXECUTE` | Control Flow | Canonical language token |
+| `FOR` | Control Flow | Canonical language token |
+| `FOREACH` | Control Flow | Canonical language token |
+| `GO` | Control Flow | Canonical language token |
+| `IF` | Control Flow | Canonical language token |
+| `RAISEERROR` | Control Flow | Canonical language token |
+| `RAISERROR` | Control Flow | Canonical language token |
+| `RETURN` | Control Flow | Canonical language token |
+| `SEND_EMAIL` | Control Flow | Canonical language token |
+| `THEN` | Control Flow | Canonical language token |
+| `THROW` | Control Flow | Canonical language token |
+| `TRY` | Control Flow | Canonical language token |
+| `WHEN` | Control Flow | Canonical language token |
+| `WHILE` | Control Flow | Canonical language token |
+
+### 18.4 Join Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `ALL` | Join | Canonical language token |
+| `APPLY` | Join | Canonical language token |
+| `CROSS` | Join | Canonical language token |
+| `EXCEPT` | Join | Canonical language token |
+| `FULL` | Join | Canonical language token |
+| `FUZZY` | Join | Canonical language token |
+| `INNER` | Join | Canonical language token |
+| `INTERSECT` | Join | Canonical language token |
+| `JOIN` | Join | Canonical language token |
+| `KEEP` | Join | Canonical language token |
+| `LEFT` | Join | Canonical language token |
+| `OUTER` | Join | Canonical language token |
+| `RIGHT` | Join | Canonical language token |
+| `UNION` | Join | Canonical language token |
+
+### 18.5 Operator Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `AND` | Operator | Canonical language token |
+| `BETWEEN` | Operator | Canonical language token |
+| `ESCAPE` | Operator | Canonical language token |
+| `EXISTS` | Operator | Canonical language token |
+| `ILIKE` | Operator | Canonical language token |
+| `IN` | Operator | Canonical language token |
+| `IS` | Operator | Canonical language token |
+| `LIKE` | Operator | Canonical language token |
+| `NOT` | Operator | Canonical language token |
+| `NULL` | Operator | Canonical language token |
+| `OR` | Operator | Canonical language token |
+
+### 18.6 Settings & Engine Configuration Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `ALLOW_FILE_OPERATIONS` | Settings & Engine Configuration | Canonical language token |
+| `ALLOW_RECURSIVE_LAYERS` | Settings & Engine Configuration | Canonical language token |
+| `CASE_SENSITIVE` | Settings & Engine Configuration | Canonical language token |
+| `CONFIG` | Settings & Engine Configuration | Canonical language token |
+| `EXTERNAL_HASH_PARTITIONS` | Settings & Engine Configuration | Canonical language token |
+| `EXTERNAL_SORT_CHUNK_SIZE` | Settings & Engine Configuration | Canonical language token |
+| `FOREACH_PAGE_SIZE` | Settings & Engine Configuration | Canonical language token |
+| `INTERACTIVE_MODE` | Settings & Engine Configuration | Canonical language token |
+| `JOIN_SPILL_THRESHOLD` | Settings & Engine Configuration | Canonical language token |
+| `LINT` | Settings & Engine Configuration | Canonical language token |
+| `MAX_FILE_OPERATIONS` | Settings & Engine Configuration | Canonical language token |
+| `MAX_GENERATE_ROWS` | Settings & Engine Configuration | Canonical language token |
+| `MAX_GENERATE_ROWS` | Settings & Engine Configuration | Canonical language token |
+| `MAX_GROUPING_SETS` | Settings & Engine Configuration | Canonical language token |
+| `MAX_IN_MEMORY_BATCHES` | Settings & Engine Configuration | Canonical language token |
+| `MAX_INTERNAL_OPERATIONS` | Settings & Engine Configuration | Canonical language token |
+| `MAX_INTERNAL_OPERATIONS` | Settings & Engine Configuration | Canonical language token |
+| `MAX_LAST_RESULT_ROWS` | Settings & Engine Configuration | Canonical language token |
+| `MAX_MESSAGES` | Settings & Engine Configuration | Canonical language token |
+| `MAX_PARALLEL_DEGREE` | Settings & Engine Configuration | Canonical language token |
+| `MAX_RECURSIVE_DEPTH` | Settings & Engine Configuration | Canonical language token |
+| `MAX_SESSION_SIZE` | Settings & Engine Configuration | Canonical language token |
+| `MAX_SMTP_EMAILS_PER_SCRIPT` | Settings & Engine Configuration | Canonical language token |
+| `MAX_SMTP_EMAILS_PER_SCRIPT` | Settings & Engine Configuration | Canonical language token |
+| `MAX_STRING_RESULT_SIZE` | Settings & Engine Configuration | Canonical language token |
+| `PROFILE` | Settings & Engine Configuration | Canonical language token |
+| `PROFILING` | Settings & Engine Configuration | Canonical language token |
+| `REGEX_MATCH_TIMEOUT` | Settings & Engine Configuration | Canonical language token |
+| `SCRIPT_HASH_POLICY` | Settings & Engine Configuration | Canonical language token |
+| `SET_CUBE_LIMIT` | Settings & Engine Configuration | Canonical language token |
+| `SPILL_COMPRESSION` | Settings & Engine Configuration | Canonical language token |
+| `SPILL_ENCRYPTION` | Settings & Engine Configuration | Canonical language token |
+| `TELEMETRY` | Settings & Engine Configuration | Canonical language token |
+| `TEMP_TABLE_SPILL_THRESHOLD` | Settings & Engine Configuration | Canonical language token |
+| `VERSION` | Settings & Engine Configuration | Canonical language token |
+| `WEEK_START_DAY` | Settings & Engine Configuration | Canonical language token |
+| `WHAT_IF` | Settings & Engine Configuration | Canonical language token |
+| `WINDOW_SPILL_THRESHOLD` | Settings & Engine Configuration | Canonical language token |
+
+### 18.7 File & Directory Operations Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `COMPRESS` | File & Directory Operations | Canonical language token |
+| `COMPRESS_DIRECTORY` | File & Directory Operations | Canonical language token |
+| `COMPRESS_FILE` | File & Directory Operations | Canonical language token |
+| `COPY` | File & Directory Operations | Canonical language token |
+| `COPY_DIRECTORY` | File & Directory Operations | Canonical language token |
+| `COPY_FILE` | File & Directory Operations | Canonical language token |
+| `CREATE_DIRECTORY` | File & Directory Operations | Canonical language token |
+| `DECOMPRESS` | File & Directory Operations | Canonical language token |
+| `DECOMPRESS_DIRECTORY` | File & Directory Operations | Canonical language token |
+| `DECOMPRESS_FILE` | File & Directory Operations | Canonical language token |
+| `DECRYPT_DIRECTORY` | File & Directory Operations | Canonical language token |
+| `DECRYPT_FILE` | File & Directory Operations | Canonical language token |
+| `DELETE` | File & Directory Operations | Canonical language token |
+| `DELETE_DIRECTORY` | File & Directory Operations | Canonical language token |
+| `DELETE_DIRECTORY_CONTENTS` | File & Directory Operations | Canonical language token |
+| `DELETE_FILE` | File & Directory Operations | Canonical language token |
+| `ENCRYPT_DIRECTORY` | File & Directory Operations | Canonical language token |
+| `ENCRYPT_FILE` | File & Directory Operations | Canonical language token |
+| `FILES` | File & Directory Operations | Canonical language token |
+| `MOVE` | File & Directory Operations | Canonical language token |
+| `MOVE_DIRECTORY` | File & Directory Operations | Canonical language token |
+| `MOVE_FILE` | File & Directory Operations | Canonical language token |
+| `PATH` | File & Directory Operations | Canonical language token |
+| `RENAME` | File & Directory Operations | Canonical language token |
+| `RENAME_DIRECTORY` | File & Directory Operations | Canonical language token |
+| `RENAME_FILE` | File & Directory Operations | Canonical language token |
+| `ROOT` | File & Directory Operations | Canonical language token |
+
+### 18.8 Data Formatting & File Connector Options Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `BACKSLASH_N` | Data Formatting & File Connector Options | Canonical language token |
+| `COLON` | Data Formatting & File Connector Options | Canonical language token |
+| `COMMA` | Data Formatting & File Connector Options | Canonical language token |
+| `CR` | Data Formatting & File Connector Options | Canonical language token |
+| `CRLF` | Data Formatting & File Connector Options | Canonical language token |
+| `DATE_FORMAT` | Data Formatting & File Connector Options | Canonical language token |
+| `DOUBLEQUOTE` | Data Formatting & File Connector Options | Canonical language token |
+| `DOUBLEQUOTES` | Data Formatting & File Connector Options | Canonical language token |
+| `EMPTY` | Data Formatting & File Connector Options | Canonical language token |
+| `ESCAPE_CHAR` | Data Formatting & File Connector Options | Canonical language token |
+| `FIELDTERMINATOR` | Data Formatting & File Connector Options | Canonical language token |
+| `FIRSTROW` | Data Formatting & File Connector Options | Canonical language token |
+| `INCLUDE_NULL_VALUES` | Data Formatting & File Connector Options | Canonical language token |
+| `LATIN1` | Data Formatting & File Connector Options | Canonical language token |
+| `LF` | Data Formatting & File Connector Options | Canonical language token |
+| `NULL_AS` | Data Formatting & File Connector Options | Canonical language token |
+| `PIPE` | Data Formatting & File Connector Options | Canonical language token |
+| `ROWTERMINATOR` | Data Formatting & File Connector Options | Canonical language token |
+| `SEMICOLON` | Data Formatting & File Connector Options | Canonical language token |
+| `SINGLEQUOTE` | Data Formatting & File Connector Options | Canonical language token |
+| `SINGLEQUOTES` | Data Formatting & File Connector Options | Canonical language token |
+| `STRICT_SCHEMA` | Data Formatting & File Connector Options | Canonical language token |
+| `TAB` | Data Formatting & File Connector Options | Canonical language token |
+| `TILDE` | Data Formatting & File Connector Options | Canonical language token |
+| `UNICODE` | Data Formatting & File Connector Options | Canonical language token |
+| `UTF16` | Data Formatting & File Connector Options | Canonical language token |
+| `WITHOUT_ARRAY_WRAPPER` | Data Formatting & File Connector Options | Canonical language token |
+
+### 18.9 Security & Secrets Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `ALLOW_PLAINTEXT_SECRETS` | Security & Secrets | Canonical language token |
+| `CONNECTION_ENCRYPTION` | Security & Secrets | Canonical language token |
+| `NO_SAVE_CONNECTION` | Security & Secrets | Canonical language token |
+| `NO_SAVE_SENSITIVE` | Security & Secrets | Canonical language token |
+| `PASSPHRASE` | Security & Secrets | Canonical language token |
+| `PASSWORD` | Security & Secrets | Canonical language token |
+| `PGP_KEY` | Security & Secrets | Canonical language token |
+| `SHOW_PASSWORD` | Security & Secrets | Canonical language token |
+| `SHOW_SECRETS` | Security & Secrets | Canonical language token |
+
+### 18.10 Reporting & Visuals Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `ABBREVIATE` | Reporting & Visuals | Canonical language token |
+| `ACTIONS` | Reporting & Visuals | Canonical language token |
+| `ARROWS` | Reporting & Visuals | Canonical language token |
+| `AXIS_SORT` | Reporting & Visuals | Canonical language token |
+| `BACKGROUND` | Reporting & Visuals | Canonical language token |
+| `BAR` | Reporting & Visuals | Canonical language token |
+| `BOXPLOT` | Reporting & Visuals | Canonical language token |
+| `CARD` | Reporting & Visuals | Canonical language token |
+| `CENTER` | Reporting & Visuals | Canonical language token |
+| `CHECKBOX` | Reporting & Visuals | Canonical language token |
+| `CHECKS` | Reporting & Visuals | Canonical language token |
+| `CLEAR_FILTERS` | Reporting & Visuals | Canonical language token |
+| `CLOSE_PCT` | Reporting & Visuals | Canonical language token |
+| `COLOR_CLOSE` | Reporting & Visuals | Canonical language token |
+| `COLOR_MET` | Reporting & Visuals | Canonical language token |
+| `COLOR_MISSED` | Reporting & Visuals | Canonical language token |
+| `COMBO` | Reporting & Visuals | Canonical language token |
+| `CONTENT` | Reporting & Visuals | Canonical language token |
+| `CSS` | Reporting & Visuals | Canonical language token |
+| `DASHBOARD` | Reporting & Visuals | Canonical language token |
+| `DATEPICKER` | Reporting & Visuals | Canonical language token |
+| `DECIMALS` | Reporting & Visuals | Canonical language token |
+| `DELTA_FORMAT` | Reporting & Visuals | Canonical language token |
+| `DELTA_LABEL` | Reporting & Visuals | Canonical language token |
+| `DONUT` | Reporting & Visuals | Canonical language token |
+| `FAVICON` | Reporting & Visuals | Canonical language token |
+| `FONT_SIZE` | Reporting & Visuals | Canonical language token |
+| `FOOTER` | Reporting & Visuals | Canonical language token |
+| `FUNNEL` | Reporting & Visuals | Canonical language token |
+| `GAP` | Reporting & Visuals | Canonical language token |
+| `GAUGE` | Reporting & Visuals | Canonical language token |
+| `GAUGE_STYLE` | Reporting & Visuals | Canonical language token |
+| `HBAR` | Reporting & Visuals | Canonical language token |
+| `HEADER` | Reporting & Visuals | Canonical language token |
+| `HEATMAP` | Reporting & Visuals | Canonical language token |
+| `HIGHLIGHT` | Reporting & Visuals | Canonical language token |
+| `ICON_CLOSE` | Reporting & Visuals | Canonical language token |
+| `ICON_MET` | Reporting & Visuals | Canonical language token |
+| `ICON_MISSED` | Reporting & Visuals | Canonical language token |
+| `ICON_SET` | Reporting & Visuals | Canonical language token |
+| `INSIDE` | Reporting & Visuals | Canonical language token |
+| `INSIDE_BOTTOM` | Reporting & Visuals | Canonical language token |
+| `INSIDE_BOTTOM_LEFT` | Reporting & Visuals | Canonical language token |
+| `INSIDE_BOTTOM_RIGHT` | Reporting & Visuals | Canonical language token |
+| `INSIDE_LEFT` | Reporting & Visuals | Canonical language token |
+| `INSIDE_RIGHT` | Reporting & Visuals | Canonical language token |
+| `INSIDE_TOP` | Reporting & Visuals | Canonical language token |
+| `INSIDE_TOP_LEFT` | Reporting & Visuals | Canonical language token |
+| `INSIDE_TOP_RIGHT` | Reporting & Visuals | Canonical language token |
+| `INTERACTIONS` | Reporting & Visuals | Canonical language token |
+| `JS` | Reporting & Visuals | Canonical language token |
+| `LABEL_CLOSE` | Reporting & Visuals | Canonical language token |
+| `LABEL_MET` | Reporting & Visuals | Canonical language token |
+| `LABEL_MISSED` | Reporting & Visuals | Canonical language token |
+| `LABEL_POSITION` | Reporting & Visuals | Canonical language token |
+| `LAYER` | Reporting & Visuals | Canonical language token |
+| `LINE` | Reporting & Visuals | Canonical language token |
+| `LOGO` | Reporting & Visuals | Canonical language token |
+| `MAP` | Reporting & Visuals | Canonical language token |
+| `MAPPINGS` | Reporting & Visuals | Canonical language token |
+| `MATCHING` | Reporting & Visuals | Canonical language token |
+| `MET_PCT` | Reporting & Visuals | Canonical language token |
+| `MINMAX` | Reporting & Visuals | Canonical language token |
+| `NAVIGATE_PAGE` | Reporting & Visuals | Canonical language token |
+| `NUMBERBOX` | Reporting & Visuals | Canonical language token |
+| `ON_SELECT` | Reporting & Visuals | Canonical language token |
+| `PAGINATED` | Reporting & Visuals | Canonical language token |
+| `PIE` | Reporting & Visuals | Canonical language token |
+| `PINNABLE` | Reporting & Visuals | Canonical language token |
+| `PLACEHOLDER` | Reporting & Visuals | Canonical language token |
+| `POSITIVE_DOWN` | Reporting & Visuals | Canonical language token |
+| `POSITIVE_UP` | Reporting & Visuals | Canonical language token |
+| `PREFIX` | Reporting & Visuals | Canonical language token |
+| `PROGRESS_STYLE` | Reporting & Visuals | Canonical language token |
+| `RELDATEPICKER` | Reporting & Visuals | Canonical language token |
+| `RING` | Reporting & Visuals | Canonical language token |
+| `SCATTER` | Reporting & Visuals | Canonical language token |
+| `SEARCH` | Reporting & Visuals | Canonical language token |
+| `SHOW_GOAL` | Reporting & Visuals | Canonical language token |
+| `SHOW_NO_DATA_PLACEHOLDER` | Reporting & Visuals | Canonical language token |
+| `SHOW_PERCENT_OF_GOAL` | Reporting & Visuals | Canonical language token |
+| `SHOW_PROGRESS` | Reporting & Visuals | Canonical language token |
+| `SLICER` | Reporting & Visuals | Canonical language token |
+| `SLIDER` | Reporting & Visuals | Canonical language token |
+| `STRUCTURE` | Reporting & Visuals | Canonical language token |
+| `SUBTITLE` | Reporting & Visuals | Canonical language token |
+| `SUFFIX` | Reporting & Visuals | Canonical language token |
+| `TABLE` | Reporting & Visuals | Canonical language token |
+| `TEMPLATE_PATH` | Reporting & Visuals | Canonical language token |
+| `TEXT` | Reporting & Visuals | Canonical language token |
+| `TEXTBOX` | Reporting & Visuals | Canonical language token |
+| `TITLE` | Reporting & Visuals | Canonical language token |
+| `TOOLTIP` | Reporting & Visuals | Canonical language token |
+| `TRAFFIC` | Reporting & Visuals | Canonical language token |
+| `TREEMAP` | Reporting & Visuals | Canonical language token |
+| `TREND_DIR` | Reporting & Visuals | Canonical language token |
+| `VALUE_DESC` | Reporting & Visuals | Canonical language token |
+| `VISIBLE` | Reporting & Visuals | Canonical language token |
+| `WATERFALL` | Reporting & Visuals | Canonical language token |
+
+### 18.11 Date & Time Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `CURRENT_DATE` | Date & Time | Canonical language token |
+| `CURRENT_TIME` | Date & Time | Canonical language token |
+| `CURRENT_TIMESTAMP` | Date & Time | Canonical language token |
+| `DAY` | Date & Time | Canonical language token |
+| `HOUR` | Date & Time | Canonical language token |
+| `MINUTE` | Date & Time | Canonical language token |
+| `MONTH` | Date & Time | Canonical language token |
+| `RELDATE` | Date & Time | Canonical language token |
+| `SECOND` | Date & Time | Canonical language token |
+| `SYSDATE` | Date & Time | Canonical language token |
+| `YEAR` | Date & Time | Canonical language token |
+
+### 18.12 Email Operations Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `ATTACH` | Email Operations | Canonical language token |
+| `BCC` | Email Operations | Canonical language token |
+| `BODY` | Email Operations | Canonical language token |
+| `CC` | Email Operations | Canonical language token |
+| `DELIVER` | Email Operations | Canonical language token |
+| `EMAIL` | Email Operations | Canonical language token |
+| `RECEIVE` | Email Operations | Canonical language token |
+| `RECIPIENT` | Email Operations | Canonical language token |
+| `SEND` | Email Operations | Canonical language token |
+| `SMTP` | Email Operations | Canonical language token |
+| `SUBJECT` | Email Operations | Canonical language token |
+
+### 18.13 Script & Job Execution Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `ACTIVE` | Script & Job Execution | Canonical language token |
+| `CRON` | Script & Job Execution | Canonical language token |
+| `DELAY` | Script & Job Execution | Canonical language token |
+| `EVERY` | Script & Job Execution | Canonical language token |
+| `JOB` | Script & Job Execution | Canonical language token |
+| `JOBS` | Script & Job Execution | Canonical language token |
+| `KILL` | Script & Job Execution | Canonical language token |
+| `ON_LOAD` | Script & Job Execution | Canonical language token |
+| `ON_RUN` | Script & Job Execution | Canonical language token |
+| `PAUSE` | Script & Job Execution | Canonical language token |
+| `RUN` | Script & Job Execution | Canonical language token |
+| `RUN_SCRIPT` | Script & Job Execution | Canonical language token |
+| `SCHEDULE` | Script & Job Execution | Canonical language token |
+| `SCRIPT` | Script & Job Execution | Canonical language token |
+| `START` | Script & Job Execution | Canonical language token |
+| `STEP` | Script & Job Execution | Canonical language token |
+| `STOP` | Script & Job Execution | Canonical language token |
+| `TRIGGER` | Script & Job Execution | Canonical language token |
+| `UNTIL` | Script & Job Execution | Canonical language token |
+| `USE` | Script & Job Execution | Canonical language token |
+| `WAIT` | Script & Job Execution | Canonical language token |
+| `WAITFOR` | Script & Job Execution | Canonical language token |
+
+### 18.14 Portal Administration Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `ALERT` | Portal Administration | Canonical language token |
+| `ALERTS` | Portal Administration | Canonical language token |
+| `BUNDLE` | Portal Administration | Canonical language token |
+| `BUNDLES` | Portal Administration | Canonical language token |
+| `CATALOG` | Portal Administration | Canonical language token |
+| `DEPENDENCIES` | Portal Administration | Canonical language token |
+| `EFFECTIVE` | Portal Administration | Canonical language token |
+| `EMBED` | Portal Administration | Canonical language token |
+| `EXPIRES` | Portal Administration | Canonical language token |
+| `EXPIRES_AT` | Portal Administration | Canonical language token |
+| `EXPORT` | Portal Administration | Canonical language token |
+| `FAVORITE` | Portal Administration | Canonical language token |
+| `HISTORY` | Portal Administration | Canonical language token |
+| `LINK` | Portal Administration | Canonical language token |
+| `LINKS` | Portal Administration | Canonical language token |
+| `METRICS` | Portal Administration | Canonical language token |
+| `PERMISSIONS` | Portal Administration | Canonical language token |
+| `PORTAL` | Portal Administration | Canonical language token |
+| `PUBLISH` | Portal Administration | Canonical language token |
+| `PUBLISHED` | Portal Administration | Canonical language token |
+| `RECENT` | Portal Administration | Canonical language token |
+| `REPORT` | Portal Administration | Canonical language token |
+| `REPORTS` | Portal Administration | Canonical language token |
+| `SAVED` | Portal Administration | Canonical language token |
+| `SHARE` | Portal Administration | Canonical language token |
+| `SHOW` | Portal Administration | Canonical language token |
+| `SUBSCRIPTION` | Portal Administration | Canonical language token |
+| `TOKEN` | Portal Administration | Canonical language token |
+| `TOKENS` | Portal Administration | Canonical language token |
+| `UNFAVORITE` | Portal Administration | Canonical language token |
+| `USAGE` | Portal Administration | Canonical language token |
+| `VALIDATE` | Portal Administration | Canonical language token |
+| `VERSIONS` | Portal Administration | Canonical language token |
+| `VIEW` | Portal Administration | Canonical language token |
+| `VIEWS` | Portal Administration | Canonical language token |
+
+### 18.15 XML, JSON & Query Modifiers Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `ANTI` | XML, JSON & Query Modifiers | Canonical language token |
+| `AT` | XML, JSON & Query Modifiers | Canonical language token |
+| `AUTO` | XML, JSON & Query Modifiers | Canonical language token |
+| `CURRENT` | XML, JSON & Query Modifiers | Canonical language token |
+| `DEFAULT` | XML, JSON & Query Modifiers | Canonical language token |
+| `ELEMENTS` | XML, JSON & Query Modifiers | Canonical language token |
+| `EXCLUDE` | XML, JSON & Query Modifiers | Canonical language token |
+| `EXPLAIN` | XML, JSON & Query Modifiers | Canonical language token |
+| `EXPLICIT` | XML, JSON & Query Modifiers | Canonical language token |
+| `FETCH` | XML, JSON & Query Modifiers | Canonical language token |
+| `FILE_RECEIVE` | XML, JSON & Query Modifiers | Canonical language token |
+| `FILE_SEND` | XML, JSON & Query Modifiers | Canonical language token |
+| `FOLLOWING` | XML, JSON & Query Modifiers | Canonical language token |
+| `GENERATE` | XML, JSON & Query Modifiers | Canonical language token |
+| `GROUPS` | XML, JSON & Query Modifiers | Canonical language token |
+| `HASH` | XML, JSON & Query Modifiers | Canonical language token |
+| `IDENTITY` | XML, JSON & Query Modifiers | Canonical language token |
+| `LOOP` | XML, JSON & Query Modifiers | Canonical language token |
+| `NO` | XML, JSON & Query Modifiers | Canonical language token |
+| `OTHERS` | XML, JSON & Query Modifiers | Canonical language token |
+| `OVER` | XML, JSON & Query Modifiers | Canonical language token |
+| `PARTITION` | XML, JSON & Query Modifiers | Canonical language token |
+| `PERCENT` | XML, JSON & Query Modifiers | Canonical language token |
+| `PRECEDING` | XML, JSON & Query Modifiers | Canonical language token |
+| `RANGE` | XML, JSON & Query Modifiers | Canonical language token |
+| `RAW` | XML, JSON & Query Modifiers | Canonical language token |
+| `RECEIVE_FILE` | XML, JSON & Query Modifiers | Canonical language token |
+| `RECURSIVE` | XML, JSON & Query Modifiers | Canonical language token |
+| `ROWS` | XML, JSON & Query Modifiers | Canonical language token |
+| `SEMI` | XML, JSON & Query Modifiers | Canonical language token |
+| `SEND_FILE` | XML, JSON & Query Modifiers | Canonical language token |
+| `TIES` | XML, JSON & Query Modifiers | Canonical language token |
+| `TIME` | XML, JSON & Query Modifiers | Canonical language token |
+| `UNBOUNDED` | XML, JSON & Query Modifiers | Canonical language token |
+| `WITH` | XML, JSON & Query Modifiers | Canonical language token |
+| `WITHIN` | XML, JSON & Query Modifiers | Canonical language token |
+| `ZONE` | XML, JSON & Query Modifiers | Canonical language token |
+
+### 18.16 General Keywords
+
+| Token | Family | Notes |
+| :--- | :--- | :--- |
+| `ALGORITHM` | General | Canonical language token |
+| `ANALYZE` | General | Canonical language token |
+| `BACK` | General | Canonical language token |
+| `BATCHSIZE` | General | Canonical language token |
+| `BITS` | General | Canonical language token |
+| `BOTH` | General | Canonical language token |
+| `BULK` | General | Canonical language token |
+| `BUTTON` | General | Canonical language token |
+| `CHAR_LENGTH` | General | Canonical language token |
+| `CHARACTER_LENGTH` | General | Canonical language token |
+| `CLOSE` | General | Canonical language token |
+| `COLUMNS` | General | Canonical language token |
+| `COMMENT` | General | Canonical language token |
+| `CONNECTIONS` | General | Canonical language token |
+| `DATA_SOURCE` | General | Canonical language token |
+| `DISABLE` | General | Canonical language token |
+| `DISCONNECT` | General | Canonical language token |
+| `ENABLE` | General | Canonical language token |
+| `EXPORT_CSV` | General | Canonical language token |
+| `EXPORT_EXCEL` | General | Canonical language token |
+| `EXPORT_PDF` | General | Canonical language token |
+| `EXTRACT` | General | Canonical language token |
+| `FALSE` | General | Canonical language token |
+| `FILTER` | General | Canonical language token |
+| `FORMAT` | General | Canonical language token |
+| `HELP` | General | Canonical language token |
+| `ICON` | General | Canonical language token |
+| `IN` | General | Canonical language token |
+| `INPUT` | General | Canonical language token |
+| `LEADING` | General | Canonical language token |
+| `LINEAGE` | General | Canonical language token |
+| `LINEAGE_TAGS` | General | Canonical language token |
+| `LOAD` | General | Canonical language token |
+| `LOCAL` | General | Canonical language token |
+| `MAX` | General | Canonical language token |
+| `MAXERRORS` | General | Canonical language token |
+| `MIN` | General | Canonical language token |
+| `NONE` | General | Canonical language token |
+| `OCTET_LENGTH` | General | Canonical language token |
+| `OFF` | General | Canonical language token |
+| `ON` | General | Canonical language token |
+| `OUTPUT` | General | Canonical language token |
+| `OVERLAY` | General | Canonical language token |
+| `PARALLEL` | General | Canonical language token |
+| `PERSIST` | General | Canonical language token |
+| `PLACING` | General | Canonical language token |
+| `POSITION` | General | Canonical language token |
+| `PRINT` | General | Canonical language token |
+| `REFRESH` | General | Canonical language token |
+| `REFRESH_REPORT` | General | Canonical language token |
+| `REFRESH_VISUALS` | General | Canonical language token |
+| `REQUIRE` | General | Canonical language token |
+| `REQUIRED` | General | Canonical language token |
+| `RESTART` | General | Canonical language token |
+| `SAFE` | General | Canonical language token |
+| `SESSION` | General | Canonical language token |
+| `SESSIONS` | General | Canonical language token |
+| `SETS` | General | Canonical language token |
+| `SHUTDOWN` | General | Canonical language token |
+| `SUBSTRING` | General | Canonical language token |
+| `TABLES` | General | Canonical language token |
+| `TAG` | General | Canonical language token |
+| `TAGS` | General | Canonical language token |
+| `TARGET` | General | Canonical language token |
+| `TO` | General | Canonical language token |
+| `TRAILING` | General | Canonical language token |
+| `TRIM` | General | Canonical language token |
+| `TRUE` | General | Canonical language token |
+| `TYPE` | General | Canonical language token |
+| `VALUE` | General | Canonical language token |
+| `VARIABLES` | General | Canonical language token |
+| `ZONES` | General | Canonical language token |
+
+### 18.17 Connector Types
+
+| Token | Group | Notes |
+| :--- | :--- | :--- |
+| `AVRO` | Connector | Canonical connector token |
+| `AZURE_BLOB` | Connector | Canonical connector token |
+| `CSV` | Connector | Canonical connector token |
+| `DIRECTORY` | Connector | Canonical connector token |
+| `DOCKER` | Connector | Canonical connector token |
+| `EXCEL` | Connector | Canonical connector token |
+| `FLATFILE` | Connector | Canonical connector token |
+| `FTP` | Connector | Canonical connector token |
+| `FTP_CONN` | Connector | Canonical connector token |
+| `JSON` | Connector | Canonical connector token |
+| `MOCKDB` | Connector | Canonical connector token |
+| `MSSQL` | Connector | Canonical connector token |
+| `ODBC` | Connector | Canonical connector token |
+| `ORACLE` | Connector | Canonical connector token |
+| `ORCH` | Connector | Canonical connector token |
+| `ORCHESTRATOR` | Connector | Canonical connector token |
+| `PARQUET` | Connector | Canonical connector token |
+| `POSTGRES` | Connector | Canonical connector token |
+| `REPORT_PORTAL` | Connector | Canonical connector token |
+| `REPORTPORTAL` | Connector | Canonical connector token |
+| `SFTP` | Connector | Canonical connector token |
+| `SMTP` | Connector | Canonical connector token |
+| `XML` | Connector | Canonical connector token |
+
+### 18.18 Built-in Functions
+
+| Token | Group | Notes |
+| :--- | :--- | :--- |
+| `ABS` | Function | Canonical built-in function |
+| `ACOS` | Function | Canonical built-in function |
+| `APPEND_TO_LIST` | Function | Canonical built-in function |
+| `ASCII` | Function | Canonical built-in function |
+| `ASIN` | Function | Canonical built-in function |
+| `ATAN` | Function | Canonical built-in function |
+| `ATAN2` | Function | Canonical built-in function |
+| `AVG` | Function | Canonical built-in function |
+| `BINARY_CHECKSUM` | Function | Canonical built-in function |
+| `CAST` | Function | Canonical built-in function |
+| `CEILING` | Function | Canonical built-in function |
+| `CHAR` | Function | Canonical built-in function |
+| `CHARINDEX` | Function | Canonical built-in function |
+| `CHECKSUM` | Function | Canonical built-in function |
+| `COALESCE` | Function | Canonical built-in function |
+| `CONCAT` | Function | Canonical built-in function |
+| `CORR` | Function | Canonical built-in function |
+| `COS` | Function | Canonical built-in function |
+| `COUNT` | Function | Canonical built-in function |
+| `COVAR_POP` | Function | Canonical built-in function |
+| `COVAR_SAMP` | Function | Canonical built-in function |
+| `CUME_DIST` | Function | Canonical built-in function |
+| `DATALENGTH` | Function | Canonical built-in function |
+| `DATEDIFF` | Function | Canonical built-in function |
+| `DATEPART` | Function | Canonical built-in function |
+| `DATETIMEFROMPARTS` | Function | Canonical built-in function |
+| `DATETIMEOFFSETSFROMPARTS` | Function | Canonical built-in function |
+| `DECODE` | Function | Canonical built-in function |
+| `DECOMPRESS_FILE` | Function | Canonical built-in function |
+| `DENSE_RANK` | Function | Canonical built-in function |
+| `DIRECTORY_EXISTS` | Function | Canonical built-in function |
+| `DMETAPHONE` | Function | Canonical built-in function |
+| `DMETAPHONE_ALT` | Function | Canonical built-in function |
+| `EXP` | Function | Canonical built-in function |
+| `EXTRACTVALUE` | Function | Canonical built-in function |
+| `FILE_EXISTS` | Function | Canonical built-in function |
+| `FILE_LIST` | Function | Canonical built-in function |
+| `FIRST_VALUE` | Function | Canonical built-in function |
+| `FLOOR` | Function | Canonical built-in function |
+| `FORMAT` | Function | Canonical built-in function |
+| `GET_TAG_VALUE` | Function | Canonical built-in function |
+| `GET_TAGS` | Function | Canonical built-in function |
+| `GETDATE` | Function | Canonical built-in function |
+| `GREATEST` | Function | Canonical built-in function |
+| `HAS_TAG` | Function | Canonical built-in function |
+| `HASHBYTES` | Function | Canonical built-in function |
+| `INITCAP` | Function | Canonical built-in function |
+| `INSTR` | Function | Canonical built-in function |
+| `ISJSON` | Function | Canonical built-in function |
+| `ISNULL` | Function | Canonical built-in function |
+| `JSON_ARRAY` | Function | Canonical built-in function |
+| `JSON_EXISTS` | Function | Canonical built-in function |
+| `JSON_EXTRACT` | Function | Canonical built-in function |
+| `JSON_MODIFY` | Function | Canonical built-in function |
+| `JSON_OBJECT` | Function | Canonical built-in function |
+| `JSON_QUERY` | Function | Canonical built-in function |
+| `JSON_TABLE` | Function | Canonical built-in function |
+| `JSON_VALUE` | Function | Canonical built-in function |
+| `LAG` | Function | Canonical built-in function |
+| `LAST_VALUE` | Function | Canonical built-in function |
+| `LEAD` | Function | Canonical built-in function |
+| `LEAST` | Function | Canonical built-in function |
+| `LEN` | Function | Canonical built-in function |
+| `LENGTH` | Function | Canonical built-in function |
+| `LEVENSHTEIN` | Function | Canonical built-in function |
+| `LN` | Function | Canonical built-in function |
+| `LOG` | Function | Canonical built-in function |
+| `LOWER` | Function | Canonical built-in function |
+| `LPAD` | Function | Canonical built-in function |
+| `LTRIM` | Function | Canonical built-in function |
+| `MAX` | Function | Canonical built-in function |
+| `METAPHONE` | Function | Canonical built-in function |
+| `MIN` | Function | Canonical built-in function |
+| `MOD` | Function | Canonical built-in function |
+| `NEWID` | Function | Canonical built-in function |
+| `NEWSEQUENTIALID` | Function | Canonical built-in function |
+| `NGRAM_TOKENS` | Function | Canonical built-in function |
+| `NGRAMS` | Function | Canonical built-in function |
+| `NORMALIZE` | Function | Canonical built-in function |
+| `NTH_VALUE` | Function | Canonical built-in function |
+| `NTILE` | Function | Canonical built-in function |
+| `NULLIF` | Function | Canonical built-in function |
+| `NVL` | Function | Canonical built-in function |
+| `NVL2` | Function | Canonical built-in function |
+| `OPENJSON` | Function | Canonical built-in function |
+| `PATINDEX` | Function | Canonical built-in function |
+| `PERCENT_RANK` | Function | Canonical built-in function |
+| `PERCENTILE_CONT` | Function | Canonical built-in function |
+| `PERCENTILE_DISC` | Function | Canonical built-in function |
+| `POSITION` | Function | Canonical built-in function |
+| `POWER` | Function | Canonical built-in function |
+| `QUOTENAME` | Function | Canonical built-in function |
+| `RANDOM` | Function | Canonical built-in function |
+| `RANDOM_DECIMAL` | Function | Canonical built-in function |
+| `RANDOM_INT` | Function | Canonical built-in function |
+| `RANK` | Function | Canonical built-in function |
+| `REGEXP_COUNT` | Function | Canonical built-in function |
+| `REGEXP_INSTR` | Function | Canonical built-in function |
+| `REGEXP_LIKE` | Function | Canonical built-in function |
+| `REGEXP_MATCHES` | Function | Canonical built-in function |
+| `REGEXP_REPLACE` | Function | Canonical built-in function |
+| `REGEXP_SPLIT_TO_TABLE` | Function | Canonical built-in function |
+| `REGEXP_SUBSTR` | Function | Canonical built-in function |
+| `RELDATE` | Function | Canonical built-in function |
+| `REMOVE_FROM_LIST` | Function | Canonical built-in function |
+| `REPLACE` | Function | Canonical built-in function |
+| `REPLICATE` | Function | Canonical built-in function |
+| `ROUND` | Function | Canonical built-in function |
+| `ROW_NUMBER` | Function | Canonical built-in function |
+| `RPAD` | Function | Canonical built-in function |
+| `RTRIM` | Function | Canonical built-in function |
+| `SEQUENCE` | Function | Canonical built-in function |
+| `SIGN` | Function | Canonical built-in function |
+| `SIMILARITY` | Function | Canonical built-in function |
+| `SIN` | Function | Canonical built-in function |
+| `SORT_LIST` | Function | Canonical built-in function |
+| `SOUNDEX` | Function | Canonical built-in function |
+| `SQRT` | Function | Canonical built-in function |
+| `STDDEV` | Function | Canonical built-in function |
+| `STDDEV_POP` | Function | Canonical built-in function |
+| `STDDEV_SAMP` | Function | Canonical built-in function |
+| `STDEV` | Function | Canonical built-in function |
+| `STDEVP` | Function | Canonical built-in function |
+| `STR` | Function | Canonical built-in function |
+| `STRING_AGG` | Function | Canonical built-in function |
+| `STRING_ESCAPE` | Function | Canonical built-in function |
+| `STRING_SPLIT` | Function | Canonical built-in function |
+| `STRPOS` | Function | Canonical built-in function |
+| `STUFF` | Function | Canonical built-in function |
+| `SUBSTR` | Function | Canonical built-in function |
+| `SUBSTRING` | Function | Canonical built-in function |
+| `SUM` | Function | Canonical built-in function |
+| `SYSDATE` | Function | Canonical built-in function |
+| `TAN` | Function | Canonical built-in function |
+| `TIMEFROMPARTS` | Function | Canonical built-in function |
+| `TO_STR` | Function | Canonical built-in function |
+| `TRANSLATE` | Function | Canonical built-in function |
+| `TRIM` | Function | Canonical built-in function |
+| `TRUNC` | Function | Canonical built-in function |
+| `TRY_CAST` | Function | Canonical built-in function |
+| `UNICODE` | Function | Canonical built-in function |
+| `UPPER` | Function | Canonical built-in function |
+| `VAR` | Function | Canonical built-in function |
+| `VAR_POP` | Function | Canonical built-in function |
+| `VAR_SAMP` | Function | Canonical built-in function |
+| `VARP` | Function | Canonical built-in function |
+| `XMLATTRIBUTES` | Function | Canonical built-in function |
+| `XMLELEMENT` | Function | Canonical built-in function |
+| `XMLEXISTS` | Function | Canonical built-in function |
+| `XMLFOREST` | Function | Canonical built-in function |
+| `XMLQUERY` | Function | Canonical built-in function |
+| `XMLTABLE` | Function | Canonical built-in function |
+| `XMLVALUE` | Function | Canonical built-in function |
+
+### 18.19 Data Types
+
+| Token | Group | Notes |
+| :--- | :--- | :--- |
+| `ANY` | Type | Canonical data type token |
+| `BIGINT` | Type | Canonical data type token |
+| `BINARY` | Type | Canonical data type token |
+| `BIT` | Type | Canonical data type token |
+| `BLOB` | Type | Canonical data type token |
+| `BOOL` | Type | Canonical data type token |
+| `BOOLEAN` | Type | Canonical data type token |
+| `CHAR` | Type | Canonical data type token |
+| `CURSOR` | Type | Canonical data type token |
+| `DATE` | Type | Canonical data type token |
+| `DATETIME` | Type | Canonical data type token |
+| `DATETIME2` | Type | Canonical data type token |
+| `DATETIMEOFFSET` | Type | Canonical data type token |
+| `DECIMAL` | Type | Canonical data type token |
+| `DOUBLE` | Type | Canonical data type token |
+| `FLOAT` | Type | Canonical data type token |
+| `GEOGRAPHY` | Type | Canonical data type token |
+| `GEOMETRY` | Type | Canonical data type token |
+| `GUID` | Type | Canonical data type token |
+| `HIERARCHYID` | Type | Canonical data type token |
+| `IMAGE` | Type | Canonical data type token |
+| `INT` | Type | Canonical data type token |
+| `INTEGER` | Type | Canonical data type token |
+| `JSON` | Type | Canonical data type token |
+| `LOB` | Type | Canonical data type token |
+| `MARKDOWN` | Type | Canonical data type token |
+| `MINMAX` | Type | Canonical data type token |
+| `MONEY` | Type | Canonical data type token |
+| `NCHAR` | Type | Canonical data type token |
+| `NTEXT` | Type | Canonical data type token |
+| `NUMBER` | Type | Canonical data type token |
+| `NUMERIC` | Type | Canonical data type token |
+| `NVARCHAR` | Type | Canonical data type token |
+| `REAL` | Type | Canonical data type token |
+| `SECRET` | Type | Canonical data type token |
+| `SENSITIVE` | Type | Canonical data type token |
+| `SMALLDATETIME` | Type | Canonical data type token |
+| `SMALLINT` | Type | Canonical data type token |
+| `SMALLMONEY` | Type | Canonical data type token |
+| `SQL_VARIANT` | Type | Canonical data type token |
+| `STRING` | Type | Canonical data type token |
+| `TABLE` | Type | Canonical data type token |
+| `TEXT` | Type | Canonical data type token |
+| `TIME` | Type | Canonical data type token |
+| `TIMESTAMP` | Type | Canonical data type token |
+| `TINYINT` | Type | Canonical data type token |
+| `UNIQUEIDENTIFIER` | Type | Canonical data type token |
+| `UUID` | Type | Canonical data type token |
+| `VARBINARY` | Type | Canonical data type token |
+| `VARCHAR` | Type | Canonical data type token |
+| `VARCHAR2` | Type | Canonical data type token |
+| `VARIANT` | Type | Canonical data type token |
+| `VECTOR` | Type | Canonical data type token |
+| `XML` | Type | Canonical data type token |
+
+### 18.20 Standard Tags
+
+| Token | Group | Notes |
+| :--- | :--- | :--- |
+| `@category` | Tag | Standard governance tag |
+| `@certification` | Tag | Standard governance tag |
+| `@classification` | Tag | Standard governance tag |
+| `@contact` | Tag | Standard governance tag |
+| `@d` | Tag | Standard governance tag |
+| `@domain` | Tag | Standard governance tag |
+| `@encrypted_at_rest` | Tag | Standard governance tag |
+| `@example` | Tag | Standard governance tag |
+| `@format` | Tag | Standard governance tag |
+| `@freshness` | Tag | Standard governance tag |
+| `@load_pattern` | Tag | Standard governance tag |
+| `@nullable` | Tag | Standard governance tag |
+| `@owner` | Tag | Standard governance tag |
+| `@pci` | Tag | Standard governance tag |
+| `@phi` | Tag | Standard governance tag |
+| `@pii` | Tag | Standard governance tag |
+| `@quality` | Tag | Standard governance tag |
+| `@sensitive` | Tag | Standard governance tag |
+| `@sla` | Tag | Standard governance tag |
+| `@source_system` | Tag | Standard governance tag |
+| `@source_table` | Tag | Standard governance tag |
+| `@steward` | Tag | Standard governance tag |
+| `@tags` | Tag | Standard governance tag |
+| `@trusted` | Tag | Standard governance tag |
+| `@unit` | Tag | Standard governance tag |
+<!-- END GENERATED CANONICAL TOKEN INDEX -->

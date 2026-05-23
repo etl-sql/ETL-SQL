@@ -354,17 +354,20 @@ namespace ETL_SQL.Engine.Functions
 
         internal static string ComputeSoundex(string s)
         {
-            s = Regex.Replace(s.ToUpperInvariant(), @"[^A-Z]", "");
-            if (s.Length == 0) return "0000";
+            var match = Regex.Match(s.Trim(), @"^[A-Za-z]+");
+            if (!match.Success) return "0000";
 
-            char first = s[0];
+            string word = match.Value.ToUpperInvariant();
+            if (word.Length == 0) return "0000";
+
+            char first = word[0];
             var sb = new StringBuilder();
             sb.Append(first);
             char prevCode = SoundexCode(first);
 
-            for (int i = 1; i < s.Length && sb.Length < 4; i++)
+            for (int i = 1; i < word.Length && sb.Length < 4; i++)
             {
-                char code = SoundexCode(s[i]);
+                char code = SoundexCode(word[i]);
                 if (code == '0') { prevCode = code; continue; } // vowels reset adjacency
                 if (code != prevCode) sb.Append(code);
                 prevCode = code;
@@ -756,8 +759,15 @@ namespace ETL_SQL.Engine.Functions
 
                     case 'H':
                         if ((current == 0 || IsVowel(s[current - 1])) && current + 1 < length && IsVowel(s[current + 1]))
+                        {
                             Add(primary, secondary, "H");
-                        current += 2; break;
+                            current += 2;
+                        }
+                        else
+                        {
+                            current++;
+                        }
+                        break;
 
                     case 'J':
                         if (StringAt(s, current, 4, "JOSE") || StringAt(s, 0, 4, "SAN "))

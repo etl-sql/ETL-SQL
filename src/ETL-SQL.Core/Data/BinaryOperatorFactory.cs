@@ -19,7 +19,9 @@ namespace ETL_SQL.Core.Data
             [TokenType.MINUS] = (l, r) => MathOp(l, r, "-"),
             [TokenType.STAR] = (l, r) => MathOp(l, r, "*"),
             [TokenType.SLASH] = (l, r) => MathOp(l, r, "/"),
-            [TokenType.MODULO] = (l, r) => MathOp(l, r, "%")
+            [TokenType.MODULO] = (l, r) => MathOp(l, r, "%"),
+            [TokenType.LSHIFT] = (l, r) => ShiftOp(l, r, "<<"),
+            [TokenType.RSHIFT] = (l, r) => ShiftOp(l, r, ">>")
         };
 
         private static object? MathOp(object? a, object? b, string op)
@@ -57,9 +59,9 @@ namespace ETL_SQL.Core.Data
                     "+" => da + db,
                     "-" => da - db,
                     "*" => da * db,
-                    "/" => db == 0 ? throw new ExecutionException("Divide by zero error encountered.", null, 0, 0, 8134, 16, 1)
-                               : (IsIntegerScale(da) && IsIntegerScale(db) ? Math.Truncate(da / db) : da / db),
-                    "%" => db == 0 ? throw new ExecutionException("Divide by zero error encountered.", null, 0, 0, 8134, 16, 1) : da % db,
+                    "/" => db == 0 ? null
+                               : (IsIntegerType(a) && IsIntegerType(b) ? Math.Truncate(da / db) : da / db),
+                    "%" => db == 0 ? null : da % db,
                     _ => null
                 };
             }
@@ -69,9 +71,63 @@ namespace ETL_SQL.Core.Data
             }
         }
 
-        // Scale 0 means no decimal digits were written (e.g. 7, not 7.0 or 7.5).
-        // Convert.ToDecimal(intValue) always produces scale 0, so INT column values qualify.
-        private static bool IsIntegerScale(decimal d) => ((decimal.GetBits(d)[3] >> 16) & 0x7F) == 0;
+        private static object? ShiftOp(object? a, object? b, string op)
+        {
+            if (a == null || b == null) return null;
+            long valA, valB;
+            try
+            {
+                valA = Convert.ToInt64(a, System.Globalization.CultureInfo.InvariantCulture);
+                valB = Convert.ToInt64(b, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return null;
+            }
+
+            try
+            {
+                if (op == "<<")
+                {
+                    return valA << (int)(valB & 63);
+                }
+                if (op == ">>")
+                {
+                    return valA >> (int)(valB & 63);
+                }
+            }
+            catch (OverflowException)
+            {
+                return null;
+            }
+            return null;
+        }
+
+        private static bool IsIntegerType(object? val)
+        {
+            if (val == null) return false;
+            if (val is int || val is long || val is short || val is byte || val is sbyte || val is uint || val is ulong || val is ushort)
+                return true;
+            if (val is decimal dec)
+            {
+                if (dec != Math.Truncate(dec)) return false;
+                string s = dec.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return !s.Contains('.') && !s.Contains('e') && !s.Contains('E');
+            }
+            if (val is double dbl)
+            {
+                if (dbl != Math.Truncate(dbl)) return false;
+                string s = dbl.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return !s.Contains('.') && !s.Contains('e') && !s.Contains('E');
+            }
+            if (val is float fl)
+            {
+                if (fl != Math.Truncate(fl)) return false;
+                string s = fl.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return !s.Contains('.') && !s.Contains('e') && !s.Contains('E');
+            }
+            return false;
+        }
 
         /// <summary>Executes a binary operation for the given token type.</summary>
         public static object? Execute(TokenType op, object? left, object? right)

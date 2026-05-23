@@ -451,17 +451,17 @@ namespace ETL_SQL.Tests.Coverage
         }
 
         [Fact]
-        public void BinaryOp_DivideByZero_Throws()
+        public void BinaryOp_DivideByZero_ReturnsNull()
         {
-            Assert.Throws<ExecutionException>(() =>
-                BinaryOperatorFactory.Execute(TokenType.SLASH, 10m, 0m));
+            var result = BinaryOperatorFactory.Execute(TokenType.SLASH, 10m, 0m);
+            Assert.Null(result);
         }
-
+ 
         [Fact]
-        public void BinaryOp_ModuloByZero_Throws()
+        public void BinaryOp_ModuloByZero_ReturnsNull()
         {
-            Assert.Throws<ExecutionException>(() =>
-                BinaryOperatorFactory.Execute(TokenType.MODULO, 10m, 0m));
+            var result = BinaryOperatorFactory.Execute(TokenType.MODULO, 10m, 0m);
+            Assert.Null(result);
         }
 
         [Fact]

@@ -52,6 +52,8 @@ namespace ETL_SQL.Engine.Engines
             string fromName = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
             bool hasAggInColumns = stmt.Columns.Any(c => _aggregateEngine.IsAggregate(c.Expression));
             bool hasWindowInColumns = stmt.Columns.Any(c => _windowEngine.IsWindowFunction(c.Expression));
+            bool hasGroupBy = stmt.GroupBy != null || stmt.GroupingSet != null;
+            bool hasPreEvaluatedColumns = hasAggInColumns || hasWindowInColumns || hasGroupBy;
 
             _logger.Debug("[PIPELINE] Initializing Multi-Pass Engine Pipeline for {TableName}", fromName);
 
@@ -174,7 +176,7 @@ namespace ETL_SQL.Engine.Engines
                         : inputStream;
                     if (!whereApplied && stmt.WhereClause != null) whereApplied = true;
 
-                    allRows = await TopNFromStream(src, stmt.OrderBy!, colNames, finalColumns, limit, topOffset);
+                    allRows = await TopNFromStream(src, stmt.OrderBy!, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns);
                 }
                 else
                 {
@@ -292,7 +294,7 @@ namespace ETL_SQL.Engine.Engines
                 {
                     int limit = Convert.ToInt32(await _context.EvaluateValue(stmt.LimitCount ?? stmt.TopCount!, new Row()));
                     int topOffset = stmt.Offset != null ? Convert.ToInt32(await _context.EvaluateValue(stmt.Offset, new Row())) : 0;
-                    allRows = await TopNFromStream(externalEngineStream, stmt.OrderBy, colNames, finalColumns, limit, topOffset);
+                    allRows = await TopNFromStream(externalEngineStream, stmt.OrderBy, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns);
                     externalEngineStream = null;
                 }
                 else
@@ -305,7 +307,7 @@ namespace ETL_SQL.Engine.Engines
                     }
                     else
                     {
-                        allRows = await SortInMemory(allRows, stmt.OrderBy, colNames, finalColumns);
+                        allRows = await SortInMemory(allRows, stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns);
                     }
                 }
             }
@@ -313,7 +315,7 @@ namespace ETL_SQL.Engine.Engines
             // 6. OFFSET / LIMIT
             // Phase 7: Flush any pending external engine stream (e.g. external agg with no ORDER BY).
             await MaterializeEngineStream();
-            allRows = await ApplyLimits(allRows, stmt, colNames, finalColumns);
+            allRows = await ApplyLimits(allRows, stmt, colNames, finalColumns, hasPreEvaluatedColumns);
 
             // Final Projection & Batching
             var seenRows = stmt.IsDistinct ? new HashSet<string>() : null;
@@ -324,24 +326,42 @@ namespace ETL_SQL.Engine.Engines
             {
                 if (canDeferWhere && !await _context.EvaluateCondition(stmt.WhereClause!, row)) continue;
                 var resRow = batch.NewRow();
+                
+                bool schemaMatches = hasPreEvaluatedColumns && row.Schema != null && row.Schema.ColumnCount == finalColumns.Count;
+                if (schemaMatches)
+                {
+                    for (int k = 0; k < finalColumns.Count; k++)
+                    {
+                        if (!string.Equals(row.Schema!.GetName(k), colNames[k], StringComparison.OrdinalIgnoreCase))
+                        {
+                            schemaMatches = false;
+                            break;
+                        }
+                    }
+                }
+
                 for (int i = 0; i < finalColumns.Count; i++)
                 {
                     var col = finalColumns[i];
+                    if (schemaMatches)
+                    {
+                        resRow[i] = row[i];
+                    }
                     // If the column (by alias or exact expression match) is already in the row, use it.
                     // This is essential after Aggregation or Window functions.
-                    if (col.Alias != null && row.HasColumn(col.Alias))
+                    else if (hasPreEvaluatedColumns && col.Alias != null && row.HasColumn(col.Alias))
                     {
                         resRow[i] = row[col.Alias];
                     }
-                    else if (row.HasColumn(col.Expression.ToSql()))
+                    else if (hasPreEvaluatedColumns && row.HasColumn(col.Expression.ToSql()))
                     {
                         resRow[i] = row[col.Expression.ToSql()];
                     }
-                    else if (row.HasColumn($"AGG_{col.Expression.ToSql().ToUpperInvariant()}"))
+                    else if (hasPreEvaluatedColumns && row.HasColumn($"AGG_{col.Expression.ToSql().ToUpperInvariant()}"))
                     {
                         resRow[i] = row[$"AGG_{col.Expression.ToSql().ToUpperInvariant()}"];
                     }
-                    else if (col.Expression is FunctionCallExpression fce && fce.Window != null && row.HasColumn($"WINDOW_{fce.ToSql().ToUpperInvariant()}"))
+                    else if (hasPreEvaluatedColumns && col.Expression is FunctionCallExpression fce && fce.Window != null && row.HasColumn($"WINDOW_{fce.ToSql().ToUpperInvariant()}"))
                     {
                         resRow[i] = row[$"WINDOW_{fce.ToSql().ToUpperInvariant()}"];
                     }
@@ -349,7 +369,6 @@ namespace ETL_SQL.Engine.Engines
                     {
                         resRow[i] = await _context.EvaluateValue(col.Expression, row);
                     }
-
                 }
 
                 if (seenRows != null)
@@ -377,11 +396,11 @@ namespace ETL_SQL.Engine.Engines
             if (batch.Rows.Count > 0 || !yielded) yield return batch;
         }
 
-        private async Task<List<Row>> SortInMemory(List<Row> rows, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns)
+        private async Task<List<Row>> SortInMemory(List<Row> rows, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns, bool hasPreEvaluatedColumns)
         {
             var rowSortKeys = new List<(Row Row, object?[] Keys)>(rows.Count);
             foreach (var row in rows)
-                rowSortKeys.Add((row, await ExtractSortKeys(row, orderBy, colNames, finalColumns)));
+                rowSortKeys.Add((row, await ExtractSortKeys(row, orderBy, colNames, finalColumns, hasPreEvaluatedColumns)));
 
             rowSortKeys.Sort((a, b) => {
                 for (int i = 0; i < orderBy.Count; i++)
@@ -405,7 +424,8 @@ namespace ETL_SQL.Engine.Engines
             List<string> colNames,
             List<SelectColumn> finalColumns,
             int limit,
-            int offset)
+            int offset,
+            bool hasPreEvaluatedColumns)
         {
             int keep = Math.Max(0, checked(offset + limit));
             if (keep == 0) return new List<Row>();
@@ -425,7 +445,7 @@ namespace ETL_SQL.Engine.Engines
 
             await foreach (var row in source)
             {
-                var keys = await ExtractSortKeys(row, orderBy, colNames, finalColumns);
+                var keys = await ExtractSortKeys(row, orderBy, colNames, finalColumns, hasPreEvaluatedColumns);
                 var entry = (row, keys);
 
                 if (heap.Count < keep)
@@ -453,7 +473,7 @@ namespace ETL_SQL.Engine.Engines
             return sorted;
         }
 
-        private async Task<object?[]> ExtractSortKeys(Row row, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns)
+        private async Task<object?[]> ExtractSortKeys(Row row, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns, bool hasPreEvaluatedColumns)
         {
             var keys = new object?[orderBy.Count];
             for (int i = 0; i < orderBy.Count; i++)
@@ -466,14 +486,14 @@ namespace ETL_SQL.Engine.Engines
                     var colName = colNames[colIdx];
                     // Use direct lookup when the column is already projected (post-agg/window),
                     // otherwise evaluate the SELECT expression on the pre-projection source row.
-                    keys[i] = row.HasColumn(colName)
+                    keys[i] = (hasPreEvaluatedColumns && row.HasColumn(colName))
                         ? row[colName]
                         : await _context.EvaluateValue(finalColumns[colIdx].Expression, row);
                     continue;
                 }
                 if (expr is IdentifierExpression id && colNames.Contains(id.Name, StringComparer.OrdinalIgnoreCase))
                 {
-                    if (row.HasColumn(id.Name))
+                    if (hasPreEvaluatedColumns && row.HasColumn(id.Name))
                         keys[i] = row[id.Name];
                     else
                     {
@@ -511,7 +531,7 @@ namespace ETL_SQL.Engine.Engines
         }
 
         private async Task<List<Row>> ApplyLimits(List<Row> rows, SelectStatement stmt,
-            List<string>? colNames = null, List<SelectColumn>? finalColumns = null)
+            List<string>? colNames = null, List<SelectColumn>? finalColumns = null, bool hasPreEvaluatedColumns = false)
         {
             if (stmt.Offset != null)
             {
@@ -536,10 +556,10 @@ namespace ETL_SQL.Engine.Engines
             if (stmt.WithTies && stmt.OrderBy != null && colNames != null && finalColumns != null && take < rows.Count)
             {
                 var taken = rows.Take(take).ToList();
-                var lastKeys = await ExtractSortKeys(taken[^1], stmt.OrderBy, colNames, finalColumns);
+                var lastKeys = await ExtractSortKeys(taken[^1], stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns);
                 for (int i = take; i < rows.Count; i++)
                 {
-                    var keys = await ExtractSortKeys(rows[i], stmt.OrderBy, colNames, finalColumns);
+                    var keys = await ExtractSortKeys(rows[i], stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns);
                     bool tied = true;
                     for (int j = 0; j < stmt.OrderBy.Count; j++)
                         if (_context.CompareConstants(keys[j], lastKeys[j]) != 0) { tied = false; break; }

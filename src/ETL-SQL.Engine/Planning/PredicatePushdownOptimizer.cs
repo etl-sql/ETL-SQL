@@ -119,61 +119,88 @@ namespace ETL_SQL.Engine.Planning
             string fromAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
             var leftTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { fromAlias };
 
+            var remainingJoins = new List<JoinClause>(stmt.Joins);
             var newJoins = new List<JoinClause>(stmt.Joins.Count);
             bool anyPushed = false;
 
-            foreach (var join in stmt.Joins)
+            while (remainingJoins.Count > 0)
             {
-                string rightAlias = join.Table.Alias ?? join.Table.TableName;
+                JoinClause? bestJoin = null;
+                int bestIndex = -1;
+                List<Expression>? bestMatchList = null;
 
-                if (!IsTrueCrossJoin(join))
+                for (int j = 0; j < remainingJoins.Count; j++)
                 {
-                    newJoins.Add(join);
-                    leftTables.Add(rightAlias);
-                    continue;
+                    var join = remainingJoins[j];
+                    if (!IsTrueCrossJoin(join)) continue;
+
+                    string rightAlias = join.Table.Alias ?? join.Table.TableName;
+                    var matchList = new List<Expression>();
+
+                    for (int i = 0; i < predicates.Count; i++)
+                    {
+                        if (pushed.Contains(i)) continue;
+
+                        var tables = predicates[i].GetSourceTables()
+                                                  .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                        if (!tables.Contains(rightAlias)) continue;
+
+                        // Only promote true cross-table predicates (referencing both sides) to INNER
+                        // JOIN conditions. A predicate that only references the right table (e.g.
+                        // t7.e7=280) is a single-table filter, not a join predicate — pushing it as
+                        // the join condition breaks hash-join key construction and yields 0 rows.
+                        // Leave single-table right-side predicates in the WHERE clause.
+                        if (!tables.Overlaps(leftTables)) continue;
+
+                        var available = new HashSet<string>(leftTables, StringComparer.OrdinalIgnoreCase) { rightAlias };
+                        if (!tables.IsSubsetOf(available)) continue;
+
+                        matchList.Add(predicates[i]);
+                    }
+
+                    if (matchList.Count > 0)
+                    {
+                        bestJoin = join;
+                        bestIndex = j;
+                        bestMatchList = matchList;
+                        break; // Greedily pick the first cross join that can be successfully rewritten
+                    }
                 }
 
-                var matchList = new List<Expression>();
-                for (int i = 0; i < predicates.Count; i++)
+                if (bestJoin != null)
                 {
-                    if (pushed.Contains(i)) continue;
+                    string rightAlias = bestJoin.Table.Alias ?? bestJoin.Table.TableName;
+                    
+                    // Mark match list expressions as pushed
+                    foreach (var m in bestMatchList!)
+                    {
+                        for (int i = 0; i < predicates.Count; i++)
+                        {
+                            if (predicates[i] == m) pushed.Add(i);
+                        }
+                    }
 
-                    var tables = predicates[i].GetSourceTables()
-                                              .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                    if (!tables.Contains(rightAlias)) continue;
-
-                    // Only promote true cross-table predicates (referencing both sides) to INNER
-                    // JOIN conditions. A predicate that only references the right table (e.g.
-                    // t7.e7=280) is a single-table filter, not a join predicate — pushing it as
-                    // the join condition breaks hash-join key construction and yields 0 rows.
-                    // Leave single-table right-side predicates in the WHERE clause.
-                    if (!tables.Overlaps(leftTables)) continue;
-
-                    var available = new HashSet<string>(leftTables, StringComparer.OrdinalIgnoreCase);
-                    available.Add(rightAlias);
-                    if (!tables.IsSubsetOf(available)) continue;
-
-                    matchList.Add(predicates[i]);
-                    pushed.Add(i);
-                }
-
-                if (matchList.Count > 0)
-                {
-                    Expression cond = matchList.Count == 1
-                        ? matchList[0]
-                        : matchList.Skip(1).Aggregate(
-                            matchList[0],
+                    Expression cond = bestMatchList.Count == 1
+                        ? bestMatchList[0]
+                        : bestMatchList.Skip(1).Aggregate(
+                            bestMatchList[0],
                             (acc, p) => (Expression)new BinaryExpression(acc, TokenType.AND, p));
 
-                    newJoins.Add(new JoinClause("INNER JOIN", join.Table, cond, join.Hint, join.KeepBest));
+                    newJoins.Add(new JoinClause("INNER JOIN", bestJoin.Table, cond, bestJoin.Hint, bestJoin.KeepBest));
+                    leftTables.Add(rightAlias);
+                    remainingJoins.RemoveAt(bestIndex);
                     anyPushed = true;
                 }
                 else
                 {
-                    newJoins.Add(join);
-                }
+                    // No cross join could be rewritten with current leftTables. We must pull the next join in sequence.
+                    var join = remainingJoins[0];
+                    string rightAlias = join.Table.Alias ?? join.Table.TableName;
 
-                leftTables.Add(rightAlias);
+                    newJoins.Add(join);
+                    leftTables.Add(rightAlias);
+                    remainingJoins.RemoveAt(0);
+                }
             }
 
             if (!anyPushed) return stmt;

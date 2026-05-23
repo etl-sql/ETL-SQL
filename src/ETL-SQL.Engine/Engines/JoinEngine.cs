@@ -348,7 +348,44 @@ namespace ETL_SQL.Engine.Engines
                 yield break;
             }
 
+            var leftAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
+            var rightAlias = join.Table.Alias ?? join.Table.TableName;
+
             var joinRows = await GetJoinRows(join); // Buffer right side (usually smaller)
+
+            // Pre-filter the right-side join table using predicates in WHERE that reference ONLY this table.
+            if (joinRows.Count > 0 && stmt.WhereClause != null)
+            {
+                var wherePredicates = new List<Expression>();
+                FlattenAnds(stmt.WhereClause, wherePredicates);
+                var applicable = new List<Expression>();
+                foreach (var p in wherePredicates)
+                {
+                    var tables = p.GetSourceTables().ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    if (tables.Count == 1 && tables.Contains(rightAlias))
+                    {
+                        applicable.Add(p);
+                    }
+                }
+                if (applicable.Count > 0)
+                {
+                    Expression filter = applicable.Count == 1
+                        ? applicable[0]
+                        : applicable.Skip(1).Aggregate(applicable[0],
+                            (acc, p) => (Expression)new BinaryExpression(acc, TokenType.AND, p));
+
+                    var filtered = new List<Row>(joinRows.Count);
+                    foreach (var r in joinRows)
+                    {
+                        if (await _context.EvaluateCondition(filter, r))
+                            filtered.Add(r);
+                    }
+
+                    _logger.Debug("[JOIN-STREAM] Pre-join table filter: {Predicates} predicate(s) reduced {Before} → {After} rows for table {Table}",
+                        applicable.Count, joinRows.Count, filtered.Count, rightAlias);
+                    joinRows = filtered;
+                }
+            }
 
             // FUZZY JOIN in streaming context — buffer left, run buffered fuzzy join, re-stream
             if (join.IsFuzzy)
@@ -361,8 +398,6 @@ namespace ETL_SQL.Engine.Engines
                 yield break;
             }
 
-            var leftAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
-            var rightAlias = join.Table.Alias ?? join.Table.TableName;
             var hashKeysLeft = new List<string>();
             var hashKeysRight = new List<string>();
             bool hasEquality = TryExtractEqualityKeys(join.Condition, leftAlias, rightAlias, hashKeysLeft, hashKeysRight);
