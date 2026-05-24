@@ -181,25 +181,29 @@ namespace ETL_SQL.Engine.Handlers
                 var boundBatches = context.InterceptProgress(batches);
                 int count = 0;
                 var allInsertedRows = new List<Row>();
-                await foreach (var batch in boundBatches)
+                async IAsyncEnumerable<DataTable> CountBatches(IAsyncEnumerable<DataTable> source)
                 {
-                    // foreach (var r in batch.Rows) Console.Error.WriteLine($"INSERT DEBUG: Row={r.Columns.Values.FirstOrDefault() ?? "NULL"} | id={r["id"]} | cat={r["cat"]} | val={r["val"]}");
-                    if (context.IsWhatIf)
+                    await foreach (var batch in source)
                     {
-                        // Dry run: don't write
+                        count += batch.Rows.Count;
+                        if (stmt.Output != null) allInsertedRows.AddRange(batch.Rows);
+                        yield return batch;
                     }
-                    else
+                }
+
+                if (context.IsWhatIf)
+                {
+                    await foreach (var _ in CountBatches(boundBatches)) { }
+                }
+                else
+                {
+                    // Security Hardening: Block writing data into script files
+                    if (!string.IsNullOrEmpty(destination.Path))
                     {
-                        // Security Hardening: Block writing data into script files
-                        if (!string.IsNullOrEmpty(destination.Path))
-                        {
-                            context.SecurityService.ValidateWriteAccess(destination.Path);
-                        }
-                        
-                        await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true);
+                        context.SecurityService.ValidateWriteAccess(destination.Path);
                     }
-                    count += batch.Rows.Count;
-                    if (stmt.Output != null) allInsertedRows.AddRange(batch.Rows);
+
+                    await destination.WriteBatches(CountBatches(boundBatches), append: true);
                 }
                 
                 if (context.IsWhatIf)

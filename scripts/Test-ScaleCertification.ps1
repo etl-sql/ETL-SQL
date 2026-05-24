@@ -125,7 +125,9 @@ $mdLines += "| SELECT (streaming) | Result Cap | 100k rows | MaxLastResultRows c
 $mdLines += "| WINDOW ROW_NUMBER | External Window | 50k rows | WindowSpillThreshold forced to 5k |"
 $mdLines += "| CSV ingest | Connector batch read | 50k rows | Row count and checksum certified |"
 $mdLines += "| Parquet round trip | Connector batch write/read | 50k rows | Row count and checksum certified |"
-$mdLines += "| CREATE DATASET snapshot/reload | Pending | Skipped | Currently returns only the first 10k-row batch from a 50k-row smoke dataset |"
+$mdLines += "| CREATE DATASET snapshot/reload | Query -> Parquet cache -> reload | 50k rows | Row count and checksum certified after cached reload |"
+$mdLines += "| GROUP BY CUBE | External Aggregate grouping-set expansion | 50k rows | Expanded row count, checksum, and spill bytes certified |"
+$mdLines += "| Scalar subquery cache | Correlated subquery LRU cache | 50k rows | Row count, checksum, and exact hit/miss counts certified |"
 
 $mdPath = Join-Path $OutDir 'cert-report.md'
 $mdLines | Set-Content -Path $mdPath -Encoding UTF8

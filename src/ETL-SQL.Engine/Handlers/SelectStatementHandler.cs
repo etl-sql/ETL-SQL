@@ -74,11 +74,16 @@ namespace ETL_SQL.Engine.Handlers
 
                 var boundBatches = context.InterceptProgress(batches);
                 long totalRows = 0;
-                await foreach (var batch in boundBatches)
+                async IAsyncEnumerable<DataTable> CountBatches(IAsyncEnumerable<DataTable> source)
                 {
-                    totalRows += batch.Rows.Count;
-                    await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true);
+                    await foreach (var batch in source)
+                    {
+                        totalRows += batch.Rows.Count;
+                        yield return batch;
+                    }
                 }
+
+                await destination.WriteBatches(CountBatches(boundBatches), append: true);
 
                 context.Variables["@@ROWCOUNT"] = totalRows;
                 context.Logger.Info($"{totalRows} rows affected.");

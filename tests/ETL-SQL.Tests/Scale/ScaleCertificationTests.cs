@@ -85,6 +85,25 @@ namespace ETL_SQL.Tests.Scale
             return src;
         }
 
+        private static async Task<InMemoryDataSource> SourceWithCubeRows(int rowCount, int groups = 10, int buckets = 5)
+        {
+            var table = new DataTable();
+            table.SetColumns(new[] { "grp", "bucket", "val" });
+
+            for (int i = 0; i < rowCount; i++)
+            {
+                var r = new Row(table.Schema);
+                r["grp"] = i % groups;
+                r["bucket"] = (i / groups) % buckets;
+                r["val"] = (decimal)(i + 1);
+                await table.AddRowAsync(r);
+            }
+
+            var src = new InMemoryDataSource();
+            await src.WriteBatches(new[] { table }.ToAsyncEnumerable());
+            return src;
+        }
+
         private static async Task<DataTable> TableWithRows(int rowCount, int groups = 10)
         {
             var src = await SourceWithRows(rowCount, groups);
@@ -421,7 +440,7 @@ namespace ETL_SQL.Tests.Scale
 
         // ── 9. Report dataset Parquet cache ──────────────────────────────────
 
-        [Fact(Skip = "CREATE DATASET Parquet snapshot/reload currently returns only the first 10k-row batch for a 50k smoke dataset.")]
+        [Fact]
         public async Task Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum()
         {
             var Rows = ScaleRows(50_000);
@@ -450,6 +469,7 @@ namespace ETL_SQL.Tests.Scale
                 var metadata = await registry.Lookup("&cert", reportDir, "IsAdmin=true");
                 Assert.NotNull(metadata);
                 Assert.True(File.Exists(metadata!.ParquetFilePath));
+                Assert.Equal(Rows, metadata.RowCount);
 
                 var second = NewEvaluator();
                 second.DatasetRegistry = registry;
@@ -475,6 +495,109 @@ namespace ETL_SQL.Tests.Scale
             {
                 DeleteTempDir(dir);
             }
+        }
+
+        // ── 10. Grouping sets / CUBE at scale ───────────────────────────────
+
+        [Fact]
+        public async Task Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum()
+        {
+            var Rows = ScaleRows(50_000);
+            const int Groups = 10;
+            const int Buckets = 5;
+            var expectedInputSum = (decimal)Rows * (Rows + 1) / 2;
+            var expectedCubeRows = Groups * Buckets + Groups + Buckets + 1;
+
+            var ev = NewEvaluator();
+            ev.Connections["#cube_src"] = await SourceWithCubeRows(Rows, Groups, Buckets);
+            ev.OperatorMemoryGrantMB = 1;
+
+            ev.Telemetry.Clear();
+            var sw = Stopwatch.StartNew();
+
+            await ev.Evaluate(TestHelpers.Parse("""
+                SELECT grp, bucket, SUM(val) AS total
+                INTO #cube_result
+                FROM #cube_src
+                GROUP BY CUBE(grp, bucket);
+                """));
+
+            sw.Stop();
+
+            var row = await AggQuery(ev, "SELECT COUNT(*) AS n, SUM(total) AS s FROM #cube_result;");
+            var count = Convert.ToInt64(row["n"]);
+            var sum = Convert.ToDecimal(row["s"]);
+
+            Assert.Equal(expectedCubeRows, count);
+            Assert.Equal(expectedInputSum * 4, sum);
+            AssertSpilled(ev, "CubeGroupingSets");
+            EmitMetrics($"CubeGroupingSets_{Rows}_{Groups}x{Buckets}", Rows, sw.ElapsedMilliseconds,
+                ev.Telemetry.TotalSpilledBytes, count, sum, true);
+        }
+
+        // ── 11. Scalar subquery cache at scale ───────────────────────────────
+
+        [Fact]
+        public async Task Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys()
+        {
+            var Rows = ScaleRows(50_000);
+            var distinctKeys = Math.Min(1_000, Rows);
+            decimal expectedScoreSum = 0;
+
+            var fact = new DataTable();
+            fact.SetColumns(new[] { "id", "val" });
+            for (int i = 0; i < Rows; i++)
+            {
+                var id = i % distinctKeys + 1;
+                expectedScoreSum += id * 2m;
+
+                var r = new Row(fact.Schema);
+                r["id"] = id;
+                r["val"] = (decimal)(i + 1);
+                await fact.AddRowAsync(r);
+            }
+
+            var lookup = new DataTable();
+            lookup.SetColumns(new[] { "id", "score" });
+            for (int i = 1; i <= distinctKeys; i++)
+            {
+                var r = new Row(lookup.Schema);
+                r["id"] = i;
+                r["score"] = i * 2m;
+                await lookup.AddRowAsync(r);
+            }
+
+            var ev = NewEvaluator();
+            var factSrc = new InMemoryDataSource();
+            await factSrc.WriteBatches(new[] { fact }.ToAsyncEnumerable());
+            ev.Connections["#fact"] = factSrc;
+
+            var lookupSrc = new InMemoryDataSource();
+            await lookupSrc.WriteBatches(new[] { lookup }.ToAsyncEnumerable());
+            ev.Connections["#lookup"] = lookupSrc;
+
+            ev.Telemetry.Clear();
+            var sw = Stopwatch.StartNew();
+
+            await ev.Evaluate(TestHelpers.Parse("""
+                SELECT id,
+                       (SELECT score FROM #lookup l WHERE l.id = #fact.id) AS score
+                INTO #subq_result
+                FROM #fact;
+                """));
+
+            sw.Stop();
+
+            var row = await AggQuery(ev, "SELECT COUNT(*) AS n, SUM(score) AS s FROM #subq_result;");
+            var count = Convert.ToInt64(row["n"]);
+            var sum = Convert.ToDecimal(row["s"]);
+
+            Assert.Equal(Rows, count);
+            Assert.Equal(expectedScoreSum, sum);
+            Assert.Equal(distinctKeys, ev.Telemetry.SubqueryCacheMisses);
+            Assert.Equal(Rows - distinctKeys, ev.Telemetry.SubqueryCacheHits);
+            EmitMetrics($"ScalarSubqueryCache_{Rows}_{distinctKeys}keys", Rows, sw.ElapsedMilliseconds,
+                ev.Telemetry.TotalSpilledBytes, count, sum, true);
         }
 
         private static string CreateTempDir()

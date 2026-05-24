@@ -36,14 +36,9 @@ Reports are written to `./certification-results/`.
 | Window ROW_NUMBER | 50k × scale | `ROW_NUMBER() OVER(ORDER BY)` → ExternalWindowEngine | Window spill threshold forced to 5k | Row count, min/max/sum, spill bytes > 0 |
 | CSV Ingest | 50k × scale | `FLATFILE`/CSV `ReadBatches` | Connector batch read | Row count and checksum |
 | Parquet Round Trip | 50k × scale | `PARQUET` `WriteBatches`/`ReadBatches` | Connector batch write/read | Row count and checksum |
-
----
-
-## Not Yet Certified
-
-| Scenario | Status | Reason |
-| :--- | :--- | :--- |
-| Report `CREATE DATASET` snapshot/reload | Skipped in scale lane | Current Parquet snapshot/reload path returns only the first 10k-row batch from a 50k-row smoke dataset. |
+| Report `CREATE DATASET` Snapshot/Reload | 50k × scale | Query → Parquet cache → reload | Portal dataset cache | Row count and checksum after cached reload |
+| CUBE Grouping Sets | 50k × scale | `GROUP BY CUBE(grp, bucket)` → ExternalAggregateEngine | Operator memory grant forced to 1 MB | Expanded row count, checksum, spill bytes > 0 |
+| Scalar Subquery Cache | 50k × scale | Correlated scalar subquery | LRU subquery cache | Row count, checksum, exact hit/miss counts |
 
 ---
 
@@ -100,8 +95,6 @@ The test suite reads `CERT_ROW_SCALE` directly; the PowerShell runner sets it fr
 
 The following acceptance items remain open before ETL-SQL can claim complete large-data certification:
 
-- Report `CREATE DATASET` snapshot/reload beyond the first 10k-row batch.
-- Grouping sets/cube spill paths and scalar subquery/cache stress scenarios.
 - Provider-backed large-data runs beyond in-memory sources.
 - Cleanup assertions for spill/session/temp files after success and forced failure.
 - Documented memory bounds enforced by test assertions.

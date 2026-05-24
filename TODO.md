@@ -132,17 +132,16 @@
   - Status review 2026-05-24: smoke-tier harness exists for sort, aggregate, join, temp spill, result cap, and window. Row scaling now flows from `CERT_ROW_SCALE`, and spill-path scenarios assert `TotalSpilledBytes > 0`. This is not full large-data product certification yet.
 
 - [ ] **Scale certification suite — remaining coverage**
-  - Fix and certify report `CREATE DATASET` snapshot/reload beyond one 10k-row batch.
-  - Add grouping sets/cube spill path and scalar subquery/cache path.
   - Add provider-backed large-data certification where real connectors are available.
   - Add cleanup assertions for spill/session/temp files after success and forced failure.
   - Add memory-bound assertions per tier.
   - Certify or explicitly warn on `MERGE`, `UPDATE`, and `DELETE` boundedness.
   - Add true `Standard`/`Stress` test traits instead of only scaling the Smoke scenarios.
+  - Status review 2026-05-24: added CUBE grouping-set spill certification and scalar subquery cache certification to the smoke lane.
 
-- [ ] **Report dataset metadata row count certification**
-  - `Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum` is present but skipped because `CREATE DATASET` Parquet snapshot/reload currently returns only the first 10k-row batch for a 50k smoke dataset.
-  - Audit the `CREATE DATASET` write/read path and `Telemetry.LastStatementRowsProcessed` for batched `SELECT INTO`/`CREATE DATASET`; both cached row content and `DatasetMetadata.RowCount` should reflect the full materialized row count.
+- [x] **Report dataset metadata row count certification**
+  - Fixed batched `SELECT INTO` and `INSERT INTO ... SELECT` writes so handlers pass the full batch stream to `WriteBatches` once instead of calling append once per batch. This preserves all Parquet row groups for report dataset cache writes.
+  - `Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum` now runs in the scale lane and verifies a 50k-row `CREATE DATASET` Parquet snapshot/reload with row count and checksum.
 
 - [x] **Persistent lineage and stewardship catalog — core history**
   - Added `ILineageCatalogStore` interface with `SaveLineageAsync`, `GetHistoryForTableAsync`, `GetHistoryForTagAsync` to `ETL-SQL.Core/Data/`.
