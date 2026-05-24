@@ -378,9 +378,9 @@ namespace ETL_SQL.Engine.Engines
                 if (seenRows != null)
                 {
                     // Fix DISTINCT collapse: Use a unique sentinel for NULL to distinguish it from empty string
-                    var key = string.Join("\0", colNames.Select(c => 
+                    var key = string.Join("\0", Enumerable.Range(0, colNames.Count).Select(i => 
                     {
-                        var val = resRow[c];
+                        var val = resRow[i];
                         if (val == null || val == DBNull.Value) return "__NULL__";
                         var s = val.ToString() ?? "";
                         return s == "__NULL__" ? "__[NULL]__" : s; // Escape literal "__NULL__"

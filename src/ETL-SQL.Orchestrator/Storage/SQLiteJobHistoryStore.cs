@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.Orchestrator.Storage
@@ -10,7 +13,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// <summary>
     /// SQLite-backed implementation of the job history store, managing job definitions and execution logs.
     /// </summary>
-    public class SQLiteJobHistoryStore : IJobHistoryStore, IBundleStore
+    public class SQLiteJobHistoryStore : IJobHistoryStore, IBundleStore, ILineageCatalogStore
     {
         private readonly string _connectionString;
         private bool _initialized;
@@ -108,8 +111,26 @@ namespace ETL_SQL.Orchestrator.Storage
                     FOREIGN KEY (BundleName, Version) REFERENCES BundleVersions(BundleName, Version)
                 );";
 
+            var createLineageHistoryTable = @"
+                CREATE TABLE IF NOT EXISTS LineageHistory (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    RunAt TEXT NOT NULL,
+                    JobName TEXT,
+                    ScriptPath TEXT,
+                    TargetTable TEXT NOT NULL,
+                    TargetColumn TEXT,
+                    SourceTables TEXT NOT NULL DEFAULT '[]',
+                    SourceColumns TEXT NOT NULL DEFAULT '[]',
+                    Operation TEXT NOT NULL,
+                    Tags TEXT NOT NULL DEFAULT '{}',
+                    SourceFile TEXT,
+                    Line INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_lh_target ON LineageHistory(TargetTable COLLATE NOCASE);
+                CREATE INDEX IF NOT EXISTS idx_lh_runAt ON LineageHistory(RunAt);";
+
             using var command = connection.CreateCommand();
-            command.CommandText = createJobsTable + createHistoryTable + createBundleTables;
+            command.CommandText = createJobsTable + createHistoryTable + createBundleTables + createLineageHistoryTable;
             await command.ExecuteNonQueryAsync();
 
             // 8B-2: Schema migration — add resource tracking columns if missing
@@ -653,5 +674,115 @@ namespace ETL_SQL.Orchestrator.Storage
 
         private static string NormalizeVirtualPath(string path)
             => path.Replace('\\', '/').TrimStart('/');
+
+        // ── ILineageCatalogStore ──────────────────────────────────────────────
+
+        public async Task SaveLineageAsync(IEnumerable<LineageEntry> entries, string? jobName, string? scriptPath, DateTime runAt)
+        {
+            await EnsureInitializedAsync();
+            var runAtStr = runAt.ToString("O");
+            var entriesList = entries.ToList();
+            if (entriesList.Count == 0) return;
+
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var transaction = connection.BeginTransaction();
+            try
+            {
+                foreach (var entry in entriesList)
+                {
+                    using var cmd = connection.CreateCommand();
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = @"
+                        INSERT INTO LineageHistory
+                            (RunAt, JobName, ScriptPath, TargetTable, TargetColumn, SourceTables, SourceColumns, Operation, Tags, SourceFile, Line)
+                        VALUES
+                            ($runAt, $job, $script, $target, $col, $sources, $srcCols, $op, $tags, $file, $line);";
+                    cmd.Parameters.AddWithValue("$runAt",   runAtStr);
+                    cmd.Parameters.AddWithValue("$job",     (object?)jobName    ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$script",  (object?)scriptPath ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$target",  entry.TargetTable);
+                    cmd.Parameters.AddWithValue("$col",     (object?)entry.TargetColumn ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$sources", JsonSerializer.Serialize(entry.SourceTables));
+                    cmd.Parameters.AddWithValue("$srcCols", JsonSerializer.Serialize(entry.SourceColumns));
+                    cmd.Parameters.AddWithValue("$op",      entry.Operation);
+                    cmd.Parameters.AddWithValue("$tags",    JsonSerializer.Serialize(entry.Metadata));
+                    cmd.Parameters.AddWithValue("$file",    (object?)entry.SourceFile ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$line",    entry.Line);
+                    await cmd.ExecuteNonQueryAsync();
+                }
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTableAsync(string tableName, int limit = 100)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"
+                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
+                       SourceTables, Operation, Tags, SourceFile, Line
+                FROM LineageHistory
+                WHERE TargetTable = $table COLLATE NOCASE
+                ORDER BY RunAt DESC, Id DESC
+                LIMIT $limit;";
+            cmd.Parameters.AddWithValue("$table", tableName);
+            cmd.Parameters.AddWithValue("$limit", limit);
+            return await ReadLineageHistoryAsync(cmd);
+        }
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTagAsync(string tagKey, string? tagValue = null, int limit = 100)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            // Tags is stored as a JSON object. Use LIKE to find the key; refine with value if provided.
+            var pattern = tagValue == null
+                ? $"%\"{tagKey}\"%"
+                : $"%\"{tagKey}\":\"{tagValue}\"%";
+            cmd.CommandText = @"
+                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
+                       SourceTables, Operation, Tags, SourceFile, Line
+                FROM LineageHistory
+                WHERE Tags LIKE $pattern
+                ORDER BY RunAt DESC, Id DESC
+                LIMIT $limit;";
+            cmd.Parameters.AddWithValue("$pattern", pattern);
+            cmd.Parameters.AddWithValue("$limit", limit);
+            return await ReadLineageHistoryAsync(cmd);
+        }
+
+        private static async Task<IEnumerable<LineageHistoryEntry>> ReadLineageHistoryAsync(SqliteCommand cmd)
+        {
+            var results = new List<LineageHistoryEntry>();
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var sourceTables = JsonSerializer.Deserialize<List<string>>(reader.GetString(6)) ?? new List<string>();
+                var tags = JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(8)) ?? new Dictionary<string, string>();
+                results.Add(new LineageHistoryEntry(
+                    reader.GetInt64(0),
+                    DateTime.Parse(reader.GetString(1)),
+                    reader.IsDBNull(2) ? null : reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.GetString(4),
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    sourceTables,
+                    reader.GetString(7),
+                    tags,
+                    reader.IsDBNull(9)  ? null : reader.GetString(9),
+                    reader.IsDBNull(10) ? 0    : reader.GetInt32(10)
+                ));
+            }
+            return results;
+        }
     }
 }

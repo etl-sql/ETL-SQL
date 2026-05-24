@@ -2160,6 +2160,8 @@ SHOW PROFILE                   [INTO #temp];
 SHOW LINEAGE [FOR <table_ref> [COLUMN <column>]] [INTO #temp];
 SHOW LINEAGE FOR REPORT <report_name> [INTO #temp];
 SHOW LINEAGE FOR DATASET &<dataset_name> [INTO #temp];
+SHOW LINEAGE HISTORY FOR TABLE <table_name> [AT <connection>] [LIMIT <n>] [INTO #temp];
+SHOW LINEAGE HISTORY FOR TAG <tag_key> [= '<tag_value>'] [AT <connection>] [LIMIT <n>] [INTO #temp];
 
 -- Metadata Tags
 SHOW TAGS FOR SCRIPT                         [INTO #temp];

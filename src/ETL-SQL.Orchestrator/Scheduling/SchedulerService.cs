@@ -217,7 +217,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
                     try
                     {
-                        lastResult = await executor.ExecuteTextAsync(job.Script, sessionId, jobCts.Token);
+                        lastResult = await executor.ExecuteTextAsync(job.Script, sessionId, jobCts.Token, job.Name);
 
                         // Capture sessionId for potential persistence in retry (CQ-S2)
                         sessionId = lastResult.SessionId;

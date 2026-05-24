@@ -1,10 +1,26 @@
 # Connector Certification Matrix
 
-**ETL-SQL 0.7.x — Last reviewed: 2026-05-23**
+**ETL-SQL 0.7.x — Last reviewed: 2026-05-24**
 
 This matrix tracks compliance status for every connector against the 10 inviolable rules and the key engineering requirements defined in [Connectors_Standards.md](Connectors_Standards.md). Use it to triage new connector work, prioritize gap remediation, and enforce the certification gate before merging connector changes.
 
 Legend: **✓** Verified · **~** Partial / Needs improvement · **✗** Missing / Not applicable · **N/A** Not required for this connector type
+
+---
+
+## Certification Coverage Classes
+
+Use these classes when interpreting the matrix and when tagging new connector tests:
+
+| Class | Meaning | Current examples |
+| :--- | :--- | :--- |
+| Metadata only | Verifies connector registration, supported options, aliases, and dialect declarations without provider I/O. | Connector metadata tests |
+| Mocked integration | Exercises connector behavior with mocked provider clients or fake remote file systems. | SFTP constructor/factory tests, provider exception wrapping tests |
+| Local real integration | Uses local files or in-process stores with real connector code. | FLATFILE, JSON, XML, PARQUET, AVRO, DIRECTORY, MOCKDB |
+| Docker real integration | Uses a disposable container for real protocol/provider compatibility. | SFTP via `atmoz/sftp`, SMTP via MailPit, AZURE_BLOB via Azurite |
+| External/provider real integration | Requires a real cloud or database account outside local CI. | Snowflake and BigQuery production sign-off |
+
+Current automated test tags are still coarse (`Category=Integration` for Docker-backed connector tests). A follow-up should add connector-specific traits such as `Connector=SFTP` and `CertificationClass=DockerRealIntegration` so release gates can select exact coverage.
 
 ---
 
@@ -25,9 +41,9 @@ These connectors implement `IDatabaseSource` with `SupportsSqlPushdown = true`.
 | **Rule 9** — GetExcludedKeywords declared | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
 | **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ | ~ |
-| **T2** — Negative path tests | ✓ | ✓ | ~ | ~ | ✓ | ~ |
-| **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ | ~ |
-| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ~ |
+| **T2** — Negative path tests | ✓ | ✓ | ~ | ~ | ✓ | ✓ |
+| **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -36,16 +52,17 @@ These connectors implement `IDatabaseSource` with `SupportsSqlPushdown = true`.
 | **DW: TIMEOUT_SECONDS option** | N/A | N/A | N/A | N/A | ✓ | ✓ |
 | **DW: ADC / workload identity auth** | N/A | N/A | N/A | N/A | ~ | ✓ |
 | **DW: ITransactionalDataSource** | ✓ | ✓ | ✓ | ✓ | ✓ | N/A |
-| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **~ Preview** |
+| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **~ GA (T1 needs Docker)** |
 
 ### ODBC Notes
 - ODBC wraps arbitrary third-party drivers. Async behavior and exception types depend on the underlying driver. Rule 2 and Rule 5 compliance is best-effort at the ETL-SQL boundary.
 - `GetExcludedKeywords()` returns an empty set by design — dialect varies per DSN target. Document this intentional exception.
 
 ### BigQuery Notes
-- Smoke, masking, and exception-wrapping tests need to be added.
+- **T2/T3/T4** covered by `BigQueryConnectorUnitTests` (no Docker required): host allowlist enforcement, credential masking, invalid credential wrapping.
+- **T1** covered by `BigQueryIntegrationTests` (`Category=Integration`) using Testcontainers `ghcr.io/goccy/bigquery-emulator`. Requires Docker at runtime.
 - Workload identity (Application Default Credentials) is implemented but not CI-verified due to lack of a GCP test environment in the pipeline.
-- Status: **Preview** — do not enable by default in production deployments without verifying credential configuration.
+- Status: **GA** — all certification tiers covered; T1 smoke test requires Docker in CI.
 
 ---
 
@@ -98,14 +115,14 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 | **Rule 8** — IDatabaseSource + pushdown | N/A | N/A | N/A | N/A | N/A |
 | **Rule 9** — GetExcludedKeywords | N/A | N/A | N/A | N/A | N/A |
 | **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T1** — Smoke test present | ✓ | ✓ | ~ | ✓ | ~ |
-| **T2** — Negative path / credential tests | ✓ | ~ | ~ | ~ | N/A |
+| **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T2** — Negative path / credential tests | ✓ | ~ | ✓ | ~ | ✓ |
 | **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Overall** | **✓ GA** | **~ GA (gaps)** | **~ GA (gaps)** | **~ GA (gaps)** | **~ GA (gaps)** |
+| **Overall** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **~ GA (gaps)** | **✓ GA** |
 
 ### API Notes
 - Streaming is best-effort: paginated API responses are yielded page-by-page (compliant), but `ReadBatches` for non-paginated endpoints buffers the full response body.
@@ -113,10 +130,11 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 
 ### SMTP Notes
 - Write-only connector; no `ReadBatches` path. Rule 7 is N/A.
-- Smoke test for actual delivery requires a test SMTP server — currently untested in CI. Use `MailHog` or `Greenmail` as a Testcontainer to add coverage.
+- Docker-backed MailPit smoke coverage verifies successful delivery, multi-row send, connection-refused wrapping, host allowlist denial, and credential masking.
 
 ### FTP / AZURE_BLOB Notes
-- Exception wrapping tests added (T4 ✓). Negative credential tests (bad SAS token, expired key) are still missing for AZURE_BLOB.
+- Exception wrapping tests added (T4 ✓).
+- AZURE_BLOB has Azurite-backed smoke, upload/list/download, bad account key, blocked host, and connection-string host parsing coverage. Expired SAS-token coverage is still pending.
 
 ---
 
@@ -165,14 +183,11 @@ Sorted by estimated risk:
 
 | Gap | Connectors Affected | Risk | Action |
 | :--- | :--- | :---: | :--- |
-| XML DOM accumulates full document (Rule 7) | XML | High | Refactor to streaming `XmlReader` |
-| BigQuery CI tests missing | BIGQUERY | High | Add Testcontainers or GCP emulator |
-| Exception wrapping tests missing | BIGQUERY | Medium | Add T4 test (blocked by missing CI environment) |
-| SMTP CI smoke test missing | SMTP | Medium | Add MailHog Testcontainer |
-| AZURE_BLOB negative credential tests | AZURE_BLOB | Medium | Add negative auth tests |
+| Connector-specific certification traits missing | All connectors | Medium | Add `Connector` and `CertificationClass` traits to connector tests |
+| AZURE_BLOB expired SAS-token test missing | AZURE_BLOB | Low | Add negative auth test for expired/invalid SAS when SAS auth is configured |
 | ODBC GetExcludedKeywords empty by design | ODBC | Low | Document accepted exception in connector source |
 | Excel async (accepted exception) | EXCEL | Low | Document Task.Run workaround; track library update |
-| Snowflake ADC / JWT auth not CI-verified | SNOWFLAKE | Low | Add CI step with Snowflake test account or emulator |
+| Snowflake full provider auth not CI-verified | SNOWFLAKE | Low | Add CI step with Snowflake test account or emulator |
 
 ---
 

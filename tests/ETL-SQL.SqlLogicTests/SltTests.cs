@@ -89,11 +89,23 @@ namespace ETL_SQL.SqlLogicTests
 
             if (!Directory.Exists(root)) return Enumerable.Empty<object[]>();
 
+            // Exclusions:
+            //   select4_debug.test — debug variant of select4, overlaps entirely with select4.test
+            //   slt_lang_createtrigger.test, slt_lang_droptrigger.test — ETL-SQL has no trigger support
+            //   slt_lang_aggfunc.test — uses aggregate functions with SQLite-specific NULL semantics that differ from ETL-SQL
+            //   (empty) index/* files — placeholder stubs with no test content
+            var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "select4_debug.test",
+                "slt_lang_createtrigger.test",
+                "slt_lang_droptrigger.test",
+                "slt_lang_aggfunc.test",
+            };
+
             return Directory.GetFiles(root, "*.test", SearchOption.AllDirectories)
-                .Where(f => !f.Contains("trigger", StringComparison.OrdinalIgnoreCase))
-                .Where(f => !Path.GetFileName(f).Equals("slt_good_2.test", StringComparison.OrdinalIgnoreCase))
-                .Where(f => !Path.GetFileName(f).Equals("slt_lang_aggfunc.test", StringComparison.OrdinalIgnoreCase))
-                .Where(f => !Path.GetFileName(f).Equals("select4_debug.test", StringComparison.OrdinalIgnoreCase))
+                .Where(f => new FileInfo(f).Length > 0)
+                .Where(f => !excluded.Contains(Path.GetFileName(f)))
+                .OrderBy(f => f)
                 .Select(f => new object[] { f });
         }
     }

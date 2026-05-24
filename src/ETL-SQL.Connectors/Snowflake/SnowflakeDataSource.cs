@@ -359,7 +359,7 @@ namespace ETL_SQL.Connectors.Snowflake
 
         private System.Data.Common.DbCommand CreateCommand(SnowflakeDbConnection conn)
         {
-            var cmd = CreateCommand(conn);
+            var cmd = conn.CreateCommand();
             cmd.CommandTimeout = _commandTimeout;
             return cmd;
         }

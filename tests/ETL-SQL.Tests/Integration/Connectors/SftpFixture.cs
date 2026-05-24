@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Xunit;
+using DotNet.Testcontainers.Configurations;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
@@ -22,9 +23,12 @@ namespace ETL_SQL.Tests.Integration.Connectors
         private IContainer? _container;
         private string? _keyDir;
 
+        public const string TestPassphrase = "sftp-test-passphrase-123";
+
         public string Host => "localhost";
         public int Port { get; private set; }
         public string PrivateKeyPath { get; private set; } = "";
+        public string EncryptedPrivateKeyPath { get; private set; } = "";
 
         public async Task InitializeAsync()
         {
@@ -38,6 +42,13 @@ namespace ETL_SQL.Tests.Integration.Connectors
             PrivateKeyPath = Path.Combine(_keyDir, "test_id_rsa.pem");
             File.WriteAllText(PrivateKeyPath, privatePem);
             File.WriteAllText(Path.Combine(_keyDir, "test_id_rsa.pub"), authorizedKeyLine);
+
+            // Also write a passphrase-encrypted version of the same key pair so the
+            // passphrase auth test can use it.  Both keys share the same authorized_keys
+            // entry because they have the same public component.
+            var encryptedPem = GenerateEncryptedPem(privatePem, TestPassphrase);
+            EncryptedPrivateKeyPath = Path.Combine(_keyDir, "test_id_rsa_enc.pem");
+            File.WriteAllText(EncryptedPrivateKeyPath, encryptedPem);
 
             _container = new ContainerBuilder("atmoz/sftp:latest")
                 // Format: user:pass[:uid[:gid[:dir[,dir…]]]]
@@ -61,6 +72,19 @@ namespace ETL_SQL.Tests.Integration.Connectors
         }
 
         // ── Key generation ────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Re-exports <paramref name="unencryptedPem"/> as a PKCS#8 AES-256-CBC encrypted PEM
+        /// using the given passphrase.  SSH.NET 2024+ reads this format natively.
+        /// </summary>
+        private static string GenerateEncryptedPem(string unencryptedPem, string passphrase)
+        {
+            using var rsa = RSA.Create();
+            rsa.ImportFromPem(unencryptedPem);
+            return rsa.ExportEncryptedPkcs8PrivateKeyPem(
+                Encoding.UTF8.GetBytes(passphrase),
+                new PbeParameters(PbeEncryptionAlgorithm.Aes256Cbc, HashAlgorithmName.SHA256, 100_000));
+        }
 
         private static (string privatePem, string authorizedKeyLine) GenerateRsaKeyPair()
         {

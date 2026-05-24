@@ -275,3 +275,37 @@ SHOW TAGS;
 SHOW TAGS INTO #all_tags;
 SELECT * FROM #all_tags WHERE tag_name = 'pii' AND tag_value = 'true';
 ```
+
+## Cross-Run Lineage Catalog
+
+`SHOW LINEAGE` is scoped to the current session. The catalog stores lineage across all orchestrated runs so you can answer stewardship questions that span many executions.
+
+### SHOW LINEAGE HISTORY FOR TABLE
+
+```sql
+-- Local catalog
+SHOW LINEAGE HISTORY FOR TABLE Orders;
+SHOW LINEAGE HISTORY FOR TABLE Orders LIMIT 50;
+SHOW LINEAGE HISTORY FOR TABLE Orders INTO #history;
+
+-- Remote Orchestrator
+SHOW LINEAGE HISTORY FOR TABLE Orders AT ProdOrch;
+SHOW LINEAGE HISTORY FOR TABLE Orders AT ProdOrch LIMIT 50 INTO #history;
+```
+
+Returns all lineage entries that targeted the named table, most recent run first. Columns: `Id`, `RunAt`, `JobName`, `TargetTable`, `TargetColumn`, `SourceTables`, `Operation`, `Tags`, `SourceFile`, `Line`.
+
+### SHOW LINEAGE HISTORY FOR TAG
+
+```sql
+-- Local catalog
+SHOW LINEAGE HISTORY FOR TAG pii;
+SHOW LINEAGE HISTORY FOR TAG pii = 'true';
+SHOW LINEAGE HISTORY FOR TAG classification = 'restricted' LIMIT 100 INTO #restricted;
+
+-- Remote Orchestrator
+SHOW LINEAGE HISTORY FOR TAG pii = 'true' AT ProdOrch;
+SHOW LINEAGE HISTORY FOR TAG classification = 'restricted' AT ProdOrch LIMIT 100 INTO #restricted;
+```
+
+Returns all entries whose `Tags` JSON contains the given key, optionally filtered to a specific value.

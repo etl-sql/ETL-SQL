@@ -1681,6 +1681,23 @@ namespace ETL_SQL.Core
         }
     }
 
+    public record ShowLineageHistoryForTableStatement : Statement
+    {
+        public string TableName { get; init; } = string.Empty;
+        public int? Limit { get; init; }
+        public string? IntoTable { get; init; }
+        public string? At { get; set; }
+    }
+
+    public record ShowLineageHistoryForTagStatement : Statement
+    {
+        public string TagKey { get; init; } = string.Empty;
+        public string? TagValue { get; init; }
+        public int? Limit { get; init; }
+        public string? IntoTable { get; init; }
+        public string? At { get; set; }
+    }
+
     public record ShowVariablesStatement : Statement
     {
         public bool IsLocalOnly { get; init; }

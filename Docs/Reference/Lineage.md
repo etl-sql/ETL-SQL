@@ -43,7 +43,7 @@ For each transformation, lineage records:
 
 ETL-SQL lineage is complete and accurate for everything the *script* does. The lineage chain stops at the boundary of external database objects:
 
-- If a source is a **VIEW**, lineage records the view name. Lineage through the view to its underlying tables requires Phase 7 (view transparency) to be enabled.
+- If a source is a **VIEW**, lineage records the view name as the source. Lineage does not trace through the view to its underlying base tables; that boundary is opaque to the engine.
 - If a source is a **stored procedure**, lineage records the procedure call. Internal operations inside the procedure are not visible.
 - If you use **EXECUTE PUSHDOWN**, the entire pushed-down block is recorded as a single lineage event with no column-level detail.
 
@@ -350,6 +350,77 @@ Configure automatic export on every script run in `appsettings.json`:
   "OpenLineageEndpoint": "http://localhost:5000/api/v1/lineage"
 }
 ```
+
+---
+
+## Cross-Run Lineage Catalog
+
+Every lineage event recorded during an orchestrated job run is automatically persisted to the shared catalog database (`etlsql.db`, the same store used for job history). Ad-hoc script runs are also stored, with `JobName = NULL`. This gives you cross-run stewardship queries that span many executions.
+
+### SHOW LINEAGE HISTORY FOR TABLE
+
+Returns all recorded lineage entries that wrote to a given table, most recent run first. Use `AT <connection>` to query a remote Orchestrator.
+
+```sql
+-- Local catalog
+SHOW LINEAGE HISTORY FOR TABLE Orders;
+SHOW LINEAGE HISTORY FOR TABLE Orders LIMIT 50;
+SHOW LINEAGE HISTORY FOR TABLE Orders INTO #history;
+
+-- Remote Orchestrator
+SHOW LINEAGE HISTORY FOR TABLE Orders AT ProdOrch;
+SHOW LINEAGE HISTORY FOR TABLE Orders AT ProdOrch LIMIT 50 INTO #history;
+```
+
+**Result columns:** `Id`, `RunAt`, `JobName`, `TargetTable`, `TargetColumn`, `SourceTables`, `Operation`, `Tags`, `SourceFile`, `Line`
+
+Typical stewardship queries:
+
+```sql
+-- What scripts write to the Orders table?
+SHOW LINEAGE HISTORY FOR TABLE Orders INTO #h;
+SELECT DISTINCT JobName, SourceTables FROM #h;
+
+-- How many times has PII landed in CustomerExport this week?
+SHOW LINEAGE HISTORY FOR TABLE CustomerExport INTO #h;
+SELECT COUNT(*) FROM #h
+WHERE JSON_VALUE(Tags, '$.pii') = 'true'
+  AND RunAt >= DATEADD(DAY, -7, GETDATE());
+```
+
+### SHOW LINEAGE HISTORY FOR TAG
+
+Returns all recorded lineage entries whose `Tags` column contains a given tag key, optionally filtered to a specific value. Use `AT <connection>` to query a remote Orchestrator.
+
+```sql
+-- Local catalog
+SHOW LINEAGE HISTORY FOR TAG pii;
+SHOW LINEAGE HISTORY FOR TAG pii = 'true';
+SHOW LINEAGE HISTORY FOR TAG pii = 'true' LIMIT 100 INTO #pii_history;
+
+-- Remote Orchestrator
+SHOW LINEAGE HISTORY FOR TAG pii = 'true' AT ProdOrch;
+SHOW LINEAGE HISTORY FOR TAG classification = 'restricted' AT ProdOrch LIMIT 100 INTO #restricted;
+```
+
+**Result columns:** same as `SHOW LINEAGE HISTORY FOR TABLE`.
+
+Typical stewardship queries:
+
+```sql
+-- Which jobs touched PII-tagged columns this week?
+SHOW LINEAGE HISTORY FOR TAG pii = 'true' INTO #pii;
+SELECT DISTINCT JobName, TargetTable, TargetColumn
+FROM #pii
+WHERE RunAt >= DATEADD(DAY, -7, GETDATE())
+ORDER BY JobName, TargetTable;
+
+-- Which outputs were ever tagged as restricted?
+SHOW LINEAGE HISTORY FOR TAG classification = 'restricted' INTO #restricted;
+SELECT DISTINCT TargetTable FROM #restricted;
+```
+
+> **Scope:** Only in-process `ScriptExecutorAdapter` runs persist to the local catalog (scheduled jobs and inline CLI executions). `ProcessJobExecutor` (out-of-process) runs do not currently write to the catalog. When the Orchestrator is a remote server, use `AT <connection>` to query its catalog directly.
 
 ---
 

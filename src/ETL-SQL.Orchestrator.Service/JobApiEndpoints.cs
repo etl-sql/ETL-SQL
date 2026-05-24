@@ -215,6 +215,22 @@ namespace ETL_SQL.Orchestrator.Service
                 return Results.Ok(history);
             }).WithName("getAllJobHistory");
 
+            app.MapGet("/api/lineage/history/table/{name}", async (HttpContext ctx, string name,
+                ILineageCatalogStore catalog, IConfiguration cfg, int limit = 100) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var entries = await catalog.GetHistoryForTableAsync(Uri.UnescapeDataString(name), limit);
+                return Results.Ok(entries);
+            }).WithName("getLineageHistoryForTable");
+
+            app.MapGet("/api/lineage/history/tag/{key}", async (HttpContext ctx, string key,
+                ILineageCatalogStore catalog, IConfiguration cfg, string? value = null, int limit = 100) =>
+            {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var entries = await catalog.GetHistoryForTagAsync(Uri.UnescapeDataString(key), value, limit);
+                return Results.Ok(entries);
+            }).WithName("getLineageHistoryForTag");
+
             app.MapPost("/api/scheduled-jobs/{name}/trigger", async (HttpContext ctx, string name,
                 SchedulerService scheduler, IJobHistoryStore store, IConfiguration cfg) =>
             {

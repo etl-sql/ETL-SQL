@@ -154,10 +154,10 @@ namespace ETL_SQL.Engine.Engines
         {
             var output = new Row();
 
-            output["MATCH_NUMBER"] = (decimal)matchNumber;
-
             if (currentRowIndex != null)
             {
+                output["MATCH_NUMBER"] = (decimal)matchNumber;
+
                 // ALL ROWS PER MATCH: copy source row columns and emit CLASSIFIER
                 if (rows.Count > currentRowIndex.Value)
                 {

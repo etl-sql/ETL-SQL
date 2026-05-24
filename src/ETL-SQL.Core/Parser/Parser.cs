@@ -405,12 +405,25 @@ namespace ETL_SQL.Core.Parser
             var preJoins = new List<JoinClause>();
             if (Match(TokenType.FROM))
             {
+                bool parenthesizedFrom = false;
+                if (Current.Type == TokenType.LPAREN && Peek.Type != TokenType.SELECT && Peek.Type != TokenType.VALUES)
+                {
+                    parenthesizedFrom = true;
+                    Consume(TokenType.LPAREN, "Expected '('");
+                }
+
                 fromTable = ParseTableReference();
                 // SQL-89 comma-separated multi-table FROM (implicit CROSS JOINs)
                 while (Current.Type == TokenType.COMMA)
                 {
                     Advance();
                     preJoins.Add(new JoinClause("CROSS JOIN", ParseTableReference(), new LiteralExpression(true, TokenType.NUMBER)));
+                }
+
+                if (parenthesizedFrom)
+                {
+                    preJoins.AddRange(ParseJoins());
+                    Consume(TokenType.RPAREN, "Expected ')' after parenthesized FROM/JOIN list");
                 }
             }
             else

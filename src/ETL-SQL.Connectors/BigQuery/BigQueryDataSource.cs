@@ -286,6 +286,21 @@ namespace ETL_SQL.Connectors.BigQuery
         {
             try
             {
+                var emulatorHost = Environment.GetEnvironmentVariable("BIGQUERY_EMULATOR_HOST");
+                if (emulatorHost is not null)
+                {
+                    var baseUri = emulatorHost.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                        ? emulatorHost.TrimEnd('/') + "/"
+                        : $"http://{emulatorHost}/";
+                    var builder = new BigQueryClientBuilder
+                    {
+                        ProjectId   = _projectId,
+                        BaseUri     = baseUri,
+                        Credential  = GoogleCredential.FromAccessToken("emulator-token"),
+                    };
+                    return await builder.BuildAsync();
+                }
+
                 if (_credentialFile != null)
                 {
 #pragma warning disable CS0618

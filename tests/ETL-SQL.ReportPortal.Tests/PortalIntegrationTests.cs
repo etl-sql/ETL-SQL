@@ -1447,6 +1447,216 @@ CREATE VISUAL Total AS CARD (
         Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
     }
 
+    // ── 8. Operational hardening ──────────────────────────────────────────────
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task Snapshot_FailedRefresh_KeepsLastGoodSnapshot()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Resilience Folder", parentId = (int?)null });
+        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId  = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", "resilience_report.rptsql");
+        await File.WriteAllTextAsync(scriptPath, @"
+CREATE VISUAL Answer AS CARD (
+    SOURCE = (SELECT 42 AS Value),
+    MAPPINGS (VALUE = Value)
+);
+");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId, name = "Resilience Report", description = "", scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        // First execution — should succeed and produce a snapshot
+        var exec1     = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
+        Assert.Equal(HttpStatusCode.Accepted, exec1.StatusCode);
+        var exec1Body = await exec1.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var job1      = await WaitForJobAsync(token, exec1Body!["jobId"]!.GetValue<string>());
+        Assert.Equal("Completed", job1["status"]!.GetValue<string>());
+
+        // Verify snapshot exists
+        var snap1 = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=false");
+        Assert.Equal(HttpStatusCode.OK, snap1.StatusCode);
+
+        // Delete the script — next run will fail
+        File.Delete(scriptPath);
+
+        var exec2     = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
+        Assert.Equal(HttpStatusCode.Accepted, exec2.StatusCode);
+        var exec2Body = await exec2.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var job2      = await WaitForJobAsync(token, exec2Body!["jobId"]!.GetValue<string>());
+        Assert.Equal("Failed", job2["status"]!.GetValue<string>());
+
+        // Old snapshot must still be accessible despite the failed refresh
+        var snap2 = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=false");
+        Assert.Equal(HttpStatusCode.OK, snap2.StatusCode);
+        var snapBody = await snap2.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.NotNull(snapBody!["builtAt"]);
+
+        // Catalog listing should surface Failed status and preserve snapshotBuiltAt
+        var listRes = await AuthGet(token, $"/api/folders/{folderId}/reports");
+        var reports = await listRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        var listed  = reports!.Single(r => r!["id"]!.GetValue<int>() == reportId)!.AsObject();
+        Assert.Equal("Failed", listed["lastRefreshStatus"]!.GetValue<string>());
+        Assert.NotNull(listed["snapshotBuiltAt"]);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task AuditLog_RecordsViewSnapshotExportAndSubscriptionEvents()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Audit Events Folder", parentId = (int?)null });
+        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId  = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", "audit_events_report.rptsql");
+        await File.WriteAllTextAsync(scriptPath, @"
+CREATE VISUAL Summary AS TABLE (
+    SOURCE = (SELECT 1 AS Id, 'Alpha' AS Name),
+    MAPPINGS (Id = Id, Name = Name)
+);
+");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId, name = "Audit Events Report", description = "", scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        // Execute to get a snapshot (required for CSV export)
+        var execRes = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
+        Assert.Equal(HttpStatusCode.Accepted, execRes.StatusCode);
+        var execBody = await execRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var job      = await WaitForJobAsync(token, execBody!["jobId"]!.GetValue<string>());
+        Assert.Equal("Completed", job["status"]!.GetValue<string>());
+
+        // Trigger VIEW_SNAPSHOT
+        var snapRes = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=false");
+        Assert.Equal(HttpStatusCode.OK, snapRes.StatusCode);
+
+        // Trigger EXPORT_CSV
+        var csvRes = await AuthGet(token, $"/api/reports/{reportId}/export/csv");
+        Assert.Equal(HttpStatusCode.OK, csvRes.StatusCode);
+
+        // Trigger CREATE_SUBSCRIPTION and DELETE_SUBSCRIPTION
+        var smtpRes = await AuthPost(token, "/api/admin/smtp", new
+        {
+            alias       = $"audit-smtp-{Guid.NewGuid():N}"[..16],
+            host        = "smtp.test.local",
+            port        = 587,
+            username    = "user@test.local",
+            password    = "smtppassword",
+            fromAddress = "noreply@test.local",
+            useSsl      = true
+        });
+        Assert.Equal(HttpStatusCode.OK, smtpRes.StatusCode);
+        var smtpBody  = await smtpRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var smtpAlias = smtpBody!["alias"]!.GetValue<string>();
+
+        var subRes = await AuthPost(token, "/api/subscriptions", new
+        {
+            reportId, schedule = "Daily", format = "Link", smtpAlias, recipientEmail = "audit@test.local", atTime = "09:00"
+        });
+        Assert.Equal(HttpStatusCode.Created, subRes.StatusCode);
+        var subBody = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var subId   = subBody!["id"]!.GetValue<int>();
+
+        var delSubRes = await AuthDelete(token, $"/api/subscriptions/{subId}");
+        Assert.Equal(HttpStatusCode.NoContent, delSubRes.StatusCode);
+
+        // Verify all expected audit events exist
+        var auditRes = await AuthGet(token, "/api/admin/audit?pageSize=500");
+        Assert.Equal(HttpStatusCode.OK, auditRes.StatusCode);
+        var auditBody = await auditRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var items     = auditBody!["items"]!.AsArray()
+            .Select(i => i!["action"]!.GetValue<string>())
+            .ToHashSet();
+
+        Assert.Contains("VIEW_SNAPSHOT",       items);
+        Assert.Contains("EXPORT_CSV",          items);
+        Assert.Contains("CREATE_SUBSCRIPTION", items);
+        Assert.Contains("DELETE_SUBSCRIPTION", items);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task Subscription_WithParameters_PersistsAndRoundTrips()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Parameterized Sub Folder", parentId = (int?)null });
+        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId  = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", "param_sub_report.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "DECLARE @Region STRING INPUT = 'All';");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId, name = "Param Sub Report", description = "", scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var smtpRes = await AuthPost(token, "/api/admin/smtp", new
+        {
+            alias       = $"param-smtp-{Guid.NewGuid():N}"[..16],
+            host        = "smtp.test.local",
+            port        = 587,
+            username    = "user@test.local",
+            password    = "smtppassword",
+            fromAddress = "noreply@test.local",
+            useSsl      = true
+        });
+        Assert.Equal(HttpStatusCode.OK, smtpRes.StatusCode);
+        var smtpBody  = await smtpRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var smtpAlias = smtpBody!["alias"]!.GetValue<string>();
+
+        var subRes = await AuthPost(token, "/api/subscriptions", new
+        {
+            reportId,
+            schedule       = "Daily",
+            format         = "Link",
+            smtpAlias,
+            recipientEmail = "regional@test.local",
+            atTime         = "07:00",
+            parameters     = new Dictionary<string, string> { ["Region"] = "EMEA" }
+        });
+        Assert.Equal(HttpStatusCode.Created, subRes.StatusCode);
+        var subBody = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var subId   = subBody!["id"]!.GetValue<int>();
+
+        // Verify the GET round-trip preserves parameters
+        var getRes  = await AuthGet(token, $"/api/subscriptions/{subId}");
+        Assert.Equal(HttpStatusCode.OK, getRes.StatusCode);
+        var getBody = await getRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var param   = getBody!["parameters"]!.AsObject()["Region"]!.GetValue<string>();
+        Assert.Equal("EMEA", param);
+
+        // Update the parameter value
+        var updateRes = await AuthPut(token, $"/api/subscriptions/{subId}", new
+        {
+            parameters = new Dictionary<string, string> { ["Region"] = "NA" }
+        });
+        Assert.Equal(HttpStatusCode.OK, updateRes.StatusCode);
+        var updatedBody  = await updateRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var updatedParam = updatedBody!["parameters"]!.AsObject()["Region"]!.GetValue<string>();
+        Assert.Equal("NA", updatedParam);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     /// <summary>

@@ -129,14 +129,12 @@ namespace ETL_SQL.LSP
             if (functionHelp != null)
             {
                 if (md.Count > 0) md.Add("---");
-                md.Add("#### Function Help");
                 md.Add(ScaleDownHeaders(functionHelp));
             }
 
             if (keywordHelp != null)
             {
                 if (md.Count > 0) md.Add("---");
-                md.Add("#### Help");
                 md.Add(ScaleDownHeaders(keywordHelp));
             }
 

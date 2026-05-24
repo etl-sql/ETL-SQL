@@ -114,18 +114,6 @@ namespace ETL_SQL.Core.Data
                 string s = dec.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 return !s.Contains('.') && !s.Contains('e') && !s.Contains('E');
             }
-            if (val is double dbl)
-            {
-                if (dbl != Math.Truncate(dbl)) return false;
-                string s = dbl.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                return !s.Contains('.') && !s.Contains('e') && !s.Contains('E');
-            }
-            if (val is float fl)
-            {
-                if (fl != Math.Truncate(fl)) return false;
-                string s = fl.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                return !s.Contains('.') && !s.Contains('e') && !s.Contains('E');
-            }
             return false;
         }
 

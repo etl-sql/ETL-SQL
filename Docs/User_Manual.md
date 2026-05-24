@@ -1017,7 +1017,27 @@ WHERE TargetColumn = 'Email';
 
 ---
 
-### 11.1 Script Metadata Headers
+### 11.1 Cross-Run Lineage History
+
+In-session `SHOW LINEAGE` shows what happened within the current script run. For questions that span many runs — "what jobs wrote to this table last week?" or "which outputs ever carried a PII tag?" — use the cross-run catalog:
+
+```sql
+-- What wrote to the Orders table across all job runs?
+SHOW LINEAGE HISTORY FOR TABLE Orders INTO #h;
+SELECT DISTINCT JobName, SourceTables FROM #h ORDER BY JobName;
+
+-- Which jobs touched PII columns this week?
+SHOW LINEAGE HISTORY FOR TAG pii = 'true' LIMIT 200 INTO #pii;
+SELECT DISTINCT JobName, TargetTable, TargetColumn
+FROM #pii
+WHERE RunAt >= DATEADD(DAY, -7, GETDATE());
+```
+
+Both commands support `LIMIT n` and `INTO #temp`. Results are ordered most-recent-run first. Ad-hoc CLI runs are stored with `JobName = NULL`; scheduled Orchestrator jobs are stored with the job name.
+
+---
+
+### 11.2 Script Metadata Headers
 
 The engine automatically reads a structured comment at the top of any `.etlsql` file and records the metadata in lineage logs:
 

@@ -927,6 +927,8 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW ACTIVE SESSIONS`| Portal   | Lists unrevoked, unexpired portal refresh sessions |
 | `SHOW JOBS`           | Orch     | Lists scheduled background tasks |
 | `SHOW JOB HISTORY`    | Orch     | Lists history of executed background tasks |
+| `SHOW LINEAGE HISTORY FOR TABLE` | Lineage | Cross-run catalog: all lineage entries that wrote to a table; supports `AT <connection>` for remote Orchestrators |
+| `SHOW LINEAGE HISTORY FOR TAG`   | Lineage | Cross-run catalog: all entries whose tags match a key/value; supports `AT <connection>` for remote Orchestrators |
 | `SHOW PUBLISHED BUNDLES` | Orch  | Lists latest published bundle versions |
 | `SHOW BUNDLES`           | Orch  | Alias for `SHOW PUBLISHED BUNDLES` |
 | `SHOW BUNDLE VERSIONS` | Orch    | Lists all versions for a bundle |
@@ -1100,8 +1102,31 @@ Annotations used for lineage, security, and script behavior.
 | `ENC:...` | Literal | Prefix for engine-encrypted strings |
 | `BANG` / `!` | Session | Prefix for named Environment Sets (e.g. `!PROD`) |
 
+---
+
+## 18. CLI Commands
+
+Commands run outside a script via `etl-sql <command>`. These are shell-level entry points, not SQL statements.
+
+| Command | Purpose |
+| :--- | :--- |
+| `etl-sql --run <script>` | Execute a `.etlsql` script headlessly |
+| `etl-sql --ui edit <script>` | Open the Terminal IDE (TUI) |
+| `etl-sql encrypt --value <v> --pass <p>` | Produce an `ENC:...` cipher string |
+| `etl-sql doctor` | Quick install validation (checks 1–10: OS, runtime, write access, disk, ODBC, config, security, connectors, history DB, log dirs) |
+| `etl-sql doctor --profile full` | Full validation adds parser/engine/encryption/linter/security-guardrail/Report-SQL/asset-drift/Node.js/portal-DB checks |
+| `etl-sql doctor --strict` | Exit code 1 on any WARN or FAIL result (CI-safe) |
+| `etl-sql doctor --json` | Machine-readable JSON output |
+| `etl-sql report serve <file>` | Serve a `.rptsql` dashboard |
+| `etl-sql report build <file>` | Export report to PDF/CSV/Markdown |
+| `etl-sql report refresh <file>` | Re-evaluate data and update a snapshot |
+
+See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guide.md) for full option reference.
+
+---
+
 <!-- BEGIN GENERATED CANONICAL TOKEN INDEX -->
-## 18. Canonical Token Inventory
+## 19. Canonical Token Inventory
 
 > Generated from `src/ETL-SQL.Core/Common/LanguageMetadata.cs`. Run `node ./scripts/generate-syntax-index.js` after adding, removing, or renaming language tokens.
 

@@ -690,7 +690,7 @@ namespace ETL_SQL.Core.Parser.Components
                 stmt = new ShowDatasetsStatement();
 
             if (stmt == null)
-                throw new SyntaxException("Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, VARIABLES, SCRIPT TAGS, TAGS, VERSION, LINEAGE, or DATASETS after SHOW", _parser.Current.Line, _parser.Current.Column);
+                throw new SyntaxException("Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, VARIABLES, SCRIPT TAGS, TAGS, VERSION, LINEAGE, LINEAGE HISTORY, or DATASETS after SHOW", _parser.Current.Line, _parser.Current.Column);
 
             if ((stmt is ShowJobsStatement || stmt is ShowJobHistoryStatement || stmt is ShowPublishedBundlesStatement ||
                  stmt is ShowBundleVersionsStatement || stmt is ShowBundleFilesStatement || stmt is ShowBundleDependenciesStatement) && Match(TokenType.AT))
@@ -751,6 +751,8 @@ namespace ETL_SQL.Core.Parser.Components
                     ShowPortalUsageMetricsStatement spum => spum with { IntoTable = tempTable },
                     ShowActivePortalSessionsStatement saps => saps with { IntoTable = tempTable },
                     LineageStatement lin         => lin with { IntoTable = tempTable },
+                    ShowLineageHistoryForTableStatement slht => slht with { IntoTable = tempTable },
+                    ShowLineageHistoryForTagStatement slhg  => slhg with { IntoTable = tempTable },
                     _                            => stmt
                 };
             }
@@ -805,7 +807,38 @@ namespace ETL_SQL.Core.Parser.Components
             throw new SyntaxException(message, tok.Line, tok.Column);
         }
 
-        private LineageStatement ParseShowLineage(Token startToken)
+        private Statement ParseShowLineage(Token startToken)
+        {
+            if (Match(TokenType.HISTORY))
+                return ParseShowLineageHistory(startToken);
+
+            return ParseShowLineageCore(startToken);
+        }
+
+        private Statement ParseShowLineageHistory(Token startToken)
+        {
+            Consume(TokenType.FOR, "Expected FOR after SHOW LINEAGE HISTORY");
+            if (Match(TokenType.TABLE))
+            {
+                var tableName = ConsumeIdentifier("Expected table name after SHOW LINEAGE HISTORY FOR TABLE").Value;
+                string? at = Match(TokenType.AT) ? ConsumeIdentifier("Expected connection name after AT").Value : null;
+                var limit = ParseOptionalLimit();
+                return new ShowLineageHistoryForTableStatement { TableName = tableName, At = at, Limit = limit };
+            }
+            if (Match(TokenType.TAG))
+            {
+                var tagKey = ConsumeIdentifier("Expected tag key after SHOW LINEAGE HISTORY FOR TAG").Value;
+                string? tagValue = null;
+                if (Match(TokenType.EQUALS))
+                    tagValue = Consume(TokenType.STRING_LITERAL, "Expected string value after =").Value;
+                string? at = Match(TokenType.AT) ? ConsumeIdentifier("Expected connection name after AT").Value : null;
+                var limit = ParseOptionalLimit();
+                return new ShowLineageHistoryForTagStatement { TagKey = tagKey, TagValue = tagValue, At = at, Limit = limit };
+            }
+            throw new SyntaxException("Expected TABLE or TAG after SHOW LINEAGE HISTORY FOR", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private LineageStatement ParseShowLineageCore(Token startToken)
         {
             TableReference? targetTable = null;
             string? columnName = null;

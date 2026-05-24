@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
-using Xunit;
+using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Snowflake;
+using ETL_SQL.Services;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
@@ -267,6 +271,138 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public void Additions_NotEmpty()
         {
             Assert.NotEmpty(SnowflakeSyntax.Additions);
+        }
+    }
+
+    /// <summary>
+    /// Mock-based verification of SnowflakeDataSource security and auth string construction.
+    ///
+    /// Full production sign-off for JWT key-pair auth and OAuth/ADC requires:
+    ///   1. A real Snowflake trial account (free tier available at signup.snowflake.com).
+    ///   2. A 2048-bit RSA key pair registered in the Snowflake user profile.
+    ///   3. Run: CREATE CONNECTION MySnow TYPE SNOWFLAKE TARGET 'myorg-myaccount'
+    ///              WITH (USERNAME='testuser', PRIVATE_KEY_FILE='rsa_key.p8');
+    ///           SELECT CURRENT_VERSION() AT MySnow;
+    ///   4. Verify: no SnowflakeDbException leaks through (should be ExecutionException).
+    ///   5. Verify: PRIVATE_KEY_FILE path uses ResolvePath so path traversal is rejected.
+    ///   6. For CI: set env vars SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PRIVATE_KEY_PATH
+    ///      and guard the tests with a Skip when vars are absent.
+    /// </summary>
+    public class SnowflakeDataSourceTests
+    {
+        private static IExecutionContext MakePermissiveContext()
+        {
+            var security = new SecurityService(NullLogger.Instance);
+            var ctx = new Mock<IExecutionContext>();
+            ctx.Setup(c => c.SecurityService).Returns(security);
+            ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);
+            return ctx.Object;
+        }
+
+        // ── Host allowlist enforcement ─────────────────────────────────────────
+
+        [Fact]
+        public void BlockedHost_ThrowsSecurityException()
+        {
+            var security = new SecurityService(NullLogger.Instance);
+            security.IsTestMode = false;
+            security.AllowedHosts.Clear();
+
+            var ctx = new Mock<IExecutionContext>();
+            ctx.Setup(c => c.SecurityService).Returns(security);
+            ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);
+
+            // Constructor calls ValidateHost — should throw before any network attempt.
+            Assert.Throws<SecurityException>(() =>
+                new SnowflakeDataSource(ctx.Object,
+                    "account=myorg-myaccount;user=alice;password=s3cr3t;",
+                    null, null));
+        }
+
+        [Fact]
+        public void PermissiveContext_ConstructorDoesNotThrow()
+        {
+            // Baseline: in test mode (or with * allowed), construction is always safe.
+            var ds = new SnowflakeDataSource(MakePermissiveContext(),
+                "account=myorg-myaccount;user=alice;password=s3cr3t;",
+                null, null);
+            Assert.NotNull(ds);
+        }
+
+        // ── Host normalisation in security check ──────────────────────────────
+
+        [Fact]
+        public void JwtAuth_HostOptionWithoutSuffix_AddsSuffixForValidation()
+        {
+            // When HOST option is a bare account identifier (no dots), the DataSource
+            // appends .snowflakecomputing.com before passing it to ValidateHost.
+            var security = new SecurityService(NullLogger.Instance);
+            security.IsTestMode = false;
+            security.AllowedHosts.Clear();
+            security.AllowedHosts.Add("myorg-myaccount.snowflakecomputing.com");
+
+            var ctx = new Mock<IExecutionContext>();
+            ctx.Setup(c => c.SecurityService).Returns(security);
+            ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);
+
+            // Should NOT throw — the allowlist contains the suffixed host.
+            var ds = new SnowflakeDataSource(ctx.Object,
+                "account=myorg-myaccount;user=alice;",
+                null,
+                new Dictionary<string, string> { ["HOST"] = "myorg-myaccount" });
+            Assert.NotNull(ds);
+        }
+
+        [Fact]
+        public void JwtAuth_HostOptionWithSuffix_PassedThroughAsIs()
+        {
+            var security = new SecurityService(NullLogger.Instance);
+            security.IsTestMode = false;
+            security.AllowedHosts.Clear();
+            security.AllowedHosts.Add("myorg-myaccount.snowflakecomputing.com");
+
+            var ctx = new Mock<IExecutionContext>();
+            ctx.Setup(c => c.SecurityService).Returns(security);
+            ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);
+
+            var ds = new SnowflakeDataSource(ctx.Object,
+                "account=myorg-myaccount;user=alice;",
+                null,
+                new Dictionary<string, string> { ["HOST"] = "myorg-myaccount.snowflakecomputing.com" });
+            Assert.NotNull(ds);
+        }
+
+        // ── JWT connection string → auth properties ───────────────────────────
+
+        [Fact]
+        public void JwtConnectionString_ContainsSnowflakeJwtAuthenticator()
+        {
+            var connector = new SnowflakeConnector();
+            var cs = connector.BuildConnectionString(new Dictionary<string, string>
+            {
+                ["HOST"]             = "myorg-myaccount",
+                ["USERNAME"]         = "alice",
+                ["PRIVATE_KEY_FILE"] = "/certs/rsa_key.p8"
+            });
+
+            Assert.Contains("authenticator=snowflake_jwt", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("private_key_file=/certs/rsa_key.p8", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("password=", cs, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void PasswordAuth_ConnectionString_NoJwtAuthenticator()
+        {
+            var connector = new SnowflakeConnector();
+            var cs = connector.BuildConnectionString(new Dictionary<string, string>
+            {
+                ["HOST"]     = "myorg-myaccount",
+                ["USERNAME"] = "alice",
+                ["PASSWORD"] = "mysecret"
+            });
+
+            Assert.DoesNotContain("authenticator=snowflake_jwt", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("password=mysecret", cs, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

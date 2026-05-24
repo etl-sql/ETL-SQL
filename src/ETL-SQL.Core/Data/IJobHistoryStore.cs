@@ -1,9 +1,31 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.Core.Data
 {
+    public record LineageHistoryEntry(
+        long Id,
+        DateTime RunAt,
+        string? JobName,
+        string? ScriptPath,
+        string TargetTable,
+        string? TargetColumn,
+        IReadOnlyList<string> SourceTables,
+        string Operation,
+        IReadOnlyDictionary<string, string> Tags,
+        string? SourceFile,
+        int Line
+    );
+
+    public interface ILineageCatalogStore
+    {
+        Task SaveLineageAsync(IEnumerable<LineageEntry> entries, string? jobName, string? scriptPath, DateTime runAt);
+        Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTableAsync(string tableName, int limit = 100);
+        Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTagAsync(string tagKey, string? tagValue = null, int limit = 100);
+    }
+
     public record JobDefinition(
         string Name,
         string Script,

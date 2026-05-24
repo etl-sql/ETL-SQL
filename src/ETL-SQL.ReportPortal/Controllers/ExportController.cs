@@ -15,7 +15,8 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [Authorize]
 public class ExportController(
     PortalDbContext  db,
-    PortalConfig     portalConfig) : ControllerBase
+    PortalConfig     portalConfig,
+    AuditService     audit) : ControllerBase
 {
     // ── Per-user PDF rate limit (tokens per minute) ────────────────────────────
     private static readonly ConcurrentDictionary<int, (int Count, DateTime WindowStart)> _pdfBucket = new();
@@ -87,6 +88,7 @@ public class ExportController(
         var reportName = manifest.Title ?? System.IO.Path.GetFileNameWithoutExtension(manifest.Source);
         var filename   = $"{SanitizeFilename(reportName)}_{DateTime.UtcNow:yyyyMMdd}.csv";
 
+        await audit.LogAsync(CurrentUserId, "EXPORT_CSV", "Report", id.ToString(), visual);
         return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
                     "text/csv; charset=utf-8",
                     filename);
@@ -132,6 +134,7 @@ public class ExportController(
         var reportName = manifest.Title ?? System.IO.Path.GetFileNameWithoutExtension(manifest.Source);
         var filename   = $"{SanitizeFilename(reportName)}_{DateTime.UtcNow:yyyyMMdd}.pdf";
 
+        await audit.LogAsync(CurrentUserId, "EXPORT_PDF", "Report", id.ToString());
         return File(pdfBytes, "application/pdf", filename);
     }
 

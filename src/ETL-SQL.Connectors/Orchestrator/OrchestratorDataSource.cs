@@ -89,8 +89,10 @@ namespace ETL_SQL.Connectors.Orchestrator
                 case ShowBundleVersionsStatement s:    await FetchBundleVersionsAsync(s, context); break;
                 case ShowBundleFilesStatement s:       await FetchBundleFilesAsync(s, context); break;
                 case ShowBundleDependenciesStatement s: await FetchBundleDependenciesAsync(s, context); break;
-                case ShowJobsStatement s:               await FetchJobsAsync(s, context); break;
-                case ShowJobHistoryStatement s:         await FetchJobHistoryAsync(s, context); break;
+                case ShowJobsStatement s:                          await FetchJobsAsync(s, context); break;
+                case ShowJobHistoryStatement s:                    await FetchJobHistoryAsync(s, context); break;
+                case ShowLineageHistoryForTableStatement s:        await FetchLineageHistoryForTableAsync(s, context); break;
+                case ShowLineageHistoryForTagStatement s:          await FetchLineageHistoryForTagAsync(s, context); break;
                 default:
                     throw new ExecutionException(
                         $"Statement type '{statement.GetType().Name}' is not supported inside an ORCHESTRATOR block.");
@@ -253,6 +255,67 @@ namespace ETL_SQL.Connectors.Orchestrator
             }
 
             await WriteResultAsync(table, stmt.IntoTable, context);
+        }
+
+        private async Task FetchLineageHistoryForTableAsync(ShowLineageHistoryForTableStatement stmt, IExecutionContext context)
+        {
+            var url = $"api/lineage/history/table/{Uri.EscapeDataString(stmt.TableName)}?limit={stmt.Limit ?? 100}";
+            var resp = await SendHttpAsync(() => _http.GetAsync(url));
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+            }
+            var entries = await resp.Content.ReadFromJsonAsync<LineageHistoryEntryDto[]>(_json) ?? [];
+            var table = await BuildLineageHistoryTableAsync(entries);
+            await WriteResultAsync(table, stmt.IntoTable, context);
+        }
+
+        private async Task FetchLineageHistoryForTagAsync(ShowLineageHistoryForTagStatement stmt, IExecutionContext context)
+        {
+            var url = stmt.TagValue != null
+                ? $"api/lineage/history/tag/{Uri.EscapeDataString(stmt.TagKey)}?value={Uri.EscapeDataString(stmt.TagValue)}&limit={stmt.Limit ?? 100}"
+                : $"api/lineage/history/tag/{Uri.EscapeDataString(stmt.TagKey)}?limit={stmt.Limit ?? 100}";
+            var resp = await SendHttpAsync(() => _http.GetAsync(url));
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+            }
+            var entries = await resp.Content.ReadFromJsonAsync<LineageHistoryEntryDto[]>(_json) ?? [];
+            var table = await BuildLineageHistoryTableAsync(entries);
+            await WriteResultAsync(table, stmt.IntoTable, context);
+        }
+
+        private static async Task<DataTable> BuildLineageHistoryTableAsync(LineageHistoryEntryDto[] entries)
+        {
+            var table = new DataTable();
+            table.AddColumn("Id");
+            table.AddColumn("RunAt");
+            table.AddColumn("JobName");
+            table.AddColumn("TargetTable");
+            table.AddColumn("TargetColumn");
+            table.AddColumn("SourceTables");
+            table.AddColumn("Operation");
+            table.AddColumn("Tags");
+            table.AddColumn("SourceFile");
+            table.AddColumn("Line");
+            foreach (var e in entries)
+            {
+                var row = new Row();
+                row["Id"]           = e.Id;
+                row["RunAt"]        = e.RunAt;
+                row["JobName"]      = e.JobName;
+                row["TargetTable"]  = e.TargetTable;
+                row["TargetColumn"] = e.TargetColumn;
+                row["SourceTables"] = string.Join(", ", e.SourceTables);
+                row["Operation"]    = e.Operation;
+                row["Tags"]         = JsonSerializer.Serialize(e.Tags);
+                row["SourceFile"]   = e.SourceFile;
+                row["Line"]         = e.Line;
+                await table.AddRowAsync(row);
+            }
+            return table;
         }
 
         private async Task PublishBundleAsync(PublishBundleStatement stmt, IExecutionContext context)
@@ -528,5 +591,11 @@ namespace ETL_SQL.Connectors.Orchestrator
         }
 
         private sealed record PublishBundleApiRequest(BundlePublishRequest Bundle, string? Password = null);
+
+        private sealed record LineageHistoryEntryDto(
+            long Id, DateTime RunAt, string? JobName, string? ScriptPath,
+            string TargetTable, string? TargetColumn,
+            string[] SourceTables, string Operation,
+            Dictionary<string, string> Tags, string? SourceFile, int Line);
     }
 }

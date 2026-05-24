@@ -40,7 +40,7 @@ namespace ETL_SQL.Orchestrator.Execution
             _logger  = logger;
         }
 
-        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default)
+        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null)
         {
             // Write script to a temp file — ETL-SQL.exe run expects a file path
             var tempFile = Path.Combine(Path.GetTempPath(), $"etlsql-job-{Guid.NewGuid():N}.etlsql");

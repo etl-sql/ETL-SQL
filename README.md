@@ -248,6 +248,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | `ETL-SQL.exe` | Headless script executor for pipelines, CI/CD, cron, and server deployments. |
 | `ETL-SQL-TUI.exe` | Interactive terminal IDE with editor, results, messages, autocomplete, and profiling. |
 | `ETL-SQL-REPORT.exe` | Report-SQL CLI for `build`, `refresh`, and `serve`. |
+| `etl-sql doctor` | Install validation: checks runtime, config, encryption, engine smoke, and asset health. Use `--profile full` for extended checks, `--strict` for CI exit codes, `--json` for machine-readable output. |
 | VS Code extension | Language server, REPL panel, notebook support, schema sidebar, and report preview. |
 | Report Portal | Multi-report hosting, publishing, permissions, subscriptions, alerts, saved views, and usage metrics. |
 | Orchestrator service | Job scheduling, execution history, and always-on automation. |

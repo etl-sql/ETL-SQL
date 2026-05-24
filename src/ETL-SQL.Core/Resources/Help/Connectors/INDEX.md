@@ -2,37 +2,42 @@
 
 Connections link ETL-SQL to external data sources — databases, files, APIs, and protocols.
 
-Syntax:
-  CREATE CONNECTION <name> ON <TYPE>(<options>);
-  DROP CONNECTION <name>;
-  SHOW CONNECTIONS [INTO #table];
+## Syntax
 
-Connection types:
+- `CREATE CONNECTION <name> ON <TYPE>(<options>);`
+- `DROP CONNECTION <name>;`
+- `SHOW CONNECTIONS [INTO #table];`
 
-  Relational databases:
-    MSSQL / SQLSERVER    — Microsoft SQL Server and Azure SQL
-    POSTGRES / PG        — PostgreSQL
-    ORACLE               — Oracle Database
-    ODBC                 — Any ODBC-compatible source
+## Connection Types
 
-  File formats:
-    FLATFILE / CSV       — Delimited or fixed-width text files
-    EXCEL / XLSX         — Excel workbooks
-    JSON                 — JSON files
-    XML                  — XML files
-    PARQUET              — Apache Parquet columnar files
-    AVRO                 — Apache Avro binary files
-    DIRECTORY            — Local or UNC folder listing
+**Relational databases**
 
-  Protocols and services:
-    API / HTTP           — REST endpoints
-    SFTP / SSH           — Secure file transfer
-    FTP / FTPS           — FTP file transfer
-    AZURE_BLOB           — Azure Blob Storage
-    SMTP                 — Email sending
+- `MSSQL` / `SQLSERVER`: Microsoft SQL Server and Azure SQL
+- `POSTGRES` / `PG`: PostgreSQL
+- `ORACLE`: Oracle Database
+- `ODBC`: Any ODBC-compatible source
 
-  Other:
-    MOCKDB               — In-memory test database
+**File formats**
+
+- `FLATFILE` / `CSV`: Delimited or fixed-width text files
+- `EXCEL` / `XLSX`: Excel workbooks
+- `JSON`: JSON files
+- `XML`: XML files
+- `PARQUET`: Apache Parquet columnar files
+- `AVRO`: Apache Avro binary files
+- `DIRECTORY`: Local or UNC folder listing
+
+**Protocols and services**
+
+- `API` / `HTTP`: REST endpoints
+- `SFTP` / `SSH`: Secure file transfer
+- `FTP` / `FTPS`: FTP file transfer
+- `AZURE_BLOB`: Azure Blob Storage
+- `SMTP`: Email sending
+
+**Other**
+
+- `MOCKDB`: In-memory test database
 
 ```sql
 CREATE CONNECTION SalesDB ON MSSQL(

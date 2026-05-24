@@ -744,6 +744,103 @@ namespace ETL_SQL.App
                 }
                 catch (Exception ex) { lintStatus = "FAIL"; lintDetail = ex.Message; }
                 checks.Add(("Linter Smoke", lintDetail, lintStatus));
+
+                // 15. Security guardrail smoke
+                string secGuardStatus = "OK";
+                string secGuardDetail = "Restricted system path correctly rejected";
+                try
+                {
+                    var secSmoke = new SecurityService(NullLogger.Instance);
+                    secSmoke.IsTestMode = false;
+                    bool threwOnBlocked = false;
+                    var blockedSamplePath = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
+                        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "test.dll")
+                        : "/etc/passwd";
+                    try { secSmoke.ValidatePath(blockedSamplePath); }
+                    catch (SecurityException) { threwOnBlocked = true; }
+
+                    if (!threwOnBlocked)
+                    {
+                        secGuardStatus = "FAIL";
+                        secGuardDetail = $"Guardrail did not reject: {blockedSamplePath}";
+                    }
+                }
+                catch (Exception ex) { secGuardStatus = "FAIL"; secGuardDetail = ex.Message; }
+                checks.Add(("Security Guardrail Smoke", secGuardDetail, secGuardStatus));
+
+                // 16. Report-SQL parser smoke
+                string rptParseStatus = "OK";
+                string rptParseDetail = "SET REPORT TITLE statement parsed successfully";
+                try
+                {
+                    var rptScript = new Parser(new Lexer("SET REPORT TITLE = 'Doctor Test';").Tokenize()).Parse();
+                    if (rptScript.Statements.Count == 0) { rptParseStatus = "FAIL"; rptParseDetail = "Report-SQL parser returned 0 statements"; }
+                }
+                catch (Exception ex) { rptParseStatus = "FAIL"; rptParseDetail = ex.Message; }
+                checks.Add(("Report-SQL Parser Smoke", rptParseDetail, rptParseStatus));
+
+                // 17. Shared runtime asset drift (source context only)
+                string driftStatus = "OK";
+                string driftDetail = "Not running from a source checkout — skipped";
+                var syncScript = FindRepoFile(Path.Combine("scripts", "sync-assets.ps1"));
+                if (syncScript != null)
+                {
+                    try
+                    {
+                        var pwshExe = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "pwsh.exe" : "pwsh";
+                        var psi = new ProcessStartInfo
+                        {
+                            FileName = pwshExe,
+                            Arguments = $"-NoProfile -NonInteractive -File \"{syncScript}\" -Check",
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+                        using var proc = Process.Start(psi);
+                        if (proc != null)
+                        {
+                            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(15));
+                            await proc.WaitForExitAsync(cts.Token);
+                            driftDetail = proc.ExitCode == 0 ? "Runtime assets in sync" : "Asset drift detected — run sync-assets.ps1 to fix";
+                            driftStatus = proc.ExitCode == 0 ? "OK" : "WARN";
+                        }
+                        else { driftDetail = "Could not start pwsh for drift check"; driftStatus = "WARN"; }
+                    }
+                    catch (Exception ex) { driftStatus = "WARN"; driftDetail = $"Drift check skipped: {ex.Message}"; }
+                }
+                checks.Add(("Asset Drift Check", driftDetail, driftStatus));
+
+                // 18. Node.js (optional dependency for extension builds)
+                string nodeStatus = "WARN";
+                string nodeDetail = "Node.js not found — VS Code extension build unavailable";
+                try
+                {
+                    var nodeExe = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) ? "node.exe" : "node";
+                    var pathDirs = (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator);
+                    var nodeFound = pathDirs.Any(dir => { try { return File.Exists(Path.Combine(dir, nodeExe)); } catch { return false; } });
+                    if (nodeFound) { nodeStatus = "OK"; nodeDetail = "Node.js found in PATH"; }
+                }
+                catch { }
+                checks.Add(("Node.js (optional)", nodeDetail, nodeStatus));
+
+                // 19. Portal database
+                string portalDbStatus = "OK";
+                string portalDbDetail = "Portal:DatabasePath not configured";
+                try
+                {
+                    var portalDb = config["Portal:DatabasePath"];
+                    if (!string.IsNullOrEmpty(portalDb))
+                    {
+                        portalDbDetail = File.Exists(portalDb)
+                            ? $"{portalDb} (initialized)"
+                            : $"{portalDb} (not yet created — will be created on first portal run)";
+                        if (!File.Exists(portalDb)) portalDbStatus = "WARN";
+                    }
+                    else { portalDbStatus = "WARN"; }
+                }
+                catch (Exception ex) { portalDbStatus = "WARN"; portalDbDetail = ex.Message; }
+                checks.Add(("Portal Database", portalDbDetail, portalDbStatus));
             }
 
             bool hasFailures = checks.Any(c => c.Status == "FAIL");

@@ -101,6 +101,25 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.NotNull(entries);
         }
 
+        [Fact]
+        public async Task PrivateKeyWithPassphrase_CanConnectAndListDirectory()
+        {
+            // Uses an AES-256-CBC encrypted PKCS#8 PEM — verifies SSH.NET reads passphrase-protected keys.
+            await using var connector = new SftpConnector(
+                context: null!,
+                host: _sftp.Host,
+                username: SftpFixture.TestUser,
+                password: null,
+                keyFilePath: _sftp.EncryptedPrivateKeyPath,
+                passphrase: SftpFixture.TestPassphrase,
+                clientFactory: (h, u, _, k, pp) => new SftpClient(h, _sftp.Port, u, new PrivateKeyFile(k!, pp)));
+
+            var entries = new System.Collections.Generic.List<FileMetaData>();
+            await foreach (var entry in connector.ListFilesAsync($"/{SftpFixture.RemoteUploadDir}"))
+                entries.Add(entry);
+            Assert.NotNull(entries);
+        }
+
         // ── 2. Upload / Download round-trip ───────────────────────────────────
 
         [Fact]
@@ -231,6 +250,18 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
             await Assert.ThrowsAsync<ExecutionException>(
                 () => connector.DeleteFileAsync("/upload/no_such_file_xyz.txt"));
+        }
+
+        [Fact]
+        public async Task UploadToUnauthorizedRootPath_ThrowsExecutionException()
+        {
+            var localSrc = LocalPath("permission_denied.txt");
+            File.WriteAllText(localSrc, "should not be writable at chroot root");
+
+            await using var connector = PasswordConnector();
+
+            await Assert.ThrowsAsync<ExecutionException>(
+                () => connector.UploadFileAsync(localSrc, $"/denied_{Guid.NewGuid():N}.txt", overwrite: true));
         }
 
         // ── 7. Credential masking ─────────────────────────────────────────────
