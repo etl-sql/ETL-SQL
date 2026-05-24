@@ -1,0 +1,119 @@
+# ETL-SQL INSERT coverage
+# Covers: INSERT VALUES (basic, NULL, expressions), INSERT SELECT (filtered,
+# with JOIN, with aggregate), and verifies row counts and values throughout.
+
+statement ok
+CREATE TABLE products(id INTEGER, name TEXT, category TEXT, price INTEGER)
+
+statement ok
+INSERT INTO products VALUES(1, 'Apple', 'Fruit', 120)
+
+statement ok
+INSERT INTO products VALUES(2, 'Banana', 'Fruit', 45)
+
+statement ok
+INSERT INTO products VALUES(3, 'Carrot', 'Veg', 80)
+
+statement ok
+INSERT INTO products VALUES(4, 'Daikon', 'Veg', 90)
+
+statement ok
+INSERT INTO products VALUES(5, 'Elderberry', 'Fruit', 200)
+
+# INSERT with NULL price
+statement ok
+INSERT INTO products VALUES(6, 'Fig', 'Fruit', NULL)
+
+query I nosort
+SELECT COUNT(*) FROM products
+----
+6
+
+# NULL price row is present
+query T nosort
+SELECT name FROM products WHERE price IS NULL
+----
+Fig
+
+# INSERT with expressions in VALUES (id=3+4=7, name=UPPER(...)='GRAPE', price=50*2=100)
+statement ok
+INSERT INTO products VALUES(3+4, UPPER('grape'), 'Fruit', 50*2)
+
+query I nosort
+SELECT COUNT(*) FROM products
+----
+7
+
+query TI nosort
+SELECT name, price FROM products WHERE id = 7
+----
+GRAPE
+100
+
+# INSERT SELECT: copy products with price > 100 to featured table
+statement ok
+CREATE TABLE featured(id INTEGER, name TEXT, price INTEGER)
+
+statement ok
+INSERT INTO featured SELECT id, name, price FROM products WHERE price > 100
+
+# Apple(120), Elderberry(200) qualify; GRAPE(100) and Banana(45) do not
+query I nosort
+SELECT COUNT(*) FROM featured
+----
+2
+
+query T rowsort
+SELECT name FROM featured
+----
+Apple
+Elderberry
+
+# INSERT SELECT with JOIN: join featured items back to products to capture category
+statement ok
+CREATE TABLE featured_detail(id INTEGER, name TEXT, category TEXT, price INTEGER)
+
+statement ok
+INSERT INTO featured_detail
+SELECT f.id, f.name, p.category, f.price
+FROM featured f
+JOIN products p ON f.id = p.id
+
+query I nosort
+SELECT COUNT(*) FROM featured_detail
+----
+2
+
+query TT nosort
+SELECT name, category FROM featured_detail ORDER BY name
+----
+Apple
+Fruit
+Elderberry
+Fruit
+
+# INSERT SELECT with aggregate: category summary excluding NULL-price rows
+statement ok
+CREATE TABLE cat_summary(category TEXT, item_count INTEGER)
+
+statement ok
+INSERT INTO cat_summary
+SELECT category, COUNT(*)
+FROM products
+WHERE price IS NOT NULL
+GROUP BY category
+
+# Fruit: Apple, Banana, Elderberry, GRAPE = 4 (Fig excluded by WHERE)
+# Veg: Carrot, Daikon = 2
+query I nosort
+SELECT COUNT(*) FROM cat_summary
+----
+2
+
+query TI nosort
+SELECT category, item_count FROM cat_summary ORDER BY category
+----
+Fruit
+4
+Veg
+2

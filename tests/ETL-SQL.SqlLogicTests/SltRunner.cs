@@ -458,7 +458,8 @@ SET TELEMETRY = OFF;";
                 new CreateConnectionStatementHandler(connectors, l),
                 new CreateViewStatementHandler(),
                 new DropViewStatementHandler(l),
-                new ShowViewsStatementHandler()
+                new ShowViewsStatementHandler(),
+                new MergeStatementHandler(l)
             };
 
             var evaluator = new Evaluator(handlers, serviceProvider, registry, tracker.Object, docker.Object, connectors, sessions.Object, security, l, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());

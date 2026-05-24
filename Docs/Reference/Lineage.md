@@ -215,7 +215,7 @@ FROM #customers;
 Display the lineage graph for a table or column:
 
 ```sql
-SHOW LINEAGE;                                      -- all session lineage
+SHOW LINEAGE;                                     -- all session lineage
 SHOW LINEAGE FOR #target_table;                   -- all columns
 SHOW LINEAGE FOR #target_table COLUMN column_name;-- single column
 SHOW LINEAGE FOR REPORT SalesDashboard;           -- report node
@@ -511,8 +511,9 @@ SELECT
     card_number     /*@pci: true; @classification: restricted; @d: Masked PAN*/,
     amount          /*@unit: USD; @d: Transaction amount in USD*/,
     transaction_date
-FROM PaymentDB.dbo.Transactions
 INTO #raw_txn;
+FROM PaymentDB.dbo.Transactions
+;
 
 TAG #raw_txn WITH (
     source_system = 'PaymentDB',

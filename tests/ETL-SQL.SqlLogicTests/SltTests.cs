@@ -89,22 +89,31 @@ namespace ETL_SQL.SqlLogicTests
 
             if (!Directory.Exists(root)) return Enumerable.Empty<object[]>();
 
-            // Exclusions:
-            //   select4_debug.test — debug variant of select4, overlaps entirely with select4.test
-            //   slt_lang_createtrigger.test, slt_lang_droptrigger.test — ETL-SQL has no trigger support
-            //   slt_lang_aggfunc.test — uses aggregate functions with SQLite-specific NULL semantics that differ from ETL-SQL
-            //   (empty) index/* files — placeholder stubs with no test content
+            // Exclusions (see Docs/Standards/SLT_Coverage.md for full rationale):
+            //
+            //   select4_debug.test — truncated artifact: same 1025 setup statements as select4.test
+            //     but only 1019 of its 2832 queries (cuts off before complex join tests). No unique
+            //     content; deleted from repo. Left here as a safety net in case it reappears.
+            //
+            //   slt_lang_aggfunc.test — SQLite-only by design. The file opens with "skipif sqlite; halt"
+            //     meaning every non-SQLite engine should skip it. It tests total() (returns 0.0 not NULL
+            //     for empty sets), group_concat() (not standard SQL), and non-numeric string coercion to 0
+            //     in avg()/sum() — all SQLite-specific behaviors ETL-SQL intentionally does not emulate.
             var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 "select4_debug.test",
-                "slt_lang_createtrigger.test",
-                "slt_lang_droptrigger.test",
                 "slt_lang_aggfunc.test",
             };
+
+            // index/ subdirectory: real SLT index-optimization tests (10,000+ queries per file)
+            // that use CREATE INDEX on regular (non-temp) tables — not supported in ETL-SQL.
+            // ETL-SQL supports CREATE INDEX only on #temp tables.
+            var indexDir = Path.Combine(root, "index") + Path.DirectorySeparatorChar;
 
             return Directory.GetFiles(root, "*.test", SearchOption.AllDirectories)
                 .Where(f => new FileInfo(f).Length > 0)
                 .Where(f => !excluded.Contains(Path.GetFileName(f)))
+                .Where(f => !f.StartsWith(indexDir, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(f => f)
                 .Select(f => new object[] { f });
         }

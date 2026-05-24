@@ -203,29 +203,17 @@
   **Low risk / documentation**
   - [x] **ODBC — document GetExcludedKeywords accepted exception** — Explicit override with comment added to `OdbcConnector.cs`.
   - [x] **Excel — document async accepted exception** — Comment added to `ExcelDataSource.cs` at the `AsDataSet` call.
-  - [x] **Snowflake ADC/JWT auth — CI verification** — Fixed a recursive `SnowflakeDataSource.CreateCommand(conn)` StackOverflow bug (was calling itself instead of `conn.CreateCommand()`). Added `SnowflakeDataSourceTests`: host allowlist enforcement (SecurityException), JWT connection string authenticator properties, host suffix normalisation logic. Full production sign-off still requires a real Snowflake account (see doc comment in `SnowflakeConnectorTests.cs` for manual steps).
+  - [x] **Snowflake ADC/JWT auth — CI verification** — Fixed a recursive `SnowflakeDataSource.CreateCommand(conn)` StackOverflow bug (was calling itself instead of `conn.CreateCommand()`). Added `SnowflakeDataSourceTests`: host allowlist enforcement (SecurityException), JWT connection string authenticator properties, host suffix normalization logic. Full production sign-off still requires a real Snowflake account (see doc comment in `SnowflakeConnectorTests.cs` for manual steps).
 
 ## Bugs
 ### VS Code
 - [x] **Password not working**  In VS Code I added a password to encrypt a connection.  When I reopened the file and ran the script vs code asked for the password.  I put it in and it gave me this error: ETL-SQL password: requires an interactive console.
 - [x] **Test coverage slipped below 70%** — Back to 70.8% after T4 exception wrapping tests were added.
 ### General
-- [x] **Is SLT corpus complete** — Audited and documented. Short answer: the corpus is intentionally SELECT-focused and appropriate for ETL-SQL; the runner had a critical bug that made it run zero files.
-  - **Bug fixed**: `SltTests.GetTestFiles()` filtered to "slt_good_10.test" (a non-existent file), so `RunAllSltTests` was always passing trivially with 0 tests. Fixed to include all non-empty .test files except explicit exclusions.
-  - **Upstream source**: SQLite Logic Test suite (D. Richard Hipp). We carry `corpus/select1-5.test` (the 5 most comprehensive SELECT-coverage files from the original SLT). The full suite has 622 `slt_good_N.test` files; those beyond select1-5 cover triggers, REINDEX, and other SQLite-specific features ETL-SQL doesn't support.
-  - **Included** (effective after bug fix):
-    - `corpus/select1.test` — 1,031 records (31 stmt + 1,000 query)
-    - `corpus/select2.test` — 1,031 records (NULLs in data)
-    - `corpus/select3.test` — 3,351 records (31 stmt + 3,320 query)
-    - `corpus/select4.test` — 3,857 records (1,025 stmt + 2,832 query; large, OOM risk)
-    - `corpus/select5.test` — 1,436 records (704 stmt + 732 query; large)
-    - `evidence/in1.test`, `in2.test` — IN-predicate tests (216 + 54 records)
-    - `evidence/slt_lang_createview.test`, `dropview.test`, `droptable.test`, `dropindex.test`, `reindex.test`, `replace.test`, `update.test`
-    - All 23 root ETL-SQL custom tests (aggregates, cte, window, join, subquery, etc.)
-  - **Excluded** (with reasons):
-    - `corpus/select4_debug.test` — debug variant, overlaps entirely with `select4.test`
-    - `evidence/slt_lang_createtrigger.test`, `slt_lang_droptrigger.test` — ETL-SQL has no trigger support
-    - `evidence/slt_lang_aggfunc.test` — uses SQLite-specific NULL aggregate semantics that differ from ETL-SQL
-    - `index/between/`, `commute/`, `delete/`, `in/`, `orderby/`, `random/`, `view/` — all files are 0 bytes (placeholder stubs, never populated)
-  - **Current results**: `CorpusRegressionTests` (6 targeted hand-crafted tests): 6/6 pass. `RunAllSltTests` requires `ETL_SQL_RUN_SLT=1` due to OOM risk on select4/select5.
-  - **Release validation decision**: `CorpusRegressionTests` (Category=SLT, no env var needed) is the CI gate. Full corpus run (`scripts\Test-SltCorpus.ps1`) is manual pre-release only — run it, then `Parse-SltResults.ps1` for the summary.
+- [x] **Is SLT corpus complete** — Audited, cleaned up, and documented in `Docs/Standards/SLT_Coverage.md`.
+  - **Corpus**: select1–5 from the SQLite Logic Test suite (~9,700 query records). Strong SELECT, JOIN, aggregate, subquery, NULL, and CASE coverage. See the coverage doc for the full confidence matrix.
+  - **Exclusions documented**: `select4_debug.test` (truncated artifact, deleted), trigger files (deleted — no trigger support), `slt_lang_aggfunc.test` (SQLite-only by design: tests `total()`, `group_concat()`, non-numeric-to-0 coercion — all inapplicable to ETL-SQL), empty `index/` placeholder stubs (deleted).
+  - **Gap**: DML (UPDATE/DELETE complex forms, INSERT SELECT, MERGE) is lightly covered — evidence files test basic paths only. Suggested additions tracked below.
+  - **Release validation**: `CorpusRegressionTests` (6 hand-crafted tests, ~2s) is the CI gate. Full corpus run via `scripts\Test-SltCorpus.ps1` is manual pre-release.
+
+- [x] **SLT DML coverage gap** — added `dml.test` (UPDATE: arithmetic, CASE-in-SET, subquery-in-WHERE, multi-column, unconditional, no-op; DELETE: WHERE, subquery, no-op, unconditional), `insert.test` (INSERT VALUES with NULL and expressions, INSERT SELECT filtered, with JOIN, with aggregate), and `merge.test` (upsert, conditional WHEN MATCHED AND, inventory top-up). Also added `MergeStatementHandler` to SltRunner — it was missing from the handler list, blocking MERGE tests. All 40 SLT files pass.

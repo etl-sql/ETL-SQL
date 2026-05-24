@@ -1,0 +1,149 @@
+# ETL-SQL UPDATE and DELETE coverage
+# Covers: basic WHERE, arithmetic SET, CASE in SET, subquery in WHERE,
+# unconditional (no WHERE), no-op (zero rows matched), and DELETE variants.
+#
+# Data trace (salary values change as tests progress):
+#   Initial: Alice/Eng/90000, Bob/Sales/70000, Carol/Eng/85000, Dave/HR/65000, Eve/Eng/95000
+
+statement ok
+CREATE TABLE staff(id INTEGER, name TEXT, dept TEXT, salary INTEGER)
+
+statement ok
+INSERT INTO staff VALUES(1, 'Alice', 'Eng', 90000)
+
+statement ok
+INSERT INTO staff VALUES(2, 'Bob', 'Sales', 70000)
+
+statement ok
+INSERT INTO staff VALUES(3, 'Carol', 'Eng', 85000)
+
+statement ok
+INSERT INTO staff VALUES(4, 'Dave', 'HR', 65000)
+
+statement ok
+INSERT INTO staff VALUES(5, 'Eve', 'Eng', 95000)
+
+# Basic UPDATE with WHERE — change a single row
+statement ok
+UPDATE staff SET salary = 75000 WHERE id = 2
+
+query I nosort
+SELECT salary FROM staff WHERE id = 2
+----
+75000
+
+# UPDATE arithmetic expression — increase all Eng salaries by 5000
+# Alice: 90000+5000=95000, Carol: 85000+5000=90000, Eve: 95000+5000=100000
+statement ok
+UPDATE staff SET salary = salary + 5000 WHERE dept = 'Eng'
+
+query I nosort
+SELECT SUM(salary) FROM staff WHERE dept = 'Eng'
+----
+285000
+
+# UPDATE with CASE in SET — promote anyone earning >= 90000 to 'Senior'
+# Alice(95000), Carol(90000), Eve(100000) → Senior; Bob(75000), Dave(65000) unchanged
+statement ok
+UPDATE staff SET dept = CASE WHEN salary >= 90000 THEN 'Senior' ELSE dept END
+
+query I nosort
+SELECT COUNT(*) FROM staff WHERE dept = 'Senior'
+----
+3
+
+# UPDATE with subquery in WHERE — mark above-average earners as 'Lead'
+# AVG = (95000+75000+90000+65000+100000)/5 = 85000
+# Alice(95000), Carol(90000), Eve(100000) qualify
+statement ok
+UPDATE staff SET dept = 'Lead' WHERE salary > (SELECT AVG(salary) FROM staff)
+
+query I nosort
+SELECT COUNT(*) FROM staff WHERE dept = 'Lead'
+----
+3
+
+query T rowsort
+SELECT name FROM staff WHERE dept = 'Lead'
+----
+Alice
+Carol
+Eve
+
+# Multi-column SET in one UPDATE
+statement ok
+UPDATE staff SET dept = 'Manager', salary = salary + 10000 WHERE name = 'Alice'
+
+query TI nosort
+SELECT dept, salary FROM staff WHERE id = 1
+----
+Manager
+105000
+
+# UPDATE with no matching rows — must not error and must not change other rows
+statement ok
+UPDATE staff SET salary = 0 WHERE id = 999
+
+query I nosort
+SELECT COUNT(*) FROM staff
+----
+5
+
+# Unconditional UPDATE (no WHERE) — give everyone a 1000 raise
+statement ok
+UPDATE staff SET salary = salary + 1000
+
+query I nosort
+SELECT MIN(salary) FROM staff
+----
+66000
+
+# DELETE with basic WHERE
+statement ok
+DELETE FROM staff WHERE id = 4
+
+query I nosort
+SELECT COUNT(*) FROM staff
+----
+4
+
+query I nosort
+SELECT COUNT(*) FROM staff WHERE name = 'Dave'
+----
+0
+
+# DELETE with subquery in WHERE — remove below-average earners
+# Remaining after Dave removed: Alice(106000), Bob(76000), Carol(91000), Eve(101000)
+# AVG = (106000+76000+91000+101000)/4 = 374000/4 = 93500
+# Bob(76000) < 93500 → deleted; Carol(91000) < 93500 → also deleted
+statement ok
+DELETE FROM staff WHERE salary < (SELECT AVG(salary) FROM staff)
+
+query I nosort
+SELECT COUNT(*) FROM staff
+----
+2
+
+query T nosort
+SELECT name FROM staff ORDER BY id
+----
+Alice
+Eve
+
+# DELETE with no matching rows — must not error
+statement ok
+DELETE FROM staff WHERE id = 999
+
+query I nosort
+SELECT COUNT(*) FROM staff
+----
+2
+
+# DELETE all rows (no WHERE clause)
+statement ok
+DELETE FROM staff
+
+query I nosort
+SELECT COUNT(*) FROM staff
+----
+0

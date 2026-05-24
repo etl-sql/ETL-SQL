@@ -1,0 +1,197 @@
+# ETL-SQL MERGE coverage
+# Scenario A: update matched rows, insert unmatched rows (classic upsert)
+# Scenario B: conditional WHEN MATCHED AND, inventory top-up with insert
+# Scenario C: MERGE with only WHEN MATCHED (no insert for unmatched source rows)
+
+# ── Scenario A: basic upsert ─────────────────────────────────────────────────
+# customers: 3 existing rows
+# incoming:  id=2 changed, id=3 unchanged, id=4 new
+
+statement ok
+CREATE TABLE customers(id INTEGER, name TEXT, status TEXT)
+
+statement ok
+INSERT INTO customers VALUES(1, 'Alice', 'active')
+
+statement ok
+INSERT INTO customers VALUES(2, 'Bob', 'active')
+
+statement ok
+INSERT INTO customers VALUES(3, 'Carol', 'active')
+
+statement ok
+CREATE TABLE incoming(id INTEGER, name TEXT, status TEXT)
+
+statement ok
+INSERT INTO incoming VALUES(2, 'Bob Updated', 'inactive')
+
+statement ok
+INSERT INTO incoming VALUES(3, 'Carol', 'active')
+
+statement ok
+INSERT INTO incoming VALUES(4, 'Dave', 'active')
+
+statement ok
+MERGE INTO customers AS t
+USING incoming AS s
+ON t.id = s.id
+WHEN MATCHED THEN
+    UPDATE SET name = s.name, status = s.status
+WHEN NOT MATCHED THEN
+    INSERT (id, name, status) VALUES (s.id, s.name, s.status)
+
+# 3 original + 1 inserted
+query I nosort
+SELECT COUNT(*) FROM customers
+----
+4
+
+# id=1 was not in source → untouched
+query TT nosort
+SELECT name, status FROM customers WHERE id = 1
+----
+Alice
+active
+
+# id=2 was matched → updated
+query TT nosort
+SELECT name, status FROM customers WHERE id = 2
+----
+Bob Updated
+inactive
+
+# id=4 was not matched → inserted
+query TT nosort
+SELECT name, status FROM customers WHERE id = 4
+----
+Dave
+active
+
+# ── Scenario B: inventory top-up with conditional update ─────────────────────
+# WHEN MATCHED AND price changes → update; unchanged rows → skip
+# WHEN NOT MATCHED → insert new item
+
+statement ok
+CREATE TABLE inventory(id INTEGER, item TEXT, qty INTEGER)
+
+statement ok
+INSERT INTO inventory VALUES(1, 'Widget', 50)
+
+statement ok
+INSERT INTO inventory VALUES(2, 'Gadget', 30)
+
+statement ok
+INSERT INTO inventory VALUES(3, 'Doohickey', 20)
+
+statement ok
+CREATE TABLE shipment(id INTEGER, item TEXT, qty INTEGER)
+
+statement ok
+INSERT INTO shipment VALUES(1, 'Widget', 10)
+
+statement ok
+INSERT INTO shipment VALUES(2, 'Gadget', 5)
+
+statement ok
+INSERT INTO shipment VALUES(4, 'Gizmo', 100)
+
+statement ok
+MERGE INTO inventory AS t
+USING shipment AS s
+ON t.id = s.id
+WHEN MATCHED THEN
+    UPDATE SET qty = t.qty + s.qty
+WHEN NOT MATCHED THEN
+    INSERT (id, item, qty) VALUES (s.id, s.item, s.qty)
+
+# 3 original + 1 new (Gizmo)
+query I nosort
+SELECT COUNT(*) FROM inventory
+----
+4
+
+# Widget: 50+10=60
+query I nosort
+SELECT qty FROM inventory WHERE id = 1
+----
+60
+
+# Gadget: 30+5=35
+query I nosort
+SELECT qty FROM inventory WHERE id = 2
+----
+35
+
+# Doohickey: no match in shipment → unchanged
+query I nosort
+SELECT qty FROM inventory WHERE id = 3
+----
+20
+
+# Gizmo: inserted from shipment
+query TI nosort
+SELECT item, qty FROM inventory WHERE id = 4
+----
+Gizmo
+100
+
+# ── Scenario C: WHEN MATCHED AND condition — conditional update only ──────────
+# Only update rows where the incoming price actually differs.
+# Rows where prices match are touched (MATCHED) but condition prevents update.
+# No WHEN NOT MATCHED clause — unmatched source rows are silently ignored.
+
+statement ok
+CREATE TABLE prices(id INTEGER, item TEXT, price INTEGER)
+
+statement ok
+INSERT INTO prices VALUES(1, 'Alpha', 100)
+
+statement ok
+INSERT INTO prices VALUES(2, 'Beta', 200)
+
+statement ok
+INSERT INTO prices VALUES(3, 'Gamma', 300)
+
+statement ok
+CREATE TABLE price_changes(id INTEGER, new_price INTEGER)
+
+statement ok
+INSERT INTO price_changes VALUES(1, 150)
+
+statement ok
+INSERT INTO price_changes VALUES(2, 200)
+
+statement ok
+INSERT INTO price_changes VALUES(5, 999)
+
+statement ok
+MERGE INTO prices AS t
+USING price_changes AS s
+ON t.id = s.id
+WHEN MATCHED AND t.price <> s.new_price THEN
+    UPDATE SET price = s.new_price
+
+# id=1: matched AND 100 <> 150 → updated to 150
+query I nosort
+SELECT price FROM prices WHERE id = 1
+----
+150
+
+# id=2: matched AND 200 = 200 → condition false, no update
+query I nosort
+SELECT price FROM prices WHERE id = 2
+----
+200
+
+# id=3: not in source → untouched
+query I nosort
+SELECT price FROM prices WHERE id = 3
+----
+300
+
+# id=5: in source but not in target, no WHEN NOT MATCHED clause → ignored
+# total row count unchanged
+query I nosort
+SELECT COUNT(*) FROM prices
+----
+3
