@@ -164,10 +164,12 @@ namespace ETL_SQL.Tests.Scale
             return scale;
         }
 
-        private async Task RunSmokeScenarioSetWithScale(double rowScale)
+        private async Task RunSmokeScenarioSetWithScale(double rowScale, string certificationTier)
         {
             var previous = Environment.GetEnvironmentVariable("CERT_ROW_SCALE");
+            var previousTier = Environment.GetEnvironmentVariable("CERT_CERTIFICATION_TIER");
             Environment.SetEnvironmentVariable("CERT_ROW_SCALE", rowScale.ToString(CultureInfo.InvariantCulture));
+            Environment.SetEnvironmentVariable("CERT_CERTIFICATION_TIER", certificationTier);
 
             try
             {
@@ -188,6 +190,27 @@ namespace ETL_SQL.Tests.Scale
             finally
             {
                 Environment.SetEnvironmentVariable("CERT_ROW_SCALE", previous);
+                Environment.SetEnvironmentVariable("CERT_CERTIFICATION_TIER", previousTier);
+            }
+        }
+
+        private async Task RunProviderScenarioSetWithScale(double rowScale)
+        {
+            var previous = Environment.GetEnvironmentVariable("CERT_ROW_SCALE");
+            var previousTier = Environment.GetEnvironmentVariable("CERT_CERTIFICATION_TIER");
+            Environment.SetEnvironmentVariable("CERT_ROW_SCALE", rowScale.ToString(CultureInfo.InvariantCulture));
+            Environment.SetEnvironmentVariable("CERT_CERTIFICATION_TIER", "Provider");
+
+            try
+            {
+                await Cert_Smoke_CsvIngest_50kRows_CorrectChecksum();
+                await Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum();
+                await Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum();
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("CERT_ROW_SCALE", previous);
+                Environment.SetEnvironmentVariable("CERT_CERTIFICATION_TIER", previousTier);
             }
         }
 
@@ -224,6 +247,12 @@ namespace ETL_SQL.Tests.Scale
         {
             var rowScale = RowScale();
             var memoryTier = MemoryTier(rowScale);
+            var certificationTier = Environment.GetEnvironmentVariable("CERT_CERTIFICATION_TIER");
+            if (string.IsNullOrWhiteSpace(certificationTier))
+            {
+                certificationTier = memoryTier;
+            }
+
             var managedMemoryMB = Math.Round(GC.GetTotalMemory(forceFullCollection: true) / (1024.0 * 1024.0), 1);
             var memoryBoundMB = MemoryBoundMB(rowCount, rowScale);
 
@@ -234,7 +263,8 @@ namespace ETL_SQL.Tests.Scale
             var metrics = new
             {
                 scenario,
-                tier = memoryTier,
+                tier = certificationTier,
+                memoryTier,
                 rowCount,
                 elapsedMs,
                 spillBytes,
@@ -250,12 +280,18 @@ namespace ETL_SQL.Tests.Scale
         [Fact]
         [Trait("Tier", "Standard")]
         public Task Cert_Standard_SmokeScenarioSet_RowScale10()
-            => RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_STANDARD_ROW_SCALE", 10.0));
+            => RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_STANDARD_ROW_SCALE", 10.0), "Standard");
 
         [Fact]
         [Trait("Tier", "Stress")]
         public Task Cert_Stress_SmokeScenarioSet_RowScale100()
-            => RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_STRESS_ROW_SCALE", 100.0));
+            => RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_STRESS_ROW_SCALE", 100.0), "Stress");
+
+        [Fact]
+        [Trait("Tier", "Provider")]
+        [Trait("CertificationClass", "LocalReal")]
+        public Task Cert_Provider_LocalFileConnectors_RowScale1()
+            => RunProviderScenarioSetWithScale(RowScaleFrom("CERT_PROVIDER_ROW_SCALE", 1.0));
 
         // ── 1. External Sort (ORDER BY) ───────────────────────────────────────
 
@@ -489,6 +525,8 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
+        [Trait("CertificationClass", "LocalReal")]
+        [Trait("Connector", "CSV")]
         public async Task Cert_Smoke_CsvIngest_50kRows_CorrectChecksum()
         {
             var Rows = ScaleRows(50_000);
@@ -524,6 +562,8 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
+        [Trait("CertificationClass", "LocalReal")]
+        [Trait("Connector", "PARQUET")]
         public async Task Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum()
         {
             var Rows = ScaleRows(50_000);
@@ -557,6 +597,8 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
+        [Trait("CertificationClass", "LocalReal")]
+        [Trait("Connector", "PARQUET")]
         public async Task Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum()
         {
             var Rows = ScaleRows(50_000);

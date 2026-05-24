@@ -13,6 +13,7 @@ Current status: the implemented lane is a **Smoke-tier certification harness**. 
 | **Smoke** | 50k–100k rows | PR/local validation — fast, spill forced by threshold override | `dotnet test --filter "Category=ScaleCertification&Tier=Smoke"` |
 | **Standard** | 1M+ rows | Release validation — real memory pressure using the smoke scenario set at higher row scale | `.\scripts\Test-ScaleCertification.ps1 -Tier Standard` |
 | **Stress** | 10M+ rows | Nightly / manual only — OOM risk on small machines | `.\scripts\Test-ScaleCertification.ps1 -Tier Stress` |
+| **Provider** | 50k+ rows | Real local connector validation for providers available without external services | `.\scripts\Test-ScaleCertification.ps1 -Tier Provider` |
 
 Run the full certification lane and produce a report with:
 
@@ -86,6 +87,9 @@ dotnet test ETL-SQL.slnx --filter "Category=ScaleCertification"
 # Stress-scale (100× row counts by default) — manual/nightly only
 .\scripts\Test-ScaleCertification.ps1 -Tier Stress
 
+# Provider-backed local connector lane
+.\scripts\Test-ScaleCertification.ps1 -Tier Provider
+
 # Full report with all tiers
 .\scripts\Test-ScaleCertification.ps1 -Tier All
 ```
@@ -94,7 +98,7 @@ dotnet test ETL-SQL.slnx --filter "Category=ScaleCertification"
 
 Set `CERT_ROW_SCALE` environment variable or pass `-RowCountScale` to the script to scale row counts for the target machine profile. Script defaults are tier-specific: Smoke = 1.0, Standard = 10.0, Stress = 100.0.
 
-The test suite reads `CERT_ROW_SCALE` directly for Smoke tests. The Standard and Stress trait wrappers use `CERT_STANDARD_ROW_SCALE` and `CERT_STRESS_ROW_SCALE` so release gates can select `Tier=Standard` or `Tier=Stress` without reusing the Smoke trait.
+The test suite reads `CERT_ROW_SCALE` directly for Smoke tests. The Standard, Stress, and Provider trait wrappers use `CERT_STANDARD_ROW_SCALE`, `CERT_STRESS_ROW_SCALE`, and `CERT_PROVIDER_ROW_SCALE` so release gates can select those tiers without reusing the Smoke trait.
 
 ### Memory Bounds
 
@@ -114,9 +118,7 @@ Set `CERT_MEMORY_BOUND_MB` to override the default when certifying on a constrai
 
 ## Pending Certification Coverage
 
-The following acceptance items remain open before ETL-SQL can claim complete large-data certification:
-
-- Provider-backed large-data runs beyond in-memory sources.
+The scale harness now has selectable Smoke, Standard, Stress, and local Provider lanes. External database/provider certification remains tracked under connector certification because it depends on service availability and credentials outside the self-contained scale harness.
 
 ---
 

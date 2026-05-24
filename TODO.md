@@ -131,9 +131,8 @@
     - Link failed/uncertified paths to TODOs or documented limits.
   - Status review 2026-05-24: smoke-tier harness exists for sort, aggregate, join, temp spill, result cap, and window. Row scaling now flows from `CERT_ROW_SCALE`, and spill-path scenarios assert `TotalSpilledBytes > 0`. This is not full large-data product certification yet.
 
-- [ ] **Scale certification suite — remaining coverage**
-  - Add provider-backed large-data certification where real connectors are available.
-  - Status review 2026-05-24: added CUBE grouping-set spill certification, scalar subquery cache certification, non-persistent spill cleanup assertions after success and forced failure, tier-derived managed-memory bounds, `FullyMaterializingDml` warnings for uncapped `MERGE`/`UPDATE`/`DELETE` paths, and explicit Standard/Stress trait wrappers for release-gate selection.
+- [x] **Scale certification suite — remaining coverage**
+  - Status review 2026-05-24: added CUBE grouping-set spill certification, scalar subquery cache certification, non-persistent spill cleanup assertions after success and forced failure, tier-derived managed-memory bounds, `FullyMaterializingDml` warnings for uncapped `MERGE`/`UPDATE`/`DELETE` paths, explicit Standard/Stress trait wrappers, and a local Provider lane for CSV/Parquet-backed scale scenarios. External service-backed provider certification remains tracked under connector certification.
 
 - [x] **Report dataset metadata row count certification**
   - Fixed batched `SELECT INTO` and `INSERT INTO ... SELECT` writes so handlers pass the full batch stream to `WriteBatches` once instead of calling append once per batch. This preserves all Parquet row groups for report dataset cache writes.

@@ -11,21 +11,21 @@
       ./certification-results/cert-report.md       — human-readable table
 
 .PARAMETER Tier
-    Run only tests for a specific tier: Smoke (default), Standard, Stress, or All.
+    Run only tests for a specific tier: Smoke (default), Standard, Stress, Provider, or All.
 
 .PARAMETER OutDir
     Directory to write report files (default: ./certification-results).
 
 .PARAMETER RowCountScale
     Multiplier applied to row counts. When omitted or <= 0, defaults by tier:
-    Smoke=1.0, Standard=10.0, Stress=100.0, All=1.0.
+    Smoke=1.0, Standard=10.0, Stress=100.0, Provider=1.0, All=1.0.
 
 .EXAMPLE
     .\scripts\Test-ScaleCertification.ps1
     .\scripts\Test-ScaleCertification.ps1 -Tier All -RowCountScale 10
 #>
 param(
-    [ValidateSet('Smoke', 'Standard', 'Stress', 'All')]
+    [ValidateSet('Smoke', 'Standard', 'Stress', 'Provider', 'All')]
     [string]$Tier = 'Smoke',
 
     [string]$OutDir = './certification-results',
@@ -69,14 +69,18 @@ $rawLog = Join-Path $OutDir 'raw-output.txt'
 
 Write-Host "Running certification tests (filter: $filterExpr)..." -ForegroundColor Yellow
 $env:CERT_ROW_SCALE = $RowCountScale
+$env:CERT_CERTIFICATION_TIER = if ($Tier -eq 'All') { '' } else { $Tier }
 
 if ($Tier -eq 'Standard') {
     $env:CERT_STANDARD_ROW_SCALE = $RowCountScale
 } elseif ($Tier -eq 'Stress') {
     $env:CERT_STRESS_ROW_SCALE = $RowCountScale
+} elseif ($Tier -eq 'Provider') {
+    $env:CERT_PROVIDER_ROW_SCALE = $RowCountScale
 } elseif ($Tier -eq 'All') {
     $env:CERT_STANDARD_ROW_SCALE = if ($rowCountScaleWasSpecified) { $RowCountScale } else { 10.0 }
     $env:CERT_STRESS_ROW_SCALE = if ($rowCountScaleWasSpecified) { $RowCountScale } else { 100.0 }
+    $env:CERT_PROVIDER_ROW_SCALE = if ($rowCountScaleWasSpecified) { $RowCountScale } else { 1.0 }
 }
 
 dotnet test "$RepoRoot/ETL-SQL.slnx" `
