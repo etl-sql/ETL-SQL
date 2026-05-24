@@ -6,6 +6,7 @@ using System.Text;
 using MigraDoc.DocumentObjectModel;
 using MigraDoc.DocumentObjectModel.Tables;
 using MigraDoc.Rendering;
+using PdfSharp.Fonts;
 using SkiaSharp;
 using Svg.Skia;
 
@@ -28,11 +29,15 @@ namespace ETL_SQL.Reporting
         private const double ContentWidthPt  = 500.0;
         private const int    SvgNativeWidth  = 600;
         private const int    SvgNativeHeight = 350;
+        private static readonly object _fontInitLock = new();
+        private static bool _fontsInitialized;
 
         private readonly SvgChartRenderer _svg = new();
 
         public byte[] Export(ReportManifest manifest)
         {
+            EnsureFontsInitialized();
+
             var tempFiles = new List<string>();
             try
             {
@@ -47,6 +52,23 @@ namespace ETL_SQL.Reporting
             {
                 foreach (var tmp in tempFiles)
                     try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* best-effort */ }
+            }
+        }
+
+        private static void EnsureFontsInitialized()
+        {
+            if (_fontsInitialized)
+                return;
+
+            lock (_fontInitLock)
+            {
+                if (_fontsInitialized)
+                    return;
+
+                if (OperatingSystem.IsWindows())
+                    GlobalFontSettings.UseWindowsFontsUnderWindows = true;
+
+                _fontsInitialized = true;
             }
         }
 

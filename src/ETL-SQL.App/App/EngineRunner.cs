@@ -833,7 +833,70 @@ CREATE PAGE Main AS DASHBOARD (
                 }
                 checks.Add(("Report Build Smoke", rptBuildDetail, rptBuildStatus));
 
-                // 17. Shared runtime asset drift (source context only)
+                // 17. Report PDF export smoke
+                string pdfStatus = "OK";
+                string pdfDetail = "PDF exporter produced a valid PDF payload";
+                try
+                {
+                    var pdfManifest = new ReportManifest
+                    {
+                        Source = "doctor-pdf-smoke",
+                        Title = "Doctor PDF Smoke"
+                    };
+                    pdfManifest.Visuals.Add(new VisualManifest
+                    {
+                        Name = "DoctorHealth",
+                        VisualType = "CARD",
+                        Columns = new List<string> { "Value" },
+                        Rows = new List<List<string?>> { new() { "1" } }
+                    });
+                    pdfManifest.Pages.Add(new PageManifest
+                    {
+                        Name = "Main",
+                        Structure = "A",
+                        SlotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["A"] = "DoctorHealth"
+                        }
+                    });
+
+                    var pdfBytes = new PdfExporter().Export(pdfManifest);
+                    if (pdfBytes.Length < 5
+                        || pdfBytes[0] != (byte)'%'
+                        || pdfBytes[1] != (byte)'P'
+                        || pdfBytes[2] != (byte)'D'
+                        || pdfBytes[3] != (byte)'F'
+                        || pdfBytes[4] != (byte)'-')
+                    {
+                        pdfStatus = "FAIL";
+                        pdfDetail = $"PDF exporter returned {pdfBytes.Length} byte(s) without a PDF header";
+                    }
+                }
+                catch (Exception ex) { pdfStatus = "FAIL"; pdfDetail = ex.Message; }
+                checks.Add(("Report PDF Export", pdfDetail, pdfStatus));
+
+                // 18. Optional render/runtime capabilities
+                var graphvizRequired = bool.TryParse(config["Doctor:RequireGraphviz"], out var requireGraphviz) && requireGraphviz;
+                var graphvizPath = FindExecutableOnPath("dot");
+                checks.Add(("Graphviz (optional)",
+                    graphvizPath != null
+                        ? $"dot found at {graphvizPath}"
+                        : graphvizRequired
+                            ? "Doctor:RequireGraphviz=true but dot was not found in PATH"
+                            : "dot not found; Graphviz-dependent exports are unavailable",
+                    graphvizPath != null ? "OK" : graphvizRequired ? "WARN" : "OK"));
+
+                var browserRequired = bool.TryParse(config["Doctor:RequireBrowser"], out var requireBrowser) && requireBrowser;
+                var browserPath = FindExecutableOnPath("msedge", "chrome", "chromium", "chromium-browser", "google-chrome");
+                checks.Add(("Browser Runtime (optional)",
+                    browserPath != null
+                        ? $"Browser runtime found at {browserPath}"
+                        : browserRequired
+                            ? "Doctor:RequireBrowser=true but no supported browser runtime was found in PATH"
+                            : "No external browser runtime required for built-in report export",
+                    browserPath != null ? "OK" : browserRequired ? "WARN" : "OK"));
+
+                // 19. Shared runtime asset drift (source context only)
                 string driftStatus = "OK";
                 string driftDetail = "Not running from a source checkout — skipped";
                 var syncScript = FindRepoFile(Path.Combine("scripts", "sync-assets.ps1"));
@@ -865,7 +928,7 @@ CREATE PAGE Main AS DASHBOARD (
                 }
                 checks.Add(("Asset Drift Check", driftDetail, driftStatus));
 
-                // 18. Node.js (optional dependency for extension builds)
+                // 20. Node.js (optional dependency for extension builds)
                 string nodeStatus = "WARN";
                 string nodeDetail = "Node.js not found — VS Code extension build unavailable";
                 try
@@ -878,7 +941,7 @@ CREATE PAGE Main AS DASHBOARD (
                 catch { }
                 checks.Add(("Node.js (optional)", nodeDetail, nodeStatus));
 
-                // 19. Portal database
+                // 21. Portal database
                 string portalDbStatus = "OK";
                 string portalDbDetail = "Portal:DatabasePath not configured";
                 try
@@ -980,6 +1043,39 @@ CREATE PAGE Main AS DASHBOARD (
                     if (File.Exists(candidate))
                         return candidate;
                     dir = dir.Parent;
+                }
+            }
+
+            return null;
+        }
+
+        private static string? FindExecutableOnPath(params string[] names)
+        {
+            var pathDirs = (Environment.GetEnvironmentVariable("PATH") ?? "")
+                .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+            var pathExts = OperatingSystem.IsWindows()
+                ? (Environment.GetEnvironmentVariable("PATHEXT") ?? ".EXE;.CMD;.BAT")
+                    .Split(';', StringSplitOptions.RemoveEmptyEntries)
+                : new[] { string.Empty };
+
+            foreach (var dir in pathDirs)
+            {
+                foreach (var name in names)
+                {
+                    var extensions = Path.HasExtension(name) ? new[] { string.Empty } : pathExts;
+                    foreach (var ext in extensions)
+                    {
+                        try
+                        {
+                            var candidate = Path.Combine(dir, name + ext);
+                            if (File.Exists(candidate))
+                                return candidate;
+                        }
+                        catch
+                        {
+                            // Ignore invalid PATH entries.
+                        }
+                    }
                 }
             }
 
