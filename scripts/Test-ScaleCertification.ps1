@@ -17,8 +17,8 @@
     Directory to write report files (default: ./certification-results).
 
 .PARAMETER RowCountScale
-    Multiplier applied to all row counts (default: 1.0). Use 0.1 on developer laptops
-    for a quick sanity pass, or 10.0 on release agents for standard-tier coverage.
+    Multiplier applied to row counts. When omitted or <= 0, defaults by tier:
+    Smoke=1.0, Standard=10.0, Stress=100.0, All=1.0.
 
 .EXAMPLE
     .\scripts\Test-ScaleCertification.ps1
@@ -30,12 +30,21 @@ param(
 
     [string]$OutDir = './certification-results',
 
-    [double]$RowCountScale = 1.0
+    [double]$RowCountScale = 0.0
 )
 
 $ErrorActionPreference = 'Stop'
 $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot = Join-Path $PSScriptRoot '..'
+$rowCountScaleWasSpecified = $RowCountScale -gt 0
+
+if ($RowCountScale -le 0) {
+    $RowCountScale = switch ($Tier) {
+        'Standard' { 10.0 }
+        'Stress'   { 100.0 }
+        default    { 1.0 }
+    }
+}
 
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " ETL-SQL Scale Certification Runner" -ForegroundColor Cyan
@@ -60,6 +69,15 @@ $rawLog = Join-Path $OutDir 'raw-output.txt'
 
 Write-Host "Running certification tests (filter: $filterExpr)..." -ForegroundColor Yellow
 $env:CERT_ROW_SCALE = $RowCountScale
+
+if ($Tier -eq 'Standard') {
+    $env:CERT_STANDARD_ROW_SCALE = $RowCountScale
+} elseif ($Tier -eq 'Stress') {
+    $env:CERT_STRESS_ROW_SCALE = $RowCountScale
+} elseif ($Tier -eq 'All') {
+    $env:CERT_STANDARD_ROW_SCALE = if ($rowCountScaleWasSpecified) { $RowCountScale } else { 10.0 }
+    $env:CERT_STRESS_ROW_SCALE = if ($rowCountScaleWasSpecified) { $RowCountScale } else { 100.0 }
+}
 
 dotnet test "$RepoRoot/ETL-SQL.slnx" `
     --filter $filterExpr `

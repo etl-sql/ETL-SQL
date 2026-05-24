@@ -133,8 +133,7 @@
 
 - [ ] **Scale certification suite — remaining coverage**
   - Add provider-backed large-data certification where real connectors are available.
-  - Add true `Standard`/`Stress` test traits instead of only scaling the Smoke scenarios.
-  - Status review 2026-05-24: added CUBE grouping-set spill certification, scalar subquery cache certification, non-persistent spill cleanup assertions after success and forced failure, tier-derived managed-memory bounds, and `FullyMaterializingDml` warnings for uncapped `MERGE`/`UPDATE`/`DELETE` paths.
+  - Status review 2026-05-24: added CUBE grouping-set spill certification, scalar subquery cache certification, non-persistent spill cleanup assertions after success and forced failure, tier-derived managed-memory bounds, `FullyMaterializingDml` warnings for uncapped `MERGE`/`UPDATE`/`DELETE` paths, and explicit Standard/Stress trait wrappers for release-gate selection.
 
 - [x] **Report dataset metadata row count certification**
   - Fixed batched `SELECT INTO` and `INSERT INTO ... SELECT` writes so handlers pass the full batch stream to `WriteBatches` once instead of calling append once per batch. This preserves all Parquet row groups for report dataset cache writes.

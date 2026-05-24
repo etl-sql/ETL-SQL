@@ -11,8 +11,8 @@ Current status: the implemented lane is a **Smoke-tier certification harness**. 
 | Tier | Row Count | Purpose | How to Run |
 | :--- | :--- | :--- | :--- |
 | **Smoke** | 50k–100k rows | PR/local validation — fast, spill forced by threshold override | `dotnet test --filter "Category=ScaleCertification&Tier=Smoke"` |
-| **Standard** | 1M+ rows | Release validation — real memory pressure using the same smoke scenarios at higher row scale | `.\scripts\Test-ScaleCertification.ps1 -Tier Smoke -RowCountScale 10` |
-| **Stress** | 10M+ rows | Nightly / manual only — OOM risk on small machines; scenario coverage still pending | `.\scripts\Test-ScaleCertification.ps1 -Tier Smoke -RowCountScale 100` |
+| **Standard** | 1M+ rows | Release validation — real memory pressure using the smoke scenario set at higher row scale | `.\scripts\Test-ScaleCertification.ps1 -Tier Standard` |
+| **Stress** | 10M+ rows | Nightly / manual only — OOM risk on small machines | `.\scripts\Test-ScaleCertification.ps1 -Tier Stress` |
 
 Run the full certification lane and produce a report with:
 
@@ -80,8 +80,11 @@ dotnet test ETL-SQL.slnx --filter "Category=ScaleCertification"
 # Smoke tier with report artifact
 .\scripts\Test-ScaleCertification.ps1 -Tier Smoke
 
-# Standard-scale (10× row counts) — suitable for CI release agents
-.\scripts\Test-ScaleCertification.ps1 -Tier Smoke -RowCountScale 10
+# Standard-scale (10× row counts by default) — suitable for CI release agents
+.\scripts\Test-ScaleCertification.ps1 -Tier Standard
+
+# Stress-scale (100× row counts by default) — manual/nightly only
+.\scripts\Test-ScaleCertification.ps1 -Tier Stress
 
 # Full report with all tiers
 .\scripts\Test-ScaleCertification.ps1 -Tier All
@@ -89,9 +92,9 @@ dotnet test ETL-SQL.slnx --filter "Category=ScaleCertification"
 
 ### Environment Tuning
 
-Set `CERT_ROW_SCALE` environment variable or pass `-RowCountScale` to the script to scale row counts for the target machine profile. Default is 1.0 (Smoke tier as defined above).
+Set `CERT_ROW_SCALE` environment variable or pass `-RowCountScale` to the script to scale row counts for the target machine profile. Script defaults are tier-specific: Smoke = 1.0, Standard = 10.0, Stress = 100.0.
 
-The test suite reads `CERT_ROW_SCALE` directly; the PowerShell runner sets it from `-RowCountScale` before invoking `dotnet test`.
+The test suite reads `CERT_ROW_SCALE` directly for Smoke tests. The Standard and Stress trait wrappers use `CERT_STANDARD_ROW_SCALE` and `CERT_STRESS_ROW_SCALE` so release gates can select `Tier=Standard` or `Tier=Stress` without reusing the Smoke trait.
 
 ### Memory Bounds
 

@@ -32,8 +32,13 @@ namespace ETL_SQL.Tests.Scale
     /// Row-level assertions use aggregate summary queries (COUNT, SUM, MIN, MAX) rather
     /// than collecting all rows in memory, since ExecuteQuery streams one batch at a time.
     /// </summary>
+    [CollectionDefinition("ScaleCertification", DisableParallelization = true)]
+    public sealed class ScaleCertificationCollection
+    {
+    }
+
+    [Collection("ScaleCertification")]
     [Trait("Category", "ScaleCertification")]
-    [Trait("Tier", "Smoke")]
     public class ScaleCertificationTests
     {
         private readonly ITestOutputHelper _out;
@@ -148,6 +153,44 @@ namespace ETL_SQL.Tests.Scale
             return scale;
         }
 
+        private static double RowScaleFrom(string variableName, double defaultScale)
+        {
+            var raw = Environment.GetEnvironmentVariable(variableName);
+            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var scale) || scale <= 0)
+            {
+                return defaultScale;
+            }
+
+            return scale;
+        }
+
+        private async Task RunSmokeScenarioSetWithScale(double rowScale)
+        {
+            var previous = Environment.GetEnvironmentVariable("CERT_ROW_SCALE");
+            Environment.SetEnvironmentVariable("CERT_ROW_SCALE", rowScale.ToString(CultureInfo.InvariantCulture));
+
+            try
+            {
+                await Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized();
+                await Cert_Smoke_ExternalAggregate_100kRows_CorrectSums();
+                await Cert_Smoke_ExternalJoin_50kRows_CorrectResults();
+                await Cert_Smoke_TempTableSpill_50kRows_CorrectCount();
+                await Cert_Smoke_StreamingSelect_ResultCapEnforced();
+                await Cert_Smoke_WindowFunction_50kRows_CorrectRankValues();
+                await Cert_Smoke_CsvIngest_50kRows_CorrectChecksum();
+                await Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum();
+                await Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum();
+                await Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum();
+                await Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys();
+                await Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles();
+                await Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles();
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("CERT_ROW_SCALE", previous);
+            }
+        }
+
         private static string MemoryTier(double rowScale)
         {
             if (rowScale <= 1.0)
@@ -204,9 +247,20 @@ namespace ETL_SQL.Tests.Scale
             _out.WriteLine("CERT_METRIC:" + JsonSerializer.Serialize(metrics));
         }
 
+        [Fact]
+        [Trait("Tier", "Standard")]
+        public Task Cert_Standard_SmokeScenarioSet_RowScale10()
+            => RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_STANDARD_ROW_SCALE", 10.0));
+
+        [Fact]
+        [Trait("Tier", "Stress")]
+        public Task Cert_Stress_SmokeScenarioSet_RowScale100()
+            => RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_STRESS_ROW_SCALE", 100.0));
+
         // ── 1. External Sort (ORDER BY) ───────────────────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized()
         {
             var Rows = ScaleRows(50_000);
@@ -245,6 +299,7 @@ namespace ETL_SQL.Tests.Scale
         // ── 2. External Aggregate (GROUP BY) ─────────────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_ExternalAggregate_100kRows_CorrectSums()
         {
             var Rows = ScaleRows(100_000);
@@ -277,6 +332,7 @@ namespace ETL_SQL.Tests.Scale
         // ── 3. External Join ──────────────────────────────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_ExternalJoin_50kRows_CorrectResults()
         {
             var Rows = ScaleRows(50_000);
@@ -340,6 +396,7 @@ namespace ETL_SQL.Tests.Scale
         // ── 4. Temp table spill (SELECT INTO) ────────────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_TempTableSpill_50kRows_CorrectCount()
         {
             var Rows = ScaleRows(50_000);
@@ -365,6 +422,7 @@ namespace ETL_SQL.Tests.Scale
         // ── 5. Streaming SELECT — result cap check ────────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_StreamingSelect_ResultCapEnforced()
         {
             var Rows = ScaleRows(100_000);
@@ -391,6 +449,7 @@ namespace ETL_SQL.Tests.Scale
         // ── 6. Window function at scale ───────────────────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_WindowFunction_50kRows_CorrectRankValues()
         {
             var Rows = ScaleRows(50_000);
@@ -429,6 +488,7 @@ namespace ETL_SQL.Tests.Scale
         // ── 7. CSV ingest ────────────────────────────────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_CsvIngest_50kRows_CorrectChecksum()
         {
             var Rows = ScaleRows(50_000);
@@ -463,6 +523,7 @@ namespace ETL_SQL.Tests.Scale
         // ── 8. Parquet round-trip ────────────────────────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum()
         {
             var Rows = ScaleRows(50_000);
@@ -495,6 +556,7 @@ namespace ETL_SQL.Tests.Scale
         // ── 9. Report dataset Parquet cache ──────────────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum()
         {
             var Rows = ScaleRows(50_000);
@@ -554,6 +616,7 @@ namespace ETL_SQL.Tests.Scale
         // ── 10. Grouping sets / CUBE at scale ───────────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum()
         {
             var Rows = ScaleRows(50_000);
@@ -592,6 +655,7 @@ namespace ETL_SQL.Tests.Scale
         // ── 11. Scalar subquery cache at scale ───────────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys()
         {
             var Rows = ScaleRows(50_000);
@@ -657,6 +721,7 @@ namespace ETL_SQL.Tests.Scale
         // ── 12. Spill cleanup after success ─────────────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles()
         {
             var Rows = ScaleRows(50_000);
@@ -684,6 +749,7 @@ namespace ETL_SQL.Tests.Scale
         // ── 13. Spill cleanup after forced failure ──────────────────────────
 
         [Fact]
+        [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles()
         {
             var Rows = ScaleRows(50_000);
