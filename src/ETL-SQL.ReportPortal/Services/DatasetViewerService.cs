@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Parquet;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using Microsoft.EntityFrameworkCore;
@@ -125,14 +127,42 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache)
             throw new InvalidOperationException($"Parquet file for dataset '{dataset.Name}' is not available.");
 
         var columns = ParseColumnSchema(dataset.ColumnSchema);
+
+        if (dataset.EncryptionMode is not DatasetEncryptionMode.None and not DatasetEncryptionMode.MachineBound)
+            throw new InvalidOperationException(
+                $"Dataset '{dataset.Name}' uses {dataset.EncryptionMode} encryption, which is not supported for web viewing.");
+
+        string effectivePath = dataset.ParquetFilePath;
+        string? tempFile = null;
+
+        if (dataset.EncryptionMode == DatasetEncryptionMode.MachineBound)
+        {
+            try
+            {
+                tempFile = Path.GetTempFileName();
+                var enc = new EncryptionOptions(new Dictionary<string, string> { { "ENCRYPT", "MACHINE" } });
+                enc.DecryptFile(dataset.ParquetFilePath, tempFile);
+                effectivePath = tempFile;
+            }
+            catch (Exception ex) when (ex is not InvalidOperationException)
+            {
+                if (tempFile != null) try { File.Delete(tempFile); } catch { /* best effort */ }
+                throw new InvalidOperationException($"Failed to decrypt dataset '{dataset.Name}': {ex.Message}", ex);
+            }
+        }
+
         List<Dictionary<string, object?>> rows;
         try
         {
-            rows = await ReadParquetAsync(dataset.ParquetFilePath, columns);
+            rows = await ReadParquetAsync(effectivePath, columns);
         }
         catch (Exception ex) when (ex is not InvalidOperationException)
         {
             throw new InvalidOperationException($"Failed to read dataset '{dataset.Name}': {ex.Message}", ex);
+        }
+        finally
+        {
+            if (tempFile != null) try { File.Delete(tempFile); } catch { /* best effort */ }
         }
 
         var result = (rows, columns);

@@ -59,6 +59,9 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Property<string>("ColumnSchema")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("EncryptionMode")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 

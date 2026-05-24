@@ -121,16 +121,17 @@ namespace ETL_SQL.Engine.Handlers
 
             await registry.RegisterOrUpdate(new DatasetMetadata
             {
-                Name            = stmt.TempTableName,
-                FolderPath      = folderPath,
+                Name           = stmt.TempTableName,
+                FolderPath     = folderPath,
                 ParquetFilePath = parquetPath,
-                SourceQuery     = stmt.SourceQuery.ToSql(),
-                AccessLevel     = stmt.AccessLevel,
-                LastRefresh     = DateTime.UtcNow,
-                Ttl             = stmt.Ttl,
-                CachedTtl       = ParseDuration(stmt.Ttl),
+                SourceQuery    = stmt.SourceQuery.ToSql(),
+                AccessLevel    = stmt.AccessLevel,
+                EncryptionMode = stmt.EncryptionMode,
+                LastRefresh    = DateTime.UtcNow,
+                Ttl            = stmt.Ttl,
+                CachedTtl      = ParseDuration(stmt.Ttl),
                 RefreshInterval = stmt.RefreshInterval,
-                RowCount        = rowCount
+                RowCount       = rowCount
             });
 
             if (!string.IsNullOrWhiteSpace(stmt.RefreshInterval))

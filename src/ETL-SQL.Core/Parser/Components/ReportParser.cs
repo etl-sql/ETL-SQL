@@ -363,7 +363,7 @@ namespace ETL_SQL.Core.Parser.Components
             string? refreshInterval    = null;
             string? ttl                = null;
             bool    compress           = false;
-            var     encryptionMode     = DatasetEncryptionMode.None;
+            var     encryptionMode     = DatasetEncryptionMode.MachineBound;
             string? encryptionPassword = null;
             string? keyFile            = null;
             var     accessLevel        = ETL_SQL.Core.Data.DatasetAccessLevel.Private;

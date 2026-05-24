@@ -50,6 +50,7 @@ namespace ETL_SQL.ReportPortal.Services
             existing.OwningReportId = metadata.OwningReportId;
             existing.SourceQuery = metadata.SourceQuery;
             existing.AccessLevel = metadata.AccessLevel;
+            existing.EncryptionMode = metadata.EncryptionMode;
             existing.LastRefresh = metadata.LastRefresh;
             existing.Ttl = metadata.Ttl;
             existing.RefreshInterval = metadata.RefreshInterval;
@@ -229,6 +230,7 @@ namespace ETL_SQL.ReportPortal.Services
                 OwningReportId = d.OwningReportId,
                 SourceQuery = d.SourceQuery,
                 AccessLevel = d.AccessLevel,
+                EncryptionMode = d.EncryptionMode,
                 LastRefresh = d.LastRefresh,
                 Ttl = d.Ttl,
                 RefreshInterval = d.RefreshInterval,

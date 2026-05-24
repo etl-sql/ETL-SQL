@@ -259,7 +259,7 @@ AS (SELECT Date, SUM(Amount) AS Total FROM orders GROUP BY Date);";
             Assert.Equal("&summary", stmt!.TempTableName);
             Assert.Null(stmt.RefreshInterval);
             Assert.False(stmt.Compress);
-            Assert.Equal(DatasetEncryptionMode.None, stmt.EncryptionMode);
+            Assert.Equal(DatasetEncryptionMode.MachineBound, stmt.EncryptionMode);
         }
         [Fact]
         public void ParseCreateVisual_WithActions_ParsesDrillIn()

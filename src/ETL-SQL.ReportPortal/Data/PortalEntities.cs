@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.ReportPortal.Data;
@@ -290,14 +291,15 @@ public class Dataset
     public int?               OwningReportId  { get; set; }
     public Report?            OwningReport    { get; set; }
     public string             SourceQuery     { get; set; } = "";
-    public DatasetAccessLevel AccessLevel     { get; set; } = DatasetAccessLevel.Private;
-    public DateTime?          LastRefresh     { get; set; }
-    public string?            Ttl             { get; set; }
-    public string?            RefreshInterval { get; set; }
-    public long               RowCount        { get; set; }
-    public string?            ColumnSchema    { get; set; } // JSON
-    public DateTime           CreatedAt       { get; set; } = DateTime.UtcNow;
-    public DateTime           UpdatedAt       { get; set; } = DateTime.UtcNow;
+    public DatasetAccessLevel    AccessLevel    { get; set; } = DatasetAccessLevel.Private;
+    public DatasetEncryptionMode EncryptionMode { get; set; } = DatasetEncryptionMode.MachineBound;
+    public DateTime?             LastRefresh    { get; set; }
+    public string?               Ttl            { get; set; }
+    public string?               RefreshInterval { get; set; }
+    public long                  RowCount       { get; set; }
+    public string?               ColumnSchema   { get; set; } // JSON
+    public DateTime              CreatedAt      { get; set; } = DateTime.UtcNow;
+    public DateTime              UpdatedAt      { get; set; } = DateTime.UtcNow;
 
     public ICollection<DatasetAcl> Acls { get; set; } = [];
 }
