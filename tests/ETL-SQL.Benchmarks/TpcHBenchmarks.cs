@@ -34,19 +34,19 @@ namespace ETL_SQL.Benchmarks
         public TpcHBenchmarks() => _scaleFactor = 0.01;
         public TpcHBenchmarks(double scaleFactor) => _scaleFactor = scaleFactor;
 
-        private Evaluator _evaluator;
-        private string _q1;
-        private string _q6;
-        private string _q3;
-        private string _q5;
-        private string _q12;
-        private string _q14;
-        private Script _q1Script;
-        private Script _q6Script;
-        private Script _q3Script;
-        private Script _q5Script;
-        private Script _q12Script;
-        private Script _q14Script;
+        private Evaluator _evaluator = null!;
+        private string _q1 = null!;
+        private string _q6 = null!;
+        private string _q3 = null!;
+        private string _q5 = null!;
+        private string _q12 = null!;
+        private string _q14 = null!;
+        private Script _q1Script = null!;
+        private Script _q6Script = null!;
+        private Script _q3Script = null!;
+        private Script _q5Script = null!;
+        private Script _q12Script = null!;
+        private Script _q14Script = null!;
         public DataTable? LastResult => _evaluator?.LastResult;
 
         [GlobalSetup]
@@ -65,7 +65,7 @@ namespace ETL_SQL.Benchmarks
                 tracker.Setup(t => t.GlobalMetadata).Returns(new Dictionary<string, string>());
                 
                 var config = new ConfigurationBuilder()
-                    .AddInMemoryCollection(new Dictionary<string, string> { { "Session:PersistentSessionTTLHours", "1" } })
+                    .AddInMemoryCollection(new Dictionary<string, string?> { { "Session:PersistentSessionTTLHours", "1" } })
                     .Build();
                 
                 var tempSessionDir = Path.Combine(Path.GetTempPath(), "ETL-SQL-Benchmarks-" + Guid.NewGuid());

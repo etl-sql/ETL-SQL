@@ -120,7 +120,7 @@ namespace ETL_SQL.Tests.Coverage
                 tree.AddNode(child, parent.Id);
             }
             var lines = renderer.Render(tree);
-            Assert.True(lines.Any(l => l.IsSummary));
+            Assert.Contains(lines, l => l.IsSummary);
         }
 
         [Fact]

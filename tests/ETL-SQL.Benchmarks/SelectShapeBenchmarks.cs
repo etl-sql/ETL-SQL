@@ -44,12 +44,12 @@ namespace ETL_SQL.Benchmarks
         public SelectShapeBenchmarks() => _rowCount = 10_000;
         public SelectShapeBenchmarks(int rowCount) => _rowCount = rowCount;
 
-        private Evaluator _evaluator;
-        private Script _simpleFilterScript;
-        private Script _distinctScript;
-        private Script _limitedSortScript;
-        private Script _windowQualifyScript;
-        private Script _unionAllScript;
+        private Evaluator _evaluator = null!;
+        private Script _simpleFilterScript = null!;
+        private Script _distinctScript = null!;
+        private Script _limitedSortScript = null!;
+        private Script _windowQualifyScript = null!;
+        private Script _unionAllScript = null!;
 
         public DataTable? LastResult => _evaluator?.LastResult;
 
@@ -69,7 +69,7 @@ namespace ETL_SQL.Benchmarks
                 tracker.Setup(t => t.GlobalMetadata).Returns(new Dictionary<string, string>());
 
                 var config = new ConfigurationBuilder()
-                    .AddInMemoryCollection(new Dictionary<string, string> { { "Session:PersistentSessionTTLHours", "1" } })
+                    .AddInMemoryCollection(new Dictionary<string, string?> { { "Session:PersistentSessionTTLHours", "1" } })
                     .Build();
 
                 var tempSessionDir = Path.Combine(Path.GetTempPath(), "ETL-SQL-ShapeBench-" + Guid.NewGuid());

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>ETL_SQL.Benchmarks</RootNamespace>
-    <Nullable>disable</Nullable>
+    <Nullable>enable</Nullable>
     <AssemblyName>ETL-SQL.Benchmarks</AssemblyName>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>

@@ -9,8 +9,8 @@ namespace ETL_SQL.Benchmarks
     [MemoryDiagnoser]
     public class ParserBenchmarks
     {
-        private string _smallScript;
-        private string _largeScript;
+        private string _smallScript = null!;
+        private string _largeScript = null!;
 
         [GlobalSetup]
         public void Setup()
