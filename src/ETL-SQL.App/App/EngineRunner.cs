@@ -15,6 +15,7 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Reporting;
 using ETL_SQL.Services;
 
 namespace ETL_SQL.App
@@ -768,16 +769,59 @@ namespace ETL_SQL.App
                 catch (Exception ex) { secGuardStatus = "FAIL"; secGuardDetail = ex.Message; }
                 checks.Add(("Security Guardrail Smoke", secGuardDetail, secGuardStatus));
 
-                // 16. Report-SQL parser smoke
-                string rptParseStatus = "OK";
-                string rptParseDetail = "SET REPORT TITLE statement parsed successfully";
+                // 16. Report build smoke
+                string rptBuildStatus = "OK";
+                string rptBuildDetail = "Report manifest build produced 1 page and 1 visual";
+                string? rptSmokePath = null;
                 try
                 {
-                    var rptScript = new Parser(new Lexer("SET REPORT TITLE = 'Doctor Test';").Tokenize()).Parse();
-                    if (rptScript.Statements.Count == 0) { rptParseStatus = "FAIL"; rptParseDetail = "Report-SQL parser returned 0 statements"; }
+                    var rptSource = @"
+SET REPORT TITLE = 'Doctor Report Smoke';
+SELECT 'Health' AS Label, 1 AS Value INTO #DoctorReportSmoke;
+
+CREATE VISUAL DoctorHealth AS CARD (
+    SOURCE = (SELECT Label, Value FROM #DoctorReportSmoke),
+    MAPPINGS (VALUE = Value, LABEL = Label)
+);
+
+CREATE PAGE Main AS DASHBOARD (
+    STRUCTURE = 'A',
+    MAP('A' = DoctorHealth)
+);
+";
+                    rptSmokePath = Path.Combine(Path.GetTempPath(), $"etl_sql_doctor_report_{Guid.NewGuid():N}.rptsql");
+                    await File.WriteAllTextAsync(rptSmokePath, rptSource);
+
+                    var rptScript = new Parser(new Lexer(rptSource).Tokenize(), rptSource).Parse();
+                    await using var rptEval = Program.ServiceProvider.GetRequiredService<Evaluator>();
+                    rptEval.SecurityService.IsTestMode = true;
+                    rptEval.CurrentScriptPath = rptSmokePath;
+                    await rptEval.Evaluate(rptScript);
+
+                    var manifest = await new ManifestBuilder(rptEval).BuildAsync(rptSmokePath);
+                    if (!string.IsNullOrWhiteSpace(manifest.Error))
+                    {
+                        rptBuildStatus = "FAIL";
+                        rptBuildDetail = manifest.Error;
+                    }
+                    else if (manifest.Pages.Count != 1 || manifest.Visuals.Count != 1)
+                    {
+                        rptBuildStatus = "FAIL";
+                        rptBuildDetail = $"Expected 1 page/1 visual, got {manifest.Pages.Count} page(s)/{manifest.Visuals.Count} visual(s)";
+                    }
+                    else if (manifest.Visuals[0].Rows.Count != 1)
+                    {
+                        rptBuildStatus = "FAIL";
+                        rptBuildDetail = $"Expected 1 visual row, got {manifest.Visuals[0].Rows.Count}";
+                    }
                 }
-                catch (Exception ex) { rptParseStatus = "FAIL"; rptParseDetail = ex.Message; }
-                checks.Add(("Report-SQL Parser Smoke", rptParseDetail, rptParseStatus));
+                catch (Exception ex) { rptBuildStatus = "FAIL"; rptBuildDetail = ex.Message; }
+                finally
+                {
+                    if (!string.IsNullOrEmpty(rptSmokePath) && File.Exists(rptSmokePath))
+                        File.Delete(rptSmokePath);
+                }
+                checks.Add(("Report Build Smoke", rptBuildDetail, rptBuildStatus));
 
                 // 17. Shared runtime asset drift (source context only)
                 string driftStatus = "OK";
