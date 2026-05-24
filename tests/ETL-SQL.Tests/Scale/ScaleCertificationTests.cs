@@ -10,6 +10,7 @@ using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Connectors.Parquet;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
@@ -131,6 +132,9 @@ namespace ETL_SQL.Tests.Scale
             var res = await ev.ExecuteQuery(TestHelpers.Parse(sql).Statements[0]).FirstAsync();
             return res.Rows[0];
         }
+
+        private static int CountFiles(string dir)
+            => Directory.Exists(dir) ? Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Length : 0;
 
         private void EmitMetrics(string scenario, int rowCount, long elapsedMs,
             long spillBytes, long resultRows, decimal checksum, bool passed)
@@ -600,6 +604,62 @@ namespace ETL_SQL.Tests.Scale
                 ev.Telemetry.TotalSpilledBytes, count, sum, true);
         }
 
+        // ── 12. Spill cleanup after success ─────────────────────────────────
+
+        [Fact]
+        public async Task Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles()
+        {
+            var Rows = ScaleRows(50_000);
+            var ev = await EvWithRows(Rows);
+            ev.IsPersistentSession = false;
+            ev.TempTableSpillThresholdRows = 10_000;
+
+            ev.Telemetry.Clear();
+            var sw = Stopwatch.StartNew();
+            await ev.Evaluate(TestHelpers.Parse("SELECT grp, val INTO #cleanup_result FROM #cert;"));
+            sw.Stop();
+
+            var spillRoot = ev.SpillStore.RootPath;
+            var filesBeforeDispose = CountFiles(spillRoot);
+            AssertSpilled(ev, "SpillCleanupSuccess");
+            Assert.True(filesBeforeDispose > 0, "Expected spill files before evaluator disposal.");
+
+            await ev.DisposeAsync();
+
+            Assert.False(Directory.Exists(spillRoot), $"Expected spill directory '{spillRoot}' to be removed after evaluator disposal.");
+            EmitMetrics($"SpillCleanupSuccess_{Rows}", Rows, sw.ElapsedMilliseconds,
+                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true);
+        }
+
+        // ── 13. Spill cleanup after forced failure ──────────────────────────
+
+        [Fact]
+        public async Task Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles()
+        {
+            var Rows = ScaleRows(50_000);
+            var ev = NewEvaluator();
+            ev.IsPersistentSession = false;
+            ev.TempTableSpillThresholdRows = 1_000;
+            ev.Connections["#faulty"] = new ThrowingBatchDataSource(Rows, batchSize: 5_000, throwAfterBatches: 3);
+
+            ev.Telemetry.Clear();
+            var sw = Stopwatch.StartNew();
+            await Assert.ThrowsAsync<ExecutionException>(() =>
+                ev.Evaluate(TestHelpers.Parse("SELECT grp, val INTO #failed_cleanup FROM #faulty;")));
+            sw.Stop();
+
+            var spillRoot = ev.SpillStore.RootPath;
+            var filesBeforeDispose = CountFiles(spillRoot);
+            AssertSpilled(ev, "SpillCleanupFailure");
+            Assert.True(filesBeforeDispose > 0, "Expected spill files before evaluator disposal after forced failure.");
+
+            await ev.DisposeAsync();
+
+            Assert.False(Directory.Exists(spillRoot), $"Expected spill directory '{spillRoot}' to be removed after failed evaluator disposal.");
+            EmitMetrics($"SpillCleanupFailure_{Rows}", Rows, sw.ElapsedMilliseconds,
+                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true);
+        }
+
         private static string CreateTempDir()
         {
             var dir = Path.Combine(Path.GetTempPath(), "etl-scale-cert-" + Guid.NewGuid().ToString("N"));
@@ -663,6 +723,62 @@ namespace ETL_SQL.Tests.Scale
                 Directory.CreateDirectory(dir);
                 return Path.Combine(dir, safeName + ".parquet");
             }
+        }
+
+        private sealed class ThrowingBatchDataSource : IDataSource
+        {
+            private readonly int _rowCount;
+            private readonly int _batchSize;
+            private readonly int _throwAfterBatches;
+
+            public ThrowingBatchDataSource(int rowCount, int batchSize, int throwAfterBatches)
+            {
+                _rowCount = rowCount;
+                _batchSize = batchSize;
+                _throwAfterBatches = throwAfterBatches;
+            }
+
+            public string Path => "";
+            public Dictionary<string, string>? Options => null;
+            public string ConnectorType => "FAULTY";
+
+            public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+            {
+                var emitted = 0;
+                var batchNumber = 0;
+                while (emitted < _rowCount)
+                {
+                    if (batchNumber >= _throwAfterBatches)
+                        throw new ExecutionException("Forced scale certification source failure.");
+
+                    var take = Math.Min(_batchSize, _rowCount - emitted);
+                    var table = new DataTable();
+                    table.SetColumns(new[] { "grp", "val" });
+
+                    for (int i = 0; i < take; i++)
+                    {
+                        var r = new Row(table.Schema);
+                        r["grp"] = (emitted + i) % 10;
+                        r["val"] = (decimal)(emitted + i + 1);
+                        await table.AddRowAsync(r);
+                    }
+
+                    emitted += take;
+                    batchNumber++;
+                    yield return table;
+                }
+            }
+
+            public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+                => throw new NotSupportedException();
+
+            public Task<IEnumerable<string>> GetColumnsAsync()
+                => Task.FromResult<IEnumerable<string>>(new[] { "grp", "val" });
+
+            public IDataSource WithTable(string tableName) => this;
+            public object? Snapshot() => null;
+            public void Restore(object? snapshot) { }
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
     }
 }

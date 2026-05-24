@@ -39,6 +39,8 @@ Reports are written to `./certification-results/`.
 | Report `CREATE DATASET` Snapshot/Reload | 50k × scale | Query → Parquet cache → reload | Portal dataset cache | Row count and checksum after cached reload |
 | CUBE Grouping Sets | 50k × scale | `GROUP BY CUBE(grp, bucket)` → ExternalAggregateEngine | Operator memory grant forced to 1 MB | Expanded row count, checksum, spill bytes > 0 |
 | Scalar Subquery Cache | 50k × scale | Correlated scalar subquery | LRU subquery cache | Row count, checksum, exact hit/miss counts |
+| Spill Cleanup Success | 50k × scale | Non-persistent `SELECT INTO #temp` spill | Temp-table spill files | Spill files exist before dispose; spill directory removed after dispose |
+| Spill Cleanup Failure | 50k × scale | Non-persistent `SELECT INTO #temp` with forced source failure | Temp-table spill files | Spill files exist after failure; spill directory removed after dispose |
 
 ---
 
@@ -96,7 +98,6 @@ The test suite reads `CERT_ROW_SCALE` directly; the PowerShell runner sets it fr
 The following acceptance items remain open before ETL-SQL can claim complete large-data certification:
 
 - Provider-backed large-data runs beyond in-memory sources.
-- Cleanup assertions for spill/session/temp files after success and forced failure.
 - Documented memory bounds enforced by test assertions.
 - `MERGE`, `UPDATE`, and `DELETE` boundedness certification or explicit warnings in the linter/runtime.
 

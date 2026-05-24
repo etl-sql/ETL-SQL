@@ -128,6 +128,8 @@ $mdLines += "| Parquet round trip | Connector batch write/read | 50k rows | Row 
 $mdLines += "| CREATE DATASET snapshot/reload | Query -> Parquet cache -> reload | 50k rows | Row count and checksum certified after cached reload |"
 $mdLines += "| GROUP BY CUBE | External Aggregate grouping-set expansion | 50k rows | Expanded row count, checksum, and spill bytes certified |"
 $mdLines += "| Scalar subquery cache | Correlated subquery LRU cache | 50k rows | Row count, checksum, and exact hit/miss counts certified |"
+$mdLines += "| Spill cleanup after success | Non-persistent temp-table spill lifecycle | 50k rows | Spill directory removed after evaluator disposal |"
+$mdLines += "| Spill cleanup after failure | Non-persistent temp-table spill lifecycle | 50k rows | Forced source failure still removes spill directory after evaluator disposal |"
 
 $mdPath = Join-Path $OutDir 'cert-report.md'
 $mdLines | Set-Content -Path $mdPath -Encoding UTF8
