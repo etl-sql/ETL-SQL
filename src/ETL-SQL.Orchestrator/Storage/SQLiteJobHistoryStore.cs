@@ -832,6 +832,47 @@ namespace ETL_SQL.Orchestrator.Storage
             return await ReadLineageHistoryAsync(cmd);
         }
 
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceAsync(string sourceName, int limit = 100)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"
+                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
+                       SourceTables, Operation, Tags, SourceFile, Line
+                FROM LineageHistory
+                WHERE SourceTables LIKE $pattern
+                ORDER BY RunAt DESC, Id DESC
+                LIMIT $scanLimit;";
+            cmd.Parameters.AddWithValue("$pattern", $"%\"{sourceName}\"%");
+            cmd.Parameters.AddWithValue("$scanLimit", Math.Max(limit * 5, limit));
+
+            return (await ReadLineageHistoryAsync(cmd))
+                .Where(e => e.SourceTables.Any(s => string.Equals(s, sourceName, StringComparison.OrdinalIgnoreCase)))
+                .Take(limit)
+                .ToList();
+        }
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceFileAsync(string sourceFile, int limit = 100)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"
+                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
+                       SourceTables, Operation, Tags, SourceFile, Line
+                FROM LineageHistory
+                WHERE SourceFile = $sourceFile COLLATE NOCASE
+                   OR ScriptPath = $sourceFile COLLATE NOCASE
+                ORDER BY RunAt DESC, Id DESC
+                LIMIT $limit;";
+            cmd.Parameters.AddWithValue("$sourceFile", sourceFile);
+            cmd.Parameters.AddWithValue("$limit", limit);
+            return await ReadLineageHistoryAsync(cmd);
+        }
+
         private static async Task<IEnumerable<LineageHistoryEntry>> ReadLineageHistoryAsync(SqliteCommand cmd)
         {
             var results = new List<LineageHistoryEntry>();

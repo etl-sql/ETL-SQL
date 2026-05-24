@@ -153,6 +153,48 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Empty(results);
         }
 
+        [Fact]
+        public async Task GetHistoryForSource_ReturnsExactSourceMatches()
+        {
+            await _store.InitializeAsync();
+            var catalog = (ILineageCatalogStore)_store;
+
+            await catalog.SaveLineageAsync(
+                new[]
+                {
+                    MakeEntry("#stage", sources: new[] { "sales.Orders" }),
+                    MakeEntry("#other", sources: new[] { "sales.OrdersArchive" })
+                },
+                "SourceJob",
+                "scripts/source.etlsql",
+                DateTime.UtcNow);
+
+            var results = (await catalog.GetHistoryForSourceAsync("sales.Orders")).ToList();
+
+            Assert.Single(results);
+            Assert.Equal("#stage", results[0].TargetTable);
+        }
+
+        [Fact]
+        public async Task GetHistoryForSourceFile_ReturnsEntriesForSourceFileOrScriptPath()
+        {
+            await _store.InitializeAsync();
+            var catalog = (ILineageCatalogStore)_store;
+            var sourceEntry = MakeEntry("#stage");
+            sourceEntry.SourceFile = "bundle/main.etlsql";
+
+            await catalog.SaveLineageAsync(new[] { sourceEntry }, "BundleJob", "orch://bundle@1/main.etlsql", DateTime.UtcNow);
+            await catalog.SaveLineageAsync(new[] { MakeEntry("#script") }, "ScriptJob", "scripts/load.etlsql", DateTime.UtcNow);
+
+            var sourceFileResults = (await catalog.GetHistoryForSourceFileAsync("bundle/main.etlsql")).ToList();
+            var scriptPathResults = (await catalog.GetHistoryForSourceFileAsync("scripts/load.etlsql")).ToList();
+
+            Assert.Single(sourceFileResults);
+            Assert.Equal("#stage", sourceFileResults[0].TargetTable);
+            Assert.Single(scriptPathResults);
+            Assert.Equal("#script", scriptPathResults[0].TargetTable);
+        }
+
         // ── Ad-hoc run (null jobName) ─────────────────────────────────────────
 
         [Fact]

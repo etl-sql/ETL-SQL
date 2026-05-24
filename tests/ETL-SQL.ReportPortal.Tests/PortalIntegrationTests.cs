@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ETL_SQL.Core;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.Core.Data;
 using Microsoft.EntityFrameworkCore;
@@ -311,6 +312,86 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Contains(folderResults!, r =>
             r!["type"]!.GetValue<string>() == "Folder" &&
             r["path"]!.GetValue<string>() == $"/Search {suffix}");
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task CatalogLineageEndpoints_ReturnHistoryWithReportContext()
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = $"Lineage {suffix}", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"lineage_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "SET REPORT TITLE = 'Lineage Catalog';\n");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = $"Lineage Report {suffix}",
+            description = "Lineage catalog integration report",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var catalog = scope.ServiceProvider.GetRequiredService<ILineageCatalogStore>();
+            var stageEntry = new LineageEntry("#stage", "SELECT")
+            {
+                TargetColumn = "OrderId",
+                SourceTables = new List<string> { $"sales.Orders_{suffix}" },
+                Metadata = new Dictionary<string, string> { ["pii"] = "true", ["owner"] = "SalesOps" },
+                SourceFile = scriptPath,
+                Line = 3
+            };
+            var visualEntry = new LineageEntry("report:SalesCard", "CREATE VISUAL")
+            {
+                SourceTables = new List<string> { "#stage" },
+                Metadata = new Dictionary<string, string> { ["owner"] = "SalesOps" },
+                SourceFile = scriptPath,
+                Line = 8
+            };
+
+            await catalog.SaveLineageAsync(
+                new[] { stageEntry, visualEntry },
+                $"report:{reportId}:manual-session",
+                scriptPath,
+                DateTime.UtcNow);
+        }
+
+        var sourceRes = await AuthGet(token, $"/api/catalog/lineage/source?name={Uri.EscapeDataString($"sales.Orders_{suffix}")}");
+        Assert.Equal(HttpStatusCode.OK, sourceRes.StatusCode);
+        var sourceRows = await sourceRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        var sourceHit = Assert.Single(sourceRows!);
+        Assert.Equal("#stage", sourceHit!["targetTable"]!.GetValue<string>());
+        Assert.Equal($"Lineage Report {suffix}", sourceHit["reportName"]!.GetValue<string>());
+        Assert.Equal($"/Lineage {suffix}", sourceHit["folderPath"]!.GetValue<string>());
+
+        var tableRes = await AuthGet(token, $"/api/catalog/lineage/table?name={Uri.EscapeDataString("report:SalesCard")}");
+        Assert.Equal(HttpStatusCode.OK, tableRes.StatusCode);
+        var tableRows = await tableRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        Assert.Contains(tableRows!, r =>
+            r!["reportId"]!.GetValue<int>() == reportId &&
+            r["sourceTables"]!.AsArray().Any(s => s!.GetValue<string>() == "#stage"));
+
+        var tagRes = await AuthGet(token, "/api/catalog/lineage/tag?key=pii&value=true");
+        Assert.Equal(HttpStatusCode.OK, tagRes.StatusCode);
+        var tagRows = await tagRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        Assert.Contains(tagRows!, r =>
+            r!["targetTable"]!.GetValue<string>() == "#stage" &&
+            r["tags"]!["owner"]!.GetValue<string>() == "SalesOps");
+
+        var sourceFileRes = await AuthGet(token, $"/api/catalog/lineage/source-file?path={Uri.EscapeDataString(scriptPath)}");
+        Assert.Equal(HttpStatusCode.OK, sourceFileRes.StatusCode);
+        var sourceFileRows = await sourceFileRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        Assert.True(sourceFileRows!.Count >= 2);
     }
 
     [Fact]

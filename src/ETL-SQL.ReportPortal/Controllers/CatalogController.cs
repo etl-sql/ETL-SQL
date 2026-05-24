@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using ETL_SQL.Core.Data;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 
@@ -11,7 +12,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [ApiController]
 [Route("api/catalog")]
 [Authorize]
-public class CatalogController(PortalDbContext db) : ControllerBase
+public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageCatalog) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -94,6 +95,66 @@ public class CatalogController(PortalDbContext db) : ControllerBase
         return Ok(reports.Select(r => ToCatalogResult(r, favoriteIds)).ToList());
     }
 
+    [HttpGet("lineage/table")]
+    public async Task<IActionResult> LineageForTable([FromQuery] string name, [FromQuery] int limit = 100)
+    {
+        name = name?.Trim() ?? "";
+        if (name.Length == 0)
+            return BadRequest(new { error = "Table name is required." });
+
+        limit = Math.Clamp(limit, 1, 500);
+        var entries = await lineageCatalog.GetHistoryForTableAsync(name, limit);
+        return Ok(await ToLineageDtosAsync(entries));
+    }
+
+    [HttpGet("lineage/source")]
+    public async Task<IActionResult> LineageForSource([FromQuery] string name, [FromQuery] int limit = 100)
+    {
+        name = name?.Trim() ?? "";
+        if (name.Length == 0)
+            return BadRequest(new { error = "Source name is required." });
+
+        limit = Math.Clamp(limit, 1, 500);
+        var entries = await lineageCatalog.GetHistoryForSourceAsync(name, limit);
+        return Ok(await ToLineageDtosAsync(entries));
+    }
+
+    [HttpGet("lineage/source-file")]
+    public async Task<IActionResult> LineageForSourceFile([FromQuery] string path, [FromQuery] int limit = 100)
+    {
+        path = path?.Trim() ?? "";
+        if (path.Length == 0)
+            return BadRequest(new { error = "Source file path is required." });
+
+        limit = Math.Clamp(limit, 1, 500);
+        var entries = await lineageCatalog.GetHistoryForSourceFileAsync(path, limit);
+        return Ok(await ToLineageDtosAsync(entries));
+    }
+
+    [HttpGet("lineage/tag")]
+    public async Task<IActionResult> LineageForTag([FromQuery] string key, [FromQuery] string? value = null, [FromQuery] int limit = 100)
+    {
+        key = key?.Trim() ?? "";
+        if (key.Length == 0)
+            return BadRequest(new { error = "Tag key is required." });
+
+        limit = Math.Clamp(limit, 1, 500);
+        var entries = await lineageCatalog.GetHistoryForTagAsync(key, string.IsNullOrWhiteSpace(value) ? null : value, limit);
+        return Ok(await ToLineageDtosAsync(entries));
+    }
+
+    [HttpGet("lineage/job")]
+    public async Task<IActionResult> LineageForJob([FromQuery] string name, [FromQuery] int limit = 100)
+    {
+        name = name?.Trim() ?? "";
+        if (name.Length == 0)
+            return BadRequest(new { error = "Job name is required." });
+
+        limit = Math.Clamp(limit, 1, 500);
+        var entries = await lineageCatalog.GetHistoryForJobAsync(name, limit);
+        return Ok(await ToLineageDtosAsync(entries));
+    }
+
     private async Task<HashSet<int>> GetVisibleFolderIdsAsync()
     {
         if (IsAdmin)
@@ -121,6 +182,59 @@ public class CatalogController(PortalDbContext db) : ControllerBase
             .Where(f => f.UserId == CurrentUserId)
             .Select(f => f.ReportId)
             .ToHashSetAsync();
+
+    private async Task<IReadOnlyList<CatalogLineageHistoryDto>> ToLineageDtosAsync(IEnumerable<LineageHistoryEntry> entries)
+    {
+        var entryList = entries.ToList();
+        var reportIds = entryList
+            .Select(e => TryParseReportId(e.JobName))
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToHashSet();
+
+        var visibleFolderIds = await GetVisibleFolderIdsAsync();
+        var reports = reportIds.Count == 0
+            ? new Dictionary<int, Report>()
+            : await db.Reports
+                .Include(r => r.Folder)
+                .Where(r => !r.IsDeleted && reportIds.Contains(r.Id) && visibleFolderIds.Contains(r.FolderId))
+                .ToDictionaryAsync(r => r.Id);
+
+        return entryList
+            .Select(e =>
+            {
+                var reportId = TryParseReportId(e.JobName);
+                reports.TryGetValue(reportId ?? -1, out var report);
+                return new CatalogLineageHistoryDto(
+                    e.Id,
+                    e.RunAt,
+                    e.JobName,
+                    e.ScriptPath,
+                    e.TargetTable,
+                    e.TargetColumn,
+                    e.SourceTables,
+                    e.Operation,
+                    e.Tags,
+                    e.SourceFile,
+                    e.Line,
+                    report?.Id,
+                    report?.Name,
+                    report?.Folder.Path);
+            })
+            .ToList();
+    }
+
+    private static int? TryParseReportId(string? jobName)
+    {
+        if (string.IsNullOrWhiteSpace(jobName) || !jobName.StartsWith("report:", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var nextColon = jobName.IndexOf(':', "report:".Length);
+        var idText = nextColon < 0
+            ? jobName["report:".Length..]
+            : jobName["report:".Length..nextColon];
+        return int.TryParse(idText, out var id) ? id : null;
+    }
 
     private static CatalogSearchResultDto ToCatalogResult(Report r, ISet<int> favoriteIds)
     {
