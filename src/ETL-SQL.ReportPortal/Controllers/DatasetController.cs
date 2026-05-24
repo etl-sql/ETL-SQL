@@ -19,7 +19,8 @@ public class DatasetController(
     IDatasetRegistry    registry,
     AuditService        audit,
     ExecutionJobService jobService,
-    PortalConfig        portalConfig) : ControllerBase
+    PortalConfig        portalConfig,
+    DatasetViewerService viewer) : ControllerBase
 {
     private int  CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin       => User.IsInRole("Admin");
@@ -95,6 +96,120 @@ public class DatasetController(
         if (!CanView(perm)) return Forbid();
 
         return Ok(ToDto(dataset));
+    }
+
+    // ── GET /api/datasets/{id}/data ──────────────────────────────────────────
+
+    [HttpGet("{id:int}/data")]
+    public async Task<IActionResult> GetData(
+        int id,
+        [FromQuery] int    page     = 1,
+        [FromQuery] int    pageSize = 50,
+        [FromQuery] string? sort   = null,
+        [FromQuery] string? dir    = null,
+        [FromQuery] string? search = null,
+        [FromQuery] string? filters = null)
+    {
+        var dataset = await LoadDataset(id);
+        if (dataset is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(dataset);
+        if (!CanView(perm)) return Forbid();
+
+        var filterList = ParseFilters(filters);
+
+        try
+        {
+            if (dataset.RowCount > 500_000)
+                Response.Headers.Append("X-Dataset-Large", "true");
+
+            var result = await viewer.QueryAsync(id, page, pageSize, sort, dir, search, filterList);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // ── GET /api/datasets/{id}/data/export ───────────────────────────────────
+
+    [HttpGet("{id:int}/data/export")]
+    public async Task<IActionResult> ExportData(
+        int id,
+        [FromQuery] string? sort    = null,
+        [FromQuery] string? dir     = null,
+        [FromQuery] string? search  = null,
+        [FromQuery] string? filters = null)
+    {
+        var dataset = await LoadDataset(id);
+        if (dataset is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(dataset);
+        if (!CanView(perm)) return Forbid();
+
+        var filterList = ParseFilters(filters);
+        var safeName   = string.Concat(dataset.Name.Where(c => char.IsLetterOrDigit(c) || c == '_'));
+
+        Response.ContentType = "text/csv; charset=utf-8";
+        Response.Headers.Append("Content-Disposition", $"attachment; filename=\"{safeName}.csv\"");
+
+        try
+        {
+            await viewer.ExportCsvAsync(id, sort, dir, search, filterList, Response.Body);
+            return new EmptyResult();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // ── GET /api/datasets/{id}/data/stats ────────────────────────────────────
+
+    [HttpGet("{id:int}/data/stats")]
+    public async Task<IActionResult> GetStats(int id, [FromQuery] string? filters = null)
+    {
+        var dataset = await LoadDataset(id);
+        if (dataset is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(dataset);
+        if (!CanView(perm)) return Forbid();
+
+        try
+        {
+            var result = await viewer.GetStatsAsync(id, ParseFilters(filters));
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // ── GET /api/datasets/{id}/column/{colName}/values ───────────────────────
+
+    [HttpGet("{id:int}/column/{colName}/values")]
+    public async Task<IActionResult> GetColumnValues(
+        int id, string colName,
+        [FromQuery] string? search = null,
+        [FromQuery] int     limit  = 50)
+    {
+        var dataset = await LoadDataset(id);
+        if (dataset is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(dataset);
+        if (!CanView(perm)) return Forbid();
+
+        try
+        {
+            var result = await viewer.GetColumnValuesAsync(id, colName, search, limit);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     // ── GET /api/datasets/{id}/rows ───────────────────────────────────────────
@@ -300,6 +415,13 @@ public class DatasetController(
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static IEnumerable<DatasetColumnFilterDto> ParseFilters(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try { return JsonSerializer.Deserialize<DatasetColumnFilterDto[]>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? []; }
+        catch { return []; }
+    }
 
     private Task<Dataset?> LoadDataset(int id) =>
         db.Datasets

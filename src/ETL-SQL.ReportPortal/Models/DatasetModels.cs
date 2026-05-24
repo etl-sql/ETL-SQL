@@ -38,3 +38,25 @@ public record DatasetRefreshStatusDto(
     string?   Error,
     DateTime? LastRefresh,
     bool      IsStale);
+
+// ── Dataset Viewer ─────────────────────────────────────────────────────────────
+
+// Op values: contains | starts_with | eq | neq | gt | lt | gte | lte | between | in | is_null | not_null
+public record DatasetColumnFilterDto(string Col, string Op, string? Val, string? Val2);
+
+public record DatasetRowsDto(
+    IEnumerable<DatasetColumnDto>            Columns,
+    IEnumerable<Dictionary<string, object?>> Rows,
+    long TotalCount,
+    long FilteredCount,
+    int  Page,
+    int  PageSize);
+
+public record DatasetColumnStatsDto(
+    string  Name,
+    long    NullCount,
+    object? Min,
+    object? Max,
+    double? Avg);
+
+public record DatasetColumnValuesDto(IEnumerable<object?> Values, long TotalDistinct);

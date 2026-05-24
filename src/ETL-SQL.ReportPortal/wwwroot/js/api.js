@@ -189,7 +189,41 @@ export const datasetsApi = {
     grantAcl:      (id, groupId, permission) =>
         apiJson(`/api/datasets/${id}/acl`, { method: 'POST', body: { groupId, permission } }),
     revokeAcl:     (id, groupId)            =>
-        apiJson(`/api/datasets/${id}/acl/${groupId}`, { method: 'DELETE' })
+        apiJson(`/api/datasets/${id}/acl/${groupId}`, { method: 'DELETE' }),
+
+    data(id, { page = 1, pageSize = 50, sort = null, dir = null, search = null, filters = null } = {}) {
+        const p = new URLSearchParams({ page, pageSize });
+        if (sort)    p.set('sort', sort);
+        if (dir)     p.set('dir', dir);
+        if (search)  p.set('search', search);
+        if (filters && filters.length) p.set('filters', JSON.stringify(filters));
+        return apiJson(`/api/datasets/${id}/data?${p}`);
+    },
+    async exportCsv(id, filename, { sort = null, dir = null, search = null, filters = null } = {}) {
+        const p = new URLSearchParams();
+        if (sort)    p.set('sort', sort);
+        if (dir)     p.set('dir', dir);
+        if (search)  p.set('search', search);
+        if (filters && filters.length) p.set('filters', JSON.stringify(filters));
+        const res = await apiFetch(`/api/datasets/${id}/data/export?${p}`);
+        if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url; a.download = filename || 'dataset.csv';
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+    },
+    stats(id, filters = null) {
+        const p = new URLSearchParams();
+        if (filters && filters.length) p.set('filters', JSON.stringify(filters));
+        return apiJson(`/api/datasets/${id}/data/stats?${p}`);
+    },
+    columnValues(id, colName, { search = null, limit = 50 } = {}) {
+        const p = new URLSearchParams({ limit });
+        if (search) p.set('search', search);
+        return apiJson(`/api/datasets/${id}/column/${encodeURIComponent(colName)}/values?${p}`);
+    }
 };
 
 // ── Catalog ───────────────────────────────────────────────────────────────────

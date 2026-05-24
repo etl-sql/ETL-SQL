@@ -5,6 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin — ETL-SQL Report Portal</title>
   <link rel="stylesheet" href="/css/portal.css">
+  <style>
+    /* ── Dataset Viewer ─────────────────────────────────────────────────── */
+    .dv-modal { width: 96vw; max-height: 96vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+    .dv-modal .modal-header { padding: 16px 20px; flex-shrink: 0; border-bottom: 1px solid var(--portal-border-soft); }
+    .dv-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+                  padding: 10px 20px; border-bottom: 1px solid var(--portal-border-soft); flex-shrink: 0; background: var(--portal-surface-subtle); }
+    .dv-counts  { color: var(--portal-muted); font-size: .86em; white-space: nowrap; }
+    .dv-toolbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+    .dv-table-wrap { flex: 1; overflow: auto; min-height: 0; }
+    .dv-table { width: 100%; border-collapse: collapse; font-size: .84em; }
+    .dv-table th, .dv-table td { border: 1px solid var(--portal-border-soft); padding: 4px 8px; white-space: nowrap; }
+    .dv-table thead th { background: var(--portal-surface-subtle); position: sticky; top: 0; z-index: 2; }
+    .dv-table tfoot td { background: var(--portal-accent-soft); font-size: .78em; color: var(--portal-text-soft); }
+    .dv-col-header { cursor: pointer; user-select: none; }
+    .dv-col-header:hover { background: var(--portal-border-soft); }
+    .col-type-tag { margin-left: 5px; font-size: .72em; font-weight: 700; text-transform: uppercase;
+                    color: var(--portal-muted); letter-spacing: .04em; }
+    .dv-filter-row th { background: var(--portal-bg); padding: 3px 4px; }
+    .dv-text-filter, .dv-range-filter { display: flex; gap: 3px; align-items: center; }
+    .dv-text-filter .param-input, .dv-range-filter .param-input { min-width: 0; flex: 1; font-size: .82em; padding: 2px 5px; }
+    .dv-text-filter .dv-filter-op, .dv-range-filter .dv-filter-op { width: 80px; flex: 0 0 auto; }
+    .dv-filter-val2 { display: none; }
+    .dv-null { color: var(--portal-muted); font-style: italic; font-size: .85em; }
+    .dv-pagination { display: flex; align-items: center; gap: 8px; padding: 10px 20px;
+                     border-top: 1px solid var(--portal-border-soft); flex-shrink: 0; background: var(--portal-surface-subtle); }
+    .dv-page-info { color: var(--portal-muted); font-size: .86em; flex: 1; text-align: center; }
+    .dv-picker-btn { padding: 1px 5px; font-size: .8em; border: 1px solid var(--portal-border);
+                     border-radius: var(--portal-radius-sm); background: none; cursor: pointer; color: var(--portal-muted); }
+    .dv-picker-btn:hover { background: var(--portal-border-soft); }
+    .dv-picker-popover { position: fixed; z-index: 1200; background: var(--portal-surface); border: 1px solid var(--portal-border);
+                         border-radius: var(--portal-radius); box-shadow: var(--portal-shadow-md);
+                         padding: 8px; min-width: 200px; max-height: 300px; overflow: auto; }
+    .dv-picker-search { width: 100%; box-sizing: border-box; padding: 5px 8px; margin-bottom: 6px;
+                        border: 1px solid var(--portal-border); border-radius: var(--portal-radius-sm); font-size: .86em; }
+    .dv-picker-item { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: .86em; cursor: pointer; }
+    .dv-picker-item:hover { color: var(--portal-accent); }
+    .dv-picker-apply { margin-top: 6px; width: 100%; }
+    .dv-stats-label { font-weight: 600; color: var(--portal-muted); }
+    .btn-ghost { background: none; border: none; cursor: pointer; color: var(--portal-text-soft); padding: 4px 8px; border-radius: var(--portal-radius-sm); }
+    .btn-ghost:hover { background: var(--portal-border-soft); }
+    .btn-xs { padding: 2px 6px; font-size: .8em; }
+    .chip-filter { background: var(--portal-accent-soft); color: var(--portal-accent); }
+  </style>
 </head>
 <body>
 <div class="app-shell">
@@ -512,6 +555,48 @@
       <button class="btn btn-outline" id="sb-cancelBtn">Cancel</button>
     </div>
   </div>
+</div>
+
+<!-- Dataset Viewer modal -->
+<div id="datasetViewerModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="dv-title">
+  <div class="modal-card dv-modal">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Dataset</span>
+        <h3 id="dv-title" class="modal-title">Loading…</h3>
+      </div>
+      <button class="btn btn-ghost" id="dv-closeBtn" aria-label="Close">✕</button>
+    </div>
+    <div class="dv-toolbar">
+      <span class="dv-counts"><strong id="dv-totalCount">—</strong> rows total · <strong id="dv-filteredCount">—</strong> matching</span>
+      <div class="dv-toolbar-right">
+        <input type="text" id="dv-search" placeholder="Search all columns…" class="admin-filter-input" style="width:200px">
+        <span id="dv-filter-badge" class="chip chip-filter" style="display:none"></span>
+        <button class="btn btn-outline btn-sm" id="dv-resetBtn">Reset</button>
+        <button class="btn btn-outline btn-sm" id="dv-exportBtn">Export CSV</button>
+      </div>
+    </div>
+    <div class="dv-table-wrap" id="dv-tableWrap">
+      <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading…</span></div>
+    </div>
+    <div class="dv-pagination">
+      <button class="btn btn-outline btn-sm" id="dv-prevBtn">← Prev</button>
+      <span class="dv-page-info" id="dv-pageInfo">Page 1 of —</span>
+      <button class="btn btn-outline btn-sm" id="dv-nextBtn">Next →</button>
+      <select id="dv-pageSize" class="param-input" style="width:auto">
+        <option value="25">25 / page</option>
+        <option value="50" selected>50 / page</option>
+        <option value="100">100 / page</option>
+        <option value="200">200 / page</option>
+      </select>
+    </div>
+  </div>
+</div>
+<!-- Value picker popover (shared, repositioned on open) -->
+<div id="dv-pickerPopover" class="dv-picker-popover" style="display:none">
+  <input type="text" id="dv-pickerSearch" class="dv-picker-search" placeholder="Search values…">
+  <div id="dv-pickerList"></div>
+  <button class="btn btn-primary btn-sm dv-picker-apply" id="dv-pickerApply">Apply</button>
 </div>
 
 <script type="module">
@@ -1364,6 +1449,7 @@ async function loadDatasets() {
         </td>
         <td>
           <div class="table-actions">
+            <button class="btn btn-outline btn-sm" data-action="view" data-id="${d.id}" data-name="${escAttr(d.name)}">View Data</button>
             <button class="btn btn-outline btn-sm" data-action="refresh" data-id="${d.id}">Refresh</button>
             <button class="btn btn-outline btn-sm" data-action="edit" data-id="${d.id}">Edit</button>
             <button class="btn btn-outline btn-sm" data-action="acl" data-id="${d.id}" data-name="${escAttr(d.name)}">Permissions</button>
@@ -1388,7 +1474,10 @@ async function handleDatasetAction(btn) {
   const id = +btn.dataset.id;
   const action = btn.dataset.action;
 
-  if (action === 'delete') {
+  if (action === 'view') {
+    dvOpen(id, btn.dataset.name || 'Dataset');
+    return;
+  } else if (action === 'delete') {
     if (!confirm('Delete this dataset? This removes the registry entry and cached data.')) return;
     await datasetsApi.delete(id).catch(alertErr);
     loadDatasets();
@@ -1566,6 +1655,323 @@ function formatOptionalDate(value) {
   return value ? new Date(value).toLocaleString() : 'Not refreshed';
 }
 function alertErr(err) { alert(err.message || 'An error occurred.'); }
+
+// ── Dataset Viewer ─────────────────────────────────────────────────────────────
+
+const dv = {
+  id: null, name: null, columns: [], stats: null,
+  filters: [], sort: null, dir: 'asc', search: '', page: 1, pageSize: 50,
+  pickerCol: null, pickerChecked: new Set(),
+};
+
+function dvOpen(id, name) {
+  Object.assign(dv, { id, name, columns: [], stats: null, filters: [], sort: null, dir: 'asc', search: '', page: 1, pageSize: 50, pickerCol: null, pickerChecked: new Set() });
+  document.getElementById('dv-title').textContent = name;
+  document.getElementById('dv-search').value = '';
+  document.getElementById('dv-pageSize').value = '50';
+  document.getElementById('datasetViewerModal').style.display = 'flex';
+  dvFetch();
+  dvFetchStats();
+}
+
+async function dvFetch() {
+  const $wrap = document.getElementById('dv-tableWrap');
+  $wrap.innerHTML = '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading…</span></div>';
+  try {
+    const res = await datasetsApi.data(dv.id, { page: dv.page, pageSize: dv.pageSize, sort: dv.sort, dir: dv.dir, search: dv.search, filters: dv.filters });
+    dv.columns = res.columns || [];
+    dvRender(res);
+    document.getElementById('dv-totalCount').textContent    = (res.totalCount    ?? 0).toLocaleString();
+    document.getElementById('dv-filteredCount').textContent = (res.filteredCount ?? 0).toLocaleString();
+    const totalPages = Math.max(1, Math.ceil((res.filteredCount ?? 0) / dv.pageSize));
+    document.getElementById('dv-pageInfo').textContent = `Page ${dv.page} of ${totalPages}`;
+    document.getElementById('dv-prevBtn').disabled = dv.page <= 1;
+    document.getElementById('dv-nextBtn').disabled = dv.page >= totalPages;
+    dvUpdateBadge();
+  } catch (err) {
+    $wrap.innerHTML = `<div class="error-msg show">${esc(err.message)}</div>`;
+  }
+}
+
+async function dvFetchStats() {
+  try {
+    dv.stats = await datasetsApi.stats(dv.id, dv.filters.length ? dv.filters : null);
+    dvRefreshStatsFooter();
+  } catch { dv.stats = null; }
+}
+
+function dvGuessType(typeStr) {
+  const t = (typeStr || '').toLowerCase();
+  if (/int|float|double|decimal|numeric|real|money|number/.test(t)) return 'number';
+  if (/date|time/.test(t)) return 'date';
+  return 'text';
+}
+
+function dvRender(res) {
+  const cols = res.columns || [];
+  const rows = res.rows    || [];
+
+  const headerCells = cols.map(col => {
+    const arrow = dv.sort === col.name ? (dv.dir === 'asc' ? ' ↑' : ' ↓') : '';
+    return `<th class="dv-col-header" data-col="${escAttr(col.name)}">${esc(col.name)}${arrow}<span class="col-type-tag">${esc(col.type)}</span></th>`;
+  }).join('');
+
+  const filterCells = cols.map(col => {
+    const type = dvGuessType(col.type);
+    return `<th class="dv-filter-cell">${dvFilterHtml(col.name, type)}</th>`;
+  }).join('');
+
+  const statsRow = (dv.stats && dv.stats.length)
+    ? `<tfoot><tr class="dv-stats-row">${cols.map(col => {
+        const s = dv.stats.find(x => x.name === col.name);
+        if (!s) return '<td></td>';
+        const type = dvGuessType(col.type);
+        if (type === 'number') return `<td><span class="dv-stats-label">Min</span> ${s.min ?? '—'} <span class="dv-stats-label">Max</span> ${s.max ?? '—'} <span class="dv-stats-label">Avg</span> ${s.avg != null ? (+s.avg.toFixed(2)) : '—'} <span class="dv-stats-label">Nulls</span> ${s.nullCount}</td>`;
+        return `<td><span class="dv-stats-label">Nulls</span> ${s.nullCount}</td>`;
+      }).join('')}</tr></tfoot>`
+    : '';
+
+  const dataRows = rows.length
+    ? rows.map(row => `<tr>${cols.map(col => {
+        const v = row[col.name];
+        return `<td>${v == null ? '<span class="dv-null">null</span>' : esc(String(v))}</td>`;
+      }).join('')}</tr>`).join('')
+    : `<tr><td colspan="${cols.length || 1}" style="text-align:center;color:var(--portal-muted);padding:20px">No rows match the current filters.</td></tr>`;
+
+  const $wrap = document.getElementById('dv-tableWrap');
+  $wrap.innerHTML = `
+    <table class="data-table dv-table">
+      <thead>
+        <tr>${headerCells}</tr>
+        <tr class="dv-filter-row">${filterCells}</tr>
+      </thead>
+      <tbody>${dataRows}</tbody>
+      ${statsRow}
+    </table>`;
+
+  // Sort
+  $wrap.querySelectorAll('.dv-col-header').forEach(th => th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    dv.dir = (dv.sort === col && dv.dir === 'asc') ? 'desc' : 'asc';
+    dv.sort = col; dv.page = 1; dvFetch();
+  }));
+
+  // Restore filter values from dv.filters and wire inputs
+  cols.forEach(col => {
+    const type = dvGuessType(col.type);
+    const existing = dv.filters.find(f => f.col === col.name);
+    const opEl  = $wrap.querySelector(`.dv-filter-op[data-col="${CSS.escape(col.name)}"]`);
+    const valEl = $wrap.querySelector(`.dv-filter-val[data-col="${CSS.escape(col.name)}"]`);
+    const val2El= $wrap.querySelector(`.dv-filter-val2[data-col="${CSS.escape(col.name)}"]`);
+
+    if (existing) {
+      if (opEl)  opEl.value  = existing.op;
+      if (valEl) valEl.value = existing.val  ?? '';
+      if (val2El) val2El.value = existing.val2 ?? '';
+    }
+
+    // Show val2 for range ops
+    function syncVal2() {
+      if (!val2El) return;
+      const op = opEl ? opEl.value : 'between';
+      val2El.style.display = (op === 'between' || type === 'date') ? '' : 'none';
+    }
+    if (opEl) { opEl.addEventListener('change', syncVal2); syncVal2(); }
+
+    // Apply filter on blur/enter
+    function applyFilter() {
+      const op  = opEl  ? opEl.value  : (type === 'date' ? 'between' : 'contains');
+      const val = valEl ? valEl.value : '';
+      const val2= val2El ? val2El.value : '';
+      dv.filters = dv.filters.filter(f => f.col !== col.name);
+      if (op === 'is_null' || op === 'not_null' || val.trim()) {
+        dv.filters.push({ col: col.name, op, val: val || null, val2: val2 || null });
+      }
+      dv.page = 1; dvFetch(); dvFetchStats();
+    }
+
+    [valEl, val2El].filter(Boolean).forEach(el => {
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') applyFilter(); });
+      el.addEventListener('blur', e => {
+        // Skip if focus is moving to the sibling input for the same column (val1↔val2 tab)
+        if (e.relatedTarget === valEl || e.relatedTarget === val2El) return;
+        applyFilter();
+      });
+    });
+    if (opEl) opEl.addEventListener('change', () => {
+      const op = opEl.value;
+      if (op === 'is_null' || op === 'not_null') applyFilter();
+    });
+
+    // Picker button
+    const pickerBtn = $wrap.querySelector(`.dv-picker-btn[data-col="${CSS.escape(col.name)}"]`);
+    if (pickerBtn) pickerBtn.addEventListener('click', e => { e.stopPropagation(); dvOpenPicker(col.name, pickerBtn); });
+  });
+
+  // Date filter val2 always shown for date type (handled by syncVal2 default)
+  $wrap.querySelectorAll('.dv-filter-val2').forEach(el => {
+    const col = el.dataset.col;
+    const type = dvGuessType((cols.find(c => c.name === col) || {}).type || '');
+    if (type === 'date') el.style.display = '';
+  });
+}
+
+function dvRefreshStatsFooter() {
+  if (!dv.stats || !dv.columns.length) return;
+  const table = document.querySelector('#dv-tableWrap .dv-table');
+  if (!table) return;
+
+  let row = table.querySelector('.dv-stats-row');
+  if (!row) {
+    // Stats resolved after data — inject the tfoot now
+    const tfoot = document.createElement('tfoot');
+    const tr    = document.createElement('tr');
+    tr.className = 'dv-stats-row';
+    dv.columns.forEach(() => tr.appendChild(document.createElement('td')));
+    tfoot.appendChild(tr);
+    table.appendChild(tfoot);
+    row = tr;
+  }
+
+  const tds = row.querySelectorAll('td');
+  dv.columns.forEach((col, i) => {
+    if (!tds[i]) return;
+    const s = dv.stats.find(x => x.name === col.name);
+    if (!s) return;
+    const type = dvGuessType(col.type);
+    if (type === 'number')
+      tds[i].innerHTML = `<span class="dv-stats-label">Min</span> ${s.min ?? '—'} <span class="dv-stats-label">Max</span> ${s.max ?? '—'} <span class="dv-stats-label">Avg</span> ${s.avg != null ? (+s.avg.toFixed(2)) : '—'} <span class="dv-stats-label">Nulls</span> ${s.nullCount}`;
+    else
+      tds[i].innerHTML = `<span class="dv-stats-label">Nulls</span> ${s.nullCount}`;
+  });
+}
+
+function dvFilterHtml(colName, type) {
+  const safe = escAttr(colName);
+  const opSel = type === 'text'
+    ? `<select class="dv-filter-op param-input" data-col="${safe}" title="op">
+        <option value="contains">contains</option><option value="eq">equals</option>
+        <option value="starts_with">starts with</option><option value="neq">≠</option>
+        <option value="is_null">null</option><option value="not_null">not null</option>
+       </select>`
+    : type === 'number'
+    ? `<select class="dv-filter-op param-input" data-col="${safe}" title="op">
+        <option value="between">between</option><option value="eq">=</option>
+        <option value="gt">&gt;</option><option value="lt">&lt;</option>
+        <option value="gte">≥</option><option value="lte">≤</option>
+        <option value="is_null">null</option><option value="not_null">not null</option>
+       </select>`
+    : '';
+
+  const val1 = type === 'date'
+    ? `<input type="date" class="dv-filter-val param-input" data-col="${safe}">`
+    : `<input type="${type === 'number' ? 'number' : 'text'}" class="dv-filter-val param-input" data-col="${safe}" placeholder="filter…">`;
+
+  const val2 = `<input type="${type === 'date' ? 'date' : 'number'}" class="dv-filter-val2 param-input" data-col="${safe}" placeholder="${type === 'date' ? '' : 'max'}" style="display:none">`;
+
+  const picker = (type !== 'date') ? `<button class="dv-picker-btn" data-col="${safe}" title="Pick values">≡</button>` : '';
+
+  return `<div class="dv-${type === 'date' ? 'range' : 'text'}-filter">${opSel}${val1}${val2}${picker}</div>`;
+}
+
+function dvUpdateBadge() {
+  const $badge = document.getElementById('dv-filter-badge');
+  if (dv.filters.length) {
+    $badge.textContent = `${dv.filters.length} filter${dv.filters.length > 1 ? 's' : ''}`;
+    $badge.style.display = '';
+  } else {
+    $badge.style.display = 'none';
+  }
+}
+
+// ── Value picker ───────────────────────────────────────────────────────────────
+
+async function dvOpenPicker(colName, anchor) {
+  dv.pickerCol = colName;
+  const popover = document.getElementById('dv-pickerPopover');
+  const $list   = document.getElementById('dv-pickerList');
+  const $search = document.getElementById('dv-pickerSearch');
+
+  const existing = dv.filters.find(f => f.col === colName && f.op === 'in');
+  dv.pickerChecked = existing ? new Set(JSON.parse(existing.val || '[]')) : new Set();
+
+  $search.value = '';
+  $list.innerHTML = '<span style="color:var(--portal-muted);font-size:.84em">Loading…</span>';
+  popover.style.display = '';
+
+  const rect = anchor.getBoundingClientRect();
+  popover.style.left = `${Math.min(rect.left, window.innerWidth - 220)}px`;
+  popover.style.top  = `${rect.bottom + 4}px`;
+
+  await dvLoadPickerValues('');
+
+  $search.oninput = () => dvLoadPickerValues($search.value);
+}
+
+async function dvLoadPickerValues(search) {
+  const $list = document.getElementById('dv-pickerList');
+  try {
+    const res = await datasetsApi.columnValues(dv.id, dv.pickerCol, { search, limit: 50 });
+    const values = res.values || [];
+    $list.innerHTML = values.map(v => {
+      const s = v == null ? '' : String(v);
+      const checked = dv.pickerChecked.has(s) ? 'checked' : '';
+      return `<label class="dv-picker-item"><input type="checkbox" value="${escAttr(s)}" ${checked}> ${esc(s || '(empty)')}</label>`;
+    }).join('') || '<span style="color:var(--portal-muted);font-size:.84em">No values found.</span>';
+  } catch { $list.innerHTML = '<span style="color:var(--portal-muted)">Error loading values.</span>'; }
+}
+
+document.getElementById('dv-pickerList').addEventListener('change', e => {
+  if (e.target.type !== 'checkbox') return;
+  if (e.target.checked) dv.pickerChecked.add(e.target.value);
+  else dv.pickerChecked.delete(e.target.value);
+});
+
+document.getElementById('dv-pickerApply').addEventListener('click', () => {
+  const col = dv.pickerCol;
+  dv.filters = dv.filters.filter(f => !(f.col === col && f.op === 'in'));
+  if (dv.pickerChecked.size) {
+    dv.filters.push({ col, op: 'in', val: JSON.stringify([...dv.pickerChecked]), val2: null });
+  }
+  document.getElementById('dv-pickerPopover').style.display = 'none';
+  dv.page = 1; dvFetch(); dvFetchStats();
+});
+
+document.addEventListener('click', e => {
+  if (!document.getElementById('dv-pickerPopover').contains(e.target)
+      && !e.target.classList.contains('dv-picker-btn')) {
+    document.getElementById('dv-pickerPopover').style.display = 'none';
+  }
+});
+
+// ── Toolbar wiring ─────────────────────────────────────────────────────────────
+
+document.getElementById('dv-search').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  dv.search = e.target.value.trim(); dv.page = 1; dvFetch();
+});
+
+document.getElementById('dv-resetBtn').addEventListener('click', () => {
+  dv.filters = []; dv.search = ''; dv.sort = null; dv.dir = 'asc'; dv.page = 1;
+  document.getElementById('dv-search').value = '';
+  dvFetch(); dvFetchStats();
+});
+
+document.getElementById('dv-exportBtn').addEventListener('click', async () => {
+  try { await datasetsApi.exportCsv(dv.id, dv.name + '.csv', { sort: dv.sort, dir: dv.dir, search: dv.search, filters: dv.filters }); }
+  catch (err) { alertErr(err); }
+});
+
+document.getElementById('dv-closeBtn').addEventListener('click', () => {
+  document.getElementById('datasetViewerModal').style.display = 'none';
+  document.getElementById('dv-pickerPopover').style.display   = 'none';
+});
+
+document.getElementById('dv-prevBtn').addEventListener('click', () => { if (dv.page > 1) { dv.page--; dvFetch(); } });
+document.getElementById('dv-nextBtn').addEventListener('click', () => { dv.page++; dvFetch(); });
+document.getElementById('dv-pageSize').addEventListener('change', e => {
+  dv.pageSize = +e.target.value; dv.page = 1; dvFetch();
+});
 
 document.querySelectorAll('.modal-overlay').forEach(modal => {
   modal.addEventListener('click', e => {

@@ -126,9 +126,11 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.TokenService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetViewerService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SmtpPasswordProtector>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorDbLocator>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.PortalBrandingSettingsService>();
