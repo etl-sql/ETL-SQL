@@ -172,10 +172,10 @@ namespace ETL_SQL.Connectors.Xml
                 var children = new List<(string, string)>();
                 if (!reader.IsEmptyElement)
                 {
-                    // ReadSubtree positions the sub-reader on the record element (depth 0
-                    // within the subtree); direct children are at subtree depth 1.
+                    // XmlSubtreeReader resets Depth to 0 at the record element, so direct child
+                    // elements are at sub-depth 1 and their text content is at sub-depth 2.
                     using var sub = reader.ReadSubtree();
-                    await sub.ReadAsync(); // consume the record element itself
+                    await sub.ReadAsync(); // consume the record element itself (sub-depth 0)
 
                     string? childName = null;
                     bool childHasElements = false;
@@ -194,7 +194,7 @@ namespace ETL_SQL.Connectors.Xml
                             case XmlNodeType.Element when sub.Depth > 1:
                                 childHasElements = true;
                                 break;
-                            case XmlNodeType.Text or XmlNodeType.CDATA when sub.Depth == 1:
+                            case XmlNodeType.Text or XmlNodeType.CDATA when sub.Depth == 2:
                                 childText.Append(sub.Value);
                                 break;
                             case XmlNodeType.EndElement when sub.Depth == 1:

@@ -343,6 +343,14 @@ namespace ETL_SQL.Engine.Engines
                 for (int i = 0; i < finalColumns.Count; i++)
                 {
                     var col = finalColumns[i];
+                    // Window results are stored in the dynamic dict under WINDOW_ keys, not in the schema slot.
+                    // Check before schemaMatches so GROUP BY + window queries resolve correctly.
+                    if (hasPreEvaluatedColumns && col.Expression is FunctionCallExpression winFce && winFce.Window != null)
+                    {
+                        var winKey = $"WINDOW_{winFce.ToSql().ToUpperInvariant()}";
+                        if (row.HasColumn(winKey)) { resRow[i] = row[winKey]; continue; }
+                    }
+
                     if (schemaMatches)
                     {
                         resRow[i] = row[i];
@@ -360,10 +368,6 @@ namespace ETL_SQL.Engine.Engines
                     else if (hasPreEvaluatedColumns && row.HasColumn($"AGG_{col.Expression.ToSql().ToUpperInvariant()}"))
                     {
                         resRow[i] = row[$"AGG_{col.Expression.ToSql().ToUpperInvariant()}"];
-                    }
-                    else if (hasPreEvaluatedColumns && col.Expression is FunctionCallExpression fce && fce.Window != null && row.HasColumn($"WINDOW_{fce.ToSql().ToUpperInvariant()}"))
-                    {
-                        resRow[i] = row[$"WINDOW_{fce.ToSql().ToUpperInvariant()}"];
                     }
                     else
                     {

@@ -178,15 +178,15 @@ namespace ETL_SQL.Tests.Statements
             var currentRow = await ev.EvaluateSelect((SelectStatement)Parse(
                 "SELECT Val, SUM(Val) OVER(ORDER BY K ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW) AS S FROM #E;")
                 .Statements[0]).FirstAsync();
-            Assert.Equal(0m, currentRow.Rows[0]["S"]);
+            Assert.Null(currentRow.Rows[0]["S"]);  // frame = {} after EXCLUDE CURRENT ROW → SUM(empty) = NULL
             Assert.Equal(10m, currentRow.Rows[1]["S"]);
             Assert.Equal(30m, currentRow.Rows[2]["S"]);
 
             var group = await ev.EvaluateSelect((SelectStatement)Parse(
                 "SELECT Val, SUM(Val) OVER(ORDER BY K RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE GROUP) AS S FROM #E;")
                 .Statements[0]).FirstAsync();
-            Assert.Equal(0m, group.Rows[0]["S"]);
-            Assert.Equal(0m, group.Rows[1]["S"]);
+            Assert.Null(group.Rows[0]["S"]);  // K=1 group excluded from frame → SUM(empty) = NULL
+            Assert.Null(group.Rows[1]["S"]);  // K=1 group excluded from frame → SUM(empty) = NULL
             Assert.Equal(30m, group.Rows[2]["S"]);
             Assert.Equal(60m, group.Rows[3]["S"]);
             Assert.Equal(60m, group.Rows[4]["S"]);
@@ -367,8 +367,8 @@ namespace ETL_SQL.Tests.Statements
                 .Statements[0]).FirstAsync();
             
             Assert.Equal(4, res.Rows.Count);
-            Assert.Equal(0m, res.Rows[0]["FilteredSum"]);   // 10
-            Assert.Equal(0m, res.Rows[1]["FilteredSum"]);   // 20
+            Assert.Null(res.Rows[0]["FilteredSum"]);   // 10 — no values pass Val > 50 → SUM(empty) = NULL
+            Assert.Null(res.Rows[1]["FilteredSum"]);   // 20 — no values pass Val > 50 → SUM(empty) = NULL
             Assert.Equal(100m, res.Rows[2]["FilteredSum"]); // 100
             Assert.Equal(300m, res.Rows[3]["FilteredSum"]); // 200
         }

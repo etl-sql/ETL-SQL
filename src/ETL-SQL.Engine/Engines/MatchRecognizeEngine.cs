@@ -153,7 +153,26 @@ namespace ETL_SQL.Engine.Engines
         private async Task<Row> BuildOutputRow(MatchRecognizeClause clause, List<Row> rows, PatternMatch match, int matchNumber, int? currentRowIndex)
         {
             var output = new Row();
-            
+
+            output["MATCH_NUMBER"] = (decimal)matchNumber;
+
+            if (currentRowIndex != null)
+            {
+                // ALL ROWS PER MATCH: copy source row columns and emit CLASSIFIER
+                if (rows.Count > currentRowIndex.Value)
+                {
+                    foreach (var (col, val) in rows[currentRowIndex.Value].Columns)
+                        output[col] = val;
+                }
+
+                string? classifier = null;
+                foreach (var (variable, indices) in match.Captures)
+                {
+                    if (indices.Contains(currentRowIndex.Value)) { classifier = variable; break; }
+                }
+                output["CLASSIFIER"] = classifier;
+            }
+
             if (rows.Count > 0)
             {
                 foreach (var expr in clause.PartitionBy)

@@ -32,8 +32,8 @@ namespace ETL_SQL.Tests.Integration
             
             Assert.Equal(2, res.Rows.Count);
             Assert.Equal("1", res.Rows[0]["ID"]?.ToString());
-            
-            if (File.Exists(tempXml)) File.Delete(tempXml);
+
+            try { if (File.Exists(tempXml)) File.Delete(tempXml); } catch (IOException) { }
         }
 
         [Fact]
@@ -53,8 +53,8 @@ namespace ETL_SQL.Tests.Integration
             Assert.Equal(2, res.Rows.Count);
             Assert.Equal("100", res.Rows[0]["id"]?.ToString());
             Assert.Equal("Active", res.Rows[0]["status"]?.ToString());
-            
-            if (File.Exists(tempXml)) File.Delete(tempXml);
+
+            try { if (File.Exists(tempXml)) File.Delete(tempXml); } catch (IOException) { }
         }
 
         [Fact]
@@ -76,8 +76,8 @@ namespace ETL_SQL.Tests.Integration
             
             Assert.Equal(2, res.Rows.Count);
             Assert.Equal("P2", res.Rows[1]["ID"]?.ToString());
-            
-            if (File.Exists(tempXml)) File.Delete(tempXml);
+
+            try { if (File.Exists(tempXml)) File.Delete(tempXml); } catch (IOException) { }
         }
 
         private static Script Parse(string source)

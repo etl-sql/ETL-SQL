@@ -59,9 +59,9 @@ namespace ETL_SQL.Core.Data
                     "+" => da + db,
                     "-" => da - db,
                     "*" => da * db,
-                    "/" => db == 0 ? null
+                    "/" => db == 0 ? throw new ExecutionException("Divide by zero error encountered.")
                                : (IsIntegerType(a) && IsIntegerType(b) ? Math.Truncate(da / db) : da / db),
-                    "%" => db == 0 ? null : da % db,
+                    "%" => db == 0 ? throw new ExecutionException("Divide by zero error encountered.") : da % db,
                     _ => null
                 };
             }
