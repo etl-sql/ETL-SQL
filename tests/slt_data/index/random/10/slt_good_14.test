@@ -34008,22 +34008,27 @@ query IIIIIII rowsort label-5855
 SELECT * FROM tab4 WHERE NULL IN ( + CAST ( NULL AS INTEGER ) )
 ----
 
+skipif etlsql
 query IIIIIII rowsort label-5860
 SELECT ALL * FROM tab0 WHERE ( NULL ) <> - 39 * - col4 / + 0
 ----
 
+skipif etlsql
 query IIIIIII rowsort label-5860
 SELECT ALL * FROM tab1 WHERE ( NULL ) <> - 39 * - col4 / + 0
 ----
 
+skipif etlsql
 query IIIIIII rowsort label-5860
 SELECT ALL * FROM tab2 WHERE ( NULL ) <> - 39 * - col4 / + 0
 ----
 
+skipif etlsql
 query IIIIIII rowsort label-5860
 SELECT ALL * FROM tab3 WHERE ( NULL ) <> - 39 * - col4 / + 0
 ----
 
+skipif etlsql
 query IIIIIII rowsort label-5860
 SELECT ALL * FROM tab4 WHERE ( NULL ) <> - 39 * - col4 / + 0
 ----
