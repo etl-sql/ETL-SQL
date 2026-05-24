@@ -212,7 +212,7 @@
 ### General
 - [x] **Is SLT corpus complete** — Audited, cleaned up, and documented in `Docs/Standards/SLT_Coverage.md`.
   - **Corpus**: select1–5 from the SQLite Logic Test suite (~9,700 query records). Strong SELECT, JOIN, aggregate, subquery, NULL, and CASE coverage. See the coverage doc for the full confidence matrix.
-  - **Exclusions documented**: `select4_debug.test` (truncated artifact, deleted), trigger files (deleted — no trigger support), `slt_lang_aggfunc.test` (SQLite-only by design: tests `total()`, `group_concat()`, non-numeric-to-0 coercion — all inapplicable to ETL-SQL), empty `index/` placeholder stubs (deleted).
+  - **Exclusions documented**: `select4_debug.test` (truncated artifact, deleted), trigger files (deleted — no trigger support), `slt_lang_aggfunc.test` (SQLite-only by design: tests `total()`, `group_concat()`, non-numeric-to-0 coercion — all inapplicable to ETL-SQL), `index/` subdirectory (real SLT index-optimization tests retained in repo but excluded from runs — use `CREATE INDEX` on regular tables, not supported in ETL-SQL).
   - **Gap**: DML (UPDATE/DELETE complex forms, INSERT SELECT, MERGE) is lightly covered — evidence files test basic paths only. Suggested additions tracked below.
   - **Release validation**: `CorpusRegressionTests` (6 hand-crafted tests, ~2s) is the CI gate. Full corpus run via `scripts\Test-SltCorpus.ps1` is manual pre-release.
 
