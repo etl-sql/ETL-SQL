@@ -542,6 +542,16 @@ namespace ETL_SQL.App
             bool isStrict = ctx.DoctorStrict;
             bool isFull = string.Equals(ctx.DoctorProfile, "full", StringComparison.OrdinalIgnoreCase);
 
+            var previousLoggerSuppressConsole = logger.SuppressConsole;
+            var previousLoggerJsonMode = logger.IsJsonMode;
+            var previousResultSuppressOutput = ResultFormatter.SuppressOutput;
+            if (isJson)
+            {
+                logger.SuppressConsole = true;
+                logger.IsJsonMode = true;
+                ResultFormatter.SuppressOutput = true;
+            }
+
             if (!isJson)
             {
                 AnsiConsole.Write(new FigletText("ETL-SQL Doctor").Centered().Color(Color.DeepSkyBlue1));
@@ -889,6 +899,10 @@ CREATE PAGE Main AS DASHBOARD (
 
             bool hasFailures = checks.Any(c => c.Status == "FAIL");
             bool hasWarnings = checks.Any(c => c.Status == "WARN");
+
+            logger.SuppressConsole = previousLoggerSuppressConsole;
+            logger.IsJsonMode = previousLoggerJsonMode;
+            ResultFormatter.SuppressOutput = previousResultSuppressOutput;
 
             if (isJson)
             {

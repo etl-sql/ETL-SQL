@@ -15,6 +15,7 @@ namespace ETL_SQL.Engine
     {
         public static bool IsJsonMode { get; set; } = false;
         public static bool EnablePaging { get; set; } = false;
+        public static bool SuppressOutput { get; set; } = false;
         private static int _resultSetCount = 0;
 
         /// <summary>Resets the internal result set count for paging.</summary>
@@ -26,6 +27,7 @@ namespace ETL_SQL.Engine
         /// </summary>
         public static void PrintBatch(DataTable batch, bool isFirst) 
         { 
+            if (SuppressOutput) return;
             if (IsJsonMode) { PrintJson(batch, isFirst); return; } 
             if (batch.Rows.Count == 0) return;
 

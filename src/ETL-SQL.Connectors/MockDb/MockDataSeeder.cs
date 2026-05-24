@@ -19,7 +19,6 @@ namespace ETL_SQL.Connectors.MockDb
     {
         public async Task SeedDataAsync(Dictionary<string, DataTable> tables, Random rng)
         {
-            Console.Error.WriteLine("[TRACE] MockDataSeeder: Starting data generation...");
             // 1. Users
             var users = new DataTable();
             users.SetColumns(new[] { "UserID", "UserName", "Email", "ExternalID", "RegistrationDate", "PreciseTime", "LastLoginOffset" });
@@ -146,7 +145,6 @@ namespace ETL_SQL.Connectors.MockDb
             }
             tables["departments"] = deptTable;
             tables["hr.departments"] = deptTable;
-            Console.Error.WriteLine("[TRACE] MockDataSeeder: Data generation complete.");
         }
     }
 }

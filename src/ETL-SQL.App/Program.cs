@@ -36,15 +36,20 @@ namespace ETL_SQL
 
             try
             {
+                var isDoctorJson = args.Any(a => string.Equals(a, "doctor", StringComparison.OrdinalIgnoreCase))
+                    && args.Any(a => string.Equals(a, "--json", StringComparison.OrdinalIgnoreCase));
+
                 // Diagnostic breadcrumb for IDEs
-                Console.Error.WriteLine("[PROC_START] ETL-SQL Engine process identified.");
+                if (!isDoctorJson)
+                    Console.Error.WriteLine("[PROC_START] ETL-SQL Engine process identified.");
 
                 ServiceProvider = DependencyInjectionSetup.BuildServiceProvider();
-                Console.Error.WriteLine("[DI_READY] Dependency injection logic completed.");
+                if (!isDoctorJson)
+                    Console.Error.WriteLine("[DI_READY] Dependency injection logic completed.");
 
 
                 // Start scheduler only for interactive/daemon modes, not for one-shot script execution
-                bool isOneShot = args.Length > 0 && (args[0] == "run" || args[0] == "--run");
+                bool isOneShot = args.Length > 0 && (args[0] == "run" || args[0] == "--run" || args[0] == "doctor");
                 if (!isOneShot)
                 {
                     try
