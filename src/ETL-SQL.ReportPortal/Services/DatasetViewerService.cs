@@ -125,7 +125,15 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache)
             throw new InvalidOperationException($"Parquet file for dataset '{dataset.Name}' is not available.");
 
         var columns = ParseColumnSchema(dataset.ColumnSchema);
-        var rows    = await ReadParquetAsync(dataset.ParquetFilePath, columns);
+        List<Dictionary<string, object?>> rows;
+        try
+        {
+            rows = await ReadParquetAsync(dataset.ParquetFilePath, columns);
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
+            throw new InvalidOperationException($"Failed to read dataset '{dataset.Name}': {ex.Message}", ex);
+        }
 
         var result = (rows, columns);
         cache.Set(cacheKey, result, CacheOptions);

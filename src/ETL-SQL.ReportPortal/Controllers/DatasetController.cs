@@ -19,7 +19,6 @@ public class DatasetController(
     IDatasetRegistry    registry,
     AuditService        audit,
     ExecutionJobService jobService,
-    PortalConfig        portalConfig,
     DatasetViewerService viewer) : ControllerBase
 {
     private int  CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -251,19 +250,20 @@ public class DatasetController(
         // Mark stale so the engine re-materialises on next CREATE DATASET hit
         await registry.SetStale(dataset.Name, dataset.FolderPath);
 
-        // If we have an owning report with an accessible script, queue a real engine refresh
-        if (dataset.OwningReport is not null
-            && PortalPathGuard.TryResolveScript(portalConfig, dataset.OwningReport.ScriptPath, out var scriptPath))
+        // If we have an owning report, queue a real engine refresh.
+        // Path security is enforced inside RunJobAsync — no need to pre-validate here.
+        if (dataset.OwningReport is not null)
         {
-            var jobId = jobService.EnqueueRefresh(dataset.OwningReport.Id, CurrentUserId, scriptPath);
+            var jobId = jobService.EnqueueRefresh(dataset.OwningReport.Id, CurrentUserId, dataset.OwningReport.ScriptPath);
             await audit.LogAsync(CurrentUserId, "REFRESH_DATASET", "Dataset", id.ToString(), dataset.Name);
             Response.Headers.Append("Location", $"/api/jobs/{jobId}");
             return Accepted(new { triggered = true, jobId });
         }
 
-        // No owning report (or script inaccessible) — dataset is stale and will refresh on next script run
+        // No owning report — dataset was created outside the Portal (e.g. ad-hoc CLI run).
+        // Mark stale so it re-materialises when the producing script next executes.
         await audit.LogAsync(CurrentUserId, "REFRESH_DATASET", "Dataset", id.ToString(), dataset.Name + " (stale-only)");
-        return Accepted(new { triggered = false, message = $"Dataset '{dataset.Name}' marked stale. It will re-materialise on next script execution." });
+        return Accepted(new { triggered = false, message = $"Dataset '{dataset.Name}' has no linked report. Run the script that produced it to refresh the data." });
     }
 
     // ── GET /api/datasets/{id}/refresh-status ────────────────────────────────
