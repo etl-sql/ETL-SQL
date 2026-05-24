@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -136,19 +137,68 @@ namespace ETL_SQL.Tests.Scale
         private static int CountFiles(string dir)
             => Directory.Exists(dir) ? Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Length : 0;
 
+        private static double RowScale()
+        {
+            var raw = Environment.GetEnvironmentVariable("CERT_ROW_SCALE");
+            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var scale) || scale <= 0)
+            {
+                return 1.0;
+            }
+
+            return scale;
+        }
+
+        private static string MemoryTier(double rowScale)
+        {
+            if (rowScale <= 1.0)
+            {
+                return "Smoke";
+            }
+
+            return rowScale <= 10.0 ? "Standard" : "Stress";
+        }
+
+        private static double MemoryBoundMB(int rowCount, double rowScale)
+        {
+            var raw = Environment.GetEnvironmentVariable("CERT_MEMORY_BOUND_MB");
+            if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var configured) && configured > 0)
+            {
+                return Math.Round(configured, 1);
+            }
+
+            var bound = MemoryTier(rowScale) switch
+            {
+                "Smoke" => Math.Max(512.0, rowCount * 0.02),
+                "Standard" => Math.Max(2_048.0, rowCount * 0.012),
+                _ => Math.Max(8_192.0, rowCount * 0.008)
+            };
+
+            return Math.Round(bound, 1);
+        }
+
         private void EmitMetrics(string scenario, int rowCount, long elapsedMs,
             long spillBytes, long resultRows, decimal checksum, bool passed)
         {
+            var rowScale = RowScale();
+            var memoryTier = MemoryTier(rowScale);
+            var managedMemoryMB = Math.Round(GC.GetTotalMemory(forceFullCollection: true) / (1024.0 * 1024.0), 1);
+            var memoryBoundMB = MemoryBoundMB(rowCount, rowScale);
+
+            Assert.True(managedMemoryMB <= memoryBoundMB,
+                $"{scenario} managed memory {managedMemoryMB} MB exceeded {memoryTier} tier bound {memoryBoundMB} MB. " +
+                "Set CERT_MEMORY_BOUND_MB to an explicit machine-specific bound when certifying on constrained agents.");
+
             var metrics = new
             {
                 scenario,
-                tier = "Smoke",
+                tier = memoryTier,
                 rowCount,
                 elapsedMs,
                 spillBytes,
                 resultRows,
                 checksum,
-                peakManagedMemoryMB = Math.Round(GC.GetTotalMemory(false) / (1024.0 * 1024.0), 1),
+                peakManagedMemoryMB = managedMemoryMB,
+                memoryBoundMB,
                 passed
             };
             _out.WriteLine("CERT_METRIC:" + JsonSerializer.Serialize(metrics));

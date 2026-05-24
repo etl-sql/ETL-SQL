@@ -216,6 +216,62 @@ namespace ETL_SQL.Tests.Analysis
             Assert.Empty(results);
         }
 
+        // ── FullyMaterializingDmlRule ────────────────────────────────────────
+
+        [Fact]
+        public async Task FullyMaterializingDml_UpdateWithWhere_IsWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new FullyMaterializingDmlRule());
+            var script = Parse("UPDATE #data SET Name = 'x' WHERE Id = 1;");
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.Single(results);
+            Assert.Equal(LintSeverity.Warning, results[0].Severity);
+            Assert.Contains("fully materializes", results[0].Message);
+        }
+
+        [Fact]
+        public async Task FullyMaterializingDml_DeleteWithWhere_IsWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new FullyMaterializingDmlRule());
+            var script = Parse("DELETE FROM #data WHERE Id = 1;");
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.Single(results);
+            Assert.Contains("DELETE", results[0].Message);
+        }
+
+        [Fact]
+        public async Task FullyMaterializingDml_Merge_IsWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new FullyMaterializingDmlRule());
+            var script = Parse(@"
+                MERGE INTO #Target AS T
+                USING #Source AS S
+                ON T.Id = S.Id
+                WHEN MATCHED THEN UPDATE SET T.Name = S.Name
+                WHEN NOT MATCHED THEN INSERT (Id, Name) VALUES (S.Id, S.Name);
+            ");
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.Single(results);
+            Assert.Contains("MERGE", results[0].Message);
+        }
+
+        [Fact]
+        public async Task FullyMaterializingDml_InsideBlock_IsWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new FullyMaterializingDmlRule());
+            var script = Parse("IF 1 = 1 BEGIN DELETE FROM #data WHERE Id = 1; END");
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.Single(results);
+        }
+
         [Fact]
         public async Task DeleteWithoutWhere_InsideBlock_IsError()
         {

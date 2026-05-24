@@ -65,7 +65,9 @@ Reports are written to `./certification-results/`.
 `MERGE`, `UPDATE`, and `DELETE` load the full match set into memory. For large tables:
 - Prefer `MERGE`/`UPDATE`/`DELETE` with selective `WHERE` clauses.
 - Use batched loops for large-scale mutations.
-- Report a bug if memory usage exceeds 2× the dataset size.
+- Treat these as uncapped operations until they have a spill-backed implementation.
+
+The linter emits `FullyMaterializingDml` warnings for these statements so scripts do not accidentally rely on large-data boundedness that is not certified.
 
 ---
 
@@ -91,6 +93,20 @@ Set `CERT_ROW_SCALE` environment variable or pass `-RowCountScale` to the script
 
 The test suite reads `CERT_ROW_SCALE` directly; the PowerShell runner sets it from `-RowCountScale` before invoking `dotnet test`.
 
+### Memory Bounds
+
+Every certification scenario asserts that managed memory remains below a documented tier bound. The emitted `CERT_METRIC` JSON and generated Markdown report include both observed managed memory and the enforced bound.
+
+Default bounds are intentionally machine-profile oriented:
+
+| Row Scale | Effective Memory Tier | Default Bound |
+| :--- | :--- | :--- |
+| `<= 1` | Smoke | `max(512 MB, rowCount * 0.02 MB)` |
+| `> 1` and `<= 10` | Standard | `max(2048 MB, rowCount * 0.012 MB)` |
+| `> 10` | Stress | `max(8192 MB, rowCount * 0.008 MB)` |
+
+Set `CERT_MEMORY_BOUND_MB` to override the default when certifying on a constrained or intentionally oversized validation agent. The override is treated as the hard assertion limit for every scenario in that run.
+
 ---
 
 ## Pending Certification Coverage
@@ -98,8 +114,6 @@ The test suite reads `CERT_ROW_SCALE` directly; the PowerShell runner sets it fr
 The following acceptance items remain open before ETL-SQL can claim complete large-data certification:
 
 - Provider-backed large-data runs beyond in-memory sources.
-- Documented memory bounds enforced by test assertions.
-- `MERGE`, `UPDATE`, and `DELETE` boundedness certification or explicit warnings in the linter/runtime.
 
 ---
 

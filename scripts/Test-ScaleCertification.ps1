@@ -99,17 +99,17 @@ $mdLines = @(
     "",
     "## Results",
     "",
-    "| Scenario | Rows | Elapsed (ms) | Spill (bytes) | Result Rows | Memory (MB) | Pass |",
-    "| :--- | ---: | ---: | ---: | ---: | ---: | :---: |"
+    "| Scenario | Rows | Elapsed (ms) | Spill (bytes) | Result Rows | Memory (MB) | Memory Bound (MB) | Pass |",
+    "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |"
 )
 
 foreach ($m in $metrics) {
     $pass = if ($m.passed) { 'OK' } else { 'FAIL' }
-    $mdLines += "| $($m.scenario) | $($m.rowCount) | $($m.elapsedMs) | $($m.spillBytes) | $($m.resultRows) | $($m.peakManagedMemoryMB) | $pass |"
+    $mdLines += "| $($m.scenario) | $($m.rowCount) | $($m.elapsedMs) | $($m.spillBytes) | $($m.resultRows) | $($m.peakManagedMemoryMB) | $($m.memoryBoundMB) | $pass |"
 }
 
 if ($metrics.Count -eq 0) {
-    $mdLines += "| _No metrics collected — check test output_ | | | | | | |"
+    $mdLines += "| _No metrics collected — check test output_ | | | | | | | |"
 }
 
 $mdLines += ""
