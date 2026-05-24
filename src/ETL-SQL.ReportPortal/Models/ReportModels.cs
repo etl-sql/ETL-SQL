@@ -164,7 +164,8 @@ public record ReportDependencyDto(
     IReadOnlyList<ReportDependencyManifestDatasetDto> ManifestDatasets,
     IReadOnlyList<ReportDependencyDatasetDto> RegisteredDatasets,
     IReadOnlyList<ReportDependencyRefreshJobDto> RefreshJobs,
-    IReadOnlyList<ReportDependencySourceDto> Sources);
+    IReadOnlyList<ReportDependencySourceDto> Sources,
+    IReadOnlyList<ReportDependencyLineageDto> LineageEntries);
 
 public record ReportDependencyReportDto(
     int Id,
@@ -205,6 +206,15 @@ public record ReportDependencySourceDto(
     string? Connection,
     string? ObjectName,
     string Kind);
+
+public record ReportDependencyLineageDto(
+    string Target,
+    string? TargetColumn,
+    string Operation,
+    IReadOnlyList<string> Sources,
+    IReadOnlyList<string> SourceColumns,
+    IReadOnlyDictionary<string, string> Tags,
+    int Line);
 
 public record ReportHistoryDto(
     ReportDependencyReportDto Report,

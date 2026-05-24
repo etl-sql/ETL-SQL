@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -45,6 +46,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             context.ReportContext.VisualDefinitions[stmt.Name] = stmt;
+            new LineageManager(context.LineageTracker).RecordCreateVisualLineage(stmt);
 
             _logger.Debug("Visual '{VisualName}' ({VisualType}) registered.", stmt.Name, stmt.VisualType);
             context.Log($"Visual '{stmt.Name}' {(alreadyExists ? "updated" : "created")}.");

@@ -9,6 +9,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -63,6 +64,7 @@ namespace ETL_SQL.Engine.Handlers
                         stmt.TempTableName, existing!.LastRefresh);
                     await LoadFromParquet(existing.ParquetFilePath, stmt.TempTableName, stmt, context);
                     RegisterReportContext(stmt, context);
+                    new LineageManager(context.LineageTracker).RecordCreateDatasetLineage(stmt);
                     return;
                 }
             }
@@ -77,6 +79,7 @@ namespace ETL_SQL.Engine.Handlers
 
             // ── 6. Register AST in report context (for ManifestBuilder) ───────────
             RegisterReportContext(stmt, context);
+            new LineageManager(context.LineageTracker).RecordCreateDatasetLineage(stmt);
 
             var intervalNote = string.IsNullOrWhiteSpace(stmt.RefreshInterval) ? ""
                 : $" (refresh every {stmt.RefreshInterval})";

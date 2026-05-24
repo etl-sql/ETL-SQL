@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
+using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
@@ -369,6 +370,7 @@ public class ReportsController : ControllerBase
             sourceNames.Add(source);
         foreach (var source in registeredDatasets.SelectMany(d => ParseSourceTables(d.SourceQuery)))
             sourceNames.Add(source);
+        var lineageEntries = await ReadScriptLineageAsync(report.ScriptPath);
 
         var dto = new ReportDependencyDto(
             new ReportDependencyReportDto(report.Id, report.Name, report.Folder?.Path ?? "", report.ScriptPath),
@@ -376,7 +378,8 @@ public class ReportsController : ControllerBase
             manifestDatasets,
             datasetDtos,
             jobs,
-            BuildSourceDtos(sourceNames.OrderBy(s => s, StringComparer.OrdinalIgnoreCase), "ScriptSource"));
+            BuildSourceDtos(sourceNames.OrderBy(s => s, StringComparer.OrdinalIgnoreCase), "ScriptSource"),
+            lineageEntries);
 
         return Ok(dto);
     }
@@ -1036,6 +1039,38 @@ public class ReportsController : ControllerBase
             return Array.Empty<string>();
 
         return ParseSourceTables(await System.IO.File.ReadAllTextAsync(resolvedScriptPath));
+    }
+
+    private async Task<IReadOnlyList<ReportDependencyLineageDto>> ReadScriptLineageAsync(string scriptPath)
+    {
+        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
+            return Array.Empty<ReportDependencyLineageDto>();
+        if (!System.IO.File.Exists(resolvedScriptPath))
+            return Array.Empty<ReportDependencyLineageDto>();
+
+        try
+        {
+            var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);
+            var tokens = new Lexer(scriptText).Tokenize();
+            var script = new CoreParser(tokens, scriptText).Parse();
+            var tracker = new LineageTracker(ETL_SQL.Common.NullLogger.Instance);
+            new LineageAnalyzer(tracker).Analyze(script);
+
+            return tracker.GetFullLineage()
+                .Select(e => new ReportDependencyLineageDto(
+                    e.TargetTable,
+                    e.TargetColumn,
+                    e.Operation,
+                    e.SourceTables.ToList(),
+                    e.SourceColumns.ToList(),
+                    e.Metadata,
+                    e.Line))
+                .ToList();
+        }
+        catch
+        {
+            return Array.Empty<ReportDependencyLineageDto>();
+        }
     }
 
     private async Task<string?> ReadCurrentScriptHashAsync(string scriptPath)

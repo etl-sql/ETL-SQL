@@ -150,9 +150,11 @@
   - Remaining work split below: portal/report views for lineage; `SHOW REPORT DEPENDENCIES` lineage enrichment; cross-run lineage for `CREATE DATASET`/`CREATE VISUAL`/published bundles.
 
 - [ ] **Persistent lineage and stewardship catalog — report/portal integration**
-  - Add portal/report views for lineage and tags, not just ETL output tables.
-  - Enrich `SHOW REPORT DEPENDENCIES` with lineage/tag context where available.
-  - Add cross-run lineage continuity for `CREATE DATASET`, `CREATE VISUAL`, published bundles, and scheduled report refresh jobs.
+  - Added executed-script lineage records for runtime `CREATE DATASET` and `CREATE VISUAL` so report objects can be persisted by the existing lineage catalog path.
+  - Added lineage/tag enrichment to report dependencies: `/api/reports/{id}/dependencies`, `SHOW REPORT DEPENDENCIES`, and the report viewer Dependencies modal now expose script-derived lineage entries.
+  - Added lineage catalog persistence for in-process portal report executions/refreshes after snapshot rebuild.
+  - Remaining: add broader portal/report catalog views for lineage and tags, not just the dependency modal.
+  - Remaining: add cross-run lineage continuity for published bundles and remote orchestrator-backed report refresh jobs.
   - Add tests answering stewardship questions:
     - What scripts write to this table?
     - What reports use this dataset/table/column?

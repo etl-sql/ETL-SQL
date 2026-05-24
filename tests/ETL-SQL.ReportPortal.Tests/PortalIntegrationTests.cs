@@ -398,9 +398,10 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var folderId = folder!["id"]!.GetValue<int>();
 
+        var visualName = $"ExecLineage_{Guid.NewGuid():N}";
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "execute_report.rptsql");
-        await File.WriteAllTextAsync(scriptPath, @"
-CREATE VISUAL Total AS CARD (
+        await File.WriteAllTextAsync(scriptPath, $@"
+CREATE VISUAL {visualName} AS CARD (
     SOURCE = (SELECT 42 AS Answer),
     MAPPINGS (VALUE = Answer)
 );
@@ -451,6 +452,16 @@ CREATE VISUAL Total AS CARD (
         Assert.NotNull(listed["snapshotBuiltAt"]);
         Assert.NotNull(listed["lastViewedAt"]);
         Assert.True(listed["lastRefreshDurationMs"]!.GetValue<long>() >= 0);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var catalog = scope.ServiceProvider.GetRequiredService<ILineageCatalogStore>();
+            var lineage = (await catalog.GetHistoryForTableAsync($"report:{visualName}", 20)).ToList();
+            Assert.Contains(lineage, e =>
+                e.Operation == "CREATE VISUAL" &&
+                e.JobName == $"report:{reportId}:{jobId}" &&
+                e.ScriptPath == scriptPath);
+        }
 
         var recentRes = await AuthGet(token, "/api/catalog/recent?limit=5");
         Assert.Equal(HttpStatusCode.OK, recentRes.StatusCode);
@@ -545,7 +556,7 @@ CREATE VISUAL Total AS CARD (
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"dependency_{Guid.NewGuid():N}.rptsql");
         await File.WriteAllTextAsync(scriptPath, @"
-SELECT *
+SELECT OrderId /* @owner: SalesOps; */
 INTO #stage
 FROM sales.Orders;
 
@@ -622,6 +633,10 @@ CREATE VISUAL Total AS CARD (
         Assert.Equal("Sales Summary", body["registeredDatasets"]![0]!["name"]!.GetValue<string>());
         Assert.Equal("refresh_sales_summary", body["refreshJobs"]![0]!["orchestratorJobName"]!.GetValue<string>());
         Assert.Contains(body["sources"]!.AsArray(), n => n!["name"]!.GetValue<string>() == "erp.InvoiceLines");
+        Assert.Contains(body["lineageEntries"]!.AsArray(), n =>
+            n!["target"]!.GetValue<string>() == "#stage" &&
+            n["targetColumn"]!.GetValue<string>() == "OrderId" &&
+            n["tags"]!["owner"]!.GetValue<string>() == "SalesOps");
     }
 
     [Fact]

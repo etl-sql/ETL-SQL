@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using ETL_SQL.Engine;
@@ -438,6 +439,34 @@ namespace ETL_SQL.Tests.Engine
                 "CREATE OR ALTER DATASET &altds AS (SELECT 2 AS n);" +
                 "SELECT * FROM &altds;");
             Assert.NotNull(eval.LastResult);
+        }
+
+        [Fact]
+        public async Task CreateDataset_RecordsReportObjectLineage()
+        {
+            var eval = await RunAndGet(
+                "SELECT 1 AS amount INTO #orders;" +
+                "CREATE DATASET &daily_sales AS (SELECT amount FROM #orders);");
+
+            var entries = eval.LineageTracker.GetFullLineage().ToList();
+            Assert.Contains(entries, e =>
+                e.Operation == "CREATE DATASET" &&
+                e.TargetTable == "dataset:&daily_sales" &&
+                e.SourceTables.Contains("#orders", StringComparer.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public async Task CreateVisual_RecordsReportObjectLineage()
+        {
+            var eval = await RunAndGet(
+                "SELECT 1 AS amount INTO #sales;" +
+                "CREATE VISUAL SalesChart AS BAR (SOURCE = #sales, MAPPINGS (x = amount, y = amount));");
+
+            var entries = eval.LineageTracker.GetFullLineage().ToList();
+            Assert.Contains(entries, e =>
+                e.Operation == "CREATE VISUAL" &&
+                e.TargetTable == "report:SalesChart" &&
+                e.SourceTables.Contains("#sales", StringComparer.OrdinalIgnoreCase));
         }
 
         // ── ADDITIONAL LOW-COVERAGE HANDLERS ─────────────────────────────────

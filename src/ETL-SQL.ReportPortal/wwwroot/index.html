@@ -1045,6 +1045,8 @@ function renderDependencies(data) {
     <tr><td>${esc(j.orchestratorJobName)}</td><td>${esc(j.refreshInterval || 'Manual')}</td><td>${esc(j.lastRefreshedAt ? formatBuiltAt(j.lastRefreshedAt) : 'Never')}</td></tr>`).join('');
   const sourceRows = (data.sources || []).map(s => `
     <tr><td>${esc(s.connection || 'Engine')}</td><td>${esc(s.objectName || s.name)}</td><td>${esc(s.kind)}</td></tr>`).join('');
+  const lineageRows = (data.lineageEntries || []).map(e => `
+    <tr><td>${esc(e.targetColumn ? `${e.target}.${e.targetColumn}` : e.target)}</td><td>${esc(e.operation)}</td><td>${esc((e.sources || []).join(', ') || 'None')}</td><td>${esc(formatTags(e.tags))}</td></tr>`).join('');
 
   return `
     <div class="dependency-summary">
@@ -1054,7 +1056,13 @@ function renderDependencies(data) {
     ${renderDependencyTable('Manifest Datasets', ['Dataset', 'Rows', 'Refresh', 'TTL'], manifestRows)}
     ${renderDependencyTable('Registered Datasets', ['Dataset', 'Folder', 'Access', 'Rows', 'Sources'], registryRows)}
     ${renderDependencyTable('Refresh Jobs', ['Job', 'Interval', 'Last Refresh'], jobRows)}
-    ${renderDependencyTable('Sources', ['Connection', 'Object', 'Kind'], sourceRows)}`;
+    ${renderDependencyTable('Sources', ['Connection', 'Object', 'Kind'], sourceRows)}
+    ${renderDependencyTable('Lineage and Tags', ['Target', 'Operation', 'Sources', 'Tags'], lineageRows)}`;
+}
+
+function formatTags(tags) {
+  if (!tags || typeof tags !== 'object') return '';
+  return Object.entries(tags).map(([key, value]) => `${key}: ${value}`).join(', ');
 }
 
 function renderDependencyTable(title, headers, rows) {

@@ -3,6 +3,8 @@ using System.Security.Cryptography;
 using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.ReportPortal.Services;
@@ -162,6 +164,7 @@ public class ExecutionJobService : IDisposable
                     await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));
 
                 var manifest = await svc.RebuildAsync().WaitAsync(cts.Token);
+                await PersistReportLineageAsync(job, scriptPath, svc.CurrentLineageTracker);
 
                 // Save manifest to portal's SnapshotDirectory.
                 Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
@@ -242,6 +245,22 @@ public class ExecutionJobService : IDisposable
             _gate.Release();
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
         }
+    }
+
+    private async Task PersistReportLineageAsync(ExecutionJob job, string scriptPath, ILineageTracker? tracker)
+    {
+        var entries = tracker?.GetFullLineage().ToList();
+        if (entries is not { Count: > 0 }) return;
+
+        using var scope = _scopeFactory.CreateScope();
+        var catalog = scope.ServiceProvider.GetService<ILineageCatalogStore>();
+        if (catalog is null) return;
+
+        await catalog.SaveLineageAsync(
+            entries,
+            $"report:{job.ReportId}:{job.Id}",
+            scriptPath,
+            DateTime.UtcNow);
     }
 
     private async Task UpdateReportRefreshStatusAsync(ExecutionJob job, string status, string? error)

@@ -95,5 +95,35 @@ namespace ETL_SQL.Engine.Services
                 _tracker.Record(intoName, statement.GetSourceTables(), "SELECT INTO", line: statement.Line, column: statement.Column);
             }
         }
+
+        public void RecordCreateDatasetLineage(CreateDatasetStatement statement)
+        {
+            _tracker.Record(
+                $"dataset:{statement.TempTableName}",
+                statement.SourceQuery.GetSourceTables(),
+                "CREATE DATASET",
+                line: statement.Line,
+                column: statement.Column,
+                endLine: statement.EndLine,
+                endColumn: statement.EndColumn);
+        }
+
+        public void RecordCreateVisualLineage(CreateVisualStatement statement)
+        {
+            var sources = statement.Source.IsInlineSelect && statement.Source.InlineSelect != null
+                ? statement.Source.InlineSelect.GetSourceTables()
+                : string.IsNullOrWhiteSpace(statement.Source.TempTableName)
+                    ? Enumerable.Empty<string>()
+                    : new[] { statement.Source.TempTableName };
+
+            _tracker.Record(
+                $"report:{statement.Name}",
+                sources,
+                "CREATE VISUAL",
+                line: statement.Line,
+                column: statement.Column,
+                endLine: statement.EndLine,
+                endColumn: statement.EndColumn);
+        }
     }
 }

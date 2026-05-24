@@ -94,6 +94,8 @@ namespace ETL_SQL.ReportHosting
         /// <summary>Current parameter values (set by slicer interactions).</summary>
         public IReadOnlyDictionary<string, string> Parameters => _parameters;
 
+        public ILineageTracker? CurrentLineageTracker => _evaluator?.LineageTracker;
+
         private bool IsPaginatedPage(string pageName) =>
             _manifest?.Pages.Any(p =>
                 p.Name.Equals(pageName, StringComparison.OrdinalIgnoreCase) &&
