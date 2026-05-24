@@ -253,6 +253,7 @@ namespace ETL_SQL.Core.Services
             "format"            => "**@format** `YYYY-MM-DD|E.164|...` — Expected format or pattern.",
             "source_system"     => "**@source_system** `Salesforce|SAP|...` — Originating system.",
             "source_table"      => "**@source_table** `dbo.Orders` — Originating table.",
+            "source_column"     => "**@source_column** `cust_id` — Original column name in the source system before any ETL renaming.",
             "load_pattern"      => "**@load_pattern** `full_load|incremental|streaming` — How data is loaded.",
             _                   => null
         };

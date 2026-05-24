@@ -129,7 +129,7 @@ namespace ETL_SQL.Common
             // Documentation
             "d", "example", "unit", "format",
             // Source
-            "source_system", "source_table", "load_pattern"
+            "source_system", "source_table", "source_column", "load_pattern"
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)

@@ -53,7 +53,7 @@ namespace ETL_SQL.Orchestrator.Execution
                     try
                     {
                         var lineage = LastEvaluator.LineageTracker.GetFullLineage().ToList();
-                        if (lineage.Count > 0)
+                        if (lineage.Count > 0 && jobName != null)
                             await _catalog.SaveLineageAsync(lineage, jobName, null, runAt);
                     }
                     catch (Exception ex)

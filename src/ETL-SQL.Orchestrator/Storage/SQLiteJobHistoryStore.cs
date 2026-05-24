@@ -5,8 +5,11 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
+using ETL_SQL.Analysis.Lineage;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Orchestrator.Storage
 {
@@ -534,9 +537,60 @@ namespace ETL_SQL.Orchestrator.Storage
                 throw;
             }
 
-            return new BundleVersionInfo(request.BundleName, nextVersion, NormalizeVirtualPath(request.EntryPath),
+            var versionInfo = new BundleVersionInfo(request.BundleName, nextVersion, NormalizeVirtualPath(request.EntryPath),
                 request.ContentHash, publishedAt, request.Publisher, request.Description);
+            var lineage = BuildBundleLineage(request, versionInfo);
+            if (lineage.Count > 0)
+            {
+                await SaveLineageAsync(
+                    lineage,
+                    $"bundle:{versionInfo.BundleName}@{versionInfo.Version}",
+                    $"orch://{versionInfo.BundleName}@{versionInfo.Version}/{versionInfo.EntryPath}",
+                    versionInfo.PublishedAt);
+            }
+
+            return versionInfo;
         }
+
+        private static IReadOnlyList<LineageEntry> BuildBundleLineage(BundlePublishRequest request, BundleVersionInfo version)
+        {
+            var entries = new List<LineageEntry>();
+            foreach (var file in request.Files.Where(IsScriptFile))
+            {
+                var virtualPath = NormalizeVirtualPath(file.VirtualPath);
+                try
+                {
+                    var tokens = new Lexer(file.Content).Tokenize();
+                    var script = new Parser(tokens, file.Content).Parse();
+                    var tracker = new LineageTracker(NullLogger.Instance);
+                    tracker.GlobalMetadata["bundle"] = version.BundleName;
+                    tracker.GlobalMetadata["bundle_version"] = version.Version.ToString();
+                    tracker.GlobalMetadata["bundle_path"] = virtualPath;
+                    new LineageAnalyzer(tracker).Analyze(script);
+
+                    foreach (var entry in tracker.GetFullLineage())
+                    {
+                        entry.SourceFile = virtualPath;
+                        entry.Metadata["bundle"] = version.BundleName;
+                        entry.Metadata["bundle_version"] = version.Version.ToString();
+                        entry.Metadata["bundle_path"] = virtualPath;
+                        entries.Add(entry);
+                    }
+                }
+                catch
+                {
+                    // Bundle content has already been accepted by the publish path. Lineage is best-effort.
+                }
+            }
+
+            return entries;
+        }
+
+        private static bool IsScriptFile(BundlePublishFile file) =>
+            file.ContentType.Equals("application/etlsql", StringComparison.OrdinalIgnoreCase)
+            || file.ContentType.Equals("application/rptsql", StringComparison.OrdinalIgnoreCase)
+            || file.VirtualPath.EndsWith(".etlsql", StringComparison.OrdinalIgnoreCase)
+            || file.VirtualPath.EndsWith(".rptsql", StringComparison.OrdinalIgnoreCase);
 
         public async Task<BundleVersionInfo?> GetLatestVersionAsync(string bundleName)
         {
@@ -756,6 +810,24 @@ namespace ETL_SQL.Orchestrator.Storage
                 ORDER BY RunAt DESC, Id DESC
                 LIMIT $limit;";
             cmd.Parameters.AddWithValue("$pattern", pattern);
+            cmd.Parameters.AddWithValue("$limit", limit);
+            return await ReadLineageHistoryAsync(cmd);
+        }
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForJobAsync(string jobName, int limit = 100)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = @"
+                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
+                       SourceTables, Operation, Tags, SourceFile, Line
+                FROM LineageHistory
+                WHERE JobName = $jobName COLLATE NOCASE
+                ORDER BY RunAt DESC, Id DESC
+                LIMIT $limit;";
+            cmd.Parameters.AddWithValue("$jobName", jobName);
             cmd.Parameters.AddWithValue("$limit", limit);
             return await ReadLineageHistoryAsync(cmd);
         }

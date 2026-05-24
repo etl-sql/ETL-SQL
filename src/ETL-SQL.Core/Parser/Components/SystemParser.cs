@@ -753,6 +753,7 @@ namespace ETL_SQL.Core.Parser.Components
                     LineageStatement lin         => lin with { IntoTable = tempTable },
                     ShowLineageHistoryForTableStatement slht => slht with { IntoTable = tempTable },
                     ShowLineageHistoryForTagStatement slhg  => slhg with { IntoTable = tempTable },
+                    ShowLineageHistoryForJobStatement slhj  => slhj with { IntoTable = tempTable },
                     _                            => stmt
                 };
             }
@@ -835,7 +836,14 @@ namespace ETL_SQL.Core.Parser.Components
                 var limit = ParseOptionalLimit();
                 return new ShowLineageHistoryForTagStatement { TagKey = tagKey, TagValue = tagValue, At = at, Limit = limit };
             }
-            throw new SyntaxException("Expected TABLE or TAG after SHOW LINEAGE HISTORY FOR", _parser.Current.Line, _parser.Current.Column);
+            if (Match(TokenType.JOB))
+            {
+                var jobName = ConsumeIdentifier("Expected job name after SHOW LINEAGE HISTORY FOR JOB").Value;
+                string? at = Match(TokenType.AT) ? ConsumeIdentifier("Expected connection name after AT").Value : null;
+                var limit = ParseOptionalLimit();
+                return new ShowLineageHistoryForJobStatement { JobName = jobName, At = at, Limit = limit };
+            }
+            throw new SyntaxException("Expected TABLE, TAG, or JOB after SHOW LINEAGE HISTORY FOR", _parser.Current.Line, _parser.Current.Column);
         }
 
         private LineageStatement ParseShowLineageCore(Token startToken)

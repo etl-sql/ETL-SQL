@@ -1698,6 +1698,14 @@ namespace ETL_SQL.Core
         public string? At { get; set; }
     }
 
+    public record ShowLineageHistoryForJobStatement : Statement
+    {
+        public string JobName { get; init; } = string.Empty;
+        public int? Limit { get; init; }
+        public string? IntoTable { get; init; }
+        public string? At { get; set; }
+    }
+
     public record ShowVariablesStatement : Statement
     {
         public bool IsLocalOnly { get; init; }

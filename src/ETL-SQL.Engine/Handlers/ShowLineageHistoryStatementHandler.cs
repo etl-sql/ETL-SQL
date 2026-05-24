@@ -87,6 +87,45 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 
+    public class ShowLineageHistoryForJobStatementHandler : IStatementHandler
+    {
+        public Type SupportedStatementType => typeof(ShowLineageHistoryForJobStatement);
+        private readonly ILineageCatalogStore _catalog;
+
+        public ShowLineageHistoryForJobStatementHandler(ILineageCatalogStore catalog)
+        {
+            _catalog = catalog;
+        }
+
+        public async Task Execute(Statement statement, IExecutionContext context)
+        {
+            var stmt = (ShowLineageHistoryForJobStatement)statement;
+
+            if (stmt.At != null)
+            {
+                await LineageHistoryRouting.RouteToRemoteAsync(stmt, stmt.At, context);
+                return;
+            }
+
+            var entries = await _catalog.GetHistoryForJobAsync(stmt.JobName, stmt.Limit ?? 100);
+            var table = await LineageHistoryRouting.BuildTable(entries);
+
+            if (stmt.IntoTable != null)
+            {
+                if (!context.Connections.ContainsKey(stmt.IntoTable))
+                    context.Connections[stmt.IntoTable] = new InMemoryDataSource();
+                var dest = await context.ResolveDataSourceAsync(new TableReference(stmt.IntoTable));
+                await dest.WriteBatches(new[] { table }.ToAsyncEnumerable());
+            }
+            else
+            {
+                context.LastResult = table;
+                context.LastResultSets.Add(table);
+                context.OnResultSet?.Invoke(table);
+            }
+        }
+    }
+
     internal static class LineageHistoryRouting
     {
         internal static async Task RouteToRemoteAsync(Statement stmt, string atConn, IExecutionContext context)

@@ -157,6 +157,7 @@ These tags carry the highest governance weight. They are inherited through trans
 |-----|------|--------|---------|
 | `@source_system` | string | free-form | The originating system. E.g. `Salesforce`, `SAP`, `Snowflake`, `Oracle-ERP`. |
 | `@source_table` | string | free-form | The original table name in the source system, before any ETL renaming. |
+| `@source_column` | string | free-form | The original column name in the source system, before any ETL renaming. E.g. `cust_id` for a column renamed to `customer_id`. |
 | `@load_pattern` | enum | `full` `incremental` `cdc` | How the data was loaded. `cdc` = change data capture. |
 
 ---
@@ -355,7 +356,7 @@ Configure automatic export on every script run in `appsettings.json`:
 
 ## Cross-Run Lineage Catalog
 
-Every lineage event recorded during an orchestrated job run is automatically persisted to the shared catalog database (`etlsql.db`, the same store used for job history). Ad-hoc script runs are also stored, with `JobName = NULL`. This gives you cross-run stewardship queries that span many executions.
+Every lineage event recorded during a named orchestrated job run is automatically persisted to the shared catalog database (`etlsql.db`, the same store used for job history). Ad-hoc script runs are not stored. This gives you cross-run stewardship queries that span many job executions.
 
 ### SHOW LINEAGE HISTORY FOR TABLE
 
@@ -420,7 +421,39 @@ SHOW LINEAGE HISTORY FOR TAG classification = 'restricted' INTO #restricted;
 SELECT DISTINCT TargetTable FROM #restricted;
 ```
 
-> **Scope:** Only in-process `ScriptExecutorAdapter` runs persist to the local catalog (scheduled jobs and inline CLI executions). `ProcessJobExecutor` (out-of-process) runs do not currently write to the catalog. When the Orchestrator is a remote server, use `AT <connection>` to query its catalog directly.
+> **Scope:** Only named jobs executed via `ScriptExecutorAdapter` persist to the local catalog. Ad-hoc CLI runs and `ProcessJobExecutor` (out-of-process) runs do not write to the catalog. When the Orchestrator is a remote server, use `AT <connection>` to query its catalog directly.
+
+### SHOW LINEAGE HISTORY FOR JOB
+
+Returns all recorded lineage entries written by a specific named job, most recent run first. Use `AT <connection>` to query a remote Orchestrator.
+
+```sql
+-- Local catalog
+SHOW LINEAGE HISTORY FOR JOB DailyRevenue;
+SHOW LINEAGE HISTORY FOR JOB DailyRevenue LIMIT 50;
+SHOW LINEAGE HISTORY FOR JOB DailyRevenue INTO #history;
+
+-- Remote Orchestrator
+SHOW LINEAGE HISTORY FOR JOB DailyRevenue AT ProdOrch;
+SHOW LINEAGE HISTORY FOR JOB DailyRevenue AT ProdOrch LIMIT 50 INTO #history;
+```
+
+**Result columns:** `Id`, `RunAt`, `JobName`, `TargetTable`, `TargetColumn`, `SourceTables`, `Operation`, `Tags`, `SourceFile`, `Line`
+
+Typical stewardship queries:
+
+```sql
+-- What tables does DailyRevenue write to?
+SHOW LINEAGE HISTORY FOR JOB DailyRevenue INTO #h;
+SELECT DISTINCT TargetTable FROM #h ORDER BY TargetTable;
+
+-- Did DailyRevenue ever touch PII columns?
+SHOW LINEAGE HISTORY FOR JOB DailyRevenue INTO #h;
+SELECT TargetTable, TargetColumn, RunAt
+FROM #h
+WHERE JSON_VALUE(Tags, '$.pii') = 'true'
+ORDER BY RunAt DESC;
+```
 
 ---
 
@@ -443,6 +476,18 @@ SHOW SCRIPT TAGS;
 ```
 
 Script-level tags appear in OpenLineage exports under the job facet and are available in the `LINEAGE_TAGS` virtual table with `scope = 'script'`.
+
+### Standard Script-Level Tags
+
+| Tag | Type | Auto-populated | Purpose |
+|-----|------|:--------------:|---------|
+| `@author` | string | Yes — git user or `%USERNAME%` | Author of the script |
+| `@engine_version` | string | Yes — set at run time | ETL-SQL engine version that ran the script |
+| `@environment` | string | No | Deployment environment. E.g. `production`, `staging`, `dev` |
+| `@domain` | string | No | Business domain. E.g. `Finance`, `HR`, `Sales` |
+| `@version` | string | No | Script version, free-form |
+| `@description` | string | No | Human-readable description of what the script does |
+| `@schedule` | string | No | Expected run cadence. E.g. `daily`, `hourly`, `on-demand` |
 
 ---
 

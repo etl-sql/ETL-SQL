@@ -137,6 +137,7 @@ Tags are attached to columns and tables using inline SQL comments with the `/* @
 | :--- | :--- | :--- | :--- |
 | `@source_system` | string | e.g. `Salesforce`, `SAP` | Originating system |
 | `@source_table` | string | e.g. `dbo.Orders` | Originating table |
+| `@source_column` | string | e.g. `cust_id` | Original column name in the source system |
 | `@load_pattern` | string | `full_load` / `incremental` / `streaming` | How data is loaded |
 
 ### Tag Syntax
