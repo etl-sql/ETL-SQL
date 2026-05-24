@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
@@ -21,6 +22,7 @@ namespace ETL_SQL.Engine.Handlers
         string EntryPath,
         IReadOnlyList<BundlePublishFile> Files,
         IReadOnlyList<BundleDependencyInfo> Dependencies,
+        IReadOnlyList<LineageEntry> LineageEntries,
         string ContentHash,
         int RemovedPasswordStatements);
 
@@ -56,17 +58,18 @@ namespace ETL_SQL.Engine.Handlers
             var isDirectoryPublish = Directory.Exists(resolvedSource);
             var visited = new Dictionary<string, BundlePublishFile>(StringComparer.OrdinalIgnoreCase);
             var dependencies = new List<BundleDependencyInfo>();
+            var lineageEntries = new List<LineageEntry>();
             var removedPasswords = 0;
-            await VisitAsync(bundleName, 0, root, entryFullPath, publishPassword, encryptionPassword, rewriteSecrets, visited, dependencies, () => removedPasswords++);
+            await VisitAsync(bundleName, 0, root, entryFullPath, publishPassword, encryptionPassword, rewriteSecrets, visited, dependencies, lineageEntries, () => removedPasswords++);
             if (isDirectoryPublish)
             {
                 foreach (var scriptPath in EnumerateScriptFiles(root))
-                    await VisitAsync(bundleName, 0, root, scriptPath, publishPassword, encryptionPassword, rewriteSecrets, visited, dependencies, () => removedPasswords++);
+                    await VisitAsync(bundleName, 0, root, scriptPath, publishPassword, encryptionPassword, rewriteSecrets, visited, dependencies, lineageEntries, () => removedPasswords++);
             }
 
             var ordered = visited.Values.OrderBy(f => f.VirtualPath, StringComparer.OrdinalIgnoreCase).ToList();
             var contentHash = HashText(string.Join("\n", ordered.Select(f => $"{f.VirtualPath}:{f.ContentHash}")));
-            return new BundlePreflightResult(GetVirtualPath(root, entryFullPath), ordered, dependencies, contentHash, removedPasswords);
+            return new BundlePreflightResult(GetVirtualPath(root, entryFullPath), ordered, dependencies, lineageEntries, contentHash, removedPasswords);
         }
 
         public static BundlePublishRequest ReEncryptRequest(
@@ -101,6 +104,7 @@ namespace ETL_SQL.Engine.Handlers
             bool rewriteSecrets,
             Dictionary<string, BundlePublishFile> visited,
             List<BundleDependencyInfo> dependencies,
+            List<LineageEntry> lineageEntries,
             Action passwordRemoved)
         {
             var virtualPath = GetVirtualPath(root, fullPath);
@@ -109,6 +113,7 @@ namespace ETL_SQL.Engine.Handlers
             var source = await File.ReadAllTextAsync(fullPath);
             var tokens = new Lexer(source).Tokenize();
             var script = new Parser(tokens, source).Parse();
+            lineageEntries.AddRange(AnalyzeLineage(script, bundleName, virtualPath));
 
             var filePassword = publishPassword ?? ExtractLiteralUsePassword(script) ?? SecurityService.GetMachineKey();
             var sanitized = rewriteSecrets
@@ -143,8 +148,26 @@ namespace ETL_SQL.Engine.Handlers
 
                 var childVirtual = GetVirtualPath(root, childFullPath);
                 dependencies.Add(new BundleDependencyInfo(bundleName, version, virtualPath, childVirtual));
-                await VisitAsync(bundleName, version, root, childFullPath, publishPassword, encryptionPassword, rewriteSecrets, visited, dependencies, passwordRemoved);
+                await VisitAsync(bundleName, version, root, childFullPath, publishPassword, encryptionPassword, rewriteSecrets, visited, dependencies, lineageEntries, passwordRemoved);
             }
+        }
+
+        private static IReadOnlyList<LineageEntry> AnalyzeLineage(Script script, string bundleName, string virtualPath)
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            tracker.GlobalMetadata["bundle"] = bundleName;
+            tracker.GlobalMetadata["bundle_path"] = virtualPath;
+            new LineageAnalyzer(tracker).Analyze(script);
+
+            return tracker.GetFullLineage()
+                .Select(entry =>
+                {
+                    entry.SourceFile = virtualPath;
+                    entry.Metadata["bundle"] = bundleName;
+                    entry.Metadata["bundle_path"] = virtualPath;
+                    return entry;
+                })
+                .ToList();
         }
 
         private static string ReEncryptAndStripPasswords(string source, string decryptPassword, string encryptPassword, Action passwordRemoved)

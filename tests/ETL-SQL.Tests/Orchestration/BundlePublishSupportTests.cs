@@ -39,5 +39,42 @@ namespace ETL_SQL.Tests.Orchestration
             var paths = result.Files.Select(f => f.VirtualPath).OrderBy(p => p).ToArray();
             Assert.Equal(new[] { "append.etlsql", "main.etlsql", "report.rptsql" }, paths);
         }
+
+        [Fact]
+        public async Task PreflightAsync_CapturesLineageForPackagedScripts()
+        {
+            await File.WriteAllTextAsync(Path.Combine(_root, "main.etlsql"), @"
+SELECT OrderId /* @owner: SalesOps; */
+INTO #stage
+FROM sales.Orders;
+RUN SCRIPT 'report.rptsql';
+");
+            await File.WriteAllTextAsync(Path.Combine(_root, "report.rptsql"), @"
+CREATE VISUAL SalesCard AS CARD (
+    SOURCE = #stage,
+    MAPPINGS (VALUE = OrderId)
+);
+");
+
+            var result = await BundlePublishSupport.PreflightAsync(
+                "sales-bundle",
+                Path.Combine(_root, "main.etlsql"),
+                "main.etlsql",
+                publishPassword: null,
+                encryptionPassword: "machine-key");
+
+            Assert.Contains(result.LineageEntries, e =>
+                e.TargetTable == "#stage" &&
+                e.TargetColumn == "OrderId" &&
+                e.SourceTables.Contains("sales.Orders", StringComparer.OrdinalIgnoreCase) &&
+                e.SourceFile == "main.etlsql" &&
+                e.Metadata["owner"] == "SalesOps" &&
+                e.Metadata["bundle"] == "sales-bundle");
+
+            Assert.Contains(result.LineageEntries, e =>
+                e.TargetTable == "report:SalesCard" &&
+                e.Operation == "CREATE VISUAL" &&
+                e.SourceFile == "report.rptsql");
+        }
     }
 }

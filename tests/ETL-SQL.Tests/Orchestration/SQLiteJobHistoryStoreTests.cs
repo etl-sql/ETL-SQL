@@ -129,6 +129,41 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("lib/util.etlsql", deps[0].ToPath);
         }
 
+        [Fact]
+        public async Task PublishBundle_StoresLineageHistory()
+        {
+            await _store.InitializeAsync();
+            await _store.PublishBundleAsync(new BundlePublishRequest(
+                "sales-load",
+                "main.etlsql",
+                new[]
+                {
+                    new BundlePublishFile(
+                        "main.etlsql",
+                        "SELECT OrderId /* @owner: SalesOps; */ INTO #stage FROM sales.Orders;",
+                        "sha256:file1",
+                        68,
+                        "application/etlsql")
+                },
+                Array.Empty<BundleDependencyInfo>(),
+                "sha256:bundle1",
+                "MACHINE",
+                null,
+                "tester",
+                null));
+
+            var history = (await _store.GetHistoryForTableAsync("#stage", 20)).ToList();
+
+            Assert.Contains(history, entry =>
+                entry.JobName == "bundle:sales-load@1" &&
+                entry.ScriptPath == "orch://sales-load@1/main.etlsql" &&
+                entry.SourceFile == "main.etlsql" &&
+                entry.Operation == "SELECT" &&
+                entry.TargetColumn == "OrderId" &&
+                entry.Tags.TryGetValue("bundle_version", out var version) &&
+                version == "1");
+        }
+
         // ── SaveJobAsync / GetAllJobsAsync ───────────────────────────────────────
 
         [Fact]

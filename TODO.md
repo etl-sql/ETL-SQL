@@ -153,8 +153,9 @@
   - Added executed-script lineage records for runtime `CREATE DATASET` and `CREATE VISUAL` so report objects can be persisted by the existing lineage catalog path.
   - Added lineage/tag enrichment to report dependencies: `/api/reports/{id}/dependencies`, `SHOW REPORT DEPENDENCIES`, and the report viewer Dependencies modal now expose script-derived lineage entries.
   - Added lineage catalog persistence for in-process portal report executions/refreshes after snapshot rebuild.
+  - Added publish-time lineage catalog persistence for bundle files in `SQLiteJobHistoryStore`, covering local and remote Orchestrator bundle publishes.
+  - Added stable report lineage job names for in-process and remote Orchestrator ad-hoc report jobs (`report:<id>:<session>`).
   - Remaining: add broader portal/report catalog views for lineage and tags, not just the dependency modal.
-  - Remaining: add cross-run lineage continuity for published bundles and remote orchestrator-backed report refresh jobs.
   - Add tests answering stewardship questions:
     - What scripts write to this table?
     - What reports use this dataset/table/column?

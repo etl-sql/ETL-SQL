@@ -70,7 +70,11 @@ namespace ETL_SQL.Orchestrator.Channels
             var sw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                var result = await _executor.ExecuteTextAsync(request.ScriptText, cancellationToken: ct);
+                var result = await _executor.ExecuteTextAsync(
+                    request.ScriptText,
+                    request.SessionId,
+                    ct,
+                    request.GetLineageJobName(entry.JobId));
                 entry.RowsProcessed  = result.RowsProcessed;
                 entry.Status         = result.Success ? JobRunStatus.Completed : JobRunStatus.Failed;
                 entry.ErrorMessage   = result.ErrorMessage;

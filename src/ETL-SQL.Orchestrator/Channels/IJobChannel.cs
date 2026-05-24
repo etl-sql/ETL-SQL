@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -30,6 +31,20 @@ namespace ETL_SQL.Orchestrator.Channels
         public string? Label               { get; set; }
         /// <summary>Optional key-value pairs for job-specific configuration.</summary>
         public Dictionary<string, string>? Metadata { get; set; }
+
+        public string? GetLineageJobName(string fallbackJobId)
+        {
+            if (Metadata != null
+                && Metadata.TryGetValue("IsReport", out var isReport)
+                && isReport.Equals("true", StringComparison.OrdinalIgnoreCase)
+                && Metadata.TryGetValue("ReportId", out var reportId)
+                && !string.IsNullOrWhiteSpace(reportId))
+            {
+                return $"report:{reportId}:{SessionId ?? fallbackJobId}";
+            }
+
+            return Label;
+        }
     }
 
     public class JobStatusResponse

@@ -425,7 +425,11 @@ namespace ETL_SQL.Orchestrator.Service
 
             try
             {
-                var result = await executor.ExecuteTextAsync(request.ScriptText, cancellationToken: ct);
+                var result = await executor.ExecuteTextAsync(
+                    request.ScriptText,
+                    request.SessionId,
+                    ct,
+                    request.GetLineageJobName(entry.JobId));
                 entry.RowsProcessed = result.RowsProcessed;
                 entry.Status        = result.Success ? JobRunStatus.Completed : JobRunStatus.Failed;
                 entry.ErrorMessage  = result.ErrorMessage;
