@@ -121,6 +121,7 @@ namespace ETL_SQL.App
             {
                 DoctorStrictOption,
                 DoctorProfileOption,
+                JsonOption,
             };
             doctorCommand.SetHandler(async (context) => await Dispatch(context, "doctor", handler));
 
