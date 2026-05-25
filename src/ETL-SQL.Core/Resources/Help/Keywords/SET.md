@@ -9,7 +9,7 @@ Syntax — engine option:
 Engine options:
   WHAT_IF = ON|OFF              — parse and plan without executing DML (default OFF)
   PROFILING = ON|OFF            — collect per-statement timing; view with SHOW PROFILE
-  SHOW_PASSWORD = ON|OFF        — display SENSITIVE values in output/log views (default OFF)
+  SHOW_SECRETS = ON|OFF         — display SENSITIVE values in output/log views (default OFF, alias: SHOW_PASSWORD)
   ALLOW_PLAINTEXT_SECRETS = ON|OFF
                                 — unsafe: allow plaintext secrets to remain in saved source
   NO_SAVE_SENSITIVE = ON|OFF    — scrub sensitive literals from saved source
@@ -36,7 +36,7 @@ SELECT * FROM dbo.BigTable INTO #data;
 SHOW PROFILE;
 
 -- Display masking only; does not change save behavior
-SET SHOW_PASSWORD = ON;
+SET SHOW_SECRETS = ON;
 SHOW VARIABLES;
 
 -- Unsafe local-dev escape hatch for source persistence

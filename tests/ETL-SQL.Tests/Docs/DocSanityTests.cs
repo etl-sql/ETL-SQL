@@ -74,6 +74,21 @@ namespace ETL_SQL.Tests.Docs
                 string.Join("\n\n", failures));
         }
 
+        [Fact]
+        public void GeneralDocs_SqlBlocks_ParseWithoutSyntaxError()
+        {
+            var docsDir = RepoFile("Docs");
+            var docFiles = Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories)
+                .Concat(new[] { RepoFile("SECURITY.md"), RepoFile("AGENTS.md") })
+                .ToArray();
+
+            var failures = FindSqlBlockParseFailures(docFiles.Where(File.Exists));
+
+            Assert.True(failures.Count == 0,
+                $"General documentation SQL blocks that failed to parse ({failures.Count}):\n" +
+                string.Join("\n\n", failures));
+        }
+
         // ── Help files in Resources/Help exist and are non-empty ─────────────────
 
         [Fact]

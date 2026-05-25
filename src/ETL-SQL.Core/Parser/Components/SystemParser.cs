@@ -136,7 +136,8 @@ namespace ETL_SQL.Core.Parser.Components
 
         public Statement ParseSetShowPassword()
         {
-            var enabled = ParseOptionalEqualsOnOff("SET SHOW_PASSWORD");
+            var startToken = _parser.Previous;
+            var enabled = ParseOptionalEqualsOnOff($"SET {startToken.Value}");
             Match(TokenType.SEMICOLON);
             return new SetShowPasswordStatement(enabled);
         }
