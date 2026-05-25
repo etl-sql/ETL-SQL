@@ -43,15 +43,15 @@ Statements are the top-level actions in an ETL-SQL script.
 | `PRINT` | IO | [Grammar.md](../Docs/Reference/Grammar.md) | [PRINT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PRINT.md) |
 | `EXECUTE` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [EXECUTE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/EXECUTE.md) |
 | `RUN SCRIPT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [RUN.md](../src/ETL-SQL.Core/Resources/Help/Keywords/RUN.md) |
-| `PUBLISH BUNDLE` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | - |
-| `VALIDATE BUNDLE` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `PUBLISH BUNDLE` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [PUBLISH.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PUBLISH.md) |
+| `VALIDATE BUNDLE` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [VALIDATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/VALIDATE.md) |
 | `EXPORT SCRIPT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [EXPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/EXPORT.md) |
 | `PARALLEL` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [PARALLEL.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PARALLEL.md) |
 | `GO` | Scripting | [Grammar.md](../Docs/Reference/Grammar.md) | [GO.md](../src/ETL-SQL.Core/Resources/Help/Keywords/GO.md) |
 | `ASSERT` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | [ASSERT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ASSERT.md) |
-| `EXPECT SCHEMA` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `EXPECT SCHEMA` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | [EXPECT_SCHEMA.md](../src/ETL-SQL.Core/Resources/Help/Keywords/EXPECT_SCHEMA.md) |
 | `LINT` | Validation | [Grammar.md](../Docs/Reference/Grammar.md) | [LINT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/LINT.md) |
-| `EXPLAIN` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `EXPLAIN` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [EXPLAIN.md](../src/ETL-SQL.Core/Resources/Help/Keywords/EXPLAIN.md) |
 | `SHOW PROFILE` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
 | `SHOW VARIABLES` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
 | `SHOW LOCAL VARIABLES`| Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
@@ -73,7 +73,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `SEND EMAIL` | Notifications | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [SEND/EMAIL.md](../src/ETL-SQL.Core/Resources/Help/Operations/SEND/EMAIL.md) |
 | `DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
 | `CREATE JOB` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [SCHEDULE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SCHEDULE.md) |
-| `KILL JOB` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `KILL JOB` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [KILL.md](../src/ETL-SQL.Core/Resources/Help/Keywords/KILL.md) |
 | `CREATE INDEX` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
 | `CREATE PROCEDURE` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
 | `CREATE FUNCTION` | DDL | [Grammar.md](../Docs/Reference/Grammar.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
@@ -86,13 +86,13 @@ Statements are the top-level actions in an ETL-SQL script.
 | `WITH` | CTE | [Grammar.md](../Docs/Reference/Grammar.md) | [WITH.md](../src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
 | `WITH RECURSIVE` | CTE | [Grammar.md](../Docs/Reference/Grammar.md) | [WITH.md](../src/ETL-SQL.Core/Resources/Help/Keywords/WITH.md) |
 | `PIVOT` / `UNPIVOT` | DML / Transform | [Grammar.md](../Docs/Reference/Grammar.md) | [PIVOT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
-| `MATCH_RECOGNIZE` | DML / Pattern Matching | [Grammar.md](../Docs/Reference/Grammar.md#59-match_recognize) | - |
+| `MATCH_RECOGNIZE` | DML / Pattern Matching | [Grammar.md](../Docs/Reference/Grammar.md#59-match_recognize) | [MATCH_RECOGNIZE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/MATCH_RECOGNIZE.md) |
 | `EXPORT REPORT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [EXPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/EXPORT.md) |
 | `SUBSCRIPTION` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [SUBSCRIPTION.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SUBSCRIPTION.md) |
 | `RELDATE` | Variables | [RelativeDate_Parameters.md](../Docs/Reference/RelativeDate_Parameters.md) | [RELDATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/RELDATE.md) |
-| `RAISEERROR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | - |
-| `HELP` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | - |
-| `ANALYZE` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `RAISEERROR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [THROW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/THROW.md) |
+| `HELP` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [HELP.md](../src/ETL-SQL.Core/Resources/Help/Keywords/HELP.md) |
+| `ANALYZE` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [ANALYZE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ANALYZE.md) |
 | `RENAME FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/FILE.md) |
 | `COMPRESS FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [COMPRESS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/COMPRESS.md) |
 | `DECOMPRESS FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/FILE.md) |
@@ -113,31 +113,42 @@ Statements are the top-level actions in an ETL-SQL script.
 | `STOP DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
 | `PAUSE DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
 | `CLOSE DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
-| `CREATE USER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `ALTER USER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `DROP USER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `CREATE GROUP` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `DROP GROUP` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `ADD USER TO GROUP` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `CREATE FOLDER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `DROP FOLDER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `GRANT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `REVOKE` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `PUBLISH REPORT` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `ALTER REPORT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `DROP REPORT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `REFRESH REPORT` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `REFRESH DATASET` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `ALTER DATASET` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `DROP DATASET` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `REBUILD SNAPSHOT` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `DROP SNAPSHOT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `CREATE REFRESH JOB` | Portal / Orchestrator | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `DROP REFRESH JOB` | Portal / Orchestrator | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `SHOW USERS` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `SHOW REPORTS` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `DISCONNECT USER` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
-| `REVOKE TOKENS FOR USER` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
+| `CREATE USER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_USER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_USER.md) |
+| `ALTER USER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_USER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_USER.md) |
+| `DROP USER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_USER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_USER.md) |
+| `DISCONNECT USER` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_USER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_USER.md) |
+| `REVOKE TOKENS FOR USER` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_USER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_USER.md) |
+| `CREATE GROUP` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_GROUP.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_GROUP.md) |
+| `DROP GROUP` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_GROUP.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_GROUP.md) |
+| `ADD USER TO GROUP` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_GROUP.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_GROUP.md) |
+| `CREATE FOLDER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_FOLDER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_FOLDER.md) |
+| `DROP FOLDER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_FOLDER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_FOLDER.md) |
+| `GRANT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_PERMISSIONS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_PERMISSIONS.md) |
+| `REVOKE` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_PERMISSIONS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_PERMISSIONS.md) |
+| `PUBLISH REPORT` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_REPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_REPORT.md) |
+| `ALTER REPORT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_REPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_REPORT.md) |
+| `DROP REPORT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_REPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_REPORT.md) |
+| `REFRESH REPORT` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_REPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_REPORT.md) |
+| `CREATE SHARE LINK` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SHARE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SHARE.md) |
+| `REVOKE SHARE LINK` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SHARE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SHARE.md) |
+| `CREATE SAVED VIEW` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SAVEDVIEW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SAVEDVIEW.md) |
+| `DROP SAVED VIEW` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SAVEDVIEW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SAVEDVIEW.md) |
+| `CREATE ALERT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_ALERT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_ALERT.md) |
+| `DROP ALERT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_ALERT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_ALERT.md) |
+| `CREATE SUBSCRIPTION` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SUBSCRIPTION.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SUBSCRIPTION.md) |
+| `DROP SUBSCRIPTION` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SUBSCRIPTION.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SUBSCRIPTION.md) |
+| `REFRESH DATASET` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_DATASET.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_DATASET.md) |
+| `ALTER DATASET` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_DATASET.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_DATASET.md) |
+| `DROP DATASET` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_DATASET.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_DATASET.md) |
+| `REBUILD SNAPSHOT` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_DATASET.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_DATASET.md) |
+| `DROP SNAPSHOT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_DATASET.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_DATASET.md) |
+| `CREATE REFRESH JOB` | Portal / Orchestrator | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_REFRESHJOB.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_REFRESHJOB.md) |
+| `DROP REFRESH JOB` | Portal / Orchestrator | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_REFRESHJOB.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_REFRESHJOB.md) |
+| `SHOW USERS` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SHOW.md) |
+| `SHOW REPORTS` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SHOW.md) |
+| `SHOW ACTIVE SESSIONS` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SHOW.md) |
+| `RESTART PORTAL` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_ADMIN.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_ADMIN.md) |
+| `SHUTDOWN PORTAL` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_ADMIN.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_ADMIN.md) |
 
 ---
 
@@ -151,8 +162,8 @@ Connectors define how to communicate with external data sources.
 | `POSTGRES` | SQL | [POSTGRES.md](../src/ETL-SQL.Core/Resources/Help/Connectors/POSTGRES.md) | HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, ... |
 | `ORACLE` | SQL | [ORACLE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ORACLE.md) | HOST, PORT, SERVICE_NAME, USER, PASSWORD, ... |
 | `ODBC` | SQL | [ODBC.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ODBC.md) | DSN, DRIVER, SERVER, DATABASE, UID, PWD, ... |
-| `SNOWFLAKE` | SQL | - | ACCOUNT, WAREHOUSE, DATABASE, SCHEMA, ... |
-| `BIGQUERY` | SQL | - | PROJECT_ID, DATASET_ID, KEY_FILE, ... |
+| `SNOWFLAKE` | SQL | [SNOWFLAKE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SNOWFLAKE.md) | HOST, DATABASE, SCHEMA, WAREHOUSE, USERNAME, PASSWORD, PRIVATE_KEY_FILE, ... |
+| `BIGQUERY` | SQL | [BIGQUERY.md](../src/ETL-SQL.Core/Resources/Help/Connectors/BIGQUERY.md) | PROJECT_ID, DATASET_ID, KEY_FILE, ... |
 | `FLATFILE` | File | [FLATFILE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/FLATFILE.md) | PATH, FORMAT, DELIMITER, HEADER, ENCODING, ... |
 | `EXCEL` | File | [EXCEL.md](../src/ETL-SQL.Core/Resources/Help/Connectors/EXCEL.md) | PATH, SHEET, RANGE, HEADER, ... |
 | `JSON` | File | [JSON.md](../src/ETL-SQL.Core/Resources/Help/Connectors/JSON.md) | PATH, ROOT_PATH, ENCODING, ... |
@@ -500,50 +511,6 @@ FUNCTION_NAME(args) OVER (
 | `NTH_VALUE(expression, nth)` | [NTH_VALUE.md](../Docs/Reference/Standard_Library.md#133-analytic-functions) | Nth value in window frame |
 | `PERCENTILE_CONT(fraction)` | [PERCENTILE_CONT.md](../src/ETL-SQL.Core/Resources/Help/Functions/PERCENTILE_CONT.md) | Continuous percentile |
 | `PERCENTILE_DISC(fraction)` | [PERCENTILE_DISC.md](../src/ETL-SQL.Core/Resources/Help/Functions/PERCENTILE_DISC.md) | Discrete percentile |
-
-## 4. Window Functions
-
-Window functions perform calculations across a set of table rows that are somehow related to the current row.
-
-### 4.1 Window Syntax
-```sql
-FUNCTION_NAME(args) OVER (
-  [PARTITION BY col1, col2, ...]
-  [ORDER BY colA [ASC|DESC], ...]
-  [ROWS|RANGE|GROUPS BETWEEN <bound> AND <bound>]
-  [EXCLUDE CURRENT ROW|GROUP|TIES|NO OTHERS]
-)
-```
-
-**Supported Bounds:**
-- `UNBOUNDED PRECEDING`
-- `<n> PRECEDING`
-- `CURRENT ROW`
-- `<n> FOLLOWING`
-- `UNBOUNDED FOLLOWING`
-
-**Frame Modes and Exclusions:**
-- `ROWS` counts physical rows.
-- `RANGE` groups rows by ordering value range.
-- `GROUPS` counts peer groups with equal `ORDER BY` values.
-- `EXCLUDE CURRENT ROW`, `EXCLUDE GROUP`, `EXCLUDE TIES`, and `EXCLUDE NO OTHERS` remove rows from the resolved frame.
-
-### 4.2 Dedicated Window Functions
-| Function | Help File | Description |
-| :--- | :--- | :--- |
-| `ROW_NUMBER()` | [ROW_NUMBER.md](../src/ETL-SQL.Core/Resources/Help/Functions/ROW_NUMBER.md) | Sequential row number within partition |
-| `RANK()` | [RANK.md](../src/ETL-SQL.Core/Resources/Help/Functions/RANK.md) | Rank with gaps for ties |
-| `DENSE_RANK()` | [DENSE_RANK.md](../src/ETL-SQL.Core/Resources/Help/Functions/DENSE_RANK.md) | Rank without gaps for ties |
-| `PERCENT_RANK()` | [PERCENT_RANK.md](../Docs/Reference/Standard_Library.md#132-ranking-functions) | Relative rank (0 to 1) |
-| `CUME_DIST()` | [CUME_DIST.md](../Docs/Reference/Standard_Library.md#13-window-functions) | Cumulative distribution |
-| `NTILE(n)` | [NTILE.md](../src/ETL-SQL.Core/Resources/Help/Functions/NTILE.md) | Divide rows into N buckets |
-| `LAG(v, [n], [d])` | [LAG.md](../src/ETL-SQL.Core/Resources/Help/Functions/LAG.md) | Value from N rows before |
-| `LEAD(v, [n], [d])` | [LEAD.md](../src/ETL-SQL.Core/Resources/Help/Functions/LEAD.md) | Value from N rows after |
-| `FIRST_VALUE(v)` | [FIRST_VALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/FIRST_VALUE.md) | First value in window frame |
-| `LAST_VALUE(v)` | [LAST_VALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/LAST_VALUE.md) | Last value in window frame |
-| `NTH_VALUE(v, n)` | [NTH_VALUE.md](../Docs/Reference/Standard_Library.md#133-analytic-functions) | Nth value in window frame |
-| `PERCENTILE_CONT(n)` | [PERCENTILE_CONT.md](../src/ETL-SQL.Core/Resources/Help/Functions/PERCENTILE_CONT.md) | Continuous percentile |
-| `PERCENTILE_DISC(n)` | [PERCENTILE_DISC.md](../src/ETL-SQL.Core/Resources/Help/Functions/PERCENTILE_DISC.md) | Discrete percentile |
 
 ### 4.3 Aggregate-as-Window Functions
 Any standard aggregate function can be used as a window function by appending the `OVER` clause.
