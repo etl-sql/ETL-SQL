@@ -34,6 +34,7 @@ namespace ETL_SQL.Tests.Integration
             var store = new SQLiteJobHistoryStore(dbName);
             services.AddSingleton<IJobHistoryStore>(store);
             services.AddSingleton<IBundleStore>(store);
+            services.AddSingleton<ILineageCatalogStore>(store);
             services.AddSingleton<SchedulerService>();
             
             var registry = new FunctionRegistry();
