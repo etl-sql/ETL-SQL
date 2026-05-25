@@ -42,7 +42,7 @@ Write-Host "  Environment OK." -ForegroundColor Gray
 # --- STEP 1: Testing ---
 if (!$SkipTests) {
     Write-Host "`n[2/7] Running Release Smoke Test Lane..." -ForegroundColor Yellow
-    & (Join-Path $PSScriptRoot "test-lane.ps1") -Lane smoke -Configuration Release -NoRestore -NoBuild
+    & (Join-Path $PSScriptRoot "test-lane.ps1") -Lane smoke -Configuration Release
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Release smoke lane failed. Aborting release."
         exit 1

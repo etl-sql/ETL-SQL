@@ -1,6 +1,6 @@
 # Connector Certification Matrix
 
-**ETL-SQL 0.7.x — Last reviewed: 2026-05-25**
+**ETL-SQL 0.8.0 — Last reviewed: 2026-05-25**
 
 This matrix tracks compliance status for every connector against the 10 inviolable rules and the key engineering requirements defined in [Connectors_Standards.md](Connectors_Standards.md). Use it to triage new connector work, prioritize gap remediation, and enforce the certification gate before merging connector changes.
 
