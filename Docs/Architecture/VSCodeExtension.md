@@ -78,6 +78,21 @@ The client uses **full text synchronization** — every document change sends th
 1. `syncConnectionsToLsp()` — loads global connections from `context.globalState` and sends `etlsql/setConnections` so the server can populate schema caches
 2. Subscribe to `etlsql/scriptConnections` notifications — when received, call `connectionsProvider.updateScriptConnections()` to refresh the sidebar
 
+### Snippet completions
+
+The LSP `CompletionProvider` (`src/ETL-SQL.LanguageServer/CompletionProvider.cs`) surfaces `$trigger` snippet templates as VS Code-native completion items. When the cursor prefix matches a `$` word at statement start, `SnippetLibrary.Instance.GetByPrefix()` is queried and each matching `SnippetDef` is returned with:
+
+| Field | Value |
+|-------|-------|
+| `Kind` | `CompletionItemKind.Snippet` |
+| `InsertText` | `SnippetDef.LspBody` — the template body with `«placeholder»` markers converted to `${N:placeholder}` VS Code tab-stop syntax |
+| `InsertTextFormat` | `InsertTextFormat.Snippet` — enables native VS Code tab-stop navigation |
+| `SortText` | `"0001_" + trigger` — snippets sort above keyword completions |
+
+The `LspBody` is pre-computed by `SnippetLibrary.ConvertToLspTabStops()` when the library loads. Each `«text»` becomes `${1:text}`, `${2:text}`, etc. in order of appearance.
+
+User snippets from `Snippets:UserSnippetsPath` are loaded into the same `SnippetLibrary.Instance` and delivered identically.
+
 ---
 
 ## 4. Commands

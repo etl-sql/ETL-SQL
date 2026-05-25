@@ -247,6 +247,33 @@ Scripts can override some engine behavior, but administrators can set defaults i
 }
 ```
 
+### User Snippet Templates
+
+To deploy team-standard snippet templates that appear in the TUI and VS Code autocomplete alongside the built-in `$trigger` templates, configure a shared directory:
+
+```json
+"Snippets": {
+  "UserSnippetsPath": "C:\\SharedConfig\\etlsql-snippets"
+}
+```
+
+Each `.md` file in the directory must follow the standard snippet frontmatter format:
+
+```markdown
+---
+trigger: $myconn
+label: Production DB Connection
+description: Company-standard production database connection
+---
+CREATE CONNECTION «ConnName» ON MSSQL(
+  SERVER             = '«prod-sql01.example.com»',
+  DATABASE           = '«database»',
+  TRUSTED_CONNECTION = ON
+);
+```
+
+User snippets with the same trigger as a built-in override the built-in. The directory is loaded once at startup; restart the application to pick up changes. The path can be a UNC share for team-wide deployment (`\\fileserver\etlsql\snippets`). See [User_Manual.md §15.6](User_Manual.md#156-snippet-templates) for the full authoring reference.
+
 ---
 
 ## 8. Backup & Maintenance

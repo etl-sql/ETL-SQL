@@ -22,7 +22,7 @@ Welcome to ETL-SQL. This guide is designed to help you transition from thinking 
 12. [Debugging & Diagnostics](#12-debugging--diagnostics) — LINT, EXPLAIN, profiling, MOCKDB, `etl-sql doctor`
 13. [Zero-Trust Security](#13-zero-trust-security)
 14. [Mocking & Testing](#14-mocking--testing)
-15. [Interactive TUI Editor](#15-interactive-tui-editor)
+15. [Interactive TUI Editor](#15-interactive-tui-editor) — layout, results, compare, keyboard reference, snippet templates
 16. [VS Code Authoring](#16-vs-code-authoring)
 17. [Report-SQL Dashboards](#17-report-sql-dashboards)
 18. [Report Portal Workflow](#18-report-portal-workflow)
@@ -1407,11 +1407,12 @@ SET PROFILING OFF;
 
 ### 15.5 Keyboard Reference
 
-Press `F1` inside the editor for the full interactive help overlay (shows live state for focus and active panel). Key highlights:
+Press `F1` inside the editor for the full interactive help overlay (shows live state for focus and active panel). While the overlay is open, press `F2` to toggle to the **Snippet Reference** page, which lists every available `$trigger` and its description. Press `F2` again to return to the keyboard table.
 
 | Key | Action |
 |-----|--------|
 | `F1` | Help overlay — any key to close |
+| `F2` (while F1 open) | Toggle help overlay: keyboard reference ↔ snippet list |
 | `F4` | Cycle lower panel |
 | `F5` / `Shift+F5` | Run script / run current statement |
 | `F6` | Toggle Editor ↔ Results focus |
@@ -1419,13 +1420,86 @@ Press `F1` inside the editor for the full interactive help overlay (shows live s
 | `F8` | Cycle active pane in Compare mode |
 | `Ctrl+M` | Maximize / restore lower panel |
 | `Ctrl+/` | Toggle `--` comment on selection |
-| `Tab` / `Shift+Tab` | Indent / dedent selected block |
+| `Tab` / `Shift+Tab` | Indent / dedent selected block (or navigate snippet placeholders — see §15.6) |
 | `Ctrl+Left/Right` | Word jump |
 | `Ctrl+Shift+Left/Right` | Word select |
 | `Alt+Up/Down` | Add cursor above / below |
 | `Ctrl+F` | Find (or filter rows in Results focus) |
 | `Ctrl+P` | Export results to CSV |
 | `Ctrl+Q` | Exit |
+
+### 15.6 Snippet Templates
+
+Typing a `$trigger` word at the **start of a statement line** and pressing `Tab` or `Enter` expands it into a full scaffold template. Every placeholder in the expanded template is wrapped in `«angle quotes»` so you can cycle through them without hunting.
+
+**Accepting a snippet:**
+
+```
+$bar          ← type this at statement start, then Tab
+```
+
+Expands to:
+
+```sql
+CREATE VISUAL «VisualName» AS BAR (
+  SOURCE   = («SELECT * FROM #data»),
+  MAPPINGS (X = «category», Y = «value»),
+  OPTIONS  (AXIS_SORT = VALUE_DESC, TITLE = '«Chart Title»')
+);
+```
+
+The first placeholder (`«VisualName»`) is automatically selected. Fill it in and press `Tab` to jump to the next.
+
+**Tab-stop navigation:**
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Jump to next `«placeholder»` |
+| `Shift+Tab` | Jump to previous `«placeholder»` |
+| `Escape` | Exit snippet mode (cursor stays, placeholders remain as text) |
+
+Snippet mode exits automatically when you tab past the last placeholder.
+
+**Available snippets by category:**
+
+*Visual charts* — `$bar`, `$line`, `$pie`, `$donut`, `$kpi`, `$tbl`, `$map`, `$hbar`, `$gauge`, `$scatter`, `$heatmap`, `$radar`, `$funnel`, `$waterfall`, `$treemap`, `$boxplot`
+
+*Database connectors* — `$mssql`, `$postgres`, `$oracle`, `$snowflake`, `$bigquery`, `$odbc`
+
+*File connectors* — `$csv`, `$excel`, `$parquet`, `$json`, `$avro`, `$xml`
+
+*Remote / network connectors* — `$sftp`, `$ftp`, `$blob`, `$api`, `$smtp`
+
+*Script objects* — `$proc`, `$func`, `$view`, `$dataset`, `$job`
+
+Type `HELP SNIPPETS` in the REPL to list all triggers and descriptions. Type `HELP SNIPPETS <trigger>` (e.g., `HELP SNIPPETS bar`) to see the full template body for a specific snippet.
+
+**User-defined snippets:**
+
+You can add your own `$trigger` snippets by placing `.md` files in a directory and setting `Snippets:UserSnippetsPath` in `appsettings.json`:
+
+```json
+"Snippets": {
+  "UserSnippetsPath": "C:\\MyTeam\\etlsql-snippets"
+}
+```
+
+Each file must follow the same frontmatter format:
+
+```markdown
+---
+trigger: $myconn
+label: My Standard Connection
+description: Company-standard database connection template
+---
+CREATE CONNECTION «ConnName» ON MSSQL(
+  SERVER   = '«prod-sql01.example.com»',
+  DATABASE = '«database»',
+  TRUSTED_CONNECTION = ON
+);
+```
+
+A user snippet with the same trigger as a built-in overrides the built-in. User snippets appear in autocomplete and `HELP SNIPPETS` alongside the built-ins.
 
 ---
 
@@ -1439,6 +1513,9 @@ Use it for:
 - Writing `.rptsql` reports with Report-SQL syntax highlighting.
 - Encrypting plaintext connection credentials through the security quick fix.
 - Browsing pipeline, result, variable, metadata, and report preview panels.
+- Expanding `$trigger` snippet templates with native VS Code tab-stop navigation.
+
+**Snippets in VS Code:** The same 38 built-in `$trigger` templates available in the TUI are delivered as VS Code-native completions with `${N:placeholder}` tab stops. Type `$bar` at the start of a statement and accept the completion — VS Code's standard Tab key cycles through all placeholders. User-defined snippets from `Snippets:UserSnippetsPath` are also available in the completion list.
 
 The extension uses the ETL-SQL language server, so diagnostics should match command-line lint behavior. When in doubt, run the same script through the CLI or TUI before scheduling it.
 

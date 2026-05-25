@@ -139,6 +139,7 @@ Manages the autocomplete overlay. Suggestions are fetched asynchronously from `E
 | File paths | `Directory.EnumerateFiles()` after `/` |
 | Connector options | Hard-coded per connector type |
 | Connections | Active connection registry |
+| Snippets | `SnippetLibrary.Instance.GetByPrefix()` — only when `$` word is at statement start |
 
 **Key methods:**
 
@@ -146,8 +147,21 @@ Manages the autocomplete overlay. Suggestions are fetched asynchronously from `E
 |--------|----------|
 | `UpdateAsync()` | Refresh suggestion list after each keystroke |
 | `HandleKey(key)` | Up/Down to navigate; Tab/Enter to accept; Escape to dismiss |
-| `Accept()` | Replace the current token with the selected suggestion |
+| `Accept()` | Replace the current token with the selected suggestion; activates snippet mode if `«»` markers are present |
 | `TrySuggestAsync()` | Expand `SELECT *` or `alias.*` to full column list |
+| `FindNextPlaceholder(buffer, fromLine, fromCol)` | Scan forward for next `«...»` span; returns `(Line, StartCol, EndCol)?` |
+| `FindPrevPlaceholder(buffer, fromLine, fromCol)` | Scan backward for previous `«...»` span |
+
+**Snippet mode:**
+
+After a snippet is accepted, `Accept()` calls `FindNextPlaceholder` starting from line 0 and, if a `«placeholder»` exists, calls `_buffer.SelectRange()` to highlight it and sets `_renderer.SnippetModeActive = true`.
+
+While `SnippetModeActive` is true, the Tab key in `InputHandler` is intercepted before the normal indent logic:
+- `Tab` → `MoveToNextPlaceholder()` — finds the next `«»` after the current selection end and selects it, or calls `ExitSnippetMode()` if none remain.
+- `Shift+Tab` → `MoveToPrevPlaceholder()` — finds the previous `«»` before the current selection start.
+- `Escape` → `ExitSnippetMode()` — clears `SnippetModeActive` and the selection anchor.
+
+Placeholder scanning is always on-demand (re-reads `buffer.Lines` on each Tab press). This means placeholder positions remain correct even after in-place edits during navigation.
 
 ---
 
@@ -207,6 +221,9 @@ The mode pill is color-coded: grey for Pipeline, yellow for Results/Focus, cyan 
 | `CompareScrollRows` | Per-pane scroll positions (List<int>) |
 | `CompareFilters` | Per-pane filter strings (List<string>) |
 | `ActiveResultSetIndex` | Which result set is shown in single-set view |
+| `SnippetModeActive` | Tab key navigates `«»` placeholders instead of indenting |
+| `HelpVisible` | F1 help overlay is open |
+| `HelpPageIndex` | `0` = keyboard reference table; `1` = snippet trigger/description list (toggled by F2 while overlay is open) |
 
 ---
 
@@ -300,7 +317,9 @@ Routes `ConsoleKeyInfo` events to the correct handler. Autocomplete overlay capt
 | Ctrl+A | Select all |
 | Ctrl+D / Ctrl+K | Duplicate / Delete line |
 | Ctrl+/ | Toggle `--` line comment on selection |
-| Tab / Shift+Tab | Indent / dedent (selection-aware) |
+| Tab / Shift+Tab | **Snippet mode:** jump to next / previous `«placeholder»`; otherwise indent / dedent (selection-aware) |
+| Escape | **Snippet mode:** exit snippet mode; otherwise clear multi-cursors |
+| F2 (while F1 help overlay open) | Toggle help overlay page: keyboard reference ↔ snippet reference |
 | Ctrl+I / Alt+F | Format SQL (Beautifier) |
 | Ctrl+Space | Trigger autocomplete |
 | Alt+Up / Down | Add cursor above / below |
