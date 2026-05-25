@@ -2,11 +2,11 @@
 
 ## Tweaks & Minor Enhancements (Priority)
 
-- [ ] **[Engine] Support `BigInteger` in `IsIntegerType` check**
+- [x] **[Engine] Support `BigInteger` in `IsIntegerType` check**
   - File: [AggregateEngine.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Engines/AggregateEngine.cs)
   - Detail: Include `System.Numerics.BigInteger` in the `IsIntegerType` type check so that high-precision integers mapping to `BigInteger` from Snowflake or BigQuery are correctly truncated on `AVG()` and other aggregation functions.
 
-- [ ] **[Parser] Lexer/Parser Exception Sanitisation**
+- [x] **[Parser] Lexer/Parser Exception Sanitisation**
   - File: [Parser.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Parser/Parser.cs) (or compile exception handlers)
   - Detail: Ensure that syntax exceptions or compilation error reports sanitize script source code context lines so that connection string credentials, keys, and `'ENC:...'` payloads are redacted before being printed to stdout or written to application logs.
 
