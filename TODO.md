@@ -230,3 +230,9 @@
   - **Release validation**: `CorpusRegressionTests` (6 hand-crafted tests, ~2s) is the CI gate. Full corpus run via `scripts\Test-SltCorpus.ps1` is manual pre-release.
 
 - [x] **SLT DML coverage gap** — added `dml.test` (UPDATE: arithmetic, CASE-in-SET, subquery-in-WHERE, multi-column, unconditional, no-op; DELETE: WHERE, subquery, no-op, unconditional), `insert.test` (INSERT VALUES with NULL and expressions, INSERT SELECT filtered, with JOIN, with aggregate), and `merge.test` (upsert, conditional WHEN MATCHED AND, inventory top-up). Also added `MergeStatementHandler` to SltRunner — it was missing from the handler list, blocking MERGE tests. All 40 SLT files pass.
+
+- [ ] **Remove `### ALLOW_...` comment directive form** -- The `### ALLOW_...` comment-scanning mechanism was intended to be replaced by the `SET ALLOW_...` statement form and should be fully removed.
+  - Remove the scanning logic for `### ALLOW_FILE_TYPE_ACCESS`, `### ALLOW_GREATER_THAN_100_FILE`, and `### ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS` from the engine (check `ExecutionSession` and `SecurityService.cs`).
+  - Update stale XML doc comment in `src/ETL-SQL.Core/SecurityService.cs` line 215 that still references the `### ALLOW_GREATER_THAN_100_FILE` form.
+  - Update `Docs/Architecture/Orchestrator.md` section 2.3 -- remove the comment-directive table (lines 140-147) and all inline references at lines 499 and 614 -- replace with `SET ALLOW_FILE_OPERATIONS = <n>` and `SET ALLOW_RECURSIVE_LAYERS = <n>` statement equivalents.
+  - Verify no samples or test scripts use the `### ALLOW_...` comment form; update any that do to use `SET ALLOW_FILE_OPERATIONS = <n>` or `SET ALLOW_RECURSIVE_LAYERS = <n>`.

@@ -168,9 +168,9 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > The sandbox blocks access to drive roots (e.g. `\\server\` directly without a subdirectory), most system directories, and paths containing restricted segments like `.git`, `.ssh`, `.aws`. Ensure your path resolves to a specific subdirectory within an `ApprovedSafeZone`. Contact your ETL-SQL administrator to have the share's UNC path registered as a safe zone.
 
 **Q: I need my script to process more than 100 files. How do I raise the limit?**
-> Add the override flag to your script, and ensure the target path is within a registered `ApprovedSafeZone`:
+> Use `SET ALLOW_FILE_OPERATIONS = <n>` to raise the file operation limit to a specific value, and ensure the target path is within a registered `ApprovedSafeZone`:
 > ```sql
-> SET ALLOW_GREATER_THAN_100_FILE ON;
+> SET ALLOW_FILE_OPERATIONS = 500;
 > -- This override only works if the script's working directory is an Approved Safe Zone.
 > FOREACH @f IN FILE_LIST('C:\Inbound', '*.csv')
 > BEGIN

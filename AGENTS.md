@@ -55,10 +55,11 @@ Key syntax facts:
 - **Suspension**: `WAITFOR DELAY 'hh:mm:ss'` — fixed pause; `WAITFOR TIME 'hh:mm:ss'` — pause until clock time
 
 > [!NOTE]
-> `WAITFOR` has three supported forms:
+> `WAITFOR` has four supported forms:
 > - `WAITFOR DELAY 'hh:mm:ss'` — fixed pause
 > - `WAITFOR TIME 'hh:mm:ss'` — pause until wall-clock time
-> - `WAITFOR (condition)` — polls the expression at 200ms intervals until it returns a truthy value
+> - `WAITFOR (condition)` — polls the expression at 200ms intervals until it returns a truthy value; condition may be a scalar expression or a subquery (e.g. `WAITFOR (SELECT COUNT(*) FROM #t) > 0`)
+> - `WAIT UNTIL condition` — preferred alias for `WAITFOR (condition)`
 >
 > The `WHILE` loop with `WAITFOR DELAY` inside remains the preferred pattern when you need a custom poll interval or inter-check logic.
 
@@ -98,7 +99,7 @@ As an AI, you **MUST NOT** generate ETL-SQL scripts that:
 - Attempt to read from or write to `.sql`, `.etlsql`, or `.rptsql` script files — the engine blocks this via the **Script Immutability Guardrail**
 - Access system directories (`C:\Windows`, `C:\bin`, `/etc`, `/root`, `.git`, `.ssh` **when not accessed via SFTP/KEYFILE**)
 - Perform operations on the root of any drive (e.g. `C:\` directly)
-- Exceed 100 file operations or 5 levels of recursion without an explicit `### ALLOW_...` override comment in the script
+- Exceed 100 file operations or 5 levels of recursion without a `SET ALLOW_FILE_OPERATIONS = <n>` or `SET ALLOW_RECURSIVE_LAYERS = <n>` statement in the script
 - Log, print, or concatenate connection strings, passwords, API keys, or `ENC:` values into any output string
 - Use `DELETE`, `MERGE`, `TRUNCATE`, or destructive file operations without either a `BEGIN TRANSACTION`/`ROLLBACK` guard or a `SET WHAT_IF ON` validation block first
 
@@ -187,7 +188,7 @@ END CATCH
 ### 5.4 Does this involve scheduling?
 Use `CREATE JOB` for recurring tasks; use `RUN SCRIPT` to break large scripts into composable modules.
 
-For 18 production-grade complete recipes, see **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)**.
+For 20 production-grade complete recipes, see **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)**.
 
 ---
 
@@ -206,7 +207,7 @@ Use this map to find the right document for any task.
 | Relative date parameters (`@TODAY`, offsets, report filters) | **[RelativeDate_Parameters.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/RelativeDate_Parameters.md)** |
 | Complete production recipes | **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)** |
 | Pipeline mental model for new users | **[User_Manual.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/User_Manual.md)** |
-| Sample script inventory (55+ scripts in `/samples/`) | **[Sample_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Sample_Guide.md)** |
+| Sample script inventory (160+ scripts in `/samples/`) | **[Sample_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Sample_Guide.md)** |
 | Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** |
 
 ### Contributing Engine Code
@@ -331,7 +332,6 @@ For full usage and script details, refer to **[scripts/README.md](file:///c:/Use
 | Forgetting `IF FILE_EXISTS()` before `COPY FILE` or `ENCRYPT FILE` | Check existence first to avoid silent no-ops or errors |
 | Using `Logger.Instance` in C# engine code | Use injected `ILogger` from `IExecutionContext` |
 | Declaring `class` for AST nodes in C# | Use `record` types for all AST nodes |
-| Writing `WAITFOR (SELECT ...)` | This form does not exist; use `WAITFOR (condition)` for simple scalar checks, or `WHILE` + `WAITFOR DELAY` for complex polling |
 | Using `MySQL` as a connector token | MySQL is not a supported connector; use `ODBC` with a MySQL driver instead |
 | Writing `FROM FLATFILE` or `FROM FILE` in a `CREATE CONNECTION` | `FLATFILE` is the **connector type**; `FILE` is the **table alias** used in queries — `CREATE CONNECTION src ON FLATFILE('my.csv'); SELECT * FROM src` |
 
