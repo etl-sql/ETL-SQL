@@ -2,7 +2,7 @@
 # Requires WiX Toolset v3.x installed and in PATH.
 
 $ErrorActionPreference = "Stop"
-$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.7.0" }
+$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.8.0" }
 $BuildDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer\publish\win-x64\bin"
 $InstallerDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer"
 
@@ -43,7 +43,8 @@ if ($CandleExe) {
     Write-Host "Compiling WiX manifest (using $($CandleExe.Source))..." -ForegroundColor Gray
     Push-Location $InstallerDir
     try {
-        candle.exe Installer.wxs -o Installer.wixobj
+        $WixVersion = "$Version.0"  # WiX requires Major.Minor.Build.Revision
+        candle.exe Installer.wxs -dProductVersion=$WixVersion -o Installer.wixobj
         if ($LASTEXITCODE -ne 0) {
             Write-Error "candle.exe failed (exit code $LASTEXITCODE)"
             exit $LASTEXITCODE

@@ -28,6 +28,9 @@ namespace ETL_SQL.Connectors.Snowflake
             "SNOWFLAKE Connector: Native connector for Snowflake Cloud Data Platform.\n" +
             "Options:\n" +
             "  HOST: Account identifier (e.g. myorg-myaccount or myorg-myaccount.snowflakecomputing.com).\n" +
+            "  ACCOUNT: Snowflake account name override, useful with local emulators.\n" +
+            "  PORT: Optional Snowflake service port, useful with local emulators.\n" +
+            "  PROTOCOL: Optional protocol (https or http), useful with local emulators.\n" +
             "  DATABASE: Target database.\n" +
             "  SCHEMA: Target schema (default: PUBLIC).\n" +
             "  WAREHOUSE: Virtual warehouse for query execution.\n" +
@@ -38,6 +41,9 @@ namespace ETL_SQL.Connectors.Snowflake
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
             { "HOST",             Array.Empty<string>() },
+            { "ACCOUNT",          Array.Empty<string>() },
+            { "PORT",             Array.Empty<string>() },
+            { "PROTOCOL",         Array.Empty<string>() },
             { "DATABASE",         Array.Empty<string>() },
             { "SCHEMA",           Array.Empty<string>() },
             { "WAREHOUSE",        Array.Empty<string>() },
@@ -65,8 +71,21 @@ namespace ETL_SQL.Connectors.Snowflake
         {
             var parts = new List<string>();
 
-            if (properties.TryGetValue("HOST", out var host))
+            properties.TryGetValue("HOST", out var host);
+
+            if (properties.TryGetValue("ACCOUNT", out var account))
+                parts.Add($"account={account}");
+            else if (!string.IsNullOrWhiteSpace(host))
                 parts.Add($"account={NormalizeAccount(host)}");
+
+            if (!string.IsNullOrWhiteSpace(host) && IsLocalOrExplicitEndpoint(host))
+                parts.Add($"host={host}");
+
+            if (properties.TryGetValue("PORT", out var port))
+                parts.Add($"port={port}");
+
+            if (properties.TryGetValue("PROTOCOL", out var protocol))
+                parts.Add($"scheme={protocol}");
 
             if (properties.TryGetValue("USERNAME", out var user))
                 parts.Add($"user={user}");
@@ -97,7 +116,8 @@ namespace ETL_SQL.Connectors.Snowflake
         public static string? GetHostStatic(string connectionString, Dictionary<string, string>? options = null)
         {
             if (options?.TryGetValue("HOST", out var host) == true) return host;
-            return ParseAccountFromConnectionString(connectionString);
+            return ParseValueFromConnectionString(connectionString, "host")
+                ?? ParseValueFromConnectionString(connectionString, "account");
         }
 
         internal static string NormalizeAccount(string host)
@@ -108,12 +128,20 @@ namespace ETL_SQL.Connectors.Snowflake
                 : host;
         }
 
-        private static string? ParseAccountFromConnectionString(string cs)
+        internal static bool IsLocalOrExplicitEndpoint(string host)
+        {
+            return host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+                || host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                || host.Equals("::1", StringComparison.OrdinalIgnoreCase)
+                || host.Contains(':', StringComparison.Ordinal);
+        }
+
+        private static string? ParseValueFromConnectionString(string cs, string key)
         {
             foreach (var part in cs.Split(';'))
             {
                 var kv = part.Trim().Split('=', 2);
-                if (kv.Length == 2 && kv[0].Equals("account", StringComparison.OrdinalIgnoreCase))
+                if (kv.Length == 2 && kv[0].Equals(key, StringComparison.OrdinalIgnoreCase))
                     return kv[1];
             }
             return null;

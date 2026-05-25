@@ -16,7 +16,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > -- or capture it
 > DECLARE @v STRING = @@VERSION;
 > ```
-> Use `SHOW VERSION;` to display version info from within a script session. The current release baseline is **v0.7.0**.
+> Use `SHOW VERSION;` to display version info from within a script session. The current release baseline is **v0.8.0**.
 
 **Q: Where do I start?**
 > Read the [User Manual](User_Manual.md) first — it explains the pipeline mental model that everything else builds on. Then work through the [Cookbook](Cookbook.md) for production-ready examples.
@@ -52,7 +52,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > Yes — the `WAITFOR (condition)` form is supported. The engine evaluates the expression repeatedly at a 200ms interval and continues execution as soon as the result is truthy (non-zero, non-empty, or `true`):
 > ```sql
 > -- Polls every 200ms until the condition returns a non-zero count
-> WAITFOR (SELECT COUNT(*) FROM control_db.JobStatus WHERE Status = 'Ready');
+> WAIT UNTIL (SELECT COUNT(*) FROM control_db.JobStatus WHERE Status = 'Ready') > 0;
 > PRINT 'Condition met — proceeding.';
 > ```
 >
@@ -168,9 +168,9 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > The sandbox blocks access to drive roots (e.g. `\\server\` directly without a subdirectory), most system directories, and paths containing restricted segments like `.git`, `.ssh`, `.aws`. Ensure your path resolves to a specific subdirectory within an `ApprovedSafeZone`. Contact your ETL-SQL administrator to have the share's UNC path registered as a safe zone.
 
 **Q: I need my script to process more than 100 files. How do I raise the limit?**
-> Add the override flag as a comment at the top of your script, and ensure the target path is within a registered `ApprovedSafeZone`:
+> Add the override flag to your script, and ensure the target path is within a registered `ApprovedSafeZone`:
 > ```sql
-> ### ALLOW_GREATER_THAN_100_FILE
+> SET ALLOW_GREATER_THAN_100_FILE ON;
 > -- This override only works if the script's working directory is an Approved Safe Zone.
 > FOREACH @f IN FILE_LIST('C:\Inbound', '*.csv')
 > BEGIN
@@ -198,7 +198,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > When you join a file connector source with a SQL connector source, the engine must pull all rows from both sides into memory and join them in-process. For large SQL-side tables, consider pushing a filter to the SQL side first using a `SELECT INTO #temp` with a `WHERE` clause before the join:
 > ```sql
 > -- Pre-filter on the SQL side (only pulls matching rows)
-> SELECT Id, Name FROM prod_db.Customers WHERE Region = 'North' INTO #sql_side;
+> SELECT Id, Name INTO #sql_side FROM prod_db.Customers WHERE Region = 'North';
 >
 > -- Now join in engine memory — smaller dataset
 > SELECT c.Id, c.Name, csv.DiscountCode
@@ -211,6 +211,12 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > ```sql
 > SET PROFILING ON;
 > RUN SCRIPT 'C:\Scripts\my_pipeline.etlsql';
+> SET PROFILING OFF;
+>
+> -- View the 10 slowest statements
+> SHOW PROFILE INTO #perf;
+> SELECT * FROM #perf ORDER BY DurationMs DESC LIMIT 10;
+> ```
 
 **Q: Why did `PUBLISH BUNDLE` fail on `RUN SCRIPT @path`?**
 > Published bundles must know every sub-script at publish time so the Orchestrator can version and store the full dependency graph. Dynamic script paths cannot be packaged safely. Use live mode for those jobs:
@@ -222,12 +228,6 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 
 **Q: Can I recover a script after publishing if I lose the source files?**
 > Yes. Use `EXPORT SCRIPT 'orch://bundle@version/main.etlsql' TO 'C:\Recovered\bundle';`. The export recovers script text and relative paths, but it does not decrypt or reveal secrets. Re-enter credentials before running recovered scripts.
-> SET PROFILING OFF;
->
-> -- View the 10 slowest statements
-> SHOW PROFILE INTO #perf;
-> SELECT * FROM #perf ORDER BY DurationMs DESC LIMIT 10;
-> ```
 
 ---
 

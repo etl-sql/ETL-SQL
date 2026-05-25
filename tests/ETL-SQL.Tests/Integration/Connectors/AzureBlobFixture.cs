@@ -1,6 +1,8 @@
 using System;
 using System.Threading.Tasks;
+using Azure.Storage;
 using Azure.Storage.Blobs;
+using Azure.Storage.Sas;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using Xunit;
@@ -38,6 +40,25 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public string ValidConnectionString => ConnectionString(DevAccountKey);
         public string BadKeyConnectionString  => ConnectionString(WrongAccountKey);
 
+        public string ExpiredSasConnectionString()
+        {
+            var credential = new StorageSharedKeyCredential(DevAccountName, DevAccountKey);
+            var sas = new AccountSasBuilder
+            {
+                Services = AccountSasServices.Blobs,
+                ResourceTypes = AccountSasResourceTypes.Service | AccountSasResourceTypes.Container | AccountSasResourceTypes.Object,
+                Protocol = SasProtocol.HttpsAndHttp,
+                StartsOn = DateTimeOffset.UtcNow.AddHours(-2),
+                ExpiresOn = DateTimeOffset.UtcNow.AddHours(-1)
+            };
+            sas.SetPermissions(AccountSasPermissions.Read | AccountSasPermissions.List);
+
+            return $"DefaultEndpointsProtocol=http;" +
+                   $"AccountName={DevAccountName};" +
+                   $"BlobEndpoint=http://127.0.0.1:{BlobPort}/{DevAccountName};" +
+                   $"SharedAccessSignature={sas.ToSasQueryParameters(credential)};";
+        }
+
         public BlobServiceClient CreateServiceClient() =>
             new BlobServiceClient(ValidConnectionString);
 
@@ -45,8 +66,9 @@ namespace ETL_SQL.Tests.Integration.Connectors
         {
             _container = new ContainerBuilder("mcr.microsoft.com/azure-storage/azurite:latest")
                 .WithPortBinding(10000, true)
+                .WithCommand("azurite-blob", "--blobHost", "0.0.0.0", "--skipApiVersionCheck")
                 .WithWaitStrategy(Wait.ForUnixContainer()
-                    .UntilMessageIsLogged("Azurite Blob service is successfully listening"))
+                    .UntilInternalTcpPortIsAvailable(10000))
                 .Build();
 
             await _container.StartAsync();

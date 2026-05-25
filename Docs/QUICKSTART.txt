@@ -1,9 +1,9 @@
 ================================================================================
-  ETL-SQL v0.7.0 Quickstart Guide
+  ETL-SQL v0.8.0 Quickstart Guide
 ================================================================================
 
-Welcome to ETL-SQL, the high-performance hybrid engine for SQL, NoSQL, and 
-FlatFiles. This release (v0.7.0) is focused on portability and security.
+Welcome to ETL-SQL, the high-performance hybrid engine for SQL, NoSQL, and
+FlatFiles.
 
 1. FIRST STEPS
 --------------------------------------------------------------------------------

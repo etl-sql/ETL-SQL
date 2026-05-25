@@ -46,6 +46,9 @@ namespace ETL_SQL.Tests.Integration.Connectors
         private AzureBlobConnector BadKeyConnector(string container = "testcontainer") =>
             new AzureBlobConnector(MakeContext(), _blob.BadKeyConnectionString, container);
 
+        private AzureBlobConnector ExpiredSasConnector(string container = "testcontainer") =>
+            new AzureBlobConnector(MakeContext(), _blob.ExpiredSasConnectionString(), container);
+
         /// <summary>Creates a blob container in Azurite and returns it.</summary>
         private async Task<BlobContainerClient> CreateContainerAsync(string name)
         {
@@ -150,7 +153,22 @@ namespace ETL_SQL.Tests.Integration.Connectors
             }
         }
 
-        // ── 6. Host not in allowlist → SecurityException at construction ──────────
+        // ── 6. Expired SAS token → auth failure → ExecutionException ─────────────
+
+        [Fact]
+        public async Task ExpiredSas_ReadBatches_WrapsAsExecutionException()
+        {
+            var containerName = $"sas-{Guid.NewGuid():N}";
+            await CreateContainerAsync(containerName);
+
+            var conn = ExpiredSasConnector(containerName);
+            var ex = await Assert.ThrowsAsync<ExecutionException>(
+                async () => await conn.ReadBatches().ToListAsync());
+
+            Assert.Contains("Azure Blob", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // ── 7. Host not in allowlist → SecurityException at construction ──────────
 
         [Fact]
         public void BlockedHost_ThrowsSecurityException()
@@ -164,10 +182,10 @@ namespace ETL_SQL.Tests.Integration.Connectors
             ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);
 
             // account.blob.core.windows.net is not localhost — must be rejected
-            const string publicCs =
+            var publicCs =
                 "DefaultEndpointsProtocol=https;" +
                 "AccountName=someaccount;" +
-                "AccountKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==;";
+                $"AccountKey={AzureBlobFixture.DevAccountKey};";
 
             Assert.Throws<SecurityException>(() =>
                 new AzureBlobConnector(ctx.Object, publicCs, "container"));

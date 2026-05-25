@@ -174,8 +174,10 @@ namespace ETL_SQL.Connectors.Rest
                 }
             }
 
-            // Body for POST
-            if (method == HttpMethod.Post && _options != null && _options.TryGetValue("BODY", out var body))
+            // Body for request methods that support JSON payloads.
+            if ((method == HttpMethod.Post || method == HttpMethod.Put) &&
+                _options != null &&
+                _options.TryGetValue("BODY", out var body))
             {
                 request.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
             }

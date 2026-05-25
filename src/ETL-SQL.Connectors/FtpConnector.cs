@@ -23,6 +23,7 @@ namespace ETL_SQL.Connectors
 
         private readonly FtpClient? _client;
         private readonly string? _host;
+        private readonly int _port;
         private readonly string? _username;
         private readonly string? _password;
 
@@ -32,25 +33,35 @@ namespace ETL_SQL.Connectors
         }
 
         public FtpConnector(string host, string username, string password)
+            : this(host, username, password, 21)
+        {
+        }
+
+        public FtpConnector(string host, string username, string password, int port)
         {
             _logger = NullLogger.Instance;
-            _host = host;
+            (_host, _port) = NormalizeEndpoint(host, port);
             _username = username;
             _password = password;
-            _client = new FtpClient(host, username, password);
+            _client = CreateClient(_host, _port, username, password);
         }
 
         public FtpConnector(IExecutionContext context, string host, string username, string password)
+            : this(context, host, username, password, 21)
+        {
+        }
+
+        public FtpConnector(IExecutionContext context, string host, string username, string password, int port)
         {
             _context = context;
             _logger = context.Logger;
-            _host = host;
+            (_host, _port) = NormalizeEndpoint(host, port);
             _username = username;
             _password = password;
-            _client = new FtpClient(host, username, password);
+            _client = CreateClient(_host, _port, username, password);
 
             // Security Hardening: egress control
-            context.SecurityService.ValidateHost(host);
+            context.SecurityService.ValidateHost(_host);
         }
 
         public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
@@ -70,7 +81,12 @@ namespace ETL_SQL.Connectors
         {
             string user = options?.GetValueOrDefault("USER") ?? "";
             string pass = options?.GetValueOrDefault("PASSWORD") ?? "";
-            return new FtpConnector(context, connectionString, user, pass);
+            var port = 21;
+            if (options?.TryGetValue("PORT", out var portText) == true && int.TryParse(portText, out var parsedPort))
+            {
+                port = parsedPort;
+            }
+            return new FtpConnector(context, connectionString, user, pass, port);
         }
 
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");
@@ -196,7 +212,33 @@ namespace ETL_SQL.Connectors
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
         {
             if (options != null && options.TryGetValue("HOST", out var host)) return host;
-            return connectionString;
+            return NormalizeEndpoint(connectionString, 21).Host;
+        }
+
+        private static FtpClient CreateClient(string host, int port, string username, string password)
+        {
+            var client = new FtpClient(host, username, password)
+            {
+                Port = port
+            };
+            return client;
+        }
+
+        private static (string Host, int Port) NormalizeEndpoint(string host, int fallbackPort)
+        {
+            if (Uri.TryCreate(host, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
+            {
+                return (uri.Host, uri.IsDefaultPort ? fallbackPort : uri.Port);
+            }
+
+            var colonIndex = host.LastIndexOf(':');
+            if (colonIndex > 0 && colonIndex == host.IndexOf(':') &&
+                int.TryParse(host[(colonIndex + 1)..], out var parsedPort))
+            {
+                return (host[..colonIndex], parsedPort);
+            }
+
+            return (host, fallbackPort);
         }
 
         private static bool ShouldWrapProviderException(Exception ex) =>

@@ -1,6 +1,6 @@
 # ETL-SQL
 
-![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.7.0-blue?style=for-the-badge&logo=dotnet)
+![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.8.0-blue?style=for-the-badge&logo=dotnet)
 ![Language](https://img.shields.io/badge/Language-C%23-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-lightgrey?style=for-the-badge)
 
@@ -292,10 +292,10 @@ etl-sql-report build sales_dashboard.rptsql --format json
 
 ## Release Build
 
-Maintainers can run the release script to validate, package, and publish the 0.7.0 artifacts:
+Maintainers can run the release script to validate, package, and publish the 0.8.0 artifacts:
 
 ```powershell
-.\scripts\Master-Release.ps1 -Version "0.7.0"
+.\scripts\Master-Release.ps1 -Version "0.8.0"
 ```
 
 ---

@@ -12,9 +12,11 @@ using ETL_SQL.Connectors.Avro;
 using Spectre.Console;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Tests.Integration
 {
+    [Trait("Category", "Integration")]
     [Trait("Connector", "AVRO")]
     [Trait("CertificationClass", "LocalRealIntegration")]
     public class AvroTests
@@ -57,6 +59,27 @@ namespace ETL_SQL.Tests.Integration
             Assert.True(Convert.ToBoolean(batches[0].Rows[1]["Active"]) == false, "Second row Active should be false");
 
             if (File.Exists(path)) File.Delete(path);
+        }
+
+        [Fact]
+        public async Task CorruptFile_ReadBatches_WrapsAsExecutionException()
+        {
+            string path = $"corrupt_{Guid.NewGuid():N}.avro";
+            File.WriteAllText(path, "not an avro file");
+
+            try
+            {
+                var ds = new AvroDataSource(SystemExecutionContext.Instance, path);
+
+                var ex = await Assert.ThrowsAsync<ExecutionException>(
+                    async () => await ds.ReadBatches().ToListAsync());
+
+                Assert.Contains("Avro", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
         }
 
         [Fact]

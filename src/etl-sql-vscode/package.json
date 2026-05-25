@@ -2,7 +2,7 @@
   "name": "etl-sql-vscode",
   "displayName": "ETL-SQL Tools",
   "description": "Language support for ETL-SQL scripts with lineage tracking and diagnostics.",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "publisher": "etl-sql",
   "license": "MIT",
   "author": "Charles Clemens <etlsqlsoftware@gmail.com>",

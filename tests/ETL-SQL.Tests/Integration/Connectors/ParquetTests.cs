@@ -9,9 +9,11 @@ using ETL_SQL.Connectors.Parquet;
 using Spectre.Console;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Tests.Integration
 {
+    [Trait("Category", "Integration")]
     [Trait("Connector", "PARQUET")]
     [Trait("CertificationClass", "LocalRealIntegration")]
     public class ParquetTests
@@ -53,6 +55,27 @@ namespace ETL_SQL.Tests.Integration
             Assert.Equal(88.0, Convert.ToDouble(batches[0].Rows[1]["Score"]));
 
             if (File.Exists(path)) File.Delete(path);
+        }
+
+        [Fact]
+        public async Task CorruptFile_ReadBatches_WrapsAsExecutionException()
+        {
+            string path = $"corrupt_{Guid.NewGuid():N}.parquet";
+            File.WriteAllText(path, "not a parquet file");
+
+            try
+            {
+                var ds = new ParquetDataSource(SystemExecutionContext.Instance, path);
+
+                var ex = await Assert.ThrowsAsync<ExecutionException>(
+                    async () => await ds.ReadBatches().ToListAsync());
+
+                Assert.Contains("Parquet", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+            finally
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
         }
     }
 }

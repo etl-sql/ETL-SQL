@@ -42,6 +42,31 @@ namespace ETL_SQL.Tests.Integration.Connectors
         }
 
         [Fact]
+        public void BuildConnectionString_LocalEmulator_ProducesHostPortProtocolParts()
+        {
+            var props = new Dictionary<string, string>
+            {
+                { "HOST",     "127.0.0.1" },
+                { "ACCOUNT",  "test" },
+                { "PORT",     "8080" },
+                { "PROTOCOL", "http" },
+                { "USERNAME", "test" },
+                { "PASSWORD", "test" },
+                { "DATABASE", "TEST_DB" },
+                { "SCHEMA",   "PUBLIC" }
+            };
+
+            var cs = _connector.BuildConnectionString(props);
+
+            Assert.Contains("account=test", cs);
+            Assert.Contains("host=127.0.0.1", cs);
+            Assert.Contains("port=8080", cs);
+            Assert.Contains("scheme=http", cs);
+            Assert.Contains("user=test", cs);
+            Assert.Contains("password=test", cs);
+        }
+
+        [Fact]
         public void BuildConnectionString_HostWithSuffix_NormalizesAccount()
         {
             var props = new Dictionary<string, string>
@@ -127,6 +152,13 @@ namespace ETL_SQL.Tests.Integration.Connectors
         {
             var host = SnowflakeConnector.GetHostStatic("user=alice;password=s3cr3t;");
             Assert.Null(host);
+        }
+
+        [Fact]
+        public void GetHostStatic_HostKey_TakesPrecedenceOverAccount()
+        {
+            var host = SnowflakeConnector.GetHostStatic("account=test;host=127.0.0.1;port=8080;");
+            Assert.Equal("127.0.0.1", host);
         }
 
         [Fact]

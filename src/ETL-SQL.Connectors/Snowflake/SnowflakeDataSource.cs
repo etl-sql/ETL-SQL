@@ -40,7 +40,12 @@ namespace ETL_SQL.Connectors.Snowflake
 
             var host = SnowflakeConnector.GetHostStatic(connectionString, options);
             if (!string.IsNullOrEmpty(host))
-                context.SecurityService.ValidateHost(host.Contains('.') ? host : host + ".snowflakecomputing.com");
+            {
+                var validationHost = SnowflakeConnector.IsLocalOrExplicitEndpoint(host) || HasEmulatorEndpointOptions(connectionString, options)
+                    ? host
+                    : host.Contains('.') ? host : host + ".snowflakecomputing.com";
+                context.SecurityService.ValidateHost(validationHost);
+            }
         }
 
         public string ConnectionString => _connectionString;
@@ -158,7 +163,13 @@ namespace ETL_SQL.Connectors.Snowflake
             }
         }
 
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ExecuteRawSqlCore(sql, parameters),
+                "Snowflake",
+                ex => ex is SnowflakeDbException);
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
         {
             var (conn, isShared) = await GetConnectionAsync();
             try
@@ -177,6 +188,17 @@ namespace ETL_SQL.Connectors.Snowflake
                         param.Value = p ?? DBNull.Value;
                         cmd.Parameters.Add(param);
                     }
+                }
+
+                if (IsNonQueryStatement(sql))
+                {
+                    var affected = await cmd.ExecuteNonQueryAsync();
+                    var status = new DataTable();
+                    status.SetColumns(new[] { "Status" });
+                    status.RowsAffected = affected;
+                    await status.AddRowAsync(new Row { ["Status"] = "OK" });
+                    yield return status;
+                    yield break;
                 }
 
                 using var reader = await cmd.ExecuteReaderAsync();
@@ -370,6 +392,39 @@ namespace ETL_SQL.Connectors.Snowflake
             var parts = name.Split('.');
             return string.Join(".", parts.Select(p =>
                 p.StartsWith('"') ? p : $"\"{p.Replace("\"", "\"\"")}\""));
+        }
+
+        private static bool IsNonQueryStatement(string sql)
+        {
+            var trimmed = sql.TrimStart();
+            var firstSpace = trimmed.IndexOfAny(new[] { ' ', '\t', '\r', '\n', ';' });
+            var keyword = firstSpace < 0 ? trimmed : trimmed[..firstSpace];
+
+            return keyword.Equals("CREATE", StringComparison.OrdinalIgnoreCase)
+                || keyword.Equals("DROP", StringComparison.OrdinalIgnoreCase)
+                || keyword.Equals("ALTER", StringComparison.OrdinalIgnoreCase)
+                || keyword.Equals("INSERT", StringComparison.OrdinalIgnoreCase)
+                || keyword.Equals("UPDATE", StringComparison.OrdinalIgnoreCase)
+                || keyword.Equals("DELETE", StringComparison.OrdinalIgnoreCase)
+                || keyword.Equals("MERGE", StringComparison.OrdinalIgnoreCase)
+                || keyword.Equals("TRUNCATE", StringComparison.OrdinalIgnoreCase)
+                || keyword.Equals("USE", StringComparison.OrdinalIgnoreCase)
+                || keyword.Equals("BEGIN", StringComparison.OrdinalIgnoreCase)
+                || keyword.Equals("COMMIT", StringComparison.OrdinalIgnoreCase)
+                || keyword.Equals("ROLLBACK", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool HasEmulatorEndpointOptions(string connectionString, Dictionary<string, string>? options)
+        {
+            if (options != null &&
+                (options.ContainsKey("PORT") || options.ContainsKey("PROTOCOL") || options.ContainsKey("ACCOUNT")))
+            {
+                return true;
+            }
+
+            return connectionString.Contains("port=", StringComparison.OrdinalIgnoreCase)
+                || connectionString.Contains("protocol=", StringComparison.OrdinalIgnoreCase)
+                || connectionString.Contains("host=", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

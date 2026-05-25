@@ -1,6 +1,6 @@
 # Connector Certification Matrix
 
-**ETL-SQL 0.7.x — Last reviewed: 2026-05-24**
+**ETL-SQL 0.7.x — Last reviewed: 2026-05-25**
 
 This matrix tracks compliance status for every connector against the 10 inviolable rules and the key engineering requirements defined in [Connectors_Standards.md](Connectors_Standards.md). Use it to triage new connector work, prioritize gap remediation, and enforce the certification gate before merging connector changes.
 
@@ -16,11 +16,11 @@ Use these classes when interpreting the matrix and when tagging new connector te
 | :--- | :--- | :--- |
 | Metadata only | Verifies connector registration, supported options, aliases, and dialect declarations without provider I/O. | Connector metadata tests |
 | Mocked integration | Exercises connector behavior with mocked provider clients or fake remote file systems. | SFTP constructor/factory tests, provider exception wrapping tests |
-| Local real integration | Uses local files or in-process stores with real connector code. | FLATFILE, JSON, XML, PARQUET, AVRO, DIRECTORY, MOCKDB |
-| Docker real integration | Uses a disposable container for real protocol/provider compatibility. | SFTP via `atmoz/sftp`, SMTP via MailPit, AZURE_BLOB via Azurite |
+| Local real integration | Uses local files, loopback services, or in-process stores with real connector code. | FLATFILE, JSON, XML, PARQUET, AVRO, DIRECTORY, API loopback server, MOCKDB |
+| Docker real integration | Uses a disposable container for real protocol/provider compatibility. | SFTP via `atmoz/sftp`, FTP via `delfer/alpine-ftp-server`, SMTP via MailPit, AZURE_BLOB via Azurite |
 | External/provider real integration | Requires a real cloud or database account outside local CI. | Snowflake and BigQuery production sign-off |
 
-Current automated test tags are still coarse (`Category=Integration` for Docker-backed connector tests). A follow-up should add connector-specific traits such as `Connector=SFTP` and `CertificationClass=DockerRealIntegration` so release gates can select exact coverage.
+Connector certification tests now carry connector-specific traits such as `Connector=SFTP` and coverage-class traits such as `CertificationClass=DockerRealIntegration`, `CertificationClass=LocalRealIntegration`, `CertificationClass=MockedIntegration`, and `CertificationClass=MetadataOnly`. Use these traits with the existing `Category=Integration` tags to select exact release-gate coverage.
 
 ---
 
@@ -41,7 +41,7 @@ These connectors implement `IDatabaseSource` with `SupportsSqlPushdown = true`.
 | **Rule 9** — GetExcludedKeywords declared | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
 | **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ | ~ |
-| **T2** — Negative path tests | ✓ | ✓ | ~ | ~ | ✓ | ✓ |
+| **T2** — Negative path tests | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
 | **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -83,11 +83,11 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 | **Rule 9** — GetExcludedKeywords declared | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
 | **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T2** — Negative path tests (ResolvePath) | ✓ | ✓ | ✓ | ✓ | ~ | ~ | ✓ |
+| **T2** — Negative path tests (ResolvePath) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Overall** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **~ GA (gaps)** | **✓ GA** |
+| **Overall** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** |
 
 ### Excel Notes
 - `ExcelDataReader` does not expose async read APIs. Rule 2 compliance is documented as an accepted exception; reads are offloaded to `Task.Run` to avoid blocking the async call chain.
@@ -97,7 +97,7 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 - Refactored to streaming `XmlReader` in 0.7.x: `ReadBatches` performs two lightweight passes (schema discovery + data yield) without loading the full document into memory. Rule 7 compliant.
 
 ### Parquet / Avro Notes
-- Apache.Parquet and Avro.Net libraries do not provide granular async row-level APIs. Exception wrapping tests added (T4 ✓). Negative path tests still missing.
+- Apache.Parquet and Avro.Net libraries do not provide granular async row-level APIs. Exception wrapping tests added (T4 ✓), and corrupt-file negative-path reads are covered for both connectors (T2 ✓).
 
 ---
 
@@ -116,17 +116,17 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 | **Rule 9** — GetExcludedKeywords | N/A | N/A | N/A | N/A | N/A |
 | **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T2** — Negative path / credential tests | ✓ | ~ | ✓ | ~ | ✓ |
+| **T2** — Negative path / credential tests | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Overall** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **~ GA (gaps)** | **✓ GA** |
+| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **✓ GA** |
 
 ### API Notes
 - Streaming is best-effort: paginated API responses are yielded page-by-page (compliant), but `ReadBatches` for non-paginated endpoints buffers the full response body.
-- Smoke tests exist for GET/POST flows; PUT/DELETE and auth-scheme tests are missing.
+- Local loopback HTTP tests cover GET/POST smoke paths, PUT/DELETE methods, and Basic, Bearer, and API key authentication headers.
 
 ### SMTP Notes
 - Write-only connector; no `ReadBatches` path. Rule 7 is N/A.
@@ -134,7 +134,8 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 
 ### FTP / AZURE_BLOB Notes
 - Exception wrapping tests added (T4 ✓).
-- AZURE_BLOB has Azurite-backed smoke, upload/list/download, bad account key, blocked host, and connection-string host parsing coverage. Expired SAS-token coverage is still pending.
+- FTP has Docker-backed coverage for mapped-port connection setup, `PORT` option handling through `CreateDataSource`, root listing, upload/download round trip, and wrong-password provider failure wrapping.
+- AZURE_BLOB has Azurite-backed smoke, upload/list/download, bad account key, expired SAS token, blocked host, and connection-string host parsing coverage.
 
 ---
 
@@ -183,10 +184,6 @@ Sorted by estimated risk:
 
 | Gap | Connectors Affected | Risk | Action |
 | :--- | :--- | :---: | :--- |
-| Connector-specific certification traits missing | All connectors | Medium | Add `Connector` and `CertificationClass` traits to connector tests |
-| AZURE_BLOB expired SAS-token test missing | AZURE_BLOB | Low | Add negative auth test for expired/invalid SAS when SAS auth is configured |
-| ODBC GetExcludedKeywords empty by design | ODBC | Low | Document accepted exception in connector source |
-| Excel async (accepted exception) | EXCEL | Low | Document Task.Run workaround; track library update |
 | Snowflake full provider auth not CI-verified | SNOWFLAKE | Low | Add CI step with Snowflake test account or emulator |
 
 ---

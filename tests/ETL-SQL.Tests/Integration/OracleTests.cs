@@ -8,11 +8,17 @@ using ETL_SQL.Core;
 using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Data;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors.Oracle;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
 using Spectre.Console;
 
 namespace ETL_SQL.Tests.Integration
 {
     [Trait("Category", "Integration")]
+    [Trait("Connector", "ORACLE")]
+    [Trait("CertificationClass", "DockerRealIntegration")]
     [Collection("Database collection")]
     public class OracleTests
     {
@@ -85,6 +91,41 @@ namespace ETL_SQL.Tests.Integration
                 var columns = (await db.GetColumnsAsync("typetest")).ToList();
                 Assert.Contains(columns, c => c.Equals("VARCHAR2COL", StringComparison.OrdinalIgnoreCase));
             }
+        }
+
+        [Fact]
+        public async Task MissingTable_ReadBatches_WrapsAsExecutionException()
+        {
+            var ds = new OracleDataSource(
+                SystemExecutionContext.Instance,
+                _fixture.OracleConnectionString,
+                $"missing_table_{Guid.NewGuid():N}");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
+            {
+                await foreach (var _ in ds.ReadBatches(batchSize: 10))
+                {
+                }
+            });
+
+            Assert.Contains("Oracle", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task InvalidSql_ExecuteRawSql_WrapsAsExecutionException()
+        {
+            var ds = new OracleDataSource(
+                SystemExecutionContext.Instance,
+                _fixture.OracleConnectionString);
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
+            {
+                await foreach (var _ in ds.ExecuteRawSql("SELECT * FROM"))
+                {
+                }
+            });
+
+            Assert.Contains("Oracle", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

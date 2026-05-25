@@ -66,7 +66,7 @@ With Authentication:
 
 Supported Options:
   URL         - The base endpoint URL.
-  METHOD      - HTTP Method (GET, POST). Default: GET.
+  METHOD      - HTTP Method (GET, POST, PUT, DELETE). Default: GET.
   AUTH_TYPE   - Authentication mode: NONE, BASIC, BEARER, APIKEY.
   USER/PASS   - Credentials for BASIC auth.
   TOKEN       - Secret for BEARER or APIKEY auth.

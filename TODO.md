@@ -52,7 +52,7 @@
     - Schema/table/column discovery.
     - Pushdown behavior for SQL connectors.
   - Add a generated status table to docs so users know what has been verified.
-  - Status review 2026-05-24: matrix exists and has been refreshed for XML streaming, SMTP Docker, and AZURE_BLOB Azurite coverage. Remaining gap: add connector-specific test traits/classifications (`Connector=...`, `CertificationClass=...`) so release gates can select metadata-only, mocked, local-real, Docker-real, and external-provider coverage precisely.
+  - Status review 2026-05-24: matrix exists and has been refreshed for XML streaming, SMTP Docker, AZURE_BLOB Azurite coverage, and connector-specific test traits/classifications (`Connector=...`, `CertificationClass=...`) so release gates can select metadata-only, mocked, local-real, Docker-real, and external-provider coverage precisely.
 
 - [x] **Real SFTP integration test lane**
   - Current state: SFTP connector exists and tests verify constructor/plumbing with factories and mock remote file systems.
@@ -197,6 +197,12 @@
   - Tightened report dependency output so private registered datasets are hidden unless the caller has dataset ownership, public access, admin access, or a dataset ACL.
 
 - [ ] **Connector certification gap remediation** *(see `Docs/Standards/Connector_Certification_Matrix.md` for full detail)*
+  - [x] **Connector-specific certification traits** — Added `Connector` and `CertificationClass` traits across connector test classes so release gates can select metadata-only, mocked integration, local real integration, and Docker real integration coverage directly.
+  - [x] **Oracle Docker negative-path coverage** — Existing `gvenzl/oracle-free` Testcontainers fixture now covers missing-table `ReadBatches` and invalid-SQL `ExecuteRawSql` provider failures as sanitized `ExecutionException`s; Oracle T2 is now verified in the certification matrix.
+  - [x] **AZURE_BLOB expired SAS-token coverage** — Azurite-backed integration tests now generate an expired account SAS and verify `ReadBatches` wraps the provider auth failure as a sanitized `ExecutionException`.
+  - [x] **FTP Docker real-integration coverage** — Added `delfer/alpine-ftp-server` Testcontainers coverage for mapped-port connection setup, `PORT` option handling through `CreateDataSource`, root listing, upload/download round trip, and wrong-password provider failure wrapping.
+  - [x] **API local real-integration coverage** — Added loopback HTTP server coverage for real `HttpClient` PUT and DELETE requests plus Basic, Bearer, and API key auth headers; PUT now sends configured JSON request bodies.
+  - [x] **Parquet/Avro corrupt-file coverage** — Added local real-integration negative-path reads that verify corrupt Parquet and Avro provider failures are wrapped as sanitized `ExecutionException`s.
 
   **High risk**
   - [x] **XML streaming refactor** — XML connector accumulates the full document in a DOM before yielding rows (Rule 7 violation). Refactor to streaming `XmlReader` so large XML files do not materialize fully in memory.
@@ -205,7 +211,7 @@
   **Medium risk**
   - [x] **Exception wrapping tests (T4) — 11 connectors** — T4 tests added for ORACLE, ODBC, EXCEL, PARQUET, AVRO, FTP, AZURE_BLOB, API, SMTP, REPORTPORTAL, and ORCHESTRATOR in `ConnectorExceptionWrappingTests.cs`. All 11 pass.
   - [x] **SMTP Docker smoke test** — `SmtpFixture.cs` starts an `axllent/mailpit:latest` container; `SmtpIntegrationTests.cs` covers successful send+verify via MailPit API, multi-row batch, connection refused → ExecutionException, host not in allowlist → SecurityException, and credential masking.
-  - [x] **AZURE_BLOB negative credential and path tests** — `AzureBlobFixture.cs` starts Azurite; `AzureBlobIntegrationTests.cs` covers: smoke (valid creds, empty container), upload+list round-trip, download, bad account key → ExecutionException on ReadBatches and Upload, host not in allowlist → SecurityException. `AzureBlobConnectorUnitTests` covers GetHostStatic parsing for all connection string formats.
+  - [x] **AZURE_BLOB negative credential and path tests** — `AzureBlobFixture.cs` starts Azurite; `AzureBlobIntegrationTests.cs` covers: smoke (valid creds, empty container), upload+list round-trip, download, bad account key → ExecutionException on ReadBatches and Upload, expired SAS token → ExecutionException on ReadBatches, host not in allowlist → SecurityException. `AzureBlobConnectorUnitTests` covers GetHostStatic parsing for all connection string formats.
 
   **Low risk / documentation**
   - [x] **ODBC — document GetExcludedKeywords accepted exception** — Explicit override with comment added to `OdbcConnector.cs`.
