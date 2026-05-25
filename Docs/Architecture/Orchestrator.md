@@ -135,16 +135,17 @@ External NuGet packages:
 
 ### 2.3 Security override flags
 
-`ExecutionSession` scans the raw script source text for special comment directives before the evaluator starts. These must appear as whole-line comments:
+Zero-Trust security guardrails can be overridden using session-scoped `SET` statements. These overrides are only authorized if the executing script's path is located within an approved safe zone:
 
-| Comment directive | Effect |
+| Statement override | Effect |
 |---|---|
-| `### ALLOW_FILE_TYPE_ACCESS` | Allows non-standard file extensions in `FLATFILE` connectors |
-| `### ALLOW_GREATER_THAN_100_FILE` | Allows file operations exceeding the 100-file limit |
-| `### ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS` | Allows `RUN SCRIPT` recursion beyond 5 levels |
+| `SET ALLOW_FILE_TYPE_ACCESS = ON` | Allows non-standard file extensions in `FLATFILE` connectors |
+| `SET ALLOW_FILE_TYPE_ACCESS = '.ext'` | Whitelists a specific file extension for the session |
+| `SET ALLOW_FILE_OPERATIONS = n` | Overrides the runaway file-operation count limit (default 100) |
+| `SET ALLOW_RECURSIVE_LAYERS = n` | Overrides the `RUN SCRIPT` recursion nesting depth limit (default 5) |
 
 > [!CAUTION]
-> These flags bypass Zero-Trust guardrails. They must only be used in scripts stored in `ApprovedSafeZones`. See `SecurityService.cs` for zone management.
+> These overrides bypass safety boundaries. They must only be used in scripts stored in `ApprovedSafeZones`. See `SecurityService.cs` for zone management.
 
 ### 2.4 Live execution tree callback
 
@@ -496,7 +497,7 @@ RUN SCRIPT 'C:\ETL\Transforms\normalize.etlsql' WITH (@region = @region_var);
      c. context.PopScope()
 ```
 
-**Recursion limit:** The evaluator enforces `MaxRecursiveDepth` (default 5). Scripts that call themselves (directly or transitively) beyond this depth receive a `SecurityException`. The `### ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS` comment overrides this for approved safe-zone scripts.
+**Recursion limit:** The evaluator enforces `MaxRecursiveDepth` (default 5). Scripts that call themselves (directly or transitively) beyond this depth receive a `SecurityException`. The `SET ALLOW_RECURSIVE_LAYERS = n` statement overrides this for approved safe-zone scripts.
 
 **Scope isolation:** Variables declared inside the sub-script (without explicit `OUTPUT`) are invisible to the caller after it returns. Only parameters and explicitly `OUTPUT`-marked variables are returned.
 
@@ -611,7 +612,7 @@ All Orchestrator configuration is bound from `appsettings.json` in the host appl
 
 **Cause:** A chain of `RUN SCRIPT` calls has exceeded 5 levels of nesting.
 
-**Fix:** Add `### ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS` to the top-level script if the recursion is intentional and the script is stored in an approved safe zone. Otherwise, refactor the script into a flat structure using `#temp` tables to pass data between logical steps.
+**Fix:** Use `SET ALLOW_RECURSIVE_LAYERS = n;` in the script if the recursion is intentional and the script is stored in an approved safe zone. Otherwise, refactor the script into a flat structure using `#temp` tables to pass data between logical steps.
 
 ### 12.5 `PARALLEL` branches produce non-deterministic `#temp` table results
 

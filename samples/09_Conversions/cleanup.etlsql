@@ -1,7 +1,5 @@
 -- Cleanup Script: Post-Migration Cleanup
 -- Path: samples/conversion/cleanup.etlsql
-
--- ### ALLOW_FILE_OPERATIONS = 100
 SET ALLOW_FILE_OPERATIONS = 100;
 
 DECLARE @StagingDir PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\import_staging\';

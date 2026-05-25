@@ -162,7 +162,7 @@ namespace ETL_SQL.Core
         /// <summary>Named environment sets created by CREATE SETS.</summary>
         IDictionary<string, NamedSet> NamedSets { get; }
         
-        // Security override flags (granted via ### flags in script)
+        // Security override flags (granted via session SET options)
         bool AllowUnknownFileTypes { get; set; }
         bool AllowLargeFileOperationCount { get; set; }
         bool AllowDeepRecursion { get; set; }

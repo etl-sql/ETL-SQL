@@ -6,9 +6,7 @@
    @author: Chuck
    @description: Secure HR Data Export with PGP and Compression
 */
-
 -- 1. Setup Environment
--- ### ALLOW_FILE_OPERATIONS = 200
 SET ALLOW_FILE_OPERATIONS = 200;
 
 DECLARE @OutputDir = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\output\';

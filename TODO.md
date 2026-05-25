@@ -231,7 +231,19 @@
 
 - [x] **SLT DML coverage gap** — added `dml.test` (UPDATE: arithmetic, CASE-in-SET, subquery-in-WHERE, multi-column, unconditional, no-op; DELETE: WHERE, subquery, no-op, unconditional), `insert.test` (INSERT VALUES with NULL and expressions, INSERT SELECT filtered, with JOIN, with aggregate), and `merge.test` (upsert, conditional WHEN MATCHED AND, inventory top-up). Also added `MergeStatementHandler` to SltRunner — it was missing from the handler list, blocking MERGE tests. All 40 SLT files pass.
 
-- [ ] **Remove `### ALLOW_...` comment directive form** -- The `### ALLOW_...` comment-scanning mechanism was intended to be replaced by the `SET ALLOW_...` statement form and should be fully removed.
+- [ ] **[Snowflake] `IsNonQueryStatement` misclassifies block-comment-prefixed DDL** — When a DDL statement is prefixed with a block comment (`/* ... */ CREATE TABLE ...`), the first "word" extracted is `/*`, which is not in the non-query keyword list. The statement is routed to `ExecuteReaderAsync` and the Snowflake driver throws.
+  - `src/ETL-SQL.Connectors/Snowflake/SnowflakeDataSource.cs` — fix keyword extraction to skip past block comments before checking the first keyword.
+
+- [ ] **[Snowflake] `HasEmulatorEndpointOptions` treats production `ACCOUNT=` as emulator marker** — The method returns `true` whenever the options dictionary contains an `ACCOUNT` key, which is a standard production option. This causes the FQDN normalization step to be skipped before `ValidateHost`, potentially bypassing the allowlist check for non-local accounts.
+  - `src/ETL-SQL.Connectors/Snowflake/SnowflakeDataSource.cs` — restrict the emulator check to options that unambiguously indicate a local/emulator endpoint (e.g., `HOST=localhost`, `PORT=`, emulator-specific keys).
+
+- [ ] **[REST] PUT/POST body `Content-Type` hardcoded to `application/json`** — `HEADER_Content-Type` goes to the message headers collection, not the content headers, so it has no effect on the body content type. Callers cannot send `application/x-www-form-urlencoded`, `text/plain`, or other body types.
+  - `src/ETL-SQL.Connectors/Rest/RestDataSource.cs` — detect a `BODY_CONTENT_TYPE` (or equivalent) option and apply it to `content.Headers.ContentType` rather than the request headers.
+
+- [ ] **[FTP] `NormalizeEndpoint` drops explicit port when it matches default** — `Uri.IsDefaultPort` is `true` for `:21`, so an explicitly specified port 21 is silently dropped and replaced by the `fallbackPort` argument. If any future caller passes a different fallback, the port will be wrong.
+  - `src/ETL-SQL.Connectors/FtpConnector.cs` — latent risk; consider using `uri.Port` unconditionally rather than branching on `IsDefaultPort`.
+
+- [x] **Remove `### ALLOW_...` comment directive form** -- The `### ALLOW_...` comment-scanning mechanism was intended to be replaced by the `SET ALLOW_...` statement form and should be fully removed.
   - Remove the scanning logic for `### ALLOW_FILE_TYPE_ACCESS`, `### ALLOW_GREATER_THAN_100_FILE`, and `### ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS` from the engine (check `ExecutionSession` and `SecurityService.cs`).
   - Update stale XML doc comment in `src/ETL-SQL.Core/SecurityService.cs` line 215 that still references the `### ALLOW_GREATER_THAN_100_FILE` form.
   - Update `Docs/Architecture/Orchestrator.md` section 2.3 -- remove the comment-directive table (lines 140-147) and all inline references at lines 499 and 614 -- replace with `SET ALLOW_FILE_OPERATIONS = <n>` and `SET ALLOW_RECURSIVE_LAYERS = <n>` statement equivalents.

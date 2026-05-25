@@ -212,7 +212,7 @@ namespace ETL_SQL.Services
         public string? MasterPassword { get; set; }
 
         /// <summary>
-        /// (like ### ALLOW_GREATER_THAN_100_FILE) are permitted.
+        /// Explicit list of filesystem directories where filesystem operations and security overrides (like SET ALLOW_FILE_OPERATIONS = n) are permitted.
         /// </summary>
         public HashSet<string> ApprovedSafeZones { get; }
 
@@ -454,7 +454,7 @@ namespace ETL_SQL.Services
         /// <param name="count">Total operations executed so far in this script.</param>
         /// <param name="depth">Current recursive nesting depth.</param>
         /// <param name="allowLargeCount">
-        ///   When <c>true</c> (set via <c>SET ALLOW_GREATER_THAN_100_FILE ON</c>), permits exceeding
+        ///   When <c>true</c> (set via <c>SET ALLOW_FILE_OPERATIONS = n</c>), permits exceeding
         ///   <see cref="MaxFileOperations"/> — but only if <paramref name="path"/> is inside an
         ///   <see cref="ApprovedSafeZones"/> entry. Ignored for internal operations.
         /// </param>

@@ -1,9 +1,7 @@
 -- Main Orchestration: System B Secure Ingestion
 -- Path: samples/conversion/system_b/import_main.etlsql
 -- @requires: postgres
-
 -- 1. Setup Environment
--- ### ALLOW_FILE_OPERATIONS = 200
 SET ALLOW_FILE_OPERATIONS = 200;
 
 DECLARE @InputDir    PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\import_staging\';
