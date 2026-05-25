@@ -30,3 +30,6 @@ SELECT * INTO #data FROM TestDB.public.my_table;
 -- Tear down when done
 CLOSE_DOCKER TestPG;
 ```
+
+References:
+- [Specialized Operations](../../../../../Docs/Reference/Specialized_Operations.md)

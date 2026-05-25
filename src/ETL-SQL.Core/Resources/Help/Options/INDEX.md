@@ -96,3 +96,6 @@ SELECT * FROM #timing ORDER BY duration_ms DESC;
 -- Raise spill threshold before a known large join
 SET JOIN_SPILL_THRESHOLD = 500000;
 ```
+
+References:
+- [Syntax Index](../../../../../Docs/Syntax_Index.md)

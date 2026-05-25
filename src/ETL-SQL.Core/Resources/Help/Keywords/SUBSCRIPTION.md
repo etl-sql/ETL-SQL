@@ -32,3 +32,6 @@ Example:
     FORMAT PDF
     AT corporate-smtp
     PARAMETERS (@start = 'D-1', @end = 'D');
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

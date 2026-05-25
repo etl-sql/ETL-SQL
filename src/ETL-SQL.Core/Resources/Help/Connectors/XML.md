@@ -31,3 +31,6 @@ SELECT OrderID, CustomerID, Total, OrderDate
 
 PRINT 'Orders loaded: ' + @@ROWCOUNT;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

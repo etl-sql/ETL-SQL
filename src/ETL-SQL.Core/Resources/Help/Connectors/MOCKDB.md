@@ -22,3 +22,6 @@ PRINT 'Rows: ' + @@ROWCOUNT;
 ```
 
 Use MOCKDB during script development to avoid modifying real databases. Switch to the real connection when ready by changing the CREATE CONNECTION statement.
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

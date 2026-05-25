@@ -33,3 +33,6 @@ CREATE VISUAL OrdersTable AS TABLE (
   SOURCE = (SELECT * FROM #orders WHERE amount >= @threshold)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

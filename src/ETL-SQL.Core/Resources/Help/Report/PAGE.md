@@ -52,3 +52,6 @@ CREATE PAGE Detail AS PAGINATED (
   )
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

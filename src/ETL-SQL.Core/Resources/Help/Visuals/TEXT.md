@@ -54,3 +54,6 @@ CREATE VISUAL Narrative AS TEXT (
   MAPPINGS (CONTENT = content)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

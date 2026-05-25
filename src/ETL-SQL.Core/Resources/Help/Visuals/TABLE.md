@@ -73,3 +73,6 @@ CREATE VISUAL RecentOrders AS TABLE (
   )
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

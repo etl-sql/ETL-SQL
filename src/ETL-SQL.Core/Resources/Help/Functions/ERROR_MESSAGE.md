@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT ERROR_MESSAGE();
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

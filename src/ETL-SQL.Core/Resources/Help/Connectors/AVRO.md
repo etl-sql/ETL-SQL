@@ -27,3 +27,6 @@ SELECT event_type, user_id, event_time
 
 PRINT 'Events loaded: ' + @@ROWCOUNT;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

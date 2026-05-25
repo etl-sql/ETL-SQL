@@ -38,3 +38,6 @@ EXPORT SCRIPT 'orch://finance-load@3/main.etlsql' TO 'C:\Recovered\finance-load'
 - To control column order or filter rows before export, `SELECT ... INTO #subset` first.
 - `EXPORT SCRIPT` preserves published bundle relative paths but does not decrypt or reveal secrets; recovered scripts may require credentials to be re-entered.
 - See: CREATE CONNECTION, SELECT
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

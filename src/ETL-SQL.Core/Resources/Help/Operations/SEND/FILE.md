@@ -15,3 +15,6 @@ Parameters:
 Examples:
   SEND FILE 'C:\exports\report.csv' TO '/data/report.csv' AT MyFtp WITH (OVERWRITE = TRUE);
   SEND FILE('C:\exports\report.csv', MyFtp, '/data/report.csv', TRUE);
+
+References:
+- [Specialized Operations](../../../../../Docs/Reference/Specialized_Operations.md)

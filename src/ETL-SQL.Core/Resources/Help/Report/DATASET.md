@@ -39,3 +39,6 @@ CREATE VISUAL CatPie AS PIE (
 ```
 
 `&name` is the report-dataset form. Keep intermediate preparation in ordinary `#temp` tables, then expose reusable report data through `CREATE DATASET &dataset` definitions. `USE DATASET` and `REFRESH DATASET` also require the `&dataset` name.
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

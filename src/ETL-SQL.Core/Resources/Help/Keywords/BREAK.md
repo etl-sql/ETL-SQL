@@ -22,3 +22,6 @@ END;
 - BREAK exits only one level of nesting. For nested loops, use a flag variable or restructure the logic.
 - BREAK inside a `TRY` block does not suppress any pending `CATCH` — the loop exits cleanly.
 - See: CONTINUE, FOR, FOREACH, WHILE
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

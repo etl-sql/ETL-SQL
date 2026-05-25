@@ -27,3 +27,6 @@ CLEAR SESSIONS STALE;
 - `CLEAR SESSIONS STALE` is safe to run from a maintenance job — it removes data from sessions that have no active process, leaving running sessions untouched.
 - `CLEAR SESSIONS ALL` requires elevated permissions and should be used carefully in multi-user Orchestrator deployments.
 - See: SCHEDULE, TRANSACTION
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

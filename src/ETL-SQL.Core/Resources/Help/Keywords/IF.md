@@ -32,3 +32,6 @@ IF EXISTS (SELECT 1 FROM #errors) BEGIN
   THROW 'Errors found — aborting.';
 END;
 ```
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

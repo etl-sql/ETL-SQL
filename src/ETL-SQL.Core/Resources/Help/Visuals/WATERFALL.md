@@ -31,3 +31,6 @@ CREATE VISUAL ProfitBridge AS WATERFALL (
   )
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

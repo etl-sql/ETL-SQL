@@ -32,3 +32,6 @@ SELECT department, q1, q2, q3, q4
 
 PRINT 'Budget rows loaded: ' + @@ROWCOUNT;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

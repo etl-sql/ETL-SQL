@@ -33,3 +33,6 @@ CREATE VISUAL HierRevenue AS TREEMAP (
   MAPPINGS (NAME = name, PARENT = parent, VALUE = value)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

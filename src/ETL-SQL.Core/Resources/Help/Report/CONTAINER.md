@@ -73,3 +73,6 @@ CREATE PAGE Dashboard AS DASHBOARD (
   )
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

@@ -25,3 +25,6 @@ END;
 ```
 
 Always pair WAITFOR CONDITION with a TIMEOUT to avoid infinite waits.
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

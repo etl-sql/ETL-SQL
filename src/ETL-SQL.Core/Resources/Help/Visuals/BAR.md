@@ -23,3 +23,6 @@ CREATE VISUAL SalesByPeriod AS BAR (
   ACTIONS  (ON_CLICK = DRILL_IN(HIERARCHY = (Year, Quarter, Month)))
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

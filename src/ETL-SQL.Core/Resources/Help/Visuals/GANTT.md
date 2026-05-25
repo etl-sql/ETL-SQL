@@ -31,3 +31,6 @@ CREATE VISUAL ProjectTimeline AS GANTT (
   )
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

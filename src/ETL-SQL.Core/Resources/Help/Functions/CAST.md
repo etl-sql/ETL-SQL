@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT CAST('1' AS INT);
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

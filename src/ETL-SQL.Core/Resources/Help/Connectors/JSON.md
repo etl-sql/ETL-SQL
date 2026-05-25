@@ -31,3 +31,6 @@ SELECT id, customer_id, total, created_at
 
 PRINT 'Orders loaded: ' + @@ROWCOUNT;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

@@ -18,3 +18,6 @@ Use INPUT to let callers (CLI, parent script, subscription) supply the expressio
   DECLARE @start RELDATE INPUT = 'M-1';
 
 CLI override: etlsql run report.etlsql --var @start=W-1
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

@@ -55,3 +55,6 @@ CREATE PAGE Main AS DASHBOARD (
 
 Use HELP REPORT <component> for details (e.g. HELP REPORT VISUAL, HELP REPORT PAGE).
 Use HELP VISUAL <type> for chart-specific options (e.g. HELP VISUAL BAR).
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

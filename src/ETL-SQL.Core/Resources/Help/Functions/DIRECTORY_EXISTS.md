@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT DIRECTORY_EXISTS('dir');
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

@@ -28,3 +28,6 @@ INSERT INTO #summary (region, total)
 
 To insert into a remote connection table, the connection must be specified via AT or via a qualified table name.
 To replace all rows, use TRUNCATE followed by INSERT, or use MERGE for upsert semantics.
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

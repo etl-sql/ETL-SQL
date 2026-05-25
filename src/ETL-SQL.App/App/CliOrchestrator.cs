@@ -36,7 +36,7 @@ namespace ETL_SQL.App
         private static readonly Option<int?> ServePortOption    = new(new[] { "--port", "-p" }, "Port to listen on (default: auto-assigned ephemeral port)");
         private static readonly Option<bool>  ServeNoBrowserOption = new("--no-browser", "Do not automatically open the browser on start");
         private static readonly Option<bool>   DoctorStrictOption   = new("--strict", "Exit with code 1 if any check produces a WARN or FAIL result.");
-        private static readonly Option<string> DoctorProfileOption  = new("--profile", () => "quick", "Check depth: 'quick' (fast config checks) or 'full' (adds engine/crypto/linter smoke tests).");
+        private static readonly Option<string> DoctorProfileOption  = new("--profile", () => "quick", "Check depth: 'quick' (fast local checks) or 'full' (adds engine, report, asset, runtime, and configured service probes).");
 
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {

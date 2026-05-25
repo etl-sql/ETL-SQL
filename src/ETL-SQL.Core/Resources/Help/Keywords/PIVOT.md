@@ -35,3 +35,6 @@ PIVOT #sales
 - NULL cells in a PIVOT result indicate no matching rows; wrap with `COALESCE(..., 0)` if needed.
 - UNPIVOT excludes NULL values by default.
 - See: SELECT, GROUP BY, WITH
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

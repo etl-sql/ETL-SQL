@@ -41,3 +41,6 @@ etlsql encrypt --password "my-passphrase" --value "db-password-here"
 - The session password is held in memory only and is never logged or written to disk.
 - Encryption uses AES-256. The `ENC:` blob includes a salt; the same plaintext produces different blobs each time.
 - See: USE, CREATE CONNECTION, DECLARE
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

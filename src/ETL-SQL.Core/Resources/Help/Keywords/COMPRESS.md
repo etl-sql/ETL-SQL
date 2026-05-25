@@ -38,3 +38,6 @@ DECOMPRESS FILE 'downloads/archive.zip' TO 'staging/';
 - `DECOMPRESS FILE` to a directory path extracts all contents into that directory.
 - Compressed files can be used directly with EXPORT by pointing to `.gz` destinations on supported connections (e.g., S3, SFTP).
 - See: COPY, EXPORT, ENCRYPT
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

@@ -30,3 +30,6 @@ END;
 - `RAISEERROR` is a single-argument alias for simple message-only throws.
 - Uncaught errors abort the script and mark the execution session as FAILED in Orchestrator history.
 - See: TRY, ASSERT, TRANSACTION
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

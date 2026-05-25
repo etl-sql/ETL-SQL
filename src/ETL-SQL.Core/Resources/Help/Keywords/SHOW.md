@@ -56,3 +56,6 @@ EXECUTE portal BEGIN
   SHOW ACTIVE SESSIONS;
 END;
 ```
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

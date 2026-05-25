@@ -32,3 +32,6 @@ CREATE VISUAL RegionBar AS BAR (
   MAPPINGS (X = region, Y = revenue)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

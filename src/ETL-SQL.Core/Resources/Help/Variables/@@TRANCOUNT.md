@@ -18,3 +18,6 @@ PRINT 'After rollback: ' + @@TRANCOUNT;      -- 0
 ```
 
 ROLLBACK always rolls back to the outermost transaction regardless of nesting depth. COMMIT only decrements the nesting level; only the outermost COMMIT makes changes durable.
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

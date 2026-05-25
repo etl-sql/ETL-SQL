@@ -33,3 +33,6 @@ CREATE VISUAL CompareRadar AS RADAR (
   OPTIONS  (TITLE = 'Model Comparison', MAX = 100)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

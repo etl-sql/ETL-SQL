@@ -234,7 +234,18 @@ export const catalogApi = {
     recent: (limit = 20) =>
         apiJson(`/api/catalog/recent?limit=${limit}`),
     favorites: (limit = 50) =>
-        apiJson(`/api/catalog/favorites?limit=${limit}`)
+        apiJson(`/api/catalog/favorites?limit=${limit}`),
+    lineage(kind, { name = null, key = null, value = null, path = null, column = null, from = null, to = null, limit = 100 } = {}) {
+        const p = new URLSearchParams({ limit });
+        if (name)  p.set('name', name);
+        if (key)   p.set('key', key);
+        if (value) p.set('value', value);
+        if (path)  p.set('path', path);
+        if (column) p.set('column', column);
+        if (from)  p.set('from', from);
+        if (to)    p.set('to', to);
+        return apiJson(`/api/catalog/lineage/${kind}?${p}`);
+    }
 };
 
 // ── Admin — users ──────────────────────────────────────────────────────────────

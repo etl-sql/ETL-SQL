@@ -37,3 +37,6 @@ SELECT id, email, created_at
 
 PRINT 'Users loaded: ' + @@ROWCOUNT;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

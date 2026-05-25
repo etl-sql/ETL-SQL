@@ -29,3 +29,6 @@ CREATE VISUAL SLAGauge AS GAUGE (
   )
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

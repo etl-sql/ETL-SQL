@@ -30,3 +30,6 @@ INTO #orders;
 - Version format is `MAJOR.MINOR.PATCH` (semantic versioning).
 - If the running engine does not satisfy the constraint, execution stops immediately with a version mismatch error — no partial execution occurs.
 - See: DECLARE, RUN SCRIPT
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

@@ -26,3 +26,6 @@ SEND FILE 'C:\output\summary.csv' TO 'outgoing/summary.csv' AT DataFeed;
 ```
 
 For email delivery use SEND EMAIL. For blob-based transfer use AZURE_BLOB connections with SEND FILE.
+
+References:
+- [Specialized Operations](../../../../../Docs/Reference/Specialized_Operations.md)

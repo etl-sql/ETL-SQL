@@ -35,3 +35,6 @@ GENERATE 10000 ROWS INTO #mock AS (
 - Row count can be a variable: `GENERATE @batchSize ROWS INTO #data AS (...)`.
 - Generated tables behave identically to any other #temp table.
 - See: CREATE TABLE, INSERT, DECLARE
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

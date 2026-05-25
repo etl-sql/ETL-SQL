@@ -37,3 +37,6 @@ CREATE VISUAL SalesBar AS BAR (
   MAPPINGS (X = product, Y = revenue)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

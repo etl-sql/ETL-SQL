@@ -30,3 +30,6 @@ ENCRYPT FILE 'data.csv' TO 'data.pgp'
   PGP_KEY 'C:\keys\internal_pgp' 
   PASSWORD @pgp_passphrase;
 ```
+
+References:
+- [Specialized Operations](../../../../../Docs/Reference/Specialized_Operations.md)

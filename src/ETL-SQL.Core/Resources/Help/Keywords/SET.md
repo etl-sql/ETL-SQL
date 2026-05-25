@@ -54,3 +54,6 @@ USE PASSWORD = 'dev-only';
 -- Override week start for RELDATE expressions
 SET WEEK_START_DAY = 'Sunday';
 ```
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

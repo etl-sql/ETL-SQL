@@ -24,3 +24,6 @@ CREATE VISUAL SalesFunnel AS FUNNEL (
   OPTIONS  (SHOW_PERCENT = ON, TITLE = 'Sales Pipeline')
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

@@ -25,3 +25,6 @@ CREATE VISUAL SalesTable AS TABLE (
   STYLE  (DISPLAY = @show_details)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

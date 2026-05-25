@@ -30,3 +30,6 @@ CREATE NAVIGATION MainNav AS TAB (
 ```
 
 The NAVIGATION component renders outside the page content area as a persistent menu. It is declared at the report level, not inside a page.
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

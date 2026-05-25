@@ -14,3 +14,6 @@ Parameters:
 Examples:
   RECEIVE FILE FROM '/data/report.csv' TO 'C:\downloads\report.csv' AT MyFtp;
   RECEIVE FILE(MyFtp, '/data/report.csv', 'C:\downloads\report.csv');
+
+References:
+- [Specialized Operations](../../../../../Docs/Reference/Specialized_Operations.md)

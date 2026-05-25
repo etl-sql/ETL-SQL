@@ -66,3 +66,6 @@ Notes
     See HELP FUNCTIONS NULL for COALESCE/ISNULL patterns.
   - Aggregate functions cannot appear in WHERE; use HAVING instead.
   - Window functions require an OVER clause and cannot be nested.
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

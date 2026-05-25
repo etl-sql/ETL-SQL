@@ -36,3 +36,6 @@ SEND EMAIL
   ATTACH  = 'C:\reports\daily.xlsx'
   AT MailServer;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

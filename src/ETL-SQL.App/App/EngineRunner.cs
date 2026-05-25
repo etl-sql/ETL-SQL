@@ -3,6 +3,9 @@ using System.IO;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 using Spectre.Console;
 using ETL_SQL.Core;
@@ -958,6 +961,41 @@ CREATE PAGE Main AS DASHBOARD (
                 }
                 catch (Exception ex) { portalDbStatus = "WARN"; portalDbDetail = ex.Message; }
                 checks.Add(("Portal Database", portalDbDetail, portalDbStatus));
+
+                // 22. Optional service endpoint checks. These only probe configured endpoints.
+                checks.Add(await ProbeHttpEndpointAsync(
+                    "Report Portal /health",
+                    ResolveHealthUrl(
+                        config["Doctor:ReportPortalHealthUrl"],
+                        config["Portal:HealthUrl"],
+                        config["Portal:BaseUrl"]),
+                    "Report Portal health URL not configured"));
+
+                checks.Add(await ProbeHttpEndpointAsync(
+                    "Orchestrator /health",
+                    ResolveHealthUrl(
+                        config["Doctor:OrchestratorHealthUrl"],
+                        config["Orchestrator:HealthUrl"],
+                        config["Portal:Orchestrator:ApiUrl"],
+                        config["Orchestrator:ApiUrl"]),
+                    "Orchestrator health URL not configured"));
+
+                checks.Add(await ProbeTcpEndpointAsync(
+                    "SMTP Endpoint",
+                    config["Doctor:SmtpHost"] ?? config["SMTP:Host"] ?? config["Smtp:Host"],
+                    ConfigInt(config, "Doctor:SmtpPort", "SMTP:Port", "Smtp:Port") ?? 25,
+                    "SMTP endpoint not configured"));
+
+                checks.Add(await ProbeTcpEndpointAsync(
+                    "SFTP Endpoint",
+                    config["Doctor:SftpHost"] ?? config["SFTP:Host"] ?? config["Sftp:Host"],
+                    ConfigInt(config, "Doctor:SftpPort", "SFTP:Port", "Sftp:Port") ?? 22,
+                    "SFTP endpoint not configured"));
+
+                checks.Add(await ProbeHttpEndpointAsync(
+                    "Azure Blob Endpoint",
+                    config["Doctor:AzureBlobEndpoint"] ?? config["AzureBlob:BlobEndpoint"] ?? config["AzureBlob:Endpoint"],
+                    "Azure Blob endpoint not configured"));
             }
 
             bool hasFailures = checks.Any(c => c.Status == "FAIL");
@@ -1014,8 +1052,11 @@ CREATE PAGE Main AS DASHBOARD (
                     AnsiConsole.MarkupLine("[yellow]--strict mode: exiting with code 1 due to WARN or FAIL results.[/]");
             }
 
-            return isStrict && (hasFailures || hasWarnings) ? 1 : 0;
+            return DoctorExitCode(isStrict, hasFailures, hasWarnings);
         }
+
+        public static int DoctorExitCode(bool isStrict, bool hasFailures, bool hasWarnings) =>
+            isStrict && (hasFailures || hasWarnings) ? 1 : 0;
 
         private static void ShowThirdPartyNotices(ILogger logger)
         {
@@ -1080,6 +1121,82 @@ CREATE PAGE Main AS DASHBOARD (
             }
 
             return null;
+        }
+
+        private static string? ResolveHealthUrl(params string?[] candidates)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (string.IsNullOrWhiteSpace(candidate))
+                    continue;
+
+                var trimmed = candidate.Trim();
+                if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+                    continue;
+
+                if (uri.AbsolutePath.EndsWith("/health", StringComparison.OrdinalIgnoreCase))
+                    return uri.ToString();
+
+                return new Uri(uri, "health").ToString();
+            }
+
+            return null;
+        }
+
+        private static int? ConfigInt(IConfiguration config, params string[] keys)
+        {
+            foreach (var key in keys)
+            {
+                if (int.TryParse(config[key], out var value))
+                    return value;
+            }
+
+            return null;
+        }
+
+        private static async Task<(string Name, string Detail, string Status)> ProbeHttpEndpointAsync(
+            string name,
+            string? url,
+            string notConfiguredDetail)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return (name, notConfiguredDetail, "OK");
+
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                using var response = await client.GetAsync(url);
+                var status = (int)response.StatusCode;
+                return status < 500
+                    ? (name, $"{url} returned HTTP {status}", "OK")
+                    : (name, $"{url} returned HTTP {status}", "WARN");
+            }
+            catch (Exception ex)
+            {
+                return (name, $"{url} unreachable: {ex.Message}", "WARN");
+            }
+        }
+
+        private static async Task<(string Name, string Detail, string Status)> ProbeTcpEndpointAsync(
+            string name,
+            string? host,
+            int port,
+            string notConfiguredDetail)
+        {
+            if (string.IsNullOrWhiteSpace(host))
+                return (name, notConfiguredDetail, "OK");
+
+            try
+            {
+                using var client = new TcpClient();
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                await client.ConnectAsync(host.Trim(), port, cts.Token);
+                return (name, $"{host}:{port} accepted TCP connection", "OK");
+            }
+            catch (Exception ex)
+            {
+                return (name, $"{host}:{port} unreachable: {ex.Message}", "WARN");
+            }
         }
 
         private static async Task<int> RunSetupJwt(ILogger logger, bool updateConfig)

@@ -36,6 +36,13 @@ namespace ETL_SQL
 
             try
             {
+                var isHelpOnly = args.Any(a => a is "--help" or "-h" or "-?");
+                if (isHelpOnly && args.Length > 1)
+                {
+                    var helpCommand = CliOrchestrator.BuildRootCommand(_ => Task.FromResult(0));
+                    return await helpCommand.InvokeAsync(args);
+                }
+
                 var isDoctorJson = args.Any(a => string.Equals(a, "doctor", StringComparison.OrdinalIgnoreCase))
                     && args.Any(a => string.Equals(a, "--json", StringComparison.OrdinalIgnoreCase));
 

@@ -34,3 +34,6 @@ SELECT name, size, last_modified INTO #blobs FROM ReportBlobs;
 -- Copy a local result to blob storage
 SELECT * FROM #output INTO ReportBlobs.'exports/summary_2024.csv';
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

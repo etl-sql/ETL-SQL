@@ -40,3 +40,6 @@ BEGIN TRANSACTION;
   INSERT INTO SalesDB.dbo.Staging SELECT * FROM #processed;
 COMMIT;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

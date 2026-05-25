@@ -20,3 +20,6 @@ EXECUTE MyDB 'TRUNCATE TABLE staging';
 - `EXECUTE` does not open a new transaction — it runs inside any active transaction on that connection.
 - For running another ETL-SQL script, see: RUN SCRIPT
 - See: RUN, TRANSACTION
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

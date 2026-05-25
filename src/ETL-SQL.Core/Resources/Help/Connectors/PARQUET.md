@@ -29,3 +29,6 @@ SELECT user_id, event_type, event_ts
 -- Write a large result set to Parquet
 SELECT * INTO OutParquet FROM #analytics_result;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

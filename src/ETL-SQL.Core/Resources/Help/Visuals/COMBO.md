@@ -37,3 +37,6 @@ CREATE VISUAL RevenueWithMargin AS COMBO (
   )
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

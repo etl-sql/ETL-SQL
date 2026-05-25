@@ -27,11 +27,11 @@
   - Document it in README, User_Manual, Administrators_Guide, and Syntax/CLI reference docs.
   - Status review 2026-05-24: quick/full profiles, human/JSON output, strict mode, runtime-path write checks, parser/engine/linter/security/encryption/file/report-parser/asset/Node/portal-DB checks are implemented and documented.
 
-- [ ] **`etl-sql doctor` remaining full-profile checks**
-  - Add a real report build smoke, not only Report-SQL parser smoke.
-  - Add optional Graphviz/browser/PDF capability checks when installed features require them.
-  - Add optional service checks for Report Portal `/health`, Orchestrator `/health`, and configured SMTP/SFTP/Blob endpoints.
-  - Add explicit tests for `doctor --json`, `doctor --strict`, and `doctor --profile quick|full` exit-code behavior.
+- [x] **`etl-sql doctor` remaining full-profile checks**
+  - Confirmed full profile already includes a real report manifest build smoke and PDF export smoke.
+  - Confirmed full profile already includes optional Graphviz and browser runtime capability checks.
+  - Added optional full-profile service probes for configured Report Portal `/health`, Orchestrator `/health`, SMTP, SFTP, and Azure Blob endpoints.
+  - Added explicit coverage for `doctor --json`, `doctor --strict`, `doctor --profile quick|full` parsing and strict exit-code behavior.
 
 - [x] **Connector certification matrix — phase 1**
   - Goal: prove which connectors are production-tested versus syntax/plumbing-tested.
@@ -149,18 +149,20 @@
   - 16 tests in `LineageCatalogTests.cs` covering save/query/tag-filter/limit/null-job/empty/idempotent-init and all parser forms.
   - Remaining work split below: portal/report views for lineage; `SHOW REPORT DEPENDENCIES` lineage enrichment; cross-run lineage for `CREATE DATASET`/`CREATE VISUAL`/published bundles.
 
-- [ ] **Persistent lineage and stewardship catalog — report/portal integration**
+- [x] **Persistent lineage and stewardship catalog — report/portal integration**
   - Added executed-script lineage records for runtime `CREATE DATASET` and `CREATE VISUAL` so report objects can be persisted by the existing lineage catalog path.
   - Added lineage/tag enrichment to report dependencies: `/api/reports/{id}/dependencies`, `SHOW REPORT DEPENDENCIES`, and the report viewer Dependencies modal now expose script-derived lineage entries.
   - Added lineage catalog persistence for in-process portal report executions/refreshes after snapshot rebuild.
   - Added publish-time lineage catalog persistence for bundle files in `SQLiteJobHistoryStore`, covering local and remote Orchestrator bundle publishes.
   - Added stable report lineage job names for in-process and remote Orchestrator ad-hoc report jobs (`report:<id>:<session>`).
-  - Remaining: add broader portal/report catalog views for lineage and tags, not just the dependency modal.
+  - Added authenticated portal catalog lineage APIs for table, source, source file, tag, and job history, with report context attached for `report:<id>:<session>` lineage runs.
+  - Added a portal Lineage catalog view with target/source/source-file/tag/job queries, column and date filters, tags, jobs, source files, report links, CSV export of displayed results, and reusable saved query presets.
+  - Future consideration: promote local saved query presets to shared/server-side stewardship views if teams need cross-user publishing.
   - Add tests answering stewardship questions:
     - What scripts write to this table?
-    - What reports use this dataset/table/column?
-    - What jobs touched PII-tagged columns this week?
-    - Which outputs were derived from a given source file?
+    - What reports use this dataset/table/column? (API and UI query coverage added, including target-column filter.)
+    - What jobs touched PII-tagged columns this week? (API date filters and UI query coverage added.)
+    - Which outputs were derived from a given source file? (API and UI query coverage added.)
 
 - [x] **Documentation truth and findability audit — phase 1**
   - Fixed stale "Phase 7 (view transparency)" backlog reference in `Docs/Reference/Lineage.md`; replaced with current engine behaviour note.
@@ -171,11 +173,12 @@
     - `Grammar_SqlBlocks_ParseWithoutSyntaxError` — every non-placeholder `sql` block in `Grammar.md` (138 total) parses without `SyntaxException`/`ParseException`.
     - `HelpFiles_AllNonEmpty` — every `.md` file under `Resources/Help/` is non-empty.
 
-- [ ] **Documentation truth and findability audit — remaining checks**
-  - Parse SQL blocks in `Syntax_Index.md` and help files, not only `Grammar.md`.
-  - Verify every documented keyword has a help entry or an explicit no-help exception.
-  - Verify every help entry links back to the canonical reference page.
-  - Add a generated report of stale roadmap/backlog language that appears in reference docs.
+- [x] **Documentation truth and findability audit — remaining checks**
+  - Added focused doc sanity coverage that parses SQL blocks in `Syntax_Index.md` and all bundled help files, using the same syntax-failure guardrail as `Grammar.md`.
+  - Added focused doc sanity coverage that verifies every `Syntax_Index.md` help link resolves to an existing file or uses an explicit no-help marker.
+  - Fixed stale operation help links for file, directory, key-pair, and Docker commands in `Syntax_Index.md`.
+  - Added a focused stale-roadmap/backlog language guardrail for reference docs and the Report-SQL guide.
+  - Added canonical reference backlinks to bundled help entries and a doc sanity guardrail that enforces the category-level reference mapping.
 
 - [x] **Report Portal operational hardening review — API/core**
   - Added `EXPORT_CSV` and `EXPORT_PDF` audit events to `ExportController` (previously unlogged).

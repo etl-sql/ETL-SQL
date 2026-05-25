@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT RADIANS(180);
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

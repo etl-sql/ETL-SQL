@@ -35,3 +35,6 @@ SELECT account_id, balance, last_updated
 
 PRINT 'Accounts loaded: ' + @@ROWCOUNT;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

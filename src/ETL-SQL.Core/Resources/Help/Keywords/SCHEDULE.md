@@ -79,3 +79,6 @@ KILL JOB 1023;
 - Job names are unique; attempting to create a job that already exists will result in an error. To update a job, run `DROP JOB` first and then `CREATE JOB`.
 - Scheduling requires the ETL-SQL Orchestrator Service to be running.
 - See: RUN SCRIPT, EXECUTE, SHOW
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

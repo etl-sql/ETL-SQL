@@ -31,3 +31,6 @@ LOG-1  Line 55: Output table #results has no traceable source — add a lineage 
 - `LINT 'file'` exits with a non-zero code when any SEC- or PERF- violations are found, making it suitable for CI gates.
 - Rule severity can be configured per-rule in `appsettings.json → Lint`.
 - See: ASSERT, TRY
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

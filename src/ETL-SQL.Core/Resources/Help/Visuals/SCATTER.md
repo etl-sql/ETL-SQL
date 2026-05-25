@@ -46,3 +46,6 @@ CREATE VISUAL MarketBubble AS SCATTER (
   OPTIONS  (TITLE = 'Regional Market Overview')
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

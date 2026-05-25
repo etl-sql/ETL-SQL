@@ -36,3 +36,6 @@ COPY DIRECTORY 'reports/' TO S3Conn:'bucket/reports/' WITH (
 - Paths are resolved via `ResolvePath()` — relative paths are anchored to the script's location.
 - `COPY DIRECTORY` with `RECURSE = OFF` copies only top-level files.
 - See: EXPORT, COMPRESS, CREATE CONNECTION
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

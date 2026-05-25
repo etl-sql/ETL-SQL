@@ -27,3 +27,6 @@ WHERE status = 'Active';
 - ALTER TABLE applies only to #temp tables, not external connection tables.
 - `ALTER VIEW` requires the view to exist. Use `CREATE OR ALTER VIEW` for idempotent scripts.
 - See: CREATE TABLE, CREATE VIEW, SELECT INTO
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

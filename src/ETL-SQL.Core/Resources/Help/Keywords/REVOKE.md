@@ -15,3 +15,6 @@ Notes:
 - `REVOKE TOKENS` invalidates refresh tokens. Existing access tokens expire on their normal JWT lifetime.
 - Use `DISCONNECT USER '<name>'` when you want to revoke active refresh sessions for a user.
 - Share and embed token lookup is global; duplicate matching tokens are treated as an error.
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

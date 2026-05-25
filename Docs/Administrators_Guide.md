@@ -316,12 +316,16 @@ Runs immediately (no database or network required) and prints a status table cov
 etl-sql doctor --profile full
 ```
 
-Adds engine smoke tests that take a few seconds but exercise the runtime itself:
+Adds smoke tests and optional endpoint probes that take a few seconds but exercise the runtime itself:
 
 - Parses a trivial script
 - Runs a live MOCKDB query through the engine
 - Verifies the `ENC:` encrypt/decrypt round-trip
 - Runs the linter on a simple script
+- Verifies the security path guardrail
+- Builds a small Report-SQL manifest and PDF payload
+- Checks optional Graphviz/browser capability, shared asset drift, Node.js, and portal DB configuration
+- Probes configured Report Portal `/health`, Orchestrator `/health`, SMTP, SFTP, and Azure Blob endpoints
 
 ### CI and monitoring integration
 

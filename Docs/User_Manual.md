@@ -1133,7 +1133,7 @@ The command checks the most common setup problems and prints a status table:
 # Exit with code 1 if any check is WARN or FAIL (useful in CI setup scripts)
 etl-sql doctor --strict
 
-# Run deeper smoke tests: parser, engine execution, ENC: round-trip, linter
+# Run deeper smoke tests and optional configured service probes
 etl-sql doctor --profile full
 
 # Output machine-readable JSON (useful for monitoring scripts)
@@ -1143,7 +1143,7 @@ etl-sql doctor --json
 etl-sql doctor --profile full --strict --json
 ```
 
-The `--profile full` option adds four additional checks that exercise the engine itself:
+The `--profile full` option adds checks that exercise the engine, report stack, local toolchain, and any configured service endpoints:
 
 | Check | What it does |
 | :--- | :--- |
@@ -1151,6 +1151,12 @@ The `--profile full` option adds four additional checks that exercise the engine
 | Engine Smoke (MOCKDB) | Runs a live query against the built-in MOCKDB connector |
 | ENC: Round-Trip | Encrypts and decrypts a value and verifies the result matches |
 | Linter Smoke | Runs the linter on a trivial script and verifies no errors |
+| Security Guardrail Smoke | Verifies restricted system paths are rejected |
+| Report Build Smoke | Builds a small Report-SQL manifest |
+| Report PDF Export | Verifies the built-in PDF exporter returns a PDF payload |
+| Graphviz / Browser Runtime | Reports optional runtime availability when configured features require them |
+| Asset Drift / Node.js / Portal DB | Checks shared report assets, Node.js availability, and portal database configuration |
+| Portal / Orchestrator / SMTP / SFTP / Azure Blob | Probes configured service endpoints; skipped as OK when no endpoint is configured |
 
 > [!TIP]
 > Run `etl-sql doctor --profile full` as part of first-time setup, release validation, or when migrating to a new host machine.

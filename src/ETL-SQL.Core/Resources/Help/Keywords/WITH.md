@@ -30,3 +30,6 @@ SELECT * FROM ranked WHERE Rank <= 10;
 - CTEs are evaluated lazily — they are inlined and may be executed multiple times if referenced more than once. For expensive CTEs, `SELECT ... INTO #temp` first.
 - CTE names shadow any #temp table with the same name for the duration of that statement.
 - See: SELECT, PARALLEL
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

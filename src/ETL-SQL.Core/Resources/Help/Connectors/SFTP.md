@@ -33,3 +33,6 @@ RECEIVE FILE 'incoming/orders_today.csv' TO 'C:\data\orders.csv' AT PartnerSFTP;
 -- Process, then upload the result
 SEND FILE 'C:\data\summary.csv' TO 'outgoing/summary.csv' AT PartnerSFTP;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

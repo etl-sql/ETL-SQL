@@ -44,3 +44,6 @@ DROP TABLE IF EXISTS #summary;
 - `GO` is a client-side directive, not a SQL statement — it has no effect inside `BEGIN…END` blocks, procedures, or `TRY…CATCH`.
 - A cancelled execution (`CancellationToken`) propagates immediately across all batches.
 - See: TRY, RETURN, BREAK
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

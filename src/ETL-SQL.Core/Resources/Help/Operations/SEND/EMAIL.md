@@ -25,3 +25,6 @@ Parameters:
 Examples:
   SEND EMAIL TO 'user@corp.com' FROM 'etl@corp.com' SUBJECT 'Report' BODY 'See attached.' @ MySmtp;
   SEND EMAIL(MySmtp, 'user@corp.com', 'etl@corp.com', 'Report', 'See attached.');
+
+References:
+- [Specialized Operations](../../../../../Docs/Reference/Specialized_Operations.md)

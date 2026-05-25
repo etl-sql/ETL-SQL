@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT XMLQUERY(x, '/a');
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT LISTAGG(Name, ', ') FROM Employees;
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

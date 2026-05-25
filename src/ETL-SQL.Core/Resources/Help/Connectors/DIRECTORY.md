@@ -32,3 +32,6 @@ PRINT 'Files found: ' + @@ROWCOUNT;
 ```
 
 For file-level operations (copy, move, delete, compress, encrypt) use the FILE and DIRECTORY operation keywords rather than this connector.
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

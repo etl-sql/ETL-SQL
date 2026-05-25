@@ -56,3 +56,6 @@ DROP CONNECTION ReportCSV;
 ```
 
 Use HELP CONNECTORS <TYPE> for type-specific options (e.g. HELP CONNECTORS MSSQL).
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

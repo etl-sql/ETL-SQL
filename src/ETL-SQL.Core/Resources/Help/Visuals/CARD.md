@@ -71,3 +71,6 @@ CREATE PAGE Summary AS DASHBOARD (
   MAP ('A' = CustomerCount, 'B' = AvgOrder)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

@@ -35,3 +35,6 @@ CREATE VISUAL RevenuePivot AS MATRIX (
   OPTIONS  (AGGREGATE = SUM, GRAND_TOTAL = ON, SUBTOTALS = ON, AXIS_SORT = DESC)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

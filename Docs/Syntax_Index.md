@@ -65,7 +65,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `REQUIRE VERSION` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [REQUIRE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/REQUIRE.md) |
 | `BULK INSERT` | File IO | [Grammar.md](../Docs/Reference/Grammar.md) | [BULK.INSERT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/BULK.INSERT.md) |
 | `COPY FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [COPY.md](../src/ETL-SQL.Core/Resources/Help/Keywords/COPY.md) |
-| `MOVE FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [MOVE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/MOVE.md) |
+| `MOVE FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/FILE.md) |
 | `DELETE FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DELETE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
 | `ENCRYPT FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [ENCRYPT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ENCRYPT.md) |
 | `SEND FILE` | File IO / Conn | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [SEND/FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/SEND/FILE.md) |
@@ -93,26 +93,26 @@ Statements are the top-level actions in an ETL-SQL script.
 | `RAISEERROR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `HELP` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `ANALYZE` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | - |
-| `RENAME FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [RENAME.md](../src/ETL-SQL.Core/Resources/Help/Keywords/RENAME.md) |
+| `RENAME FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/FILE.md) |
 | `COMPRESS FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [COMPRESS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/COMPRESS.md) |
-| `DECOMPRESS FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DECOMPRESS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DECOMPRESS.md) |
-| `DECRYPT FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DECRYPT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DECRYPT.md) |
+| `DECOMPRESS FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/FILE.md) |
+| `DECRYPT FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/FILE.md) |
 | `CREATE DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [CREATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
 | `COPY DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [COPY.md](../src/ETL-SQL.Core/Resources/Help/Keywords/COPY.md) |
-| `MOVE DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [MOVE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/MOVE.md) |
-| `RENAME DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [RENAME.md](../src/ETL-SQL.Core/Resources/Help/Keywords/RENAME.md) |
+| `MOVE DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Operations/DIRECTORY.md) |
+| `RENAME DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Operations/DIRECTORY.md) |
 | `DELETE DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DELETE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
 | `DELETE DIRECTORY_CONTENTS`| Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | - |
 | `COMPRESS DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [COMPRESS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/COMPRESS.md) |
-| `DECOMPRESS DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DECOMPRESS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DECOMPRESS.md) |
+| `DECOMPRESS DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Operations/DIRECTORY.md) |
 | `ENCRYPT DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [ENCRYPT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ENCRYPT.md) |
-| `DECRYPT DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DECRYPT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DECRYPT.md) |
-| `CREATE SSH_KEY_PAIR` | Security | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [SSH_KEY_PAIR.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SSH_KEY_PAIR.md) |
-| `CREATE PGP_KEY_PAIR` | Security | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [PGP_KEY_PAIR.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PGP_KEY_PAIR.md) |
-| `START DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DOCKER.md) |
-| `STOP DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DOCKER.md) |
-| `PAUSE DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DOCKER.md) |
-| `CLOSE DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DOCKER.md) |
+| `DECRYPT DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Operations/DIRECTORY.md) |
+| `CREATE SSH_KEY_PAIR` | Security | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [CREATE.SSH_KEY_PAIR.md](../src/ETL-SQL.Core/Resources/Help/Operations/CREATE.SSH_KEY_PAIR.md) |
+| `CREATE PGP_KEY_PAIR` | Security | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [CREATE.PGP_KEY_PAIR.md](../src/ETL-SQL.Core/Resources/Help/Operations/CREATE.PGP_KEY_PAIR.md) |
+| `START DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
+| `STOP DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
+| `PAUSE DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
+| `CLOSE DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
 | `CREATE USER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
 | `ALTER USER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
 | `DROP USER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | - |
@@ -1114,7 +1114,7 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql --ui edit <script>` | Open the Terminal IDE (TUI) |
 | `etl-sql encrypt --value <v> --pass <p>` | Produce an `ENC:...` cipher string |
 | `etl-sql doctor` | Quick install validation (checks 1–10: OS, runtime, write access, disk, ODBC, config, security, connectors, history DB, log dirs) |
-| `etl-sql doctor --profile full` | Full validation adds parser/engine/encryption/linter/security-guardrail/Report-SQL/asset-drift/Node.js/portal-DB checks |
+| `etl-sql doctor --profile full` | Full validation adds parser/engine/encryption/linter/security-guardrail/report/PDF/runtime/asset-drift/Node.js/portal-DB/configured-service checks |
 | `etl-sql doctor --strict` | Exit code 1 on any WARN or FAIL result (CI-safe) |
 | `etl-sql doctor --json` | Machine-readable JSON output |
 | `etl-sql report serve <file>` | Serve a `.rptsql` dashboard |

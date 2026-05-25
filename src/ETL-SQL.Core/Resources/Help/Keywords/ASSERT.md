@@ -31,3 +31,6 @@ ASSERT (
 - ASSERT is removed at runtime in release mode if the `Engine.DisableAsserts` setting is `true` in `appsettings.json`.
 - Use ASSERT for invariants and data contracts; use `THROW` for business-logic errors.
 - See: THROW, TRY, LINT
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

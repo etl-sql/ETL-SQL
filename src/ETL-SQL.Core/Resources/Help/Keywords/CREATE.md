@@ -54,3 +54,6 @@ END;
 - `CREATE VIEW` stores a query definition only; rows are evaluated when the view is selected.
 - Portal administration variants require `EXECUTE <reportportal-connection> BEGIN ... END`.
 - See: DROP, USE SETS, ENCRYPT
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

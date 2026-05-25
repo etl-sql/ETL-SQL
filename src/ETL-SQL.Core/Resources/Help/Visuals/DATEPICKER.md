@@ -36,3 +36,6 @@ CREATE VISUAL SalesTrend AS LINE (
   MAPPINGS (X = sale_date, Y = total)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

@@ -96,63 +96,69 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
     }
 
     [HttpGet("lineage/table")]
-    public async Task<IActionResult> LineageForTable([FromQuery] string name, [FromQuery] int limit = 100)
+    public async Task<IActionResult> LineageForTable(
+        [FromQuery] string name,
+        [FromQuery] int limit = 100,
+        [FromQuery] string? column = null,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null)
     {
         name = name?.Trim() ?? "";
         if (name.Length == 0)
             return BadRequest(new { error = "Table name is required." });
 
         limit = Math.Clamp(limit, 1, 500);
-        var entries = await lineageCatalog.GetHistoryForTableAsync(name, limit);
-        return Ok(await ToLineageDtosAsync(entries));
+        var entries = await lineageCatalog.GetHistoryForTableAsync(name, LineageScanLimit(limit, from, to));
+        entries = FilterColumn(entries, column);
+        return Ok(await ToLineageDtosAsync(FilterRunWindow(entries, from, to).Take(limit)));
     }
 
     [HttpGet("lineage/source")]
-    public async Task<IActionResult> LineageForSource([FromQuery] string name, [FromQuery] int limit = 100)
+    public async Task<IActionResult> LineageForSource([FromQuery] string name, [FromQuery] int limit = 100, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         name = name?.Trim() ?? "";
         if (name.Length == 0)
             return BadRequest(new { error = "Source name is required." });
 
         limit = Math.Clamp(limit, 1, 500);
-        var entries = await lineageCatalog.GetHistoryForSourceAsync(name, limit);
-        return Ok(await ToLineageDtosAsync(entries));
+        var entries = await lineageCatalog.GetHistoryForSourceAsync(name, LineageScanLimit(limit, from, to));
+        return Ok(await ToLineageDtosAsync(FilterRunWindow(entries, from, to).Take(limit)));
     }
 
     [HttpGet("lineage/source-file")]
-    public async Task<IActionResult> LineageForSourceFile([FromQuery] string path, [FromQuery] int limit = 100)
+    public async Task<IActionResult> LineageForSourceFile([FromQuery] string path, [FromQuery] int limit = 100, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         path = path?.Trim() ?? "";
         if (path.Length == 0)
             return BadRequest(new { error = "Source file path is required." });
 
         limit = Math.Clamp(limit, 1, 500);
-        var entries = await lineageCatalog.GetHistoryForSourceFileAsync(path, limit);
-        return Ok(await ToLineageDtosAsync(entries));
+        var entries = await lineageCatalog.GetHistoryForSourceFileAsync(path, LineageScanLimit(limit, from, to));
+        return Ok(await ToLineageDtosAsync(FilterRunWindow(entries, from, to).Take(limit)));
     }
 
     [HttpGet("lineage/tag")]
-    public async Task<IActionResult> LineageForTag([FromQuery] string key, [FromQuery] string? value = null, [FromQuery] int limit = 100)
+    public async Task<IActionResult> LineageForTag([FromQuery] string key, [FromQuery] string? value = null, [FromQuery] int limit = 100, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         key = key?.Trim() ?? "";
         if (key.Length == 0)
             return BadRequest(new { error = "Tag key is required." });
 
         limit = Math.Clamp(limit, 1, 500);
-        var entries = await lineageCatalog.GetHistoryForTagAsync(key, string.IsNullOrWhiteSpace(value) ? null : value, limit);
-        return Ok(await ToLineageDtosAsync(entries));
+        var entries = await lineageCatalog.GetHistoryForTagAsync(key, string.IsNullOrWhiteSpace(value) ? null : value, LineageScanLimit(limit, from, to));
+        return Ok(await ToLineageDtosAsync(FilterRunWindow(entries, from, to).Take(limit)));
     }
 
     [HttpGet("lineage/job")]
-    public async Task<IActionResult> LineageForJob([FromQuery] string name, [FromQuery] int limit = 100)
+    public async Task<IActionResult> LineageForJob([FromQuery] string name, [FromQuery] int limit = 100, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {
         name = name?.Trim() ?? "";
         if (name.Length == 0)
             return BadRequest(new { error = "Job name is required." });
 
         limit = Math.Clamp(limit, 1, 500);
-        var entries = await lineageCatalog.GetHistoryForJobAsync(name, limit);
-        return Ok(await ToLineageDtosAsync(entries));
+        var entries = await lineageCatalog.GetHistoryForJobAsync(name, LineageScanLimit(limit, from, to));
+        return Ok(await ToLineageDtosAsync(FilterRunWindow(entries, from, to).Take(limit)));
     }
 
     private async Task<HashSet<int>> GetVisibleFolderIdsAsync()
@@ -222,6 +228,26 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
                     report?.Folder.Path);
             })
             .ToList();
+    }
+
+    private static int LineageScanLimit(int limit, DateTime? from, DateTime? to) =>
+        from.HasValue || to.HasValue ? Math.Max(limit * 10, 500) : limit;
+
+    private static IEnumerable<LineageHistoryEntry> FilterRunWindow(IEnumerable<LineageHistoryEntry> entries, DateTime? from, DateTime? to)
+    {
+        if (from.HasValue)
+            entries = entries.Where(e => e.RunAt >= from.Value);
+        if (to.HasValue)
+            entries = entries.Where(e => e.RunAt <= to.Value);
+        return entries;
+    }
+
+    private static IEnumerable<LineageHistoryEntry> FilterColumn(IEnumerable<LineageHistoryEntry> entries, string? column)
+    {
+        column = column?.Trim();
+        return string.IsNullOrWhiteSpace(column)
+            ? entries
+            : entries.Where(e => string.Equals(e.TargetColumn, column, StringComparison.OrdinalIgnoreCase));
     }
 
     private static int? TryParseReportId(string? jobName)

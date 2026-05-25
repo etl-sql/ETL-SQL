@@ -36,3 +36,6 @@ SELECT number, title, state, created_at
 
 PRINT 'Issues loaded: ' + @@ROWCOUNT;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

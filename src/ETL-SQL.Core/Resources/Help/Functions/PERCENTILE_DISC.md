@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT PERCENTILE_DISC(0.9) FROM #sales;
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

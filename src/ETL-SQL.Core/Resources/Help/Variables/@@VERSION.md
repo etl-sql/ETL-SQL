@@ -11,3 +11,6 @@ VALUES (GETDATE(), @@VERSION);
 ```
 
 Use SHOW VERSION for a compact one-line version string. @@VERSION includes the full build metadata.
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

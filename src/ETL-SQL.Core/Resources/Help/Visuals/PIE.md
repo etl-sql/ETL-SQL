@@ -39,3 +39,6 @@ CREATE VISUAL SalesRose AS PIE (
   OPTIONS  (ROSE_MODE = ON)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

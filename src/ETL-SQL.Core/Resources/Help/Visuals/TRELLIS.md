@@ -32,3 +32,6 @@ CREATE VISUAL TrellisRevByRegion AS TRELLIS (
   OPTIONS  (CHART_TYPE = BAR, COLUMNS = 2, SHARED_AXIS = ON)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

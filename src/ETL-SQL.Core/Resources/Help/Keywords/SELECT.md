@@ -42,3 +42,6 @@ SELECT name, score
   ORDER BY score DESC
   OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY;
 ```
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

@@ -93,3 +93,6 @@ CREATE VISUAL RegionSlicer AS SLICER (
   ACTIONS (ON_CHANGE = SET_PARAMETER(@region, Region))
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

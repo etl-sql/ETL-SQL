@@ -39,3 +39,6 @@ CREATE VISUAL CollabNetwork AS NETWORK (
   OPTIONS  (REPULSION = 800)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

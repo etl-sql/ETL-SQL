@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT CEIL(123.01);
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

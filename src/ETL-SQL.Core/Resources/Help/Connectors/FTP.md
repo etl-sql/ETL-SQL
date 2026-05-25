@@ -33,3 +33,6 @@ RECEIVE FILE 'incoming/orders_latest.csv' TO 'C:\data\orders.csv' AT DropzoneFTP
 -- Upload processed result
 SEND FILE 'C:\data\report.csv' TO 'outgoing/report.csv' AT DropzoneFTP;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

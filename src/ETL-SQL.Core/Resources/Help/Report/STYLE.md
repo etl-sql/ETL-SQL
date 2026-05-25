@@ -33,3 +33,6 @@ CREATE VISUAL RevChart AS BAR (
   STYLE    (ALLOW_MAXIMIZE = OFF)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

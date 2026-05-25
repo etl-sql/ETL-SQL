@@ -69,3 +69,6 @@ DECLARE @EndDate   DATE = RELDATE(@End);
 
 SELECT * FROM orders WHERE order_date BETWEEN @StartDate AND @EndDate;
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

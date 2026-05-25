@@ -28,3 +28,6 @@ SELECT * FROM #orders WHERE Region IN !Regions;
 - `USE SETS !name` replaces any previously active set of the same name.
 - Sets can be created inline with `CREATE SETS` or loaded from external `.sets` files.
 - See: CREATE SETS, ENCRYPT, DECLARE
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

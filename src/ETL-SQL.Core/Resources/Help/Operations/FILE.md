@@ -24,3 +24,6 @@ ENCRYPT FILE 'C:\export\payroll.csv' TO 'C:\export\payroll.enc' PASSWORD(@enc_ke
 SEND FILE 'C:\export\payroll.enc' TO 'secure/payroll.enc' AT PartnerSFTP;
 DELETE FILE 'C:\export\payroll.enc';
 ```
+
+References:
+- [Specialized Operations](../../../../../Docs/Reference/Specialized_Operations.md)

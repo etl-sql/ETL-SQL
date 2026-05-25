@@ -32,3 +32,6 @@ FROM #orders;
 - Works in SELECT columns, WHERE clauses, ORDER BY, GROUP BY, and SET @var = CASE ... END.
 - The result type is inferred from the THEN/ELSE branches; mixed numeric types promote to DECIMAL.
 - See: IF, SET
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

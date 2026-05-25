@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SET @t = REMOVE_FROM_LIST(@t, 'b');
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

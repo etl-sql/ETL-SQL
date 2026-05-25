@@ -34,3 +34,6 @@ SELECT part_no, description, quantity
 
 PRINT 'Parts loaded: ' + @@ROWCOUNT;
 ```
+
+References:
+- [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

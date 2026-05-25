@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT IFNULL(note, 'No notes');
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

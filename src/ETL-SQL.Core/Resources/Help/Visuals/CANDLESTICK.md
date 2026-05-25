@@ -34,3 +34,6 @@ CREATE VISUAL AcmeChart AS CANDLESTICK (
   OPTIONS  (COLOR_UP = '#26a69a', COLOR_DOWN = '#ef5350', TITLE = 'ACME — 90-Day Price')
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

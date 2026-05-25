@@ -18,3 +18,6 @@ BEGIN CATCH
   PRINT 'Error code: ' + @@ERROR;
 END CATCH;
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

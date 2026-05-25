@@ -26,3 +26,6 @@ CREATE VISUAL RevenueDonut AS DONUT (
   )
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

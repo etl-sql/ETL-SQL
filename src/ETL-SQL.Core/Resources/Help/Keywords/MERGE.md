@@ -26,3 +26,6 @@ PRINT 'Merged rows: ' + @@ROWCOUNT;
 
 WHEN NOT MATCHED BY SOURCE THEN DELETE removes target rows with no matching source row — use with caution on production tables.
 Wrap MERGE in a transaction to make the operation atomic.
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

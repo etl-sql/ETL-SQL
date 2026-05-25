@@ -37,3 +37,6 @@ END;
 - Dropping an index does not drop the table.
 - Portal variants require a REPORTPORTAL connection and admin/manage permissions as enforced by the portal.
 - See: CREATE, CLEAR SESSION
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

@@ -37,3 +37,6 @@ DECLARE @result_count INT OUTPUT;
 ```
 
 Use HELP RELDATE for the full relative-date expression syntax.
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

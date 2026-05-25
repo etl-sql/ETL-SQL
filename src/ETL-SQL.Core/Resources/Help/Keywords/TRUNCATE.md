@@ -17,3 +17,6 @@ INSERT INTO #results SELECT id, SUM(amount) FROM #orders GROUP BY id;
 ```
 
 TRUNCATE is not logged row-by-row, so it cannot be rolled back on all database platforms — behaviour is platform-specific for remote connections. For #temp tables it is always safe and instant.
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

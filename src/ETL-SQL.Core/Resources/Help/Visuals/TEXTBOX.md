@@ -28,3 +28,6 @@ CREATE VISUAL UserList AS TABLE (
   SOURCE = (SELECT * FROM #users WHERE @user_filter = '' OR username LIKE '%' + @user_filter + '%')
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

@@ -22,3 +22,6 @@ MERGE INTO dbo.Target USING #source ON target.id = source.id
   WHEN NOT MATCHED THEN INSERT (id, value) VALUES (source.id, source.value);
 PRINT 'Rows merged: ' + @@ROWCOUNT;
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

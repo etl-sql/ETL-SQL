@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT ENV('PATH');
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

@@ -48,3 +48,6 @@ CREATE PAGE Summary AS DASHBOARD (
   MAP ('A' = SalesChart, 'B' = GoBack, 'C' = RefreshData, 'D' = ResetFilters)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

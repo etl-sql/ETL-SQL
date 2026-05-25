@@ -18,3 +18,6 @@ Examples:
   -- Save configuration to a temp table to query it programmatically
   SHOW CONNECTION WebAPI CONFIG INTO #api_config;
   SELECT Value FROM #api_config WHERE Option = 'URL';
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

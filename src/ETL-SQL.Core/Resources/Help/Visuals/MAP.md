@@ -80,3 +80,6 @@ CREATE VISUAL StoreLocations AS MAP (
   OPTIONS  (MAP_NAME = 'US_STATES', MODE = POINTS)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

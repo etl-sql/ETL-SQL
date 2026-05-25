@@ -28,3 +28,6 @@ RETURN;
 - All OUTPUT variables are flushed to the caller at the point of RETURN, not only at natural end-of-file.
 - RETURN does not roll back open transactions — use `ROLLBACK` before RETURN if needed.
 - See: RUN SCRIPT, DECLARE, TRANSACTION
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

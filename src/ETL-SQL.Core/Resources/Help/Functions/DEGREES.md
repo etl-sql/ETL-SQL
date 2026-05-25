@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT DEGREES(PI());
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

@@ -25,3 +25,6 @@ CREATE VISUAL SalesTable AS TABLE (
   MAPPINGS (region, customer, amount)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

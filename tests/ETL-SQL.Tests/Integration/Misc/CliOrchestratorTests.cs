@@ -98,5 +98,21 @@ namespace ETL_SQL.Tests.Integration
             Assert.False(capturedContext.DoctorStrict);
             Assert.Equal("quick", capturedContext.DoctorProfile);
         }
+
+        [Theory]
+        [InlineData(false, false, false, 0)]
+        [InlineData(false, false, true, 0)]
+        [InlineData(false, true, false, 0)]
+        [InlineData(true, false, false, 0)]
+        [InlineData(true, false, true, 1)]
+        [InlineData(true, true, false, 1)]
+        public void DoctorExitCode_StrictOnlyFailsOnWarningsOrFailures(
+            bool strict,
+            bool hasFailures,
+            bool hasWarnings,
+            int expectedExitCode)
+        {
+            Assert.Equal(expectedExitCode, EngineRunner.DoctorExitCode(strict, hasFailures, hasWarnings));
+        }
     }
 }

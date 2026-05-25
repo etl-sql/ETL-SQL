@@ -47,3 +47,6 @@ CREATE VISUAL StackedArea AS LINE (
   OPTIONS  (AREA = ON, STACKED = ON, TITLE = 'Stacked Revenue')
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

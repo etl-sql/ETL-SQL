@@ -57,3 +57,6 @@ Use `AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC` on BAR/HBAR/LINE/AREA/COMBO v
 Viewer maximize is shown by default for data/chart visuals and hidden by default for input/control visuals. Override with `STYLE (ALLOW_MAXIMIZE = ON|OFF)`.
 Use `FETCH = ON_RUN` for visuals that should wait for an APPLY_PARAMETERS run on a paginated page. `FETCH = AUTO` is the default: dashboards load immediately, while paginated pages load prompt controls immediately and defer result visuals.
 Use HELP VISUAL <TYPE> for type-specific mappings and options (e.g. HELP VISUAL BAR, HELP VISUAL CARD, HELP VISUAL TABLE).
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

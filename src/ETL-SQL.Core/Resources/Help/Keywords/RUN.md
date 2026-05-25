@@ -31,3 +31,6 @@ Only literal `RUN SCRIPT 'child.etlsql'` dependencies can be included in publish
 - From the CLI: `etlsql run script.etlsql --var @start=D-1` overrides any INPUT variable.
 - Scripts can be nested; each level gets its own variable scope.
 - See: DECLARE, RETURN, EXECUTE
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT OVERLAY('Hello World' PLACING 'SQL' FROM 7 FOR 5);
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

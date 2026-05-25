@@ -31,3 +31,6 @@ CREATE VISUAL OrderHeatmap AS HEATMAP (
   )
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

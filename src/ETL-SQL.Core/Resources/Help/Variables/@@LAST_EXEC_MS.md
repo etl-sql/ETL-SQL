@@ -15,3 +15,6 @@ END;
 ```
 
 For aggregate timing across multiple statements, use SET PROFILING = ON and SHOW PROFILE.
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SET @t = ADD_TO_LIST(@t, 'g');
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

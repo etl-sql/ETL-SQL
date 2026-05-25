@@ -13,3 +13,6 @@ Spills increase latency significantly. To reduce them:
 - Pre-filter the result set before sorting.
 - Raise the threshold via SET SORT_SPILL_THRESHOLD = n or in appsettings.json (Engine.SortSpillThreshold).
 - Add an INTO #temp before a large ORDER BY to reduce the sort input size.
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

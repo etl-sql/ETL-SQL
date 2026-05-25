@@ -32,3 +32,6 @@ END;
 
 BREAK exits the loop early. CONTINUE skips to the next iteration.
 For list-typed variables use FOREACH instead.
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

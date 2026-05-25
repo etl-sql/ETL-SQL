@@ -28,3 +28,6 @@ CREATE VISUAL CustomerTable AS TABLE (
   MAPPINGS (customer_id, name, email, total_spend)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

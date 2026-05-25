@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT QUOTIENT(10, 3);
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

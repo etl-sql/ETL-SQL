@@ -34,3 +34,6 @@ CREATE VISUAL MarketBubble AS BUBBLE (
   OPTIONS  (TITLE = 'Segment Market Map')
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

@@ -25,3 +25,6 @@ END;
 ```
 
 Statements inside PARALLEL share the same variable scope but write to separate #temp tables. Avoid reading the same #temp table from two branches — the result is non-deterministic.
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

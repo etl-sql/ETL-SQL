@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT FILE_EXISTS('a.csv');
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

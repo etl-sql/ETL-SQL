@@ -13,3 +13,6 @@ Notes:
 - `VALIDATE REPORT SCRIPT` returns parser/lint diagnostics from the Report Portal.
 - The script path is evaluated on the portal host, not the client machine.
 - Use `INTO #table` when deployment scripts need to inspect validation rows.
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

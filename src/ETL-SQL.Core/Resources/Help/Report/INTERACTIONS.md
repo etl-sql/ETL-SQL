@@ -21,3 +21,6 @@ CREATE VISUAL CategoryBreakdown AS BAR (
     INTERACTIONS (ON_SELECT = HIGHLIGHT)
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

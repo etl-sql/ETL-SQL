@@ -29,3 +29,6 @@ CREATE VISUAL ProductHero AS IMAGE (
   OPTIONS  (FIT = 'cover', WIDTH = '100%', HEIGHT = '300px')
 );
 ```
+
+References:
+- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

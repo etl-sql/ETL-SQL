@@ -31,3 +31,6 @@ UPDATE SalesDB.dbo.Orders
 ```
 
 @@ROWCOUNT reflects the number of rows affected after UPDATE.
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

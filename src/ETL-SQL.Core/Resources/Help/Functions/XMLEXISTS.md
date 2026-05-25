@@ -7,3 +7,6 @@ Syntax:
 ```sql
 SELECT XMLEXISTS(x, '/n');
 ```
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

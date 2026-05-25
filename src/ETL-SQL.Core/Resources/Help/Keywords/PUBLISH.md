@@ -16,3 +16,6 @@ WITH (PASSWORD = 'publish-password', ENCRYPT = MACHINE);
 - If content is unchanged from the latest version, the existing version is reused.
 - Published copies remove `USE PASSWORD` statements after secrets are re-encrypted for the Orchestrator lockbox.
 - Run published scripts with `RUN SCRIPT 'orch://bundle-name@version/main.etlsql';`.
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

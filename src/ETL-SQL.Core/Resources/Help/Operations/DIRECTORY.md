@@ -26,3 +26,6 @@ COPY DIRECTORY 'C:\exports\latest' TO @dest;
 ```
 
 Paths are resolved through the engine's path security policy. Relative paths are resolved from the script's working directory.
+
+References:
+- [Specialized Operations](../../../../../Docs/Reference/Specialized_Operations.md)

@@ -28,3 +28,6 @@ CREATE CONNECTION DeployServer ON SFTP(
   KEYFILE = 'C:\keys\partner_deploy'
 );
 ```
+
+References:
+- [Specialized Operations](../../../../../Docs/Reference/Specialized_Operations.md)

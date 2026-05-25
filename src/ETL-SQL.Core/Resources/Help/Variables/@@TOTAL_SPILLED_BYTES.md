@@ -18,3 +18,6 @@ High spill volumes slow execution significantly. To reduce them:
 - Pre-filter the result set before sorting or joining.
 - Raise spill thresholds in appsettings.json (Engine.SortSpillThreshold, Engine.JoinSpillThreshold).
 - Add intermediate INTO #temp steps to reduce sort/join input size.
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)
