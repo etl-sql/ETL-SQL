@@ -82,7 +82,7 @@ namespace ETL_SQL.Connectors.MockDb
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             await EnsureInitialized();
-            var enumerator = ReadBatches(1).GetAsyncEnumerator();
+            await using var enumerator = ReadBatches(1).GetAsyncEnumerator();
             if (await enumerator.MoveNextAsync())
             {
                 return enumerator.Current.ColumnNames;

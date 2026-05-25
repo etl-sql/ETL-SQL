@@ -415,7 +415,7 @@ public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append 
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
             try
             {
-                var enumerator = ReadBatches(1).GetAsyncEnumerator();
+                await using var enumerator = ReadBatches(1).GetAsyncEnumerator();
                 if (await enumerator.MoveNextAsync())
                 {
                     return enumerator.Current.ColumnNames;
