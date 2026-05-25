@@ -51,6 +51,11 @@ namespace ETL_SQL.TUI.UI
             if (key.Key == ConsoleKey.Escape)
             {
                 _renderer.IsBottomMaximized = false;
+                if (_renderer.SnippetModeActive)
+                {
+                    ExitSnippetMode();
+                    return;
+                }
                 if (_buffer.SelectionStartLine.HasValue || _buffer.IsMultiLineMode)
                 {
                     _buffer.ClearSelection();
@@ -86,7 +91,17 @@ namespace ETL_SQL.TUI.UI
             }
 
             // Shortcuts
-            if (key.Key == ConsoleKey.F2) { await _editor.SaveScript(key.Modifiers.HasFlag(ConsoleModifiers.Shift)); return; }
+            if (key.Key == ConsoleKey.F2)
+            {
+                if (_renderer.HelpVisible)
+                {
+                    _renderer.HelpPageIndex = _renderer.HelpPageIndex == 0 ? 1 : 0;
+                    _renderer.ForceFullRepaint();
+                    return;
+                }
+                await _editor.SaveScript(key.Modifiers.HasFlag(ConsoleModifiers.Shift));
+                return;
+            }
             if (key.Key == ConsoleKey.Q && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.HandleExit(); return; }
             if (key.Key == ConsoleKey.A && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _buffer.SelectAll(); return; }
             if (key.Key == ConsoleKey.Z && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.Undo(); return; }
@@ -118,6 +133,16 @@ namespace ETL_SQL.TUI.UI
             {
                 _editor.MarkDirty(); _editor.SaveUndoState();
                 _buffer.ToggleLineComment();
+                return;
+            }
+
+            // Tab / Shift+Tab — snippet placeholder navigation takes priority over indent
+            if (key.Key == ConsoleKey.Tab && _renderer.SnippetModeActive)
+            {
+                if (key.Modifiers.HasFlag(ConsoleModifiers.Shift))
+                    MoveToPrevPlaceholder();
+                else
+                    MoveToNextPlaceholder();
                 return;
             }
 
@@ -558,10 +583,46 @@ namespace ETL_SQL.TUI.UI
 
         private bool IsNavigationKey(ConsoleKeyInfo key)
         {
-            return key.Key == ConsoleKey.LeftArrow || key.Key == ConsoleKey.RightArrow || 
-                   key.Key == ConsoleKey.UpArrow || key.Key == ConsoleKey.DownArrow || 
-                   key.Key == ConsoleKey.Home || key.Key == ConsoleKey.End || 
+            return key.Key == ConsoleKey.LeftArrow || key.Key == ConsoleKey.RightArrow ||
+                   key.Key == ConsoleKey.UpArrow || key.Key == ConsoleKey.DownArrow ||
+                   key.Key == ConsoleKey.Home || key.Key == ConsoleKey.End ||
                    key.Key == ConsoleKey.Backspace || key.Key == ConsoleKey.Delete;
+        }
+
+        private void MoveToNextPlaceholder()
+        {
+            int searchLine = _buffer.CursorLine;
+            int searchCol = _buffer.SelectionStartLine.HasValue ? (_buffer.SelectionStartCol ?? _buffer.CursorColumn) : _buffer.CursorColumn;
+            // Start search after the current selection end
+            int afterCol = Math.Max(searchCol, _buffer.CursorColumn) + 1;
+
+            var next = AutocompleteController.FindNextPlaceholder(_buffer, searchLine, afterCol)
+                    ?? AutocompleteController.FindNextPlaceholder(_buffer, searchLine + 1, 0);
+
+            if (next.HasValue)
+                _buffer.SelectRange(next.Value.Line, next.Value.StartCol, next.Value.EndCol);
+            else
+                ExitSnippetMode();
+        }
+
+        private void MoveToPrevPlaceholder()
+        {
+            int searchLine = _buffer.CursorLine;
+            int beforeCol = _buffer.SelectionStartLine.HasValue ? (_buffer.SelectionStartCol ?? _buffer.CursorColumn) : _buffer.CursorColumn;
+
+            var prev = AutocompleteController.FindPrevPlaceholder(_buffer, searchLine, beforeCol);
+
+            if (prev.HasValue)
+                _buffer.SelectRange(prev.Value.Line, prev.Value.StartCol, prev.Value.EndCol);
+            else
+                ExitSnippetMode();
+        }
+
+        private void ExitSnippetMode()
+        {
+            _renderer.SnippetModeActive = false;
+            _buffer.SelectionStartLine = null;
+            _buffer.SelectionStartCol = null;
         }
 
         private async Task ShowOpenPrompt()

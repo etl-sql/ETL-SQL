@@ -55,6 +55,8 @@ namespace ETL_SQL.TUI.UI
         public int PromptSuggestionIndex { get; set; } = 0;
         public bool PromptIsSecret { get; set; } = false;
         public bool HelpVisible { get; set; } = false;
+        public bool SnippetModeActive { get; set; } = false;
+        public int HelpPageIndex { get; set; } = 0;
         public string FilterText { get; set; } = "";
         public bool PerformanceVisible { get; set; } = false;
         public bool ResultsVisible { get; set; } = false;
@@ -467,6 +469,12 @@ namespace ETL_SQL.TUI.UI
 
         private void RenderHelpOverlay(int totalWidth, int totalHeight)
         {
+            if (HelpPageIndex == 1)
+            {
+                RenderSnippetListOverlay(totalWidth, totalHeight);
+                return;
+            }
+
             // Live state annotations
             string focusState  = Focus switch {
                 EditorFocus.Editor => "[grey]EDITOR[/]",
@@ -556,12 +564,50 @@ namespace ETL_SQL.TUI.UI
             var inner = new Rows(
                 table,
                 new Markup("[grey] ─────────────────────────────────────────────[/]"),
-                new Markup("[grey] Press any key to close[/]")
+                new Markup("[yellow]F2[/][grey]: Snippet Reference   Press any other key to close[/]")
             );
 
             var panel = new Panel(inner)
             {
                 Header = new PanelHeader("[bold yellow] ETL-SQL Keyboard Reference [/]", Justify.Left),
+                Height = panelHeight,
+                Width  = panelWidth,
+                Border = BoxBorder.Double
+            };
+
+            int startRow = Math.Max(0, (totalHeight - panelHeight) / 2);
+
+            _console.SetCursorPosition(0, startRow);
+            _console.WriteWidget(panel);
+        }
+
+        private void RenderSnippetListOverlay(int totalWidth, int totalHeight)
+        {
+            var snippetTable = new Table()
+                .Border(TableBorder.None)
+                .HideHeaders()
+                .AddColumn(new TableColumn("").Width(14))
+                .AddColumn(new TableColumn(""));
+
+            foreach (var s in ETL_SQL.Core.Metadata.SnippetLibrary.Instance.GetAll())
+            {
+                snippetTable.AddRow(
+                    new Markup($"[yellow]{Markup.Escape(s.Trigger)}[/]"),
+                    new Markup(Markup.Escape(s.Description)));
+            }
+
+            int panelWidth  = Math.Min(72, totalWidth  - 4);
+            int panelHeight = Math.Min(32, totalHeight - 4);
+
+            var inner = new Rows(
+                snippetTable,
+                new Markup("[grey] ─────────────────────────────────────────────[/]"),
+                new Markup("[yellow]F2[/][grey]: Keyboard Reference   Press any other key to close[/]")
+            );
+
+            var panel = new Panel(inner)
+            {
+                Header = new PanelHeader("[bold yellow] ETL-SQL Snippet Reference [/]", Justify.Left),
                 Height = panelHeight,
                 Width  = panelWidth,
                 Border = BoxBorder.Double

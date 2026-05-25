@@ -125,7 +125,7 @@ namespace ETL_SQL.TUI.UI
         public void Accept()
         {
             if (!_renderer.AutocompleteVisible || !_renderer.AutocompleteOptions.Any()) return;
-            
+
             var choice = _renderer.AutocompleteOptions[_renderer.AutocompleteIndex].Text;
 
             var line = _buffer.Lines[_buffer.CursorLine];
@@ -164,6 +164,47 @@ namespace ETL_SQL.TUI.UI
                 _buffer.CursorColumn = startPos + choice.Length;
             }
             _renderer.AutocompleteVisible = false;
+
+            // Activate snippet tab-stop navigation if placeholders exist
+            var firstPlaceholder = FindNextPlaceholder(_buffer, 0, 0);
+            if (firstPlaceholder.HasValue)
+            {
+                _buffer.SelectRange(firstPlaceholder.Value.Line, firstPlaceholder.Value.StartCol, firstPlaceholder.Value.EndCol);
+                _renderer.SnippetModeActive = true;
+            }
+        }
+
+        /// <summary>Scans forward from (fromLine, fromCol) for the next «placeholder» marker.</summary>
+        public static (int Line, int StartCol, int EndCol)? FindNextPlaceholder(EditorBuffer buffer, int fromLine, int fromCol)
+        {
+            for (int l = fromLine; l < buffer.Lines.Count; l++)
+            {
+                var ln = buffer.Lines[l];
+                int searchStart = (l == fromLine) ? fromCol : 0;
+                int open = ln.IndexOf('«', searchStart);
+                if (open < 0) continue;
+                int close = ln.IndexOf('»', open + 1);
+                if (close < 0) continue;
+                return (l, open, close + 1);
+            }
+            return null;
+        }
+
+        /// <summary>Scans backward from (fromLine, fromCol) for the previous «placeholder» marker.</summary>
+        public static (int Line, int StartCol, int EndCol)? FindPrevPlaceholder(EditorBuffer buffer, int fromLine, int fromCol)
+        {
+            for (int l = fromLine; l >= 0; l--)
+            {
+                var ln = buffer.Lines[l];
+                int endSearchAt = (l == fromLine) ? fromCol - 1 : ln.Length - 1;
+                if (endSearchAt < 0) continue;
+                int close = ln.LastIndexOf('»', endSearchAt);
+                if (close < 0) continue;
+                int open = close > 0 ? ln.LastIndexOf('«', close - 1) : -1;
+                if (open < 0) continue;
+                return (l, open, close + 1);
+            }
+            return null;
         }
 
         /// <summary>Attempts to provide specialized suggestions, such as expansion of '*'.</summary>

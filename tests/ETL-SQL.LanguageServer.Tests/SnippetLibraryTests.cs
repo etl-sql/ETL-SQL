@@ -9,10 +9,10 @@ public class SnippetLibraryTests
     // ── Loading ───────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Load_Returns15Snippets()
+    public void Load_Returns25Snippets()
     {
         var snippets = SnippetLibrary.Instance.GetAll();
-        Assert.Equal(15, snippets.Count);
+        Assert.Equal(25, snippets.Count);
     }
 
     [Fact]
@@ -48,6 +48,16 @@ public class SnippetLibraryTests
     [InlineData("$excel")]
     [InlineData("$parquet")]
     [InlineData("$json")]
+    [InlineData("$donut")]
+    [InlineData("$hbar")]
+    [InlineData("$gauge")]
+    [InlineData("$scatter")]
+    [InlineData("$heatmap")]
+    [InlineData("$radar")]
+    [InlineData("$funnel")]
+    [InlineData("$waterfall")]
+    [InlineData("$treemap")]
+    [InlineData("$boxplot")]
     public void Load_ExpectedTriggerExists(string trigger)
     {
         var snippets = SnippetLibrary.Instance.GetAll();
@@ -103,10 +113,10 @@ public class SnippetLibraryTests
     }
 
     [Fact]
-    public void GetByPrefix_JustDollar_ReturnsAll15()
+    public void GetByPrefix_JustDollar_ReturnsAll25()
     {
         var matches = SnippetLibrary.Instance.GetByPrefix("$").ToList();
-        Assert.Equal(15, matches.Count);
+        Assert.Equal(25, matches.Count);
     }
 
     [Fact]

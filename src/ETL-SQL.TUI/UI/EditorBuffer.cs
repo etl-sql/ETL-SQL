@@ -239,6 +239,14 @@ namespace ETL_SQL.TUI.UI
             CursorColumn = Lines[CursorLine].Length;
         }
 
+        public void SelectRange(int line, int startCol, int endCol)
+        {
+            CursorLine = line;
+            SelectionStartLine = line;
+            SelectionStartCol = startCol;
+            CursorColumn = endCol;
+        }
+
         public int GetFlatPosition(int line, int col)
         {
             int flat = 0;
