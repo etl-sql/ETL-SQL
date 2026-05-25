@@ -78,11 +78,12 @@ namespace ETL_SQL.Tests.Docs
         public void GeneralDocs_SqlBlocks_ParseWithoutSyntaxError()
         {
             var docsDir = RepoFile("Docs");
-            var docFiles = Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories)
-                .Concat(new[] { RepoFile("SECURITY.md"), RepoFile("AGENTS.md") })
-                .ToArray();
+            var docsFiles = Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories);
+            var rootFiles = Directory.GetFiles(RepoRoot, "*.md", SearchOption.TopDirectoryOnly);
 
-            var failures = FindSqlBlockParseFailures(docFiles.Where(File.Exists));
+            var docFiles = docsFiles.Concat(rootFiles).ToArray();
+
+            var failures = FindSqlBlockParseFailures(docFiles);
 
             Assert.True(failures.Count == 0,
                 $"General documentation SQL blocks that failed to parse ({failures.Count}):\n" +
