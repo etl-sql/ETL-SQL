@@ -248,13 +248,9 @@ namespace ETL_SQL.Tests.Docs
                         var tokens = new Lexer(trimmed).Tokenize();
                         new Parser(tokens, trimmed).Parse();
                     }
-                    catch (Exception ex) when (ex.GetType().Name is "SyntaxException" or "ParseException" or "LexerException")
+                    catch (Exception ex)
                     {
-                        failures.Add($"{relativePath} block #{index + 1}: {ex.Message}\n  SQL: {Truncate(trimmed, 120)}");
-                    }
-                    catch (Exception)
-                    {
-                        // Non-parse exceptions are not documentation syntax failures.
+                        failures.Add($"{relativePath} block #{index + 1}: [{ex.GetType().Name}] {ex.Message}\n  SQL: {Truncate(trimmed, 120)}");
                     }
                 }
             }
@@ -267,7 +263,12 @@ namespace ETL_SQL.Tests.Docs
             if (string.IsNullOrWhiteSpace(trimmed))
                 return true;
 
-            if (trimmed.Contains('<') || trimmed.Contains('{') || trimmed.Contains("..."))
+            // Skip template/placeholder snippets and ellipses
+            if (trimmed.Contains("...") || Regex.IsMatch(trimmed, @"<[a-zA-Z_][a-zA-Z0-9_\-\s]*>") || trimmed.Contains('{') || trimmed.Contains('}'))
+                return true;
+
+            // Skip HTML block structures (e.g. text visuals with raw HTML snippets)
+            if (trimmed.StartsWith("<") && trimmed.Contains(">") && (trimmed.Contains("</") || trimmed.Contains("/>")))
                 return true;
 
             var fragmentLeaders = new[]
