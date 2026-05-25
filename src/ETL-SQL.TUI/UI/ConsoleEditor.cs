@@ -653,6 +653,43 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
+        /// <summary>Prompts for a file path and exports the active result set as RFC 4180 CSV.</summary>
+        public async Task ExportResults()
+        {
+            if (_evaluator.LastResultSets.Count == 0)
+            {
+                _renderer.ShowStatus("No results to export.");
+                return;
+            }
+
+            var scriptBase = Path.GetFileNameWithoutExtension(_filePath);
+            var defaultPath = scriptBase + ".csv";
+            var path = await ShowPrompt("Export CSV", defaultPath);
+            if (string.IsNullOrWhiteSpace(path)) return;
+
+            try
+            {
+                var rs = _evaluator.LastResultSets[_renderer.ActiveResultSetIndex];
+                await using var writer = new StreamWriter(path, append: false, System.Text.Encoding.UTF8);
+                await writer.WriteLineAsync(string.Join(",", rs.ColumnNames.Select(EscapeCsv)));
+                foreach (var row in rs.Rows)
+                    await writer.WriteLineAsync(string.Join(",", rs.ColumnNames.Select(col => EscapeCsv(row[col]?.ToString() ?? ""))));
+                _renderer.ShowStatus($"Exported {rs.Rows.Count} rows to {path}");
+            }
+            catch (Exception ex)
+            {
+                _renderer.ShowStatus($"Export failed: {ex.Message}");
+            }
+        }
+
+        private static string EscapeCsv(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
+                return $"\"{value.Replace("\"", "\"\"")}\"";
+            return value;
+        }
+
         /// <summary>Cuts the current selection to the clipboard.</summary>
         public async Task Cut()
         {
