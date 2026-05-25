@@ -43,6 +43,7 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+FAST_FILTER="(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
 
 invoke_dotnet_test() {
     local project="$1"
@@ -79,11 +80,11 @@ case "$LANE" in
         bash "$SCRIPT_DIR/test-smoke.sh" "${smoke_args[@]}"
         ;;
     fast)
-        invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "(Category!=Integration)&(Category!=Performance)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
+        invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$FAST_FILTER"
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
         ;;
     engine)
-        invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "(Category!=Integration)&(Category!=Performance)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
+        invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$FAST_FILTER"
         ;;
     portal)
         invoke_dotnet_test "tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" ""

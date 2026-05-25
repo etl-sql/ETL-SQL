@@ -17,6 +17,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$fastFilter = "(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
 
 function Invoke-DotNetTest {
     param(
@@ -60,11 +61,11 @@ switch ($Lane) {
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
     "fast" {
-        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "(Category!=Integration)&(Category!=Performance)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
+        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $fastFilter
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
     }
     "engine" {
-        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "(Category!=Integration)&(Category!=Performance)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
+        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $fastFilter
     }
     "portal" {
         Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"

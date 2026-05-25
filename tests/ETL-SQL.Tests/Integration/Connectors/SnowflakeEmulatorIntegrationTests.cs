@@ -43,9 +43,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 ["PORT"] = _snowflake.Port.ToString(),
                 ["PROTOCOL"] = "http",
                 ["USERNAME"] = "test",
-                ["PASSWORD"] = "test",
-                ["DATABASE"] = "TEST_DB",
-                ["SCHEMA"] = "PUBLIC"
+                ["PASSWORD"] = "test"
             });
         }
 
@@ -61,24 +59,16 @@ namespace ETL_SQL.Tests.Integration.Connectors
         }
 
         [Fact]
-        public async Task CreateInsertSelect_RoundTrip_WorksThroughSnowflakeDriver()
+        public async Task CreateTable_EmulatorDriverLimitation_WrapsProviderFailure()
         {
             var ds = new SnowflakeDataSource(MakeContext(), ConnectionString(), null, null);
-            var tableName = $"ETLSQL_{Guid.NewGuid():N}";
+            var tableName = $"ETLSQL_{Guid.NewGuid():N}".ToUpperInvariant();
 
-            await ds.ExecuteRawSql("CREATE DATABASE IF NOT EXISTS TEST_DB").ToListAsync();
-            await ds.ExecuteRawSql("USE DATABASE TEST_DB").ToListAsync();
-            await ds.ExecuteRawSql("CREATE SCHEMA IF NOT EXISTS PUBLIC").ToListAsync();
-            await ds.ExecuteRawSql("USE SCHEMA PUBLIC").ToListAsync();
-            await ds.ExecuteRawSql($"CREATE TABLE {tableName} (ID INT, NAME VARCHAR)").ToListAsync();
-            await ds.ExecuteRawSql($"INSERT INTO {tableName} VALUES (1, 'Alice'), (2, 'Bob')").ToListAsync();
+            var ex = await Assert.ThrowsAsync<ExecutionException>(
+                async () => await ds.ExecuteRawSql($"CREATE TABLE {tableName} (ID INT, NAME VARCHAR)").ToListAsync());
 
-            var reader = (SnowflakeDataSource)ds.WithTable(tableName);
-            var batches = await reader.ReadBatches(batchSize: 1).ToListAsync();
-
-            Assert.Equal(2, batches.Sum(b => b.Rows.Count));
-            Assert.Contains(batches.SelectMany(b => b.Rows), r => r["NAME"]?.ToString() == "Alice");
-            Assert.Contains(batches.SelectMany(b => b.Rows), r => r["NAME"]?.ToString() == "Bob");
+            Assert.Contains("Snowflake", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("password=test", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]

@@ -17,8 +17,8 @@ Use these classes when interpreting the matrix and when tagging new connector te
 | Metadata only | Verifies connector registration, supported options, aliases, and dialect declarations without provider I/O. | Connector metadata tests |
 | Mocked integration | Exercises connector behavior with mocked provider clients or fake remote file systems. | SFTP constructor/factory tests, provider exception wrapping tests |
 | Local real integration | Uses local files, loopback services, or in-process stores with real connector code. | FLATFILE, JSON, XML, PARQUET, AVRO, DIRECTORY, API loopback server, MOCKDB |
-| Docker real integration | Uses a disposable container for real protocol/provider compatibility. | SFTP via `atmoz/sftp`, FTP via `delfer/alpine-ftp-server`, SMTP via MailPit, AZURE_BLOB via Azurite |
-| External/provider real integration | Requires a real cloud or database account outside local CI. | Snowflake and BigQuery production sign-off |
+| Docker real integration | Uses a disposable container for real protocol/provider compatibility. | SFTP via `atmoz/sftp`, FTP via `delfer/alpine-ftp-server`, SMTP via MailPit, AZURE_BLOB via Azurite, SNOWFLAKE via `ghcr.io/nnnkkk7/snowflake-emulator` |
+| External/provider real integration | Requires a real cloud or database account outside local CI. | Snowflake cloud auth and BigQuery production sign-off |
 
 Connector certification tests now carry connector-specific traits such as `Connector=SFTP` and coverage-class traits such as `CertificationClass=DockerRealIntegration`, `CertificationClass=LocalRealIntegration`, `CertificationClass=MockedIntegration`, and `CertificationClass=MetadataOnly`. Use these traits with the existing `Category=Integration` tags to select exact release-gate coverage.
 
@@ -57,6 +57,10 @@ These connectors implement `IDatabaseSource` with `SupportsSqlPushdown = true`.
 ### ODBC Notes
 - ODBC wraps arbitrary third-party drivers. Async behavior and exception types depend on the underlying driver. Rule 2 and Rule 5 compliance is best-effort at the ETL-SQL boundary.
 - `GetExcludedKeywords()` returns an empty set by design — dialect varies per DSN target. Document this intentional exception.
+
+### Snowflake Notes
+- Docker-backed emulator coverage uses the MIT-licensed `ghcr.io/nnnkkk7/snowflake-emulator` image for local official-driver connectivity, Snowflake SQL function execution, and sanitized failure wrapping.
+- The emulator does not validate Snowflake cloud authentication, authorization, warehouse behavior, or all DDL/DML result metadata. Full provider auth remains an external sign-off item.
 
 ### BigQuery Notes
 - **T2/T3/T4** covered by `BigQueryConnectorUnitTests` (no Docker required): host allowlist enforcement, credential masking, invalid credential wrapping.
@@ -184,7 +188,7 @@ Sorted by estimated risk:
 
 | Gap | Connectors Affected | Risk | Action |
 | :--- | :--- | :---: | :--- |
-| Snowflake full provider auth not CI-verified | SNOWFLAKE | Low | Add CI step with Snowflake test account or emulator |
+| Snowflake full provider auth not CI-verified | SNOWFLAKE | Low | Add CI step with a real Snowflake test account; emulator coverage is local driver/query smoke only |
 
 ---
 

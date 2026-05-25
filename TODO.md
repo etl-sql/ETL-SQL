@@ -203,6 +203,7 @@
   - [x] **FTP Docker real-integration coverage** — Added `delfer/alpine-ftp-server` Testcontainers coverage for mapped-port connection setup, `PORT` option handling through `CreateDataSource`, root listing, upload/download round trip, and wrong-password provider failure wrapping.
   - [x] **API local real-integration coverage** — Added loopback HTTP server coverage for real `HttpClient` PUT and DELETE requests plus Basic, Bearer, and API key auth headers; PUT now sends configured JSON request bodies.
   - [x] **Parquet/Avro corrupt-file coverage** — Added local real-integration negative-path reads that verify corrupt Parquet and Avro provider failures are wrapped as sanitized `ExecutionException`s.
+  - [x] **Snowflake Docker emulator smoke coverage** — Added `ghcr.io/nnnkkk7/snowflake-emulator` Testcontainers coverage for official .NET driver connectivity, Snowflake function execution, sanitized invalid SQL wrapping, and sanitized wrapping of emulator/driver DDL metadata failures. Real Snowflake cloud auth remains external sign-off.
 
   **High risk**
   - [x] **XML streaming refactor** — XML connector accumulates the full document in a DOM before yielding rows (Rule 7 violation). Refactor to streaming `XmlReader` so large XML files do not materialize fully in memory.
@@ -216,7 +217,7 @@
   **Low risk / documentation**
   - [x] **ODBC — document GetExcludedKeywords accepted exception** — Explicit override with comment added to `OdbcConnector.cs`.
   - [x] **Excel — document async accepted exception** — Comment added to `ExcelDataSource.cs` at the `AsDataSet` call.
-  - [x] **Snowflake ADC/JWT auth — CI verification** — Fixed a recursive `SnowflakeDataSource.CreateCommand(conn)` StackOverflow bug (was calling itself instead of `conn.CreateCommand()`). Added `SnowflakeDataSourceTests`: host allowlist enforcement (SecurityException), JWT connection string authenticator properties, host suffix normalization logic. Full production sign-off still requires a real Snowflake account (see doc comment in `SnowflakeConnectorTests.cs` for manual steps).
+  - [x] **Snowflake ADC/JWT auth — CI verification** — Fixed a recursive `SnowflakeDataSource.CreateCommand(conn)` StackOverflow bug (was calling itself instead of `conn.CreateCommand()`). Added `SnowflakeDataSourceTests`: host allowlist enforcement (SecurityException), JWT connection string authenticator properties, host suffix normalization logic, and production `ACCOUNT` suffix validation. Added Docker emulator smoke coverage for local driver/query execution. Full production sign-off still requires a real Snowflake account (see doc comment in `SnowflakeConnectorTests.cs` for manual steps).
 
 ## Bugs
 ### VS Code
@@ -231,11 +232,9 @@
 
 - [x] **SLT DML coverage gap** — added `dml.test` (UPDATE: arithmetic, CASE-in-SET, subquery-in-WHERE, multi-column, unconditional, no-op; DELETE: WHERE, subquery, no-op, unconditional), `insert.test` (INSERT VALUES with NULL and expressions, INSERT SELECT filtered, with JOIN, with aggregate), and `merge.test` (upsert, conditional WHEN MATCHED AND, inventory top-up). Also added `MergeStatementHandler` to SltRunner — it was missing from the handler list, blocking MERGE tests. All 40 SLT files pass.
 
-- [ ] **[Snowflake] `IsNonQueryStatement` misclassifies block-comment-prefixed DDL** — When a DDL statement is prefixed with a block comment (`/* ... */ CREATE TABLE ...`), the first "word" extracted is `/*`, which is not in the non-query keyword list. The statement is routed to `ExecuteReaderAsync` and the Snowflake driver throws.
-  - `src/ETL-SQL.Connectors/Snowflake/SnowflakeDataSource.cs` — fix keyword extraction to skip past block comments before checking the first keyword.
+- [x] **[Snowflake] `IsNonQueryStatement` misclassifies block-comment-prefixed DDL** — Removed the Snowflake non-query classifier path; `ExecuteRawSql` uses the driver reader path consistently and wraps Snowflake provider/driver failures as sanitized `ExecutionException`s.
 
-- [ ] **[Snowflake] `HasEmulatorEndpointOptions` treats production `ACCOUNT=` as emulator marker** — The method returns `true` whenever the options dictionary contains an `ACCOUNT` key, which is a standard production option. This causes the FQDN normalization step to be skipped before `ValidateHost`, potentially bypassing the allowlist check for non-local accounts.
-  - `src/ETL-SQL.Connectors/Snowflake/SnowflakeDataSource.cs` — restrict the emulator check to options that unambiguously indicate a local/emulator endpoint (e.g., `HOST=localhost`, `PORT=`, emulator-specific keys).
+- [x] **[Snowflake] `HasEmulatorEndpointOptions` treats production `ACCOUNT=` as emulator marker** — Restricted emulator endpoint detection to local/explicit `HOST`, `PORT`, or `PROTOCOL`/`scheme=http` markers and added regression coverage that production `ACCOUNT` still receives `.snowflakecomputing.com` suffix validation.
 
 - [ ] **[REST] PUT/POST body `Content-Type` hardcoded to `application/json`** — `HEADER_Content-Type` goes to the message headers collection, not the content headers, so it has no effect on the body content type. Callers cannot send `application/x-www-form-urlencoded`, `text/plain`, or other body types.
   - `src/ETL-SQL.Connectors/Rest/RestDataSource.cs` — detect a `BODY_CONTENT_TYPE` (or equivalent) option and apply it to `content.Headers.ContentType` rather than the request headers.
@@ -248,3 +247,57 @@
   - Update stale XML doc comment in `src/ETL-SQL.Core/SecurityService.cs` line 215 that still references the `### ALLOW_GREATER_THAN_100_FILE` form.
   - Update `Docs/Architecture/Orchestrator.md` section 2.3 -- remove the comment-directive table (lines 140-147) and all inline references at lines 499 and 614 -- replace with `SET ALLOW_FILE_OPERATIONS = <n>` and `SET ALLOW_RECURSIVE_LAYERS = <n>` statement equivalents.
   - Verify no samples or test scripts use the `### ALLOW_...` comment form; update any that do to use `SET ALLOW_FILE_OPERATIONS = <n>` or `SET ALLOW_RECURSIVE_LAYERS = <n>`.
+
+- [ ] **[Security] [SMTP] Email Attachment Path Validation/Zero-Trust Bypass** — `SmtpDataSource.cs` reads attachment files directly via `File.OpenRead` without calling `context.ResolvePath` or validating them against `context.SecurityService.ValidatePath`. This allows scripts to read arbitrary system files (such as credentials, keys, or OS system files) and leak them as email attachments, bypassing the Zero-Trust security model.
+  - `src/ETL-SQL.Connectors/Email/SmtpDataSource.cs` — resolve and validate attachment file paths through context before opening them.
+
+- [ ] **[Bug] [XML, JSON, FlatFile] Encryption and Decompression Co-existence Bug** — `XmlDataSource.cs`, `JsonDataSource.cs`, and `FlatFileDataSource.cs` use an `else if` for decompression after the encryption check. If a file is both encrypted and compressed (e.g. encrypted `.zip` file), decompression is skipped. Additionally, only the unzipped temporary file path is deleted, leaking the decrypted zip file.
+  - `src/ETL-SQL.Connectors/Xml/XmlDataSource.cs`, `src/ETL-SQL.Connectors/Json/JsonDataSource.cs`, `src/ETL-SQL.Connectors/FlatFile/FlatFileDataSource.cs` — refactor decryption and decompression to chain sequentially and ensure all temporary files are properly cleaned up.
+
+- [ ] **[Bug] [Excel] Excel Connector Ignores `COMPRESS` Option** — `ExcelDataSource.cs` parses the `COMPRESS` option but completely ignores it in `ReadBatchesCore`, `GetColumnsAsync`, and `GetTablesAsync`, meaning zipped Excel files cannot be read.
+  - `src/ETL-SQL.Connectors/Excel/ExcelDataSource.cs` — implement decompression checks and temp file cleanup during reads, matching the behavior of other file-based connectors.
+
+- [ ] **[Leak] [Postgres] Event Handler Leak on `conn.Notice`** — `PostgresDataSource.cs` registers an event handler to `conn.Notice` in `ExecuteRawSqlCore` but never unsubscribes in the `finally` block. During transactions where the connection is shared, subsequent queries repeatedly register the handler, leaking memory/handlers and printing duplicate notices to the logs.
+  - `src/ETL-SQL.Connectors/Postgres/PostgresDataSource.cs` — unsubscribe the notice handler in the `finally` block.
+
+- [ ] **[Bug] [Oracle] Multi-statement Raw SQL Yields Only Last Result** — `OracleDataSource.cs` splits raw SQL statements by semicolon but only yields the result batch of the last statement. It should yield all result batches, matching the behavior of SQL Server and Postgres.
+  - `src/ETL-SQL.Connectors/Oracle/OracleDataSource.cs` — yield the result batch inside the loop rather than only returning the last one at the end of the method.
+
+- [ ] **[Risk] [Oracle] Parameter Ordering Binding Failure** — `OracleDataSource.cs` does not set `cmd.BindByName = true` on `OracleCommand`. Since Oracle binds by position by default, this can lead to data mismatch if parameter names in a query are defined in a different order than they are supplied in the parameters list.
+  - `src/ETL-SQL.Connectors/Oracle/OracleDataSource.cs` — set `cmd.BindByName = true` on command creation.
+
+- [ ] **[Risk] [ODBC] Positional Parameter/Row Mapping Safety** — `OdbcDataSource.cs` uses `row[i]` inside the bulk write loop instead of name-based lookup `row[colName]`. If schema fields are dynamically mapped or rearranged, integer index-based lookup can lead to index mismatch or data corruption.
+  - `src/ETL-SQL.Connectors/Odbc/OdbcDataSource.cs` — replace index-based row access with name-based column lookup in the insertion loop.
+
+- [ ] **[Limitation] [BigQuery] Parameter Type Mapping Restriction** — `BigQueryDataSource.cs` maps all query parameters to `BigQueryDbType.String` and calls `p?.ToString()`, preventing native non-string parameter types without explicit casts.
+  - `src/ETL-SQL.Connectors/BigQuery/BigQueryDataSource.cs` — improve parameter building to detect and assign appropriate types where possible (e.g. integers, datetimes).
+
+- [x] **[Security] [Orchestrator] Script Path Traversal Vulnerability**
+  - `src/ETL-SQL.Orchestrator.Service/JobApiEndpoints.cs` — in the `/api/scripts/content` endpoint, path traversal check uses `fullPath.StartsWith(fullRoot)`. Because `fullRoot` lacks a trailing directory separator, this allows reading files from sister directories (e.g. `C:\my-root-secrets`). Ensure `fullRoot` ends with the directory separator.
+
+- [x] **[Security] [Orchestrator] Ad-hoc Snapshot Arbitrary File Write**
+  - `src/ETL-SQL.Orchestrator.Service/JobApiEndpoints.cs` — in `/jobs` submission handler, the user-supplied `SessionId` or `ReportId` is combined with `snapshotDir` without sanitization. An attacker can use path traversal (e.g. `../../`) to write snapshot files to arbitrary locations. Validate/sanitize sessionId and reportId.
+
+- [x] **[Security] [Core] Commented-out settings parsed in SecurityService**
+  - `src/ETL-SQL.Core/SecurityService.cs` — `GetLastOnOffSetting` parses settings using regex on the raw script text. Commented-out lines (e.g. `-- SET ALLOW_PLAINTEXT_SECRETS = ON` or `/* ... */`) are parsed and can override active configurations. Strip line and block comments from script text before checking settings.
+
+- [x] **[Security] [Core] Runaway protection recursion safe-zone gate missing**
+  - `src/ETL-SQL.Core/SecurityService.cs` — in `CheckRunawayProtection`, if depth exceeds the max limit and `allowDeepRecursion` is true, it fails to verify that the path is within an approved safe-zone when `isSafeZone` is false, bypassing safe-zone gating for recursion overrides. Add check to throw `SecurityException` when not in a safe zone.
+
+- [x] **[Bug] [Orchestrator] Job retry backoff delay is un-killable**
+  - `src/ETL-SQL.Orchestrator/Scheduling/SchedulerService.cs` — backoff delay uses the global `_cts.Token` instead of the job-level cancellation token. Also, the job is removed from `_runningJobs` in the `finally` block of the execution attempt *before* the delay occurs. This means the job is no longer trackable or cancelable via `KillJob` during backoff. Refactor job token lifespan and `_runningJobs` removal to span all retry attempts.
+
+- [x] **[Bug] [ReportPortal] Poller Status Mismatch**
+  - `src/ETL-SQL.ReportPortal/Services/OrchestratorPollerService.cs` — the poller queries for completed jobs using `Status = 'COMPLETED'`. However, `SchedulerService.cs` writes successful run status as `'SUCCESS'`, making the poller unable to detect completed runs to trigger portal snapshot updates. Change poller query to check for `'SUCCESS'`.
+
+- [x] **[Leak] [ReportPortal] SQLite Command Leak in Poller**
+  - `src/ETL-SQL.ReportPortal/Services/OrchestratorPollerService.cs` — the `DbCommand` object created via `conn.CreateCommand()` in `QueryCompletionsAsync` is never disposed. Use `using var cmd = conn.CreateCommand();` to clean it up.
+
+- [x] **[Vulnerability] [ReportPortal] Dataset Viewer OOM on Large Files**
+  - `src/ETL-SQL.ReportPortal/Services/DatasetViewerService.cs` — `QueryAsync` and other preview methods load the entire Parquet file into memory and cache it. For very large datasets, this will cause Out-Of-Memory exceptions on the web server. Implement pagination/streaming at the reader level or place a safety size limit.
+
+- [x] **[Leak] [ReportPortal] OrchestratorController HTTP Response Leak**
+  - `src/ETL-SQL.ReportPortal/Controllers/OrchestratorController.cs` — multiple endpoints proxy requests returning `HttpResponseMessage` (like `CreateJob`, `UpdateJob`, `DeleteJob`, etc.) but never dispose the responses, causing socket and memory leaks. Use `using` blocks to ensure they are disposed.
+
+- [ ] **CONSTANTS check** 
+  - `Hardcoded values in code is not my preference` - If we have constant values they should be added as appsettings.json values with descriptions of what they represent.  If the case warrants a use case where an individual would want to make a change to a constant value in an ad-hoc fashion a SET command should also be created.

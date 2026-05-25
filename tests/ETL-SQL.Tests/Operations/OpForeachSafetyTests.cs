@@ -46,6 +46,7 @@ END";
             var e = NewEvaluator();
             var mockDb = new MockDatabaseSource("REMOTE_DB");
             e.Connections["remote"] = mockDb;
+            e.ForeachPageSize = 0;
 
             // Loop body is read-only -> Safe for high-speed streaming
             var script = @"

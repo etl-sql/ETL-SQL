@@ -392,6 +392,25 @@ namespace ETL_SQL.Tests.Integration.Connectors
         }
 
         [Fact]
+        public void AccountOptionWithoutLocalEndpoint_DoesNotBypassSuffixValidation()
+        {
+            var security = new SecurityService(NullLogger.Instance);
+            security.IsTestMode = false;
+            security.AllowedHosts.Clear();
+            security.AllowedHosts.Add("myorg-myaccount.snowflakecomputing.com");
+
+            var ctx = new Mock<IExecutionContext>();
+            ctx.Setup(c => c.SecurityService).Returns(security);
+            ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);
+
+            var ds = new SnowflakeDataSource(ctx.Object,
+                "account=myorg-myaccount;user=alice;",
+                null,
+                new Dictionary<string, string> { ["ACCOUNT"] = "myorg-myaccount" });
+            Assert.NotNull(ds);
+        }
+
+        [Fact]
         public void JwtAuth_HostOptionWithSuffix_PassedThroughAsIs()
         {
             var security = new SecurityService(NullLogger.Instance);

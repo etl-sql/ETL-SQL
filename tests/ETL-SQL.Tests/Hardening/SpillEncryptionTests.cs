@@ -55,6 +55,23 @@ namespace ETL_SQL.Tests.Hardening
             services.AddTransient<ETL_SQL.Engine.Services.ReportRegistry>();
             services.AddTransient<IReportContext, ETL_SQL.Engine.Services.ReportRegistry>();
             services.AddSingleton<IJobHistoryStore>(new Mock<IJobHistoryStore>().Object);
+            var lineageCatalog = new Mock<ILineageCatalogStore>();
+            lineageCatalog
+                .Setup(s => s.GetHistoryForTableAsync(It.IsAny<string>(), It.IsAny<int>()))
+                .ReturnsAsync(Enumerable.Empty<LineageHistoryEntry>());
+            lineageCatalog
+                .Setup(s => s.GetHistoryForTagAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int>()))
+                .ReturnsAsync(Enumerable.Empty<LineageHistoryEntry>());
+            lineageCatalog
+                .Setup(s => s.GetHistoryForJobAsync(It.IsAny<string>(), It.IsAny<int>()))
+                .ReturnsAsync(Enumerable.Empty<LineageHistoryEntry>());
+            lineageCatalog
+                .Setup(s => s.GetHistoryForSourceAsync(It.IsAny<string>(), It.IsAny<int>()))
+                .ReturnsAsync(Enumerable.Empty<LineageHistoryEntry>());
+            lineageCatalog
+                .Setup(s => s.GetHistoryForSourceFileAsync(It.IsAny<string>(), It.IsAny<int>()))
+                .ReturnsAsync(Enumerable.Empty<LineageHistoryEntry>());
+            services.AddSingleton(lineageCatalog.Object);
             services.AddSingleton<IBundleStore>(new Mock<IBundleStore>().Object);
             services.AddSingleton<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
             services.AddSingleton<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry, ETL_SQL.Core.Metadata.LanguageHelpRegistry>();
