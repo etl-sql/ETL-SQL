@@ -46,8 +46,7 @@ namespace ETL_SQL.Connectors.Rest
             { "ROOT_PATH", Array.Empty<string>() },
             { "BODY", Array.Empty<string>() },
             { "BODY_CONTENT_TYPE", Array.Empty<string>() },
-            { "PAG_TYPE", new[] { "NONE", "OFFSET" } },
-            { "PAG_LIMIT", Array.Empty<string>() }
+            { "TIMEOUT_SECONDS", Array.Empty<string>() }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new();
@@ -72,11 +71,10 @@ Supported Options:
   USER/PASS   - Credentials for BASIC auth.
   TOKEN       - Secret for BEARER or APIKEY auth.
   HEADER_NAME - Name of the header for APIKEY auth (e.g. X-API-KEY).
-  ROOT_PATH   - JSONPath to the data array (e.g. '$.items').
-  BODY        - JSON request body for POST/PUT methods.
+  ROOT_PATH         - JSONPath to the data array (e.g. '$.items').
+  BODY              - JSON request body for POST/PUT methods.
   BODY_CONTENT_TYPE - Content-Type for POST/PUT BODY. Default: application/json.
-  PAG_TYPE    - Pagination style: NONE, OFFSET.
-  PAG_LIMIT   - Batch size for pagination.";
+  TIMEOUT_SECONDS   - Request timeout in seconds (default 30).";
         }
 
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");

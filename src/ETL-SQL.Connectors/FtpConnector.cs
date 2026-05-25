@@ -51,14 +51,15 @@ namespace ETL_SQL.Connectors
         {
         }
 
-        public FtpConnector(IExecutionContext context, string host, string username, string password, int port)
+        public FtpConnector(IExecutionContext context, string host, string username, string password, int port,
+            string? useSsl = null, bool passive = true)
         {
             _context = context;
             _logger = context.Logger;
             (_host, _port) = NormalizeEndpoint(host, port);
             _username = username;
             _password = password;
-            _client = CreateClient(_host, _port, username, password);
+            _client = CreateClient(_host, _port, username, password, useSsl, passive);
 
             // Security Hardening: egress control
             context.SecurityService.ValidateHost(_host);
@@ -73,9 +74,16 @@ namespace ETL_SQL.Connectors
         }
         public HashSet<string> GetSupportedFunctions() => new();
         public HashSet<string> GetSupportedKeywords() => new();
-        public Dictionary<string, string[]> GetSupportedOptions() => new() { ["USER"] = new[] { "Username for FTP server" }, ["PASSWORD"] = new[] { "Password for FTP server" } };
+        public Dictionary<string, string[]> GetSupportedOptions() => new()
+        {
+            ["USER"]     = Array.Empty<string>(),
+            ["PASSWORD"] = Array.Empty<string>(),
+            ["PORT"]     = Array.Empty<string>(),
+            ["USE_SSL"]  = new[] { "OFF", "EXPLICIT", "IMPLICIT" },
+            ["PASSIVE"]  = new[] { "ON", "OFF" }
+        };
         public Dictionary<string, string[]> GetOptionValues() => new();
-        public string GetHelp() => "FTP Connector for remote file operations.\nOptions:\n  USER: The username for the FTP connection.\n  PASSWORD: The password for the FTP connection.\nMethods: GET_FILE, PUT_FILE, REMOTE_FILE_LIST.";
+        public string GetHelp() => "FTP Connector for remote file operations.\nOptions:\n  USER: The username for the FTP connection.\n  PASSWORD: The password for the FTP connection.\n  PORT: The FTP control port. Default: 21.\nMethods: GET_FILE, PUT_FILE, REMOTE_FILE_LIST.";
 
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
@@ -83,10 +91,10 @@ namespace ETL_SQL.Connectors
             string pass = options?.GetValueOrDefault("PASSWORD") ?? "";
             var port = 21;
             if (options?.TryGetValue("PORT", out var portText) == true && int.TryParse(portText, out var parsedPort))
-            {
                 port = parsedPort;
-            }
-            return new FtpConnector(context, connectionString, user, pass, port);
+            string? useSsl = options?.GetValueOrDefault("USE_SSL");
+            bool passive = options?.GetValueOrDefault("PASSIVE")?.ToUpperInvariant() != "OFF";
+            return new FtpConnector(context, connectionString, user, pass, port, useSsl, passive);
         }
 
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");
@@ -215,12 +223,18 @@ namespace ETL_SQL.Connectors
             return NormalizeEndpoint(connectionString, 21).Host;
         }
 
-        private static FtpClient CreateClient(string host, int port, string username, string password)
+        private static FtpClient CreateClient(string host, int port, string username, string password,
+            string? useSsl = null, bool passive = true)
         {
-            var client = new FtpClient(host, username, password)
+            var client = new FtpClient(host, username, password) { Port = port };
+            client.Config.EncryptionMode = useSsl?.ToUpperInvariant() switch
             {
-                Port = port
+                "EXPLICIT" or "ON" => FtpEncryptionMode.Explicit,
+                "IMPLICIT"         => FtpEncryptionMode.Implicit,
+                _                  => FtpEncryptionMode.None
             };
+            if (!passive)
+                client.Config.DataConnectionType = FtpDataConnectionType.PORT;
             return client;
         }
 
@@ -228,7 +242,10 @@ namespace ETL_SQL.Connectors
         {
             if (Uri.TryCreate(host, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
             {
-                return (uri.Host, uri.IsDefaultPort ? fallbackPort : uri.Port);
+                var explicitPort = GetExplicitPort(host);
+                return int.TryParse(explicitPort, out var uriPort)
+                    ? (uri.Host, uriPort)
+                    : (uri.Host, fallbackPort);
             }
 
             var colonIndex = host.LastIndexOf(':');
@@ -239,6 +256,38 @@ namespace ETL_SQL.Connectors
             }
 
             return (host, fallbackPort);
+        }
+
+        private static string? GetExplicitPort(string endpoint)
+        {
+            var schemeSeparator = endpoint.IndexOf("://", StringComparison.Ordinal);
+            var authority = schemeSeparator >= 0 ? endpoint[(schemeSeparator + 3)..] : endpoint;
+            var terminator = authority.IndexOfAny(new[] { '/', '?', '#' });
+            if (terminator >= 0)
+            {
+                authority = authority[..terminator];
+            }
+
+            var atIndex = authority.LastIndexOf('@');
+            if (atIndex >= 0)
+            {
+                authority = authority[(atIndex + 1)..];
+            }
+
+            if (authority.StartsWith("[", StringComparison.Ordinal))
+            {
+                var closeBracket = authority.IndexOf(']');
+                return closeBracket >= 0
+                    && authority.Length > closeBracket + 1
+                    && authority[closeBracket + 1] == ':'
+                    ? authority[(closeBracket + 2)..]
+                    : null;
+            }
+
+            var colonIndex = authority.LastIndexOf(':');
+            return colonIndex > 0 && colonIndex == authority.IndexOf(':')
+                ? authority[(colonIndex + 1)..]
+                : null;
         }
 
         private static bool ShouldWrapProviderException(Exception ex) =>

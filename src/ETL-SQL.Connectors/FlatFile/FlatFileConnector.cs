@@ -43,7 +43,8 @@ namespace ETL_SQL.Connectors.FlatFile
             { "ENCRYPT", new[] { "ON", "OFF" } },
             { "PASSWORD", Array.Empty<string>() },
             { "CULTURE", Array.Empty<string>() },
-            { "TRIM", new[] { "ON", "OFF" } }
+            { "TRIM", new[] { "ON", "OFF" } },
+            { "FORMAT", new[] { "DELIMITED", "FIXED" } }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase)

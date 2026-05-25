@@ -25,7 +25,9 @@ namespace ETL_SQL.Connectors.Parquet
 
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
-            { "COMPRESSION", new[] { "SNAPPY", "GZIP", "LZO", "BROTLI", "LZ4", "ZSTD", "UNCOMPRESSED" } }
+            { "COMPRESSION", new[] { "SNAPPY", "GZIP", "LZO", "BROTLI", "LZ4", "ZSTD", "UNCOMPRESSED" } },
+            { "ENCRYPT", new[] { "ON", "OFF" } },
+            { "PASSWORD", Array.Empty<string>() }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);

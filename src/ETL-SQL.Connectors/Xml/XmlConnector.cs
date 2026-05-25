@@ -28,7 +28,9 @@ namespace ETL_SQL.Connectors.Xml
             { "ROOT_PATH", Array.Empty<string>() },
             { "COMPRESS", new[] { "ON", "OFF" } },
             { "ENCRYPT", new[] { "ON", "OFF" } },
-            { "PASSWORD", Array.Empty<string>() }
+            { "PASSWORD", Array.Empty<string>() },
+            { "ENCODING", new[] { "UTF8", "ANSI", "UTF16", "UNICODE", "LATIN1" } },
+            { "TRIM", new[] { "ON", "OFF" } }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);

@@ -46,11 +46,9 @@ namespace ETL_SQL.Connectors.Odbc
             { "DSN", Array.Empty<string>() },
             { "DRIVER", Array.Empty<string>() },
             { "SERVER", Array.Empty<string>() },
-            { "PORT", Array.Empty<string>() },
             { "DATABASE", Array.Empty<string>() },
             { "UID", Array.Empty<string>() },
             { "PWD", Array.Empty<string>() },
-            { "CONNECT_TIMEOUT", Array.Empty<string>() },
             { "TIMEOUT_SECONDS", Array.Empty<string>() },
             { "TABLE", Array.Empty<string>() }
         };
@@ -97,11 +95,10 @@ Supported Options:
   DSN              - Pre-configured Data Source Name.
   DRIVER           - Name of driver in {}.
   SERVER           - Hostname or IP address.
-  PORT             - Listening port.
   DATABASE         - Database name or file path.
   UID              - User profile name.
   PWD              - Login password.
-  CONNECT_TIMEOUT  - Time (sec) to wait for connection.
+  TIMEOUT_SECONDS  - Command/query execution timeout in seconds (default 30).
   TABLE            - Default table for reading.";
         }
 

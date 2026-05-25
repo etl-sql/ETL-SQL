@@ -23,6 +23,7 @@ namespace ETL_SQL.Connectors.Rest
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
+        private readonly int _timeoutSeconds;
         private static readonly HttpClient _httpClient = new HttpClient();
 
         public RestDataSource(IExecutionContext context, string url, Dictionary<string, string>? options = null)
@@ -31,7 +32,8 @@ namespace ETL_SQL.Connectors.Rest
             _url = url;
             _options = options;
             _logger = context.Logger;
-            
+            _timeoutSeconds = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 30;
+
             // Security Hardening: egress control
             context.SecurityService.ValidateHost(new Uri(url).Host);
 
@@ -57,7 +59,8 @@ namespace ETL_SQL.Connectors.Rest
         private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             var request = BuildRequest();
-            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
+            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
             
             if (!response.IsSuccessStatusCode)
             {

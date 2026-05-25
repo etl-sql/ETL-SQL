@@ -19,8 +19,8 @@ Options:
   USER         — username for BASIC auth
   ROOT_PATH    — JSONPath expression to locate the response array
   BODY         — JSON body sent with POST/PUT requests
-  TIMEOUT      — request timeout in seconds (default 30)
-  HEADERS      — additional HTTP headers as a JSON object string
+  TIMEOUT_SECONDS — request timeout in seconds (default 30)
+  HEADERS         — additional HTTP headers as a JSON object string
 
 ```sql
 CREATE CONNECTION GithubAPI ON API(
