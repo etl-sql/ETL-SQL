@@ -179,7 +179,8 @@ namespace ETL_SQL.TUI.UI
             if (starMatch.Success)
             {
                 var specificAlias = starMatch.Groups[1].Value;
-                var aliases = ETLSuggestEngine.ParseAliases(text);
+                var cursorOffset = _buffer.Lines.Take(_buffer.CursorLine).Sum(l => l.Length + 1) + _buffer.CursorColumn;
+                var aliases = ETLSuggestEngine.ParseAliases(text, cursorOffset);
                 var allCols = new List<string>();
                 
                 var tablesToExpand = string.IsNullOrEmpty(specificAlias) 

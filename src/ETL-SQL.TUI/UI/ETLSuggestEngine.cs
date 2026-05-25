@@ -67,7 +67,7 @@ namespace ETL_SQL.TUI.UI
         }
 
         /// <summary>Scans the script for table aliases and their base table mappings.</summary>
-        public static Dictionary<string, AliasInfo> ParseAliases(string script) => AliasScanner.Scan(script);
+        public static Dictionary<string, AliasInfo> ParseAliases(string script, int cursorOffset = -1) => AliasScanner.Scan(script, cursorOffset);
 
         /// <summary>Applies Spectre.Console markup to a script line for syntax highlighting in the TUI.</summary>
         /// <param name="fullLine">The full raw script line (not just the visible part).</param>
