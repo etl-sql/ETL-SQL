@@ -42,6 +42,9 @@ namespace ETL_SQL.Core.Metadata
 
                 switch (category.ToUpperInvariant())
                 {
+                    case "SNIPPETS":
+                        // Snippet markdown is consumed by SnippetLibrary, not the help system
+                        continue;
                     case "KEYWORDS":
                         mappedTopic = topic;
                         break;

@@ -155,6 +155,7 @@ namespace ETL_SQL.TUI
             services.AddSingleton<SQLiteJobHistoryStore>();
             services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
+            services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<SchedulerService>();
             services.AddTransient<IScriptExecutor, ScriptExecutorAdapter>();
 

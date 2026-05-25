@@ -9,6 +9,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using ETL_SQL.Core.Services;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Metadata;
 
 namespace ETL_SQL.LSP
 {
@@ -56,7 +57,7 @@ namespace ETL_SQL.LSP
             if (col > 0 && currentLine.Length >= col)
             {
                 var beforeCursor = currentLine.Substring(0, col);
-                var match = Regex.Match(beforeCursor, @"([&\#@\w\.\*]+)$");
+                var match = Regex.Match(beforeCursor, @"([\$&\#@\w\.\*]+)$");
                 if (match.Success)
                 {
                     prefix = match.Value;
@@ -77,7 +78,8 @@ namespace ETL_SQL.LSP
             var suggestions = await _languageService.GetSuggestionsAsync(context);
 
             // Inject dataset-name suggestions when context is USE DATASET or prefix starts with &
-            var datasetItems = GetDatasetCompletions(scriptBefore, prefix, line, startCol, col);
+            var datasetItems  = GetDatasetCompletions(scriptBefore, prefix, line, startCol, col);
+            var snippetItems  = GetSnippetCompletions(scriptBefore, prefix, line, startCol, col);
 
             var items = suggestions.Select(s => {
                 bool isExpansion = s.Type == SuggestionType.Column && s.Text.Contains(",");
@@ -98,7 +100,45 @@ namespace ETL_SQL.LSP
                 };
             }).ToList();
 
-            return new CompletionList(items.Concat(datasetItems).ToList());
+            return new CompletionList(snippetItems.Concat(items).Concat(datasetItems).ToList());
+        }
+
+        // ── Snippet completions ───────────────────────────────────────────────
+
+        private List<CompletionItem> GetSnippetCompletions(string scriptBefore, string prefix, int line, int startCol, int col)
+        {
+            if (!prefix.StartsWith('$')) return [];
+            if (!IsAtStatementStart(scriptBefore, prefix)) return [];
+
+            var items = new List<CompletionItem>();
+            foreach (var snippet in SnippetLibrary.Instance.GetByPrefix(prefix))
+            {
+                items.Add(new CompletionItem
+                {
+                    Label             = snippet.Trigger,
+                    Kind              = CompletionItemKind.Snippet,
+                    Detail            = snippet.Label,
+                    Documentation     = new MarkupContent { Kind = MarkupKind.Markdown, Value = snippet.Description },
+                    SortText          = "0001_" + snippet.Trigger,
+                    FilterText        = snippet.Trigger,
+                    InsertText        = snippet.LspBody,
+                    InsertTextFormat  = InsertTextFormat.Snippet,
+                    TextEdit          = new TextEditOrInsertReplaceEdit(new TextEdit
+                    {
+                        Range   = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(line, startCol, line, col),
+                        NewText = snippet.LspBody
+                    })
+                });
+            }
+            return items;
+        }
+
+        private static bool IsAtStatementStart(string scriptBefore, string prefix)
+        {
+            // Snippet trigger must be the only non-whitespace content on the current line
+            var lastNewline = scriptBefore.LastIndexOf('\n');
+            var lineContent = lastNewline >= 0 ? scriptBefore.Substring(lastNewline + 1) : scriptBefore;
+            return lineContent.TrimStart() == prefix;
         }
 
         // ── Dataset name completions ──────────────────────────────────────────
@@ -179,7 +219,7 @@ namespace ETL_SQL.LSP
             {
                 DocumentSelector = TextDocumentSelector.ForLanguage("etlsql"),
                 ResolveProvider  = false,
-                TriggerCharacters = new Container<string>(" ", ".", "*")
+                TriggerCharacters = new Container<string>(" ", ".", "*", "$")
             };
     }
 }

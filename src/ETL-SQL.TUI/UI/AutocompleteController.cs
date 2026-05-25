@@ -7,6 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Metadata;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -44,7 +45,7 @@ namespace ETL_SQL.TUI.UI
             var sw = System.Diagnostics.Stopwatch.StartNew();
             _metadata.RefreshConnections(_buffer.GetText());
             var line = _buffer.Lines[_buffer.CursorLine].Substring(0, _buffer.CursorColumn);
-            var lastWordMatch = Regex.Match(line, @"[\w.#@./\\\""']*$");
+            var lastWordMatch = Regex.Match(line, @"[\$\w.#@./\\\""']*$");
             var lastWord = lastWordMatch.Value.Trim('\'', '\"');
             
             if (string.IsNullOrEmpty(lastWord) && !line.EndsWith("=") && !line.EndsWith("("))
@@ -53,7 +54,18 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            _renderer.AutocompleteOptions = await ETLSuggestEngine.GetSuggestionsAsync(lastWord, _buffer.GetText(), _connections, _logger, _helpRegistry);
+            var suggestions = await ETLSuggestEngine.GetSuggestionsAsync(lastWord, _buffer.GetText(), _connections, _logger, _helpRegistry);
+
+            if (lastWord.StartsWith('$') && line.TrimStart() == lastWord)
+            {
+                var snippetSuggestions = SnippetLibrary.Instance
+                    .GetByPrefix(lastWord)
+                    .Select(s => new Suggestion(s.TuiBody, SuggestionType.Snippet, 1, s.Description))
+                    .ToList();
+                suggestions.InsertRange(0, snippetSuggestions);
+            }
+
+            _renderer.AutocompleteOptions = suggestions;
             sw.Stop();
 
             if (_renderer.AutocompleteOptions.Any())
@@ -117,7 +129,7 @@ namespace ETL_SQL.TUI.UI
             var choice = _renderer.AutocompleteOptions[_renderer.AutocompleteIndex].Text;
 
             var line = _buffer.Lines[_buffer.CursorLine];
-            var lastWordMatch = Regex.Match(line.Substring(0, _buffer.CursorColumn), @"[\w.#@./\\\""']*$");
+            var lastWordMatch = Regex.Match(line.Substring(0, _buffer.CursorColumn), @"[\$\w.#@./\\\""']*$");
             var matchValue = lastWordMatch.Value;
             var startPos = _buffer.CursorColumn - matchValue.Length;
 
@@ -128,8 +140,29 @@ namespace ETL_SQL.TUI.UI
                 matchValue = matchValue.Substring(1);
             }
 
-            _buffer.Lines[_buffer.CursorLine] = line.Remove(startPos, matchValue.Length).Insert(startPos, choice);
-            _buffer.CursorColumn = startPos + choice.Length;
+            if (choice.Contains('\n'))
+            {
+                // Multi-line snippet: split into lines, expand buffer, position cursor at end
+                var choiceLines = choice.Split('\n');
+                var beforeSnippet = line.Substring(0, startPos);
+                var afterSnippet = line.Substring(startPos + matchValue.Length);
+
+                _buffer.Lines[_buffer.CursorLine] = beforeSnippet + choiceLines[0];
+                for (int i = 1; i < choiceLines.Length; i++)
+                {
+                    var insertLine = i == choiceLines.Length - 1
+                        ? choiceLines[i] + afterSnippet
+                        : choiceLines[i];
+                    _buffer.Lines.Insert(_buffer.CursorLine + i, insertLine);
+                }
+                _buffer.CursorLine += choiceLines.Length - 1;
+                _buffer.CursorColumn = choiceLines[^1].Length;
+            }
+            else
+            {
+                _buffer.Lines[_buffer.CursorLine] = line.Remove(startPos, matchValue.Length).Insert(startPos, choice);
+                _buffer.CursorColumn = startPos + choice.Length;
+            }
             _renderer.AutocompleteVisible = false;
         }
 

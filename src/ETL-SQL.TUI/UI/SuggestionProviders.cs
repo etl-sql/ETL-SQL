@@ -21,7 +21,8 @@ namespace ETL_SQL.TUI.UI
         FilePath,
         OptionName,
         OptionValue,
-        Connection
+        Connection,
+        Snippet
     }
 
     public record Suggestion(string Text, SuggestionType Type, int Priority = 100, string? Documentation = null);
