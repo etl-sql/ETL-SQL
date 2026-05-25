@@ -96,3 +96,4 @@ SELECT report_name, folder, relevance_score FROM #results ORDER BY relevance_sco
 
 References:
 - [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

@@ -10,10 +10,10 @@ public class SnippetLibraryTests
     // ── Loading ───────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Load_Returns38Snippets()
+    public void Load_Returns47Snippets()
     {
         var snippets = SnippetLibrary.Instance.GetAll();
-        Assert.Equal(38, snippets.Count);
+        Assert.Equal(47, snippets.Count);
     }
 
     [Fact]
@@ -127,10 +127,10 @@ public class SnippetLibraryTests
     }
 
     [Fact]
-    public void GetByPrefix_JustDollar_ReturnsAll38()
+    public void GetByPrefix_JustDollar_ReturnsAll47()
     {
         var matches = SnippetLibrary.Instance.GetByPrefix("$").ToList();
-        Assert.Equal(38, matches.Count);
+        Assert.Equal(47, matches.Count);
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public class SnippetLibraryTests
     public void UserSnippets_MissingDirectory_LoadsBuiltInsOnly()
     {
         var lib = new SnippetLibrary(@"C:\nonexistent\path\that\does\not\exist");
-        Assert.Equal(38, lib.GetAll().Count);
+        Assert.Equal(47, lib.GetAll().Count);
     }
 
     [Fact]

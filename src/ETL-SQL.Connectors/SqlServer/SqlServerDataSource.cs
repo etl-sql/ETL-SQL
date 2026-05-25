@@ -446,7 +446,7 @@ namespace ETL_SQL.Connectors.SqlServer
 
         private SqlCommand CreateCommand(string sql, SqlConnection conn)
         {
-            var cmd = CreateCommand(sql, conn);
+            var cmd = new SqlCommand(sql, conn);
             cmd.CommandTimeout = _commandTimeout;
             return cmd;
         }

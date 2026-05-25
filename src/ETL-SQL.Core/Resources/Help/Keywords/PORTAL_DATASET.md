@@ -57,3 +57,4 @@ SELECT dataset_name, hit_rate, last_refreshed, ttl FROM #metrics;
 
 References:
 - [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

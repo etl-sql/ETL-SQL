@@ -784,15 +784,7 @@ namespace ETL_SQL.Engine.Engines
         private static bool IsIntegerType(object? val)
         {
             if (val == null) return false;
-            if (val is int || val is long || val is short || val is byte || val is sbyte || val is uint || val is ulong || val is ushort)
-                return true;
-            if (val is decimal dec)
-            {
-                if (dec != Math.Truncate(dec)) return false;
-                string s = dec.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                return !s.Contains('.') && !s.Contains('e') && !s.Contains('E');
-            }
-            return false;
+            return val is int || val is long || val is short || val is byte || val is sbyte || val is uint || val is ulong || val is ushort;
         }
 
         private IAggregateState CreateState(FunctionCallExpression f)

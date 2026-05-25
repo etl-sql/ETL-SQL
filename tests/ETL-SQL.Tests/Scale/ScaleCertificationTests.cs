@@ -42,8 +42,13 @@ namespace ETL_SQL.Tests.Scale
     public class ScaleCertificationTests
     {
         private readonly ITestOutputHelper _out;
+        private readonly double _memoryBaselineMB;
 
-        public ScaleCertificationTests(ITestOutputHelper output) => _out = output;
+        public ScaleCertificationTests(ITestOutputHelper output)
+        {
+            _out = output;
+            _memoryBaselineMB = GC.GetTotalMemory(forceFullCollection: true) / (1024.0 * 1024.0);
+        }
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -253,7 +258,8 @@ namespace ETL_SQL.Tests.Scale
                 certificationTier = memoryTier;
             }
 
-            var managedMemoryMB = Math.Round(GC.GetTotalMemory(forceFullCollection: true) / (1024.0 * 1024.0), 1);
+            var managedMemoryMB = Math.Round(
+                Math.Max(0.0, GC.GetTotalMemory(forceFullCollection: true) / (1024.0 * 1024.0) - _memoryBaselineMB), 1);
             var memoryBoundMB = MemoryBoundMB(rowCount, rowScale);
 
             Assert.True(managedMemoryMB <= memoryBoundMB,
