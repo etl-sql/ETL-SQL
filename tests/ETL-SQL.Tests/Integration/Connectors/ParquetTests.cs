@@ -12,6 +12,8 @@ using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests.Integration
 {
+    [Trait("Connector", "PARQUET")]
+    [Trait("CertificationClass", "LocalRealIntegration")]
     public class ParquetTests
     {
         private static async IAsyncEnumerable<DataTable> ArrayToAsyncEnumerable(DataTable[] data)

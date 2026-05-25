@@ -9,6 +9,8 @@ using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
+    [Trait("Connector", "SFTP")]
+    [Trait("CertificationClass", "MockedIntegration")]
     public class SftpConnectorTests
     {
         [Fact]

@@ -11,6 +11,8 @@ using System;
 
 namespace ETL_SQL.Tests.Integration
 {
+    [Trait("Connector", "JSON")]
+    [Trait("CertificationClass", "LocalRealIntegration")]
     public class ForJsonAdvancedTests
     {
         private readonly IServiceProvider _serviceProvider;

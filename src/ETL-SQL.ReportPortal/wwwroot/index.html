@@ -113,7 +113,7 @@
 
 <!-- ── History modal ─────────────────────────────────────────────────────── -->
 <div id="historyModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
-  <div class="modal-card modal-lg">
+  <div class="modal-card modal-lg history-modal">
     <div class="modal-header">
       <div>
         <span class="library-kicker">Lifecycle</span>
@@ -1389,14 +1389,14 @@ function renderHistory(data) {
       <td>${esc(formatBuiltAt(s.builtAt))}</td>
       <td>${esc(s.builtBy)}</td>
       <td>${esc(s.hashMatched === null || s.hashMatched === undefined ? 'Unknown' : (s.hashMatched ? 'Matched' : 'Changed'))}</td>
-      <td>${esc(s.scriptHashAtRunTime || 'Not recorded')}</td>
+      <td class="history-code-cell"><code>${esc(s.scriptHashAtRunTime || 'Not recorded')}</code></td>
     </tr>`).join('');
   const changeRows = (data.changes || []).map(c => `
     <tr>
       <td>${esc(formatBuiltAt(c.timestamp))}</td>
       <td>${esc(c.action)}</td>
       <td>${esc(c.userId ?? '')}</td>
-      <td>${esc(c.detail || '')}</td>
+      <td class="history-detail-cell">${esc(c.detail || '')}</td>
     </tr>`).join('');
 
   return `
@@ -1408,8 +1408,19 @@ function renderHistory(data) {
       <div><span>Published hash</span><code>${esc(data.publishedScriptHash || 'Not recorded')}</code></div>
       <div><span>Current hash</span><code>${esc(data.currentScriptHash || 'Unavailable')}</code></div>
     </div>
-    ${renderDependencyTable('Snapshots', ['Built', 'User', 'Hash', 'Runtime Hash'], snapshotRows)}
-    ${renderDependencyTable('Changes', ['Time', 'Action', 'User', 'Detail'], changeRows)}`;
+    ${renderHistoryTable('Snapshots', 'snapshot-history-table', ['Built', 'User', 'Hash', 'Runtime Hash'], snapshotRows)}
+    ${renderHistoryTable('Changes', 'change-history-table', ['Time', 'Action', 'User', 'Detail'], changeRows)}`;
+}
+
+function renderHistoryTable(title, className, headers, rows) {
+  return `
+    <div class="dependency-section history-section">
+      <h4>${esc(title)}</h4>
+      ${rows ? `<div class="history-table-scroll"><table class="dependency-table history-table ${className}">
+        <thead><tr>${headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>` : '<p class="text-muted">No data available.</p>'}
+    </div>`;
 }
 
 document.getElementById('historyCloseBtn').addEventListener('click', () => {

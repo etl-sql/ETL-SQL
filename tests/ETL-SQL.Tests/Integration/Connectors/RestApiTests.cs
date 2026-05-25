@@ -11,6 +11,8 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
+    [Trait("Connector", "API")]
+    [Trait("CertificationClass", "MockedIntegration")]
     public class RestApiTests
     {
         [Fact]

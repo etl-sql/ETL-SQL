@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 using ETL_SQL.Analysis.Lineage;
@@ -337,11 +338,22 @@ public class ReportsController : ControllerBase
 
         var manifestDatasets = await ReadManifestDatasetsAsync(snapshot);
 
-        var registeredDatasets = await db.Datasets
+        List<int> datasetGroupIds = IsAdmin
+            ? []
+            : await db.UserGroups
+                .Where(ug => ug.UserId == CurrentUserId)
+                .Select(ug => ug.GroupId)
+                .ToListAsync();
+
+        var registeredDatasets = (await db.Datasets
+            .Include(d => d.OwningReport)
+            .Include(d => d.Acls)
             .Where(d => d.OwningReportId == id)
             .OrderBy(d => d.FolderPath)
             .ThenBy(d => d.Name)
-            .ToListAsync();
+            .ToListAsync())
+            .Where(d => CanReadDataset(d, datasetGroupIds))
+            .ToList();
 
         var datasetDtos = registeredDatasets
             .Select(d => new ReportDependencyDatasetDto(
@@ -1116,6 +1128,17 @@ public class ReportsController : ControllerBase
                 return new ReportDependencySourceDto(s, connection, objectName, kind);
             })
             .ToList();
+
+    private bool CanReadDataset(Dataset dataset, IReadOnlyCollection<int> groupIds)
+    {
+        if (IsAdmin) return true;
+        if (dataset.AccessLevel == DatasetAccessLevel.Public) return true;
+        if (dataset.OwningReport?.CreatedBy == CurrentUserId) return true;
+
+        return dataset.Acls.Any(a =>
+            groupIds.Contains(a.GroupId)
+            && a.Permission is DatasetPermission.Viewer or DatasetPermission.Editor or DatasetPermission.Owner);
+    }
 
     // ── DELETE /api/reports/{id} ──────────────────────────────────────────────
 

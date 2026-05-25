@@ -4,6 +4,8 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
+    [Trait("Connector", "ODBC")]
+    [Trait("CertificationClass", "MetadataOnly")]
     public class OdbcConnectionStringTests
     {
         [Fact]

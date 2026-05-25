@@ -21,6 +21,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
     /// </summary>
     [Collection("SMTP collection")]
     [Trait("Category", "Integration")]
+    [Trait("Connector", "SMTP")]
+    [Trait("CertificationClass", "DockerRealIntegration")]
     public class SmtpIntegrationTests
     {
         private readonly SmtpFixture _smtp;

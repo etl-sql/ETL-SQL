@@ -1211,6 +1211,169 @@ CREATE VISUAL Total AS CARD (
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
+    public async Task ReadOnlyReportAccess_AllowsSnapshotAndExportButFiltersPrivateDatasets()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var groupRes = await AuthPost(adminToken, "/api/admin/groups", new
+        {
+            name = $"readonly-report-{suffix}",
+            description = "Read-only report access edge case"
+        });
+        Assert.Equal(HttpStatusCode.Created, groupRes.StatusCode);
+        var group = await groupRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var groupId = group!["id"]!.GetValue<int>();
+
+        var username = $"report_ro_{suffix}";
+        const string initialPassword = "Viewer@Test1!";
+        const string changedPassword = "Viewer@Test2!";
+        var userRes = await AuthPost(adminToken, "/api/admin/users", new
+        {
+            username,
+            email = $"{username}@test.local",
+            password = initialPassword,
+            role = "Viewer"
+        });
+        Assert.Equal(HttpStatusCode.Created, userRes.StatusCode);
+        var user = await userRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var userId = user!["id"]!.GetValue<int>();
+
+        var memberRes = await AuthPost(adminToken, $"/api/admin/groups/{groupId}/members", new { userId });
+        Assert.Equal(HttpStatusCode.NoContent, memberRes.StatusCode);
+
+        var folderName = $"Permission Edge {suffix}";
+        var folderRes = await AuthPost(adminToken, "/api/folders", new { name = folderName, parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
+        var folderPath = folder["path"]!.GetValue<string>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"permission_edge_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, @"
+CREATE VISUAL EdgeRows AS TABLE (
+    SOURCE = (SELECT 1 AS Id, 'Allowed' AS Name),
+    MAPPINGS (Id = Id, Name = Name)
+);
+");
+
+        var publishRes = await AuthPost(adminToken, "/api/reports", new
+        {
+            folderId,
+            name = $"Permission Edge Report {suffix}",
+            description = "",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var executeRes = await AuthPost(adminToken, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
+        Assert.Equal(HttpStatusCode.Accepted, executeRes.StatusCode);
+        var executeBody = await executeRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var job = await WaitForJobAsync(adminToken, executeBody!["jobId"]!.GetValue<string>());
+        Assert.Equal("Completed", job["status"]!.GetValue<string>());
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+            await registry.RegisterOrUpdate(new DatasetMetadata
+            {
+                Name = $"#public_edge_{suffix}",
+                FolderPath = folderPath,
+                ParquetFilePath = $"public_edge_{suffix}.parquet",
+                SourceQuery = "SELECT PublicId FROM finance.PublicOrders",
+                AccessLevel = DatasetAccessLevel.Public,
+                OwningReportId = reportId
+            });
+            await registry.RegisterOrUpdate(new DatasetMetadata
+            {
+                Name = $"#private_edge_{suffix}",
+                FolderPath = folderPath,
+                ParquetFilePath = $"private_edge_{suffix}.parquet",
+                SourceQuery = "SELECT PrivateId FROM finance.PrivateOrders",
+                AccessLevel = DatasetAccessLevel.Private,
+                OwningReportId = reportId
+            });
+        }
+
+        var grantReadRes = await AuthPost(adminToken, $"/api/folders/{folderId}/acl", new
+        {
+            groupId,
+            permission = 0
+        });
+        Assert.Equal(HttpStatusCode.NoContent, grantReadRes.StatusCode);
+
+        var loginRes = await _client.PostAsJsonAsync("/api/auth/login", new { username, password = initialPassword });
+        Assert.Equal(HttpStatusCode.OK, loginRes.StatusCode);
+        var loginBody = await loginRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var firstToken = loginBody!["token"]!.GetValue<string>();
+
+        using (var changePassword = new HttpRequestMessage(HttpMethod.Post, "/api/auth/change-password"))
+        {
+            changePassword.Headers.Authorization = new("Bearer", firstToken);
+            changePassword.Content = JsonContent.Create(new
+            {
+                currentPassword = initialPassword,
+                newPassword = changedPassword
+            });
+            var changeRes = await _client.SendAsync(changePassword);
+            Assert.Equal(HttpStatusCode.NoContent, changeRes.StatusCode);
+        }
+
+        var reloginRes = await _client.PostAsJsonAsync("/api/auth/login", new { username, password = changedPassword });
+        Assert.Equal(HttpStatusCode.OK, reloginRes.StatusCode);
+        var reloginBody = await reloginRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var viewerToken = reloginBody!["token"]!.GetValue<string>();
+
+        var viewerReportRes = await AuthGet(viewerToken, $"/api/reports/{reportId}");
+        var viewerSnapshotRes = await AuthGet(viewerToken, $"/api/reports/{reportId}/snapshot?includeManifest=true");
+        var viewerExportRes = await AuthGet(viewerToken, $"/api/reports/{reportId}/export/csv?visual=EdgeRows");
+        var viewerExecuteRes = await AuthPost(viewerToken, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
+        var viewerRefreshRes = await AuthPost(viewerToken, $"/api/reports/{reportId}/refresh", new { });
+
+        Assert.Equal(HttpStatusCode.OK, viewerReportRes.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, viewerSnapshotRes.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, viewerExportRes.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, viewerExecuteRes.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, viewerRefreshRes.StatusCode);
+
+        var adminDependenciesRes = await AuthGet(adminToken, $"/api/reports/{reportId}/dependencies");
+        Assert.Equal(HttpStatusCode.OK, adminDependenciesRes.StatusCode);
+        var adminDependencies = await adminDependenciesRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var adminDatasetNames = adminDependencies!["registeredDatasets"]!.AsArray()
+            .Select(d => d!["name"]!.GetValue<string>())
+            .ToHashSet();
+        Assert.Contains($"#public_edge_{suffix}", adminDatasetNames);
+        Assert.Contains($"#private_edge_{suffix}", adminDatasetNames);
+
+        var viewerDependenciesRes = await AuthGet(viewerToken, $"/api/reports/{reportId}/dependencies");
+        Assert.Equal(HttpStatusCode.OK, viewerDependenciesRes.StatusCode);
+        var viewerDependencies = await viewerDependenciesRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var viewerDependencyNames = viewerDependencies!["registeredDatasets"]!.AsArray()
+            .Select(d => d!["name"]!.GetValue<string>())
+            .ToHashSet();
+        Assert.Contains($"#public_edge_{suffix}", viewerDependencyNames);
+        Assert.DoesNotContain($"#private_edge_{suffix}", viewerDependencyNames);
+
+        var datasetsRes = await AuthGet(viewerToken, "/api/datasets");
+        Assert.Equal(HttpStatusCode.OK, datasetsRes.StatusCode);
+        var datasets = await datasetsRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        var publicDataset = datasets!.Single(d => d!["name"]!.GetValue<string>() == $"#public_edge_{suffix}")!.AsObject();
+        Assert.DoesNotContain(datasets!, d => d!["name"]!.GetValue<string>() == $"#private_edge_{suffix}");
+
+        var publicDatasetId = publicDataset["id"]!.GetValue<int>();
+        var privateDatasetId = adminDependencies["registeredDatasets"]!.AsArray()
+            .Single(d => d!["name"]!.GetValue<string>() == $"#private_edge_{suffix}")!["id"]!.GetValue<int>();
+
+        var publicDatasetRes = await AuthGet(viewerToken, $"/api/datasets/{publicDatasetId}");
+        var privateDatasetRes = await AuthGet(viewerToken, $"/api/datasets/{privateDatasetId}");
+        Assert.Equal(HttpStatusCode.OK, publicDatasetRes.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, privateDatasetRes.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task AdminEffectivePermissions_ReturnsUserFolderAndReportAccess()
     {
         var token = await GetAdminTokenAsync();
@@ -1633,6 +1796,91 @@ CREATE VISUAL Answer AS CARD (
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
+    public async Task Snapshot_ConcurrentRefreshAndReads_ReturnConsistentResponses()
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = $"Concurrent Refresh {suffix}", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folder   = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"concurrent_refresh_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, @"
+CREATE VISUAL Answer AS CARD (
+    SOURCE = (SELECT 42 AS Value),
+    MAPPINGS (VALUE = Value)
+);
+");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId, name = $"Concurrent Refresh Report {suffix}", description = "", scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var execRes = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
+        Assert.Equal(HttpStatusCode.Accepted, execRes.StatusCode);
+        var execBody = await execRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var execJob  = await WaitForJobAsync(token, execBody!["jobId"]!.GetValue<string>());
+        Assert.Equal("Completed", execJob["status"]!.GetValue<string>());
+
+        var baselineSnapshotRes = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=true");
+        Assert.Equal(HttpStatusCode.OK, baselineSnapshotRes.StatusCode);
+        var baselineSnapshot = await baselineSnapshotRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var baselineBuiltAt  = baselineSnapshot!["builtAt"]!.GetValue<DateTime>();
+
+        await File.WriteAllTextAsync(scriptPath, @"
+WAITFOR DELAY '00:00:01';
+CREATE VISUAL Answer AS CARD (
+    SOURCE = (SELECT 43 AS Value),
+    MAPPINGS (VALUE = Value)
+);
+");
+
+        var refreshRes = await AuthPost(token, $"/api/reports/{reportId}/refresh", new { });
+        Assert.Equal(HttpStatusCode.Accepted, refreshRes.StatusCode);
+        var refreshBody = await refreshRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var refreshJobId = refreshBody!["jobId"]!.GetValue<string>();
+
+        await WaitForRunningOrCompletedJobAsync(token, refreshJobId);
+
+        var readTasks = new[]
+        {
+            AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=true"),
+            AuthGet(token, $"/api/reports/{reportId}/snapshot/manifest"),
+            AuthGet(token, $"/api/reports/{reportId}/history"),
+            AuthGet(token, $"/api/reports/{reportId}"),
+            AuthGet(token, $"/api/folders/{folderId}/reports")
+        };
+        var duplicateRefreshTask = AuthPost(token, $"/api/reports/{reportId}/refresh", new { });
+
+        var responses = await Task.WhenAll(readTasks.Append(duplicateRefreshTask));
+
+        Assert.Equal(HttpStatusCode.OK, responses[0].StatusCode);
+        var duringRefreshSnapshot = await responses[0].Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.NotNull(duringRefreshSnapshot!["manifest"]);
+        Assert.True(duringRefreshSnapshot["builtAt"]!.GetValue<DateTime>() >= baselineBuiltAt);
+
+        Assert.Equal(HttpStatusCode.OK, responses[1].StatusCode);
+        Assert.Equal(HttpStatusCode.OK, responses[2].StatusCode);
+        Assert.Equal(HttpStatusCode.OK, responses[3].StatusCode);
+        Assert.Equal(HttpStatusCode.OK, responses[4].StatusCode);
+
+        Assert.Equal(HttpStatusCode.Accepted, responses[5].StatusCode);
+        var duplicateRefresh = await responses[5].Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal(refreshJobId, duplicateRefresh!["jobId"]!.GetValue<string>());
+        Assert.True(duplicateRefresh["alreadyRunning"]!.GetValue<bool>());
+
+        var refreshJob = await WaitForJobAsync(token, refreshJobId);
+        Assert.Equal("Completed", refreshJob["status"]!.GetValue<string>());
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task AuditLog_RecordsViewSnapshotExportAndSubscriptionEvents()
     {
         var token = await GetAdminTokenAsync();
@@ -1919,6 +2167,25 @@ CREATE VISUAL Summary AS TABLE (
                 return job;
 
             await Task.Delay(100);
+        }
+
+        Assert.NotNull(job);
+        return job!;
+    }
+
+    private async Task<JsonObject> WaitForRunningOrCompletedJobAsync(string token, string jobId)
+    {
+        JsonObject? job = null;
+        for (var i = 0; i < 50; i++)
+        {
+            var jobRes = await AuthGet(token, $"/api/jobs/{jobId}");
+            Assert.Equal(HttpStatusCode.OK, jobRes.StatusCode);
+            job = await jobRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var status = job!["status"]!.GetValue<string>();
+            if (status is "Running" or "Completed" or "Failed" or "Cancelled")
+                return job;
+
+            await Task.Delay(50);
         }
 
         Assert.NotNull(job);

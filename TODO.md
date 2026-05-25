@@ -190,10 +190,11 @@
   - Confirmed: production readiness checklist already exists in `Docs/ReportPortal_Administrators_Guide.md` §14.
   - Remaining work split below: report history error surfaces and horizontal scrolling.
 
-- [ ] **Report Portal operational hardening review — remaining UI/concurrency**
-  - Test concurrent refresh/view behavior.
-  - Add UI or browser verification that report history/error surfaces remain readable without horizontal scrolling where possible.
-  - Add permission edge-case tests across combined folder/report/dataset/export access where gaps remain.
+- [x] **Report Portal operational hardening review — remaining UI/concurrency**
+  - Added `Snapshot_ConcurrentRefreshAndReads_ReturnConsistentResponses` to cover concurrent snapshot/history/report/list reads during refresh and duplicate refresh debounce behavior.
+  - Updated the report history modal to use dedicated history table rendering and wrapping so long hashes and audit details remain readable with horizontal scrolling as a fallback.
+  - Added `ReadOnlyReportAccess_AllowsSnapshotAndExportButFiltersPrivateDatasets` to cover combined read-only report access, snapshot/export access, execute/refresh denial, dataset list filtering, and dependency filtering for private datasets.
+  - Tightened report dependency output so private registered datasets are hidden unless the caller has dataset ownership, public access, admin access, or a dataset ACL.
 
 - [ ] **Connector certification gap remediation** *(see `Docs/Standards/Connector_Certification_Matrix.md` for full detail)*
 

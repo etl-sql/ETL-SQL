@@ -20,6 +20,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
     /// </summary>
     [Collection("AZURE_BLOB collection")]
     [Trait("Category", "Integration")]
+    [Trait("Connector", "AZURE_BLOB")]
+    [Trait("CertificationClass", "DockerRealIntegration")]
     public class AzureBlobIntegrationTests
     {
         private readonly AzureBlobFixture _blob;
@@ -175,6 +177,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
     /// <summary>
     /// Unit tests for AzureBlobConnector that do not require Docker.
     /// </summary>
+    [Trait("Connector", "AZURE_BLOB")]
+    [Trait("CertificationClass", "MetadataOnly")]
     public class AzureBlobConnectorUnitTests
     {
         // ── GetHostStatic parsing ─────────────────────────────────────────────────

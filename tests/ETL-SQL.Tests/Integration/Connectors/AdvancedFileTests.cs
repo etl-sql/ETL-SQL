@@ -10,6 +10,8 @@ using Spectre.Console;
 
 namespace ETL_SQL.Tests.Integration
 {
+    [Trait("Connector", "FILE")]
+    [Trait("CertificationClass", "LocalRealIntegration")]
     public class AdvancedFileTests
     {
 

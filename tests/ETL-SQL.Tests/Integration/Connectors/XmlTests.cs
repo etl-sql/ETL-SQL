@@ -14,6 +14,8 @@ using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests.Integration
 {
+    [Trait("Connector", "XML")]
+    [Trait("CertificationClass", "LocalRealIntegration")]
     public class XmlTests
     {
         [Fact]

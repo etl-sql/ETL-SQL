@@ -25,6 +25,8 @@ namespace ETL_SQL.Tests.Connectors
     /// asserts that it surfaces as <see cref="ExecutionException"/> with a sanitized
     /// message (no raw provider type leaking to the caller).
     /// </summary>
+    [Trait("Connector", "MULTIPLE")]
+    [Trait("CertificationClass", "MockedIntegration")]
     public class ConnectorExceptionWrappingTests : IDisposable
     {
         private readonly string _dir;

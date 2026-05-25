@@ -17,6 +17,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
     /// Verify that provider exceptions are wrapped as ExecutionException (T4) and that
     /// credential material does not appear in error messages (T3).
     /// </summary>
+    [Trait("Connector", "BIGQUERY")]
+    [Trait("CertificationClass", "MockedIntegration")]
     public class BigQueryConnectorUnitTests : IDisposable
     {
         private static SystemExecutionContext Ctx => SystemExecutionContext.Instance;
@@ -117,6 +119,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
     /// </summary>
     [Collection("BigQuery collection")]
     [Trait("Category", "Integration")]
+    [Trait("Connector", "BIGQUERY")]
+    [Trait("CertificationClass", "DockerRealIntegration")]
     public class BigQueryIntegrationTests
     {
         private readonly BigQueryFixture _bq;

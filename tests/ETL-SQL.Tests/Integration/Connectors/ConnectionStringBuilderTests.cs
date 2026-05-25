@@ -4,6 +4,8 @@ using ETL_SQL.Connectors;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
+    [Trait("Connector", "MULTIPLE")]
+    [Trait("CertificationClass", "MetadataOnly")]
     public class ConnectionStringBuilderTests
     {
         [Fact]

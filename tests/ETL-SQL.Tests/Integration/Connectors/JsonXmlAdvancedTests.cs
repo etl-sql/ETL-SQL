@@ -13,6 +13,8 @@ using ETL_SQL.App;
 
 namespace ETL_SQL.Tests.Integration
 {
+    [Trait("Connector", "JSON_XML")]
+    [Trait("CertificationClass", "LocalRealIntegration")]
     public class JsonXmlAdvancedTests
     {
         private async Task<DataTable> ExecuteSelect(string sql)

@@ -5,6 +5,8 @@ using ETL_SQL.Connectors.BigQuery;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
+    [Trait("Connector", "BIGQUERY")]
+    [Trait("CertificationClass", "MetadataOnly")]
     public class BigQueryConnectorTests
     {
         private readonly BigQueryConnector _connector = new();
@@ -157,6 +159,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
         }
     }
 
+    [Trait("Connector", "BIGQUERY")]
+    [Trait("CertificationClass", "MetadataOnly")]
     public class BigQuerySyntaxTests
     {
         [Fact]

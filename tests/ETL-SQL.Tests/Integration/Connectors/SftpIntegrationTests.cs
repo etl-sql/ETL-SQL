@@ -23,6 +23,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
     /// </summary>
     [Collection("SFTP collection")]
     [Trait("Category", "Integration")]
+    [Trait("Connector", "SFTP")]
+    [Trait("CertificationClass", "DockerRealIntegration")]
     public class SftpIntegrationTests : IDisposable
     {
         private readonly SftpFixture _sftp;

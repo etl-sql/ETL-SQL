@@ -22,6 +22,8 @@ namespace ETL_SQL.Tests.Connectors
     /// Tests connector metadata (Name, Aliases, IsFileBased, GetHelp, GetSupportedOptions,
     /// GetOptionValues, BuildConnectionString, GetTablesAsync) without requiring live connections.
     /// </summary>
+    [Trait("Connector", "MULTIPLE")]
+    [Trait("CertificationClass", "MetadataOnly")]
     public class ConnectorMetadataTests
     {
         private static SystemExecutionContext Ctx => SystemExecutionContext.Instance;

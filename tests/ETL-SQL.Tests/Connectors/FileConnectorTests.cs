@@ -17,6 +17,8 @@ namespace ETL_SQL.Tests.Connectors
     /// Fast-lane unit tests for file-based connector data sources (FlatFile, JSON, XML)
     /// and ConnectionStringBuilder. No external services required — only temp files.
     /// </summary>
+    [Trait("Connector", "FILE")]
+    [Trait("CertificationClass", "LocalRealIntegration")]
     public class FileConnectorTests : IDisposable
     {
         private readonly string _dir;

@@ -14,6 +14,8 @@ using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests.Integration
 {
+    [Trait("Connector", "FLATFILE")]
+    [Trait("CertificationClass", "LocalRealIntegration")]
     public class FlatFileTests
     {
         [Fact]

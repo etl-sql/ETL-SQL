@@ -9,6 +9,8 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
+    [Trait("Connector", "SNOWFLAKE")]
+    [Trait("CertificationClass", "MetadataOnly")]
     public class SnowflakeConnectorTests
     {
         private readonly SnowflakeConnector _connector = new();
@@ -206,6 +208,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
         }
     }
 
+    [Trait("Connector", "SNOWFLAKE")]
+    [Trait("CertificationClass", "MetadataOnly")]
     public class SnowflakeSyntaxTests
     {
         [Fact]
@@ -288,6 +292,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
     ///   6. For CI: set env vars SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PRIVATE_KEY_PATH
     ///      and guard the tests with a Skip when vars are absent.
     /// </summary>
+    [Trait("Connector", "SNOWFLAKE")]
+    [Trait("CertificationClass", "MockedIntegration")]
     public class SnowflakeDataSourceTests
     {
         private static IExecutionContext MakePermissiveContext()
