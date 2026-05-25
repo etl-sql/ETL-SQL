@@ -73,6 +73,33 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.Equal("updated", batches[0].Rows[0]["status"]);
         }
 
+        [Theory]
+        [InlineData("BODY_CONTENT_TYPE")]
+        [InlineData("HEADER_Content-Type")]
+        public async Task Post_WithBodyContentType_SendsContentHeader(string optionName)
+        {
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                Assert.Equal("POST", request.Method);
+                Assert.True(request.Headers.TryGetValue("Content-Type", out var contentType));
+                Assert.Equal("text/plain; charset=utf-8", contentType);
+                Assert.Equal("plain body", request.Body);
+                return LocalHttpResponse.Json("""[{"accepted":true}]""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY"] = "plain body",
+                [optionName] = "text/plain"
+            });
+
+            var batches = await ds.ReadBatches().ToListAsync();
+
+            Assert.Single(batches);
+            Assert.Equal(true, batches[0].Rows[0]["accepted"]);
+        }
+
         [Fact]
         public async Task Delete_SendsDeleteMethodAndParsesResponse()
         {

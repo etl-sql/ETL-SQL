@@ -6,6 +6,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -13,10 +14,12 @@ namespace ETL_SQL.Engine.Handlers
     {
         public Type SupportedStatementType => typeof(ShowLineageHistoryForTableStatement);
         private readonly ILineageCatalogStore _catalog;
+        private readonly IConfiguration? _config;
 
-        public ShowLineageHistoryForTableStatementHandler(ILineageCatalogStore catalog)
+        public ShowLineageHistoryForTableStatementHandler(ILineageCatalogStore catalog, IConfiguration? config = null)
         {
             _catalog = catalog;
+            _config = config;
         }
 
         public async Task Execute(Statement statement, IExecutionContext context)
@@ -29,7 +32,8 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
 
-            var entries = await _catalog.GetHistoryForTableAsync(stmt.TableName, stmt.Limit ?? 100);
+            int defaultLimit = _config?.GetValue<int>("Engine:DefaultHistoryLimit") ?? 100;
+            var entries = await _catalog.GetHistoryForTableAsync(stmt.TableName, stmt.Limit ?? defaultLimit);
             var table = await LineageHistoryRouting.BuildTable(entries);
 
             if (stmt.IntoTable != null)
@@ -52,10 +56,12 @@ namespace ETL_SQL.Engine.Handlers
     {
         public Type SupportedStatementType => typeof(ShowLineageHistoryForTagStatement);
         private readonly ILineageCatalogStore _catalog;
+        private readonly IConfiguration? _config;
 
-        public ShowLineageHistoryForTagStatementHandler(ILineageCatalogStore catalog)
+        public ShowLineageHistoryForTagStatementHandler(ILineageCatalogStore catalog, IConfiguration? config = null)
         {
             _catalog = catalog;
+            _config = config;
         }
 
         public async Task Execute(Statement statement, IExecutionContext context)
@@ -68,7 +74,8 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
 
-            var entries = await _catalog.GetHistoryForTagAsync(stmt.TagKey, stmt.TagValue, stmt.Limit ?? 100);
+            int defaultLimit = _config?.GetValue<int>("Engine:DefaultHistoryLimit") ?? 100;
+            var entries = await _catalog.GetHistoryForTagAsync(stmt.TagKey, stmt.TagValue, stmt.Limit ?? defaultLimit);
             var table = await LineageHistoryRouting.BuildTable(entries);
 
             if (stmt.IntoTable != null)
@@ -91,10 +98,12 @@ namespace ETL_SQL.Engine.Handlers
     {
         public Type SupportedStatementType => typeof(ShowLineageHistoryForJobStatement);
         private readonly ILineageCatalogStore _catalog;
+        private readonly IConfiguration? _config;
 
-        public ShowLineageHistoryForJobStatementHandler(ILineageCatalogStore catalog)
+        public ShowLineageHistoryForJobStatementHandler(ILineageCatalogStore catalog, IConfiguration? config = null)
         {
             _catalog = catalog;
+            _config = config;
         }
 
         public async Task Execute(Statement statement, IExecutionContext context)
@@ -107,7 +116,8 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
 
-            var entries = await _catalog.GetHistoryForJobAsync(stmt.JobName, stmt.Limit ?? 100);
+            int defaultLimit = _config?.GetValue<int>("Engine:DefaultHistoryLimit") ?? 100;
+            var entries = await _catalog.GetHistoryForJobAsync(stmt.JobName, stmt.Limit ?? defaultLimit);
             var table = await LineageHistoryRouting.BuildTable(entries);
 
             if (stmt.IntoTable != null)

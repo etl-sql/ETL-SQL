@@ -2,6 +2,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,10 +15,11 @@ namespace ETL_SQL.Engine.Handlers
     /// Handles the CREATE CONNECTION statement, registering new data sources in the execution context.
     /// Supports various connector types (SQL, File, specialized) and connection string interpolation.
     /// </summary>
-    public class CreateConnectionStatementHandler(IConnectorRegistry connectorRegistry, ILogger logger) : IStatementHandler
+    public class CreateConnectionStatementHandler(IConnectorRegistry connectorRegistry, ILogger logger, IConfiguration? config = null) : IStatementHandler
     {
         private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
         private readonly ILogger _logger = logger;
+        private readonly IConfiguration? _config = config;
 
 
         public Type SupportedStatementType => typeof(CreateConnectionStatement);
@@ -176,18 +178,19 @@ namespace ETL_SQL.Engine.Handlers
             _logger.Debug("CREATE CONNECTION: Found {ColumnCount} columns for {ConnectionName}.", cols.Count, connectionName);
             if (cols.Any())
             {
-                preview.SetColumns(cols.Take(10));
+                int previewLimit = _config?.GetValue<int>("Engine:ConnectionPreviewLimit") ?? 10;
+                preview.SetColumns(cols.Take(previewLimit));
                 try
                 {
                     _logger.Debug("CREATE CONNECTION: Reading preview rows for {ConnectionName}...", connectionName);
-                    // batchSize=10 here is the preview row limit, not a batch-count.
+                    // batchSize=previewLimit here is the preview row limit, not a batch-count.
                     // Take(1) ensures we stop after the first batch.
-                    var sampleBatches = ds.ReadBatches(batchSize: 10).Take(1);
+                    var sampleBatches = ds.ReadBatches(batchSize: previewLimit).Take(1);
                     await foreach (var b in sampleBatches.WithCancellation(context.CancellationToken))
                     {
                         _logger.Debug("CREATE CONNECTION: Preview batch has {RowCount} rows.", b.Rows.Count);
                         context.CancellationToken.ThrowIfCancellationRequested();
-                        foreach (var r in b.Rows.Take(10))
+                        foreach (var r in b.Rows.Take(previewLimit))
                         {
                             context.CancellationToken.ThrowIfCancellationRequested();
                             await preview.AddRowAsync(r);

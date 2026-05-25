@@ -41,7 +41,7 @@ public class OrchestratorController(OrchestratorProxyService proxy) : Controller
     [HttpPost("jobs")]
     public async Task<IActionResult> CreateJob([FromBody] CreateJobRequest req)
     {
-        var resp = await proxy.CreateJobAsync(req);
+        using var resp = await proxy.CreateJobAsync(req);
         if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         if (!resp.IsSuccessStatusCode)
         {
@@ -54,7 +54,7 @@ public class OrchestratorController(OrchestratorProxyService proxy) : Controller
     [HttpPut("jobs/{name}")]
     public async Task<IActionResult> UpdateJob(string name, [FromBody] UpdateJobRequest req)
     {
-        var resp = await proxy.UpdateJobAsync(name, req);
+        using var resp = await proxy.UpdateJobAsync(name, req);
         if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         if (!resp.IsSuccessStatusCode)
         {
@@ -67,7 +67,7 @@ public class OrchestratorController(OrchestratorProxyService proxy) : Controller
     [HttpDelete("jobs/{name}")]
     public async Task<IActionResult> DeleteJob(string name)
     {
-        var resp = await proxy.DeleteJobAsync(name);
+        using var resp = await proxy.DeleteJobAsync(name);
         if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         if (!resp.IsSuccessStatusCode)
         {
@@ -87,7 +87,7 @@ public class OrchestratorController(OrchestratorProxyService proxy) : Controller
     [HttpPost("jobs/{name}/trigger")]
     public async Task<IActionResult> TriggerJob(string name)
     {
-        var resp = await proxy.TriggerJobAsync(name);
+        using var resp = await proxy.TriggerJobAsync(name);
         if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         if (!resp.IsSuccessStatusCode)
         {
@@ -100,7 +100,7 @@ public class OrchestratorController(OrchestratorProxyService proxy) : Controller
     [HttpPost("jobs/{name}/kill")]
     public async Task<IActionResult> KillJob(string name)
     {
-        var resp = await proxy.KillJobAsync(name);
+        using var resp = await proxy.KillJobAsync(name);
         if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         if (!resp.IsSuccessStatusCode)
         {
@@ -134,7 +134,7 @@ public class OrchestratorController(OrchestratorProxyService proxy) : Controller
     [HttpPost("service/stop")]
     public async Task<IActionResult> StopService()
     {
-        var resp = await proxy.StopServiceAsync();
+        using var resp = await proxy.StopServiceAsync();
         if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         return Ok(new { Message = "Stop signal sent. Service will restart if managed by OS supervisor." });
     }

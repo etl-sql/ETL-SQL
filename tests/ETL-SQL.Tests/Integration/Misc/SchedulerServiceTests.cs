@@ -36,7 +36,7 @@ namespace ETL_SQL.Tests.Integration.Misc
                 It.IsAny<DateTime?>())).Returns(Task.CompletedTask);
 
             var mockExecutor = new Mock<IScriptExecutor>();
-            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()))
                         .ReturnsAsync(result);
 
             return (BuildService(mockStore, mockExecutor), mockStore, mockExecutor);
@@ -89,7 +89,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             await Task.Delay(500);
             service.Stop();
 
-            executor.Verify(e => e.ExecuteTextAsync("SELECT 1;", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce());
+            executor.Verify(e => e.ExecuteTextAsync("SELECT 1;", It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()), Times.AtLeastOnce());
         }
 
         [Fact]
@@ -103,7 +103,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             await Task.Delay(500);
             service.Stop();
 
-            executor.Verify(e => e.ExecuteTextAsync("PRINT 'hi';", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce());
+            executor.Verify(e => e.ExecuteTextAsync("PRINT 'hi';", It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()), Times.AtLeastOnce());
         }
 
         [Fact]
@@ -117,7 +117,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             await Task.Delay(300);
             service.Stop();
 
-            executor.Verify(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
+            executor.Verify(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()), Times.Never());
         }
 
         [Fact]
@@ -161,7 +161,7 @@ namespace ETL_SQL.Tests.Integration.Misc
                 It.IsAny<DateTime?>())).Returns(Task.CompletedTask);
 
             var mockExecutor = new Mock<IScriptExecutor>();
-            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()))
                         .ThrowsAsync(new InvalidOperationException("DB connection lost"));
 
             var service = BuildService(mockStore, mockExecutor);

@@ -119,10 +119,10 @@ public class OrchestratorPollerService(
         await using var conn = new SqliteConnection(cs);
         await conn.OpenAsync(ct);
 
-        var cmd = conn.CreateCommand();
+        using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT JobName, EndTime FROM JobHistory
-            WHERE Status = 'COMPLETED'
+            WHERE Status = 'SUCCESS'
               AND EndTime > $since
             ORDER BY EndTime ASC
             """;

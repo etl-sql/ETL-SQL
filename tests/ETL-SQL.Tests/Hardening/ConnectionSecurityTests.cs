@@ -268,6 +268,29 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Contains("<secret>", service.SecureScriptForSave("CREATE CONNECTION c ON MSSQL() WITH(PASSWORD='pw');", ""));
         }
 
+        [Fact]
+        public void SecurityService_GetLastOnOffSetting_IgnoresComments()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+
+            Assert.False(service.AllowsPlaintextSecrets("-- SET ALLOW_PLAINTEXT_SECRETS = ON;"));
+            Assert.False(service.AllowsPlaintextSecrets("/* SET ALLOW_PLAINTEXT_SECRETS = ON; */"));
+
+            Assert.True(service.AllowsPlaintextSecrets("SET ALLOW_PLAINTEXT_SECRETS = ON;\n-- SET ALLOW_PLAINTEXT_SECRETS = OFF;"));
+            Assert.False(service.AllowsPlaintextSecrets("SET ALLOW_PLAINTEXT_SECRETS = OFF;\n-- SET ALLOW_PLAINTEXT_SECRETS = ON;"));
+        }
+
+        [Fact]
+        public void SecurityService_ExtractLiteralUsePassword_IgnoresComments()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+
+            Assert.Null(service.ExtractLiteralUsePassword("-- USE PASSWORD = 'secret-pw';"));
+            Assert.Null(service.ExtractLiteralUsePassword("/* USE PASSWORD = 'secret-pw'; */"));
+
+            Assert.Equal("secret-pw", service.ExtractLiteralUsePassword("USE PASSWORD = 'secret-pw';"));
+        }
+
         private Script Parse(string sql)
         {
             var lexer = new Lexer(sql);

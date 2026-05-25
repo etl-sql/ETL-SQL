@@ -170,6 +170,11 @@ namespace ETL_SQL.Connectors.Rest
                 foreach (var opt in _options.Where(o => o.Key.StartsWith("HEADER_", StringComparison.OrdinalIgnoreCase)))
                 {
                     var headerName = opt.Key.Substring(7).Replace("_", "-");
+                    if (headerName.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
                     request.Headers.Add(headerName, opt.Value);
                 }
             }
@@ -179,10 +184,32 @@ namespace ETL_SQL.Connectors.Rest
                 _options != null &&
                 _options.TryGetValue("BODY", out var body))
             {
-                request.Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+                request.Content = new StringContent(body, System.Text.Encoding.UTF8, GetBodyContentType());
             }
 
             return request;
+        }
+
+        private string GetBodyContentType()
+        {
+            if (_options == null)
+            {
+                return "application/json";
+            }
+
+            if (_options.TryGetValue("BODY_CONTENT_TYPE", out var bodyContentType) &&
+                !string.IsNullOrWhiteSpace(bodyContentType))
+            {
+                return bodyContentType;
+            }
+
+            if (_options.TryGetValue("HEADER_Content-Type", out var headerContentType) &&
+                !string.IsNullOrWhiteSpace(headerContentType))
+            {
+                return headerContentType;
+            }
+
+            return "application/json";
         }
 
         private static bool ShouldWrapProviderException(Exception ex) =>

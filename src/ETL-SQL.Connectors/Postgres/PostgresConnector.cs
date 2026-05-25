@@ -52,6 +52,7 @@ namespace ETL_SQL.Connectors.Postgres
             { "CONNECTION_IDLE_LIFETIME", Array.Empty<string>() },
             { "SSL_MODE", new[] { "Disable", "Prefer", "Require", "VerifyCA", "VerifyFull" } },
             { "TRUST_SERVER_CERTIFICATE", new[] { "TRUE", "FALSE" } },
+            { "TIMEOUT_SECONDS", Array.Empty<string>() },
             { "TABLE", Array.Empty<string>() }
         };
 

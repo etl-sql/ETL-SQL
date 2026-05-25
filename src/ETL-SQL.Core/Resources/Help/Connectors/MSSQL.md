@@ -19,6 +19,7 @@ Options:
   PASSWORD           — SQL login password
   TRUSTED_CONNECTION — use Windows integrated authentication (default OFF)
   CONNECT_TIMEOUT    — connection timeout in seconds (default 30)
+  TIMEOUT_SECONDS    — command/query execution timeout in seconds (default 30)
   USE_SSL            — encrypt the connection (default ON for Azure SQL)
   TABLE              — default table for unqualified INSERT/SELECT
 

@@ -129,7 +129,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 {
                     _logger.LogError(ex, "Error in scheduler loop.");
                     // Safety sleep on error to avoid tight loops
-                    await Task.Delay(5000, ct);
+                    await Task.Delay(_configuration.GetValue<int>("Scheduler:ErrorSleepMs", 5000), ct);
                 }
             }
             _logger.LogInformation("Scheduler service stopped.");
@@ -191,35 +191,37 @@ namespace ETL_SQL.Orchestrator.Scheduling
             int maxAttempts = Math.Max(1, job.MaxRetries + 1);
             ScriptExecutionResult? lastResult = null;
 
-            for (int attempt = 1; attempt <= maxAttempts; attempt++)
+            using var cycleCts = CancellationTokenSource.CreateLinkedTokenSource(_cts?.Token ?? default);
+            long lastHistoryId = 0;
+
+            try
             {
-                long historyId = 0;
-                try
+                for (int attempt = 1; attempt <= maxAttempts; attempt++)
                 {
-                    historyId = await _store.LogJobStartAsync(job.Name);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to log job start for {JobName}.", job.Name);
-                }
+                    if (lastHistoryId > 0)
+                    {
+                        _runningJobs.TryRemove(lastHistoryId, out _);
+                    }
 
-                try
-                {
-                    // Acquire a concurrency slot — waits if the cap is reached.
-                    using var slot = await _throttle.AcquireAsync(job.Name);
-
-                    using var scope = _serviceProvider.CreateScope();
-                    // Inject IScriptExecutor — decoupled from the concrete Evaluator class.
-                    var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
-
-                    using var jobCts = CancellationTokenSource.CreateLinkedTokenSource(_cts?.Token ?? default);
-                    if (historyId > 0) _runningJobs[historyId] = jobCts;
+                    long historyId = 0;
+                    try
+                    {
+                        historyId = await _store.LogJobStartAsync(job.Name);
+                        lastHistoryId = historyId;
+                        if (historyId > 0) _runningJobs[historyId] = cycleCts;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to log job start for {JobName}.", job.Name);
+                    }
 
                     try
                     {
-                        lastResult = await executor.ExecuteTextAsync(job.Script, sessionId, jobCts.Token, job.Name);
+                        using var slot = await _throttle.AcquireAsync(job.Name);
+                        using var scope = _serviceProvider.CreateScope();
+                        var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
 
-                        // Capture sessionId for potential persistence in retry (CQ-S2)
+                        lastResult = await executor.ExecuteTextAsync(job.Script, sessionId, cycleCts.Token, job.Name);
                         sessionId = lastResult.SessionId;
 
                         if (lastResult.Success)
@@ -245,36 +247,38 @@ namespace ETL_SQL.Orchestrator.Scheduling
                                     scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
                         }
                     }
-                    finally
+                    catch (Exception ex)
                     {
-                        if (historyId > 0) _runningJobs.TryRemove(historyId, out _);
+                        _logger.LogError(ex, "Error executing job {JobName} on attempt {Attempt}.", job.Name, attempt);
+                        if (historyId > 0)
+                        {
+                            await _store.LogJobEndAsync(historyId, "FAILURE", ex.Message,
+                                scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
+                        }
+                        lastResult = new ScriptExecutionResult(false, 0, ex.Message);
+                    }
+
+                    if (attempt < maxAttempts)
+                    {
+                        int backoffSeconds = (int)Math.Pow(2, attempt - 1) * job.RetryDelaySeconds;
+                        backoffSeconds = Math.Min(backoffSeconds, 3600); // Cap at 1 hour
+
+                        _logger.LogInformation("Job {JobName} failed. Retrying in {Delay}s (Backoff). Session: {SessionId}", 
+                            job.Name, backoffSeconds, sessionId);
+                        
+                        try
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(backoffSeconds), cycleCts.Token);
+                        }
+                        catch (TaskCanceledException) { break; }
                     }
                 }
-                catch (Exception ex)
+            }
+            finally
+            {
+                if (lastHistoryId > 0)
                 {
-                    _logger.LogError(ex, "Error executing job {JobName} on attempt {Attempt}.", job.Name, attempt);
-                    if (historyId > 0)
-                    {
-                        await _store.LogJobEndAsync(historyId, "FAILURE", ex.Message,
-                            scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
-                    }
-                    lastResult = new ScriptExecutionResult(false, 0, ex.Message);
-                }
-
-                if (attempt < maxAttempts)
-                {
-                    // Exponential backoff: delay * 2^(attempt-1)
-                    int backoffSeconds = (int)Math.Pow(2, attempt - 1) * job.RetryDelaySeconds;
-                    backoffSeconds = Math.Min(backoffSeconds, 3600); // Cap at 1 hour
-
-                    _logger.LogInformation("Job {JobName} failed. Retrying in {Delay}s (Backoff). Session: {SessionId}", 
-                        job.Name, backoffSeconds, sessionId);
-                    
-                    try
-                    {
-                        await Task.Delay(TimeSpan.FromSeconds(backoffSeconds), _cts?.Token ?? default);
-                    }
-                    catch (TaskCanceledException) { break; }
+                    _runningJobs.TryRemove(lastHistoryId, out _);
                 }
             }
 

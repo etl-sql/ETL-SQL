@@ -21,6 +21,7 @@ namespace ETL_SQL.Connectors.Odbc
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
+        private readonly int _commandTimeout;
         private OdbcConnection? _transactionalConnection;
         private OdbcTransaction? _activeTransaction;
 
@@ -31,6 +32,7 @@ namespace ETL_SQL.Connectors.Odbc
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
+            _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 30;
 
             // Security Hardening: egress control
             var host = OdbcConnector.GetHostStatic(connectionString, options);
@@ -71,7 +73,7 @@ namespace ETL_SQL.Connectors.Odbc
 
             var (conn, isShared) = await GetConnectionAsync();
             try {
-                using var cmd = new OdbcCommand($"SELECT * FROM {OdbcSyntax.QuoteIdentifier(_tableName)}", conn);
+                using var cmd = CreateCommand($"SELECT * FROM {OdbcSyntax.QuoteIdentifier(_tableName)}", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 using var reader = cmd.ExecuteReader();
 
@@ -133,7 +135,7 @@ namespace ETL_SQL.Connectors.Odbc
                     {
                         var cols = string.Join(", ", batch.ColumnNames.Select(OdbcSyntax.QuoteIdentifier));
                         var params_arr = string.Join(", ", batch.ColumnNames.Select(_ => "?"));
-                        insertCmd = new OdbcCommand($"INSERT INTO {OdbcSyntax.QuoteIdentifier(_tableName)} ({cols}) VALUES ({params_arr})", conn);
+                        insertCmd = CreateCommand($"INSERT INTO {OdbcSyntax.QuoteIdentifier(_tableName)} ({cols}) VALUES ({params_arr})", conn);
                         if (_activeTransaction != null) insertCmd.Transaction = _activeTransaction;
                         else insertCmd.Transaction = localTx;
 
@@ -176,7 +178,7 @@ namespace ETL_SQL.Connectors.Odbc
         {
             var (conn, isShared) = await GetConnectionAsync();
             try {
-                using var cmd = new OdbcCommand(sql, conn);
+                using var cmd = CreateCommand(sql, conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
 
                 int paramCount = 0;
@@ -289,7 +291,7 @@ namespace ETL_SQL.Connectors.Odbc
             var (conn, isShared) = await GetConnectionAsync();
             try {
                 var columns = new List<string>();
-                using var cmd = new OdbcCommand($"SELECT * FROM {OdbcSyntax.QuoteIdentifier(tableName)} WHERE 1=0", conn);
+                using var cmd = CreateCommand($"SELECT * FROM {OdbcSyntax.QuoteIdentifier(tableName)} WHERE 1=0", conn);
                 using var reader = cmd.ExecuteReader();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
@@ -401,6 +403,13 @@ namespace ETL_SQL.Connectors.Odbc
             _transactionalConnection?.Dispose();
             _activeTransaction = null;
             _transactionalConnection = null;
+        }
+
+        private OdbcCommand CreateCommand(string sql, OdbcConnection conn)
+        {
+            var cmd = CreateCommand(sql, conn);
+            cmd.CommandTimeout = _commandTimeout;
+            return cmd;
         }
 
         private static bool ShouldWrapProviderException(Exception ex) =>

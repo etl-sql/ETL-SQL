@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -14,7 +15,7 @@ namespace ETL_SQL.Engine.Handlers
     /// Handles CREATE SUBSCRIPTION — registers a portal subscription as an Orchestrator job.
     /// Parameters are serialized to JSON and injected as SET statements at the top of the generated script.
     /// </summary>
-    public class CreatePortalSubscriptionHandler(IJobHistoryStore store, ILogger logger) : IStatementHandler
+    public class CreatePortalSubscriptionHandler(IJobHistoryStore store, ILogger logger, IConfiguration? config = null) : IStatementHandler
     {
         public Type SupportedStatementType => typeof(CreatePortalSubscriptionStatement);
 
@@ -37,7 +38,7 @@ namespace ETL_SQL.Engine.Handlers
                 NextRun:           null,
                 IsEnabled:         true,
                 MaxRetries:        3,
-                RetryDelaySeconds: 60);
+                RetryDelaySeconds: config?.GetValue<int>("Portal:SubscriptionRetryDelaySeconds") ?? 60);
 
             await store.SaveJobAsync(job);
 

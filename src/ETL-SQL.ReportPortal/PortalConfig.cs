@@ -8,6 +8,7 @@ public class PortalConfig
     public string MapRootPath { get; set; } = "./data/maps";
     public string DatasetRootPath { get; set; } = "./data/datasets";
     public bool AllowServiceControl { get; set; } = false;
+    public int  MaxPreviewRows    { get; set; } = 50000;
     public ResourcesConfig Resources { get; set; } = new();
     public JwtConfig       Jwt       { get; set; } = new();
     public IdentityConfig  Identity  { get; set; } = new();

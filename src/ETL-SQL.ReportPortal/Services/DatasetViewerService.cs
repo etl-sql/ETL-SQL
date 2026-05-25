@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.ReportPortal.Services;
 
-public class DatasetViewerService(PortalDbContext db, IMemoryCache cache)
+public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, PortalConfig config)
 {
     private static readonly MemoryCacheEntryOptions CacheOptions =
         new MemoryCacheEntryOptions().SetSlidingExpiration(TimeSpan.FromMinutes(5));
@@ -154,7 +154,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache)
         List<Dictionary<string, object?>> rows;
         try
         {
-            rows = await ReadParquetAsync(effectivePath, columns);
+            rows = await ReadParquetAsync(effectivePath, columns, config.MaxPreviewRows);
         }
         catch (Exception ex) when (ex is not InvalidOperationException)
         {
@@ -171,7 +171,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache)
     }
 
     private static async Task<List<Dictionary<string, object?>>> ReadParquetAsync(
-        string filePath, List<DatasetColumnDto> columns)
+        string filePath, List<DatasetColumnDto> columns, int maxRows)
     {
         var rows = new List<Dictionary<string, object?>>();
 
@@ -191,6 +191,9 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache)
 
             for (int r = 0; r < rowCount; r++)
             {
+                if (rows.Count >= maxRows)
+                    break;
+
                 var row = new Dictionary<string, object?>(dataFields.Length, StringComparer.OrdinalIgnoreCase);
                 for (int c = 0; c < dataFields.Length; c++)
                 {
@@ -199,6 +202,9 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache)
                 }
                 rows.Add(row);
             }
+
+            if (rows.Count >= maxRows)
+                break;
         }
 
         return rows;

@@ -20,6 +20,7 @@ namespace ETL_SQL.Connectors.Postgres
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
+        private readonly int _commandTimeout;
         private NpgsqlConnection? _transactionalConnection;
         private NpgsqlTransaction? _activeTransaction;
 
@@ -37,6 +38,7 @@ namespace ETL_SQL.Connectors.Postgres
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
+            _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 30;
 
             // Security Hardening: egress control
             var host = PostgresConnector.GetHostStatic(connectionString, options);
@@ -57,7 +59,7 @@ namespace ETL_SQL.Connectors.Postgres
         {
             var (conn, isShared) = await GetConnectionAsync();
             try {
-                await using var cmd = new NpgsqlCommand("SELECT version()", conn);
+                await using var cmd = CreateCommand("SELECT version()", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 var result = await cmd.ExecuteScalarAsync();
                 return result?.ToString() ?? "Unknown PostgreSQL Version";
@@ -80,7 +82,7 @@ namespace ETL_SQL.Connectors.Postgres
 
             var (conn, isShared) = await GetConnectionAsync();
             try {
-                await using var cmd = new NpgsqlCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
+                await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -177,7 +179,7 @@ namespace ETL_SQL.Connectors.Postgres
             };
 
             try {
-                await using var cmd = new NpgsqlCommand(sql, conn);
+                await using var cmd = CreateCommand(sql, conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
 
                 int paramCount = 0;
@@ -250,7 +252,7 @@ namespace ETL_SQL.Connectors.Postgres
             {
                 await using var conn = new NpgsqlConnection(_connectionString);
                 await conn.OpenAsync();
-                await using var cmd = new NpgsqlCommand($"SELECT * FROM {QuoteIdentifier(_tableName)} LIMIT 0", conn);
+                await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(_tableName)} LIMIT 0", conn);
                 await using var reader = await cmd.ExecuteReaderAsync();
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
@@ -271,7 +273,7 @@ namespace ETL_SQL.Connectors.Postgres
             {
                 await using var conn = new NpgsqlConnection(_connectionString);
                 await conn.OpenAsync();
-                await using var cmd = new NpgsqlCommand("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') AND table_type = 'BASE TABLE'", conn);
+                await using var cmd = CreateCommand("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') AND table_type = 'BASE TABLE'", conn);
                 await using var reader = await cmd.ExecuteReaderAsync();
                 var tables = new List<string>();
                 while (await reader.ReadAsync())
@@ -294,7 +296,7 @@ namespace ETL_SQL.Connectors.Postgres
             {
                 await using var conn = new NpgsqlConnection(_connectionString);
                 await conn.OpenAsync();
-                await using var cmd = new NpgsqlCommand("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') AND table_type = 'VIEW'", conn);
+                await using var cmd = CreateCommand("SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') AND table_type = 'VIEW'", conn);
                 await using var reader = await cmd.ExecuteReaderAsync();
                 var views = new List<string>();
                 while (await reader.ReadAsync())
@@ -317,7 +319,7 @@ namespace ETL_SQL.Connectors.Postgres
             {
                 await using var conn = new NpgsqlConnection(_connectionString);
                 await conn.OpenAsync();
-                await using var cmd = new NpgsqlCommand($"SELECT * FROM {QuoteIdentifier(tableName)} LIMIT 0", conn);
+                await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(tableName)} LIMIT 0", conn);
                 await using var reader = await cmd.ExecuteReaderAsync();
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
@@ -437,6 +439,13 @@ namespace ETL_SQL.Connectors.Postgres
             if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
             _activeTransaction = null;
             _transactionalConnection = null;
+        }
+
+        private NpgsqlCommand CreateCommand(string sql, NpgsqlConnection conn)
+        {
+            var cmd = CreateCommand(sql, conn);
+            cmd.CommandTimeout = _commandTimeout;
+            return cmd;
         }
 
         private static bool ShouldWrapProviderException(Exception ex) =>

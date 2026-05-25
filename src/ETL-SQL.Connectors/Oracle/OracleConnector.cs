@@ -56,6 +56,7 @@ namespace ETL_SQL.Connectors.Oracle
             { "MIN_POOL_SIZE", Array.Empty<string>() },
             { "MAX_POOL_SIZE", Array.Empty<string>() },
             { "CONNECTION_LIFETIME", Array.Empty<string>() },
+            { "TIMEOUT_SECONDS", Array.Empty<string>() },
             { "TABLE", Array.Empty<string>() }
         };
 

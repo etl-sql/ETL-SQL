@@ -145,6 +145,7 @@ namespace ETL_SQL.Services
                 MaxStringResultSize = long.TryParse(section["MaxStringResultSize"], out var msr) ? msr : DefaultMaxStringResultSize;
                 RegexMatchTimeout = int.TryParse(section["RegexMatchTimeoutMs"], out var rmt) ? TimeSpan.FromMilliseconds(rmt) : DefaultRegexMatchTimeout;
                 MaxSmtpEmailsPerScript = int.TryParse(section["MaxSmtpEmailsPerScript"], out var mse) && mse >= 0 ? mse : DefaultMaxSmtpEmailsPerScript;
+                MaxInternalOperations = int.TryParse(section["MaxInternalOperations"], out var mio) && mio > 0 ? mio : 100000;
             }
 
             var engine = configuration.GetSection("Engine");
@@ -499,6 +500,12 @@ namespace ETL_SQL.Services
                 throw new SecurityException($"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {maxDepth}. Use 'SET ALLOW_RECURSIVE_LAYERS = n;' override if allowed.");
             }
 
+            if (depth > maxDepth && allowDeepRecursion && !isSafeZone)
+            {
+                var zones = string.Join(", ", ApprovedSafeZones);
+                throw new SecurityException($"Runaway protection: Recursive operation depth ({depth}) override is only permitted within an approved safe zone. Path: '{path}'. Safe Zones: [{zones}]");
+            }
+
             if (depth > maxDepth && allowDeepRecursion && isSafeZone)
             {
                 _logger.Warning("Security Override: Deep recursion depth ({Depth}) authorized via safe zone '{Path}'.", depth, path);
@@ -661,7 +668,8 @@ namespace ETL_SQL.Services
         public string? ExtractLiteralUsePassword(string text)
         {
             if (string.IsNullOrEmpty(text)) return null;
-            var match = LiteralUsePasswordRegex().Match(text);
+            var cleanText = StripComments(text);
+            var match = LiteralUsePasswordRegex().Match(cleanText);
             if (!match.Success) return null;
             var raw = match.Value;
             var quoteIndex = raw.IndexOf(match.Groups[1].Value, StringComparison.Ordinal);
@@ -726,11 +734,28 @@ namespace ETL_SQL.Services
             return secured;
         }
 
+        private static string StripComments(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            var noBlock = Regex.Replace(text, @"/\*[\s\S]*?\*/", "");
+            var lines = noBlock.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var idx = lines[i].IndexOf("--");
+                if (idx >= 0)
+                {
+                    lines[i] = lines[i].Substring(0, idx);
+                }
+            }
+            return string.Join("\n", lines);
+        }
+
         private static bool GetLastOnOffSetting(string text, string settingName, bool defaultValue)
         {
             if (string.IsNullOrEmpty(text)) return defaultValue;
+            var cleanText = StripComments(text);
             var value = defaultValue;
-            foreach (Match match in SettingOnOffRegex().Matches(text))
+            foreach (Match match in SettingOnOffRegex().Matches(cleanText))
             {
                 if (string.Equals(match.Groups[1].Value, settingName, StringComparison.OrdinalIgnoreCase))
                     value = string.Equals(match.Groups[2].Value, "ON", StringComparison.OrdinalIgnoreCase);

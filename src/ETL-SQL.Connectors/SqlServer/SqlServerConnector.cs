@@ -58,6 +58,7 @@ namespace ETL_SQL.Connectors.SqlServer
             { "MAX_POOL_SIZE", Array.Empty<string>() },
             { "POOL_LIFETIME", Array.Empty<string>() },
             { "CONNECT_TIMEOUT", Array.Empty<string>() },
+            { "TIMEOUT_SECONDS", Array.Empty<string>() },
             { "TABLE", Array.Empty<string>() }
         };
 

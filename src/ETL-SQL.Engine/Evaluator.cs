@@ -574,6 +574,7 @@ namespace ETL_SQL.Engine
             SpillFormat = DefaultThresholds.SpillFormat(config);
             MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);
             MaxMessages = config?.GetValue<int>("Engine:MaxMessages", 1000) ?? 1000;
+            MaxInternalOperations = config?.GetValue<int>("Security:MaxInternalOperations", 100000) ?? 100000;
             WeekStartDay = DefaultThresholds.StartOfWeek(config);
             ScriptHashPolicy = DefaultThresholds.ScriptHashPolicy(config);
             IsPersistentSession = DefaultThresholds.PersistenceDefault(config);

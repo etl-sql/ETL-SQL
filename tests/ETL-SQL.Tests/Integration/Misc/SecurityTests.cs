@@ -144,6 +144,23 @@ namespace ETL_SQL.Tests.Integration
 
             // Should allow override for Internal if requested (though usually not needed)
             security.CheckRunawayProtection(OperationType.EngineInternal, 100001, 1, allowLargeCount: true, allowDeepRecursion: false);
+
+            // 3. Recursion Limit (5)
+            // Should allow up to 5 without override
+            security.CheckRunawayProtection(OperationType.EngineInternal, 1, 5, allowLargeCount: false, allowDeepRecursion: false);
+
+            // Should fail at 6 without override
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                security.CheckRunawayProtection(OperationType.EngineInternal, 1, 6, allowLargeCount: false, allowDeepRecursion: false)
+            );
+
+            // Should allow override in safe zone
+            security.CheckRunawayProtection(OperationType.EngineInternal, 1, 6, allowLargeCount: false, allowDeepRecursion: true, path: safePath + "\\file.csv");
+
+            // Should FAIL override in neutral zone
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                security.CheckRunawayProtection(OperationType.EngineInternal, 1, 6, allowLargeCount: false, allowDeepRecursion: true, path: neutralPath + "\\file.csv")
+            );
         }
 
         [Fact]

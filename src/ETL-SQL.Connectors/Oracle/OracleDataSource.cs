@@ -21,6 +21,7 @@ namespace ETL_SQL.Connectors.Oracle
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
+        private readonly int _commandTimeout;
 
         public string ConnectionString => _connectionString;
         public string Path => "ORACLE";
@@ -36,6 +37,7 @@ namespace ETL_SQL.Connectors.Oracle
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
+            _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 30;
 
             // Security Hardening: egress control
             var host = OracleConnector.GetHostStatic(connectionString, options);
@@ -65,7 +67,7 @@ namespace ETL_SQL.Connectors.Oracle
             try
             {
                 using var conn = await OpenConnectionAsync();
-                using var cmd = new OracleCommand("SELECT version FROM v$instance", conn);
+                using var cmd = CreateCommand("SELECT version FROM v$instance", conn);
                 var result = await cmd.ExecuteScalarAsync();
                 return result?.ToString() ?? "Unknown Oracle Version";
             }
@@ -86,7 +88,7 @@ namespace ETL_SQL.Connectors.Oracle
                 throw new ExecutionException("No table specified for Oracle data source read.");
 
             using var conn = await OpenConnectionAsync();
-            using var cmd = new OracleCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
+            using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
             using var reader = await cmd.ExecuteReaderAsync();
 
             var columns = new List<string>();
@@ -187,7 +189,7 @@ namespace ETL_SQL.Connectors.Oracle
             DataTable? lastResultBatch = null;
             foreach (var stmtSql in statements)
             {
-                using var cmd = new OracleCommand(stmtSql, conn);
+                using var cmd = CreateCommand(stmtSql, conn);
                 int paramCount = 0;
                 foreach (var param in paramList)
                     cmd.Parameters.Add(new OracleParameter($"p{paramCount++}", param ?? DBNull.Value));
@@ -253,7 +255,7 @@ namespace ETL_SQL.Connectors.Oracle
             try
             {
                 using var conn = await OpenConnectionAsync();
-                using var cmd = new OracleCommand("SELECT owner, table_name FROM all_tables WHERE owner NOT IN ('SYS')", conn);
+                using var cmd = CreateCommand("SELECT owner, table_name FROM all_tables WHERE owner NOT IN ('SYS')", conn);
                 using var reader = await cmd.ExecuteReaderAsync();
                 var tables = new List<string>();
                 while (await reader.ReadAsync())
@@ -275,7 +277,7 @@ namespace ETL_SQL.Connectors.Oracle
             try
             {
                 using var conn = await OpenConnectionAsync();
-                using var cmd = new OracleCommand("SELECT owner, view_name FROM all_views WHERE owner NOT IN ('SYS')", conn);
+                using var cmd = CreateCommand("SELECT owner, view_name FROM all_views WHERE owner NOT IN ('SYS')", conn);
                 using var reader = await cmd.ExecuteReaderAsync();
                 var views = new List<string>();
                 while (await reader.ReadAsync())
@@ -297,7 +299,7 @@ namespace ETL_SQL.Connectors.Oracle
             try
             {
                 using var conn = await OpenConnectionAsync();
-                using var cmd = new OracleCommand($"SELECT * FROM {QuoteIdentifier(tableName)} WHERE ROWNUM = 0", conn);
+                using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(tableName)} WHERE ROWNUM = 0", conn);
                 using var reader = await cmd.ExecuteReaderAsync();
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
@@ -333,6 +335,13 @@ namespace ETL_SQL.Connectors.Oracle
         public async ValueTask DisposeAsync()
         {
             await Task.CompletedTask;
+        }
+
+        private OracleCommand CreateCommand(string sql, OracleConnection conn)
+        {
+            var cmd = CreateCommand(sql, conn);
+            cmd.CommandTimeout = _commandTimeout;
+            return cmd;
         }
 
         private static bool ShouldWrapProviderException(Exception ex) =>

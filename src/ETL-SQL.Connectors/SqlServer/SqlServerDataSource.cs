@@ -20,6 +20,7 @@ namespace ETL_SQL.Connectors.SqlServer
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
+        private readonly int _commandTimeout;
         private SqlConnection? _transactionalConnection;
         private SqlTransaction? _activeTransaction;
 
@@ -37,6 +38,7 @@ namespace ETL_SQL.Connectors.SqlServer
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
+            _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 30;
 
             // Security Hardening: egress control
             var host = SqlServerConnector.GetHostStatic(connectionString, options);
@@ -58,7 +60,7 @@ namespace ETL_SQL.Connectors.SqlServer
             if (string.IsNullOrWhiteSpace(_connectionString)) return "MSSQL (Offline)";
             var (conn, isShared) = await GetConnectionAsync();
             try {
-                await using var cmd = new SqlCommand("SELECT @@VERSION", conn);
+                await using var cmd = CreateCommand("SELECT @@VERSION", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 var result = await cmd.ExecuteScalarAsync();
                 return result?.ToString() ?? "Unknown SQL Server Version";
@@ -81,7 +83,7 @@ namespace ETL_SQL.Connectors.SqlServer
 
             var (conn, isShared) = await GetConnectionAsync();
             try {
-                await using var cmd = new SqlCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
+                await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -191,7 +193,7 @@ namespace ETL_SQL.Connectors.SqlServer
             conn.FireInfoMessageEventOnUserErrors = true;
 
             try {
-                await using var cmd = new SqlCommand(sql, conn);
+                await using var cmd = CreateCommand(sql, conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 cmd.StatementCompleted += (_, e) =>
                 {
@@ -277,7 +279,7 @@ namespace ETL_SQL.Connectors.SqlServer
             {
                 await using var conn = new SqlConnection(_connectionString);
                 await conn.OpenAsync();
-                await using var cmd = new SqlCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'", conn);
+                await using var cmd = CreateCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'", conn);
                 await using var reader = await cmd.ExecuteReaderAsync();
                 var tables = new List<string>();
                 while (await reader.ReadAsync())
@@ -301,7 +303,7 @@ namespace ETL_SQL.Connectors.SqlServer
             {
                 await using var conn = new SqlConnection(_connectionString);
                 await conn.OpenAsync();
-                await using var cmd = new SqlCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'VIEW'", conn);
+                await using var cmd = CreateCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'VIEW'", conn);
                 await using var reader = await cmd.ExecuteReaderAsync();
                 var views = new List<string>();
                 while (await reader.ReadAsync())
@@ -325,7 +327,7 @@ namespace ETL_SQL.Connectors.SqlServer
             {
                 await using var conn = new SqlConnection(_connectionString);
                 await conn.OpenAsync();
-                await using var cmd = new SqlCommand($"SELECT TOP 0 * FROM {QuoteIdentifier(tableName)}", conn);
+                await using var cmd = CreateCommand($"SELECT TOP 0 * FROM {QuoteIdentifier(tableName)}", conn);
                 await using var reader = await cmd.ExecuteReaderAsync();
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
@@ -440,6 +442,13 @@ namespace ETL_SQL.Connectors.SqlServer
             if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
             _activeTransaction = null;
             _transactionalConnection = null;
+        }
+
+        private SqlCommand CreateCommand(string sql, SqlConnection conn)
+        {
+            var cmd = CreateCommand(sql, conn);
+            cmd.CommandTimeout = _commandTimeout;
+            return cmd;
         }
 
         private static bool ShouldWrapProviderException(Exception ex) =>

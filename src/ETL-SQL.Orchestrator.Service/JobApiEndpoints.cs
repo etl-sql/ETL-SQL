@@ -289,7 +289,9 @@ namespace ETL_SQL.Orchestrator.Service
                 // Prevent path traversal — resolve and verify it stays under root
                 var fullPath = Path.GetFullPath(Path.Combine(root, path));
                 var fullRoot = Path.GetFullPath(root);
-                if (!fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+                var separator = Path.DirectorySeparatorChar.ToString();
+                var fullRootWithSeparator = fullRoot.EndsWith(separator) ? fullRoot : fullRoot + separator;
+                if (!fullPath.StartsWith(fullRootWithSeparator, StringComparison.OrdinalIgnoreCase))
                     return Results.BadRequest(new { Error = "Invalid path." });
                 if (!File.Exists(fullPath))
                     return Results.NotFound(new { Error = $"Script '{path}' not found." });
@@ -450,6 +452,11 @@ namespace ETL_SQL.Orchestrator.Service
                             Directory.CreateDirectory(snapshotDir);
                             var reportId  = request.Metadata.GetValueOrDefault("ReportId", "unknown");
                             var sessionId = request.SessionId ?? entry.JobId;
+                            if (reportId.Contains("..") || reportId.Contains('/') || reportId.Contains('\\') ||
+                                sessionId.Contains("..") || sessionId.Contains('/') || sessionId.Contains('\\'))
+                            {
+                                throw new SecurityException("Invalid character or traversal sequence in ReportId or SessionId.");
+                            }
                             var manifestPath = Path.Combine(snapshotDir, $"report_{reportId}_{sessionId}.snapshot.json");
 
                             var store = new SnapshotStore();

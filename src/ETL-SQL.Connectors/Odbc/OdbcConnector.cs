@@ -51,6 +51,7 @@ namespace ETL_SQL.Connectors.Odbc
             { "UID", Array.Empty<string>() },
             { "PWD", Array.Empty<string>() },
             { "CONNECT_TIMEOUT", Array.Empty<string>() },
+            { "TIMEOUT_SECONDS", Array.Empty<string>() },
             { "TABLE", Array.Empty<string>() }
         };
 

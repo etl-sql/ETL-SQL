@@ -299,5 +299,9 @@
 - [x] **[Leak] [ReportPortal] OrchestratorController HTTP Response Leak**
   - `src/ETL-SQL.ReportPortal/Controllers/OrchestratorController.cs` — multiple endpoints proxy requests returning `HttpResponseMessage` (like `CreateJob`, `UpdateJob`, `DeleteJob`, etc.) but never dispose the responses, causing socket and memory leaks. Use `using` blocks to ensure they are disposed.
 
-- [ ] **CONSTANTS check** 
-  - `Hardcoded values in code is not my preference` - If we have constant values they should be added as appsettings.json values with descriptions of what they represent.  If the case warrants a use case where an individual would want to make a change to a constant value in an ad-hoc fashion a SET command should also be created.
+- [x] **CONSTANTS check** 
+  - Audited the full codebase for hardcoded magic values.
+  - Fixed 3 dead/mismatched appsettings.json keys (`Engine:ExternalSort:ChunkSize` → `Engine:ExternalSortChunkSize`; `Orchestration:MaxInMemoryBatches` and `Orchestration:ForeachPageSize` never matched the `Engine:` keys that DefaultThresholds reads).
+  - Added 10 missing entries to appsettings.json: `Engine:MaxMessages`, `Engine:MaxInternalOperations`, `Engine:TelemetryEnabled`, `Engine:LineageEnabled`, `Engine:ConnectionPreviewLimit`, `Engine:DefaultHistoryLimit`, `Scheduler:ErrorSleepMs`, `Portal:SubscriptionRetryDelaySeconds`, `Security:MaxInternalOperations`.
+  - Wired config reads in code: `SecurityService` now initializes `MaxInternalOperations` from `Security:MaxInternalOperations`; `Evaluator.InitializeThresholds` syncs it; `SchedulerService` error-sleep uses `Scheduler:ErrorSleepMs`; three lineage history handlers use `Engine:DefaultHistoryLimit`; `CreateConnectionStatementHandler` uses `Engine:ConnectionPreviewLimit`; `CreatePortalSubscriptionHandler` uses `Portal:SubscriptionRetryDelaySeconds`.
+  - Added `TIMEOUT_SECONDS` as a `CREATE CONNECTION` option to SQL Server, Postgres, Oracle, ODBC, and BigQuery connectors. Snowflake already had full support. BigQuery was documented but not wired — both now wired. All four SQL connectors use a `CreateCommand` helper that applies `CommandTimeout`. BigQuery uses `GetQueryResultsOptions.Timeout`. Existing SET commands already cover all engine threshold tuning.

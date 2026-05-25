@@ -45,6 +45,7 @@ namespace ETL_SQL.Connectors.Rest
             { "HEADER_NAME", Array.Empty<string>() },
             { "ROOT_PATH", Array.Empty<string>() },
             { "BODY", Array.Empty<string>() },
+            { "BODY_CONTENT_TYPE", Array.Empty<string>() },
             { "PAG_TYPE", new[] { "NONE", "OFFSET" } },
             { "PAG_LIMIT", Array.Empty<string>() }
         };
@@ -73,6 +74,7 @@ Supported Options:
   HEADER_NAME - Name of the header for APIKEY auth (e.g. X-API-KEY).
   ROOT_PATH   - JSONPath to the data array (e.g. '$.items').
   BODY        - JSON request body for POST/PUT methods.
+  BODY_CONTENT_TYPE - Content-Type for POST/PUT BODY. Default: application/json.
   PAG_TYPE    - Pagination style: NONE, OFFSET.
   PAG_LIMIT   - Batch size for pagination.";
         }

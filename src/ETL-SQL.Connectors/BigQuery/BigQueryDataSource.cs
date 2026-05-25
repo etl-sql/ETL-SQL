@@ -29,6 +29,7 @@ namespace ETL_SQL.Connectors.BigQuery
         private readonly string? _dataset;
         private readonly string? _credentialFile;
         private readonly string? _location;
+        private readonly int _commandTimeout;
 
         public BigQueryDataSource(IExecutionContext context, string connectionString, string? tableName, Dictionary<string, string>? options)
         {
@@ -51,6 +52,8 @@ namespace ETL_SQL.Connectors.BigQuery
 
             _location = options?.GetValueOrDefault("LOCATION")
                 ?? BigQueryConnector.ParseField(connectionString, "location");
+
+            _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 1800;
 
             context.SecurityService.ValidateHost("bigquery.googleapis.com");
         }
@@ -95,7 +98,7 @@ namespace ETL_SQL.Connectors.BigQuery
                     {
                         results = await client.ExecuteQueryAsync(
                             $"SELECT * FROM {QuoteIdentifier(_tableName)}",
-                            null, BuildQueryOptions(), null, ct);
+                            null, BuildQueryOptions(), BuildResultsOptions(), ct);
                     });
             }
             catch (Google.GoogleApiException ex)
@@ -177,7 +180,7 @@ namespace ETL_SQL.Connectors.BigQuery
                 await ConnectorRetryPolicy.ForBigQuery(_logger)
                     .ExecuteAsync(async ct =>
                     {
-                        results = await client.ExecuteQueryAsync(sql, bqParams, BuildQueryOptions(), null, ct);
+                        results = await client.ExecuteQueryAsync(sql, bqParams, BuildQueryOptions(), BuildResultsOptions(), ct);
                     });
             }
             catch (Google.GoogleApiException ex)
@@ -328,6 +331,8 @@ namespace ETL_SQL.Connectors.BigQuery
                 opts.JobLocation = _location;
             return opts;
         }
+
+        private GetQueryResultsOptions BuildResultsOptions() => new() { Timeout = TimeSpan.FromSeconds(_commandTimeout) };
 
         private async Task TruncateAsync()
         {
