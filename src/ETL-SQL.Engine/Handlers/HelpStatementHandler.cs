@@ -33,13 +33,14 @@ namespace ETL_SQL.Engine.Handlers
             if (string.IsNullOrEmpty(topic))
             {
                 _logger.WriteLine("ETL-SQL Help System", ConsoleColor.Cyan);
-                _logger.WriteLine("Categories: CONNECTION, VISUAL, REPORT, LOOP, FUNCTION, SHOW, SET, VARIABLES");
+                _logger.WriteLine("Categories: CONNECTION, VISUAL, REPORT, LOOP, FUNCTION, SHOW, SET, VARIABLES, SNIPPETS");
                 _logger.WriteLine("Examples:");
                 _logger.WriteLine("  HELP SELECT           -- Direct command help");
                 _logger.WriteLine("  HELP CONNECTION       -- List all data source types");
                 _logger.WriteLine("  HELP VISUAL           -- List all chart/widget types");
                 _logger.WriteLine("  HELP CONNECTION MSSQL -- Detailed connector options");
                 _logger.WriteLine("  HELP @@ROWCOUNT       -- System variable documentation");
+                _logger.WriteLine("  HELP SNIPPETS         -- List all $trigger snippet templates");
                 return;
             }
 
@@ -108,7 +109,39 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
 
-            // 5. Category: REPORT / VISUAL (Redirect to Index if no subtopic)
+            // 5. Category: SNIPPETS
+            if (topic.Equals("SNIPPETS", StringComparison.OrdinalIgnoreCase))
+            {
+                var snippets = ETL_SQL.Core.Metadata.SnippetLibrary.Instance.GetAll();
+
+                if (string.IsNullOrEmpty(subTopic))
+                {
+                    _logger.WriteLine("HELP: SNIPPETS", ConsoleColor.Cyan);
+                    _logger.WriteLine("Type $<trigger> at the start of a line to expand a scaffold template.\n");
+                    foreach (var s in snippets)
+                        _logger.WriteLine($"  {s.Trigger,-16} {s.Description}");
+                    _logger.WriteLine("\nUse HELP SNIPPETS <trigger> for the full template body. Example: HELP SNIPPETS bar");
+                }
+                else
+                {
+                    var trigger = subTopic.StartsWith("$") ? subTopic : $"${subTopic}";
+                    var snippet = snippets.FirstOrDefault(s => s.Trigger.Equals(trigger, StringComparison.OrdinalIgnoreCase));
+                    if (snippet != null)
+                    {
+                        _logger.WriteLine($"HELP: SNIPPET {snippet.Trigger}", ConsoleColor.Cyan);
+                        _logger.WriteLine($"{snippet.Description}\n");
+                        _logger.WriteLine(snippet.TuiBody);
+                    }
+                    else
+                    {
+                        _logger.WriteLine($"Snippet '{trigger}' not found.", ConsoleColor.Yellow);
+                        _logger.WriteLine("Use HELP SNIPPETS to list all available snippets.");
+                    }
+                }
+                return;
+            }
+
+            // 6. Category: REPORT / VISUAL (Redirect to Index if no subtopic)
             if (topic.Equals("REPORT", StringComparison.OrdinalIgnoreCase) && string.IsNullOrEmpty(subTopic))
             {
                 subTopic = "INDEX";
@@ -119,7 +152,7 @@ namespace ETL_SQL.Engine.Handlers
                 topic = "REPORT";
             }
 
-            // 6. Registry-based lookup (Direct or Scoped)
+            // 7. Registry-based lookup (Direct or Scoped)
             var help = context.LanguageHelp.GetHelp(topic, subTopic);
             if (help != null)
             {
@@ -128,7 +161,7 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
             
-            // 7. Shorthand Fallback (e.g. HELP BAR or HELP MSSQL)
+            // 8. Shorthand Fallback (e.g. HELP BAR or HELP MSSQL)
             if (string.IsNullOrEmpty(subTopic))
             {
                 // Try searching all subtopics in the registry

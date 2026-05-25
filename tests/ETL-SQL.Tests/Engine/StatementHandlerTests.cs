@@ -137,6 +137,30 @@ namespace ETL_SQL.Tests.Engine
             await Run("HELP FUNCTION CONCAT;");
         }
 
+        [Fact]
+        public async Task Help_Snippets_ListsAll_ExecutesWithoutError()
+        {
+            await Run("HELP SNIPPETS;");
+        }
+
+        [Fact]
+        public async Task Help_Snippets_SpecificTrigger_ExecutesWithoutError()
+        {
+            await Run("HELP SNIPPETS bar;");
+        }
+
+        [Fact]
+        public async Task Help_Snippets_WithDollarPrefix_ExecutesWithoutError()
+        {
+            await Run("HELP SNIPPETS $mssql;");
+        }
+
+        [Fact]
+        public async Task Help_Snippets_UnknownTrigger_ExecutesWithoutError()
+        {
+            await Run("HELP SNIPPETS nonexistent;");
+        }
+
         // ── SHOW VERSION ──────────────────────────────────────────────────────
 
         [Fact]
