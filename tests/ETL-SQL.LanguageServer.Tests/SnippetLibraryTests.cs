@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq;
 using Xunit;
 using ETL_SQL.Core.Metadata;
@@ -9,10 +10,10 @@ public class SnippetLibraryTests
     // ── Loading ───────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Load_Returns25Snippets()
+    public void Load_Returns38Snippets()
     {
         var snippets = SnippetLibrary.Instance.GetAll();
-        Assert.Equal(25, snippets.Count);
+        Assert.Equal(38, snippets.Count);
     }
 
     [Fact]
@@ -58,6 +59,19 @@ public class SnippetLibraryTests
     [InlineData("$waterfall")]
     [InlineData("$treemap")]
     [InlineData("$boxplot")]
+    [InlineData("$sftp")]
+    [InlineData("$ftp")]
+    [InlineData("$blob")]
+    [InlineData("$api")]
+    [InlineData("$smtp")]
+    [InlineData("$snowflake")]
+    [InlineData("$bigquery")]
+    [InlineData("$odbc")]
+    [InlineData("$avro")]
+    [InlineData("$xml")]
+    [InlineData("$view")]
+    [InlineData("$func")]
+    [InlineData("$job")]
     public void Load_ExpectedTriggerExists(string trigger)
     {
         var snippets = SnippetLibrary.Instance.GetAll();
@@ -113,10 +127,10 @@ public class SnippetLibraryTests
     }
 
     [Fact]
-    public void GetByPrefix_JustDollar_ReturnsAll25()
+    public void GetByPrefix_JustDollar_ReturnsAll38()
     {
         var matches = SnippetLibrary.Instance.GetByPrefix("$").ToList();
-        Assert.Equal(25, matches.Count);
+        Assert.Equal(38, matches.Count);
     }
 
     [Fact]
@@ -153,6 +167,67 @@ public class SnippetLibraryTests
     public void ParseSnippet_MissingFrontmatter_ReturnsNull()
     {
         Assert.Null(SnippetLibrary.ParseSnippet("SELECT 1;"));
+    }
+
+    // ── User snippets (disk-based) ────────────────────────────────────────────
+
+    [Fact]
+    public void UserSnippets_LoadedFromDirectory_AppendedToBuiltIns()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "custom.md"),
+                "---\ntrigger: $mysnippet\nlabel: My Custom\ndescription: Test\n---\nSELECT «col» FROM «tbl»;\n");
+
+            var lib = new SnippetLibrary(dir);
+            Assert.Contains(lib.GetAll(), s => s.Trigger == "$mysnippet");
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Fact]
+    public void UserSnippets_SameTrigger_OverridesBuiltIn()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "bar.md"),
+                "---\ntrigger: $bar\nlabel: Custom Bar\ndescription: Override\n---\nCUSTOM BODY;\n");
+
+            var lib = new SnippetLibrary(dir);
+            var bar = lib.GetAll().Single(s => s.Trigger == "$bar");
+            Assert.Equal("Custom Bar", bar.Label);
+            Assert.Equal("CUSTOM BODY;", bar.TuiBody);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Fact]
+    public void UserSnippets_MissingDirectory_LoadsBuiltInsOnly()
+    {
+        var lib = new SnippetLibrary(@"C:\nonexistent\path\that\does\not\exist");
+        Assert.Equal(38, lib.GetAll().Count);
+    }
+
+    [Fact]
+    public void UserSnippets_InvalidMarkdown_Skipped()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "bad.md"), "not valid frontmatter at all");
+            File.WriteAllText(Path.Combine(dir, "good.md"),
+                "---\ntrigger: $good\nlabel: Good\ndescription: ok\n---\nbody;\n");
+
+            var lib = new SnippetLibrary(dir);
+            Assert.Contains(lib.GetAll(), s => s.Trigger == "$good");
+            Assert.DoesNotContain(lib.GetAll(), s => s.Trigger == "$bad");
+        }
+        finally { Directory.Delete(dir, recursive: true); }
     }
 
     // ── Snippet body content spot-checks ─────────────────────────────────────

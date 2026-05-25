@@ -42,6 +42,8 @@ namespace ETL_SQL.TUI
                 .AddEnvironmentVariables()
                 .Build();
 
+            ETL_SQL.Core.Metadata.SnippetLibrary.Initialize(
+                configuration["Snippets:UserSnippetsPath"]);
 
             var services = new ServiceCollection();
 

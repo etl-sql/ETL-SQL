@@ -16,19 +16,28 @@ public record SnippetDef(
 
 public class SnippetLibrary
 {
+    private static string? _userSnippetsPath;
     private static readonly Lazy<SnippetLibrary> _instance = new(() => new SnippetLibrary());
     public static SnippetLibrary Instance => _instance.Value;
 
     private readonly IReadOnlyList<SnippetDef> _snippets;
 
-    public SnippetLibrary() => _snippets = Load();
+    // Call once at startup (before Instance is first accessed) to enable user snippets.
+    public static void Initialize(string? userSnippetsPath)
+    {
+        _userSnippetsPath = userSnippetsPath;
+    }
+
+    public SnippetLibrary() => _snippets = Load(_userSnippetsPath);
+
+    public SnippetLibrary(string? userSnippetsPath) => _snippets = Load(userSnippetsPath);
 
     public IReadOnlyList<SnippetDef> GetAll() => _snippets;
 
     public IEnumerable<SnippetDef> GetByPrefix(string prefix) =>
         _snippets.Where(s => s.Trigger.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
-    private static IReadOnlyList<SnippetDef> Load()
+    private static IReadOnlyList<SnippetDef> Load(string? userSnippetsPath)
     {
         var assembly = typeof(SnippetLibrary).Assembly;
         var names = assembly.GetManifestResourceNames()
@@ -40,11 +49,30 @@ public class SnippetLibrary
             using var stream = assembly.GetManifestResourceStream(name);
             if (stream == null) continue;
             using var reader = new StreamReader(stream);
-            var content = reader.ReadToEnd();
-
-            var def = ParseSnippet(content);
+            var def = ParseSnippet(reader.ReadToEnd());
             if (def != null) result.Add(def);
         }
+
+        // User snippets: any .md file in the configured directory is loaded and merged.
+        // User snippets with the same trigger as a built-in override the built-in.
+        if (!string.IsNullOrWhiteSpace(userSnippetsPath) && Directory.Exists(userSnippetsPath))
+        {
+            foreach (var file in Directory.EnumerateFiles(userSnippetsPath, "*.md", SearchOption.TopDirectoryOnly))
+            {
+                try
+                {
+                    var def = ParseSnippet(File.ReadAllText(file));
+                    if (def == null) continue;
+                    var existing = result.FindIndex(s => s.Trigger.Equals(def.Trigger, StringComparison.OrdinalIgnoreCase));
+                    if (existing >= 0)
+                        result[existing] = def;
+                    else
+                        result.Add(def);
+                }
+                catch (IOException) { }
+            }
+        }
+
         return result.OrderBy(s => s.Trigger).ToList();
     }
 

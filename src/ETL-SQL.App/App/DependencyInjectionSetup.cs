@@ -53,6 +53,9 @@ namespace ETL_SQL.App
                 builder.AddInMemoryCollection(configOverrides);
             var configuration = builder.Build();
 
+            ETL_SQL.Core.Metadata.SnippetLibrary.Initialize(
+                configuration["Snippets:UserSnippetsPath"]);
+
             var services = new ServiceCollection();
             
             services.AddSingleton<IConfiguration>(configuration);
