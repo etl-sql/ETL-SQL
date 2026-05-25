@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Google.Apis.Auth.OAuth2;
@@ -345,7 +346,33 @@ namespace ETL_SQL.Connectors.BigQuery
             var list = parameters.ToList();
             return list.Count == 0
                 ? null
-                : list.Select((p, i) => new BigQueryParameter($"p{i}", BigQueryDbType.String, p?.ToString()));
+                : list.Select((p, i) =>
+                {
+                    var (type, value) = InferParameter(p);
+                    return new BigQueryParameter($"p{i}", type, value);
+                });
+        }
+
+        private static (BigQueryDbType Type, object? Value) InferParameter(object? value)
+        {
+            return value switch
+            {
+                null => (BigQueryDbType.String, null),
+                bool v => (BigQueryDbType.Bool, v),
+                byte or sbyte or short or ushort or int or uint or long => (BigQueryDbType.Int64, Convert.ToInt64(value)),
+                ulong v when v <= long.MaxValue => (BigQueryDbType.Int64, Convert.ToInt64(v)),
+                float or double => (BigQueryDbType.Float64, Convert.ToDouble(value)),
+                decimal v => (BigQueryDbType.Numeric, BigQueryNumeric.Parse(v.ToString(CultureInfo.InvariantCulture))),
+                DateTimeOffset v => (BigQueryDbType.Timestamp, v.UtcDateTime),
+                DateTime v when v.Kind == DateTimeKind.Utc => (BigQueryDbType.Timestamp, v),
+                DateTime v => (BigQueryDbType.DateTime, v),
+                DateOnly v => (BigQueryDbType.Date, v.ToString("yyyy-MM-dd")),
+                TimeOnly v => (BigQueryDbType.Time, v.ToString("HH:mm:ss.ffffff")),
+                byte[] v => (BigQueryDbType.Bytes, v),
+                Guid v => (BigQueryDbType.String, v.ToString()),
+                char v => (BigQueryDbType.String, v.ToString()),
+                _ => (BigQueryDbType.String, value.ToString())
+            };
         }
 
         private static (string? project, string? dataset, string table) ParseTableName(string name)

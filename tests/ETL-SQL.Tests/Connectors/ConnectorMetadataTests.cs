@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Data.Odbc;
+using System.Reflection;
 using System.Threading.Tasks;
+using Npgsql;
+using Oracle.ManagedDataAccess.Client;
 using Xunit;
 using ETL_SQL.Connectors;
 using ETL_SQL.Connectors.Odbc;
@@ -114,6 +118,22 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Equal("myhost", result);
         }
 
+        [Fact]
+        public void OdbcDataSource_CreateCommand_AppliesTimeoutWithoutRecursing()
+        {
+            var ds = new OdbcDataSource(
+                Ctx,
+                "DSN=LocalTest",
+                options: new Dictionary<string, string> { ["TIMEOUT_SECONDS"] = "11" });
+            using var conn = new OdbcConnection();
+
+            var method = typeof(OdbcDataSource).GetMethod("CreateCommand", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            using var cmd = (OdbcCommand)method.Invoke(ds, new object[] { "SELECT 1", conn })!;
+
+            Assert.Equal("SELECT 1", cmd.CommandText);
+            Assert.Equal(11, cmd.CommandTimeout);
+        }
+
         // ── OracleConnector ───────────────────────────────────────────────────
 
         [Fact]
@@ -166,6 +186,23 @@ namespace ETL_SQL.Tests.Connectors
             Assert.NotNull(c.GetSupportedFunctions());
         }
 
+        [Fact]
+        public void OracleDataSource_CreateCommand_BindsByNameAndAppliesTimeout()
+        {
+            var ds = new ETL_SQL.Connectors.Oracle.OracleDataSource(
+                Ctx,
+                "User Id=user;Password=pass;Data Source=localhost/XEPDB1",
+                options: new Dictionary<string, string> { ["TIMEOUT_SECONDS"] = "7" });
+            using var conn = new OracleConnection();
+
+            var method = typeof(ETL_SQL.Connectors.Oracle.OracleDataSource).GetMethod("CreateCommand", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            using var cmd = (OracleCommand)method.Invoke(ds, new object[] { "SELECT :p1 FROM dual", conn })!;
+
+            Assert.Equal("SELECT :p1 FROM dual", cmd.CommandText);
+            Assert.True(cmd.BindByName);
+            Assert.Equal(7, cmd.CommandTimeout);
+        }
+
         // ── PostgresConnector ─────────────────────────────────────────────────
 
         [Fact]
@@ -215,6 +252,22 @@ namespace ETL_SQL.Tests.Connectors
         {
             var c = new PostgresConnector();
             Assert.NotNull(c.Aliases);
+        }
+
+        [Fact]
+        public void PostgresDataSource_CreateCommand_AppliesTimeoutWithoutRecursing()
+        {
+            var ds = new PostgresDataSource(
+                Ctx,
+                "Host=localhost;Username=user;Password=pass;Database=db",
+                options: new Dictionary<string, string> { ["TIMEOUT_SECONDS"] = "9" });
+            using var conn = new NpgsqlConnection();
+
+            var method = typeof(PostgresDataSource).GetMethod("CreateCommand", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            using var cmd = (NpgsqlCommand)method.Invoke(ds, new object[] { "SELECT 1", conn })!;
+
+            Assert.Equal("SELECT 1", cmd.CommandText);
+            Assert.Equal(9, cmd.CommandTimeout);
         }
 
         // ── RestConnector ─────────────────────────────────────────────────────

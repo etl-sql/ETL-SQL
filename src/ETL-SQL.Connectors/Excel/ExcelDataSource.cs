@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Collections.Generic;
 using System.Linq;
 using System.Data; // For DataSet
@@ -66,15 +67,8 @@ namespace ETL_SQL.Connectors.Excel
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
 
-            string effectivePath = _filePath;
-            string? tempFile = null;
-
-            if (_encryption.Enabled)
-            {
-                tempFile = System.IO.Path.GetTempFileName();
-                _encryption.DecryptFile(_filePath, tempFile);
-                effectivePath = tempFile;
-            }
+            var tempFiles = new List<string>();
+            string effectivePath = PrepareReadPath(tempFiles);
 
             try
             {
@@ -153,7 +147,7 @@ namespace ETL_SQL.Connectors.Excel
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile, _logger);
+                DeleteTempFiles(tempFiles);
             }
         }
 
@@ -166,15 +160,10 @@ namespace ETL_SQL.Connectors.Excel
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
             
-            string effectivePath = _filePath;
-            string? tempFile = null;
-
-            if (_encryption.Enabled)
-            {
-                tempFile = System.IO.Path.GetTempFileName();
-                try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch (Exception ex) { _logger.Debug("[ExcelDataSource.GetColumnsAsync] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
-            }
+            var tempFiles = new List<string>();
+            string effectivePath;
+            try { effectivePath = PrepareReadPath(tempFiles); }
+            catch (Exception ex) { _logger.Debug("[ExcelDataSource.GetColumnsAsync] Failed to prepare '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
 
             try
             {
@@ -213,7 +202,7 @@ namespace ETL_SQL.Connectors.Excel
                 }
             }
             catch (Exception ex) { _logger.Debug("[ExcelDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}", _filePath, ex.Message); }
-            finally { TempFileHelper.SafeDelete(tempFile, _logger); }
+            finally { DeleteTempFiles(tempFiles); }
             return Enumerable.Empty<string>();
         }
 
@@ -221,15 +210,10 @@ namespace ETL_SQL.Connectors.Excel
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
             
-            string effectivePath = _filePath;
-            string? tempFile = null;
-
-            if (_encryption.Enabled)
-            {
-                tempFile = System.IO.Path.GetTempFileName();
-                try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch { return Enumerable.Empty<string>(); }
-            }
+            var tempFiles = new List<string>();
+            string effectivePath;
+            try { effectivePath = PrepareReadPath(tempFiles); }
+            catch { return Enumerable.Empty<string>(); }
 
             try
             {
@@ -239,13 +223,52 @@ namespace ETL_SQL.Connectors.Excel
                 return result.Tables.Cast<System.Data.DataTable>().Select(t => t.TableName).ToList();
             }
             catch { return Enumerable.Empty<string>(); }
-            finally { TempFileHelper.SafeDelete(tempFile, _logger); }
+            finally { DeleteTempFiles(tempFiles); }
         }
 
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
 
         public async ValueTask DisposeAsync() => await Task.CompletedTask;
+
+        private string PrepareReadPath(List<string> tempFiles)
+        {
+            var effectivePath = _filePath;
+
+            if (_encryption.Enabled)
+            {
+                var decryptedTemp = System.IO.Path.GetTempFileName();
+                tempFiles.Add(decryptedTemp);
+                _encryption.DecryptFile(_filePath, decryptedTemp);
+                effectivePath = decryptedTemp;
+            }
+
+            if (_compress &&
+                (System.IO.Path.GetExtension(_filePath).Equals(".zip", StringComparison.OrdinalIgnoreCase)
+                 || System.IO.Path.GetExtension(effectivePath).Equals(".zip", StringComparison.OrdinalIgnoreCase)
+                 || _encryption.Enabled))
+            {
+                var extractedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".xlsx");
+                tempFiles.Add(extractedTemp);
+                using var zip = System.IO.Compression.ZipFile.OpenRead(effectivePath);
+                var entry = zip.Entries.FirstOrDefault(e => !string.IsNullOrEmpty(e.Name));
+                if (entry != null)
+                {
+                    entry.ExtractToFile(extractedTemp, true);
+                    effectivePath = extractedTemp;
+                }
+            }
+
+            return effectivePath;
+        }
+
+        private void DeleteTempFiles(IEnumerable<string> tempFiles)
+        {
+            foreach (var tempFile in tempFiles.Reverse())
+            {
+                TempFileHelper.SafeDelete(tempFile, _logger);
+            }
+        }
 
         private class ExcelRange
         {

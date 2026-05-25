@@ -172,11 +172,12 @@ namespace ETL_SQL.Connectors.Postgres
         {
             var (conn, isShared) = await GetConnectionAsync();
             
-            // Wire up Notice event for Postgres diagnostic messages
-            conn.Notice += (_, e) =>
+            void NoticeHandler(object sender, NpgsqlNoticeEventArgs e)
             {
                 _logger.WriteLine(e.Notice.MessageText, ConsoleColor.Cyan);
-            };
+            }
+
+            conn.Notice += NoticeHandler;
 
             try {
                 await using var cmd = CreateCommand(sql, conn);
@@ -240,6 +241,7 @@ namespace ETL_SQL.Connectors.Postgres
                 resultSetIndex++;
             } while (await reader.NextResultAsync());
             } finally {
+                conn.Notice -= NoticeHandler;
                 if (!isShared) await conn.DisposeAsync();
             }
         }
@@ -443,7 +445,8 @@ namespace ETL_SQL.Connectors.Postgres
 
         private NpgsqlCommand CreateCommand(string sql, NpgsqlConnection conn)
         {
-            var cmd = CreateCommand(sql, conn);
+            var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
             cmd.CommandTimeout = _commandTimeout;
             return cmd;
         }

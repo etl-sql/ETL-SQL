@@ -150,7 +150,8 @@ namespace ETL_SQL.Connectors.Odbc
                     {
                         for (int i = 0; i < batch.ColumnNames.Count; i++)
                         {
-                            insertCmd!.Parameters[i].Value = row[i] ?? DBNull.Value;
+                            var colName = batch.ColumnNames[i];
+                            insertCmd!.Parameters[i].Value = row[colName] ?? DBNull.Value;
                         }
                         insertCmd!.ExecuteNonQuery();
                     }
@@ -407,7 +408,8 @@ namespace ETL_SQL.Connectors.Odbc
 
         private OdbcCommand CreateCommand(string sql, OdbcConnection conn)
         {
-            var cmd = CreateCommand(sql, conn);
+            var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
             cmd.CommandTimeout = _commandTimeout;
             return cmd;
         }

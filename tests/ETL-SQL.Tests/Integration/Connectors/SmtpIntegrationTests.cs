@@ -44,6 +44,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
             ctx.Setup(c => c.SecurityService).Returns(security);
             ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);
             ctx.Setup(c => c.RecordSmtpEmailSend());
+            ctx.Setup(c => c.ResolvePath(It.IsAny<string>())).Returns<string>(p => p);
             return ctx.Object;
         }
 
@@ -174,6 +175,39 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 () => ds.WriteBatches(new[] { batch }.ToAsyncEnumerable()));
 
             Assert.DoesNotContain(password, ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task Send_AttachmentOutsideSafeZone_ThrowsSecurityExceptionBeforeConnect()
+        {
+            var security = new SecurityService(NullLogger.Instance);
+            security.IsTestMode = false;
+
+            var ctx = new Mock<IExecutionContext>();
+            ctx.Setup(c => c.SecurityService).Returns(security);
+            ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);
+            ctx.Setup(c => c.RecordSmtpEmailSend());
+            ctx.Setup(c => c.ResolvePath(It.IsAny<string>())).Returns<string>(p => p);
+
+            var ds = new SmtpDataSource(ctx.Object, new Dictionary<string, string>
+            {
+                ["HOST"] = "127.0.0.1",
+                ["PORT"] = "1",
+                ["USE_SSL"] = "false"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "To", "From", "Subject", "Body", "Attachments" });
+            var row = table.NewRow();
+            row["To"] = "recipient@example.com";
+            row["From"] = "sender@etl-sql.test";
+            row["Subject"] = "Blocked attachment";
+            row["Body"] = "body";
+            row["Attachments"] = OperatingSystem.IsWindows() ? @"C:\Windows\system.ini" : "/etc/passwd";
+            await table.AddRowAsync(row);
+
+            await Assert.ThrowsAsync<SecurityException>(
+                () => ds.WriteBatches(new[] { table }.ToAsyncEnumerable()));
         }
     }
 }

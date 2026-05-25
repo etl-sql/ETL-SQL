@@ -43,7 +43,7 @@ namespace ETL_SQL.Connectors.Excel
             "  SHEET: Name of the sheet to read (default: first sheet)\n" +
             "  HEADER: ON | OFF (treat first row as header, default ON)\n" +
             "  RANGE: Cell range to read (e.g. 'A1:D100')\n" +
-            "  COMPRESS: ON | OFF (GZip compress the output file)\n" +
+            "  COMPRESS: ON | OFF (read a ZIP-compressed workbook input)\n" +
             "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption";
 

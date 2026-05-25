@@ -144,6 +144,21 @@ namespace ETL_SQL.Tests.Coverage
             Assert.NotNull(c.GetOptionValues());
         }
 
+        [Theory]
+        [InlineData("ftp://example.com:21", 2121, "example.com", 21)]
+        [InlineData("ftp://example.com", 2121, "example.com", 2121)]
+        [InlineData("example.com:21", 2121, "example.com", 21)]
+        public void FtpConnector_ExplicitPort_IsPreserved(string host, int fallbackPort, string expectedHost, int expectedPort)
+        {
+            var c = new FtpConnector(host, "user", "pass", fallbackPort);
+
+            var hostField = typeof(FtpConnector).GetField("_host", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var portField = typeof(FtpConnector).GetField("_port", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+            Assert.Equal(expectedHost, hostField?.GetValue(c));
+            Assert.Equal(expectedPort, portField?.GetValue(c));
+        }
+
         // ── SftpConnector metadata ────────────────────────────────────────────
 
         [Fact]

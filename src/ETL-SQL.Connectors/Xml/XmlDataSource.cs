@@ -71,8 +71,8 @@ namespace ETL_SQL.Connectors.Xml
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
 
-            string effectivePath = await GetEffectivePathAsync();
-            bool isTemp = effectivePath != _filePath;
+            var tempFiles = new List<string>();
+            string effectivePath = GetEffectivePath(tempFiles);
 
             try
             {
@@ -116,7 +116,7 @@ namespace ETL_SQL.Connectors.Xml
             }
             finally
             {
-                if (isTemp) TempFileHelper.SafeDelete(effectivePath, _logger);
+                DeleteTempFiles(tempFiles);
             }
         }
 
@@ -261,28 +261,44 @@ namespace ETL_SQL.Connectors.Xml
             return reader.Depth;
         }
 
-        private async Task<string> GetEffectivePathAsync()
+        private string GetEffectivePath(List<string> tempFiles)
         {
+            var effectivePath = _filePath;
+
             if (_encryption.Enabled)
             {
-                string tempFile = System.IO.Path.GetTempFileName();
-                _encryption.DecryptFile(_filePath, tempFile);
-                return tempFile;
+                string decryptedTemp = System.IO.Path.GetTempFileName();
+                tempFiles.Add(decryptedTemp);
+                _encryption.DecryptFile(_filePath, decryptedTemp);
+                effectivePath = decryptedTemp;
             }
-            if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+
+            if (_compress && (_filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                              || effectivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                              || _encryption.Enabled))
             {
                 string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString() + ".xml");
-                using (var zip = System.IO.Compression.ZipFile.OpenRead(_filePath))
+                tempFiles.Add(tempFile);
+                using (var zip = System.IO.Compression.ZipFile.OpenRead(effectivePath))
                 {
                     var entry = zip.Entries.FirstOrDefault();
                     if (entry != null)
                     {
                         entry.ExtractToFile(tempFile, true);
-                        return tempFile;
+                        effectivePath = tempFile;
                     }
                 }
             }
-            return _filePath;
+
+            return effectivePath;
+        }
+
+        private void DeleteTempFiles(IEnumerable<string> tempFiles)
+        {
+            foreach (var tempFile in tempFiles.Reverse())
+            {
+                TempFileHelper.SafeDelete(tempFile, _logger);
+            }
         }
 
 public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)

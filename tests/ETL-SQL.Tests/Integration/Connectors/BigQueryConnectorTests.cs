@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using Google.Cloud.BigQuery.V2;
 using Xunit;
 using ETL_SQL.Connectors.BigQuery;
 
@@ -156,6 +159,38 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public void GetExcludedKeywords_DelegatesToBigQuerySyntax()
         {
             Assert.Equal(BigQuerySyntax.Exclusions, _connector.GetExcludedKeywords());
+        }
+
+        [Fact]
+        public void BuildParameters_InfersNativeBigQueryTypes()
+        {
+            var method = typeof(BigQueryDataSource).GetMethod("BuildParameters", BindingFlags.Static | BindingFlags.NonPublic)!;
+            var parameters = ((IEnumerable<BigQueryParameter>)method.Invoke(null, new object?[]
+            {
+                new object?[]
+                {
+                    1,
+                    2L,
+                    true,
+                    1.5d,
+                    12.34m,
+                    new DateTime(2026, 5, 25, 12, 0, 0, DateTimeKind.Utc),
+                    new DateTime(2026, 5, 25, 12, 0, 0, DateTimeKind.Unspecified),
+                    "text",
+                    null
+                }
+            })!).ToList();
+
+            Assert.Equal(BigQueryDbType.Int64, parameters[0].Type);
+            Assert.Equal(BigQueryDbType.Int64, parameters[1].Type);
+            Assert.Equal(BigQueryDbType.Bool, parameters[2].Type);
+            Assert.Equal(BigQueryDbType.Float64, parameters[3].Type);
+            Assert.Equal(BigQueryDbType.Numeric, parameters[4].Type);
+            Assert.Equal(BigQueryDbType.Timestamp, parameters[5].Type);
+            Assert.Equal(BigQueryDbType.DateTime, parameters[6].Type);
+            Assert.Equal(BigQueryDbType.String, parameters[7].Type);
+            Assert.Equal(BigQueryDbType.String, parameters[8].Type);
+            Assert.Null(parameters[8].Value);
         }
     }
 

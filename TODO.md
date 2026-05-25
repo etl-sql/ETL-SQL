@@ -236,11 +236,9 @@
 
 - [x] **[Snowflake] `HasEmulatorEndpointOptions` treats production `ACCOUNT=` as emulator marker** — Restricted emulator endpoint detection to local/explicit `HOST`, `PORT`, or `PROTOCOL`/`scheme=http` markers and added regression coverage that production `ACCOUNT` still receives `.snowflakecomputing.com` suffix validation.
 
-- [ ] **[REST] PUT/POST body `Content-Type` hardcoded to `application/json`** — `HEADER_Content-Type` goes to the message headers collection, not the content headers, so it has no effect on the body content type. Callers cannot send `application/x-www-form-urlencoded`, `text/plain`, or other body types.
-  - `src/ETL-SQL.Connectors/Rest/RestDataSource.cs` — detect a `BODY_CONTENT_TYPE` (or equivalent) option and apply it to `content.Headers.ContentType` rather than the request headers.
+- [x] **[REST] PUT/POST body `Content-Type` hardcoded to `application/json`** — Added `BODY_CONTENT_TYPE` support for POST/PUT request bodies and treat `HEADER_Content-Type` as a compatibility alias for the content header instead of an invalid request header. Loopback API tests now verify non-JSON body content types.
 
-- [ ] **[FTP] `NormalizeEndpoint` drops explicit port when it matches default** — `Uri.IsDefaultPort` is `true` for `:21`, so an explicitly specified port 21 is silently dropped and replaced by the `fallbackPort` argument. If any future caller passes a different fallback, the port will be wrong.
-  - `src/ETL-SQL.Connectors/FtpConnector.cs` — latent risk; consider using `uri.Port` unconditionally rather than branching on `IsDefaultPort`.
+- [x] **[FTP] `NormalizeEndpoint` drops explicit port when it matches default** — Explicit URI ports are now parsed from the original endpoint text so `ftp://host:21` preserves port 21 even when a different fallback port is supplied. Added regression coverage for URI and host:port forms.
 
 - [x] **Remove `### ALLOW_...` comment directive form** -- The `### ALLOW_...` comment-scanning mechanism was intended to be replaced by the `SET ALLOW_...` statement form and should be fully removed.
   - Remove the scanning logic for `### ALLOW_FILE_TYPE_ACCESS`, `### ALLOW_GREATER_THAN_100_FILE`, and `### ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS` from the engine (check `ExecutionSession` and `SecurityService.cs`).
@@ -248,29 +246,21 @@
   - Update `Docs/Architecture/Orchestrator.md` section 2.3 -- remove the comment-directive table (lines 140-147) and all inline references at lines 499 and 614 -- replace with `SET ALLOW_FILE_OPERATIONS = <n>` and `SET ALLOW_RECURSIVE_LAYERS = <n>` statement equivalents.
   - Verify no samples or test scripts use the `### ALLOW_...` comment form; update any that do to use `SET ALLOW_FILE_OPERATIONS = <n>` or `SET ALLOW_RECURSIVE_LAYERS = <n>`.
 
-- [ ] **[Security] [SMTP] Email Attachment Path Validation/Zero-Trust Bypass** — `SmtpDataSource.cs` reads attachment files directly via `File.OpenRead` without calling `context.ResolvePath` or validating them against `context.SecurityService.ValidatePath`. This allows scripts to read arbitrary system files (such as credentials, keys, or OS system files) and leak them as email attachments, bypassing the Zero-Trust security model.
-  - `src/ETL-SQL.Connectors/Email/SmtpDataSource.cs` — resolve and validate attachment file paths through context before opening them.
+- [x] **[Security] [SMTP] Email Attachment Path Validation/Zero-Trust Bypass** — SMTP attachments now resolve through `IExecutionContext.ResolvePath`, validate with `SecurityService.ValidatePath`, and preserve `SecurityException` instead of wrapping it as a generic SMTP provider failure. Docker SMTP coverage includes a blocked system-file attachment regression.
 
-- [ ] **[Bug] [XML, JSON, FlatFile] Encryption and Decompression Co-existence Bug** — `XmlDataSource.cs`, `JsonDataSource.cs`, and `FlatFileDataSource.cs` use an `else if` for decompression after the encryption check. If a file is both encrypted and compressed (e.g. encrypted `.zip` file), decompression is skipped. Additionally, only the unzipped temporary file path is deleted, leaking the decrypted zip file.
-  - `src/ETL-SQL.Connectors/Xml/XmlDataSource.cs`, `src/ETL-SQL.Connectors/Json/JsonDataSource.cs`, `src/ETL-SQL.Connectors/FlatFile/FlatFileDataSource.cs` — refactor decryption and decompression to chain sequentially and ensure all temporary files are properly cleaned up.
+- [x] **[Bug] [XML, JSON, FlatFile] Encryption and Decompression Co-existence Bug** — XML, JSON, and FlatFile reads now materialize files in stages so encrypted ZIP inputs are decrypted and then decompressed, with every temporary file tracked and deleted. Added encrypted-ZIP read regressions for all three connectors.
 
-- [ ] **[Bug] [Excel] Excel Connector Ignores `COMPRESS` Option** — `ExcelDataSource.cs` parses the `COMPRESS` option but completely ignores it in `ReadBatchesCore`, `GetColumnsAsync`, and `GetTablesAsync`, meaning zipped Excel files cannot be read.
-  - `src/ETL-SQL.Connectors/Excel/ExcelDataSource.cs` — implement decompression checks and temp file cleanup during reads, matching the behavior of other file-based connectors.
+- [x] **[Bug] [Excel] Excel Connector Ignores `COMPRESS` Option** — Excel reads now honor `COMPRESS=ON` in `ReadBatchesCore`, `GetColumnsAsync`, and `GetTablesAsync`, including staged decrypt-then-unzip temp-file cleanup. Added compressed workbook regression coverage for rows, columns, and sheet discovery.
 
-- [ ] **[Leak] [Postgres] Event Handler Leak on `conn.Notice`** — `PostgresDataSource.cs` registers an event handler to `conn.Notice` in `ExecuteRawSqlCore` but never unsubscribes in the `finally` block. During transactions where the connection is shared, subsequent queries repeatedly register the handler, leaking memory/handlers and printing duplicate notices to the logs.
-  - `src/ETL-SQL.Connectors/Postgres/PostgresDataSource.cs` — unsubscribe the notice handler in the `finally` block.
+- [x] **[Leak] [Postgres] Event Handler Leak on `conn.Notice`** — `ExecuteRawSqlCore` now registers a named notice handler and unsubscribes it in `finally`, including shared transactional connections. Also corrected the Postgres command factory so timeout-enabled commands are created from the connection instead of recursing.
 
-- [ ] **[Bug] [Oracle] Multi-statement Raw SQL Yields Only Last Result** — `OracleDataSource.cs` splits raw SQL statements by semicolon but only yields the result batch of the last statement. It should yield all result batches, matching the behavior of SQL Server and Postgres.
-  - `src/ETL-SQL.Connectors/Oracle/OracleDataSource.cs` — yield the result batch inside the loop rather than only returning the last one at the end of the method.
+- [x] **[Bug] [Oracle] Multi-statement Raw SQL Yields Only Last Result** — `ExecuteRawSqlCore` now yields each split statement result batch from inside the execution loop, matching SQL Server/Postgres multi-result behavior.
 
-- [ ] **[Risk] [Oracle] Parameter Ordering Binding Failure** — `OracleDataSource.cs` does not set `cmd.BindByName = true` on `OracleCommand`. Since Oracle binds by position by default, this can lead to data mismatch if parameter names in a query are defined in a different order than they are supplied in the parameters list.
-  - `src/ETL-SQL.Connectors/Oracle/OracleDataSource.cs` — set `cmd.BindByName = true` on command creation.
+- [x] **[Risk] [Oracle] Parameter Ordering Binding Failure** — Oracle command creation now uses `conn.CreateCommand()`, sets `CommandText`, applies the configured timeout, and sets `BindByName = true`. Metadata tests assert the command factory behavior.
 
-- [ ] **[Risk] [ODBC] Positional Parameter/Row Mapping Safety** — `OdbcDataSource.cs` uses `row[i]` inside the bulk write loop instead of name-based lookup `row[colName]`. If schema fields are dynamically mapped or rearranged, integer index-based lookup can lead to index mismatch or data corruption.
-  - `src/ETL-SQL.Connectors/Odbc/OdbcDataSource.cs` — replace index-based row access with name-based column lookup in the insertion loop.
+- [x] **[Risk] [ODBC] Positional Parameter/Row Mapping Safety** — ODBC bulk writes now populate positional parameters from `row[colName]` using the batch column list, preventing row field-order mismatches. Also corrected the ODBC command factory recursion and added timeout-helper coverage.
 
-- [ ] **[Limitation] [BigQuery] Parameter Type Mapping Restriction** — `BigQueryDataSource.cs` maps all query parameters to `BigQueryDbType.String` and calls `p?.ToString()`, preventing native non-string parameter types without explicit casts.
-  - `src/ETL-SQL.Connectors/BigQuery/BigQueryDataSource.cs` — improve parameter building to detect and assign appropriate types where possible (e.g. integers, datetimes).
+- [x] **[Limitation] [BigQuery] Parameter Type Mapping Restriction** — BigQuery raw SQL parameters now infer native types for booleans, integers, floats, numerics, timestamps, datetimes, dates, times, bytes, and string fallbacks instead of stringifying every value. Metadata tests cover the mapper without requiring external BigQuery access.
 
 - [x] **[Security] [Orchestrator] Script Path Traversal Vulnerability**
   - `src/ETL-SQL.Orchestrator.Service/JobApiEndpoints.cs` — in the `/api/scripts/content` endpoint, path traversal check uses `fullPath.StartsWith(fullRoot)`. Because `fullRoot` lacks a trailing directory separator, this allows reading files from sister directories (e.g. `C:\my-root-secrets`). Ensure `fullRoot` ends with the directory separator.

@@ -72,28 +72,8 @@ namespace ETL_SQL.Connectors.Json
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
 
-            string effectivePath = _filePath;
-            string? tempFile = null;
-
-            if (_encryption.Enabled)
-            {
-                tempFile = System.IO.Path.GetTempFileName();
-                _encryption.DecryptFile(_filePath, tempFile);
-                effectivePath = tempFile;
-            }
-            else if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-            {
-                tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString() + ".json");
-                using (var zip = System.IO.Compression.ZipFile.OpenRead(_filePath))
-                {
-                    var entry = zip.Entries.FirstOrDefault();
-                    if (entry != null)
-                    {
-                        entry.ExtractToFile(tempFile, true);
-                        effectivePath = tempFile;
-                    }
-                }
-            }
+            var tempFiles = new List<string>();
+            string effectivePath = PrepareReadPath(tempFiles, ".json");
 
             try
             {
@@ -105,7 +85,7 @@ namespace ETL_SQL.Connectors.Json
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile, _logger);
+                DeleteTempFiles(tempFiles);
             }
         }
 
@@ -177,29 +157,10 @@ namespace ETL_SQL.Connectors.Json
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
 
-            string effectivePath = _filePath;
-            string? tempFile = null;
-
-            if (_encryption.Enabled)
-            {
-                tempFile = System.IO.Path.GetTempFileName();
-                try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
-            }
-            else if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-            {
-                tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString() + ".json");
-                try
-                {
-                    using (var zip = System.IO.Compression.ZipFile.OpenRead(_filePath))
-                    {
-                        var entry = zip.Entries.FirstOrDefault();
-                        if (entry != null) { entry.ExtractToFile(tempFile, true); effectivePath = tempFile; }
-                        else return Enumerable.Empty<string>();
-                    }
-                }
-                catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to decompress '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
-            }
+            var tempFiles = new List<string>();
+            string effectivePath;
+            try { effectivePath = PrepareReadPath(tempFiles, ".json"); }
+            catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to prepare '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
 
             try
             {
@@ -208,6 +169,44 @@ namespace ETL_SQL.Connectors.Json
             }
             catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
             finally
+            {
+                DeleteTempFiles(tempFiles);
+            }
+        }
+
+        private string PrepareReadPath(List<string> tempFiles, string extension)
+        {
+            var effectivePath = _filePath;
+
+            if (_encryption.Enabled)
+            {
+                var decryptedTemp = System.IO.Path.GetTempFileName();
+                tempFiles.Add(decryptedTemp);
+                _encryption.DecryptFile(_filePath, decryptedTemp);
+                effectivePath = decryptedTemp;
+            }
+
+            if (_compress && (_filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                              || effectivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                              || _encryption.Enabled))
+            {
+                var extractedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + extension);
+                tempFiles.Add(extractedTemp);
+                using var zip = System.IO.Compression.ZipFile.OpenRead(effectivePath);
+                var entry = zip.Entries.FirstOrDefault();
+                if (entry != null)
+                {
+                    entry.ExtractToFile(extractedTemp, true);
+                    effectivePath = extractedTemp;
+                }
+            }
+
+            return effectivePath;
+        }
+
+        private void DeleteTempFiles(IEnumerable<string> tempFiles)
+        {
+            foreach (var tempFile in tempFiles.Reverse())
             {
                 TempFileHelper.SafeDelete(tempFile, _logger);
             }

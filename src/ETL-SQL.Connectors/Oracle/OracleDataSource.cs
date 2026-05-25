@@ -186,7 +186,6 @@ namespace ETL_SQL.Connectors.Oracle
             var statements = SplitOracleStatements(sql);
             var paramList = parameters?.ToList() ?? new List<object?>();
 
-            DataTable? lastResultBatch = null;
             foreach (var stmtSql in statements)
             {
                 using var cmd = CreateCommand(stmtSql, conn);
@@ -211,10 +210,8 @@ namespace ETL_SQL.Connectors.Oracle
                     await resultBatch.AddRowAsync(row);
                 }
                 resultBatch.RowsAffected = (int)reader.RecordsAffected;
-                lastResultBatch = resultBatch;
+                yield return resultBatch;
             }
-            if (lastResultBatch != null)
-                yield return lastResultBatch;
         }
 
         private static IEnumerable<string> SplitOracleStatements(string sql)
@@ -339,7 +336,9 @@ namespace ETL_SQL.Connectors.Oracle
 
         private OracleCommand CreateCommand(string sql, OracleConnection conn)
         {
-            var cmd = CreateCommand(sql, conn);
+            var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.BindByName = true;
             cmd.CommandTimeout = _commandTimeout;
             return cmd;
         }

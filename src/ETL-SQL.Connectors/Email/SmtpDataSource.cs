@@ -113,9 +113,17 @@ namespace ETL_SQL.Connectors.Email
                 {
                     foreach (var path in paths)
                     {
-                        if (System.IO.File.Exists(path))
+                        if (string.IsNullOrWhiteSpace(path))
                         {
-                            using var fs = System.IO.File.OpenRead(path);
+                            continue;
+                        }
+
+                        var resolvedPath = _context?.ResolvePath(path) ?? path;
+                        _context?.SecurityService.ValidatePath(resolvedPath);
+
+                        if (System.IO.File.Exists(resolvedPath))
+                        {
+                            using var fs = System.IO.File.OpenRead(resolvedPath);
                             var ms = new System.IO.MemoryStream();
                             await fs.CopyToAsync(ms);
                             ms.Position = 0;
@@ -125,7 +133,7 @@ namespace ETL_SQL.Connectors.Email
                                 Content = new MimeContent(ms),
                                 ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
                                 ContentTransferEncoding = ContentEncoding.Base64,
-                                FileName = System.IO.Path.GetFileName(path)
+                                FileName = System.IO.Path.GetFileName(resolvedPath)
                             };
                             multipart.Add(attachment);
                         }
@@ -155,7 +163,8 @@ namespace ETL_SQL.Connectors.Email
                 await client.SendAsync(message);
                 await client.DisconnectAsync(true);
             }
-            catch (Exception ex) when (ex is not ETL_SQL.Core.Common.Exceptions.ExecutionException)
+            catch (Exception ex) when (ex is not ETL_SQL.Core.Common.Exceptions.ExecutionException
+                                       && ex is not ETL_SQL.Services.SecurityException)
             {
                 throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"SMTP connector error: {ex.Message}", ex);
             }
