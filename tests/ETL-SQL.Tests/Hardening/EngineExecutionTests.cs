@@ -242,5 +242,37 @@ namespace ETL_SQL.Tests.Hardening
             var ex = Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => engine.ExpandGroupingSets(clause));
             Assert.Contains("exceeds the maximum grouping sets limit", ex.Message);
         }
+
+        [Fact]
+        public async Task AggregateEngine_BigIntegerIsTreatedAsIntegerType()
+        {
+            var e = NewEvaluator();
+            var engine = new AggregateEngine(e, NullLogger.Instance);
+            
+            // Average of BigInteger 10 and BigInteger 11 should be truncated to 10
+            // because they are integer types. If they were treated as decimals/floats,
+            // the average would be 10.5.
+            var schema = new TableSchema(new[] { "Val" });
+            var rows = new List<Row>();
+            
+            var r1 = new Row(schema);
+            r1["Val"] = new System.Numerics.BigInteger(10);
+            rows.Add(r1);
+
+            var r2 = new Row(schema);
+            r2["Val"] = new System.Numerics.BigInteger(11);
+            rows.Add(r2);
+
+            var groupBy = new List<Expression>();
+            var cols = new List<SelectColumn> {
+                new SelectColumn(new FunctionCallExpression("AVG", new List<Expression> { new IdentifierExpression("Val") }), "AvgVal")
+            };
+
+            var stream = rows.ToAsyncEnumerable();
+            var result = await engine.ApplyAggregation(stream, groupBy, cols, new List<string> { "AvgVal" });
+
+            Assert.Single(result);
+            Assert.Equal(new decimal(10), result[0]["AvgVal"]);
+        }
     }
 }

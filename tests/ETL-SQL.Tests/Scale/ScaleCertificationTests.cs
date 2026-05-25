@@ -291,7 +291,14 @@ namespace ETL_SQL.Tests.Scale
         [Fact]
         [Trait("Tier", "Stress")]
         public Task Cert_Stress_SmokeScenarioSet_RowScale100()
-            => RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_STRESS_ROW_SCALE", 100.0), "Stress");
+        {
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CERT_STRESS_ROW_SCALE")))
+            {
+                _out.WriteLine("SKIP: Set CERT_STRESS_ROW_SCALE to run stress-tier scale tests (100x = 5M+ rows).");
+                return Task.CompletedTask;
+            }
+            return RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_STRESS_ROW_SCALE", 100.0), "Stress");
+        }
 
         [Fact]
         [Trait("Tier", "Provider")]

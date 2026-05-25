@@ -12,7 +12,12 @@ namespace ETL_SQL.Core.Common
 
     public class Diagnostic
     {
-        public string Message { get; set; } = string.Empty;
+        private string _message = string.Empty;
+        public string Message 
+        { 
+            get => _message; 
+            set => _message = Sanitize(value); 
+        }
         public int Line { get; set; }
         public int Column { get; set; }
         public DiagnosticSeverity Severity { get; set; } = DiagnosticSeverity.Error;
@@ -28,6 +33,22 @@ namespace ETL_SQL.Core.Common
             Column = column;
             Severity = severity;
             Code = code;
+        }
+
+        private static string Sanitize(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return message;
+            var sanitized = System.Text.RegularExpressions.Regex.Replace(
+                message, 
+                @"ENC:[A-Za-z0-9+/=]+", 
+                "ENC:********", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            sanitized = System.Text.RegularExpressions.Regex.Replace(
+                sanitized, 
+                @"(PASSWORD|PWD|SECRET|APIKEY|API_KEY|TOKEN|CREDENTIAL|PRIVATEKEY)\s*=\s*['""]?[^'""\s,;]+['""]?", 
+                "$1=********", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return sanitized;
         }
     }
 }

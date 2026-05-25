@@ -304,6 +304,28 @@ TRIGGER JOB JobC AT remote_conn;
             Assert.Equal("TRIGGER JOB JobC AT remote_conn;", triggerAt.ToSql());
         }
 
+        [Fact]
+        public void TestSyntaxExceptionSanitizesSecrets()
+        {
+            var ex = new ETL_SQL.Core.Common.Exceptions.SyntaxException("Failed with option PASSWORD = 'myPlaintextPassword'", 10, 5);
+            Assert.Contains("PASSWORD=********", ex.Message);
+            Assert.DoesNotContain("myPlaintextPassword", ex.Message);
+
+            var exEnc = new ETL_SQL.Core.Common.Exceptions.SyntaxException("Invalid value 'ENC:abc123xyz='", 1, 1);
+            Assert.Contains("ENC:********", exEnc.Message);
+            Assert.DoesNotContain("abc123xyz", exEnc.Message);
+        }
+
+        [Fact]
+        public void TestDiagnosticSanitizesSecrets()
+        {
+            var diag = new ETL_SQL.Core.Common.Diagnostic("Error in connection PWD = 'secret_key' or ENC:abc123xyz=", 1, 1);
+            Assert.Contains("PWD=********", diag.Message);
+            Assert.Contains("ENC:********", diag.Message);
+            Assert.DoesNotContain("secret_key", diag.Message);
+            Assert.DoesNotContain("abc123xyz", diag.Message);
+        }
+
         private static Script Parse(string source)
         {
             var lexer = new Lexer(source);

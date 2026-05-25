@@ -14,10 +14,26 @@ namespace ETL_SQL.Core.Common.Exceptions
         public int Column { get; }
 
         public SyntaxException(string message, int line = 0, int column = 0) 
-            : base($"{message} at line {line}, col {column}")
+            : base(Sanitize(message, line, column))
         {
             Line = line;
             Column = column;
+        }
+
+        private static string Sanitize(string message, int line, int column)
+        {
+            if (string.IsNullOrEmpty(message)) return $"at line {line}, col {column}";
+            var sanitized = System.Text.RegularExpressions.Regex.Replace(
+                message, 
+                @"ENC:[A-Za-z0-9+/=]+", 
+                "ENC:********", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            sanitized = System.Text.RegularExpressions.Regex.Replace(
+                sanitized, 
+                @"(PASSWORD|PWD|SECRET|APIKEY|API_KEY|TOKEN|CREDENTIAL|PRIVATEKEY)\s*=\s*['""]?[^'""\s,;]+['""]?", 
+                "$1=********", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return $"{sanitized} at line {line}, col {column}";
         }
     }
 

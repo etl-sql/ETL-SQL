@@ -768,6 +768,7 @@ namespace ETL_SQL.Engine.Engines
         private static decimal SafeToDecimal(object? v, IExecutionContext? context = null)
         {
             if (v == null) return 0m;
+            if (v is System.Numerics.BigInteger bi) return (decimal)bi;
             if (v is DateTime dt) throw new ExecutionException($"Cannot perform numeric aggregation on a date value: '{dt:yyyy-MM-dd HH:mm:ss}'. Ensure you are not summing a grouping column like 'month'.");
             if (v is TimeSpan ts) throw new ExecutionException($"Cannot perform numeric aggregation on a time duration: '{ts}'.");
             try { return Convert.ToDecimal(v, System.Globalization.CultureInfo.InvariantCulture); }
@@ -784,7 +785,7 @@ namespace ETL_SQL.Engine.Engines
         private static bool IsIntegerType(object? val)
         {
             if (val == null) return false;
-            return val is int || val is long || val is short || val is byte || val is sbyte || val is uint || val is ulong || val is ushort;
+            return val is int || val is long || val is short || val is byte || val is sbyte || val is uint || val is ulong || val is ushort || val is System.Numerics.BigInteger;
         }
 
         private IAggregateState CreateState(FunctionCallExpression f)
