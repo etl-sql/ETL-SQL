@@ -186,8 +186,8 @@ The engine enforces configurable ceilings for operations that can destabilize a 
 
 | Control | Default | Session override |
 | :--- | :--- | :--- |
-| File operation count | 100 | `SET ALLOW_FILE_OPERATIONS = n` or `SET ALLOW_GREATER_THAN_n_FILE ON` |
-| Recursive directory depth | 5 | `SET ALLOW_RECURSIVE_LAYERS = n` or `SET ALLOW_RECURSIVE_GREATER_THAN_n_LAYERS ON` |
+| File operation count | 100 | `SET ALLOW_FILE_OPERATIONS = n` |
+| Recursive directory depth | 5 | `SET ALLOW_RECURSIVE_LAYERS = n` |
 | Parallel execution degree | 32 | `SET MAX_PARALLEL_DEGREE = n` |
 | String result size | 100 MiB | `SET ALLOW_LARGE_STRING_RESULTS ON` for guarded large results |
 | Regex timeout | 1000 ms | `SET REGEX_MATCH_TIMEOUT = n` |
@@ -329,7 +329,7 @@ AI agents working in this repository or generating ETL-SQL scripts must follow t
 | SMTP abuse can still occur within the configured send limit. | Medium | Keep `Security:MaxSmtpEmailsPerScript` conservative, restrict SMTP credentials, monitor send volume, and use provider-side throttles. |
 | Secrets can still be intentionally written into output by a script author. | High | Use linting, review, least-privilege accounts, and restricted output sinks. |
 | Development/test mode can be more permissive than production. | Medium | Verify production behavior in the real host process and configuration. |
-| `SHOW_PASSWORD` can unmask sensitive variables for an authorized session. | Medium | Restrict access to interactive sessions and logs. |
+| `SHOW_SECRETS` can unmask sensitive variables for an authorized session. | Medium | Restrict access to interactive sessions and logs. |
 | Host compromise defeats process-level controls. | High | Use OS hardening, service accounts, patching, endpoint controls, and secret rotation. |
 
 ---
