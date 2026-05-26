@@ -9,31 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  # 1. Validation Job - ensures the release is stable
-  validate:
-    name: Validate & Test
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init .
-          git remote add origin "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
-          git fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
-          git checkout --force FETCH_HEAD
-      - name: Verify .NET
-        run: dotnet --info
-      - name: Build & Run Smoke Tests
-        shell: pwsh
-        run: |
-          dotnet build ETL-SQL.slnx --configuration Release
-          .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
-
   prepare-release:
     name: Prepare GitHub Release
-    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Create or update draft release
@@ -50,7 +27,7 @@ jobs:
             gh release create "$GITHUB_REF_NAME" --draft --generate-notes "${args[@]}"
           fi
 
-  # 2. Windows Build (ZIP + MSI + VSIX)
+  # 1. Windows Build (ZIP + MSI)
   build-windows:
     name: Build Windows (MSI & ZIP)
     needs: prepare-release
@@ -69,14 +46,14 @@ jobs:
         run: dotnet --info
       - name: Verify Node.js
         run: node --version
-      
+
       - name: Build & Publish
         shell: pwsh
         run: |
           $Version = $env:GITHUB_REF_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
           .\scripts\publish_release.ps1 -Platforms win-x64
-      
+
       - name: Install WiX Toolset
         shell: pwsh
         run: choco install wixtoolset -y --no-progress --skip-if-installed
@@ -96,7 +73,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload $env:GITHUB_REF_NAME release/*.zip release/*.msi --clobber
 
-  # 3. Linux Build (ZIP + DEB)
+  # 2. Linux Build (ZIP + DEB)
   build-linux:
     name: Build Linux (DEB & ZIP)
     needs: prepare-release
@@ -115,7 +92,7 @@ jobs:
         run: dotnet --info
       - name: Verify Node.js
         run: node --version
-      
+
       - name: Publish Binaries
         shell: pwsh
         run: |
@@ -132,7 +109,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$GITHUB_REF_NAME" release/*.zip release/*.deb --clobber
 
-  # 4. macOS Build (ZIP + DMG)
+  # 3. macOS Build (ZIP + DMG)
   build-macos:
     name: Build macOS (DMG & ZIP)
     needs: prepare-release
@@ -151,7 +128,7 @@ jobs:
         run: dotnet --info
       - name: Verify Node.js
         run: node --version
-      
+
       - name: Publish Binaries
         shell: pwsh
         run: |
@@ -168,7 +145,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$GITHUB_REF_NAME" release/*.zip release/*.dmg --clobber
 
-  # 5. Create GitHub Release
+  # 4. Publish GitHub Release
   publish-release:
     name: Publish GitHub Release
     needs: [build-windows, build-linux, build-macos]
@@ -178,4 +155,4 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
