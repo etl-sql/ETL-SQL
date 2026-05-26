@@ -65,7 +65,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 $" && printf '%s\\n' '{key}' >> /home/{TestUser}/.ssh/authorized_keys" +
                 $" && chmod 700 /home/{TestUser}/.ssh" +
                 $" && chmod 600 /home/{TestUser}/.ssh/authorized_keys" +
-                $" && chown -R {TestUser}:{TestUser} /home/{TestUser}/.ssh"
+                $" && chown -R {TestUser} /home/{TestUser}/.ssh"
             });
 
             if (result.ExitCode != 0)
