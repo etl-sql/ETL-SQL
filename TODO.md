@@ -134,10 +134,9 @@ Goal: *"make lineage, tags, metadata, report dependencies, history, and permissi
 - [x] **[Lineage] Implement `SHOW LINEAGE` for the current session**
   - Implemented: `LineageStatement` AST node, `LineageStatementHandler` with visual graph, Mermaid export, OpenLineage export. History variants: `ShowLineageHistoryForTable/Tag/Job`. Sample scripts: `samples/04_Orchestration/20-Lineage.etlsql`, `Data_Lineage.etlsql`. 23 test files cover lineage.
 
-- [ ] **[Governance] Extend execution audit log to standalone `--run` executions**  done - uses appsetting.json to turn this on
-  - Current state: `SQLiteJobHistoryStore` records start/end time, status, rows processed, script hash — but only for Orchestrator-managed jobs (`CREATE JOB`). Standalone `--run` script executions are not audited.
-  - Gap: Wire `IJobHistoryStore.LogJobStart/End` into `EngineRunner` for standalone runs, adding per-connector rows-read/written breakdown to satisfy the "what ran, when, what did it touch?" use case.
-  - Files: `src/ETL-SQL.App/App/EngineRunner.cs`, `src/ETL-SQL.Orchestrator/Storage/SQLiteJobHistoryStore.cs`
+- [x] **[Governance] Extend execution audit log to standalone `--run` executions**
+  - Implemented: `EngineRunner` calls `IJobHistoryStore.LogJobStart/End` for standalone runs when `Engine:AuditAdHocRuns = true` in `appsettings.json` (default: `false`).
+  - Files: `src/ETL-SQL.App/App/EngineRunner.cs`
 
 - [x] **[Diagnostics] Implement `EXPLAIN` / `--explain` for scripts**
   - Implemented: `ExplainStatement` AST node, `ExplainStatementHandler` with EXPLAIN and EXPLAIN ANALYZE modes. Plan output includes: ID, Operation, Details, Cost, Mode, Est. Rows; ANALYZE mode adds Actual Rows, Actual Time, and Spill metrics. 5 test files.
