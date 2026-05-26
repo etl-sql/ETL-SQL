@@ -544,7 +544,9 @@ CREATE VISUAL {visualName} AS CARD (
         }
 
         Assert.NotNull(job);
-        Assert.Equal("Completed", job!["status"]!.GetValue<string>());
+        var jobStatus = job!["status"]!.GetValue<string>();
+        var jobError  = job["error"]?.GetValue<string>() ?? "(no error)";
+        Assert.True(jobStatus == "Completed", $"Expected Completed but job ended with {jobStatus}: {jobError}");
 
         var snapshotRes = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=true");
         Assert.Equal(HttpStatusCode.OK, snapshotRes.StatusCode);
