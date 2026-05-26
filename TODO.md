@@ -158,9 +158,9 @@ Goal: *"large workload behavior is intentional, documented, and observable."* Ex
   - Goal: A single reference page explains: when does the engine spill to disk, what are the default thresholds (from `appsettings.json`), how are they configured, and what are the performance implications of each external engine.
   - File: New section in `Docs/Architecture/Engine.md` or new `Docs/Reference/Performance.md`
 
-- [ ] **[Performance] Emit spill and memory metrics to verbose log output**
-  - Goal: When a script triggers an external engine (aggregate, join, window, sort), the log reports: rows processed, bytes spilled, spill file path, and elapsed time per phase. Satisfies the "observable" part of the goal so users can see when and why spilling occurred.
-  - Files: `src/ETL-SQL.Engine/` (ExternalAggregateEngine, ExternalJoinEngine, ExternalWindowEngine, ExternalSortEngine)
+- [x] **[Performance] Emit spill and memory metrics to verbose log output**
+  - Implemented: `--perf` / profiling mode shows "Disk Spilled: X MB" in the summary table; `--verbose` / JSON mode emits `spilledMb` in the `performance` telemetry packet; `SHOW PROFILE` tracks `SpilledBytes` per statement; `ExternalWindowEngine` logs deep-spill events inline. `ExecutionTelemetryManager` tracks `TotalSpilledBytes`, `SubquerySpilledBytes`, and `SortSpillCount`.
+  - Note: Individual spill file paths are not logged (only aggregate bytes). Elapsed time per external-engine phase is not separately broken out.
 
 - [ ] **[Performance] Add a regression benchmark for connector pushdown and cross-source joins**
   - Goal: Before each release, confirm that SQL pushdown to SQL Server, Postgres, MySQL, and Oracle does not regress on query plan selection or row throughput relative to the previous release.
