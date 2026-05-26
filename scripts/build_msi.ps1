@@ -44,10 +44,7 @@ if ($CandleExe) {
     Push-Location $InstallerDir
     try {
         $WixVersion = "$Version.0"  # WiX requires Major.Minor.Build.Revision
-        # Inject version directly into WXS to avoid PowerShell→candle argument expansion issues
-        $wxsContent = (Get-Content Installer.wxs -Raw) -replace [regex]::Escape('$(var.ProductVersion)'), $WixVersion
-        $wxsContent | Set-Content Installer.wxs -Encoding UTF8
-        candle.exe Installer.wxs -o Installer.wixobj
+        candle.exe Installer.wxs -o Installer.wixobj -dProductVersion=$WixVersion -arch x64
         if ($LASTEXITCODE -ne 0) {
             Write-Error "candle.exe failed (exit code $LASTEXITCODE)"
             exit $LASTEXITCODE
