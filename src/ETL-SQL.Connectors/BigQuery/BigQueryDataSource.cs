@@ -220,16 +220,17 @@ namespace ETL_SQL.Connectors.BigQuery
 
         public async Task<IEnumerable<string>> GetTablesAsync()
         {
-            var ds = _dataset ?? throw new ExecutionException("BigQuery: DATASET required for schema introspection.");
+            var datasetId = _dataset ?? throw new ExecutionException("BigQuery: DATASET required for schema introspection.");
             var client = await CreateClientAsync();
-            var sql = $"SELECT table_name FROM `{_projectId}.{ds}.INFORMATION_SCHEMA.TABLES` WHERE table_type = 'BASE TABLE' ORDER BY table_name";
             try
             {
-                var results = await client.ExecuteQueryAsync(sql, null);
-                return results
-                    .Select(r => r["table_name"]?.ToString() ?? "")
-                    .Where(n => n.Length > 0)
-                    .ToList();
+                var tables = new List<string>();
+                await foreach (var t in client.ListTablesAsync(_projectId, datasetId))
+                {
+                    if (string.Equals(t.Resource?.Type, "TABLE", StringComparison.OrdinalIgnoreCase))
+                        tables.Add(t.Reference.TableId);
+                }
+                return tables;
             }
             catch (Google.GoogleApiException ex)
             {
@@ -239,16 +240,17 @@ namespace ETL_SQL.Connectors.BigQuery
 
         public async Task<IEnumerable<string>> GetViewsAsync()
         {
-            var ds = _dataset ?? throw new ExecutionException("BigQuery: DATASET required for schema introspection.");
+            var datasetId = _dataset ?? throw new ExecutionException("BigQuery: DATASET required for schema introspection.");
             var client = await CreateClientAsync();
-            var sql = $"SELECT table_name FROM `{_projectId}.{ds}.INFORMATION_SCHEMA.VIEWS` ORDER BY table_name";
             try
             {
-                var results = await client.ExecuteQueryAsync(sql, null);
-                return results
-                    .Select(r => r["table_name"]?.ToString() ?? "")
-                    .Where(n => n.Length > 0)
-                    .ToList();
+                var views = new List<string>();
+                await foreach (var t in client.ListTablesAsync(_projectId, datasetId))
+                {
+                    if (string.Equals(t.Resource?.Type, "VIEW", StringComparison.OrdinalIgnoreCase))
+                        views.Add(t.Reference.TableId);
+                }
+                return views;
             }
             catch (Google.GoogleApiException ex)
             {
