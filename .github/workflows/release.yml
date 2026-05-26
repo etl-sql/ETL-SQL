@@ -21,7 +21,7 @@ jobs:
         run: |
           git init .
           git remote add origin "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY.git"
-          git -c http.extraheader="AUTHORIZATION: bearer $env:GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
+          git -c credential.helper= -c http.extraheader="AUTHORIZATION: bearer $env:GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
           git checkout --force FETCH_HEAD
       - name: Verify .NET
         run: dotnet --info
@@ -63,7 +63,7 @@ jobs:
         run: |
           git init .
           git remote add origin "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY.git"
-          git -c http.extraheader="AUTHORIZATION: bearer $env:GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
+          git -c credential.helper= -c http.extraheader="AUTHORIZATION: bearer $env:GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
           git checkout --force FETCH_HEAD
       - name: Verify .NET
         run: dotnet --info
@@ -109,7 +109,7 @@ jobs:
         run: |
           git init .
           git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
-          git -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin "$GITHUB_SHA"
+          git -c credential.helper= -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin "$GITHUB_SHA"
           git checkout --force FETCH_HEAD
       - name: Verify .NET
         run: dotnet --info
@@ -145,7 +145,7 @@ jobs:
         run: |
           git init .
           git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
-          git -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin "$GITHUB_SHA"
+          git -c credential.helper= -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin "$GITHUB_SHA"
           git checkout --force FETCH_HEAD
       - name: Verify .NET
         run: dotnet --info
