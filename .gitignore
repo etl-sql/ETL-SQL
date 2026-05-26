@@ -6,6 +6,9 @@ obj/
 *.userosscache
 *.sln.docstates
 *.lscache
+*.msi
+*.wixpdb
+*.wixobj
 
 ## NuGet packages
 *.nupkg
