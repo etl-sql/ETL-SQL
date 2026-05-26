@@ -19,8 +19,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git init .
-          git remote add origin "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY.git"
-          git -c credential.helper= -c http.extraheader="AUTHORIZATION: bearer $env:GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
+          git remote add origin "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
+          git fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
           git checkout --force FETCH_HEAD
 
       - name: Verify .NET
@@ -92,8 +92,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git init .
-          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
-          git -c credential.helper= -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin "$GITHUB_SHA"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags --prune --depth=1 origin "${GITHUB_SHA}"
           git checkout --force FETCH_HEAD
 
       - name: Verify .NET
