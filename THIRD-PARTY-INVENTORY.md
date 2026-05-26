@@ -54,6 +54,7 @@ About screens. It is not legal advice.
 | Microsoft.Extensions.Options.ConfigurationExtensions | 10.0.5 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
 | Microsoft.NET.Test.Sdk | 17.14.1 | test | MIT | expression | https://github.com/microsoft/vstest | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | Moq | 4.20.72 | test | BSD-3-Clause | expression | https://github.com/moq/moq | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
+| MySqlConnector | 2.3.7 | runtime | MIT | expression | https://mysqlconnector.net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Npgsql | 10.0.2 | runtime | PostgreSQL | expression | https://github.com/npgsql/npgsql | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | OmniSharp.Extensions.LanguageServer | 0.19.9 | runtime, test | LICENSE | file | https://github.com/OmniSharp/csharp-language-server-protocol | src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj |
 | Oracle.ManagedDataAccess.Core | 23.26.100 | runtime | LICENSE.txt | file | https://www.oracle.com/database/technologies/appdev/dotnet.html | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
@@ -78,6 +79,7 @@ About screens. It is not legal advice.
 | System.Linq.Async | 7.0.0 | runtime, test | MIT | expression | https://github.com/dotnet/reactive | src/ETL-SQL.Core/ETL-SQL.Core.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | System.Security.Cryptography.ProtectedData | 10.0.5 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
 | Testcontainers.MsSql | 4.11.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
+| Testcontainers.MySql | 4.11.0 | test | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
 | Testcontainers.Oracle | 4.11.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
 | Testcontainers.PostgreSql | 4.11.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
 | TextCopy | 6.2.1 | runtime | MIT | expression | https://github.com/CopyText/TextCopy | src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |

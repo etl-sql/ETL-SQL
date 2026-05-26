@@ -122,7 +122,7 @@ namespace ETL_SQL.Connectors.Excel
                 }
 
                 var etlBatch = new ETL_SQL.Data.DataTable();
-                foreach (var name in columnNames) etlBatch.ColumnNames.Add(name);
+                etlBatch.SetColumns(columnNames);
 
                 for (int r = dataStartRow; r <= endRow; r++)
                 {
@@ -139,7 +139,7 @@ namespace ETL_SQL.Connectors.Excel
                     {
                         yield return etlBatch;
                         etlBatch = new ETL_SQL.Data.DataTable();
-                        foreach (var name in columnNames) etlBatch.ColumnNames.Add(name);
+                        etlBatch.SetColumns(columnNames);
                     }
                 }
 

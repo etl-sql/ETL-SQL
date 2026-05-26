@@ -332,7 +332,7 @@ For full usage and script details, refer to **[scripts/README.md](file:///c:/Use
 | Forgetting `IF FILE_EXISTS()` before `COPY FILE` or `ENCRYPT FILE` | Check existence first to avoid silent no-ops or errors |
 | Using `Logger.Instance` in C# engine code | Use injected `ILogger` from `IExecutionContext` |
 | Declaring `class` for AST nodes in C# | Use `record` types for all AST nodes |
-| Using `MySQL` as a connector token | MySQL is not a supported connector; use `ODBC` with a MySQL driver instead |
+| Using `Firebird` as a connector token | Firebird is not a supported connector; use `ODBC` with a Firebird driver instead |
 | Writing `FROM FLATFILE` or `FROM FILE` in a `CREATE CONNECTION` | `FLATFILE` is the **connector type**; `FILE` is the **table alias** used in queries — `CREATE CONNECTION src ON FLATFILE('my.csv'); SELECT * FROM src` |
 
 ---

@@ -53,7 +53,13 @@ namespace ETL_SQL.Connectors.SqlServer
         public Dictionary<string, string>? Options => _options;
         public ETL_SQL.Data.ICatalogMetadataProvider? GetCatalogProvider() => new SqlServerCatalogProvider(_connectionString);
 
-        public IDataSource WithTable(string tableName) => new SqlServerDataSource(_context!, _connectionString, tableName, _options);
+        public IDataSource WithTable(string tableName)
+        {
+            var ds = new SqlServerDataSource(_context!, _connectionString, tableName, _options);
+            ds._transactionalConnection = _transactionalConnection;
+            ds._activeTransaction = _activeTransaction;
+            return ds;
+        }
 
         public async Task<string> GetVersionAsync()
         {

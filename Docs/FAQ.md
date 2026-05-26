@@ -70,15 +70,16 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 **Q: Can I use `GETDATE()` in a query against a Postgres connection?**
 > No — `GETDATE()` is T-SQL. Use `NOW()` for Postgres, `SYSDATE` for Oracle. When working in engine context (against a `#temp` table), use the ETL-SQL `GETDATE()` function which is always available regardless of what connections you have open.
 
-**Q: Can I use MySQL as a connector?**
-> MySQL is not a natively supported connector type. Use `ODBC` with a MySQL ODBC driver instead:
+**Q: Can I use Firebird as a connector?**
+> Firebird is not a natively supported connector type. Use `ODBC` with a Firebird ODBC driver instead:
 > ```sql
-> CREATE CONNECTION mysql_src ON ODBC()
->     WITH(DSN='MySQL_DSN', USER='etl', PASSWORD='...');
+> CREATE CONNECTION firebird_src ON ODBC()
+>     WITH(DSN='Firebird_DSN', USER='etl', PASSWORD='...');
 > -- or with a driver string
-> CREATE CONNECTION mysql_src ON ODBC()
->     WITH(CONNECTION_STRING='Driver={MySQL ODBC 9.0 Driver};Server=host;Database=mydb;User=etl;Password=pwd;');
+> CREATE CONNECTION firebird_src ON ODBC()
+>     WITH(CONNECTION_STRING='Driver={Firebird/InterBase(r) driver};Dbname=localhost:C:\Data\mydb.fdb;User=SYSDBA;Password=masterkey;');
 > ```
+
 
 **Q: My script uses `PIVOT`. Will it work?**
 > Yes, PIVOT/UNPIVOT has been implemented in the engine.

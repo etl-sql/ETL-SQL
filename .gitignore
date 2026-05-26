@@ -6,6 +6,9 @@ obj/
 *.userosscache
 *.sln.docstates
 *.lscache
+*.msi
+*.wixpdb
+*.wixobj
 
 ## NuGet packages
 *.nupkg
@@ -24,6 +27,10 @@ artifacts/
 .vscode/
 trouble/
 brain/
+
+# Local application configurations containing secrets
+appsettings.local.json
+appsettings.Development.json
 
 # Ignore Claude Code personal settings
 .claude/settings.local.json
@@ -72,6 +79,7 @@ TestData/large_*.csv
 TestData/qualified_output.csv
 TestData/*.out.csv
 slt_results/
+release-validation/
 tests/ETL-SQL.SqlLogicTests/slt.runsettings
 
 ## ETL output files — keep TestData source fixtures, ignore generated outputs
@@ -132,6 +140,8 @@ verify_lineage_metadata.etlsql
 # ETL-SQL SQLite state databases (runtime, not source)
 etlsql.db
 *.db
+*.db-shm
+*.db-wal
 
 # Temporary directories
 .etlsql_temp/

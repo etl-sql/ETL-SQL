@@ -44,6 +44,7 @@ public class ResourcesConfig
     public int ExecutionTimeoutSeconds       { get; set; } = 300;
     public int SessionCacheMaxSize           { get; set; } = 50;
     public int SessionCacheTtlMinutes        { get; set; } = 30;
+    public bool PersistAdHocInteractions     { get; set; } = false;
 }
 
 public class JwtConfig

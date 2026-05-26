@@ -212,6 +212,8 @@ namespace ETL_SQL.Core
         long MaxSessionSize { get; set; }
         /// <summary>Whether this session is marked for persistence across process runs.</summary>
         bool IsPersistentSession { get; set; }
+        /// <summary>Whether this execution is resuming from the last completed checkpoint.</summary>
+        bool IsResuming { get; set; }
         /// <summary>The start-of-week day used by RELDATE W/WS/WE anchors. Defaults to Monday (ISO 8601).</summary>
         DayOfWeek WeekStartDay { get; set; }
         /// <summary>Hash-mismatch policy for script integrity checks. "Warn" logs and continues; "Block" throws. Defaults to "Warn".</summary>

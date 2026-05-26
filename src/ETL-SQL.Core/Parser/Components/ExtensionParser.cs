@@ -59,10 +59,10 @@ namespace ETL_SQL.Core.Parser.Components
                     else break;
                 }
 
-                if (to == null)      throw new SyntaxException("Email TO is mandatory", _parser.Current.Line, _parser.Current.Column);
-                if (from == null)    throw new SyntaxException("Email FROM is mandatory", _parser.Current.Line, _parser.Current.Column);
-                if (subject == null) throw new SyntaxException("Email SUBJECT is mandatory", _parser.Current.Line, _parser.Current.Column);
-                if (body == null)    throw new SyntaxException("Email BODY is mandatory", _parser.Current.Line, _parser.Current.Column);
+                if (to == null)      throw new SyntaxException("SEND EMAIL requires a TO clause", _parser.Current.Line, _parser.Current.Column);
+                if (from == null)    throw new SyntaxException("SEND EMAIL requires a FROM clause", _parser.Current.Line, _parser.Current.Column);
+                if (subject == null) throw new SyntaxException("SEND EMAIL requires a SUBJECT clause", _parser.Current.Line, _parser.Current.Column);
+                if (body == null)    throw new SyntaxException("SEND EMAIL requires a BODY clause", _parser.Current.Line, _parser.Current.Column);
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             }
             else

@@ -113,7 +113,54 @@ CREATE CONNECTION pg_legacy ON POSTGRES('Host=localhost;Database=mydb;Username=e
 
 ---
 
-### 2.3 Oracle (`ORACLE`)
+### 2.3 MySQL & MariaDB (`MYSQL`)
+Aliases: `MARIADB`
+
+Native connector for MySQL and MariaDB databases. Supports full SQL pushdown, schema introspection, high-throughput bulk inserts via `MySqlBulkCopy`, and transactions.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `HOST` / `SERVER` | Server name or IP address | Yes (structured) |
+| `DATABASE` | Target database name | Yes (structured) |
+| `USER` / `UID` | Login username | Yes (structured) |
+| `PASSWORD` / `PWD` | Login password | Yes (structured) |
+| `PORT` | Listening port (Default: `3306`) | No |
+| `SSL_MODE` | TLS mode: `NONE`, `PREFERRED`, `REQUIRED`, `VERIFYCA`, `VERIFYFULL` (Default: `PREFERRED`) | No |
+| `ALLOW_PUBLIC_KEY_RETRIEVAL` | Allow RSA public key retrieval from server (`TRUE`/`FALSE`, Default: `FALSE`) | No |
+| `ALLOW_USER_VARIABLES` | Allow user-defined variables like `@var` inside queries (`TRUE`/`FALSE`, Default: `FALSE`) | No |
+| `TIMEOUT_SECONDS` | Command timeout in seconds (Default: `30`) | No |
+| `POOLING` | Enable connection pooling (`TRUE`/`FALSE`) | No |
+| `MIN_POOL_SIZE` | Minimum pool size | No |
+| `MAX_POOL_SIZE` | Maximum pool size | No |
+| `TABLE` | Default table context | No |
+
+*Examples:*
+```sql
+-- Structured property connection
+CREATE CONNECTION mysql_db ON MYSQL()
+    WITH(HOST='127.0.0.1', PORT=3306, DATABASE='inventory', USER='etl_user', PASSWORD='s3cr3t', ALLOW_PUBLIC_KEY_RETRIEVAL=TRUE);
+
+-- Traditional connection string
+CREATE CONNECTION mysql_legacy ON MYSQL('Server=localhost;Database=mydb;Uid=etl;Pwd=pass;AllowUserVariables=True;');
+```
+
+**Supported MySQL-specific SQL:**
+The connector supports native MySQL functions and constructs when pushing queries down to the remote server.
+
+| Feature | Notes |
+| :--- | :--- |
+| `LIMIT` / `OFFSET` | MySQL standard row capping |
+| `ON DUPLICATE KEY UPDATE` | Upsert behavior |
+| `IFNULL` / `COALESCE` | Null-substitution functions |
+| `GROUP_CONCAT` | Group string concatenation |
+| `JSON_OBJECT` / `JSON_ARRAY` / `JSON_EXTRACT` | Semi-structured data manipulation |
+| `STR_TO_DATE` / `DATE_FORMAT` | Date string conversion and formatting |
+
+The keywords `TOP`, `ROWNUM`, and `PERCENT` are excluded. The T-SQL 2-argument `ISNULL` function is excluded (use MySQL's `IFNULL` or `COALESCE`).
+
+---
+
+### 2.4 Oracle (`ORACLE`)
 Oracle supports two patterns: **Service Name** (for direct connection) and **TNS** (for pre-configured aliases). They are mutually exclusive.
 
 | Option | Description | Mandatory |
@@ -145,7 +192,7 @@ CREATE CONNECTION o_prod ON ORACLE('Data Source=MyTNS;User Id=app_user;Password=
 
 ---
 
-### 2.4 ODBC Bridge (`ODBC`)
+### 2.5 ODBC Bridge (`ODBC`)
 Universal bridge for any source with a local ODBC driver. Supports both DSN-based and DSN-less connections. SQL pushdown depends on the underlying provider.
 
 | Option | Description | Mandatory |
@@ -233,7 +280,7 @@ CREATE CONNECTION dremio ON ODBC()
 
 ---
 
-### 2.5 Snowflake (`SNOWFLAKE`)
+### 2.6 Snowflake (`SNOWFLAKE`)
 
 Native connector for Snowflake Cloud Data Platform. Supports full SQL pushdown, schema introspection, batch reads/writes, and transactions. Two authentication modes are supported: username + password, and private-key JWT (recommended for production).
 
@@ -297,7 +344,7 @@ The keywords `TOP` and `NOLOCK` are excluded (T-SQL only). Use `LIMIT` for row c
 
 ---
 
-### 2.6 BigQuery (`BIGQUERY`)
+### 2.7 BigQuery (`BIGQUERY`)
 
 Native connector for Google BigQuery. Uses the BigQuery REST API (not ADO.NET). Supports full Standard SQL pushdown, schema introspection, streaming inserts, and batch reads. Two authentication modes: service-account JSON key file (`CREDENTIAL_FILE`) or Application Default Credentials (ADC / workload identity) when no credential file is provided.
 

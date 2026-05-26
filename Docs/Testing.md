@@ -40,6 +40,39 @@ Use `scripts/test-lane.ps1` when you want a named suite rather than only smoke t
 .\scripts\test-lane.ps1 -Lane slt        # deployment-only
 ```
 
+## Local Pre-Release Validation
+
+Use `scripts/Test-PreRelease.ps1` (Windows) or `scripts/test-pre-release.sh` (Linux/macOS) before pushing a release branch, tag, or installer build. It is the local-first release gate: GitHub Actions should not be the first place release failures are discovered.
+
+```powershell
+# PowerShell — normal local release confidence run
+.\scripts\Test-PreRelease.ps1
+
+# Resume after fixing a failed phase
+.\scripts\Test-PreRelease.ps1 -Resume
+
+# Include Docker-backed connector coverage
+.\scripts\Test-PreRelease.ps1 -IncludeDockerIntegration
+
+# Include Standard-scale certification
+.\scripts\Test-PreRelease.ps1 -IncludeStandardScale
+
+# Build release artifacts after validation
+.\scripts\Test-PreRelease.ps1 -BuildInstallers -Platforms win-x64
+```
+
+```bash
+# Bash — same phases, same flag semantics
+./scripts/test-pre-release.sh
+./scripts/test-pre-release.sh --resume
+./scripts/test-pre-release.sh --include-docker-integration
+./scripts/test-pre-release.sh --include-standard-scale
+./scripts/test-pre-release.sh --build-installers --platforms linux-x64
+./scripts/test-pre-release.sh --build-installers --platforms osx-arm64
+```
+
+The script writes timestamped JSON/Markdown reports and phase logs under `release-validation/`, which is ignored by Git. The `latest/state.json` file lets `--resume` skip phases that already passed for the same source fingerprint. If code changes after a failed run, rerun from the beginning unless you intentionally use `--force-resume`.
+
 `fast` is the default local correctness lane. `full` runs the normal xUnit test projects and skips the benchmark executable and deployment-only SLT corpus so `dotnet test` output stays meaningful.
 
 ### Category tag reference

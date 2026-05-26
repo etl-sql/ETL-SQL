@@ -30,7 +30,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 await context.EvaluateStatement(stmt.TryBody);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not BreakException && ex is not ContinueException && ex is not ReturnException && ex is not GotoException)
             {
                 _logger.Debug("Exception caught in TRY block: {Message}", ex.Message);
                 

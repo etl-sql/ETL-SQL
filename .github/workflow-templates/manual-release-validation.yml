@@ -1,0 +1,65 @@
+name: Manual Release Validation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Smoke, Fast, Coverage
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
+          git fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
+          git checkout --force FETCH_HEAD
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Restore dependencies
+        run: dotnet restore ETL-SQL.slnx
+
+      - name: Check shared report runtime assets
+        shell: pwsh
+        run: node .\scripts\sync-assets.js -Check
+
+      - name: Build
+        run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
+
+      - name: Smoke lane
+        shell: pwsh
+        run: .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
+
+      - name: Fast lane with coverage
+        shell: pwsh
+        run: .\scripts\test-lane.ps1 -Lane fast -Configuration Release -NoRestore -NoBuild -CollectCoverage -ResultsDirectory coverage
+
+      - name: Generate coverage report
+        run: >
+          dotnet reportgenerator
+          -reports:"./coverage/**/coverage.cobertura.xml"
+          -targetdir:"./coverage/report"
+          -reporttypes:"Html;Cobertura;TextSummary"
+          -assemblyfilters:"+ETL-SQL.*;-ETL-SQL.Tests;-ETL-SQL.PerfTests;-ETL-SQL.Benchmarks;-ETL-SQL.LintTests"
+
+      - name: Check coverage threshold
+        shell: pwsh
+        run: |
+          $summaryPath = "./coverage/report/Summary.txt"
+          $content = Get-Content $summaryPath -Raw
+          if ($content -match "Line coverage:\s+([\d.]+)%") {
+            $lineCoverage = [double]$Matches[1]
+            if ($lineCoverage -lt 70.0) {
+              Write-Error "Coverage $lineCoverage% is below threshold 70.0%"
+              exit 1
+            }
+          } else {
+            Write-Error "Could not parse coverage from $summaryPath"
+            exit 1
+          }

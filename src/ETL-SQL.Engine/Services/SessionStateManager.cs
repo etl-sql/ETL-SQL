@@ -77,7 +77,7 @@ namespace ETL_SQL.Engine.Services
         public async Task SaveSession(string sessionId, object evaluatorObj, string? scriptSource = null)
         {
             if (evaluatorObj is not Evaluator evaluator)
-                throw new ArgumentException("SessionStateManager.SaveSession expects an Evaluator instance.", nameof(evaluatorObj));
+                return;
 
             // Enforce MaxSessionSize (Zero-Trust Guardrail)
             var currentSize = MeasureSessionSize(evaluator);

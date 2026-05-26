@@ -221,5 +221,79 @@ namespace ETL_SQL.LanguageServer.Tests
             md = hover.Contents.MarkupContent;
             Assert.Contains("# MSSQL", md.Value);
         }
+
+        [Fact]
+        public async Task DocumentSymbols_Should_Include_Labels()
+        {
+            // Arrange
+            var services = new ServiceCollection();
+            services.AddLogging(builder => builder.AddConsole().AddDebug());
+            var serviceProvider = services.BuildServiceProvider();
+            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+            
+            var store = new DocumentStateStore();
+            var handler = new TextDocumentHandler(loggerFactory, new MetadataManager(ETL_SQL.Common.NullLogger.Instance, new ETL_SQL.Data.ConnectorRegistry()), store);
+            var symbolProvider = new DocumentSymbolProvider(store);
+
+            var uri = DocumentUri.From("untitled:Untitled-4");
+            var script = "DECLARE @val INT = 10;\r\ncheckpoint1:\r\nSET @val = 20;\r\nIF 1=1 BEGIN\r\n    inner_label:\r\n    PRINT 'ok';\r\nEND";
+            await handler.AnalyzeAsync(uri, script);
+
+            var request = new DocumentSymbolParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri)
+            };
+
+            // Act
+            var container = await symbolProvider.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.NotNull(container);
+            var list = container.Select(s => s.DocumentSymbol).ToList();
+            Assert.Equal(2, list.Count);
+            
+            var cp1 = list.FirstOrDefault(s => s.Name == "checkpoint1");
+            Assert.NotNull(cp1);
+            Assert.Equal("Top-level Checkpoint", cp1.Detail);
+
+            var cp2 = list.FirstOrDefault(s => s.Name == "inner_label");
+            Assert.NotNull(cp2);
+            Assert.Equal("Control Flow Target", cp2.Detail);
+        }
+
+        [Fact]
+        public async Task Completion_After_Goto_Should_Suggest_Labels()
+        {
+            // Arrange
+            var services = new ServiceCollection();
+            services.AddLogging(builder => builder.AddConsole().AddDebug());
+            var serviceProvider = services.BuildServiceProvider();
+            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+            
+            var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
+            var metadataManager = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, connectorRegistry);
+            var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
+            var languageService = new LanguageService(metadataManager, helpRegistry);
+            var store = new DocumentStateStore();
+            var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
+            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, languageService, new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()));
+
+            var uri = DocumentUri.From("untitled:Untitled-5");
+            var script = "DECLARE @val INT = 10;\r\nmy_label1:\r\nSET @val = 20;\r\nGOTO ";
+            await handler.AnalyzeAsync(uri, script);
+
+            var completionParams = new CompletionParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Position = new Position(3, 5), // Cursor right after "GOTO " (line 3, index 5)
+                Context = new CompletionContext { TriggerKind = CompletionTriggerKind.Invoked }
+            };
+
+            // Act
+            var list = await completionProvider.Handle(completionParams, CancellationToken.None);
+
+            // Assert: Should suggest my_label1
+            Assert.Contains(list, i => i.Label == "my_label1");
+        }
     }
 }

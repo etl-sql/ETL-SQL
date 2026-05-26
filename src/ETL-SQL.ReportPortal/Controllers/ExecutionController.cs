@@ -8,6 +8,8 @@ using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
 using ETL_SQL.Reporting;
+using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -212,6 +214,7 @@ public class ExecutionController(
 
         var svc      = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
         var manifest = await svc.SetParameterAsync(req.Name, req.Value ?? string.Empty, req.IsInteraction);
+        await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
         return Ok(manifest);
     }
 
@@ -238,6 +241,7 @@ public class ExecutionController(
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name, p.Value));
         var manifest = await svc.SetParametersAsync(updates, req.IsInteraction, req.PageName);
+        await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
         return Ok(manifest);
     }
 
@@ -262,6 +266,7 @@ public class ExecutionController(
         var manifest = req.Direction?.ToUpperInvariant() == "UP"
             ? await svc.DrillUpAsync(req.VisualName, req.TargetDepth)
             : await svc.DrillInAsync(req.VisualName, req.ClickedValue ?? "");
+        await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
         return manifest is null ? NotFound() : Ok(manifest);
     }
 
@@ -284,7 +289,36 @@ public class ExecutionController(
 
         var svc      = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
         var manifest = await svc.RefreshVisualsAsync(req.Visuals);
+        await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
         return manifest is null ? NotFound() : Ok(manifest);
+    }
+
+    private async Task TryPersistAdHocLineageAsync(int id, string scriptPath, ETL_SQL.ReportHosting.DashboardService svc)
+    {
+        if (portalConfig.Resources.PersistAdHocInteractions)
+        {
+            try
+            {
+                var lineage = svc.CurrentLineageTracker?.GetFullLineage().ToList();
+                if (lineage is { Count: > 0 })
+                {
+                    var catalog = HttpContext.RequestServices.GetService<ILineageCatalogStore>();
+                    if (catalog != null)
+                    {
+                        await catalog.SaveLineageAsync(
+                            lineage,
+                            $"report:{id}:interaction",
+                            scriptPath,
+                            DateTime.UtcNow);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Fire and forget
+                audit.LogAsync(CurrentUserId, "PERSIST_LINEAGE_FAILED", "Report", id.ToString(), ex.Message).Wait();
+            }
+        }
     }
 
     // ── Session helper ────────────────────────────────────────────────────────

@@ -174,7 +174,7 @@ namespace ETL_SQL.Connectors
         private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             var table = new DataTable();
-            table.ColumnNames.AddRange(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+            table.SetColumns(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
             await foreach (var f in ListFilesAsync(""))
             {
                 await table.AddRowAsync(new Row

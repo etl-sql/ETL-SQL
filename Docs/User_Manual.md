@@ -367,6 +367,71 @@ DROP SETS IF EXISTS !STAGING;
 > [!TIP]
 > `CREATE SETS` blocks are typically placed in a shared `_environments.etlsql` and loaded at the top of each orchestrator script via `RUN SCRIPT '_environments.etlsql'`.
 
+### 3.4 Persistent Sessions and Checkpoint Resume
+
+When running long or multi-stage pipelines, a failure in a late stage can be costly if you have to start the entire extraction process from scratch. ETL-SQL addresses this through **Persistent Sessions** and **Checkpoint Resumes**.
+
+#### Implicit Session State Checkpoints
+
+When running with `--session`, any top-level script label (a label not nested inside loops, conditionals, or try-catch blocks) acts as a **state checkpoint marker**.
+
+When the execution pointer hits a top-level label, the engine:
+1. Updates the internal `@_LAST_CHECKPOINT_LABEL` session variable to the label name.
+2. Spills all active `#temp` tables to Apache Arrow table chunks under the session directory.
+3. Serializes all variables and active connections to a JSON state file.
+
+```sql
+DECLARE @val INT = 10;
+
+-- Hitting this top-level label saves @val = 10 to session storage
+step_1: 
+SET @val = @val + 5;
+
+-- Hitting this top-level label saves @val = 15 to session storage
+step_2:
+SET @val = @val + 10;
+```
+
+#### How `--session` and `--resume` Interact
+
+These two flags serve distinct roles and must not be confused:
+
+| Command | What happens |
+| :--- | :--- |
+| `etl-sql run --session "job-id" --file ...` | **Fresh run.** State is saved at each checkpoint but not loaded. Every `--session`-only run starts with a clean environment, regardless of prior runs with the same ID. |
+| `etl-sql run --session "job-id" --resume --file ...` | **Resumed run.** The engine loads state from the last checkpoint, skips all statements before that label, and continues from there. |
+| `etl-sql run --resume --file ...` | **Error.** `--resume requires --session to be specified.` |
+| `etl-sql run --session "job-id" --resume --file ...` (first run, no checkpoint saved) | **Error.** `--resume was specified but no saved session found for 'job-id'. Run without --resume to start fresh.` |
+
+> [!IMPORTANT]
+> `--session` alone does **not** restore prior state. Running the same session ID without `--resume` always starts from the top of the script with fresh variables. This prevents stale values from a previous run silently carrying over into a new one.
+
+#### Resuming Execution After a Failure
+
+If a script fails mid-run (e.g., a database timeout or network drop), resume from the last successfully completed checkpoint:
+
+```powershell
+# Initial run — fails somewhere after step_2 completes
+etl-sql run --session "nightly-load-123" --file .\nightly_load.etlsql
+
+# After fixing the external issue, resume from the last saved checkpoint
+etl-sql run --session "nightly-load-123" --resume --file .\nightly_load.etlsql
+```
+
+When `--resume` is active, the engine:
+1. Loads the saved session state (variables, `#temp` tables, connection metadata).
+2. Identifies the last successfully saved checkpoint label (e.g., `step_2`).
+3. Skips all statements in the script until it reaches that label.
+4. Resumes executing normally from that label using the restored state.
+
+#### Clearing a Session
+
+To discard saved state for a session ID and start clean on the next run:
+
+```powershell
+etl-sql session clear "nightly-load-123"
+```
+
 ---
 
 ## 4. The #Temp Table Workspace

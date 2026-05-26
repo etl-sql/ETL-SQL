@@ -1,0 +1,75 @@
+name: Local Validated Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to publish, such as v0.9.0
+        required: true
+      prerelease:
+        description: Mark GitHub release as prerelease
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: write
+
+jobs:
+  publish-draft:
+    name: Create Draft Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create or update draft release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ inputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          args=(--repo "$GITHUB_REPOSITORY")
+          if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
+          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" --draft "${args[@]}"
+          else
+            gh release create "$TAG_NAME" --draft --generate-notes "${args[@]}"
+          fi
+
+  build-windows:
+    name: Build Windows Release Assets
+    needs: publish-draft
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ inputs.tag }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
+          git fetch --no-tags --prune --depth=1 origin "refs/tags/$env:TAG_NAME"
+          git checkout --force FETCH_HEAD
+
+      - name: Build release assets
+        shell: pwsh
+        env:
+          ETL_SQL_VERSION: ${{ inputs.tag }}
+        run: |
+          $env:ETL_SQL_VERSION = $env:ETL_SQL_VERSION.TrimStart('v')
+          .\scripts\publish_release.ps1 -Platforms win-x64
+          .\scripts\build_msi.ps1
+          $version = $env:ETL_SQL_VERSION
+          Move-Item "src/ETL-SQL.Installer/ETL-SQL-Enterprise-v$version.msi" "release/ETL-SQL-v$version-x64-Setup.msi"
+
+      - name: Upload release assets
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ inputs.tag }}
+        run: gh release upload $env:TAG_NAME release/*.zip release/*.msi --clobber

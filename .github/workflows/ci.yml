@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: [ main, 'release/**' ]
 
+permissions:
+  contents: read
 
 jobs:
   build-and-test:
@@ -14,14 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init .
-          git remote add origin "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
-          git fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
-          git checkout --force FETCH_HEAD
+        uses: actions/checkout@v4
 
       - name: Verify .NET
         run: dotnet --info
@@ -87,14 +82,7 @@ jobs:
 
     steps:
       - name: Checkout
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init .
-          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --no-tags --prune --depth=1 origin "${GITHUB_SHA}"
-          git checkout --force FETCH_HEAD
+        uses: actions/checkout@v4
 
       - name: Verify .NET
         run: dotnet --info

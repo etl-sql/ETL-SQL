@@ -28,31 +28,31 @@ Connector certification tests now carry connector-specific traits such as `Conne
 
 These connectors implement `IDatabaseSource` with `SupportsSqlPushdown = true`.
 
-| Requirement | MSSQL | POSTGRES | ORACLE | ODBC | SNOWFLAKE | BIGQUERY |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Rule 1** — No SQL evaluation inside connector | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 2** — All I/O via async overloads | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
-| **Rule 3** — Credentials never in logs/exceptions | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 4** — File I/O via ResolvePath | N/A | N/A | N/A | N/A | ~ | ✓ |
-| **Rule 5** — Provider exceptions wrapped as ExecutionException | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
-| **Rule 6** — Sensitive options masked in metadata output | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 7** — O(1) memory streaming via ReadBatches | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 8** — Implements IDatabaseSource + pushdown | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 9** — GetExcludedKeywords declared | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
-| **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T2** — Negative path tests | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
-| **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **GetExcludedKeywords non-empty** | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
-| **DW: IsDataWarehouse + timeout** | N/A | N/A | N/A | N/A | ✓ | ✓ |
-| **DW: TIMEOUT_SECONDS option** | N/A | N/A | N/A | N/A | ✓ | ✓ |
-| **DW: ADC / workload identity auth** | N/A | N/A | N/A | N/A | ~ | ✓ |
-| **DW: ITransactionalDataSource** | ✓ | ✓ | ✓ | ✓ | ✓ | N/A |
-| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **✓ GA** |
+| Requirement | MSSQL | POSTGRES | MYSQL | ORACLE | ODBC | SNOWFLAKE | BIGQUERY |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Rule 1** — No SQL evaluation inside connector | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 2** — All I/O via async overloads | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
+| **Rule 3** — Credentials never in logs/exceptions | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 4** — File I/O via ResolvePath | N/A | N/A | N/A | N/A | N/A | ~ | ✓ |
+| **Rule 5** — Provider exceptions wrapped as ExecutionException | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
+| **Rule 6** — Sensitive options masked in metadata output | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 7** — O(1) memory streaming via ReadBatches | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 8** — Implements IDatabaseSource + pushdown | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 9** — GetExcludedKeywords declared | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
+| **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T2** — Negative path tests | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
+| **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **GetExcludedKeywords non-empty** | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
+| **DW: IsDataWarehouse + timeout** | N/A | N/A | N/A | N/A | N/A | ✓ | ✓ |
+| **DW: TIMEOUT_SECONDS option** | N/A | N/A | N/A | N/A | N/A | ✓ | ✓ |
+| **DW: ADC / workload identity auth** | N/A | N/A | N/A | N/A | N/A | ~ | ✓ |
+| **DW: ITransactionalDataSource** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | N/A |
+| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **✓ GA** |
 
 ### ODBC Notes
 - ODBC wraps arbitrary third-party drivers. Async behavior and exception types depend on the underlying driver. Rule 2 and Rule 5 compliance is best-effort at the ETL-SQL boundary.
@@ -66,6 +66,11 @@ These connectors implement `IDatabaseSource` with `SupportsSqlPushdown = true`.
 - **T2/T3/T4** covered by `BigQueryConnectorUnitTests` (no Docker required): host allowlist enforcement, credential masking, invalid credential wrapping.
 - **T1** covered by `BigQueryIntegrationTests` (`Category=Integration`) using Testcontainers `ghcr.io/goccy/bigquery-emulator`. Requires Docker at runtime.
 - Workload identity (Application Default Credentials) is implemented but not CI-verified due to lack of a GCP test environment in the pipeline.
+- Status: **GA** — all certification tiers covered; T1 smoke test requires Docker in CI.
+
+### MySQL Notes
+- **T1** covered by `MySqlTests` (`Category=Integration`) using Testcontainers `mysql:8.0`. Requires Docker at runtime.
+- **T2/T3/T4** covered by `ConnectorMetadataTests` (no Docker required) asserting credential masking, exception wrapping, and option parsing.
 - Status: **GA** — all certification tiers covered; T1 smoke test requires Docker in CI.
 
 ---

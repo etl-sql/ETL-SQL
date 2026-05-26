@@ -30,6 +30,10 @@ namespace ETL_SQL.Engine
 
     public class BreakException : Exception { }
     public class ContinueException : Exception { }
+    public class GotoException(string labelName) : Exception
+    {
+        public string LabelName { get; } = labelName;
+    }
 
     public class ReturnException : Exception
     {
@@ -192,6 +196,8 @@ namespace ETL_SQL.Engine
         }
 
         public bool IsPersistentSession { get; set; }
+        public bool IsResuming { get; set; }
+        public string? ResumeLabel { get; set; }
         public List<object?>? Parameters { get; set; }
         /// <summary>Start-of-week day for RELDATE W/WS/WE anchors. Settable at runtime via SET WEEK_START_DAY.</summary>
         public DayOfWeek WeekStartDay { get => _options.WeekStartDay; set => _options.WeekStartDay = value; }
@@ -745,6 +751,30 @@ namespace ETL_SQL.Engine
 
                 CancellationToken = cancellationToken;
 
+                if (IsResuming && VarContext.ContainsVariable("@_LAST_CHECKPOINT_LABEL"))
+                {
+                    var labelVal = VarContext.GetVariable("@_LAST_CHECKPOINT_LABEL")?.ToString();
+                    if (!string.IsNullOrEmpty(labelVal))
+                    {
+                        ResumeLabel = labelVal;
+                        // Verify that the label actually exists in the script as a top-level label
+                        bool labelExists = script.Statements.Any(s => s is SectionLabelStatement l && l.LabelName.Equals(ResumeLabel, StringComparison.OrdinalIgnoreCase));
+                        if (!labelExists)
+                        {
+                            throw new ExecutionException($"Cannot resume execution: checkpoint label '{ResumeLabel}' is not defined in the script.");
+                        }
+                        Log($"Resuming execution from checkpoint '{ResumeLabel}'...", ConsoleColor.Cyan);
+                    }
+                    else
+                    {
+                        throw new ExecutionException("--resume was specified but the saved session contains no checkpoint label. The job may not have reached a checkpoint yet. Run without --resume to start fresh.");
+                    }
+                }
+                else if (IsResuming)
+                {
+                    throw new ExecutionException("--resume was specified but the saved session contains no checkpoint label. The job may not have reached a checkpoint yet. Run without --resume to start fresh.");
+                }
+
                 // Split into batches at GO boundaries.
                 // Each batch runs independently — a failed batch is logged and skipped; later batches still execute.
                 var batches = SplitIntoBatches(script.Statements);
@@ -758,15 +788,58 @@ namespace ETL_SQL.Engine
 
                     try
                     {
-                        foreach (var statement in batch)
+                        for (int i = 0; i < batch.Count; i++)
                         {
                             cancellationToken.ThrowIfCancellationRequested();
-                            await EvaluateStatement(statement, cancellationToken);
+                            var statement = batch[i];
+
+                            if (IsResuming)
+                            {
+                                if (statement is SectionLabelStatement label && label.LabelName.Equals(ResumeLabel, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    IsResuming = false;
+                                    Log($"Resuming execution from checkpoint label '{label.LabelName}'...", ConsoleColor.Cyan);
+                                    // Execute the label to re-trigger/verify checkpoint saving
+                                }
+                                else
+                                {
+                                    continue;
+                                }
+                            }
+
+                            try
+                            {
+                                await EvaluateStatement(statement, cancellationToken);
+                            }
+                            catch (GotoException gotoEx)
+                            {
+                                int targetIdx = -1;
+                                for (int j = 0; j < batch.Count; j++)
+                                {
+                                    if (batch[j] is SectionLabelStatement sls && sls.LabelName.Equals(gotoEx.LabelName, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        targetIdx = j;
+                                        break;
+                                    }
+                                }
+
+                                if (targetIdx >= 0)
+                                {
+                                    i = targetIdx - 1; // -1 because loop increment will do i++
+                                    _logger.Debug("GOTO redirecting execution to label '{LabelName}'", gotoEx.LabelName);
+                                    continue;
+                                }
+                                else
+                                {
+                                    throw;
+                                }
+                            }
                         }
                         if (hasBatches) Log($"Batch {batchNum} completed.", ConsoleColor.DarkGray);
                     }
                     catch (OperationCanceledException) { throw; }
                     catch (ReturnException) { throw; }
+                    catch (GotoException) { throw; }
                     catch (Exception ex) when (hasBatches)
                     {
                         Log($"Batch {batchNum} failed: {ex.Message}", ConsoleColor.Red);

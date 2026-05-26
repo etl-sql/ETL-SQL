@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -110,6 +111,13 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
         public async Task InitializeAsync()
         {
+            await new ImageFromDockerfileBuilder()
+                .WithDockerfileDirectory(PlatformFixtureHelpers.FindRepoRoot())
+                .WithDockerfile("src/ETL-SQL.Orchestrator.Service/Dockerfile")
+                .WithName(ImageName)
+                .Build()
+                .CreateAsync();
+
             _container = new ContainerBuilder(ImageName)
                 .WithImagePullPolicy(PullPolicy.Never)
                 .WithPortBinding(ServicePort, true)
@@ -148,6 +156,13 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
         public async Task InitializeAsync()
         {
+            await new ImageFromDockerfileBuilder()
+                .WithDockerfileDirectory(PlatformFixtureHelpers.FindRepoRoot())
+                .WithDockerfile("src/ETL-SQL.ReportPortal/Dockerfile")
+                .WithName(ImageName)
+                .Build()
+                .CreateAsync();
+
             _container = new ContainerBuilder(ImageName)
                 .WithImagePullPolicy(PullPolicy.Never)
                 .WithPortBinding(PortalPort, true)
@@ -193,6 +208,17 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 NewPassword = AdminPassword
             });
             change.EnsureSuccessStatusCode();
+        }
+    }
+
+    internal static class PlatformFixtureHelpers
+    {
+        public static string FindRepoRoot()
+        {
+            var dir = AppContext.BaseDirectory;
+            while (dir != null && !Directory.Exists(Path.Combine(dir, ".git")))
+                dir = Path.GetDirectoryName(dir);
+            return dir ?? throw new InvalidOperationException("Cannot find repo root (.git directory).");
         }
     }
 

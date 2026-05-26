@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Spectre.Console;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
@@ -222,6 +223,12 @@ namespace ETL_SQL.App
                     return 1;
                 }
                 
+                var engineConfig = Program.ServiceProvider.GetRequiredService<IConfiguration>();
+                bool auditAdHoc = engineConfig.GetValue<bool>("Engine:AuditAdHocRuns");
+                long auditHistoryId = -1L;
+                string? runTimeHash = null;
+                IJobHistoryStore? historyStore = null;
+
                 try
                 {
                     logger.WriteLine("Execution phase...");
@@ -232,6 +239,29 @@ namespace ETL_SQL.App
                     evaluator.MasterPassword = ctx.Password;
                     evaluator.SessionId = ctx.SessionId;
                     evaluator.CurrentScriptPath = ctx.ScriptFile.FullName;
+
+                    if (System.IO.File.Exists(ctx.ScriptFile.FullName))
+                    {
+                        var bytes = await System.IO.File.ReadAllBytesAsync(ctx.ScriptFile.FullName);
+                        runTimeHash = "sha256:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+                    }
+
+                    if (auditAdHoc)
+                    {
+                        historyStore = Program.ServiceProvider.GetService<IJobHistoryStore>();
+                        if (historyStore != null)
+                        {
+                            try
+                            {
+                                var jobName = Path.GetFileName(ctx.ScriptFile.FullName);
+                                auditHistoryId = await historyStore.LogJobStartAsync(jobName);
+                            }
+                            catch (Exception ex)
+                            {
+                                logger.WriteLine($"[history catalog] Failed to log execution start: {ex.Message}", ConsoleColor.DarkYellow);
+                            }
+                        }
+                    }
 
                     // Security Hardening: Register the script directory as an approved safe zone for overrides
                     var scriptDir = Path.GetDirectoryName(ctx.ScriptFile.FullName);
@@ -257,16 +287,33 @@ namespace ETL_SQL.App
                     }
 
                     var sessionManager = Program.ServiceProvider.GetRequiredService<ETL_SQL.Engine.Services.SessionStateManager>();
+
+                    if (ctx.Resume && string.IsNullOrEmpty(ctx.SessionId))
+                    {
+                        logger.WriteLine("Error: --resume requires --session to be specified.", ConsoleColor.Red);
+                        return 1;
+                    }
+
                     if (!string.IsNullOrEmpty(ctx.SessionId))
                     {
                         evaluator.IsPersistentSession = true;
                         evaluator.SessionId = ctx.SessionId;
                         evaluator.SessionRoot = sessionManager.SessionRoot;
-                        var state = await sessionManager.LoadSession(ctx.SessionId);
-                        if (state != null)
+
+                        if (ctx.Resume)
                         {
-                            logger.WriteLine($"Restoring session {ctx.SessionId}...", ConsoleColor.Cyan);
-                            await evaluator.LoadSessionState(state);
+                            var state = await sessionManager.LoadSession(ctx.SessionId);
+                            if (state != null)
+                            {
+                                logger.WriteLine($"Restoring session {ctx.SessionId}...", ConsoleColor.Cyan);
+                                await evaluator.LoadSessionState(state);
+                                evaluator.IsResuming = true;
+                            }
+                            else
+                            {
+                                logger.WriteLine($"Error: --resume specified but no saved session found for '{ctx.SessionId}'. Run without --resume to start fresh.", ConsoleColor.Red);
+                                return 1;
+                            }
                         }
                     }
                     
@@ -502,6 +549,48 @@ namespace ETL_SQL.App
                         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 0, uri = ctx.ScriptFile.FullName }));
                     }
 
+                    if (auditAdHoc && historyStore != null && auditHistoryId != -1L)
+                    {
+                        try
+                        {
+                            var totalCpu = Process.GetCurrentProcess().TotalProcessorTime.TotalSeconds;
+                            await historyStore.LogJobEndAsync(
+                                auditHistoryId,
+                                "COMPLETED",
+                                null,
+                                evaluator.Telemetry.RowsProcessed,
+                                Process.GetCurrentProcess().PeakWorkingSet64,
+                                totalCpu,
+                                runTimeHash,
+                                true);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.WriteLine($"[history catalog] Failed to log execution end: {ex.Message}", ConsoleColor.DarkYellow);
+                        }
+                    }
+
+                    if (evaluator.LineageEnabled)
+                    {
+                        try
+                        {
+                            var lineage = evaluator.LineageTracker.GetFullLineage().ToList();
+                            if (lineage.Count > 0)
+                            {
+                                var lineageCatalog = Program.ServiceProvider.GetService<ILineageCatalogStore>();
+                                if (lineageCatalog != null)
+                                {
+                                    var jobName = Path.GetFileName(ctx.ScriptFile.FullName);
+                                    await lineageCatalog.SaveLineageAsync(lineage, jobName, ctx.ScriptFile.FullName, DateTime.UtcNow);
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.WriteLine($"[lineage catalog] Failed to persist lineage: {ex.Message}", ConsoleColor.DarkYellow);
+                        }
+                    }
+
                     return 0;
                 }
                 catch (ExecutionException ex)
@@ -517,6 +606,24 @@ namespace ETL_SQL.App
                         logger.WriteLine($"  - Line: {ex.Line}, Column: {ex.Column}", ConsoleColor.Yellow);
                         if (ex.ErrorNumber > 0) logger.WriteLine($"  - Error Number: {ex.ErrorNumber}", ConsoleColor.Yellow);
                     }
+
+                    if (auditAdHoc && historyStore != null && auditHistoryId != -1L)
+                    {
+                        try
+                        {
+                            await historyStore.LogJobEndAsync(
+                                auditHistoryId,
+                                "FAILED",
+                                ex.Message,
+                                0,
+                                Process.GetCurrentProcess().PeakWorkingSet64,
+                                0,
+                                runTimeHash,
+                                false);
+                        }
+                        catch { }
+                    }
+
                     return 1;
                 }
                 catch (Exception ex)
@@ -531,6 +638,24 @@ namespace ETL_SQL.App
                         logger.WriteLine($"Fatal Error: {ex.Message}", ConsoleColor.Red);
                         if (ctx.IsVerbose) logger.WriteLine(ex.StackTrace ?? "", ConsoleColor.DarkGray);
                     }
+
+                    if (auditAdHoc && historyStore != null && auditHistoryId != -1L)
+                    {
+                        try
+                        {
+                            await historyStore.LogJobEndAsync(
+                                auditHistoryId,
+                                "FAILED",
+                                ex.Message,
+                                0,
+                                Process.GetCurrentProcess().PeakWorkingSet64,
+                                0,
+                                runTimeHash,
+                                false);
+                        }
+                        catch { }
+                    }
+
                     return 1;
                 }
             }

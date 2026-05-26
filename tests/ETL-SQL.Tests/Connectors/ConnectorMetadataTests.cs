@@ -10,6 +10,8 @@ using ETL_SQL.Connectors;
 using ETL_SQL.Connectors.Odbc;
 using ETL_SQL.Connectors.Oracle;
 using ETL_SQL.Connectors.Postgres;
+using MySqlConnectorObj = ETL_SQL.Connectors.MySql.MySqlConnector;
+using MySqlConnector;
 using ETL_SQL.Connectors.Rest;
 using ETL_SQL.Connectors.Excel;
 using ETL_SQL.Connectors.Directory;
@@ -265,6 +267,85 @@ namespace ETL_SQL.Tests.Connectors
 
             var method = typeof(PostgresDataSource).GetMethod("CreateCommand", BindingFlags.Instance | BindingFlags.NonPublic)!;
             using var cmd = (NpgsqlCommand)method.Invoke(ds, new object[] { "SELECT 1", conn })!;
+
+            Assert.Equal("SELECT 1", cmd.CommandText);
+            Assert.Equal(9, cmd.CommandTimeout);
+        }
+
+        // ── MySqlConnector ────────────────────────────────────────────────────
+
+        [Fact]
+        public void MySqlConnector_Name_IsMySql()
+        {
+            var c = new MySqlConnectorObj();
+            Assert.Equal("MYSQL", c.Name);
+        }
+
+        [Fact]
+        public void MySqlConnector_Aliases_IncludesMariaDb()
+        {
+            var c = new MySqlConnectorObj();
+            Assert.Contains("MARIADB", c.Aliases);
+        }
+
+        [Fact]
+        public void MySqlConnector_GetHelp_ReturnsText()
+        {
+            var c = new MySqlConnectorObj();
+            Assert.NotEmpty(c.GetHelp());
+        }
+
+        [Fact]
+        public void MySqlConnector_GetSupportedOptions_NotNull()
+        {
+            var c = new MySqlConnectorObj();
+            Assert.NotNull(c.GetSupportedOptions());
+        }
+
+        [Fact]
+        public void MySqlConnector_GetOptionValues_NotNull()
+        {
+            var c = new MySqlConnectorObj();
+            Assert.NotNull(c.GetOptionValues());
+        }
+
+        [Fact]
+        public void MySqlConnector_BuildConnectionString_WithProperties()
+        {
+            var c = new MySqlConnectorObj();
+            var result = c.BuildConnectionString(new Dictionary<string, string>
+            {
+                ["HOST"] = "mysqlserver",
+                ["DATABASE"] = "mydb",
+                ["USER"] = "mysqluser",
+                ["PASSWORD"] = "secret",
+                ["PORT"] = "3306",
+                ["SSL_MODE"] = "VerifyFull",
+                ["ALLOW_PUBLIC_KEY_RETRIEVAL"] = "TRUE",
+                ["ALLOW_USER_VARIABLES"] = "TRUE"
+            });
+            Assert.NotEmpty(result);
+            Assert.Contains("Server=mysqlserver", result);
+            Assert.Contains("Database=mydb", result);
+            Assert.Contains("User ID=mysqluser", result);
+            Assert.Contains("Password=secret", result);
+            Assert.Contains("Port=3306", result);
+            Assert.Contains("SSL Mode=VerifyFull", result);
+            Assert.Contains("Allow Public Key Retrieval=True", result);
+            Assert.Contains("Allow User Variables=True", result);
+        }
+
+        [Fact]
+        public void MySqlDataSource_CreateCommand_AppliesTimeoutWithoutRecursing()
+        {
+            var ds = new ETL_SQL.Connectors.MySql.MySqlDataSource(
+                Ctx,
+                "Server=localhost;Database=db;Uid=user;Pwd=pass",
+                options: new Dictionary<string, string> { ["TIMEOUT_SECONDS"] = "9" });
+            using var conn = new MySqlConnection();
+
+            var method = typeof(ETL_SQL.Connectors.MySql.MySqlDataSource).GetMethod("CreateCommand", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            using var cmd = (MySqlCommand)method.Invoke(ds, new object[] { "SELECT 1", conn })!;
 
             Assert.Equal("SELECT 1", cmd.CommandText);
             Assert.Equal(9, cmd.CommandTimeout);

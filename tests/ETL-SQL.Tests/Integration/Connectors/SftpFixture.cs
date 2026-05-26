@@ -32,34 +32,45 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
         public async Task InitializeAsync()
         {
-            // Generate a 2048-bit RSA key pair; write private key to a temp file and public
-            // key to a directory that gets volume-mounted into /home/user/.ssh/keys — the
-            // atmoz/sftp entrypoint appends everything in that directory to authorized_keys.
             _keyDir = Path.Combine(Path.GetTempPath(), $"sftp_keys_{Guid.NewGuid():N}");
             Directory.CreateDirectory(_keyDir);
 
             var (privatePem, authorizedKeyLine) = GenerateRsaKeyPair();
             PrivateKeyPath = Path.Combine(_keyDir, "test_id_rsa.pem");
             File.WriteAllText(PrivateKeyPath, privatePem);
-            File.WriteAllText(Path.Combine(_keyDir, "test_id_rsa.pub"), authorizedKeyLine);
 
-            // Also write a passphrase-encrypted version of the same key pair so the
-            // passphrase auth test can use it.  Both keys share the same authorized_keys
-            // entry because they have the same public component.
             var encryptedPem = GenerateEncryptedPem(privatePem, TestPassphrase);
             EncryptedPrivateKeyPath = Path.Combine(_keyDir, "test_id_rsa_enc.pem");
             File.WriteAllText(EncryptedPrivateKeyPath, encryptedPem);
 
+            // No bind mount — Windows Docker Desktop maps host directories with 777
+            // permissions, causing sshd StrictModes to reject authorized_keys.
+            // We inject the key via ExecAsync after startup instead.
             _container = new ContainerBuilder("atmoz/sftp:latest")
-                // Format: user:pass[:uid[:gid[:dir[,dir…]]]]
                 .WithCommand($"{TestUser}:{TestPassword}:::{RemoteUploadDir}")
                 .WithPortBinding(22, true)
-                .WithBindMount(_keyDir, $"/home/{TestUser}/.ssh/keys", DotNet.Testcontainers.Configurations.AccessMode.ReadOnly)
                 .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Server listening on"))
                 .Build();
 
             await _container.StartAsync();
             Port = _container.GetMappedPublicPort(22);
+
+            // Inject the public key directly into authorized_keys with correct ownership
+            // and permissions so sshd accepts it regardless of host OS.
+            var key = authorizedKeyLine.Trim();
+            var result = await _container.ExecAsync(new[]
+            {
+                "/bin/sh", "-c",
+                $"mkdir -p /home/{TestUser}/.ssh" +
+                $" && printf '%s\\n' '{key}' >> /home/{TestUser}/.ssh/authorized_keys" +
+                $" && chmod 700 /home/{TestUser}/.ssh" +
+                $" && chmod 600 /home/{TestUser}/.ssh/authorized_keys" +
+                $" && chown -R {TestUser} /home/{TestUser}/.ssh"
+            });
+
+            if (result.ExitCode != 0)
+                throw new InvalidOperationException(
+                    $"Failed to inject SFTP authorized key (exit {result.ExitCode}): {result.Stderr}");
         }
 
         public async Task DisposeAsync()

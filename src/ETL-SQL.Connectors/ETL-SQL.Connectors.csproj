@@ -12,6 +12,7 @@
     <PackageReference Include="FluentFTP" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="MySqlConnector" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Oracle.ManagedDataAccess.Core" />
     <PackageReference Include="Parquet.Net" />

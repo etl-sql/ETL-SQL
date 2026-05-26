@@ -264,6 +264,7 @@ namespace ETL_SQL.Core.Parser
                      if (Current.Type != TokenType.EOF) Advance();
                 }
             }
+            ValidateGotoScoping(script);
             return script;
         }
 
@@ -1500,6 +1501,152 @@ namespace ETL_SQL.Core.Parser
                 joins.Add(new JoinClause(joinType, joinTable, onCondition!, hint, keepBest));
             }
             return joins;
+        }
+
+        private void ValidateGotoScoping(Script script)
+        {
+            var labels = new Dictionary<string, (SectionLabelStatement Label, List<AstNode> Ancestors)>(StringComparer.OrdinalIgnoreCase);
+            var gotos = new List<(GotoStatement Goto, List<AstNode> Ancestors)>();
+
+            TraverseAstForScoping(script, new List<AstNode>(), labels, gotos, script);
+
+            // Build map of top-level statements to batch index
+            var topLevelStatementToBatch = new Dictionary<Statement, int>();
+            int currentBatch = 0;
+            foreach (var stmt in script.Statements)
+            {
+                if (stmt is GoStatement)
+                {
+                    currentBatch++;
+                }
+                else
+                {
+                    topLevelStatementToBatch[stmt] = currentBatch;
+                }
+            }
+
+            foreach (var item in gotos)
+            {
+                var gotoStmt = item.Goto;
+                var gotoAncestors = item.Ancestors;
+
+                if (!labels.TryGetValue(gotoStmt.LabelName, out var target))
+                {
+                    script.Diagnostics.Add(new Diagnostic($"Label '{gotoStmt.LabelName}' is not defined in this script.", gotoStmt.Line, gotoStmt.Column, DiagnosticSeverity.Error, "SEMANTIC"));
+                    continue;
+                }
+
+                var labelStmt = target.Label;
+                var labelAncestors = target.Ancestors;
+
+                // Ensure they are in the same batch
+                Statement GetTopLevelStatement(Statement s, List<AstNode> ancestors)
+                {
+                    if (ancestors.Count <= 1) return s;
+                    return (Statement)ancestors[1];
+                }
+
+                var gotoTop = GetTopLevelStatement(gotoStmt, gotoAncestors);
+                var labelTop = GetTopLevelStatement(labelStmt, labelAncestors);
+                if (topLevelStatementToBatch.TryGetValue(gotoTop, out var gotoBatch) &&
+                    topLevelStatementToBatch.TryGetValue(labelTop, out var labelBatch) &&
+                    gotoBatch != labelBatch)
+                {
+                    script.Diagnostics.Add(new Diagnostic($"GOTO cannot jump across GO batch boundaries to label '{gotoStmt.LabelName}'.", gotoStmt.Line, gotoStmt.Column, DiagnosticSeverity.Error, "SEMANTIC"));
+                    continue;
+                }
+
+                // Find lowest common ancestor
+                int commonCount = 0;
+                int minLen = Math.Min(gotoAncestors.Count, labelAncestors.Count);
+                while (commonCount < minLen && gotoAncestors[commonCount] == labelAncestors[commonCount])
+                {
+                    commonCount++;
+                }
+
+                // Check nodes in the label's path after the common prefix
+                for (int i = commonCount; i < labelAncestors.Count; i++)
+                {
+                    var parent = labelAncestors[i - 1];
+                    if (parent is WhileStatement || parent is ForStatement || parent is ForeachStatement || parent is IfStatement || parent is TryCatchStatement || parent is ParallelStatement)
+                    {
+                        string typeStr = parent.GetType().Name.Replace("Statement", "");
+                        script.Diagnostics.Add(new Diagnostic($"GOTO cannot jump into nested {typeStr} block to label '{gotoStmt.LabelName}'.", gotoStmt.Line, gotoStmt.Column, DiagnosticSeverity.Error, "SEMANTIC"));
+                        break;
+                    }
+                }
+            }
+        }
+
+        private void TraverseAstForScoping(AstNode node, List<AstNode> ancestors, Dictionary<string, (SectionLabelStatement Label, List<AstNode> Ancestors)> labels, List<(GotoStatement Goto, List<AstNode> Ancestors)> gotos, Script script)
+        {
+            if (node == null) return;
+
+            var currentAncestors = new List<AstNode>(ancestors);
+
+            if (node is SectionLabelStatement label)
+            {
+                if (labels.ContainsKey(label.LabelName))
+                {
+                    script.Diagnostics.Add(new Diagnostic($"Duplicate label '{label.LabelName}' defined in script.", label.Line, label.Column, DiagnosticSeverity.Error, "SEMANTIC"));
+                }
+                else
+                {
+                    label.IsTopLevel = !currentAncestors.Any(a => a is WhileStatement || a is ForStatement || a is ForeachStatement || a is IfStatement || a is TryCatchStatement || a is ParallelStatement);
+                    labels[label.LabelName] = (label, currentAncestors);
+                }
+            }
+            else if (node is GotoStatement @goto)
+            {
+                gotos.Add((@goto, currentAncestors));
+            }
+
+            currentAncestors.Add(node);
+
+            if (node is Script s)
+            {
+                foreach (var stmt in s.Statements) TraverseAstForScoping(stmt, currentAncestors, labels, gotos, script);
+            }
+            else if (node is BlockStatement block)
+            {
+                foreach (var stmt in block.Statements) TraverseAstForScoping(stmt, currentAncestors, labels, gotos, script);
+            }
+            else if (node is WhileStatement @while)
+            {
+                TraverseAstForScoping(@while.Condition, currentAncestors, labels, gotos, script);
+                TraverseAstForScoping(@while.Body, currentAncestors, labels, gotos, script);
+            }
+            else if (node is ForStatement @for)
+            {
+                TraverseAstForScoping(@for.StartValue, currentAncestors, labels, gotos, script);
+                TraverseAstForScoping(@for.EndValue, currentAncestors, labels, gotos, script);
+                if (@for.StepValue != null) TraverseAstForScoping(@for.StepValue, currentAncestors, labels, gotos, script);
+                TraverseAstForScoping(@for.Body, currentAncestors, labels, gotos, script);
+            }
+            else if (node is ForeachStatement @foreach)
+            {
+                TraverseAstForScoping(@foreach.ListExpression, currentAncestors, labels, gotos, script);
+                TraverseAstForScoping(@foreach.Body, currentAncestors, labels, gotos, script);
+            }
+            else if (node is IfStatement @if)
+            {
+                TraverseAstForScoping(@if.Condition, currentAncestors, labels, gotos, script);
+                TraverseAstForScoping(@if.IfBody, currentAncestors, labels, gotos, script);
+                if (@if.ElseIfClauses != null)
+                {
+                    foreach (var elseif in @if.ElseIfClauses) TraverseAstForScoping(elseif.Body, currentAncestors, labels, gotos, script);
+                }
+                if (@if.ElseBody != null) TraverseAstForScoping(@if.ElseBody, currentAncestors, labels, gotos, script);
+            }
+            else if (node is TryCatchStatement tc)
+            {
+                TraverseAstForScoping(tc.TryBody, currentAncestors, labels, gotos, script);
+                TraverseAstForScoping(tc.CatchBody, currentAncestors, labels, gotos, script);
+            }
+            else if (node is ParallelStatement p)
+            {
+                TraverseAstForScoping(p.Body, currentAncestors, labels, gotos, script);
+            }
         }
     }
 }

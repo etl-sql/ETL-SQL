@@ -64,6 +64,9 @@ namespace ETL_SQL.LSP
 
         private static LocationOrLocationLinks? FindDeclaration(Statement stmt, string name, DocumentUri uri)
         {
+            if (stmt is SectionLabelStatement sls && string.Equals(sls.LabelName, name, StringComparison.OrdinalIgnoreCase))
+                return new LocationOrLocationLinks(new Location { Uri = uri, Range = new LSPRange(sls.Line - 1, sls.Column - 1, sls.Line - 1, sls.Column - 1 + name.Length) });
+
             if (stmt is DeclareStatement ds && string.Equals(ds.VariableName, name, StringComparison.OrdinalIgnoreCase))
                 return new LocationOrLocationLinks(new Location { Uri = uri, Range = new LSPRange(ds.Line - 1, ds.Column - 1, ds.Line - 1, ds.Column - 1 + name.Length) });
 
