@@ -351,6 +351,11 @@ try {
             ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke" `
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Smoke" } `
             $previousPhaseMap $fingerprint $results
+
+        Invoke-LoggedPhase "Cert baseline regression check (smoke)" `
+            ".\scripts\Compare-CertBaseline.ps1" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" } `
+            $previousPhaseMap $fingerprint $results
     }
 
     if ($IncludeDockerIntegration) {
@@ -364,6 +369,11 @@ try {
         Invoke-LoggedPhase "Scale certification standard" `
             ".\scripts\Test-ScaleCertification.ps1 -Tier Standard" `
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Standard" } `
+            $previousPhaseMap $fingerprint $results
+
+        Invoke-LoggedPhase "Cert baseline regression check (standard)" `
+            ".\scripts\Compare-CertBaseline.ps1" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" } `
             $previousPhaseMap $fingerprint $results
     }
 

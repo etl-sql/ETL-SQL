@@ -149,13 +149,12 @@ Goal: *"make lineage, tags, metadata, report dependencies, history, and permissi
 Goal: *"large workload behavior is intentional, documented, and observable."* External engines and spill strategies exist; documentation and measurability lag behind.
 
 - [ ] **[Performance] Publish Standard-scale certification results and treat regressions as release blockers**
-  - Current state: `Test-ScaleCertification.ps1 -Tier Standard` exists but there are no published passing results to compare against.
-  - Action: Run a full standard-scale certification pass, commit results to `certification-results/`, and add a check to the pre-release script that diffs against the baseline and fails on regression.
-  - Files: `scripts/Test-ScaleCertification.ps1`, `certification-results/`
+  - Regression check implemented: `scripts/Compare-CertBaseline.ps1` diffs a cert-report.json against a stored baseline (pass/fail, result rows, checksum, elapsed time ±50%) and fails on any regression. Wired into `Test-PreRelease.ps1` after both Smoke and Standard cert phases.
+  - Smoke baseline committed: `certification-results/baseline-smoke.json`.
+  - **Remaining**: Run `Test-PreRelease.ps1 -IncludeStandardScale` to generate Standard-tier results, then copy `cert-report.json` to `certification-results/baseline-standard.json`.
 
-- [ ] **[Performance] Document spill thresholds and memory behavior for users**
-  - Goal: A single reference page explains: when does the engine spill to disk, what are the default thresholds (from `appsettings.json`), how are they configured, and what are the performance implications of each external engine.
-  - File: New section in `Docs/Architecture/Engine.md` or new `Docs/Reference/Performance.md`
+- [x] **[Performance] Document spill thresholds and memory behavior for users**
+  - File: `Docs/Reference/Performance.md` — covers all four external engines, activation thresholds, `SET` overrides, `appsettings.json` defaults, spill storage, encryption/compression, observability (`--perf`, `SHOW PROFILE`, `--verbose`), memory model, tuning guidance, and scale certification tiers.
 
 - [x] **[Performance] Emit spill and memory metrics to verbose log output**
   - Implemented: `--perf` / profiling mode shows "Disk Spilled: X MB" in the summary table; `--verbose` / JSON mode emits `spilledMb` in the `performance` telemetry packet; `SHOW PROFILE` tracks `SpilledBytes` per statement; `ExternalWindowEngine` logs deep-spill events inline. `ExecutionTelemetryManager` tracks `TotalSpilledBytes`, `SubquerySpilledBytes`, and `SortSpillCount`.
