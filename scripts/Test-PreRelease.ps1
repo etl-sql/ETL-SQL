@@ -324,6 +324,11 @@ try {
         { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "fast" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
         $previousPhaseMap $fingerprint $results
 
+    Invoke-LoggedPhase "Sample scripts" `
+        ".\scripts\Test-AllSamples.ps1" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-AllSamples.ps1" } `
+        $previousPhaseMap $fingerprint $results
+
     if (-not $SkipNode) {
         Invoke-LoggedPhase "VS Code npm ci" `
             "npm ci (src\etl-sql-vscode)" `

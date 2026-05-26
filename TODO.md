@@ -185,9 +185,12 @@ Success criterion: *"common workflows have working examples, reference documenta
 - [x] **[Examples] Build a dashboard reference script**
   - Exists: `samples/08_Reporting/sales_dashboard.rptsql`; full chart-type kitchen sink in `samples/10_Kitchen_Sinks/` (01_BAR through 36_GANTT).
 
-- [ ] **[Examples] Add SLT test coverage for core example scripts**
-  - Gap: Zero `.slt` files exist in `samples/`. The example library has no automated regression coverage — a script that silently produces wrong output after a refactor will not be caught.
-  - Scope: Prioritize the `07_Real_World/` and `01_Basics/` scripts; the `10_Kitchen_Sinks/` sink scripts are better served as integration tests.
+- [x] **[Examples] Wire sample smoke coverage into pre-release validation**
+  - `scripts/Test-AllSamples.ps1` runs all `.etlsql` and `.rptsql` files and checks exit codes, with `@requires:` skip tags for unavailable services. Added as a standard phase in `Test-PreRelease.ps1` (after the fast lane).
+
+- [ ] **[Examples] Add output-correctness coverage for core example scripts**
+  - Gap: `Test-AllSamples.ps1` verifies scripts don't crash but not that they produce correct output. A refactor that silently changes row counts or values will not be caught.
+  - Scope: Prioritize `07_Real_World/` and `01_Basics/`; add `.slt` fixtures or assertion-based wrappers for each.
   - File: `tests/ETL-SQL.SqlLogicTests/`
 
 ## Release Hardening / Local Validation
