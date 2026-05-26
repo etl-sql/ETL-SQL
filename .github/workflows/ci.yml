@@ -14,17 +14,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY.git"
+          git -c http.extraheader="AUTHORIZATION: bearer $env:GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
+          git checkout --force FETCH_HEAD
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.x'
+      - name: Verify .NET
+        run: dotnet --info
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
+      - name: Verify Node.js
+        run: node --version
 
       - name: Restore tools
         run: dotnet tool restore
@@ -78,34 +81,29 @@ jobs:
             Write-Warning "Could not parse coverage from summary — skipping gate"
           }
 
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: coverage-report
-          path: ./coverage/report/
-          retention-days: 14
-
   build-vscode:
     name: Build VS Code Extension
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin "$GITHUB_SHA"
+          git checkout --force FETCH_HEAD
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.x'
+      - name: Verify .NET
+        run: dotnet --info
 
       - name: Build engine for integration tests
         run: dotnet build src/ETL-SQL.App/ETL-SQL.App.csproj --configuration Debug
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
+      - name: Verify Node.js
+        run: node --version
 
       - name: Install dependencies
         working-directory: src/etl-sql-vscode

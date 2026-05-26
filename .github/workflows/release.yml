@@ -5,6 +5,8 @@ on:
     tags:
       - 'v*' # Trigger on any version tag like v0.7.0
 
+permissions:
+  contents: write
 
 jobs:
   # 1. Validation Job - ensures the release is stable
@@ -12,32 +14,61 @@ jobs:
     name: Validate & Test
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.x'
+      - name: Checkout
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY.git"
+          git -c http.extraheader="AUTHORIZATION: bearer $env:GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
+          git checkout --force FETCH_HEAD
+      - name: Verify .NET
+        run: dotnet --info
       - name: Build & Run Smoke Tests
         shell: pwsh
         run: |
           dotnet build ETL-SQL.slnx --configuration Release
           .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
 
+  prepare-release:
+    name: Prepare GitHub Release
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update draft release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRERELEASE: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+        run: |
+          args=()
+          if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --draft "${args[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" --draft --generate-notes "${args[@]}"
+          fi
+
   # 2. Windows Build (ZIP + MSI + VSIX)
   build-windows:
     name: Build Windows (MSI & ZIP)
-    needs: validate
+    needs: prepare-release
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.x'
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
+      - name: Checkout
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY.git"
+          git -c http.extraheader="AUTHORIZATION: bearer $env:GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
+          git checkout --force FETCH_HEAD
+      - name: Verify .NET
+        run: dotnet --info
+      - name: Verify Node.js
+        run: node --version
       
       - name: Build & Publish
         shell: pwsh
@@ -59,27 +90,31 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "build_msi.ps1 failed with exit code $LASTEXITCODE" }
           Move-Item "src/ETL-SQL.Installer/ETL-SQL-Enterprise-v$Version.msi" "release/ETL-SQL-v$Version-x64-Setup.msi"
 
-      - name: Upload Windows Artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-windows
-          path: release/
+      - name: Upload Windows release assets
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload $env:GITHUB_REF_NAME release/*.zip release/*.msi --clobber
 
   # 3. Linux Build (ZIP + DEB)
   build-linux:
     name: Build Linux (DEB & ZIP)
-    needs: validate
+    needs: prepare-release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.x'
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
+      - name: Checkout
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin "$GITHUB_SHA"
+          git checkout --force FETCH_HEAD
+      - name: Verify .NET
+        run: dotnet --info
+      - name: Verify Node.js
+        run: node --version
       
       - name: Publish Binaries
         shell: pwsh
@@ -91,29 +126,31 @@ jobs:
           ./scripts/build_linux_packages.sh $Version release/linux-x64/bin
           mv "etl-sql_${Version}_amd64.deb" release/
 
-      - name: Upload Linux Artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-linux
-          path: |
-            release/*.zip
-            release/*.deb
+      - name: Upload Linux release assets
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" release/*.zip release/*.deb --clobber
 
   # 4. macOS Build (ZIP + DMG)
   build-macos:
     name: Build macOS (DMG & ZIP)
-    needs: validate
+    needs: prepare-release
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v6
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.x'
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
+      - name: Checkout
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" fetch --no-tags --prune --depth=1 origin "$GITHUB_SHA"
+          git checkout --force FETCH_HEAD
+      - name: Verify .NET
+        run: dotnet --info
+      - name: Verify Node.js
+        run: node --version
       
       - name: Publish Binaries
         shell: pwsh
@@ -125,37 +162,20 @@ jobs:
           ./scripts/build_mac_dmg.sh $Version release/osx-x64/bin
           mv "ETL-SQL_v${Version}.dmg" release/
 
-      - name: Upload macOS Artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-macos
-          path: |
-            release/*.zip
-            release/*.dmg
+      - name: Upload macOS release assets
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" release/*.zip release/*.dmg --clobber
 
   # 5. Create GitHub Release
-  create-release:
-    name: Create GitHub Release
+  publish-release:
+    name: Publish GitHub Release
     needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - name: Download all artifacts
-        uses: actions/download-artifact@v8
-        with:
-          path: all-artifacts/
-          merge-multiple: true
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: |
-            all-artifacts/*.zip
-            all-artifacts/*.msi
-            all-artifacts/*.deb
-            all-artifacts/*.dmg
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+      - name: Publish draft release
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false
