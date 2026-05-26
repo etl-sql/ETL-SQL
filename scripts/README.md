@@ -16,7 +16,7 @@ This directory contains build, test, utility, and release packaging scripts for 
 | **[`Test-AllSamples.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-AllSamples.ps1)** / **[`test-all-samples.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-all-samples.sh)** | PowerShell / Bash | Cross-platform | Discovers and executes all samples (`*.etlsql` and `*.rptsql`) in the `samples/` folder to validate engine runtime backward compatibility. |
 | **[`Compare-Benchmarks.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Compare-Benchmarks.ps1)** / **[`compare-benchmarks.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/compare-benchmarks.sh)** | PowerShell / Bash | Cross-platform | Compares BenchmarkDotNet JSON results against a checked-in baseline file and returns an exit code of 1 if regression exceeds a given threshold. |
 | **[`Test-ScaleCertification.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-ScaleCertification.ps1)** / **[`test-scale-certification.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-scale-certification.sh)** | PowerShell / Bash | Cross-platform | Runs the scale certification test suite (Smoke/Standard/Stress/Provider tiers) and produces JSON and Markdown reports with per-scenario metrics. |
-| **[`Test-PreRelease.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-PreRelease.ps1)** | PowerShell | Windows / macOS / Linux | Runs the local-first pre-release validation gate with resumable phases, optional Docker/Standard-scale/installer checks, and JSON/Markdown reports under `release-validation/`. |
+| **[`Test-PreRelease.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-PreRelease.ps1)** / **[`test-pre-release.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-pre-release.sh)** | PowerShell / Bash | Cross-platform | Runs the local-first pre-release validation gate with resumable phases, optional Docker/Standard-scale/installer checks, and JSON/Markdown reports under `release-validation/`. |
 | **[`sync-assets.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sync-assets.ps1)** / **[`sync-assets.js`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sync-assets.js)** | PowerShell / JavaScript | Cross-platform | Synchronizes canonical shared browser assets from `src/ETL-SQL.ReportRuntime` to dependent shell host directories (VS Code extension, portal, player). |
 | **[`generate-syntax-index.js`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/generate-syntax-index.js)** | JavaScript | Cross-platform | Regenerates the canonical token inventory appendix inside `Docs/Syntax_Index.md` from `LanguageMetadata.cs`. |
 | **[`install.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/install.ps1)** / **[`install.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/install.sh)** | PowerShell / Bash | Cross-platform | Boostrapping workstation installers that download, unpack, and register the ETL-SQL SDK to the user's `PATH`. |
@@ -78,20 +78,34 @@ Runs groups of tests mapped to standard pipeline stages:
 ### 2.4 Running Local Pre-Release Validation
 Run this before pushing release tags or building release installers. It is designed to catch failures locally before spending GitHub-hosted runner time.
 
-* **Windows / PowerShell:**
+* **Windows (PowerShell):**
   ```powershell
   .\scripts\Test-PreRelease.ps1
   ```
+* **Linux / macOS (Bash):**
+  ```bash
+  ./scripts/test-pre-release.sh
+  ```
 
 Useful options:
+
 ```powershell
+# PowerShell
 .\scripts\Test-PreRelease.ps1 -Resume
 .\scripts\Test-PreRelease.ps1 -IncludeDockerIntegration
 .\scripts\Test-PreRelease.ps1 -IncludeStandardScale
 .\scripts\Test-PreRelease.ps1 -BuildInstallers -Platforms win-x64
 ```
 
-Reports and logs are written to `release-validation/`. Use `-Resume` after fixing a failed phase; the script only reuses completed phases when the source fingerprint still matches, unless `-ForceResume` is supplied.
+```bash
+# Bash
+./scripts/test-pre-release.sh --resume
+./scripts/test-pre-release.sh --include-docker-integration
+./scripts/test-pre-release.sh --include-standard-scale
+./scripts/test-pre-release.sh --build-installers --platforms linux-x64
+```
+
+Reports and logs are written to `release-validation/`. Use `-Resume` / `--resume` after fixing a failed phase; the script only reuses completed phases when the source fingerprint still matches, unless `-ForceResume` / `--force-resume` is supplied.
 
 ### 2.5 Running SQLite Logic Tests (SLT) Corpus
 Runs the SQLite Logic test suite, generating timestamped output folders with standard teed console logs and TRX test results files:
