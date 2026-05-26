@@ -147,6 +147,14 @@ test_lineage.md
 test_out.txt
 tests_list.txt
 
+# WiX build outputs
+*.msi
+*.wixpdb
+*.wixobj
+
+# Release validation artifacts
+release-validation/
+
 # Sample Output
 samples/output/
 *.tmp.json
