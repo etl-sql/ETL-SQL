@@ -257,25 +257,33 @@ namespace ETL_SQL.App
                     }
 
                     var sessionManager = Program.ServiceProvider.GetRequiredService<ETL_SQL.Engine.Services.SessionStateManager>();
+
+                    if (ctx.Resume && string.IsNullOrEmpty(ctx.SessionId))
+                    {
+                        logger.WriteLine("Error: --resume requires --session to be specified.", ConsoleColor.Red);
+                        return 1;
+                    }
+
                     if (!string.IsNullOrEmpty(ctx.SessionId))
                     {
                         evaluator.IsPersistentSession = true;
                         evaluator.SessionId = ctx.SessionId;
                         evaluator.SessionRoot = sessionManager.SessionRoot;
-                        var state = await sessionManager.LoadSession(ctx.SessionId);
-                        if (state != null)
+
+                        if (ctx.Resume)
                         {
-                            logger.WriteLine($"Restoring session {ctx.SessionId}...", ConsoleColor.Cyan);
-                            await evaluator.LoadSessionState(state);
-                            if (ctx.Resume)
+                            var state = await sessionManager.LoadSession(ctx.SessionId);
+                            if (state != null)
                             {
+                                logger.WriteLine($"Restoring session {ctx.SessionId}...", ConsoleColor.Cyan);
+                                await evaluator.LoadSessionState(state);
                                 evaluator.IsResuming = true;
                             }
-                        }
-                        else if (ctx.Resume)
-                        {
-                            logger.WriteLine($"Error: --resume specified but no saved session found for '{ctx.SessionId}'. Run without --resume to start fresh.", ConsoleColor.Red);
-                            return 1;
+                            else
+                            {
+                                logger.WriteLine($"Error: --resume specified but no saved session found for '{ctx.SessionId}'. Run without --resume to start fresh.", ConsoleColor.Red);
+                                return 1;
+                            }
                         }
                     }
                     

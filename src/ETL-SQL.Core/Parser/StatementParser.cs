@@ -506,7 +506,7 @@ namespace ETL_SQL.Core.Parser
         private Statement ParseGoto()
         {
             var gotoToken = _parser.Previous;
-            if (_parser.Current.Type != TokenType.IDENTIFIER && !LanguageMetadata.IsKeyword(_parser.Current.Value))
+            if (_parser.Current.Type != TokenType.IDENTIFIER)
                 throw new SyntaxException("Expected identifier for GOTO label", _parser.Current.Line, _parser.Current.Column);
             var labelToken = _parser.Advance();
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();

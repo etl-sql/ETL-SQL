@@ -373,9 +373,13 @@ namespace ETL_SQL.Connectors.MySql
         public async Task CommitAsync()
         {
             if (_activeTransaction == null) return;
+            var tx = _activeTransaction;
+            var conn = _transactionalConnection;
+            _activeTransaction = null;
+            _transactionalConnection = null;
             try
             {
-                await _activeTransaction.CommitAsync();
+                await tx.CommitAsync();
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -383,19 +387,21 @@ namespace ETL_SQL.Connectors.MySql
             }
             finally
             {
-                await _activeTransaction.DisposeAsync();
-                if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
-                _activeTransaction = null;
-                _transactionalConnection = null;
+                await tx.DisposeAsync();
+                if (conn != null) await conn.DisposeAsync();
             }
         }
 
         public async Task RollbackAsync()
         {
             if (_activeTransaction == null) return;
+            var tx = _activeTransaction;
+            var conn = _transactionalConnection;
+            _activeTransaction = null;
+            _transactionalConnection = null;
             try
             {
-                await _activeTransaction.RollbackAsync();
+                await tx.RollbackAsync();
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -403,10 +409,8 @@ namespace ETL_SQL.Connectors.MySql
             }
             finally
             {
-                await _activeTransaction.DisposeAsync();
-                if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
-                _activeTransaction = null;
-                _transactionalConnection = null;
+                await tx.DisposeAsync();
+                if (conn != null) await conn.DisposeAsync();
             }
         }
 

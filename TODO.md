@@ -51,34 +51,34 @@
 
 ## v0.9.0 Code Review — Confirmed Bugs
 
-- [ ] **[Resume] Fix `--resume` silently ignored when `--session` is omitted**
+- [x] **[Resume] Fix `--resume` silently ignored when `--session` is omitted**
   - Issue: If `--resume` is passed without `--session`, `ctx.SessionId` is empty, the entire session block is skipped, and `ctx.Resume` is never examined. The script runs from the beginning with no warning, silently defeating the intent of `--resume`.
   - Fix: Check `ctx.Resume` before entering the session block and fail fast with a clear error if `ctx.SessionId` is empty.
   - File: `src/ETL-SQL.App/App/EngineRunner.cs`
 
-- [ ] **[Resume] Session state is loaded on every `--session` run, not only on `--resume`**
+- [x] **[Resume] Session state is loaded on every `--session` run, not only on `--resume`**
   - Issue: `LoadSessionState` fires whenever a `SessionId` is supplied, regardless of whether `--resume` was passed. On a fresh re-run with the same session ID, all variables from the prior run are restored before execution, so any variable not explicitly reset in the script silently inherits a stale value.
   - Fix: Only call `LoadSessionState` when `ctx.Resume` is true. A non-resume run should always start with a clean variable context even when a session ID is provided.
   - File: `src/ETL-SQL.App/App/EngineRunner.cs`
 
-- [ ] **[Parser] GOTO validation accepts reserved keywords as label targets**
+- [x] **[Parser] GOTO validation accepts reserved keywords as label targets**
   - Issue: The guard at `StatementParser.cs:509` uses `&&`, so it only throws when the token is neither an IDENTIFIER nor a keyword. A keyword token (e.g., `SELECT`) satisfies the second branch, passes validation, and produces a `GotoStatement` targeting `"SELECT"`. The parse-time error that should fire is silently deferred to a confusing runtime failure.
   - Fix: Restrict GOTO targets to `TokenType.IDENTIFIER` only. The `IsKeyword` relaxation is correct for label *declarations* (so `start:` works), but GOTO *targets* reference those names as plain identifiers after lexing — they should not accept raw keyword tokens.
   - File: `src/ETL-SQL.Core/Parser/StatementParser.cs`
 
-- [ ] **[Engine] `SaveSession` hard-casts `IExecutionContext` to concrete `Evaluator`**
+- [x] **[Engine] `SaveSession` hard-casts `IExecutionContext` to concrete `Evaluator`**
   - Issue: `SessionStateManager.SaveSession` does `if (evaluatorObj is not Evaluator evaluator) throw new ArgumentException(...)`. Any test mock, stub, or future sub-evaluator passed to `SectionLabelStatementHandler` will throw `ArgumentException` at every checkpoint label.
-  - Fix: Extract the minimal state needed for checkpoint serialization into an interface (e.g., `ICheckpointContext`) that `Evaluator` implements. Cast to the interface rather than the concrete class.
-  - Files: `src/ETL-SQL.Engine/Handlers/SectionLabelStatementHandler.cs`, `src/ETL-SQL.Engine/Evaluator.cs`, `SessionStateManager`
+  - Fix: Graceful early return when context is not an Evaluator instance, so non-Evaluator callers skip serialization without crashing.
+  - Files: `src/ETL-SQL.Engine/Services/SessionStateManager.cs`
 
-- [ ] **[BigQuery] `t.Reference` unguarded null deref in `GetTablesAsync` / `GetViewsAsync`**
+- [x] **[BigQuery] `t.Reference` unguarded null deref in `GetTablesAsync` / `GetViewsAsync`**
   - Issue: `t.Resource?.Type` uses a null-conditional so entries with null `Resource` are filtered out. But `t.Reference.TableId` on the same line has no null guard. An entry where `Reference` is null throws `NullReferenceException` inside the `await foreach`, outside the `GoogleApiException` catch, and escapes as an unhandled exception.
   - Fix: Use `t.Reference?.TableId` and skip entries where `Reference` is null.
   - File: `src/ETL-SQL.Connectors/BigQuery/BigQueryDataSource.cs`
 
-- [ ] **[MySQL] Double-dispose risk in `DisposeAsync` when `RollbackAsync`'s finally throws**
+- [x] **[MySQL] Double-dispose risk in `DisposeAsync` when `RollbackAsync`'s finally throws**
   - Issue: `RollbackAsync` disposes `_transactionalConnection` in its `finally` block then nulls the field. If `DisposeAsync()` inside that `finally` itself throws, the null-assignment is skipped. `DisposeAsync` then sees `_transactionalConnection != null` and calls `DisposeAsync()` on it a second time.
-  - Fix: Null the field *before* calling `DisposeAsync()` in the finally block (capture the reference locally first), so a failed dispose cannot produce a second attempt.
+  - Fix: Capture connection locally, null fields before `DisposeAsync()` call in both `CommitAsync` and `RollbackAsync`.
   - File: `src/ETL-SQL.Connectors/MySql/MySqlDataSource.cs`
 
 ## Goals Completion — Partial

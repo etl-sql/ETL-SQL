@@ -227,7 +227,7 @@ namespace ETL_SQL.Connectors.BigQuery
                 var tables = new List<string>();
                 await foreach (var t in client.ListTablesAsync(_projectId, datasetId))
                 {
-                    if (string.Equals(t.Resource?.Type, "TABLE", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(t.Resource?.Type, "TABLE", StringComparison.OrdinalIgnoreCase) && t.Reference?.TableId != null)
                         tables.Add(t.Reference.TableId);
                 }
                 return tables;
@@ -247,7 +247,7 @@ namespace ETL_SQL.Connectors.BigQuery
                 var views = new List<string>();
                 await foreach (var t in client.ListTablesAsync(_projectId, datasetId))
                 {
-                    if (string.Equals(t.Resource?.Type, "VIEW", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(t.Resource?.Type, "VIEW", StringComparison.OrdinalIgnoreCase) && t.Reference?.TableId != null)
                         views.Add(t.Reference.TableId);
                 }
                 return views;
