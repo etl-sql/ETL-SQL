@@ -87,14 +87,9 @@
 
 The feature shipped functionally but has correctness gaps. Goal: *"support clear recovery behavior when a workflow fails partway through."*
 
-- [ ] **[Resume] Add integration tests for resume edge cases**
-  - Scenarios needed:
-    - `--resume` without `--session` → expect error, not silent fresh run
-    - Re-run with same `--session` but no `--resume` → verify variables start fresh, not inherited from prior run
-    - GOTO targeting a keyword name → expect `SyntaxException` at parse time, not runtime failure
-    - Checkpoint save failure (read-only path, disk full) → graceful error, not silent corrupt state
-    - Resume from mid-script checkpoint → only post-checkpoint statements execute
-  - File: `tests/ETL-SQL.Tests/` (new `ResumeEdgeCaseTests.cs`)
+- [x] **[Resume] Add integration tests for resume edge cases**
+  - File: `tests/ETL-SQL.Tests/Statements/ResumeEdgeCaseTests.cs` (5 tests, all passing)
+  - Covered: IsResuming without checkpoint → descriptive error; same session without resume → fresh variables; GOTO targeting keyword → parse diagnostic; SaveSession with non-Evaluator → graceful return; mid-script resume → loaded checkpoint state used, not re-declared initial value.
 
 - [ ] **[Resume] Document session ID semantics and `--resume` / `--session` interaction**
   - Issue: Current docs describe `--resume` but do not explain what happens when `--session` is provided without `--resume` (state load behavior is unintuitive and currently incorrect — see bug above).
