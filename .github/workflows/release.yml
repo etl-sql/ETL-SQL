@@ -4,9 +4,18 @@ on:
   push:
     tags:
       - 'v*' # Trigger on any version tag like v0.7.0
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.8.0)'
+        required: true
+        default: 'v0.8.0'
 
 permissions:
   contents: write
+
+env:
+  TAG_NAME: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   # 1. Validation Job - ensures the release is stable
@@ -21,7 +30,8 @@ jobs:
         run: |
           git init .
           git remote add origin "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
-          git fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
+          $ref = if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') { "refs/tags/$env:TAG_NAME" } else { $env:GITHUB_SHA }
+          git fetch --no-tags --prune --depth=1 origin $ref
           git checkout --force FETCH_HEAD
       - name: Verify .NET
         run: dotnet --info
@@ -40,14 +50,14 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PRERELEASE: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          PRERELEASE: ${{ contains(env.TAG_NAME, 'alpha') || contains(env.TAG_NAME, 'beta') || contains(env.TAG_NAME, 'rc') }}
         run: |
           args=(--repo "$GITHUB_REPOSITORY")
           if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" --draft "${args[@]}"
+          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" --draft "${args[@]}"
           else
-            gh release create "$GITHUB_REF_NAME" --draft --generate-notes "${args[@]}"
+            gh release create "$TAG_NAME" --draft --generate-notes "${args[@]}"
           fi
 
   # 2. Windows Build (ZIP + MSI)
@@ -63,7 +73,8 @@ jobs:
         run: |
           git init .
           git remote add origin "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
-          git fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
+          $ref = if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') { "refs/tags/$env:TAG_NAME" } else { $env:GITHUB_SHA }
+          git fetch --no-tags --prune --depth=1 origin $ref
           git checkout --force FETCH_HEAD
       - name: Verify .NET
         run: dotnet --info
@@ -73,7 +84,7 @@ jobs:
       - name: Build & Publish
         shell: pwsh
         run: |
-          $Version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $Version = $env:TAG_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
           .\scripts\publish_release.ps1 -Platforms win-x64
 
@@ -84,7 +95,7 @@ jobs:
       - name: Build MSI
         shell: pwsh
         run: |
-          $Version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $Version = $env:TAG_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
           .\scripts\build_msi.ps1
           if ($LASTEXITCODE -ne 0) { throw "build_msi.ps1 failed with exit code $LASTEXITCODE" }
@@ -94,7 +105,7 @@ jobs:
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload $env:GITHUB_REF_NAME release/*.zip release/*.msi --clobber
+        run: gh release upload $env:TAG_NAME release/*.zip release/*.msi --clobber
 
   # 3. Linux Build (ZIP + DEB)
   build-linux:
@@ -109,7 +120,8 @@ jobs:
         run: |
           git init .
           git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --no-tags --prune --depth=1 origin "${GITHUB_SHA}"
+          ref=$([[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]] && echo "refs/tags/${TAG_NAME}" || echo "${GITHUB_SHA}")
+          git fetch --no-tags --prune --depth=1 origin "$ref"
           git checkout --force FETCH_HEAD
       - name: Verify .NET
         run: dotnet --info
@@ -119,7 +131,7 @@ jobs:
       - name: Publish Binaries
         shell: pwsh
         run: |
-          $Version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $Version = $env:TAG_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
           ./scripts/publish_release.ps1 -Platforms linux-x64
           chmod +x scripts/build_linux_packages.sh
@@ -130,7 +142,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$GITHUB_REF_NAME" release/*.zip release/*.deb --clobber
+        run: gh release upload "$TAG_NAME" release/*.zip release/*.deb --clobber
 
   # 4. macOS Build (ZIP + DMG)
   build-macos:
@@ -145,7 +157,8 @@ jobs:
         run: |
           git init .
           git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --no-tags --prune --depth=1 origin "${GITHUB_SHA}"
+          ref=$([[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]] && echo "refs/tags/${TAG_NAME}" || echo "${GITHUB_SHA}")
+          git fetch --no-tags --prune --depth=1 origin "$ref"
           git checkout --force FETCH_HEAD
       - name: Verify .NET
         run: dotnet --info
@@ -155,7 +168,7 @@ jobs:
       - name: Publish Binaries
         shell: pwsh
         run: |
-          $Version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $Version = $env:TAG_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
           ./scripts/publish_release.ps1 -Platforms osx-x64
           chmod +x scripts/build_mac_dmg.sh
@@ -166,7 +179,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$GITHUB_REF_NAME" release/*.zip release/*.dmg --clobber
+        run: gh release upload "$TAG_NAME" release/*.zip release/*.dmg --clobber
 
   # 5. Publish GitHub Release
   publish-release:
@@ -178,4 +191,4 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+        run: gh release edit "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
