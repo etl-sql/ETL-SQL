@@ -107,7 +107,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             var dt = new DataTable();
-            dt.ColumnNames.AddRange(row.Columns.Keys);
+            dt.SetColumns(row.Columns.Keys);
             await dt.AddRowAsync(row);
             await dataSource.WriteBatches(new[] { dt }.ToAsyncEnumerable());
         }

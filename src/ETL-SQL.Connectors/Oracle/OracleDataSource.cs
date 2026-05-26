@@ -98,7 +98,7 @@ namespace ETL_SQL.Connectors.Oracle
             }
 
             var currentBatch = new DataTable();
-            foreach (var col in columns) currentBatch.ColumnNames.Add(col);
+            currentBatch.SetColumns(columns);
 
             while (await reader.ReadAsync())
             {
@@ -113,7 +113,7 @@ namespace ETL_SQL.Connectors.Oracle
                 {
                     yield return currentBatch;
                     currentBatch = new DataTable();
-                    foreach (var col in columns) currentBatch.ColumnNames.Add(col);
+                    currentBatch.SetColumns(columns);
                 }
             }
 
@@ -201,7 +201,7 @@ namespace ETL_SQL.Connectors.Oracle
                     columns.Add(reader.GetName(i));
 
                 var resultBatch = new DataTable();
-                foreach (var col in columns) resultBatch.ColumnNames.Add(col);
+                resultBatch.SetColumns(columns);
                 while (await reader.ReadAsync())
                 {
                     var row = new Row();
