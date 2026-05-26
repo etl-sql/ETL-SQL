@@ -57,7 +57,7 @@ if ($CandleExe) {
             Write-Warning "build_msi.ps1: '`$(var.ProductVersion)' not found in Installer.wxs — version injection skipped."
         }
         [System.IO.File]::WriteAllText($wxsPath, $wxsPatched, [System.Text.Encoding]::UTF8)
-        Write-Host "  Version substituted: $(var.ProductVersion) -> $WixVersion" -ForegroundColor Gray
+        Write-Host "  Version substituted: `$(var.ProductVersion) -> $WixVersion" -ForegroundColor Gray
 
         candle.exe Installer.wxs -o Installer.wixobj -arch x64
         if ($LASTEXITCODE -ne 0) {
