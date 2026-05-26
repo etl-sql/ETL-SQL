@@ -105,10 +105,20 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 opt.TokenValidationParameters.IssuerSigningKey = key;
             });
 
+            // Replace the global SQLiteJobHistoryStore (DefaultDbPath) with an isolated test db
+            // so concurrent test factories don't race on the shared LocalApplicationData file.
+            services.RemoveAll<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>();
+            services.RemoveAll<ETL_SQL.Core.Data.IJobHistoryStore>();
+            services.RemoveAll<ETL_SQL.Core.Data.IBundleStore>();
+            services.RemoveAll<ETL_SQL.Core.Data.ILineageCatalogStore>();
+            var testStore = new ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore(orchDbPath);
+            services.AddSingleton(testStore);
+            services.AddSingleton<ETL_SQL.Core.Data.IJobHistoryStore>(testStore);
+            services.AddSingleton<ETL_SQL.Core.Data.IBundleStore>(testStore);
+            services.AddSingleton<ETL_SQL.Core.Data.ILineageCatalogStore>(testStore);
+
             // Disable the JWT validation hosted service (no longer needed — config is injected)
             services.RemoveAll<IHostedService>();
-            // Re-add only the hosted services we want (exclude JwtSecretValidationService)
-            // SessionCache and OrchestratorPollerService will be re-added below
         });
     }
 
