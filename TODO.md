@@ -116,14 +116,14 @@ Goal: *"one shared report semantic model across ReportPlayer, ReportPortal, VS C
 
 Goal: *"error messages are actionable without exposing sensitive details."* New constructs shipped without matching the error-quality bar of the core engine.
 
-- [ ] **[Parser] Audit new construct error messages for quality and specificity**
-  - Constructs to review: label declarations, GOTO targets, `CREATE CONNECTION`, `SEND EMAIL`, `RUN SCRIPT`, `BEGIN/END` block close.
-  - Standard: every missing-token error must name the expected token and the construct context (e.g., `"Expected identifier for GOTO target"`, not `"Unexpected token"`).
-  - File: `src/ETL-SQL.Core/Parser/StatementParser.cs` and partial files
+- [x] **[Parser] Audit new construct error messages for quality and specificity**
+  - Constructs reviewed: label declarations, GOTO targets, `CREATE CONNECTION`, `SEND EMAIL`, `RUN SCRIPT`, `BEGIN/END` block close.
+  - 12 messages improved across `DataParser.cs`, `ExtensionParser.cs`, `SystemParser.cs` to name both the construct and the expected token.
+  - GOTO, label declarations, and BEGIN/END were already at standard.
 
-- [ ] **[Parser] Add a parser error quality test suite**
-  - Goal: Every language construct has a parameterized test asserting that the most common mistake (missing keyword, wrong token, wrong order) produces a `SyntaxException` whose message names the construct and the expected token.
-  - File: `tests/ETL-SQL.Tests/` (new `ParserErrorQualityTests.cs`)
+- [x] **[Parser] Add a parser error quality test suite**
+  - 16 parameterized tests across 4 constructs (GOTO, CREATE CONNECTION, SEND EMAIL, RUN SCRIPT), each asserting the error message names the construct and expected token.
+  - File: `tests/ETL-SQL.Tests/Statements/ParserErrorQualityTests.cs`
 
 ## Goals Completion — Needs Work
 
@@ -134,7 +134,7 @@ Goal: *"make lineage, tags, metadata, report dependencies, history, and permissi
 - [x] **[Lineage] Implement `SHOW LINEAGE` for the current session**
   - Implemented: `LineageStatement` AST node, `LineageStatementHandler` with visual graph, Mermaid export, OpenLineage export. History variants: `ShowLineageHistoryForTable/Tag/Job`. Sample scripts: `samples/04_Orchestration/20-Lineage.etlsql`, `Data_Lineage.etlsql`. 23 test files cover lineage.
 
-- [ ] **[Governance] Extend execution audit log to standalone `--run` executions**
+- [ ] **[Governance] Extend execution audit log to standalone `--run` executions**  done - uses appsetting.json to turn this on
   - Current state: `SQLiteJobHistoryStore` records start/end time, status, rows processed, script hash — but only for Orchestrator-managed jobs (`CREATE JOB`). Standalone `--run` script executions are not audited.
   - Gap: Wire `IJobHistoryStore.LogJobStart/End` into `EngineRunner` for standalone runs, adding per-connector rows-read/written breakdown to satisfy the "what ran, when, what did it touch?" use case.
   - Files: `src/ETL-SQL.App/App/EngineRunner.cs`, `src/ETL-SQL.Orchestrator/Storage/SQLiteJobHistoryStore.cs`
