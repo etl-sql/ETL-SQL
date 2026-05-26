@@ -134,23 +134,19 @@ Goal: *"error messages are actionable without exposing sensitive details."* New 
 
 Goal: *"make lineage, tags, metadata, report dependencies, history, and permissions inspectable."* The `ILineageContext` interface and execution history infrastructure exist but are not surfaced as user-facing features.
 
-- [ ] **[Lineage] Implement `SHOW LINEAGE` for the current session**
-  - Goal: `SHOW LINEAGE FOR #my_table` or `SHOW LINEAGE FOR <session>` returns a result set showing source connections, transformation steps, and destinations that produced a given dataset.
-  - Current state: `ILineageContext` tracks lineage internally; there is no statement that exposes it.
-  - Files: `src/ETL-SQL.Core/IExecutionContext.cs`, `src/ETL-SQL.Core/Ast.cs`, `src/ETL-SQL.Engine/`
+- [x] **[Lineage] Implement `SHOW LINEAGE` for the current session**
+  - Implemented: `LineageStatement` AST node, `LineageStatementHandler` with visual graph, Mermaid export, OpenLineage export. History variants: `ShowLineageHistoryForTable/Tag/Job`. Sample scripts: `samples/04_Orchestration/20-Lineage.etlsql`, `Data_Lineage.etlsql`. 23 test files cover lineage.
 
-- [ ] **[Governance] Add a structured execution audit log**
-  - Goal: Each script run writes a machine-readable record (JSON or SQLite row) covering: session ID, script path and hash, start/end time, connectors used, rows read/written per connector, and errors encountered.
-  - Use case: Compliance and operations teams need this to answer "what ran, when, and what did it touch?"
-  - Files: `src/ETL-SQL.Orchestrator/` (execution history), `src/ETL-SQL.Engine/Evaluator.cs`
+- [ ] **[Governance] Extend execution audit log to standalone `--run` executions**
+  - Current state: `SQLiteJobHistoryStore` records start/end time, status, rows processed, script hash — but only for Orchestrator-managed jobs (`CREATE JOB`). Standalone `--run` script executions are not audited.
+  - Gap: Wire `IJobHistoryStore.LogJobStart/End` into `EngineRunner` for standalone runs, adding per-connector rows-read/written breakdown to satisfy the "what ran, when, what did it touch?" use case.
+  - Files: `src/ETL-SQL.App/App/EngineRunner.cs`, `src/ETL-SQL.Orchestrator/Storage/SQLiteJobHistoryStore.cs`
 
-- [ ] **[Diagnostics] Implement `EXPLAIN` / `--explain` for scripts**
-  - Goal: `--explain` mode (or an `EXPLAIN` statement prefix) prints a human-readable plan: each statement, which connector it routes to, whether pushdown applies, and estimated data movement — without executing the script.
-  - Current state: Linting rules and `WHAT_IF` exist; there is no explain-plan output.
-  - Files: `src/ETL-SQL.Core/`, `src/ETL-SQL.Engine/`, `src/ETL-SQL.App/`
+- [x] **[Diagnostics] Implement `EXPLAIN` / `--explain` for scripts**
+  - Implemented: `ExplainStatement` AST node, `ExplainStatementHandler` with EXPLAIN and EXPLAIN ANALYZE modes. Plan output includes: ID, Operation, Details, Cost, Mode, Est. Rows; ANALYZE mode adds Actual Rows, Actual Time, and Spill metrics. 5 test files.
 
 - [ ] **[Lineage] Document the lineage and governance model**
-  - Write a dedicated doc covering: what is tracked, how to query it, how to export it, and how it integrates with Orchestrator execution history. Write after the above features are implemented.
+  - Write a dedicated doc covering: what is tracked, how to query it, how to export it, and how it integrates with Orchestrator execution history.
   - File: `Docs/Architecture/Lineage.md`
 
 ### Large Workload Behavior
@@ -172,30 +168,26 @@ Goal: *"large workload behavior is intentional, documented, and observable."* Ex
 
 - [ ] **[Performance] Add a regression benchmark for connector pushdown and cross-source joins**
   - Goal: Before each release, confirm that SQL pushdown to SQL Server, Postgres, MySQL, and Oracle does not regress on query plan selection or row throughput relative to the previous release.
+  - Current state: TPC-H and parser benchmarks exist in `tests/ETL-SQL.Benchmarks/` but explicitly disable pushdown (`PushdownDisabledDataSource`). Functional pushdown tests exist in Integration but do not measure throughput.
+  - Gap: Add benchmarks that run with pushdown enabled against real connectors and track row throughput across releases.
   - Files: `tests/ETL-SQL.PerfTests/` or `tests/ETL-SQL.Benchmarks/`
 
 ### Common Workflow Examples
 
 Success criterion: *"common workflows have working examples, reference documentation, and automated test coverage."*
 
-- [ ] **[Examples] Build a standard ETL workflow example library**
-  - Target scripts (each runnable with a corresponding SLT or integration test):
-    - Extract from SQL → transform in engine → load to SQL, with validation and `WHAT_IF` guard
-    - CSV/Excel ingest → staging table → transformed output with `TRY/CATCH` and GOTO-based checkpoint recovery
-    - Incremental load pattern using a watermark variable and `APPEND`
-    - Multi-source join (SQL + CSV) with explicit pushdown where available
-  - Files: `Docs/Examples/` (scripts) + `tests/ETL-SQL.SqlLogicTests/` (test coverage)
+- [x] **[Examples] Build a standard ETL workflow example library**
+  - Exists: 10 real-world scripts in `samples/07_Real_World/` (DW load, SFTP, incremental merge, deduplication, pivot, etc.), plus `01_Basics/`, `02_Data_Movement/`, `04_Orchestration/`, `06_Advanced_SQL/` covering the target scenarios.
 
-- [ ] **[Examples] Build a paginated report reference script**
-  - Goal: A reference `.rptsql` script demonstrating: parameters, a data table with grouping, subtotals, page headers/footers, and print-ready output — comparable to a basic SSRS report.
-  - File: `Docs/Examples/Reports/`
+- [x] **[Examples] Build a paginated report reference script**
+  - Exists: `samples/paginated/audit_report.rptsql`, `detail.rptsql`, `summary.rptsql`.
 
-- [ ] **[Examples] Build a dashboard reference script**
-  - Goal: A reference `.rptsql` script demonstrating: multiple datasets, KPI cards, a bar chart, a table with interactive filters, and a drillthrough link — comparable to a basic BI dashboard.
-  - File: `Docs/Examples/Dashboards/`
+- [x] **[Examples] Build a dashboard reference script**
+  - Exists: `samples/08_Reporting/sales_dashboard.rptsql`; full chart-type kitchen sink in `samples/10_Kitchen_Sinks/` (01_BAR through 36_GANTT).
 
-- [ ] **[Examples] Require SLT test coverage for every example script**
-  - Goal: Every example in the library has a corresponding test that runs it against a fixture and verifies the output. An example that silently produces wrong output is worse than no example.
+- [ ] **[Examples] Add SLT test coverage for core example scripts**
+  - Gap: Zero `.slt` files exist in `samples/`. The example library has no automated regression coverage — a script that silently produces wrong output after a refactor will not be caught.
+  - Scope: Prioritize the `07_Real_World/` and `01_Basics/` scripts; the `10_Kitchen_Sinks/` sink scripts are better served as integration tests.
   - File: `tests/ETL-SQL.SqlLogicTests/`
 
 ## Release Hardening / Local Validation
