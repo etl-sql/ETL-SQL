@@ -76,11 +76,11 @@
   - Suggested state file: `release-validation/latest/state.json`
   - Guardrail: `-Resume` should verify source hash/commit hash so stale successful phases are not reused after code changes unless explicitly overridden.
 
-- [ ] **[Release] Add a local Docker integration release lane**
+- [x] **[Release] Add a local Docker integration release lane**
   - Goal: Keep Docker connector validation local/manual rather than spending GitHub-hosted runner time.
   - Proposed command: `.\scripts\Test-PreRelease.ps1 -IncludeDockerIntegration`
   - Coverage: Docker-backed connectors and platform containers, including SFTP, FTP, SMTP, Azure Blob/Azurite, BigQuery emulator, Snowflake emulator, Report Portal, Orchestrator, and MySQL.
-  - Fix needed first: Split or lazy-start the MySQL integration fixture so non-MySQL database tests do not always pay MySQL container startup.
+  - Note: MySQL now uses a dedicated `MySQL collection`, so non-MySQL database tests do not pay MySQL container startup.
 
 - [x] **[Release] Add local Standard-scale certification gate**
   - Goal: Make performance claims measurable before release without requiring GitHub-hosted minutes.

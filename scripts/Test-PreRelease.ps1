@@ -246,15 +246,15 @@ function Write-Reports {
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("# ETL-SQL Pre-Release Validation")
     $lines.Add("")
-    $lines.Add("Run: `$RunId`")
+    $lines.Add(('Run: `{0}`' -f $RunId))
     $lines.Add("")
-    $lines.Add("Status: **$Status**")
+    $lines.Add(('Status: **{0}**' -f $Status))
     $lines.Add("")
-    $lines.Add("Generated: $($finishedAt.ToString("yyyy-MM-dd HH:mm:ss"))")
+    $lines.Add(('Generated: {0}' -f $finishedAt.ToString('yyyy-MM-dd HH:mm:ss')))
     $lines.Add("")
-    $lines.Add("Configuration: `$Configuration`")
+    $lines.Add(('Configuration: `{0}`' -f $Configuration))
     $lines.Add("")
-    $lines.Add("Source fingerprint: `$Fingerprint`")
+    $lines.Add(('Source fingerprint: `{0}`' -f $Fingerprint))
     $lines.Add("")
     $lines.Add("| Phase | Status | Seconds | Command | Log |")
     $lines.Add("| :--- | :---: | ---: | :--- | :--- |")
@@ -262,7 +262,7 @@ function Write-Reports {
         $relativeLog = Resolve-Path -LiteralPath $r.log -ErrorAction SilentlyContinue
         $logText = if ($relativeLog) { $relativeLog.Path } else { $r.log }
         $escapedCommand = ($r.command -replace '\|', '\|')
-        $lines.Add("| $($r.name) | $($r.status) | $($r.elapsedSeconds) | `$escapedCommand` | `$logText` |")
+        $lines.Add(('| {0} | {1} | {2} | `{3}` | `{4}` |' -f $r.name, $r.status, $r.elapsedSeconds, $escapedCommand, $logText))
     }
     $lines.Add("")
     if ($Status -ne "Passed") {
