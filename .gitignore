@@ -25,6 +25,10 @@ artifacts/
 trouble/
 brain/
 
+# Local application configurations containing secrets
+appsettings.local.json
+appsettings.Development.json
+
 # Ignore Claude Code personal settings
 .claude/settings.local.json
 
@@ -133,6 +137,8 @@ verify_lineage_metadata.etlsql
 # ETL-SQL SQLite state databases (runtime, not source)
 etlsql.db
 *.db
+*.db-shm
+*.db-wal
 
 # Temporary directories
 .etlsql_temp/

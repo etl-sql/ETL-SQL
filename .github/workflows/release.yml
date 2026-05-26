@@ -24,15 +24,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init .
-          git remote add origin "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
-          $ref = if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') { "refs/tags/$env:TAG_NAME" } else { $env:GITHUB_SHA }
-          git fetch --no-tags --prune --depth=1 origin $ref
-          git checkout --force FETCH_HEAD
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG_NAME }}
       - name: Verify .NET
         run: dotnet --info
       - name: Build & Run Smoke Tests
@@ -67,15 +61,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init .
-          git remote add origin "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
-          $ref = if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') { "refs/tags/$env:TAG_NAME" } else { $env:GITHUB_SHA }
-          git fetch --no-tags --prune --depth=1 origin $ref
-          git checkout --force FETCH_HEAD
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG_NAME }}
       - name: Verify .NET
         run: dotnet --info
       - name: Verify Node.js
@@ -114,15 +102,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init .
-          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          ref=$([[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]] && echo "refs/tags/${TAG_NAME}" || echo "${GITHUB_SHA}")
-          git fetch --no-tags --prune --depth=1 origin "$ref"
-          git checkout --force FETCH_HEAD
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG_NAME }}
       - name: Verify .NET
         run: dotnet --info
       - name: Verify Node.js
@@ -151,15 +133,9 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init .
-          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          ref=$([[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]] && echo "refs/tags/${TAG_NAME}" || echo "${GITHUB_SHA}")
-          git fetch --no-tags --prune --depth=1 origin "$ref"
-          git checkout --force FETCH_HEAD
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG_NAME }}
       - name: Verify .NET
         run: dotnet --info
       - name: Verify Node.js
