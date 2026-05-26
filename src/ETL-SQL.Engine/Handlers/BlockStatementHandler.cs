@@ -1,4 +1,6 @@
+using System;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -13,14 +15,36 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (BlockStatement)statement;
             
-            
-            foreach (var s in stmt.Statements)
+            for (int i = 0; i < stmt.Statements.Count; i++)
             {
-                await context.EvaluateStatement(s);
+                var s = stmt.Statements[i];
+                try
+                {
+                    await context.EvaluateStatement(s);
+                }
+                catch (GotoException gotoEx)
+                {
+                    int targetIdx = -1;
+                    for (int j = 0; j < stmt.Statements.Count; j++)
+                    {
+                        if (stmt.Statements[j] is SectionLabelStatement sls && sls.LabelName.Equals(gotoEx.LabelName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            targetIdx = j;
+                            break;
+                        }
+                    }
+
+                    if (targetIdx >= 0)
+                    {
+                        i = targetIdx - 1; // -1 because loop increment will do i++
+                        continue;
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
             }
         }
     }
 }
-
-
-

@@ -34,6 +34,7 @@ using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Connectors.Postgres;
+using ETL_SQL.Connectors.MySql;
 using ETL_SQL.Connectors.Oracle;
 
 namespace ETL_SQL.LSP
@@ -59,6 +60,7 @@ namespace ETL_SQL.LSP
                         registry.Register(new FlatFileConnector());
                         registry.Register(new SqlServerConnector());
                         registry.Register(new PostgresConnector());
+                        registry.Register(new ETL_SQL.Connectors.MySql.MySqlConnector());
                         registry.Register(new OracleConnector());
                         registry.Register(new ETL_SQL.Connectors.Parquet.ParquetConnector());
                         registry.Register(new ETL_SQL.Connectors.Avro.AvroConnector());
@@ -147,6 +149,7 @@ namespace ETL_SQL.LSP
                     .WithHandler<CompletionProvider>()
                     .WithHandler<SignatureHelpProvider>()
                     .WithHandler<FormattingProvider>()
+                    .WithHandler<DocumentSymbolProvider>()
                     .WithHandler<CustomMethodsHandler>()
                     .WithHandler<RefreshMetadataHandler>()
                     .WithHandler<UpdateNotebookContextHandler>()

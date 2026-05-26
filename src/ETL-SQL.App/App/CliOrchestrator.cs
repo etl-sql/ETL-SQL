@@ -25,6 +25,7 @@ namespace ETL_SQL.App
         private static readonly Option<string?> SessionOption = new(new[] { "--session" }, "Enable session persistence with the specified session ID.");
         private static readonly Option<string[]> VarOption = new(new[] { "--var", "-d" }, "Inject a variable into the script (e.g. @Name=Value).") { AllowMultipleArgumentsPerToken = true };
         private static readonly Option<bool> ProgressOption = new(new[] { "--progress", "-g" }, "Display real-time graphical execution progress.");
+        private static readonly Option<bool> ResumeOption = new(new[] { "--resume" }, "Resume execution of a persistent session from the last successfully completed checkpoint.");
         private static readonly Option<bool> UpdateJwtOption = new(new[] { "--update" }, "Update the local appsettings.json file with the new secret.");
         
         private static readonly Argument<string> RunScriptArg = new("script", "The ETL-SQL script to execute.");
@@ -46,7 +47,7 @@ namespace ETL_SQL.App
             var runCommand = new Command("run", "Execute an ETL-SQL script")
             {
                 RunScriptArg,
-                BatchSizeOption, PerfOption, VerboseOption, LogOption, SilentOption, PreviewOption, JsonOption, PageOption, SessionOption, VarOption, ProgressOption
+                BatchSizeOption, PerfOption, VerboseOption, LogOption, SilentOption, PreviewOption, JsonOption, PageOption, SessionOption, VarOption, ProgressOption, ResumeOption
             };
             runCommand.SetHandler(async (context) => await Dispatch(context, "run", handler));
 
@@ -233,6 +234,11 @@ namespace ETL_SQL.App
 
             var sessionOptVal = res.FindResultFor(SessionOption) != null ? res.GetValueForOption(SessionOption) : null;
             if (sessionOptVal != null) cliContext.SessionId = sessionOptVal;
+
+            if (res.FindResultFor(ResumeOption) != null)
+            {
+                cliContext.Resume = res.GetValueForOption(ResumeOption);
+            }
 
             if (res.FindResultFor(VarOption) != null)
             {

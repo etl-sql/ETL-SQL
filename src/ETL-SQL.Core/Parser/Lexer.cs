@@ -521,6 +521,10 @@ namespace ETL_SQL.Core.Parser
                             tokens.Add(new Token(TokenType.PARAMETER, "?", startLine, startColumn, startLine, startColumn + 1, startOffset, startOffset + 1));
                         }
                         break;
+                    case ':':
+                        tokens.Add(new Token(TokenType.COLON, ":", startLine, startColumn, startLine, startColumn + 1, startOffset, startOffset + 1));
+                        Advance();
+                        break;
                     default:
                         // Instead of throwing, just skip the character. This makes the LSP more resilient to unknown snippets/logs.
                         Advance();

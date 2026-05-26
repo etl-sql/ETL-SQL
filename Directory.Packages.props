@@ -24,6 +24,7 @@
     <PackageVersion Include="MailKit" Version="4.16.0" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.0.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="9.0.2" />
+    <PackageVersion Include="MySqlConnector" Version="2.3.7" />
     <PackageVersion Include="Npgsql" Version="10.0.2" />
     <PackageVersion Include="Oracle.ManagedDataAccess.Core" Version="23.26.100" />
     <PackageVersion Include="Parquet.Net" Version="5.5.0" />
@@ -37,6 +38,7 @@
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="$(MicrosoftExtensionsVersion)" />
     <PackageVersion Include="Testcontainers" Version="$(TestcontainersVersion)" />
     <PackageVersion Include="Testcontainers.MsSql" Version="$(TestcontainersVersion)" />
+    <PackageVersion Include="Testcontainers.MySql" Version="$(TestcontainersVersion)" />
     <PackageVersion Include="Testcontainers.Oracle" Version="$(TestcontainersVersion)" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="$(TestcontainersVersion)" />
   </ItemGroup>

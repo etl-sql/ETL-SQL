@@ -66,6 +66,7 @@ projects. License values are taken from local package metadata when available.
 | Microsoft.EntityFrameworkCore.Design | MIT | EF Core migrations/design-time tooling. |
 | Microsoft.EntityFrameworkCore.Sqlite | MIT | SQLite EF Core provider. |
 | Microsoft.Extensions.* | MIT | Configuration, dependency injection, hosting, logging, and options infrastructure. |
+| MySqlConnector | MIT | MySQL and MariaDB connector support. |
 | Npgsql | PostgreSQL License | PostgreSQL connector support. |
 | OmniSharp.Extensions.LanguageServer | package license file | Language server protocol support. |
 | Oracle.ManagedDataAccess.Core | package license file | Oracle connector support. Review Oracle redistribution terms before release. |

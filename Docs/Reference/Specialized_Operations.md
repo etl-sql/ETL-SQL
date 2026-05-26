@@ -746,3 +746,30 @@ EXEC mssql_conn.dbo.sp_GetCount @Count = @RetVal OUTPUT;
 - **SQL Injection**: Always prefer parameterized execution (`WITH`) or block pushdown over string concatenation when building SQL strings with user-provided input.
 - **Transaction Scope**: Remote `EXEC` statements participate in the ambient ETL-SQL transaction if `BEGIN TRANSACTION` has been called and the connector supports it.
 
+---
+
+## 10. CLI Session Resumption & Persistence
+
+ETL-SQL provides command-line flags to enable session state persistence and resume capabilities. These flags are essential for orchestrating large workflows and automating recovery from failures.
+
+### 10.1 CLI Parameters
+
+* `--session-id <string>`
+  Specifies the unique session identifier. When provided, the engine activates persistent session mode, storing variables, connection statuses, and `#temp` tables to the session folder.
+* `--resume`
+  Resumes execution of a persistent session. Must be paired with a valid `--session-id`. If the session state exists and contains a checkpoint marker (`@_LAST_CHECKPOINT_LABEL`), the engine skips all prior statements and resumes execution from that checkpoint.
+
+### 10.2 Usage Example
+
+Run a script in a persistent session:
+```powershell
+etl-sql run --session-id "etl-nightly-job" --file "C:\Jobs\import_dw.etlsql"
+```
+
+If the execution fails at `step_3:`, fix the external database/file issue and re-run with `--resume`:
+```powershell
+etl-sql run --session-id "etl-nightly-job" --resume --file "C:\Jobs\import_dw.etlsql"
+```
+The engine will rehydrate the previous session state, skip `step_1:` and `step_2:`, and start directly at `step_3:`.
+
+

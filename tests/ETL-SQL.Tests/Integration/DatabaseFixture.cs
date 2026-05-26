@@ -3,6 +3,7 @@ using Xunit;
 using Testcontainers.MsSql;
 using Testcontainers.PostgreSql;
 using Testcontainers.Oracle;
+using Testcontainers.MySql;
 
 namespace ETL_SQL.Tests.Integration
 {
@@ -35,7 +36,7 @@ namespace ETL_SQL.Tests.Integration
 
             PostgresConnectionString = _postgres.GetConnectionString();
             SqlConnectionString = _sqlServer.GetConnectionString();
-            
+
             var oraConn = _oracle.GetConnectionString();
             OracleConnectionString = oraConn.Replace("SERVICE_NAME=XE", "SERVICE_NAME=FREEPDB1");
         }
@@ -56,5 +57,33 @@ namespace ETL_SQL.Tests.Integration
         // This class has no code, and is never created. Its purpose is simply
         // to be the place to apply [CollectionDefinition] and all the
         // ICollectionFixture<> interfaces.
+    }
+
+    public class MySqlFixture : IAsyncLifetime
+    {
+        private readonly MySqlContainer _mysql;
+
+        public string MySqlConnectionString { get; private set; } = "";
+
+        public MySqlFixture()
+        {
+            _mysql = new MySqlBuilder("mysql:8.0").Build();
+        }
+
+        public async Task InitializeAsync()
+        {
+            await _mysql.StartAsync();
+            MySqlConnectionString = _mysql.GetConnectionString();
+        }
+
+        public async Task DisposeAsync()
+        {
+            await _mysql.StopAsync();
+        }
+    }
+
+    [CollectionDefinition("MySQL collection")]
+    public class MySqlCollection : ICollectionFixture<MySqlFixture>
+    {
     }
 }

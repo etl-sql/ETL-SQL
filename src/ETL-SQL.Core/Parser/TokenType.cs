@@ -167,6 +167,7 @@ namespace ETL_SQL.Core.Parser
         FONT_COLOR, DATA_BAR, COLOR_SCALE, ICON_SET,
         HYPERLINK, SPARKLINE,
 
+        COLON, GOTO,
         EOF         // End of file / string
     }
 }

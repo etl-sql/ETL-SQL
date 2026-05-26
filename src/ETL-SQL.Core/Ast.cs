@@ -1431,6 +1431,13 @@ namespace ETL_SQL.Core
     /// if one batch fails the next batch still executes.</summary>
     public record GoStatement(int Count = 1) : Statement;
 
+    public record SectionLabelStatement(string LabelName) : Statement
+    {
+        public bool IsTopLevel { get; set; }
+    }
+
+    public record GotoStatement(string LabelName) : Statement;
+
     /// <summary>Generates a 32-bit cryptographically secure JWT secret, encrypts it, 
     /// and optionally updates the appsettings.json file.</summary>
     public record GenerateJwtSecretStatement : Statement

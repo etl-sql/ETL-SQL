@@ -1015,6 +1015,31 @@ EXPECT SCHEMA myConnection (
 | Binary | `VARBINARY`, `BINARY`, `BLOB`, `IMAGE` |
 | Range | `MINMAX` |
 
+### 4.13 Labels and `GOTO`
+
+ETL-SQL supports T-SQL style label markers and GOTO jumps for controlling execution flow and establishing session checkpoints.
+
+#### Syntax
+```sql
+-- Label definition (must end with a colon)
+my_label:
+
+-- GOTO statement (jumps to the label)
+GOTO my_label;
+```
+
+#### Compile-Time Scoping Constraints
+To ensure predictable control flow and execution safety, the compiler enforces the following rules at compile-time:
+* **No Jumps INTO Blocks**: You cannot jump from an outer scope into a nested block such as `WHILE`, `FOR`, `FOREACH`, `IF`, `TRY...CATCH`, or `PARALLEL` blocks. Doing so generates a compiler error.
+* **Jumps OUT are Allowed**: You can jump from inside a nested block to a label in an outer block (e.g. jumping out of a loop to an error recovery label).
+* **Same Batch Constraint**: A `GOTO` cannot cross `GO` batch boundaries.
+* **No Cross-Script Jumps**: Jumps must stay within the same script context (you cannot jump into a script called via `RUN SCRIPT`).
+
+#### Session Checkpointing Behavior
+In persistent sessions, top-level labels (labels not nested inside loops, conditionals, or try-catch blocks) act as **implicit session state checkpoints**. 
+* Hitting a top-level label automatically serializes all variables (as JSON) and active `#temp` tables (spilled via Arrow) to session storage.
+* Hitting a nested label (e.g. inside a `WHILE` loop) executes purely as a control flow jump target and does **not** trigger session serialization.
+
 ---
 
 ## 5. Querying (`SELECT`)

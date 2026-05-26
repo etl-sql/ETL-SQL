@@ -53,7 +53,13 @@ namespace ETL_SQL.Connectors.Postgres
         public string ConnectorType => "POSTGRES";
         public ETL_SQL.Data.ICatalogMetadataProvider? GetCatalogProvider() => new PostgresCatalogProvider(_connectionString);
 
-        public IDataSource WithTable(string tableName) => new PostgresDataSource(_context!, _connectionString, tableName, _options);
+        public IDataSource WithTable(string tableName)
+        {
+            var ds = new PostgresDataSource(_context!, _connectionString, tableName, _options);
+            ds._transactionalConnection = _transactionalConnection;
+            ds._activeTransaction = _activeTransaction;
+            return ds;
+        }
 
         public async Task<string> GetVersionAsync()
         {

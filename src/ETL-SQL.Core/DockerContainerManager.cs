@@ -5,6 +5,7 @@ using DotNet.Testcontainers.Containers;
 using Testcontainers.MsSql;
 using Testcontainers.PostgreSql;
 using Testcontainers.Oracle;
+using Testcontainers.MySql;
 using Microsoft.Extensions.Logging;
 using DotNet.Testcontainers.Configurations;
 using System.Linq;
@@ -103,6 +104,16 @@ namespace ETL_SQL.Core
                     .WithLogger(_loggerFactory.CreateLogger<OracleBuilder>())
                     .Build();
             }
+            else if (imageName.Contains("mysql", StringComparison.OrdinalIgnoreCase) || imageName.Contains("mariadb", StringComparison.OrdinalIgnoreCase))
+            {
+                container = new MySqlBuilder(imageName)
+                    .WithName(containerName)
+                    .WithUsername("mysql")
+                    .WithPassword("mysql")
+                    .WithDatabase("mysql")
+                    .WithLogger(_loggerFactory.CreateLogger<MySqlBuilder>())
+                    .Build();
+            }
             else
             {
                 throw new ExecutionException($"Unsupported Docker image for database: {imageName}. Currently supported: MsSql, Postgres, Oracle.");
@@ -170,7 +181,7 @@ namespace ETL_SQL.Core
                 
                 if (target != null)
                 {
-                    int internalPort = imageName.Contains("mssql") ? 1433 : (imageName.Contains("postgres") ? 5432 : 1521);
+                    int internalPort = imageName.Contains("mssql") ? 1433 : (imageName.Contains("postgres") ? 5432 : (imageName.Contains("mysql") || imageName.Contains("mariadb") ? 3306 : 1521));
                     var portMap = target.Ports.FirstOrDefault(p => p.PrivatePort == internalPort);
                     if (portMap != null)
                     {
@@ -181,6 +192,8 @@ namespace ETL_SQL.Core
                             return $"Server={host},{publicPort};Database=master;User Id=sa;Password=Password123!;Trusted_Connection=False;Encrypt=False;";
                         if (imageName.Contains("postgres"))
                             return $"Host={host};Port={publicPort};Database=postgres;Username=postgres;Password=postgres";
+                        if (imageName.Contains("mysql") || imageName.Contains("mariadb"))
+                            return $"Server={host};Port={publicPort};Database=mysql;User ID=mysql;Password=mysql";
                         if (imageName.Contains("oracle"))
                         {
                              if (imageName.Contains("free", StringComparison.OrdinalIgnoreCase))
@@ -255,6 +268,7 @@ namespace ETL_SQL.Core
         {
             if (container is MsSqlContainer mssql) return mssql.GetConnectionString();
             if (container is PostgreSqlContainer pg) return pg.GetConnectionString();
+            if (container is MySqlContainer mysql) return mysql.GetConnectionString();
             if (container is OracleContainer oracle) 
             {
                 var port = oracle.GetMappedPublicPort(1521);

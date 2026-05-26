@@ -5,6 +5,7 @@ using Npgsql;
 using Oracle.ManagedDataAccess.Client;
 using System.Data.Odbc;
 using Snowflake.Data.Client;
+using MySqlConnector;
 using Polly;
 using Polly.Retry;
 using ETL_SQL.Common;
@@ -282,6 +283,49 @@ namespace ETL_SQL.Connectors.Shared
                     return true;
             }
             return false;
+        }
+
+        // ── MySql ────────────────────────────────────────────────────────────
+
+        public static ResiliencePipeline ForMySql(ILogger logger) =>
+            new ResiliencePipelineBuilder()
+                .AddRetry(new RetryStrategyOptions
+                {
+                    MaxRetryAttempts = MaxAttempts,
+                    Delay             = BaseDelay,
+                    BackoffType       = DelayBackoffType.Exponential,
+                    UseJitter         = true,
+                    ShouldHandle      = new PredicateBuilder()
+                        .Handle<MySqlException>(IsTransientMySql)
+                        .Handle<TimeoutException>(),
+                    OnRetry = args =>
+                    {
+                        logger.Warning(
+                            "MySql transient error on attempt {Attempt}/{Max}: {Message}. Retrying in {Delay}ms.",
+                            args.AttemptNumber + 1, MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
+                        return ValueTask.CompletedTask;
+                    }
+                })
+                .Build();
+
+        /// <summary>
+        /// Returns true for MySqlException codes that are transient.
+        /// </summary>
+        private static bool IsTransientMySql(MySqlException ex)
+        {
+            switch (ex.Number)
+            {
+                case 1042: // Unable to connect to any of the specified MySQL hosts
+                case 1043: // Bad handshake
+                case 1152: // Aborted connection to db
+                case 1159: // Aborted connection timeout
+                case 1160: // Aborted connection write
+                case 1205: // Lock wait timeout exceeded; try restarting transaction
+                case 1213: // Deadlock found when trying to get lock; try restarting transaction
+                    return true;
+                default:
+                    return false;
+            }
         }
     }
 }

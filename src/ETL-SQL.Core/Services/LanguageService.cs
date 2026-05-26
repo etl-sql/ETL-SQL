@@ -73,6 +73,7 @@ namespace ETL_SQL.Core.Services
                 allSuggestions.AddRange(GetConnectionNameSuggestions(context));
                 allSuggestions.AddRange(GetKeywordSuggestions(context));
                 allSuggestions.AddRange(GetVariableSuggestions(context));
+                allSuggestions.AddRange(GetGotoLabelSuggestions(context));
 
                 bool skipPrefixFilter = context.Prefix.EndsWith("*", StringComparison.OrdinalIgnoreCase);
                 var filtered = allSuggestions
@@ -453,5 +454,77 @@ namespace ETL_SQL.Core.Services
             return matches.Skip(Math.Max(0, matches.Count - count)).ToList();
         }
         private record TokenInfo(string Text) { public bool IsKeyword => LanguageMetadata.IsKeyword(Text); }
+
+        private List<Suggestion> GetGotoLabelSuggestions(SuggestionContext context)
+        {
+            var results = new List<Suggestion>();
+            if (Regex.IsMatch(context.ScriptBefore, @"\bGOTO\s+\w*$", RegexOptions.IgnoreCase))
+            {
+                var lexer = new Lexer(context.FullScript);
+                try
+                {
+                    var tokens = lexer.Tokenize();
+                    var parser = new ETL_SQL.Core.Parser.Parser(tokens, context.FullScript);
+                    var script = parser.Parse();
+                    var labels = new List<string>();
+                    TraverseLabels(script, labels);
+                    foreach (var label in labels.Distinct())
+                    {
+                        results.Add(new Suggestion(label, SuggestionType.Keyword, 1));
+                    }
+                }
+                catch
+                {
+                }
+            }
+            return results;
+        }
+
+        private void TraverseLabels(AstNode node, List<string> labels)
+        {
+            if (node == null) return;
+            if (node is SectionLabelStatement label)
+            {
+                labels.Add(label.LabelName);
+            }
+            else if (node is Script script)
+            {
+                foreach (var stmt in script.Statements) TraverseLabels(stmt, labels);
+            }
+            else if (node is BlockStatement block)
+            {
+                foreach (var stmt in block.Statements) TraverseLabels(stmt, labels);
+            }
+            else if (node is WhileStatement @while)
+            {
+                TraverseLabels(@while.Body, labels);
+            }
+            else if (node is ForStatement @for)
+            {
+                TraverseLabels(@for.Body, labels);
+            }
+            else if (node is ForeachStatement @foreach)
+            {
+                TraverseLabels(@foreach.Body, labels);
+            }
+            else if (node is IfStatement @if)
+            {
+                TraverseLabels(@if.IfBody, labels);
+                if (@if.ElseIfClauses != null)
+                {
+                    foreach (var elseif in @if.ElseIfClauses) TraverseLabels(elseif.Body, labels);
+                }
+                if (@if.ElseBody != null) TraverseLabels(@if.ElseBody, labels);
+            }
+            else if (node is TryCatchStatement tc)
+            {
+                TraverseLabels(tc.TryBody, labels);
+                TraverseLabels(tc.CatchBody, labels);
+            }
+            else if (node is ParallelStatement p)
+            {
+                TraverseLabels(p.Body, labels);
+            }
+        }
     }
 }

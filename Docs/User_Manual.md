@@ -367,6 +367,47 @@ DROP SETS IF EXISTS !STAGING;
 > [!TIP]
 > `CREATE SETS` blocks are typically placed in a shared `_environments.etlsql` and loaded at the top of each orchestrator script via `RUN SCRIPT '_environments.etlsql'`.
 
+### 3.4 Persistent Sessions and Checkpoint Resume
+
+When running long or multi-stage pipelines, a failure in a late stage can be costly if you have to start the entire extraction process from scratch. ETL-SQL addresses this through **Persistent Sessions** and **Checkpoint Resumes**.
+
+#### Implicit Session State Checkpoints
+When running in a persistent session, any top-level script label (a label not nested inside loops, conditionals, or try-catch blocks) acts as a **state checkpoint marker**. 
+
+When the execution pointer hits a top-level label, the engine:
+1. Updates the internal `@_LAST_CHECKPOINT_LABEL` session variable to the label name.
+2. Spills all active `#temp` tables to Apache Arrow table chunks under the session directory.
+3. Serializes all variables and active connections to a JSON state file.
+
+```sql
+DECLARE @val INT = 10;
+
+-- Hitting this top-level label saves @val = 10 to session storage
+step_1: 
+SET @val = @val + 5;
+
+-- Hitting this top-level label saves @val = 15 to session storage
+step_2:
+SET @val = @val + 10;
+```
+
+#### Resuming Execution After a Failure
+If a script fails mid-run (e.g. database timeout or network drop), you can resume the execution from the last successfully completed checkpoint using the `--resume` flag:
+
+```powershell
+# Run initially (fails on step_3)
+etl-sql run --session-id "nightly-load-123" --file .\nightly_load.etlsql
+
+# After fixing the external issue, resume from the last completed checkpoint
+etl-sql run --session-id "nightly-load-123" --resume --file .\nightly_load.etlsql
+```
+
+When `--resume` is active, the engine:
+1. Loads the saved session state from the database.
+2. Identifies the last successfully saved checkpoint label (e.g., `step_2`).
+3. Skips all statements in the script until it reaches that label.
+4. Resumes executing statements normally from that label onwards using the restored state.
+
 ---
 
 ## 4. The #Temp Table Workspace

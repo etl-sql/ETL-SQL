@@ -15,6 +15,7 @@ using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Connectors.Oracle;
 using ETL_SQL.Connectors.Postgres;
+using ETL_SQL.Connectors.MySql;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Connectors.Json;
 using ETL_SQL.Connectors.Xml;
@@ -81,6 +82,7 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IConnector, SqlServerConnector>();
             services.AddSingleton<IConnector, OracleConnector>();
             services.AddSingleton<IConnector, PostgresConnector>();
+            services.AddSingleton<IConnector, ETL_SQL.Connectors.MySql.MySqlConnector>();
             services.AddSingleton<IConnector, FlatFileConnector>();
             services.AddSingleton<IConnector, JsonConnector>();
             services.AddSingleton<IConnector, XmlConnector>();

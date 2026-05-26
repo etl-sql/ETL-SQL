@@ -267,6 +267,15 @@ namespace ETL_SQL.App
                         {
                             logger.WriteLine($"Restoring session {ctx.SessionId}...", ConsoleColor.Cyan);
                             await evaluator.LoadSessionState(state);
+                            if (ctx.Resume)
+                            {
+                                evaluator.IsResuming = true;
+                            }
+                        }
+                        else if (ctx.Resume)
+                        {
+                            logger.WriteLine($"Error: --resume specified but no saved session found for '{ctx.SessionId}'. Run without --resume to start fresh.", ConsoleColor.Red);
+                            return 1;
                         }
                     }
                     

@@ -68,6 +68,7 @@ namespace ETL_SQL.Core.Parser
             _dispatchMap[TokenType.RETURN]        = () => FlowParser.ParseReturn();
             _dispatchMap[TokenType.BREAK]         = () => FlowParser.ParseBreak();
             _dispatchMap[TokenType.CONTINUE]      = () => FlowParser.ParseContinue();
+            _dispatchMap[TokenType.GOTO]          = () => ParseGoto();
             _dispatchMap[TokenType.GO]            = () => ParseGo();
             _dispatchMap[TokenType.HELP]          = () => SystemParser.ParseHelp();
             _dispatchMap[TokenType.USE]           = () => { var t = _parser.Previous; return SystemParser.ParseUse(t); };
@@ -150,6 +151,21 @@ namespace ETL_SQL.Core.Parser
             while (_parser.Match(TokenType.COLUMN_TAG)) { /* skip tags between statements */ }
 
             var type = _parser.Current.Type;
+
+            if ((type == TokenType.IDENTIFIER || LanguageMetadata.IsKeyword(_parser.Current.Value)) && _parser.Peek.Type == TokenType.COLON)
+            {
+                var labelName = _parser.Current.Value;
+                var startToken = _parser.Current;
+                _parser.Advance(); // Consume identifier
+                var colonToken = _parser.Advance(); // Consume colon
+                return new SectionLabelStatement(labelName)
+                {
+                    Line = startToken.Line,
+                    Column = startToken.Column,
+                    EndLine = colonToken.EndLine,
+                    EndColumn = colonToken.EndColumn
+                };
+            }
 
             if (_dispatchMap.TryGetValue(type, out var handler))
             {
@@ -485,6 +501,22 @@ namespace ETL_SQL.Core.Parser
             }
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
             return new GoStatement(count) { Line = t.Line, Column = t.Column };
+        }
+
+        private Statement ParseGoto()
+        {
+            var gotoToken = _parser.Previous;
+            if (_parser.Current.Type != TokenType.IDENTIFIER && !LanguageMetadata.IsKeyword(_parser.Current.Value))
+                throw new SyntaxException("Expected identifier for GOTO label", _parser.Current.Line, _parser.Current.Column);
+            var labelToken = _parser.Advance();
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+            return new GotoStatement(labelToken.Value)
+            {
+                Line = gotoToken.Line,
+                Column = gotoToken.Column,
+                EndLine = labelToken.EndLine,
+                EndColumn = labelToken.EndColumn
+            };
         }
 
         private static bool IsContextualKeyword(TokenType type)

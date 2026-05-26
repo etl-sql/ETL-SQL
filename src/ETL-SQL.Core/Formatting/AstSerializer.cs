@@ -19,6 +19,8 @@ namespace ETL_SQL.Core.Formatting
             NoOpStatement          _ => ";",
             BreakStatement         _ => "BREAK;",
             ContinueStatement      _ => "CONTINUE;",
+            SectionLabelStatement  s => $"{s.LabelName}:",
+            GotoStatement          s => $"GOTO {s.LabelName};",
             ClearSessionStatement  _ => "CLEAR SESSION;",
             TryCatchStatement      _ => "TRY ... CATCH ... END",
             BlockStatement         _ => "BEGIN ... END",
