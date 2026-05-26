@@ -43,8 +43,23 @@ if ($CandleExe) {
     Write-Host "Compiling WiX manifest (using $($CandleExe.Source))..." -ForegroundColor Gray
     Push-Location $InstallerDir
     try {
-        $WixVersion = "$Version.0"  # WiX requires Major.Minor.Build.Revision
-        candle.exe Installer.wxs -o Installer.wixobj -dProductVersion=$WixVersion -arch x64
+        # WiX requires four-part version: Major.Minor.Build.Revision
+        $WixVersion = "$Version.0"
+
+        # Substitute the version using PowerShell's String.Replace() before invoking candle.
+        # Passing -dProductVersion=$WixVersion directly to candle is unreliable: PowerShell's
+        # argument tokenizer can split on '=' and candle receives the literal variable name
+        # instead of the expanded value, causing CNDL0108 on GitHub-hosted runners.
+        $wxsPath     = Resolve-Path "Installer.wxs"
+        $wxsOriginal = [System.IO.File]::ReadAllText($wxsPath)
+        $wxsPatched  = $wxsOriginal.Replace('$(var.ProductVersion)', $WixVersion)
+        if ($wxsPatched -eq $wxsOriginal) {
+            Write-Warning "build_msi.ps1: '`$(var.ProductVersion)' not found in Installer.wxs — version injection skipped."
+        }
+        [System.IO.File]::WriteAllText($wxsPath, $wxsPatched, [System.Text.Encoding]::UTF8)
+        Write-Host "  Version substituted: $(var.ProductVersion) -> $WixVersion" -ForegroundColor Gray
+
+        candle.exe Installer.wxs -o Installer.wixobj -arch x64
         if ($LASTEXITCODE -ne 0) {
             Write-Error "candle.exe failed (exit code $LASTEXITCODE)"
             exit $LASTEXITCODE
