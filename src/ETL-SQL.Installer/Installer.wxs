@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
     <Product Id="*" Name="ETL-SQL Enterprise Suite" Language="1033" Version="$(var.ProductVersion)" Manufacturer="Charles Clemens" UpgradeCode="7e3da743-19a2-463e-a794-b9fb9a1757e1">
-        <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+        <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="x64" />
 
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
         <MediaTemplate EmbedCab="yes" />
@@ -82,6 +82,7 @@
         <!-- Environment Variables -->
         <DirectoryRef Id="BINDIR">
             <Component Id="PathEnvironment" Guid="dc70ead1-c4db-42f1-a8e1-7a35cc06cf3f" Win64="yes">
+                <RegistryValue Root="HKLM" Key="Software\ETL-SQL" Name="PathConfigured" Value="1" Type="integer" KeyPath="yes" />
                 <Environment Id="PATH" Name="PATH" Value="[BINDIR]" Permanent="no" Part="last" Action="set" System="yes" />
             </Component>
         </DirectoryRef>
