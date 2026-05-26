@@ -881,7 +881,7 @@ namespace ETL_SQL.Core.Parser.Components
 
         private Statement ParseCreateConnection(Token startToken, ObjectCreationMode mode)
         {
-            var name = ConsumeIdentifier("Expected connection name").Value;
+            var name = ConsumeIdentifier("Expected connection name after CREATE CONNECTION").Value;
             string? connectionType = null;
             Expression? target = null;
 
@@ -907,7 +907,7 @@ namespace ETL_SQL.Core.Parser.Components
                     else
                         target = ParseExpression();
 
-                    if (hasParen) Consume(TokenType.RPAREN, "Expected ')' after target string");
+                    if (hasParen) Consume(TokenType.RPAREN, "Expected ')' after target in CREATE CONNECTION");
                 }
             }
 
@@ -915,16 +915,16 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.WITH))
             {
                 options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
-                Consume(TokenType.LPAREN, "Expected '(' after WITH clause");
+                Consume(TokenType.LPAREN, "Expected '(' after WITH in CREATE CONNECTION");
                 while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
                 {
                     string key = Advance().Value;
-                    Consume(TokenType.EQUALS, "Expected '=' after option key");
+                    Consume(TokenType.EQUALS, "Expected '=' after option name in CREATE CONNECTION WITH(...)");
                     var val = ParseExpression();
                     options[key] = val;
                     if (!Match(TokenType.COMMA)) break;
                 }
-                Consume(TokenType.RPAREN, "Expected ')' at end of WITH options");
+                Consume(TokenType.RPAREN, "Expected ')' to close WITH options in CREATE CONNECTION");
             }
 
             Consume(TokenType.SEMICOLON, "Expected ';' at the end of CREATE CONNECTION");

@@ -326,17 +326,17 @@ namespace ETL_SQL.Core.Parser.Components
             var parameters = new List<RunScriptParameter>();
             if (Match(TokenType.WITH))
             {
-                Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                Consume(TokenType.LPAREN, "Expected '(' after WITH in RUN SCRIPT");
                 while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
                 {
                     var nameToken = Consume(TokenType.VARIABLE, "Expected parameter name starting with '@'");
-                    Consume(TokenType.EQUALS, "Expected '='");
+                    Consume(TokenType.EQUALS, "Expected '=' after parameter name in RUN SCRIPT WITH");
                     var value = ParseExpression();
                     bool isOutput = Match(TokenType.OUTPUT);
                     parameters.Add(new RunScriptParameter(nameToken.Value, value, isOutput));
                     if (!Match(TokenType.COMMA)) break;
                 }
-                Consume(TokenType.RPAREN, "Expected ')' after parameters");
+                Consume(TokenType.RPAREN, "Expected ')' to close RUN SCRIPT WITH parameter list");
             }
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new RunScriptStatement(pathExpr, parameters) { Line = startToken.Line, Column = startToken.Column };

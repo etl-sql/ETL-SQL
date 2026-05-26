@@ -2217,4 +2217,69 @@ CREATE VISUAL Summary AS TABLE (
 
         throw new FileNotFoundException("Could not locate samples/golden_workflow/golden_workflow.rptsql.");
     }
+
+    [Fact]
+    public async Task Report_InteractiveParameters_PersistsLineage_WhenConfigEnabled()
+    {
+        // Arrange
+        var config = _factory.Services.GetRequiredService<ETL_SQL.ReportPortal.PortalConfig>();
+        config.Resources.PersistAdHocInteractions = true;
+
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Interactive Folder", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
+
+        var visualName = $"IntVisual_{Guid.NewGuid():N}";
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", "interactive_report.rptsql");
+        await File.WriteAllTextAsync(scriptPath, $@"
+DECLARE @Region VARCHAR(50) = 'EMEA';
+CREATE VISUAL {visualName} AS CARD (
+    SOURCE = (SELECT @Region AS Region),
+    MAPPINGS (VALUE = Region)
+);
+");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = "Interactive Report",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        // Execute once to create snapshot and initialize session
+        var executeRes = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
+        Assert.Equal(HttpStatusCode.Accepted, executeRes.StatusCode);
+        var executeBody = await executeRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var jobId = executeBody!["jobId"]!.GetValue<string>();
+        await WaitForJobAsync(token, jobId);
+
+        // Act - Interaction with parameters
+        var interactRes = await AuthPost(token, $"/api/reports/{reportId}/parameters", new
+        {
+            @params = new[]
+            {
+                new { name = "Region", value = "APAC", isInteraction = true }
+            },
+            isInteraction = true
+        });
+        Assert.Equal(HttpStatusCode.OK, interactRes.StatusCode);
+
+        // Assert - Verify that lineage was persisted under interactive job run
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var catalog = scope.ServiceProvider.GetRequiredService<ILineageCatalogStore>();
+            var lineage = (await catalog.GetHistoryForJobAsync($"report:{reportId}:interaction", 20)).ToList();
+            Assert.NotEmpty(lineage);
+            Assert.Contains(lineage, e =>
+                e.TargetTable == $"report:{visualName}" &&
+                e.Operation == "CREATE VISUAL" &&
+                e.ScriptPath == scriptPath);
+        }
+    }
 }
