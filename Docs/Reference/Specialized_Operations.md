@@ -754,22 +754,47 @@ ETL-SQL provides command-line flags to enable session state persistence and resu
 
 ### 10.1 CLI Parameters
 
-* `--session-id <string>`
-  Specifies the unique session identifier. When provided, the engine activates persistent session mode, storing variables, connection statuses, and `#temp` tables to the session folder.
-* `--resume`
-  Resumes execution of a persistent session. Must be paired with a valid `--session-id`. If the session state exists and contains a checkpoint marker (`@_LAST_CHECKPOINT_LABEL`), the engine skips all prior statements and resumes execution from that checkpoint.
+* `--session <string>`
+  Specifies the unique session identifier. When provided, the engine activates **persistent session mode**: each top-level label in the script automatically saves the full engine state (variables, `#temp` tables, connection metadata) to the session folder. This flag alone does **not** restore any prior state — execution always starts from the top of the script with a fresh environment.
 
-### 10.2 Usage Example
+* `--resume`
+  Resumes execution from the last saved checkpoint. **Must be paired with `--session`.**
+  - Loads the saved session state for the given ID.
+  - Identifies the last successfully persisted checkpoint label.
+  - Skips all statements before that label.
+  - Resumes execution from that label using the restored variable and `#temp`-table state.
+
+### 10.2 Interaction Rules
+
+| Flags used | Result |
+| :--- | :--- |
+| `--session <id>` | Fresh run. State is **saved** at each checkpoint but **not loaded**. |
+| `--session <id> --resume` | State is **loaded** from the last checkpoint; execution skips to that label. |
+| `--resume` (no `--session`) | **Error:** `--resume requires --session to be specified.` |
+| `--session <id> --resume` (no checkpoint saved yet) | **Error:** `--resume was specified but no saved session found for '<id>'.` |
+
+> [!IMPORTANT]
+> Running the same `--session` ID **without** `--resume` always starts fresh. Prior checkpoint data is overwritten as new checkpoints are reached. This is intentional — it prevents stale values from a previous run from silently bleeding into a new one.
+
+### 10.3 Usage Example
 
 Run a script in a persistent session:
 ```powershell
-etl-sql run --session-id "etl-nightly-job" --file "C:\Jobs\import_dw.etlsql"
+etl-sql run --session "etl-nightly-job" --file "C:\Jobs\import_dw.etlsql"
 ```
 
 If the execution fails at `step_3:`, fix the external database/file issue and re-run with `--resume`:
 ```powershell
-etl-sql run --session-id "etl-nightly-job" --resume --file "C:\Jobs\import_dw.etlsql"
+etl-sql run --session "etl-nightly-job" --resume --file "C:\Jobs\import_dw.etlsql"
 ```
-The engine will rehydrate the previous session state, skip `step_1:` and `step_2:`, and start directly at `step_3:`.
+The engine loads the state saved at `step_2:`, skips `step_1:` and `step_2:`, and starts directly at `step_3:`.
+
+### 10.4 Session ID Scoping
+
+Each session ID is an isolated namespace on disk under the configured session root. Session IDs are arbitrary strings; use a naming convention that encodes the job name and run context to avoid collisions (e.g., `"nightly-load-2026-05-26"`). To clear saved state for an ID:
+
+```powershell
+etl-sql session clear "etl-nightly-job"
+```
 
 

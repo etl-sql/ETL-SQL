@@ -91,7 +91,7 @@ The feature shipped functionally but has correctness gaps. Goal: *"support clear
   - File: `tests/ETL-SQL.Tests/Statements/ResumeEdgeCaseTests.cs` (5 tests, all passing)
   - Covered: IsResuming without checkpoint → descriptive error; same session without resume → fresh variables; GOTO targeting keyword → parse diagnostic; SaveSession with non-Evaluator → graceful return; mid-script resume → loaded checkpoint state used, not re-declared initial value.
 
-- [ ] **[Resume] Document session ID semantics and `--resume` / `--session` interaction**
+- [x] **[Resume] Document session ID semantics and `--resume` / `--session` interaction**
   - Issue: Current docs describe `--resume` but do not explain what happens when `--session` is provided without `--resume` (state load behavior is unintuitive and currently incorrect — see bug above).
   - Update after the session-load bug is fixed to accurately describe: what state is saved, when it is loaded, and how session IDs scope that state.
   - Files: `Docs/Reference/Specialized_Operations.md`, `Docs/User_Manual.md`
@@ -100,15 +100,17 @@ The feature shipped functionally but has correctness gaps. Goal: *"support clear
 
 Goal: *"one shared report semantic model across ReportPlayer, ReportPortal, VS Code preview, and generated manifests."*
 
-- [ ] **[Reporting] Add a CI check for sync-assets drift**
+- [x] **[Reporting] Add a CI check for sync-assets drift**
   - Issue: Canonical assets in `src/ETL-SQL.ReportRuntime/Resources/Shared/` can silently diverge from synced copies in ReportPlayer, ReportPortal, and VS Code media if `sync-assets.ps1` is not run after a change.
   - Fix: Run `.\scripts\sync-assets.ps1 -Check` as a required step in CI (or a pre-commit hook) so unsynced changes fail the build instead of shipping as drift.
   - Files: `scripts/sync-assets.ps1`, CI/pre-commit configuration
+  - Verified: `.github/workflows/ci.yml` already runs `node .\scripts\sync-assets.js -Check` as "Check shared report runtime assets" (step 3 in `build-and-test`). `Test-PreRelease.ps1` runs it as the "Asset drift check" phase.
 
-- [ ] **[Reporting] Add cross-host consistency smoke tests**
+- [x] **[Reporting] Add cross-host consistency smoke tests**
   - Goal: A reference report script produces the same data (row counts, column names, header/footer values) when rendered by ReportPlayer, the Portal API, and VS Code preview.
   - Approach: Run the same `.rptsql` fixture through each host in the test harness and diff the serialized output.
-  - Files: `tests/ETL-SQL.Tests/` or `tests/ETL-SQL.ReportPortal.Tests/`
+  - Files: `tests/ETL-SQL.ReportPortal.Tests/CrossHostConsistencyTests.cs`
+  - Implemented: `DashboardServiceAndPortalAPI_ProduceSameManifestStructure` — executes the same fixture via `DashboardService` directly (Path A) and via Portal API execute → snapshot (Path B); asserts title, visual count, visual names, row counts, and column names match.
 
 ### Developer Experience: Actionable Parser Errors
 
