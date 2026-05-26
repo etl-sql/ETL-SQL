@@ -49,6 +49,155 @@
   - Fix: Verify package licenses and update `THIRD-PARTY-INVENTORY.md` and `THIRD-PARTY-NOTICES.md` as needed.
   - Files: `Directory.Packages.props`, `THIRD-PARTY-INVENTORY.md`, `THIRD-PARTY-NOTICES.md`
 
+## v0.9.0 Code Review — Confirmed Bugs
+
+- [ ] **[Resume] Fix `--resume` silently ignored when `--session` is omitted**
+  - Issue: If `--resume` is passed without `--session`, `ctx.SessionId` is empty, the entire session block is skipped, and `ctx.Resume` is never examined. The script runs from the beginning with no warning, silently defeating the intent of `--resume`.
+  - Fix: Check `ctx.Resume` before entering the session block and fail fast with a clear error if `ctx.SessionId` is empty.
+  - File: `src/ETL-SQL.App/App/EngineRunner.cs`
+
+- [ ] **[Resume] Session state is loaded on every `--session` run, not only on `--resume`**
+  - Issue: `LoadSessionState` fires whenever a `SessionId` is supplied, regardless of whether `--resume` was passed. On a fresh re-run with the same session ID, all variables from the prior run are restored before execution, so any variable not explicitly reset in the script silently inherits a stale value.
+  - Fix: Only call `LoadSessionState` when `ctx.Resume` is true. A non-resume run should always start with a clean variable context even when a session ID is provided.
+  - File: `src/ETL-SQL.App/App/EngineRunner.cs`
+
+- [ ] **[Parser] GOTO validation accepts reserved keywords as label targets**
+  - Issue: The guard at `StatementParser.cs:509` uses `&&`, so it only throws when the token is neither an IDENTIFIER nor a keyword. A keyword token (e.g., `SELECT`) satisfies the second branch, passes validation, and produces a `GotoStatement` targeting `"SELECT"`. The parse-time error that should fire is silently deferred to a confusing runtime failure.
+  - Fix: Restrict GOTO targets to `TokenType.IDENTIFIER` only. The `IsKeyword` relaxation is correct for label *declarations* (so `start:` works), but GOTO *targets* reference those names as plain identifiers after lexing — they should not accept raw keyword tokens.
+  - File: `src/ETL-SQL.Core/Parser/StatementParser.cs`
+
+- [ ] **[Engine] `SaveSession` hard-casts `IExecutionContext` to concrete `Evaluator`**
+  - Issue: `SessionStateManager.SaveSession` does `if (evaluatorObj is not Evaluator evaluator) throw new ArgumentException(...)`. Any test mock, stub, or future sub-evaluator passed to `SectionLabelStatementHandler` will throw `ArgumentException` at every checkpoint label.
+  - Fix: Extract the minimal state needed for checkpoint serialization into an interface (e.g., `ICheckpointContext`) that `Evaluator` implements. Cast to the interface rather than the concrete class.
+  - Files: `src/ETL-SQL.Engine/Handlers/SectionLabelStatementHandler.cs`, `src/ETL-SQL.Engine/Evaluator.cs`, `SessionStateManager`
+
+- [ ] **[BigQuery] `t.Reference` unguarded null deref in `GetTablesAsync` / `GetViewsAsync`**
+  - Issue: `t.Resource?.Type` uses a null-conditional so entries with null `Resource` are filtered out. But `t.Reference.TableId` on the same line has no null guard. An entry where `Reference` is null throws `NullReferenceException` inside the `await foreach`, outside the `GoogleApiException` catch, and escapes as an unhandled exception.
+  - Fix: Use `t.Reference?.TableId` and skip entries where `Reference` is null.
+  - File: `src/ETL-SQL.Connectors/BigQuery/BigQueryDataSource.cs`
+
+- [ ] **[MySQL] Double-dispose risk in `DisposeAsync` when `RollbackAsync`'s finally throws**
+  - Issue: `RollbackAsync` disposes `_transactionalConnection` in its `finally` block then nulls the field. If `DisposeAsync()` inside that `finally` itself throws, the null-assignment is skipped. `DisposeAsync` then sees `_transactionalConnection != null` and calls `DisposeAsync()` on it a second time.
+  - Fix: Null the field *before* calling `DisposeAsync()` in the finally block (capture the reference locally first), so a failed dispose cannot produce a second attempt.
+  - File: `src/ETL-SQL.Connectors/MySql/MySqlDataSource.cs`
+
+## Goals Completion — Partial
+
+### ETL Goals: Checkpoint / Resume Reliability
+
+The feature shipped functionally but has correctness gaps. Goal: *"support clear recovery behavior when a workflow fails partway through."*
+
+- [ ] **[Resume] Add integration tests for resume edge cases**
+  - Scenarios needed:
+    - `--resume` without `--session` → expect error, not silent fresh run
+    - Re-run with same `--session` but no `--resume` → verify variables start fresh, not inherited from prior run
+    - GOTO targeting a keyword name → expect `SyntaxException` at parse time, not runtime failure
+    - Checkpoint save failure (read-only path, disk full) → graceful error, not silent corrupt state
+    - Resume from mid-script checkpoint → only post-checkpoint statements execute
+  - File: `tests/ETL-SQL.Tests/` (new `ResumeEdgeCaseTests.cs`)
+
+- [ ] **[Resume] Document session ID semantics and `--resume` / `--session` interaction**
+  - Issue: Current docs describe `--resume` but do not explain what happens when `--session` is provided without `--resume` (state load behavior is unintuitive and currently incorrect — see bug above).
+  - Update after the session-load bug is fixed to accurately describe: what state is saved, when it is loaded, and how session IDs scope that state.
+  - Files: `Docs/Reference/Specialized_Operations.md`, `Docs/User_Manual.md`
+
+### Reporting Goals: Runtime Consistency Across Hosts
+
+Goal: *"one shared report semantic model across ReportPlayer, ReportPortal, VS Code preview, and generated manifests."*
+
+- [ ] **[Reporting] Add a CI check for sync-assets drift**
+  - Issue: Canonical assets in `src/ETL-SQL.ReportRuntime/Resources/Shared/` can silently diverge from synced copies in ReportPlayer, ReportPortal, and VS Code media if `sync-assets.ps1` is not run after a change.
+  - Fix: Run `.\scripts\sync-assets.ps1 -Check` as a required step in CI (or a pre-commit hook) so unsynced changes fail the build instead of shipping as drift.
+  - Files: `scripts/sync-assets.ps1`, CI/pre-commit configuration
+
+- [ ] **[Reporting] Add cross-host consistency smoke tests**
+  - Goal: A reference report script produces the same data (row counts, column names, header/footer values) when rendered by ReportPlayer, the Portal API, and VS Code preview.
+  - Approach: Run the same `.rptsql` fixture through each host in the test harness and diff the serialized output.
+  - Files: `tests/ETL-SQL.Tests/` or `tests/ETL-SQL.ReportPortal.Tests/`
+
+### Developer Experience: Actionable Parser Errors
+
+Goal: *"error messages are actionable without exposing sensitive details."* New constructs shipped without matching the error-quality bar of the core engine.
+
+- [ ] **[Parser] Audit new construct error messages for quality and specificity**
+  - Constructs to review: label declarations, GOTO targets, `CREATE CONNECTION`, `SEND EMAIL`, `RUN SCRIPT`, `BEGIN/END` block close.
+  - Standard: every missing-token error must name the expected token and the construct context (e.g., `"Expected identifier for GOTO target"`, not `"Unexpected token"`).
+  - File: `src/ETL-SQL.Core/Parser/StatementParser.cs` and partial files
+
+- [ ] **[Parser] Add a parser error quality test suite**
+  - Goal: Every language construct has a parameterized test asserting that the most common mistake (missing keyword, wrong token, wrong order) produces a `SyntaxException` whose message names the construct and the expected token.
+  - File: `tests/ETL-SQL.Tests/` (new `ParserErrorQualityTests.cs`)
+
+## Goals Completion — Needs Work
+
+### Observability and Governance
+
+Goal: *"make lineage, tags, metadata, report dependencies, history, and permissions inspectable."* The `ILineageContext` interface and execution history infrastructure exist but are not surfaced as user-facing features.
+
+- [ ] **[Lineage] Implement `SHOW LINEAGE` for the current session**
+  - Goal: `SHOW LINEAGE FOR #my_table` or `SHOW LINEAGE FOR <session>` returns a result set showing source connections, transformation steps, and destinations that produced a given dataset.
+  - Current state: `ILineageContext` tracks lineage internally; there is no statement that exposes it.
+  - Files: `src/ETL-SQL.Core/IExecutionContext.cs`, `src/ETL-SQL.Core/Ast.cs`, `src/ETL-SQL.Engine/`
+
+- [ ] **[Governance] Add a structured execution audit log**
+  - Goal: Each script run writes a machine-readable record (JSON or SQLite row) covering: session ID, script path and hash, start/end time, connectors used, rows read/written per connector, and errors encountered.
+  - Use case: Compliance and operations teams need this to answer "what ran, when, and what did it touch?"
+  - Files: `src/ETL-SQL.Orchestrator/` (execution history), `src/ETL-SQL.Engine/Evaluator.cs`
+
+- [ ] **[Diagnostics] Implement `EXPLAIN` / `--explain` for scripts**
+  - Goal: `--explain` mode (or an `EXPLAIN` statement prefix) prints a human-readable plan: each statement, which connector it routes to, whether pushdown applies, and estimated data movement — without executing the script.
+  - Current state: Linting rules and `WHAT_IF` exist; there is no explain-plan output.
+  - Files: `src/ETL-SQL.Core/`, `src/ETL-SQL.Engine/`, `src/ETL-SQL.App/`
+
+- [ ] **[Lineage] Document the lineage and governance model**
+  - Write a dedicated doc covering: what is tracked, how to query it, how to export it, and how it integrates with Orchestrator execution history. Write after the above features are implemented.
+  - File: `Docs/Architecture/Lineage.md`
+
+### Large Workload Behavior
+
+Goal: *"large workload behavior is intentional, documented, and observable."* External engines and spill strategies exist; documentation and measurability lag behind.
+
+- [ ] **[Performance] Publish Standard-scale certification results and treat regressions as release blockers**
+  - Current state: `Test-ScaleCertification.ps1 -Tier Standard` exists but there are no published passing results to compare against.
+  - Action: Run a full standard-scale certification pass, commit results to `certification-results/`, and add a check to the pre-release script that diffs against the baseline and fails on regression.
+  - Files: `scripts/Test-ScaleCertification.ps1`, `certification-results/`
+
+- [ ] **[Performance] Document spill thresholds and memory behavior for users**
+  - Goal: A single reference page explains: when does the engine spill to disk, what are the default thresholds (from `appsettings.json`), how are they configured, and what are the performance implications of each external engine.
+  - File: New section in `Docs/Architecture/Engine.md` or new `Docs/Reference/Performance.md`
+
+- [ ] **[Performance] Emit spill and memory metrics to verbose log output**
+  - Goal: When a script triggers an external engine (aggregate, join, window, sort), the log reports: rows processed, bytes spilled, spill file path, and elapsed time per phase. Satisfies the "observable" part of the goal so users can see when and why spilling occurred.
+  - Files: `src/ETL-SQL.Engine/` (ExternalAggregateEngine, ExternalJoinEngine, ExternalWindowEngine, ExternalSortEngine)
+
+- [ ] **[Performance] Add a regression benchmark for connector pushdown and cross-source joins**
+  - Goal: Before each release, confirm that SQL pushdown to SQL Server, Postgres, MySQL, and Oracle does not regress on query plan selection or row throughput relative to the previous release.
+  - Files: `tests/ETL-SQL.PerfTests/` or `tests/ETL-SQL.Benchmarks/`
+
+### Common Workflow Examples
+
+Success criterion: *"common workflows have working examples, reference documentation, and automated test coverage."*
+
+- [ ] **[Examples] Build a standard ETL workflow example library**
+  - Target scripts (each runnable with a corresponding SLT or integration test):
+    - Extract from SQL → transform in engine → load to SQL, with validation and `WHAT_IF` guard
+    - CSV/Excel ingest → staging table → transformed output with `TRY/CATCH` and GOTO-based checkpoint recovery
+    - Incremental load pattern using a watermark variable and `APPEND`
+    - Multi-source join (SQL + CSV) with explicit pushdown where available
+  - Files: `Docs/Examples/` (scripts) + `tests/ETL-SQL.SqlLogicTests/` (test coverage)
+
+- [ ] **[Examples] Build a paginated report reference script**
+  - Goal: A reference `.rptsql` script demonstrating: parameters, a data table with grouping, subtotals, page headers/footers, and print-ready output — comparable to a basic SSRS report.
+  - File: `Docs/Examples/Reports/`
+
+- [ ] **[Examples] Build a dashboard reference script**
+  - Goal: A reference `.rptsql` script demonstrating: multiple datasets, KPI cards, a bar chart, a table with interactive filters, and a drillthrough link — comparable to a basic BI dashboard.
+  - File: `Docs/Examples/Dashboards/`
+
+- [ ] **[Examples] Require SLT test coverage for every example script**
+  - Goal: Every example in the library has a corresponding test that runs it against a fixture and verifies the output. An example that silently produces wrong output is worse than no example.
+  - File: `tests/ETL-SQL.SqlLogicTests/`
+
 ## Release Hardening / Local Validation
 
 - [x] **[Release] Create a local pre-release validation script**
