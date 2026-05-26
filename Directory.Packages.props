@@ -15,7 +15,7 @@
   <ItemGroup Label="Data / Connectors">
     <PackageVersion Include="Apache.Arrow" Version="16.0.0" />
     <PackageVersion Include="Apache.Avro" Version="1.12.1" />
-    <PackageVersion Include="Azure.Storage.Blobs" Version="12.27.0" />
+    <PackageVersion Include="Azure.Storage.Blobs" Version="12.28.0" />
     <PackageVersion Include="Docker.DotNet" Version="3.125.15" />
     <PackageVersion Include="ExcelDataReader" Version="$(ExcelDataReaderVersion)" />
     <PackageVersion Include="ExcelDataReader.DataSet" Version="$(ExcelDataReaderVersion)" />
