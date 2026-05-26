@@ -1,24 +1,24 @@
 # ETL-SQL Scale Certification Report
 
-Generated: 2026-05-26 09:53:52  |  Tier: **Smoke**  |  Row scale: **1x**
+Generated: 2026-05-26 16:51:39  |  Tier: **Standard**  |  Row scale: **10x**
 
 ## Results
 
 | Scenario | Rows | Elapsed (ms) | Spill (bytes) | Result Rows | Memory (MB) | Memory Bound (MB) | Pass |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
-| TempTableSpill_50000_SELECT_INTO | 50000 | 1353 | 5280000 | 50000 | 41.2 | 1000 | OK |
-| SpillCleanupFailure_50000 | 50000 | 78 | 320000 | 1 | 1.3 | 1000 | OK |
-| CubeGroupingSets_50000_10x5 | 50000 | 2976 | 22400000 | 66 | 9.8 | 1000 | OK |
-| WindowFunction_ROW_NUMBER_50000 | 50000 | 1366 | 11200000 | 50000 | 45.4 | 1000 | OK |
-| ExternalJoin_50000_equality | 50000 | 861 | 8800000 | 50000 | 50.6 | 1000 | OK |
-| StreamingSelect_100000_cap50000 | 100000 | 3521 | 0 | 50000 | 19.7 | 2000 | OK |
-| ExternalAggregate_100000_10grps | 100000 | 885 | 8000000 | 10 | 14.9 | 2000 | OK |
-| ParquetRoundTrip_50000 | 50000 | 68 | 0 | 50000 | 15.2 | 1000 | OK |
-| ScalarSubqueryCache_50000_1000keys | 50000 | 923 | 4000000 | 50000 | 12.7 | 1000 | OK |
-| ExternalSort_50000_DESC | 50000 | 654 | 12000000 | 50000 | 45.4 | 1000 | OK |
-| SpillCleanupSuccess_50000 | 50000 | 96 | 1280000 | 4 | 1.1 | 1000 | OK |
-| CsvIngest_50000 | 50000 | 71 | 0 | 50000 | 8.4 | 1000 | OK |
-| ReportDatasetSnapshotReload_50000 | 50000 | 390 | 0 | 50000 | 51.8 | 1000 | OK |
+| ExternalSort_500000_DESC | 500000 | 9203 | 120000000 | 500000 | 406.1 | 6000 | OK |
+| ExternalAggregate_1000000_10grps | 1000000 | 9639 | 80000000 | 10 | 391.9 | 12000 | OK |
+| ExternalJoin_500000_equality | 500000 | 17080 | 152000000 | 500000 | 760.5 | 6000 | OK |
+| TempTableSpill_500000_SELECT_INTO | 500000 | 6059 | 55680000 | 500000 | 835 | 6000 | OK |
+| StreamingSelect_1000000_cap50000 | 1000000 | 1241 | 0 | 50000 | 978.4 | 12000 | OK |
+| WindowFunction_ROW_NUMBER_500000 | 500000 | 13752 | 112000000 | 500000 | 1121.7 | 6000 | OK |
+| CsvIngest_500000 | 500000 | 552 | 0 | 500000 | 933.1 | 6000 | OK |
+| ParquetRoundTrip_500000 | 500000 | 556 | 0 | 500000 | 998 | 6000 | OK |
+| ReportDatasetSnapshotReload_500000 | 500000 | 3719 | 0 | 500000 | 1362.9 | 6000 | OK |
+| CubeGroupingSets_500000_10x5 | 500000 | 23508 | 224000000 | 66 | 1167.5 | 6000 | OK |
+| ScalarSubqueryCache_500000_1000keys | 500000 | 3864 | 40000000 | 500000 | 1526.1 | 6000 | OK |
+| SpillCleanupSuccess_500000 | 500000 | 1369 | 15680000 | 49 | 1268.7 | 6000 | OK |
+| SpillCleanupFailure_500000 | 500000 | 41 | 320000 | 1 | 1269.8 | 6000 | OK |
 
 ## Operator Status
 

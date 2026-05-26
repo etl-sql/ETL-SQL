@@ -148,10 +148,10 @@ Goal: *"make lineage, tags, metadata, report dependencies, history, and permissi
 
 Goal: *"large workload behavior is intentional, documented, and observable."* External engines and spill strategies exist; documentation and measurability lag behind.
 
-- [ ] **[Performance] Publish Standard-scale certification results and treat regressions as release blockers**
+- [x] **[Performance] Publish Standard-scale certification results and treat regressions as release blockers**
   - Regression check implemented: `scripts/Compare-CertBaseline.ps1` diffs a cert-report.json against a stored baseline (pass/fail, result rows, checksum, elapsed time ±50%) and fails on any regression. Wired into `Test-PreRelease.ps1` after both Smoke and Standard cert phases.
   - Smoke baseline committed: `certification-results/baseline-smoke.json`.
-  - **Remaining**: Run `Test-PreRelease.ps1 -IncludeStandardScale` to generate Standard-tier results, then copy `cert-report.json` to `certification-results/baseline-standard.json`.
+  - Standard baseline committed: `certification-results/baseline-standard.json` (13 scenarios, all passing, 10x row scale, generated 2026-05-26).
 
 - [x] **[Performance] Document spill thresholds and memory behavior for users**
   - File: `Docs/Reference/Performance.md` — covers all four external engines, activation thresholds, `SET` overrides, `appsettings.json` defaults, spill storage, encryption/compression, observability (`--perf`, `SHOW PROFILE`, `--verbose`), memory model, tuning guidance, and scale certification tiers.
@@ -182,10 +182,14 @@ Success criterion: *"common workflows have working examples, reference documenta
 - [x] **[Examples] Wire sample smoke coverage into pre-release validation**
   - `scripts/Test-AllSamples.ps1` runs all `.etlsql` and `.rptsql` files and checks exit codes, with `@requires:` skip tags for unavailable services. Added as a standard phase in `Test-PreRelease.ps1` (after the fast lane).
 
-- [ ] **[Examples] Add output-correctness coverage for core example scripts**
-  - Gap: `Test-AllSamples.ps1` verifies scripts don't crash but not that they produce correct output. A refactor that silently changes row counts or values will not be caught.
-  - Scope: Prioritize `07_Real_World/` and `01_Basics/`; add `.slt` fixtures or assertion-based wrappers for each.
-  - File: `tests/ETL-SQL.SqlLogicTests/`
+- [x] **[Examples] Add output-correctness coverage for core example scripts**
+  - 6 assertion-based tests in `tests/ETL-SQL.Tests/Statements/ExampleOutputCorrectnessTests.cs` covering:
+    - `01_Basics/Function_Library.etlsql`: 15 function assertions (STRING, MATH, DATE, GENERAL categories)
+    - `07_Real_World/realworld_07_window_deduplication.etlsql`: 2 deduped rows, correct EventIDs per UserID
+    - `07_Real_World/realworld_04_incremental_merge.etlsql`: MERGE final state (3 rows, correct segments per customer)
+    - `07_Real_World/realworld_05_masking_json.etlsql`: Email + SSN masking format verified for both employees
+    - `07_Real_World/realworld_06_reconciliation_anti_join.etlsql`: Anti-join finds exactly 1 missing account (AccountID 1002)
+    - `07_Real_World/realworld_08_aggregation_pivot.etlsql`: PIVOT revenue columns correct for NORTH/Electronics and SOUTH/Furniture
 
 ## Release Hardening / Local Validation
 
