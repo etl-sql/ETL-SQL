@@ -1,0 +1,56 @@
+name: Manual Scale Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: Scale certification tier
+        required: true
+        default: Standard
+        type: choice
+        options:
+          - Smoke
+          - Standard
+          - Stress
+          - Provider
+      row_scale:
+        description: Optional row-count scale override
+        required: false
+        default: ""
+
+jobs:
+  scale:
+    name: Scale Certification
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
+          git fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
+          git checkout --force FETCH_HEAD
+
+      - name: Restore dependencies
+        run: dotnet restore ETL-SQL.slnx
+
+      - name: Build
+        run: dotnet build ETL-SQL.slnx --configuration Release --no-restore
+
+      - name: Scale certification
+        shell: pwsh
+        run: |
+          $args = @("-Tier", "${{ inputs.tier }}")
+          if ("${{ inputs.row_scale }}" -ne "") {
+            $args += @("-RowCountScale", "${{ inputs.row_scale }}")
+          }
+          .\scripts\Test-ScaleCertification.ps1 @args
+
+      - name: Print certification report location
+        shell: pwsh
+        run: |
+          Get-ChildItem certification-results -Recurse
+          Get-Content certification-results/cert-report.md

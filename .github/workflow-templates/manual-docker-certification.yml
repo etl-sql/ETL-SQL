@@ -1,0 +1,36 @@
+name: Manual Docker Connector Certification
+
+on:
+  workflow_dispatch:
+
+jobs:
+  docker-connectors:
+    name: Docker Integration Lane
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:$env:GITHUB_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
+          git fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
+          git checkout --force FETCH_HEAD
+
+      - name: Restore dependencies
+        run: dotnet restore ETL-SQL.slnx
+
+      - name: Build
+        run: dotnet build ETL-SQL.slnx --configuration Release --no-restore
+
+      - name: Build platform connector images
+        shell: pwsh
+        run: |
+          docker build -f src/ETL-SQL.ReportPortal/Dockerfile -t etl-sql-reportportal-test:latest .
+          docker build -f src/ETL-SQL.Orchestrator.Service/Dockerfile -t etl-sql-orchestrator-service-test:latest .
+
+      - name: Integration lane
+        shell: pwsh
+        run: .\scripts\test-lane.ps1 -Lane integration -Configuration Release -NoRestore -NoBuild

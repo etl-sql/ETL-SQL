@@ -40,6 +40,29 @@ Use `scripts/test-lane.ps1` when you want a named suite rather than only smoke t
 .\scripts\test-lane.ps1 -Lane slt        # deployment-only
 ```
 
+## Local Pre-Release Validation
+
+Use `scripts/Test-PreRelease.ps1` before pushing a release branch, tag, or installer build. It is the local-first release gate: GitHub Actions should not be the first place release failures are discovered.
+
+```powershell
+# Normal local release confidence run
+.\scripts\Test-PreRelease.ps1
+
+# Resume after fixing a failed phase
+.\scripts\Test-PreRelease.ps1 -Resume
+
+# Include Docker-backed connector coverage
+.\scripts\Test-PreRelease.ps1 -IncludeDockerIntegration
+
+# Include Standard-scale certification
+.\scripts\Test-PreRelease.ps1 -IncludeStandardScale
+
+# Build release artifacts after validation
+.\scripts\Test-PreRelease.ps1 -BuildInstallers -Platforms win-x64
+```
+
+The script writes timestamped JSON/Markdown reports and phase logs under `release-validation/`, which is ignored by Git. The `latest/state.json` file lets `-Resume` skip phases that already passed for the same source fingerprint. If code changes after a failed run, rerun from the beginning unless you intentionally use `-ForceResume`.
+
 `fast` is the default local correctness lane. `full` runs the normal xUnit test projects and skips the benchmark executable and deployment-only SLT corpus so `dotnet test` output stays meaningful.
 
 ### Category tag reference
