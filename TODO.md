@@ -141,9 +141,8 @@ Goal: *"make lineage, tags, metadata, report dependencies, history, and permissi
 - [x] **[Diagnostics] Implement `EXPLAIN` / `--explain` for scripts**
   - Implemented: `ExplainStatement` AST node, `ExplainStatementHandler` with EXPLAIN and EXPLAIN ANALYZE modes. Plan output includes: ID, Operation, Details, Cost, Mode, Est. Rows; ANALYZE mode adds Actual Rows, Actual Time, and Spill metrics. 5 test files.
 
-- [ ] **[Lineage] Document the lineage and governance model**
-  - Write a dedicated doc covering: what is tracked, how to query it, how to export it, and how it integrates with Orchestrator execution history.
-  - File: `Docs/Architecture/Lineage.md`
+- [x] **[Lineage] Document the lineage and governance model**
+  - File: `Docs/Architecture/Lineage.md` — covers what is tracked, `LineageEntry` data model, `SHOW LINEAGE` syntax, Mermaid/OpenLineage export, cross-run catalog (`SHOW LINEAGE HISTORY`), metadata inheritance rules, and Orchestrator integration.
 
 ### Large Workload Behavior
 
