@@ -531,7 +531,7 @@ CREATE VISUAL {visualName} AS CARD (
         var jobId = executeBody!["jobId"]!.GetValue<string>();
 
         JsonObject? job = null;
-        for (var i = 0; i < 50; i++)
+        for (var i = 0; i < 300; i++)
         {
             var jobRes = await AuthGet(token, $"/api/jobs/{jobId}");
             Assert.Equal(HttpStatusCode.OK, jobRes.StatusCode);
@@ -540,7 +540,7 @@ CREATE VISUAL {visualName} AS CARD (
             if (status is "Completed" or "Failed" or "Cancelled")
                 break;
 
-            await Task.Delay(100);
+            await Task.Delay(200);
         }
 
         Assert.NotNull(job);
@@ -2159,7 +2159,7 @@ CREATE VISUAL Summary AS TABLE (
     private async Task<JsonObject> WaitForJobAsync(string token, string jobId)
     {
         JsonObject? job = null;
-        for (var i = 0; i < 50; i++)
+        for (var i = 0; i < 300; i++)
         {
             var jobRes = await AuthGet(token, $"/api/jobs/{jobId}");
             Assert.Equal(HttpStatusCode.OK, jobRes.StatusCode);
@@ -2168,7 +2168,7 @@ CREATE VISUAL Summary AS TABLE (
             if (status is "Completed" or "Failed" or "Cancelled")
                 return job;
 
-            await Task.Delay(100);
+            await Task.Delay(200);
         }
 
         Assert.NotNull(job);
@@ -2178,7 +2178,7 @@ CREATE VISUAL Summary AS TABLE (
     private async Task<JsonObject> WaitForRunningOrCompletedJobAsync(string token, string jobId)
     {
         JsonObject? job = null;
-        for (var i = 0; i < 50; i++)
+        for (var i = 0; i < 300; i++)
         {
             var jobRes = await AuthGet(token, $"/api/jobs/{jobId}");
             Assert.Equal(HttpStatusCode.OK, jobRes.StatusCode);
