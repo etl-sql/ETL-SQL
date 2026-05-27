@@ -1,6 +1,6 @@
 # ETL-SQL
 
-![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.8.0-blue?style=for-the-badge&logo=dotnet)
+![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.9.0-blue?style=for-the-badge&logo=dotnet)
 ![Language](https://img.shields.io/badge/Language-C%23-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-lightgrey?style=for-the-badge)
 
@@ -11,8 +11,9 @@ Use ETL-SQL when you want SQL to be the orchestration language, not just the que
 ## Why ETL-SQL
 
 - **One language for the whole workflow**: extraction, staging, transformation, validation, file operations, email, scheduling, lineage, and reporting.
-- **Portable across sources**: MSSQL, Postgres, Oracle, ODBC, Snowflake, BigQuery, flat files, Parquet, JSON, XML, Excel, Avro, REST, SFTP, FTP, Azure Blob, and SMTP.
+- **Portable across sources**: MSSQL, Postgres, Oracle, MySQL/MariaDB, ODBC, Snowflake, BigQuery, flat files, Parquet, JSON, XML, Excel, Avro, REST, SFTP, FTP, Azure Blob, and SMTP.
 - **Engine-side control**: data flows through the ETL-SQL engine, where variables, `#temp` tables, lineage, linting, security checks, and cross-source transforms live.
+- **Checkpoint and resume**: top-level labels can act as resumable checkpoints, with `GOTO`, `--session`, and `--resume` supporting controlled restarts.
 - **Zero-trust by default**: scripts run inside a sandbox with path guardrails, script immutability, resource caps, encrypted credentials, and dry-run support.
 - **Reports are scripts too**: `.rptsql` files use the same engine and add dashboards, filters, pages, containers, navigation, exports, and portal publishing.
 
@@ -215,7 +216,8 @@ etl-sql-report build sales_dashboard.rptsql --format json
 - Stream large datasets through supported execution paths with bounded display results.
 - Spill sort, join, aggregate, and window workloads to disk when thresholds are exceeded.
 - Cache repeated scalar subqueries within a session.
-- Profile statements with `SET PROFILING ON` and inspect runtime metrics with system variables.
+- Profile statements with `SET PROFILING ON`, `EXPLAIN`, `EXPLAIN ANALYZE`, and `--explain`.
+- Inspect runtime metrics, spill totals, and memory pressure with system variables and `SHOW PROFILE`.
 
 ### Security & Governance
 
@@ -237,7 +239,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 - Run scripts headlessly from the CLI.
 - Use the terminal IDE for syntax highlighting, autocomplete, live result grids, compare mode, and profiling.
 - Use the VS Code extension for LSP diagnostics, hover docs, schema autocomplete, REPL execution, report preview, and `.etlnb` notebooks.
-- Use `LINT`, `EXPLAIN`, `SHOW PROFILE`, `SHOW CONNECTIONS`, and `SHOW VERSION` to inspect scripts and sessions.
+- Use `LINT`, `EXPLAIN`, `EXPLAIN ANALYZE`, `SHOW PROFILE`, `SHOW CONNECTIONS`, and `SHOW VERSION` to inspect scripts and sessions.
 
 ---
 
@@ -276,6 +278,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | [Standard Library](Docs/Reference/Standard_Library.md) | Built-in functions: string, date, math, regex, window, JSON/XML, and more. |
 | [Data Connectors](Docs/Reference/Data_Connectors.md) | Connector types, `WITH()` options, authentication patterns, and examples. |
 | [Specialized Operations](Docs/Reference/Specialized_Operations.md) | File operations, email, transfer, lineage, Docker, jobs, and diagnostics. |
+| [Performance](Docs/Reference/Performance.md) | Spill thresholds, memory model, tuning guidance, and scale certification references. |
 
 ### Engineering
 
@@ -284,7 +287,10 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | [Engine Architecture](Docs/Architecture/Engine.md) | Parser, AST, evaluator internals, dispatch, linting, and execution model. |
 | [Reporting Architecture](Docs/Architecture/Reporting.md) | Report runtime, manifest builder, renderer, exports, and parameter binding. |
 | [Connector Architecture](Docs/Architecture/Connectors.md) | Connector interfaces, lifecycle, pushdown, and security boundaries. |
+| [Lineage Architecture](Docs/Architecture/Lineage.md) | Lineage capture, history queries, export formats, and orchestration integration. |
 | [VS Code Extension](Docs/Architecture/VSCodeExtension.md) | LSP, REPL channels, notebook controller, results panel, and report preview. |
+| [Connector Certification Matrix](Docs/Standards/Connector_Certification_Matrix.md) | Connector test classes, certification tiers, and release gate coverage. |
+| [Release Workflows](Docs/Strategy/Release_Workflows.md) | Local-first release validation and packaging workflow. |
 | [Security Policy](SECURITY.md) | Zero-trust sandbox, cryptographic architecture, and audit policy. |
 | [AI Agent Manual](AGENTS.md) | Mandatory instruction set for AI-assisted development in this repo. |
 
@@ -292,10 +298,11 @@ etl-sql-report build sales_dashboard.rptsql --format json
 
 ## Release Build
 
-Maintainers can run the release script to validate, package, and publish the 0.8.0 artifacts:
+Maintainers can run the release script to validate, package, and publish the 0.9.0 artifacts:
 
 ```powershell
-.\scripts\Master-Release.ps1 -Version "0.8.0"
+.\scripts\Test-PreRelease.ps1
+.\scripts\Master-Release.ps1 -Version "0.9.0"
 ```
 
 ---
