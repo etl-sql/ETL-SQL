@@ -320,8 +320,14 @@ namespace ETL_SQL.Core.Execution
 
         public void Dispose()
         {
-            _connection?.Dispose();
-            _connection = null;
+            if (_connection != null)
+            {
+                // ClearPool releases the file handle from the connection pool so that
+                // the caller can delete the session directory immediately after disposal.
+                SqliteConnection.ClearPool(_connection);
+                _connection.Dispose();
+                _connection = null;
+            }
         }
     }
 }

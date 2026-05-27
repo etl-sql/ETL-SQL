@@ -72,5 +72,25 @@ namespace ETL_SQL.Tests.Integration
             
             Assert.Contains(mockDb.ExecutedSql, s => s.Contains("DROP TABLE [TargetTable]") || s.Contains("DROP TABLE TargetTable"));
         }
+
+        [Fact]
+        public async Task TestInsertValuesParameterRemapCollision()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mockDb = new MockDatabaseSource();
+            evaluator.Connections["remote"] = mockDb;
+
+            string script = @"
+                DECLARE @id INT;
+                SET @id = 1;
+                INSERT INTO remote.TargetTable (Col0, Col1, Col2) VALUES (100, 10 + @id, @id + 2);
+            ";
+
+            await evaluator.Evaluate(TestHelpers.Parse(script));
+
+            Assert.Single(mockDb.ExecutedSql);
+            var sql = mockDb.ExecutedSql[0];
+            Assert.Contains("VALUES (@p0, (@p1 + @p2), (@p3 + @p4))", sql);
+        }
     }
 }

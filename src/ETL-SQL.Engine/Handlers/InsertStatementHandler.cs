@@ -138,13 +138,19 @@ namespace ETL_SQL.Engine.Handlers
                             else
                             {
                                 // Remap local @p0, @p1 → globally sequential @p{n}
-                                // Sort descending by key length so @p10 is replaced before @p1
-                                var remapped = compiled.Sql;
-                                foreach (var kv in compiled.Parameters.OrderByDescending(kv => kv.Key.Length))
+                                // Map local parameter names to their new global names
+                                var localToGlobal = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                                foreach (var kv in compiled.Parameters)
                                 {
-                                    remapped = remapped.Replace(kv.Key, $"@p{allParams.Count}");
+                                    localToGlobal[kv.Key] = $"@p{allParams.Count}";
                                     allParams.Add(kv.Value);
                                 }
+
+                                // Single-pass replacement using Regex to avoid collisions
+                                var remapped = System.Text.RegularExpressions.Regex.Replace(compiled.Sql, @"@p\d+", m =>
+                                {
+                                    return localToGlobal.TryGetValue(m.Value, out var globalName) ? globalName : m.Value;
+                                });
                                 placeholders.Add(remapped);
                             }
                         }

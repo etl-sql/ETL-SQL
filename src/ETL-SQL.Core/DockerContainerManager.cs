@@ -157,8 +157,9 @@ namespace ETL_SQL.Core
                     try
                     {
                         var uri = new Uri(pipe);
-                        using var config = new DockerClientConfiguration(uri);
-                        using var client = config.CreateClient();
+                        using var client = new DockerClientBuilder()
+                            .WithEndpoint(uri)
+                            .Build();
                         await client.System.PingAsync(); // Reliable check
                         return uri;
                     }
@@ -174,8 +175,9 @@ namespace ETL_SQL.Core
             try
             {
                 var uri = await GetValidDockerUri();
-                using var config = new DockerClientConfiguration(uri);
-                using var client = config.CreateClient();
+                using var client = new DockerClientBuilder()
+                    .WithEndpoint(uri)
+                    .Build();
                 var containers = await client.Containers.ListContainersAsync(new ContainersListParameters { All = false });
                 var target = containers.FirstOrDefault(c => c.Names.Any(n => n.Equals("/" + name, StringComparison.OrdinalIgnoreCase)));
                 

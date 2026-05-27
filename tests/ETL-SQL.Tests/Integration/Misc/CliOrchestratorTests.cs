@@ -21,7 +21,7 @@ namespace ETL_SQL.Tests.Integration
                 return 0;
             });
 
-            await root.InvokeAsync(new[] { "run", "script.sql", "--perf" });
+            await root.Parse(new[] { "run", "script.sql", "--perf" }, null).InvokeAsync(new InvocationConfiguration(), default);
             
             Assert.NotNull(capturedContext);
             Assert.True(capturedContext!.IsPerfMode);
@@ -37,7 +37,7 @@ namespace ETL_SQL.Tests.Integration
                 return 0;
             });
 
-            await root.InvokeAsync(new[] { "test", "unit" });
+            await root.Parse(new[] { "test", "unit" }, null).InvokeAsync(new InvocationConfiguration(), default);
             
             Assert.NotNull(capturedContext);
             Assert.True(capturedContext!.IsTestMode);
@@ -54,7 +54,7 @@ namespace ETL_SQL.Tests.Integration
                 return 0;
             });
 
-            await root.InvokeAsync(new[] { "run", "script.sql", "-b", "5000" });
+            await root.Parse(new[] { "run", "script.sql", "-b", "5000" }, null).InvokeAsync(new InvocationConfiguration(), default);
             
             Assert.NotNull(capturedContext);
             Assert.Equal(5000, capturedContext!.BatchSize);
@@ -70,7 +70,7 @@ namespace ETL_SQL.Tests.Integration
                 return Task.FromResult(7);
             });
 
-            var exitCode = await root.InvokeAsync(new[] { "doctor", "--json", "--strict", "--profile", "full" });
+            var exitCode = await root.Parse(new[] { "doctor", "--json", "--strict", "--profile", "full" }, null).InvokeAsync(new InvocationConfiguration(), default);
 
             Assert.Equal(7, exitCode);
             Assert.NotNull(capturedContext);
@@ -90,7 +90,7 @@ namespace ETL_SQL.Tests.Integration
                 return Task.FromResult(0);
             });
 
-            var exitCode = await root.InvokeAsync(new[] { "doctor" });
+            var exitCode = await root.Parse(new[] { "doctor" }, null).InvokeAsync(new InvocationConfiguration(), default);
 
             Assert.Equal(0, exitCode);
             Assert.NotNull(capturedContext);

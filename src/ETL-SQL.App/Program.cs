@@ -40,7 +40,8 @@ namespace ETL_SQL
                 if (isHelpOnly && args.Length > 1)
                 {
                     var helpCommand = CliOrchestrator.BuildRootCommand(_ => Task.FromResult(0));
-                    return await helpCommand.InvokeAsync(args);
+                    var parseResult = helpCommand.Parse(args, null);
+                    return await parseResult.InvokeAsync(new InvocationConfiguration(), default);
                 }
 
                 var isDoctorJson = args.Any(a => string.Equals(a, "doctor", StringComparison.OrdinalIgnoreCase))
@@ -83,7 +84,8 @@ namespace ETL_SQL
                     return await EngineRunner.Run(ctx);
                 });
 
-                return await rootCommand.InvokeAsync(args);
+                var rootParseResult = rootCommand.Parse(args, null);
+                return await rootParseResult.InvokeAsync(new InvocationConfiguration(), default);
             }
             catch (Exception ex)
             {
