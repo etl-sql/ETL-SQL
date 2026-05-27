@@ -1520,6 +1520,8 @@ WHEN MATCHED AND T.Segment <> S.Segment THEN
     UPDATE SET T.Segment = S.Segment, T.UpdatedAt = GETDATE()
 WHEN NOT MATCHED BY TARGET THEN
     INSERT (CustomerID, Name, Segment) VALUES (S.CustomerID, S.Name, S.Segment)
+WHEN NOT MATCHED BY SOURCE THEN
+    DELETE
 OUTPUT
     $action          AS Action,
     INSERTED.CustomerID,
