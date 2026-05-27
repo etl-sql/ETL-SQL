@@ -69,7 +69,7 @@ namespace ETL_SQL.Connectors.Parquet
             try
             {
                 using var stream = System.IO.File.OpenRead(effectivePath);
-                using var reader = await ParquetReader.CreateAsync(stream);
+                await using var reader = await ParquetReader.CreateAsync(stream);
                 var dataFields = reader.Schema.GetDataFields();
                 var colNames = dataFields.Select(f => f.Name).ToList();
 
@@ -77,11 +77,11 @@ namespace ETL_SQL.Connectors.Parquet
                 {
                     using var rgReader = reader.OpenRowGroupReader(i);
                     int rowCount = (int)rgReader.RowCount;
-                    
-                    var columns = new Array[dataFields.Length];
+
+                    var columns = new object?[dataFields.Length][];
                     for (int j = 0; j < dataFields.Length; j++)
                     {
-                        columns[j] = (await rgReader.ReadColumnAsync(dataFields[j])).Data;
+                        columns[j] = await ReadColumnAsObjectsAsync(rgReader, dataFields[j], rowCount);
                     }
 
                     DataTable? currentBatch = null;
@@ -97,7 +97,7 @@ namespace ETL_SQL.Connectors.Parquet
                         var etlRow = new ETL_SQL.Data.Row();
                         for (int c = 0; c < dataFields.Length; c++)
                         {
-                            etlRow[colNames[c]] = columns[c].GetValue(r);
+                            etlRow[colNames[c]] = columns[c][r];
                         }
                         await currentBatch.AddRowAsync(etlRow);
 
@@ -143,12 +143,12 @@ namespace ETL_SQL.Connectors.Parquet
                 object? firstVal = firstBatch.Rows.Count > 0 ? firstBatch.Rows[0][col] : null;
                 Type t = firstVal?.GetType() ?? typeof(string);
                 
-                if (t == typeof(int) || t == typeof(long)) fields.Add(new DataField<long>(col));
-                else if (t == typeof(decimal)) fields.Add(new DataField<decimal>(col));
-                else if (t == typeof(double) || t == typeof(float)) fields.Add(new DataField<double>(col));
-                else if (t == typeof(bool)) fields.Add(new DataField<bool>(col));
-                else if (t == typeof(DateTime)) fields.Add(new DataField<DateTime>(col));
-                else fields.Add(new DataField<string>(col));
+                if (t == typeof(int) || t == typeof(long)) fields.Add(new DataField<long>(col, nullable: true));
+                else if (t == typeof(decimal)) fields.Add(new DataField<decimal>(col, nullable: true));
+                else if (t == typeof(double) || t == typeof(float)) fields.Add(new DataField<double>(col, nullable: true));
+                else if (t == typeof(bool)) fields.Add(new DataField<bool>(col, nullable: true));
+                else if (t == typeof(DateTime)) fields.Add(new DataField<DateTime>(col, nullable: true));
+                else fields.Add(new DataField<string>(col, nullable: true));
             }
 
             string targetPath = _filePath;
@@ -167,14 +167,13 @@ namespace ETL_SQL.Connectors.Parquet
 
             try
             {
-                using (var stream = System.IO.File.Create(targetPath))
-                using (var writer = await ParquetWriter.CreateAsync(schema, stream))
-                {
-                    if (Enum.TryParse<CompressionMethod>(_compression, true, out var comp))
-                    {
-                        writer.CompressionMethod = comp;
-                    }
+                var options = new ParquetOptions();
+                if (Enum.TryParse<CompressionMethod>(_compression, true, out var comp))
+                    options.CompressionMethod = comp;
 
+                using (var stream = System.IO.File.Create(targetPath))
+                await using (var writer = await ParquetWriter.CreateAsync(schema, stream, options))
+                {
                     bool hasMore = true;
                     DataTable batch = firstBatch;
 
@@ -185,14 +184,7 @@ namespace ETL_SQL.Connectors.Parquet
                             var dataFields = schema.GetDataFields();
                             for (int i = 0; i < dataFields.Length; i++)
                             {
-                                var field = dataFields[i];
-                                var values = Array.CreateInstance(field.ClrType, batch.Rows.Count);
-                                for (int r = 0; r < batch.Rows.Count; r++)
-                                {
-                                    values.SetValue(CastValue(batch.Rows[r][field.Name], field), r);
-                                }
-                                var column = new DataColumn(field, values);
-                                await rgWriter.WriteColumnAsync(column);
+                                await WriteColumnToGroupAsync(rgWriter, dataFields[i], batch.Rows);
                             }
                         }
                         hasMore = await enumerator.MoveNextAsync();
@@ -220,19 +212,105 @@ namespace ETL_SQL.Connectors.Parquet
             await Task.CompletedTask;
         }
 
-        private object? CastValue(object? val, DataField field)
+        private static async Task<object?[]> ReadColumnAsObjectsAsync(ParquetRowGroupReader rgReader, DataField field, int rowCount)
         {
-            if (val == null) return null;
-            try
+            var rawData = await rgReader.ReadRawColumnDataBaseAsync(field, default);
+            var prop = rawData.GetType().GetProperty("NullableValues");
+            if (prop != null)
             {
-                if (field.ClrType == typeof(long)) return Convert.ToInt64(val);
-                if (field.ClrType == typeof(decimal)) return Convert.ToDecimal(val);
-                if (field.ClrType == typeof(double)) return Convert.ToDouble(val);
-                if (field.ClrType == typeof(bool)) return Convert.ToBoolean(val);
-                if (field.ClrType == typeof(DateTime)) return Convert.ToDateTime(val);
-                return val.ToString();
+                try
+                {
+                    var seq = (System.Collections.IEnumerable)prop.GetValue(rawData)!;
+                    var result = new object?[rowCount];
+                    int idx = 0;
+                    foreach (var v in seq) { if (idx >= rowCount) break; result[idx++] = v; }
+                    return result;
+                }
+                catch (InvalidOperationException)
+                {
+                    // Column has no definition levels (non-nullable); fall through to typed read
+                }
             }
-            catch { return null; }
+            return await ReadNonNullableColumnAsync(rgReader, field, rowCount);
+        }
+
+        private static async Task<object?[]> ReadNonNullableColumnAsync(ParquetRowGroupReader rgReader, DataField field, int rowCount)
+        {
+            var clrType = field.ClrType;
+            if (clrType == typeof(long) || clrType == typeof(long?))
+            {
+                var buf = new long[rowCount];
+                await rgReader.ReadAsync(field, buf.AsMemory(), null, default);
+                return Array.ConvertAll(buf, v => (object?)v);
+            }
+            if (clrType == typeof(decimal) || clrType == typeof(decimal?))
+            {
+                var buf = new decimal[rowCount];
+                await rgReader.ReadAsync(field, buf.AsMemory(), null, default);
+                return Array.ConvertAll(buf, v => (object?)v);
+            }
+            if (clrType == typeof(double) || clrType == typeof(double?))
+            {
+                var buf = new double[rowCount];
+                await rgReader.ReadAsync(field, buf.AsMemory(), null, default);
+                return Array.ConvertAll(buf, v => (object?)v);
+            }
+            if (clrType == typeof(bool) || clrType == typeof(bool?))
+            {
+                var buf = new bool[rowCount];
+                await rgReader.ReadAsync(field, buf.AsMemory(), null, default);
+                return Array.ConvertAll(buf, v => (object?)v);
+            }
+            if (clrType == typeof(DateTime) || clrType == typeof(DateTime?))
+            {
+                var buf = new DateTime[rowCount];
+                await rgReader.ReadAsync(field, buf.AsMemory(), null, default);
+                return Array.ConvertAll(buf, v => (object?)v);
+            }
+            var sBuf = new string?[rowCount];
+            await rgReader.ReadAsync(field, sBuf.AsMemory(), null, default);
+            return Array.ConvertAll(sBuf, v => (object?)v);
+        }
+
+        private static async Task WriteColumnToGroupAsync(ParquetRowGroupWriter rgWriter, DataField field, List<Row> rows)
+        {
+            int count = rows.Count;
+            var clrType = field.ClrType;
+            if (clrType == typeof(long))
+            {
+                var buf = new long?[count];
+                for (int r = 0; r < count; r++) { var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToInt64(v) : (long?)null; }
+                await rgWriter.WriteAsync(field, new ReadOnlyMemory<long?>(buf), null, null, default);
+            }
+            else if (clrType == typeof(decimal))
+            {
+                var buf = new decimal?[count];
+                for (int r = 0; r < count; r++) { var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToDecimal(v) : (decimal?)null; }
+                await rgWriter.WriteAsync(field, new ReadOnlyMemory<decimal?>(buf), null, null, default);
+            }
+            else if (clrType == typeof(double))
+            {
+                var buf = new double?[count];
+                for (int r = 0; r < count; r++) { var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToDouble(v) : (double?)null; }
+                await rgWriter.WriteAsync(field, new ReadOnlyMemory<double?>(buf), null, null, default);
+            }
+            else if (clrType == typeof(bool))
+            {
+                var buf = new bool?[count];
+                for (int r = 0; r < count; r++) { var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToBoolean(v) : (bool?)null; }
+                await rgWriter.WriteAsync(field, new ReadOnlyMemory<bool?>(buf), null, null, default);
+            }
+            else if (clrType == typeof(DateTime))
+            {
+                var buf = new DateTime?[count];
+                for (int r = 0; r < count; r++) { var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToDateTime(v) : (DateTime?)null; }
+                await rgWriter.WriteAsync(field, new ReadOnlyMemory<DateTime?>(buf), null, null, default);
+            }
+            else
+            {
+                var buf = rows.Select(r => r[field.Name]?.ToString()).ToList();
+                await rgWriter.WriteAsync(field, buf, null);
+            }
         }
 
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName)
@@ -276,7 +354,7 @@ namespace ETL_SQL.Connectors.Parquet
             try
             {
                 using var stream = System.IO.File.OpenRead(effectivePath);
-                using var reader = await ParquetReader.CreateAsync(stream);
+                await using var reader = await ParquetReader.CreateAsync(stream);
                 var cols = reader.Schema.Fields.Select(f => f.Name).ToList();
                 _logger.Debug("[PARQUET] Found {Count} columns: {Cols}", cols.Count, string.Join(", ", cols));
                 return cols;

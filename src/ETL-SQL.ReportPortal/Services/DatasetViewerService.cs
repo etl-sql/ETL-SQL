@@ -176,7 +176,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
         var rows = new List<Dictionary<string, object?>>();
 
         await using var stream = File.OpenRead(filePath);
-        using var reader = await ParquetReader.CreateAsync(stream);
+        await using var reader = await ParquetReader.CreateAsync(stream);
 
         var dataFields = reader.Schema.GetDataFields();
 
@@ -184,10 +184,20 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
         {
             using var rgReader  = reader.OpenRowGroupReader(g);
             int rowCount        = (int)rgReader.RowCount;
-            var columnArrays    = new Array[dataFields.Length];
+            var columnArrays    = new object?[dataFields.Length][];
 
             for (int c = 0; c < dataFields.Length; c++)
-                columnArrays[c] = (await rgReader.ReadColumnAsync(dataFields[c])).Data;
+            {
+                var raw = await rgReader.ReadRawColumnDataBaseAsync(dataFields[c], default);
+                var nullableValsProp = raw.GetType().GetProperty("NullableValues");
+                columnArrays[c] = new object?[rowCount];
+                if (nullableValsProp != null)
+                {
+                    var seq = (System.Collections.IEnumerable)nullableValsProp.GetValue(raw)!;
+                    int idx = 0;
+                    foreach (var v in seq) { if (idx >= rowCount) break; columnArrays[c][idx++] = v; }
+                }
+            }
 
             for (int r = 0; r < rowCount; r++)
             {
@@ -197,8 +207,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
                 var row = new Dictionary<string, object?>(dataFields.Length, StringComparer.OrdinalIgnoreCase);
                 for (int c = 0; c < dataFields.Length; c++)
                 {
-                    var val = columnArrays[c].GetValue(r);
-                    row[dataFields[c].Name] = val;
+                    row[dataFields[c].Name] = columnArrays[c][r];
                 }
                 rows.Add(row);
             }
