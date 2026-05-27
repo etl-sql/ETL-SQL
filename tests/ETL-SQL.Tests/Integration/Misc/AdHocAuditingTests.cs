@@ -20,15 +20,19 @@ namespace ETL_SQL.Tests.Integration
     {
         private readonly string _testDbPath;
         private readonly string _tempScriptPath;
+        private readonly IServiceProvider? _originalServiceProvider;
 
         public AdHocAuditingTests()
         {
             _testDbPath = $"test_audit_{Guid.NewGuid():N}.db";
             _tempScriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"temp_script_{Guid.NewGuid():N}.etlsql");
+            _originalServiceProvider = ETL_SQL.Program.ServiceProvider;
         }
 
         public void Dispose()
         {
+            ETL_SQL.Program.ServiceProvider = _originalServiceProvider;
+
             try
             {
                 if (File.Exists(_testDbPath))
