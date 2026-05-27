@@ -109,18 +109,18 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "ETL-SQL Report Portal", Version = "v1" });
-    c.AddSecurityDefinition("Bearer", new()
+    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.OpenApiSecurityScheme
     {
         Name   = "Authorization",
-        Type   = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Type   = Microsoft.OpenApi.SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT",
-        In     = Microsoft.OpenApi.Models.ParameterLocation.Header
+        In     = Microsoft.OpenApi.ParameterLocation.Header
     });
-    c.AddSecurityRequirement(new()
+    c.AddSecurityRequirement(_ => new Microsoft.OpenApi.OpenApiSecurityRequirement
     {
         {
-            new() { Reference = new() { Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme, Id = "Bearer" } },
+            new Microsoft.OpenApi.OpenApiSecuritySchemeReference("Bearer"),
             []
         }
     });
