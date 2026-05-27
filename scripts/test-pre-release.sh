@@ -79,6 +79,120 @@ json_str() {
     printf '"%s"' "$s"
 }
 
+npm_json_command() {
+    local cwd="$1"
+    shift
+    local output status
+
+    set +e
+    output="$(cd "$cwd" && npm "$@" 2>&1)"
+    status=$?
+    set -e
+
+    NPM_JSON_OUTPUT="$output"
+    NPM_JSON_STATUS="$status"
+}
+
+npm_print_outdated_summary() {
+    local label="$1"
+    local cwd="$2"
+    local output
+
+    npm_json_command "$cwd" outdated --json
+    output="$NPM_JSON_OUTPUT"
+
+    if [[ -z "${output//[[:space:]]/}" ]]; then
+        echo "[$label] Outdated packages: 0"
+        return 0
+    fi
+
+    NPM_LABEL="$label" NPM_JSON="$output" node -e '
+const label = process.env.NPM_LABEL;
+const data = process.env.NPM_JSON ? JSON.parse(process.env.NPM_JSON) : {};
+const entries = Object.entries(data).filter(([, value]) => value && value.latest);
+console.log(`[${label}] Outdated packages: ${entries.length}`);
+for (const [name, value] of entries.slice(0, 20)) {
+  const location = value.location ? ` @ ${value.location}` : "";
+  const type = value.type ? ` [${value.type}]` : "";
+  console.log(`  - ${name}${type}${location}: ${value.current} -> ${value.wanted} (latest ${value.latest})`);
+}
+if (entries.length > 20) {
+  console.log(`  - ... and ${entries.length - 20} more`);
+}
+'
+}
+
+npm_print_audit_summary() {
+    local label="$1"
+    local cwd="$2"
+    local output status
+
+    npm_json_command "$cwd" audit --json
+    output="$NPM_JSON_OUTPUT"
+    status="$NPM_JSON_STATUS"
+
+    if [[ -z "${output//[[:space:]]/}" ]]; then
+        echo "[$label] Vulnerabilities: total=0, low=0, moderate=0, high=0, critical=0"
+        return 0
+    fi
+
+    set +e
+    NPM_LABEL="$label" NPM_JSON="$output" node -e '
+const label = process.env.NPM_LABEL;
+const data = process.env.NPM_JSON ? JSON.parse(process.env.NPM_JSON) : {};
+const metadata = (data.metadata && data.metadata.vulnerabilities) || {};
+const total = Number(metadata.total || 0);
+const low = Number(metadata.low || 0);
+const moderate = Number(metadata.moderate || 0);
+const high = Number(metadata.high || 0);
+const critical = Number(metadata.critical || 0);
+const vulnerabilities = data.vulnerabilities || {};
+const names = Object.keys(vulnerabilities);
+
+console.log(`[${label}] Vulnerabilities: total=${total}, low=${low}, moderate=${moderate}, high=${high}, critical=${critical}`);
+for (const name of names.slice(0, 20)) {
+  const value = vulnerabilities[name] || {};
+  let severity = value.severity || "";
+  if (!severity && Array.isArray(value.via)) {
+    const viaSeverity = value.via.find((item) => item && item.severity);
+    severity = viaSeverity ? viaSeverity.severity : "";
+  }
+  if (!severity) {
+    severity = "unknown";
+  }
+  console.log(`  - ${name}: ${severity}`);
+}
+if (names.length > 20) {
+  console.log(`  - ... and ${names.length - 20} more`);
+}
+
+if (total > 0 || names.length > 0) {
+  process.exit(1);
+}
+'
+    status=$?
+    set -e
+
+    return "$status"
+}
+
+npm_dependency_audit_phase() {
+    local any_failed=0
+
+    npm_print_outdated_summary "src/etl-sql-vscode" "$REPO_ROOT/src/etl-sql-vscode"
+    npm_print_outdated_summary "src/etl-sql-vscode/ui" "$REPO_ROOT/src/etl-sql-vscode/ui"
+
+    if ! npm_print_audit_summary "src/etl-sql-vscode" "$REPO_ROOT/src/etl-sql-vscode"; then
+        any_failed=1
+    fi
+
+    if ! npm_print_audit_summary "src/etl-sql-vscode/ui" "$REPO_ROOT/src/etl-sql-vscode/ui"; then
+        any_failed=1
+    fi
+
+    return "$any_failed"
+}
+
 # ---------------------------------------------------------------------------
 # Source fingerprint — SHA-256 of HEAD + working-tree status
 # ---------------------------------------------------------------------------
@@ -335,6 +449,10 @@ if [[ "$SKIP_NODE" != true ]]; then
     run_phase "VS Code npm ci" \
         "npm ci (src/etl-sql-vscode)" \
         bash -c "cd '$REPO_ROOT/src/etl-sql-vscode' && npm ci"
+
+    run_phase "VS Code npm audit" \
+        "npm outdated / npm audit (src/etl-sql-vscode, src/etl-sql-vscode/ui)" \
+        npm_dependency_audit_phase
 
     run_phase "VS Code compile" \
         "npm run compile (src/etl-sql-vscode)" \
