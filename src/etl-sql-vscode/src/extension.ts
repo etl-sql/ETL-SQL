@@ -787,7 +787,7 @@ function getReportExecutablePath(context: vscode.ExtensionContext): { exe: strin
 }
 
 async function launchReport(context: vscode.ExtensionContext, mode: 'file' | 'dir' | 'manifest', uri?: vscode.Uri) {
-    let targetPath = '';
+    let targetPath: string;
     if (uri) {
         targetPath = uri.fsPath;
     } else {

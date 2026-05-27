@@ -23,11 +23,11 @@ describe('Greedy Pipeline Extraction', () => {
 
   test('should return empty array if no progress messages exist', () => {
     const messages = [{ type: 'status', status: 'ready' }];
-    expect(extractPipelineNodes(messages as any)).toHaveLength(0);
+    expect(extractPipelineNodes(messages as unknown[])).toHaveLength(0);
   });
 
   test('should return empty if data has no arrays', () => {
     const messages = [{ type: 'progress', data: { foo: 'bar', age: 42 } }];
-    expect(extractPipelineNodes(messages as any)).toHaveLength(0);
+    expect(extractPipelineNodes(messages as unknown[])).toHaveLength(0);
   });
 });

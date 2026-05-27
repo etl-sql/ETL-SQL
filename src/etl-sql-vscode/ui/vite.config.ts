@@ -12,8 +12,6 @@ export default defineConfig({
     assetsDir: "",
     rollupOptions: {
       output: {
-        // Vite 8+ deprecation fix: 
-        // @ts-ignore
         codeSplitting: false
       }
     }

@@ -40,7 +40,6 @@ function App() {
 
   useEffect(() => {
     if (status === 'error' && prevStatusRef.current !== 'error') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveTab('pipeline');
     }
     prevStatusRef.current = status;

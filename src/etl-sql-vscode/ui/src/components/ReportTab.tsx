@@ -542,6 +542,7 @@ const ReportChart: React.FC<{
                             remainingSeries.emphasis = { disabled: true };
                             remainingSeries.tooltip = { show: false };
                             option.series.push(remainingSeries);
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             option.series.forEach((s: any) => {
                                 s.stack = 'highlight';
                                 if (!s.emphasis) s.emphasis = {};
@@ -553,6 +554,7 @@ const ReportChart: React.FC<{
             } else {
                 // If not filtered, still disable hover-dimming for consistency
                 if (option.series) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     option.series.forEach((s: any) => {
                         if (!s.emphasis) s.emphasis = {};
                         s.emphasis.focus = 'none';

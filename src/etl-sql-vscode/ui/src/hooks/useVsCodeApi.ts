@@ -88,6 +88,7 @@ export function useVsCodeApi() {
                     ['connections', 'scriptConnections', 'variables', 'activeEditorChanged'].includes(m.type)
                 );
                 metaMessages.forEach(m => dispatch({ type: 'append', message: m }));
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setStatus('ready');
                 return;
             }
