@@ -122,17 +122,44 @@ namespace ETL_SQL.Engine.Handlers
                 else if (stmt.Values != null)
                 {
                     _logger.Debug("Strategy: Remote SQL Values ({RowCount} rows)", stmt.Values.Count);
-                    var rowStrings = stmt.Values.Select(row => "(" + string.Join(", ", row.Select(v => context.CompileExpression(v, sqlDest.Dialect).ToEscapedSql(sqlDest.Dialect))) + ")");
+                    var allParams = new List<object?>();
+                    var rowStrings = new List<string>();
+                    foreach (var row in stmt.Values)
+                    {
+                        var placeholders = new List<string>();
+                        foreach (var v in row)
+                        {
+                            var compiled = context.CompileExpression(v, sqlDest.Dialect);
+                            if (compiled.Parameters.Count == 0)
+                            {
+                                // Pure SQL fragment (NULL, constant function, etc.) — no injection risk
+                                placeholders.Add(compiled.Sql);
+                            }
+                            else
+                            {
+                                // Remap local @p0, @p1 → globally sequential @p{n}
+                                // Sort descending by key length so @p10 is replaced before @p1
+                                var remapped = compiled.Sql;
+                                foreach (var kv in compiled.Parameters.OrderByDescending(kv => kv.Key.Length))
+                                {
+                                    remapped = remapped.Replace(kv.Key, $"@p{allParams.Count}");
+                                    allParams.Add(kv.Value);
+                                }
+                                placeholders.Add(remapped);
+                            }
+                        }
+                        rowStrings.Add("(" + string.Join(", ", placeholders) + ")");
+                    }
                     var colList = stmt.Columns != null ? "(" + string.Join(", ", stmt.Columns) + ") " : "";
                     var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable, sqlDest.Dialect)} {colList}VALUES {string.Join(", ", rowStrings)}";
-                    
+
                     if (context.IsWhatIf)
                     {
-                        _logger.WriteLine($"WHAT IF: Would insert {stmt.Values.Count} rows into {connName} using raw SQL.", ConsoleColor.Yellow);
+                        _logger.WriteLine($"WHAT IF: Would insert {stmt.Values.Count} rows into {connName} using parameterized SQL.", ConsoleColor.Yellow);
                     }
                     else
                     {
-                        await foreach (var batch in sqlDest.ExecuteRawSql(sql)) 
+                        await foreach (var batch in sqlDest.ExecuteRawSql(sql, allParams.Count > 0 ? allParams : null))
                         {
                             if (batch.RowsAffected >= 0) context.Telemetry.RowsProcessed += batch.RowsAffected;
                         }

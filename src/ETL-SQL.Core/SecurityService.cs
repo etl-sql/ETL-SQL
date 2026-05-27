@@ -65,35 +65,25 @@ namespace ETL_SQL.Services
             ApprovedSafeZones = new HashSet<string>(PathComparison == StringComparison.Ordinal ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
             AllowedEnvVars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             AllowedHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "*" };
-            
-            // Proactive test mode detection (hardened for CI/CD)
-            if (CheckTestEnvironment())
+
+            if (IsTestRunner())
             {
                 IsTestMode = true;
-                _logger.Debug("[SECURITY] Test Mode identified. Implicit safe zones and bypasses enabled.");
+                _logger.Debug("[SECURITY] Test runner detected. Test mode enabled.");
             }
         }
 
-        private bool CheckTestEnvironment()
+        // Detects only the .NET SDK test host processes — never matches "dotnet run" or
+        // any production service process. Call sites may also set IsTestMode explicitly.
+        private static bool IsTestRunner()
         {
             try
             {
-                var procName = System.Diagnostics.Process.GetCurrentProcess().ProcessName.ToLowerInvariant();
-                if (procName.Contains("testhost") || procName.Contains("vstest") || procName.Contains("xunit") || procName.Contains("dotnet")) return true;
-                
-                var baseDir = AppDomain.CurrentDomain.BaseDirectory.ToLowerInvariant();
-                if (baseDir.Contains("test") || baseDir.Contains("check")) return true;
-
-                if (AppDomain.CurrentDomain.GetAssemblies().Any(a => a.FullName?.Contains("xunit") == true || a.FullName?.Contains("Test") == true))
-                    return true;
+                var procName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+                return string.Equals(procName, "testhost", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(procName, "vstest.console", StringComparison.OrdinalIgnoreCase);
             }
-            catch (Exception ex)
-            {
-                // Swallow: test-detection is best-effort; failures here must not prevent startup.
-                // Log at Debug so CI/CD environments can diagnose unexpected reflection errors.
-                try { _logger.Debug("[SECURITY] CheckTestEnvironment probe failed: {Message}", ex.Message); } catch { }
-            }
-            return false;
+            catch { return false; }
         }
 
         /// <summary>

@@ -1501,6 +1501,38 @@ WHEN NOT MATCHED BY SOURCE THEN
     DELETE;
 ```
 
+#### MERGE with OUTPUT clause
+
+Use `OUTPUT` to capture the rows affected by each action into an audit table. The `$action` pseudo-column returns `'INSERT'`, `'UPDATE'`, or `'DELETE'` for each row processed.
+
+```sql
+CREATE TABLE #AuditTrail (
+    Action     VARCHAR(10),
+    CustomerID VARCHAR(50),
+    OldSegment VARCHAR(50),
+    NewSegment VARCHAR(50)
+);
+
+MERGE INTO #Customers AS T
+USING #DeltaFeed AS S
+ON T.CustomerID = S.CustomerID
+WHEN MATCHED AND T.Segment <> S.Segment THEN
+    UPDATE SET T.Segment = S.Segment, T.UpdatedAt = GETDATE()
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (CustomerID, Name, Segment) VALUES (S.CustomerID, S.Name, S.Segment)
+OUTPUT
+    $action          AS Action,
+    INSERTED.CustomerID,
+    DELETED.Segment  AS OldSegment,
+    INSERTED.Segment AS NewSegment
+INTO #AuditTrail;
+```
+
+`INSERTED` holds the new row state; `DELETED` holds the previous row state. For `INSERT` actions, `DELETED` columns are `NULL`. For `DELETE` actions, `INSERTED` columns are `NULL`.
+
+> [!NOTE]
+> The current engine implementation captures `OUTPUT` rows for `UPDATE` and `DELETE` actions. `INSERT` actions are executed but their rows are not written to the `OUTPUT` target table. Query `#AuditTrail` for `UPDATE`/`DELETE` audit rows and the target table directly for confirmation of inserts.
+
 ### 9.5 `BULK INSERT`
 ```sql
 BULK INSERT target_db.DailyLogs (Name, Region, Amount)
@@ -2203,8 +2235,37 @@ KILL JOB <HistoryId>;
 ```
 
 ### 19.4 Analysis
+
+#### EXPLAIN
+Shows the query execution plan without running the query. Returns a table with the planned operations, estimated costs, and execution mode.
+
 ```sql
-EXPLAIN SELECT * FROM conn.Orders WHERE status = 'Open';
+EXPLAIN SELECT o.OrderId, c.Name
+FROM conn.Orders o
+INNER JOIN conn.Customers c ON o.CustomerId = c.Id
+WHERE o.Status = 'Open'
+ORDER BY o.OrderDate DESC;
+```
+
+Output columns: `ID`, `Operation`, `Details`, `Cost`, `Mode`, `Est. Rows`.
+
+#### EXPLAIN ANALYZE
+Executes the query and returns the plan annotated with actual row counts and elapsed time per step. Use this to diagnose slow queries or verify that plans match expectations.
+
+```sql
+EXPLAIN ANALYZE SELECT Region, SUM(Revenue) AS TotalRevenue
+FROM #Sales
+GROUP BY Region
+ORDER BY TotalRevenue DESC;
+```
+
+Output columns: `ID`, `Operation`, `Details`, `Cost`, `Mode`, `Est. Rows`, `Actual Rows`, `Elapsed Ms`.
+
+> [!NOTE]
+> `EXPLAIN ANALYZE` executes the full query including any side effects. Use `EXPLAIN` (without `ANALYZE`) during script development to inspect plans without touching data.
+
+#### LINT
+```sql
 LINT 'scripts/nightly_load.etlsql';
 ```
 
