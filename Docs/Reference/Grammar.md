@@ -2259,7 +2259,7 @@ GROUP BY Region
 ORDER BY TotalRevenue DESC;
 ```
 
-Output columns: `ID`, `Operation`, `Details`, `Cost`, `Mode`, `Est. Rows`, `Actual Rows`, `Elapsed Ms`.
+Output columns: `ID`, `Operation`, `Details`, `Cost`, `Mode`, `Est. Rows`, `Actual Rows`, `Actual Time (ms)`, `Spill Bytes`, `Spill Count`.
 
 > [!NOTE]
 > `EXPLAIN ANALYZE` executes the full query including any side effects. Use `EXPLAIN` (without `ANALYZE`) during script development to inspect plans without touching data.
