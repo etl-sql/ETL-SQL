@@ -1,11 +1,11 @@
--- ETL-SQL Interaction Phase 4: Advanced Support
+﻿-- ETL-SQL Interaction Phase 4: Advanced Support
 -- Tests: Pie, Scatter, and Multi-series Line ghosting/dimming.
 
 DECLARE @region VARCHAR = NULL;
 DECLARE @category VARCHAR = NULL;
 
 -- Mock Data
-CREATE CONNECTION mock ON MOCKDB();
+CREATE CONNECTION mock AS MOCKDB();
 CREATE TABLE #sales (region VARCHAR, category VARCHAR, sales DECIMAL, growth DECIMAL);
 INSERT INTO #sales VALUES 
   ('North', 'Electronics', 100, 5.2), ('North', 'Furniture', 50, -1.1),

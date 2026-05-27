@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Core.Parser;
@@ -17,7 +17,7 @@ namespace ETL_SQL.Tests.Hardening
         [Fact]
         public async Task ConnectionEncryptionRule_Flags_Plaintext_ConnectionString()
         {
-            var sql = "CREATE CONNECTION c ON MSSQL('Server=.;Database=DB;User=sa;Password=secret;');";
+            var sql = "CREATE CONNECTION c AS MSSQL('Server=.;Database=DB;User=sa;Password=secret;');";
             var script = Parse(sql);
             var rule = new ConnectionEncryptionRule();
             var results = await rule.AnalyzeAsync(script, new TestLintContext());
@@ -30,7 +30,7 @@ namespace ETL_SQL.Tests.Hardening
         [Fact]
         public async Task ConnectionEncryptionRule_Flags_Plaintext_PasswordOption()
         {
-            var sql = "CREATE CONNECTION c ON MSSQL() WITH(PASSWORD='secret');";
+            var sql = "CREATE CONNECTION c AS MSSQL(PASSWORD='secret');";
             var script = Parse(sql);
             var rule = new ConnectionEncryptionRule();
             var results = await rule.AnalyzeAsync(script, new TestLintContext());
@@ -43,7 +43,7 @@ namespace ETL_SQL.Tests.Hardening
         [Fact]
         public async Task ConnectionEncryptionRule_Flags_Plaintext_ApiKeyOption()
         {
-            var sql = "CREATE CONNECTION c ON MSSQL() WITH(API_KEY='secret');";
+            var sql = "CREATE CONNECTION c AS MSSQL(API_KEY='secret');";
             var script = Parse(sql);
             var rule = new ConnectionEncryptionRule();
             var results = await rule.AnalyzeAsync(script, new TestLintContext());
@@ -56,7 +56,7 @@ namespace ETL_SQL.Tests.Hardening
         [Fact]
         public async Task ConnectionEncryptionRule_Flags_Plaintext_ApiKeyOptionNoUnderscore()
         {
-            var sql = "CREATE CONNECTION c ON MSSQL() WITH(APIKEY='secret');";
+            var sql = "CREATE CONNECTION c AS MSSQL(APIKEY='secret');";
             var script = Parse(sql);
             var rule = new ConnectionEncryptionRule();
             var results = await rule.AnalyzeAsync(script, new TestLintContext());
@@ -70,8 +70,8 @@ namespace ETL_SQL.Tests.Hardening
         public async Task ConnectionEncryptionRule_Ignores_Encrypted_Credentials()
         {
             var sql = @"
-                CREATE CONNECTION c1 ON MSSQL('ENC:abc123...');
-                CREATE CONNECTION c2 ON MSSQL() WITH(PASSWORD='ENC:abc123...');
+                CREATE CONNECTION c1 AS MSSQL('ENC:abc123...');
+                CREATE CONNECTION c2 AS MSSQL(PASSWORD='ENC:abc123...');
             ";
             var script = Parse(sql);
             var rule = new ConnectionEncryptionRule();
@@ -84,7 +84,7 @@ namespace ETL_SQL.Tests.Hardening
         public void SecurityService_EncryptScript_Transforms_Plaintext_Target()
         {
             var service = new SecurityService(NullLogger.Instance);
-            var sql = "CREATE CONNECTION c ON MSSQL('Server=.;Password=secret;');";
+            var sql = "CREATE CONNECTION c AS MSSQL('Server=.;Password=secret;');";
             var encrypted = service.EncryptScript(sql, "master");
 
             Assert.Contains("ENC:", encrypted);
@@ -95,7 +95,7 @@ namespace ETL_SQL.Tests.Hardening
         public void SecurityService_EncryptScript_Transforms_Plaintext_PasswordOption()
         {
             var service = new SecurityService(NullLogger.Instance);
-            var sql = "CREATE CONNECTION c ON MSSQL() WITH(SERVER='.', PASSWORD='secret');";
+            var sql = "CREATE CONNECTION c AS MSSQL(SERVER='.', PASSWORD='secret');";
             var encrypted = service.EncryptScript(sql, "master");
 
             Assert.Contains("PASSWORD='ENC:", encrypted);
@@ -108,12 +108,12 @@ namespace ETL_SQL.Tests.Hardening
         {
             var service = new SecurityService(NullLogger.Instance);
             
-            var sql1 = "CREATE CONNECTION c ON MSSQL() WITH(SERVER='.', API_KEY='secret');";
+            var sql1 = "CREATE CONNECTION c AS MSSQL(SERVER='.', API_KEY='secret');";
             var encrypted1 = service.EncryptScript(sql1, "master");
             Assert.Contains("API_KEY='ENC:", encrypted1);
             Assert.DoesNotContain("API_KEY='secret'", encrypted1);
 
-            var sql2 = "CREATE CONNECTION c ON MSSQL() WITH(SERVER='.', APIKEY='secret');";
+            var sql2 = "CREATE CONNECTION c AS MSSQL(SERVER='.', APIKEY='secret');";
             var encrypted2 = service.EncryptScript(sql2, "master");
             Assert.Contains("APIKEY='ENC:", encrypted2);
             Assert.DoesNotContain("APIKEY='secret'", encrypted2);
@@ -124,15 +124,15 @@ namespace ETL_SQL.Tests.Hardening
         {
             var service = new SecurityService(NullLogger.Instance);
             var sql = @"
-                CREATE CONNECTION c1 ON MSSQL('Password=p1');
-                CREATE CONNECTION c2 ON POSTGRES() WITH(PASSWORD='p2');
-                CREATE CONNECTION c3 ON FLATFILE('d.csv') WITH(ENCRYPT=OFF, PASSWORD='p3');
+                CREATE CONNECTION c1 AS MSSQL('Password=p1');
+                CREATE CONNECTION c2 AS POSTGRES(PASSWORD='p2');
+                CREATE CONNECTION c3 AS FLATFILE('d.csv', ENCRYPT=OFF, PASSWORD='p3');
             ";
             var encrypted = service.EncryptScript(sql, "master");
 
-            Assert.Contains("c1 ON MSSQL('ENC:", encrypted);
-            Assert.Contains("c2 ON POSTGRES() WITH(PASSWORD='ENC:", encrypted);
-            Assert.Contains("c3 ON FLATFILE('d.csv') WITH(ENCRYPT=OFF, PASSWORD='p3')", encrypted); // ENCRYPT=OFF should skip
+            Assert.Contains("c1 AS MSSQL('ENC:", encrypted);
+            Assert.Contains("c2 AS POSTGRES(PASSWORD='ENC:", encrypted);
+            Assert.Contains("c3 AS FLATFILE('d.csv', ENCRYPT=OFF, PASSWORD='p3')", encrypted); // ENCRYPT=OFF should skip
         }
 
         [Fact]
@@ -140,10 +140,10 @@ namespace ETL_SQL.Tests.Hardening
         {
             var service = new SecurityService(NullLogger.Instance);
             
-            Assert.True(service.NeedsEncryption("CREATE CONNECTION c ON MSSQL('Pwd=p');"));
-            Assert.True(service.NeedsEncryption("CREATE CONNECTION c ON MSSQL() WITH(PASSWORD='p');"));
-            Assert.False(service.NeedsEncryption("CREATE CONNECTION c ON MSSQL('ENC:p');"));
-            Assert.False(service.NeedsEncryption("CREATE CONNECTION c ON MSSQL() WITH(PASSWORD='ENC:p');"));
+            Assert.True(service.NeedsEncryption("CREATE CONNECTION c AS MSSQL('Pwd=p');"));
+            Assert.True(service.NeedsEncryption("CREATE CONNECTION c AS MSSQL(PASSWORD='p');"));
+            Assert.False(service.NeedsEncryption("CREATE CONNECTION c AS MSSQL('ENC:p');"));
+            Assert.False(service.NeedsEncryption("CREATE CONNECTION c AS MSSQL(PASSWORD='ENC:p');"));
         }
 
         [Fact]
@@ -183,7 +183,7 @@ namespace ETL_SQL.Tests.Hardening
                 SET NO_SAVE_SENSITIVE = ON;
                 USE PASSWORD = 'dev-secret';
                 DECLARE @token SENSITIVE = 'abc';
-                CREATE CONNECTION c ON MSSQL('Server=.;Password=pw;') WITH(USERNAME='sa', PASSWORD='pw2', API_KEY='key');
+                CREATE CONNECTION c AS MSSQL('Server=.;Password=pw;', USERNAME='sa', PASSWORD='pw2', API_KEY='key');
             ";
 
             var secured = service.SecureScriptForSave(sql, "");
@@ -202,11 +202,11 @@ namespace ETL_SQL.Tests.Hardening
         public void SecurityService_SecureScriptForSave_NoSaveConnection_ScrubsConnectionDetails()
         {
             var service = new SecurityService(NullLogger.Instance);
-            var sql = "SET NO_SAVE_CONNECTION = ON;\nCREATE CONNECTION c ON POSTGRES('Host=db;Username=u;Password=p;') WITH(HOST='db', USERNAME='u', DATABASE='d', PASSWORD='p');";
+            var sql = "SET NO_SAVE_CONNECTION = ON;\nCREATE CONNECTION c AS POSTGRES('Host=db;Username=u;Password=p;', HOST='db', USERNAME='u', DATABASE='d', PASSWORD='p');";
 
             var secured = service.SecureScriptForSave(sql, "");
 
-            Assert.Contains("POSTGRES('<connection>')", secured);
+            Assert.Contains("POSTGRES('<connection>',", secured);
             Assert.Contains("HOST='<placeholder>'", secured);
             Assert.Contains("USERNAME='<placeholder>'", secured);
             Assert.Contains("DATABASE='<placeholder>'", secured);
@@ -219,7 +219,7 @@ namespace ETL_SQL.Tests.Hardening
         public void SecurityService_SecureScriptForSave_ConnectionEncryption_EncryptsFullConnection()
         {
             var service = new SecurityService(NullLogger.Instance);
-            var sql = "SET CONNECTION_ENCRYPTION = ON;\nCREATE CONNECTION c ON POSTGRES('Host=db;Username=u;Password=p;') WITH(HOST='db', USERNAME='u', DATABASE='d', PASSWORD='p');";
+            var sql = "SET CONNECTION_ENCRYPTION = ON;\nCREATE CONNECTION c AS POSTGRES('Host=db;Username=u;Password=p;', HOST='db', USERNAME='u', DATABASE='d', PASSWORD='p');";
 
             var secured = service.SecureScriptForSave(sql, "master");
 
@@ -265,7 +265,7 @@ namespace ETL_SQL.Tests.Hardening
             service.UpdateFromConfiguration(config);
 
             Assert.True(service.NoSaveSensitiveEnabled(""));
-            Assert.Contains("<secret>", service.SecureScriptForSave("CREATE CONNECTION c ON MSSQL() WITH(PASSWORD='pw');", ""));
+            Assert.Contains("<secret>", service.SecureScriptForSave("CREATE CONNECTION c AS MSSQL(PASSWORD='pw');", ""));
         }
 
         [Fact]

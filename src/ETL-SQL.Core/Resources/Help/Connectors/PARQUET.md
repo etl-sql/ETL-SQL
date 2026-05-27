@@ -1,8 +1,8 @@
-# PARQUET
+﻿# PARQUET
 Reads and writes Apache Parquet columnar files. Parquet is the preferred format for large analytical datasets — it compresses well and supports efficient columnar reads.
 
 Syntax:
-  CREATE CONNECTION <name> ON PARQUET(
+  CREATE CONNECTION <name> AS PARQUET(
     PATH        = 'data.parquet',
     COMPRESSION = 'SNAPPY' | 'GZIP' | 'ZSTD' | 'NONE',
     ENCRYPT     = ON | OFF,
@@ -16,7 +16,7 @@ Options:
   PASSWORD     — passphrase for encryption
 
 ```sql
-CREATE CONNECTION EventLog ON PARQUET(
+CREATE CONNECTION EventLog AS PARQUET(
   PATH        = 'C:\data\events_2024.parquet',
   COMPRESSION = 'SNAPPY'
 );

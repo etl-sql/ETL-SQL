@@ -1,9 +1,9 @@
--- Daily Sales Performance Report
+﻿-- Daily Sales Performance Report
 SET REPORT TITLE = 'Daily Sales Performance';
 SET REPORT DESCRIPTION = 'Monitor regional sales metrics and drill down into transaction details.';
 
 -- Connections
-CREATE CONNECTION sales_data ON FLATFILE('TestData/test_sales.csv') WITH(HEADER=TRUE);
+CREATE CONNECTION sales_data AS FLATFILE('TestData/test_sales.csv', HEADER=TRUE);
 
 -- Parameters for interactivity
 DECLARE @date_start DATE = '2026-04-26' INPUT;

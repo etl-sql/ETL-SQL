@@ -1,8 +1,8 @@
-# MSSQL
+﻿# MSSQL
 Connects to Microsoft SQL Server or Azure SQL Database. Supports transactions, stored procedure execution, and all SQL Server data types.
 
 Syntax:
-  CREATE CONNECTION <name> ON MSSQL(
+  CREATE CONNECTION <name> AS MSSQL(
     SERVER             = 'hostname\instance',
     DATABASE           = 'dbname',
     USER               = 'username',
@@ -24,7 +24,7 @@ Options:
   TABLE              — default table for unqualified INSERT/SELECT
 
 ```sql
-CREATE CONNECTION SalesDB ON MSSQL(
+CREATE CONNECTION SalesDB AS MSSQL(
   SERVER             = 'sql.corp.local',
   DATABASE           = 'SalesData',
   TRUSTED_CONNECTION = ON

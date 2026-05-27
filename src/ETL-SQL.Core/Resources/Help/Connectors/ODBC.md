@@ -1,8 +1,8 @@
-# ODBC
+﻿# ODBC
 Connects to any ODBC-compatible data source using a DSN or a full driver connection string. Use for databases without a native ETL-SQL connector.
 
 Syntax:
-  CREATE CONNECTION <name> ON ODBC(
+  CREATE CONNECTION <name> AS ODBC(
     DSN      = 'MyDSN',
     -- or build a connection string:
     DRIVER   = '{SQL Server}',
@@ -23,7 +23,7 @@ Options:
 
 ```sql
 -- Using a pre-configured DSN
-CREATE CONNECTION LegacyDB ON ODBC(
+CREATE CONNECTION LegacyDB AS ODBC(
   DSN = 'LegacyERP',
   UID = @user,
   PWD = @password

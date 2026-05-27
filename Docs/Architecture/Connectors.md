@@ -1,4 +1,4 @@
-# ETL-SQL Connectors Architecture & Engineering Reference
+﻿# ETL-SQL Connectors Architecture & Engineering Reference
 
 **Applies to ETL-SQL 0.9.0**
 
@@ -100,7 +100,7 @@ This document describes the internal mechanics of the ETL-SQL data access layer.
 // ETL_SQL.Data — namespace ETL_SQL.Data
 public interface IConnector
 {
-    /// <summary>Primary token used in the ON clause: CREATE CONNECTION c ON MSSQL(...).</summary>
+    /// <summary>Primary token used in the ON clause: CREATE CONNECTION c AS MSSQL(...).</summary>
     string Name { get; }
 
     /// <summary>Alternative tokens accepted by the parser (e.g., "SQL" for MSSQL).</summary>
@@ -221,8 +221,7 @@ public interface IConnector
 The `CommandTimeoutSeconds` property on `IConnector` is a per-connector default. Individual connections can override it at creation time:
 
 ```sql
-CREATE CONNECTION my_redshift ON ODBC()
-    WITH(DRIVER='{Amazon Redshift ODBC Driver}', …, TIMEOUT_SECONDS=3600);
+CREATE CONNECTION my_redshift AS ODBC(DRIVER='{Amazon Redshift ODBC Driver}', …, TIMEOUT_SECONDS=3600);
 ```
 
 The `TIMEOUT_SECONDS` value in the `WITH` clause is stored in the connection's options dictionary (`IDataSource.Options["TIMEOUT_SECONDS"]`). SQL connectors read it in their constructor and apply it to every `DbCommand.CommandTimeout` they create. Non-SQL connectors may ignore it.
@@ -407,7 +406,7 @@ public interface IConnectorRegistry
 ### 3.1 `CREATE CONNECTION` walkthrough
 
 ```
-Script:  CREATE CONNECTION sales ON MSSQL('Server=srv;Database=db') WITH (ENCRYPT = ON);
+Script:  CREATE CONNECTION sales AS MSSQL('Server=srv;Database=db', ENCRYPT = ON);
 
 1. Parser produces CreateConnectionStatement {
        Name = "sales",

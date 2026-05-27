@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -90,12 +90,12 @@ namespace ETL_SQL.Tests.Integration
 
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var script = @"
-                CREATE CONNECTION test_avro ON AVRO('regress_bool.avro');
+                CREATE CONNECTION test_avro AS AVRO('regress_bool.avro');
                 DROP TABLE IF EXISTS #src;
                 CREATE TABLE #src (id INT, active BOOLEAN);
                 INSERT INTO #src VALUES (1, TRUE), (2, FALSE), (3, TRUE);
                 INSERT INTO test_avro SELECT * FROM #src;
-                CREATE CONNECTION check_avro ON AVRO('regress_bool.avro');
+                CREATE CONNECTION check_avro AS AVRO('regress_bool.avro');
             ";
             await evaluator.Evaluate(Parse(script));
 

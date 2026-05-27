@@ -1,4 +1,4 @@
-# ETL-SQL FAQ & Troubleshooting Guide
+﻿# ETL-SQL FAQ & Troubleshooting Guide
 
 Common questions, gotchas, and their solutions. If you're stuck, start here.
 
@@ -73,10 +73,10 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 **Q: Can I use Firebird as a connector?**
 > Firebird is not a natively supported connector type. Use `ODBC` with a Firebird ODBC driver instead:
 > ```sql
-> CREATE CONNECTION firebird_src ON ODBC()
+> CREATE CONNECTION firebird_src AS ODBC()
 >     WITH(DSN='Firebird_DSN', USER='etl', PASSWORD='...');
 > -- or with a driver string
-> CREATE CONNECTION firebird_src ON ODBC()
+> CREATE CONNECTION firebird_src AS ODBC()
 >     WITH(CONNECTION_STRING='Driver={Firebird/InterBase(r) driver};Dbname=localhost:C:\Data\mydb.fdb;User=SYSDBA;Password=masterkey;');
 > ```
 
@@ -100,7 +100,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > -- (done automatically by the IDE on save, or by calling EncryptScript from the CLI)
 >
 > -- Step 3: At runtime, ENC: strings are decrypted transparently
-> CREATE CONNECTION db ON MSSQL('ENC:U2FsdGVkX1+abc123...');
+> CREATE CONNECTION db AS MSSQL('ENC:U2FsdGVkX1+abc123...');
 > ```
 > The IDE will warn you if a script still contains plaintext credentials when you save.
 
@@ -118,7 +118,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > CREATE SETS !PROD BEGIN @server = 'prod-db', @pwd = 'ENC:U2Fs...' END
 >
 > USE SETS !DEV;
-> CREATE CONNECTION db ON MSSQL() WITH(SERVER=@server, DATABASE='Sales', PASSWORD=@pwd);
+> CREATE CONNECTION db AS MSSQL(SERVER=@server, DATABASE='Sales', PASSWORD=@pwd);
 > ```
 
 ---

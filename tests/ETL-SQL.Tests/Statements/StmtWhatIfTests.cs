@@ -106,7 +106,7 @@ namespace ETL_SQL.Tests.Statements
             await ev.Evaluate(Parse("SET WHAT_IF ON;"));
             
             // Should not create the connection
-            await ev.Evaluate(Parse("CREATE CONNECTION TestConn TYPE MOCKDB TARGET 'test';"));
+            await ev.Evaluate(Parse("CREATE CONNECTION TestConn AS MOCKDB();"));
             Assert.False(ev.Connections.ContainsKey("TestConn"));
         }
 
@@ -140,7 +140,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #T (ID INT);"));
-            await ev.Evaluate(Parse("CREATE CONNECTION m TYPE MOCKDB TARGET 'test';"));
+            await ev.Evaluate(Parse("CREATE CONNECTION m AS MOCKDB();"));
             
             await ev.Evaluate(Parse("SET WHAT_IF ON;"));
             

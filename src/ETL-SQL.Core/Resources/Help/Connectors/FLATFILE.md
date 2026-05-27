@@ -1,8 +1,8 @@
-# FLATFILE
+﻿# FLATFILE
 Reads and writes delimited text files (CSV, TSV) or fixed-width flat files. The most flexible file-based connector — use it for any text-based tabular data.
 
 Syntax:
-  CREATE CONNECTION <name> ON FLATFILE(
+  CREATE CONNECTION <name> AS FLATFILE(
     PATH      = 'data.csv',
     DELIMITER = ',',
     HEADER    = ON | OFF,
@@ -26,7 +26,7 @@ Options:
   PASSWORD   — passphrase for encryption
 
 ```sql
-CREATE CONNECTION Orders ON FLATFILE(
+CREATE CONNECTION Orders AS FLATFILE(
   PATH      = 'C:\data\orders.csv',
   DELIMITER = ',',
   HEADER    = ON,

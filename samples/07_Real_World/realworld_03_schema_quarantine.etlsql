@@ -1,4 +1,4 @@
-/* 
+﻿/* 
     REAL-WORLD SCENARIO 3: Strict Schema Validation & Quarantine
     ------------------------------------------------------------
     Self-contained to create the inbound bad file first, then process it.
@@ -6,22 +6,21 @@
 
 CREATE TABLE #FileSpec (TransactionID VARCHAR(50), Amount DECIMAL(18,2), Status VARCHAR(10), CreatedAt DATETIME);
 
-CREATE CONNECTION MockGenerator ON FLATFILE('samples/output/partner_feed.csv') WITH (HEADER='ON');
+CREATE CONNECTION MockGenerator AS FLATFILE('samples/output/partner_feed.csv', HEADER='ON');
 INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN100', 50.00, 'PAID', GETDATE());
 INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN101', -15.00, 'FAILED', GETDATE());
 INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN102', 0.00, 'INVALID', GETDATE());
 INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN103', 100.00, 'PENDING', GETDATE());
 
 -- Force the file to adhere to strict schema
-CREATE CONNECTION InboundFeed ON FLATFILE('samples/output/partner_feed.csv') 
-    WITH (HEADER = 'ON', STRICT_SCHEMA = 'ON', ERROR_POLICY = 'IGNORE');
+CREATE CONNECTION InboundFeed AS FLATFILE('samples/output/partner_feed.csv', HEADER = 'ON', STRICT_SCHEMA = 'ON', ERROR_POLICY = 'IGNORE');
 
 SELECT * INTO #RawStage FROM InboundFeed.FILE;
 
 SELECT TransactionID, Amount, Status, CreatedAt INTO #CleanData FROM #RawStage
 WHERE Amount > 0 AND STATUS IN ('PAID', 'PENDING', 'FAILED');
 
-CREATE CONNECTION QuarantineFile ON FLATFILE('samples/output/quarantine_log.csv') WITH(HEADER='ON');
+CREATE CONNECTION QuarantineFile AS FLATFILE('samples/output/quarantine_log.csv', HEADER='ON');
 
 SELECT TransactionID, Amount, Status, CreatedAt, 'Validation Failure' AS Reason INTO QuarantineFile.FILE
 FROM #RawStage

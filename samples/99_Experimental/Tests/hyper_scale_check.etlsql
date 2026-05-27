@@ -1,8 +1,8 @@
--- Test script for Hyper-Scale Spilling (Window & Grouping Sets)
+﻿-- Test script for Hyper-Scale Spilling (Window & Grouping Sets)
 -- @requires: performance
 -- We'll generate a large dataset using cross joins from MOCKDB
 
-CREATE CONNECTION src ON MOCKDB();
+CREATE CONNECTION src AS MOCKDB();
 
 -- 1. Generate ~100k rows
 SELECT 

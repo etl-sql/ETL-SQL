@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -33,7 +33,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             eval.WindowSpillThreshold = 10;
             eval.ExternalHashPartitions = 2;
 
-            await Execute(eval, "CREATE CONNECTION src ON MOCKDB('local');");
+            await Execute(eval, "CREATE CONNECTION src AS MOCKDB();");
 
             string sql = @"
             SELECT 

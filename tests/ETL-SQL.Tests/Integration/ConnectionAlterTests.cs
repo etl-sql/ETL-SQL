@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -37,7 +37,7 @@ namespace ETL_SQL.Tests.Integration
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             string script = $@"
-                CREATE CONNECTION test_conn ON FLATFILE('{_tempFile1.Replace("\\", "/")}') WITH (HEADER = ON, DELIMITER = ',');
+                CREATE CONNECTION test_conn AS FLATFILE('{_tempFile1.Replace("\\", "/")}', HEADER = ON, DELIMITER = ',');
                 
                 -- Verify initial connection works
                 SELECT * FROM test_conn;
@@ -64,10 +64,10 @@ namespace ETL_SQL.Tests.Integration
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             string script = $@"
-                CREATE CONNECTION test_conn ON FLATFILE('{_tempFile1.Replace("\\", "/")}') WITH (HEADER = ON, DELIMITER = ',');
+                CREATE CONNECTION test_conn AS FLATFILE('{_tempFile1.Replace("\\", "/")}', HEADER = ON, DELIMITER = ',');
                 
                 -- Alter path and delimiter
-                ALTER CONNECTION test_conn ON FLATFILE('{_tempFile2.Replace("\\", "/")}') WITH (DELIMITER = 'PIPE');
+                ALTER CONNECTION test_conn AS FLATFILE('{_tempFile2.Replace("\\", "/")}', DELIMITER = 'PIPE');
                 
                 SELECT * FROM test_conn;
             ";
@@ -91,7 +91,7 @@ namespace ETL_SQL.Tests.Integration
             
             // 1. Create using CREATE OR ALTER
             string script1 = $@"
-                CREATE OR ALTER CONNECTION test_coa ON FLATFILE('{_tempFile1.Replace("\\", "/")}') WITH (HEADER = ON);
+                CREATE OR ALTER CONNECTION test_coa AS FLATFILE('{_tempFile1.Replace("\\", "/")}', HEADER = ON);
                 SELECT * FROM test_coa;
             ";
             await eval.Evaluate(new Lexer(script1).TokenizeToScript());
@@ -99,7 +99,7 @@ namespace ETL_SQL.Tests.Integration
 
             // 2. Alter using CREATE OR ALTER
             string script2 = $@"
-                CREATE OR ALTER CONNECTION test_coa ON FLATFILE('{_tempFile2.Replace("\\", "/")}') WITH (DELIMITER = 'PIPE');
+                CREATE OR ALTER CONNECTION test_coa AS FLATFILE('{_tempFile2.Replace("\\", "/")}', DELIMITER = 'PIPE');
                 SELECT * FROM test_coa;
             ";
             await eval.Evaluate(new Lexer(script2).TokenizeToScript());
@@ -123,10 +123,10 @@ namespace ETL_SQL.Tests.Integration
 
             string script = $@"
                 USE PASSWORD = '{password}';
-                CREATE CONNECTION test_enc ON FLATFILE('{_tempFile1.Replace("\\", "/")}') WITH (HEADER = ON);
+                CREATE CONNECTION test_enc AS FLATFILE('{_tempFile1.Replace("\\", "/")}', HEADER = ON);
                 
                 -- Alter with encrypted path
-                ALTER CONNECTION test_enc ON FLATFILE('{encryptedPath}') WITH (DELIMITER = 'PIPE');
+                ALTER CONNECTION test_enc AS FLATFILE('{encryptedPath}', DELIMITER = 'PIPE');
                 
                 SELECT * FROM test_enc;
             ";

@@ -1,4 +1,4 @@
-# ETL-SQL Standard Library & Data Types Reference
+﻿# ETL-SQL Standard Library & Data Types Reference
 
 This document is the authoritative dictionary for all built-in types, casting behaviors, and scalar/aggregate/window functions within the ETL-SQL engine.
 
@@ -654,7 +654,7 @@ Returns a table from a remote connection (SFTP, FTP, Azure Blob):
 -- Check before processing
 IF FILE_EXISTS('C:\Incoming\data.csv')
 BEGIN
-    CREATE CONNECTION src ON FLATFILE('C:\Incoming\data.csv');
+    CREATE CONNECTION src AS FLATFILE('C:\Incoming\data.csv');
 END
 
 -- List an SFTP directory as a queryable table
@@ -775,7 +775,7 @@ Phonetic functions encode pronunciation rather than spelling. They enable fast e
 SELECT a.*, b.*, SIMILARITY(a.name, b.name) AS score
 INTO   #candidates
 FROM   #dirty a
-JOIN   #reference b ON METAPHONE(a.name) = METAPHONE(b.name);   -- blocking pass
+JOIN   #reference b AS METAPHONE(a.name) = METAPHONE(b.name);   -- blocking pass
 
 SELECT *, ROW_NUMBER() OVER (PARTITION BY a_id ORDER BY score DESC) AS rank
 FROM   #candidates
@@ -785,7 +785,7 @@ WHERE  score > 0.75;
 SELECT a.*, b.*
 FROM   #dirty a
 JOIN   #reference b
-    ON DMETAPHONE(a.name) = DMETAPHONE(b.name)
+    AS DMETAPHONE(a.name) = DMETAPHONE(b.name)
     OR DMETAPHONE_ALT(a.name) = DMETAPHONE(b.name)
     OR DMETAPHONE(a.name) = DMETAPHONE_ALT(b.name);
 ```

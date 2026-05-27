@@ -1,8 +1,8 @@
--- Test script for dialect-aware linter validation
+﻿-- Test script for dialect-aware linter validation
 -- Connections intentionally use wrong-dialect syntax to exercise linter warnings.
 -- Wrapped in TRY/CATCH so auth/connection failures don't fail the sample run.
-CREATE CONNECTION pg_conn ON POSTGRES() WITH(HOST='localhost', DATABASE='test');
-CREATE CONNECTION ms_conn ON MSSQL() WITH(SERVER='localhost', DATABASE='test');
+CREATE CONNECTION pg_conn AS POSTGRES(HOST='localhost', DATABASE='test');
+CREATE CONNECTION ms_conn AS MSSQL(SERVER='localhost', DATABASE='test');
 
 BEGIN TRY
     -- 1. Test TOP on Postgres (Should warn)

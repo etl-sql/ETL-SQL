@@ -1,4 +1,4 @@
-# SOUNDEX
+﻿# SOUNDEX
 Returns the Soundex phonetic encoding of a string.
 
 **Category:** Fuzzy
@@ -25,7 +25,7 @@ SOUNDEX(string)
 ```sql
 SELECT SOUNDEX('Robert');    -- → 'R163'
 SELECT SOUNDEX('Rupert');    -- → 'R163'  (same code — phonetically similar)
-SELECT * FROM #names a JOIN #names b ON SOUNDEX(a.name) = SOUNDEX(b.name);
+SELECT * FROM #names a JOIN #names b AS SOUNDEX(a.name) = SOUNDEX(b.name);
 ```
 
 ## See Also

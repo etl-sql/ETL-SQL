@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
@@ -40,7 +40,7 @@ namespace ETL_SQL.Tests.Integration
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             eval.MasterPassword = pass;
             
-            var lexer = new Lexer($"CREATE CONNECTION SecureConn ON MOCKDB('{encrypted}');");
+            var lexer = new Lexer($"CREATE CONNECTION SecureConn AS MOCKDB();");
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens);
             var script = parser.Parse();
@@ -54,7 +54,7 @@ namespace ETL_SQL.Tests.Integration
         public void TestEncryptionAtRest()
         {
             string password = "MyPass";
-            string script = "CREATE CONNECTION MyConn ON MSSQL('Server=localhost;User=sa;Password=secret;');";
+            string script = "CREATE CONNECTION MyConn AS MSSQL('Server=localhost;User=sa;Password=secret;');";
             string encryptedScript = EncryptionLogic(script, password);
             
             Assert.Contains("ENC:", encryptedScript);
@@ -68,7 +68,7 @@ namespace ETL_SQL.Tests.Integration
             // We need a real encrypted string for this to work
             string original = "Server=localhost;Password=secret;";
             string encrypted = CryptoUtils.Encrypt(original, password);
-            string script = $"CREATE CONNECTION MyConn ON MSSQL('{encrypted}');";
+            string script = $"CREATE CONNECTION MyConn AS MSSQL('{encrypted}');";
             
             string decryptedScript = DecryptionLogic(script, password);
             Assert.Contains(original, decryptedScript);

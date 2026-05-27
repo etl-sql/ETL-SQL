@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -479,7 +479,7 @@ namespace ETL_SQL.Tests.Coverage
             EnsureRegistry();
             var rule = new DialectKeywordRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION pgconn ON POSTGRES('server=localhost;database=test');" +
+                "CREATE CONNECTION pgconn AS POSTGRES('server=localhost;database=test');" +
                 "SELECT TOP 10 id FROM pgconn.Orders;");
             Assert.NotEmpty(results);
             Assert.Contains(results, r => r.Message.Contains("TOP"));
@@ -491,7 +491,7 @@ namespace ETL_SQL.Tests.Coverage
             EnsureRegistry();
             var rule = new DialectKeywordRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION pgconn ON POSTGRES('server=localhost;database=test');" +
+                "CREATE CONNECTION pgconn AS POSTGRES('server=localhost;database=test');" +
                 "SELECT id, name FROM pgconn.Orders WHERE id = 1;");
             Assert.Empty(results);
         }
@@ -523,7 +523,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new DialectKeywordRule();
             // MOCKDB excludes LIMIT
             var results = await Lint(rule,
-                "CREATE CONNECTION mockconn ON MOCKDB('server=localhost');" +
+                "CREATE CONNECTION mockconn AS MOCKDB();" +
                 "SELECT id FROM mockconn.Orders LIMIT 10;");
             Assert.NotEmpty(results);
         }

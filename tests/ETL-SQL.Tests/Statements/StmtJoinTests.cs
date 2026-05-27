@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -48,8 +48,8 @@ namespace ETL_SQL.Tests.Statements
                 await File.WriteAllTextAsync(path1, data1);
                 await File.WriteAllTextAsync(path2, data2);
                 
-                await ev.Evaluate(Parse($"CREATE CONNECTION rj1 ON FLATFILE('{path1}');"));
-                await ev.Evaluate(Parse($"CREATE CONNECTION rj2 ON FLATFILE('{path2}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION rj1 AS FLATFILE('{path1}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION rj2 AS FLATFILE('{path2}');"));
                 
                 var res = await ev.ExecuteQuery(Parse("SELECT rj1.ID as L, rj2.ID as R FROM rj1 RIGHT JOIN rj2 ON rj1.ID = rj2.ID;").Statements[0]).ToListAsync();
                 var rows = res.SelectMany(b => b.Rows).ToList();
@@ -81,8 +81,8 @@ namespace ETL_SQL.Tests.Statements
                 await File.WriteAllTextAsync(path1, data1);
                 await File.WriteAllTextAsync(path2, data2);
                 
-                await ev.Evaluate(Parse($"CREATE CONNECTION fj1 ON FLATFILE('{path1}');"));
-                await ev.Evaluate(Parse($"CREATE CONNECTION fj2 ON FLATFILE('{path2}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION fj1 AS FLATFILE('{path1}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION fj2 AS FLATFILE('{path2}');"));
                 
                 var sql = "SELECT fj1.ID as L, fj2.ID as R FROM fj1 FULL JOIN fj2 ON fj1.ID = fj2.ID;";
                 var res = await ev.ExecuteQuery(Parse(sql).Statements[0]).ToListAsync();
@@ -111,7 +111,7 @@ namespace ETL_SQL.Tests.Statements
                 var data1 = "ID\n1\n2";
                 string path = Path.Combine(testDir, "ca.csv").Replace("\\", "/");
                 await File.WriteAllTextAsync(path, data1);
-                await ev.Evaluate(Parse($"CREATE CONNECTION c1 ON FLATFILE('{path}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION c1 AS FLATFILE('{path}');"));
                 
                 var sql = "SELECT c1.ID, s.Val FROM c1 CROSS APPLY (SELECT 10 as Val UNION ALL SELECT 20) s;";
                 var res = await ev.ExecuteQuery(Parse(sql).Statements[0]).ToListAsync();
@@ -137,7 +137,7 @@ namespace ETL_SQL.Tests.Statements
                 var data1 = "ID\n1";
                 string path = Path.Combine(testDir, "oa.csv").Replace("\\", "/");
                 await File.WriteAllTextAsync(path, data1);
-                await ev.Evaluate(Parse($"CREATE CONNECTION c1 ON FLATFILE('{path}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION c1 AS FLATFILE('{path}');"));
                 
                 var sql = "SELECT c1.ID, s.Val FROM c1 OUTER APPLY (SELECT 10 as Val WHERE 1=0) s;";
                 var res = await ev.ExecuteQuery(Parse(sql).Statements[0]).ToListAsync();
@@ -166,8 +166,8 @@ namespace ETL_SQL.Tests.Statements
                 await File.WriteAllTextAsync(pathU, "id,name\n1,Alice\n2,Bob");
                 await File.WriteAllTextAsync(pathO, "uid,amount\n1,100\n1,50\n2,200");
 
-                await ev.Evaluate(Parse($"CREATE CONNECTION cj_u ON FLATFILE('{pathU}');"));
-                await ev.Evaluate(Parse($"CREATE CONNECTION cj_o ON FLATFILE('{pathO}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION cj_u AS FLATFILE('{pathU}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION cj_o AS FLATFILE('{pathO}');"));
 
                 var res = await ev.ExecuteQuery(
                     Parse("SELECT cj_u.name, cj_o.amount FROM cj_u, cj_o WHERE cj_u.id = cj_o.uid ORDER BY cj_u.name, cj_o.amount;").Statements[0]
@@ -204,9 +204,9 @@ namespace ETL_SQL.Tests.Statements
                 await File.WriteAllTextAsync(pathO, "id,fk\n10,1\n11,2");
                 await File.WriteAllTextAsync(pathC, "fk2,label\n10,X\n11,Y");
 
-                await ev.Evaluate(Parse($"CREATE CONNECTION t1 ON FLATFILE('{pathU}');"));
-                await ev.Evaluate(Parse($"CREATE CONNECTION t2 ON FLATFILE('{pathO}');"));
-                await ev.Evaluate(Parse($"CREATE CONNECTION t3 ON FLATFILE('{pathC}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION t1 AS FLATFILE('{pathU}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION t2 AS FLATFILE('{pathO}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION t3 AS FLATFILE('{pathC}');"));
 
                 var res = await ev.ExecuteQuery(
                     Parse("SELECT t1.val, t3.label FROM t1, t2, t3 WHERE t1.id = t2.fk AND t2.id = t3.fk2 ORDER BY t1.val;").Statements[0]
@@ -250,9 +250,9 @@ namespace ETL_SQL.Tests.Statements
                 await File.WriteAllTextAsync(pathC, csvC);
 
                 var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                await ev.Evaluate(Parse($"CREATE CONNECTION pda ON FLATFILE('{pathA}');"));
-                await ev.Evaluate(Parse($"CREATE CONNECTION pdb ON FLATFILE('{pathB}');"));
-                await ev.Evaluate(Parse($"CREATE CONNECTION pdc ON FLATFILE('{pathC}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION pda AS FLATFILE('{pathA}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION pdb AS FLATFILE('{pathB}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION pdc AS FLATFILE('{pathC}');"));
 
                 // Comma join: pda.id = pdb.id AND pdb.id = pdc.id → should match exactly N rows (identity join).
                 // Without predicate pushdown this creates a 500^3 = 125M-row Cartesian product before WHERE.
@@ -322,7 +322,7 @@ namespace ETL_SQL.Tests.Statements
                 var data1 = "ID,Name\n1,Alice\n2,Bob";
                 string path = Path.Combine(testDir, "sj.csv").Replace("\\", "/");
                 await File.WriteAllTextAsync(path, data1);
-                await ev.Evaluate(Parse($"CREATE CONNECTION c ON FLATFILE('{path}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION c AS FLATFILE('{path}');"));
                 
                 var sql = "SELECT * FROM c JOIN (SELECT '1' as SubID) s ON c.ID = s.SubID;";
                 var res = await ev.ExecuteQuery(Parse(sql).Statements[0]).ToListAsync();

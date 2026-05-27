@@ -1,4 +1,4 @@
-# ETL-SQL
+﻿# ETL-SQL
 
 ![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.9.0-blue?style=for-the-badge&logo=dotnet)
 ![Language](https://img.shields.io/badge/Language-C%23-green?style=for-the-badge)
@@ -87,20 +87,20 @@ etl-sql-report build my_report.rptsql --format md
 This script extracts from SQL Server, stages rows inside the ETL-SQL engine, writes a CSV archive, and sends a completion email.
 
 ```sql
-CREATE CONNECTION prod_db ON MSSQL(
+CREATE CONNECTION prod_db AS MSSQL(
     HOST = 'prod',
     DATABASE = 'Sales',
     TRUSTED_CONNECTION = TRUE
 );
 
-CREATE CONNECTION archive ON FLATFILE(
+CREATE CONNECTION archive AS FLATFILE(
     PATH = 'C:\Exports\sales_2026.csv',
     FORMAT = 'CSV',
     DELIMITER = ',',
     HEADER = ON
 );
 
-CREATE CONNECTION my_smtp ON SMTP(
+CREATE CONNECTION my_smtp AS SMTP(
     HOST = 'smtp.company.com',
     PORT = 587,
     USER = 'admin',
@@ -139,7 +139,7 @@ Report-SQL extends ETL-SQL with dashboard primitives. Data prep stays in SQL; vi
 SET REPORT TITLE       = 'Sales Dashboard';
 SET REPORT DESCRIPTION = 'Regional revenue by quarter';
 
-CREATE CONNECTION prod ON MSSQL(
+CREATE CONNECTION prod AS MSSQL(
     HOST = 'prod',
     DATABASE = 'Sales',
     TRUSTED_CONNECTION = TRUE

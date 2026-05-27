@@ -369,7 +369,7 @@ public class SubscriptionsController(
             var password = pwdProtector.Unprotect(smtp!.EncryptedPassword) ?? string.Empty;
             var fromAddr = smtp.FromAddress ?? smtp.Username ?? "etlsql@localhost";
 
-            sb.AppendLine($"CREATE CONNECTION __sub_smtp TYPE SMTP (");
+            sb.AppendLine($"CREATE CONNECTION __sub_smtp AS SMTP(");
             sb.AppendLine($"    HOST     = '{Esc(smtp.Host)}',");
             sb.AppendLine($"    PORT     = {smtp.Port},");
             if (!string.IsNullOrEmpty(smtp.Username))
@@ -395,7 +395,7 @@ public class SubscriptionsController(
                 var fromAddr = smtp.FromAddress ?? smtp.Username ?? "etlsql@localhost";
                 var portalUrl = $"{{portal_url}}/index.html#report/{report.Id}";
 
-                sb.AppendLine($"CREATE CONNECTION __sub_smtp TYPE SMTP (");
+                sb.AppendLine($"CREATE CONNECTION __sub_smtp AS SMTP(");
                 sb.AppendLine($"    HOST     = '{Esc(smtp.Host)}',");
                 sb.AppendLine($"    PORT     = {smtp.Port},");
                 if (!string.IsNullOrEmpty(smtp.Username))

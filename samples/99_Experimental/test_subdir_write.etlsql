@@ -1,5 +1,5 @@
-SET WHAT_IF OFF;
+﻿SET WHAT_IF OFF;
 SELECT 1 AS A INTO #T;
-CREATE CONNECTION c ON FLATFILE('samples/output/test_subdir.csv');
+CREATE CONNECTION c AS FLATFILE('samples/output/test_subdir.csv');
 INSERT INTO c.FILE SELECT * FROM #T;
 PRINT 'Done. Rowcount: ' + @@ROWCOUNT;

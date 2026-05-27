@@ -1,12 +1,12 @@
--- Messy Data Transformation Regression Test
+﻿-- Messy Data Transformation Regression Test
 -- Pattern: Extract -> Stage -> Cleanse -> Load
 -- Purpose: Test high-precision time, diverse date formats, and region standardization.
 
 USE PASSWORD = 'test-password';
 
 -- 1. Create connections
-CREATE CONNECTION csv ON FLATFILE('test_data/sales_messy.csv');
-CREATE CONNECTION mock ON MOCKDB() WITH(DIALECT='MSSQL');
+CREATE CONNECTION csv AS FLATFILE('test_data/sales_messy.csv');
+CREATE CONNECTION mock AS MOCKDB();
 
 BEGIN TRY
     PRINT 'Phase 1: Extract messy data into engine memory...';

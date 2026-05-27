@@ -1,11 +1,10 @@
--- @requires: postgres
+﻿-- @requires: postgres
 -- Setup Script for HR Data Conversion (30 Entities)
 -- Path: samples/conversion/setup_db.etlsql
 
 BEGIN TRY
     -- 1. Define Connection to System A
-    CREATE CONNECTION system_a ON POSTGRES()
-        WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+    CREATE CONNECTION system_a AS POSTGRES(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
 
     -- 2. Define Entity List
     DECLARE @topics LIST = (

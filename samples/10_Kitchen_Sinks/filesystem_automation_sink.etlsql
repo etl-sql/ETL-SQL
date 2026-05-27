@@ -1,4 +1,4 @@
--- FILESYSTEM & AUTOMATION Kitchen Sink (Final Smoke)
+﻿-- FILESYSTEM & AUTOMATION Kitchen Sink (Final Smoke)
 SET WHAT_IF OFF;
 
 -- 1. System Variables (Read-Only?)
@@ -25,7 +25,7 @@ PRINT 'Testing FILE Ops...';
 DECLARE @tf = 'samples/kitchen_sinks/smoke.txt';
 DECLARE @cp = 'samples/kitchen_sinks/smoke_copy.txt';
 
-CREATE CONNECTION s_src ON FLATFILE(@tf);
+CREATE CONNECTION s_src AS FLATFILE(@tf);
 INSERT INTO s_src.FILE (Line) VALUES ('Smoke');
 
 COPY FILE @tf TO @cp;

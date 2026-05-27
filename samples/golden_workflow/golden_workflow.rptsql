@@ -1,4 +1,4 @@
--- Golden Workflow Report
+﻿-- Golden Workflow Report
 -- Purpose: one self-contained sample for preview, portal demo, export, and regression tests.
 
 SET REPORT TITLE = 'Golden Sales Operations Workflow';
@@ -12,8 +12,8 @@ DECLARE @ExportPath STRING INPUT = 'samples/golden_workflow/output/orders_stage.
 
 -- Extract: operational source rows come from MOCKDB, and target thresholds
 -- come from a small flat-file lookup committed beside this sample.
-CREATE CONNECTION source_db ON MOCKDB();
-CREATE CONNECTION region_targets ON FLATFILE('samples/golden_workflow/data/region_targets.csv') WITH(HEADER=ON);
+CREATE CONNECTION source_db AS MOCKDB();
+CREATE CONNECTION region_targets AS FLATFILE('samples/golden_workflow/data/region_targets.csv', HEADER=ON);
 
 SELECT *
 INTO #orders_raw
@@ -59,7 +59,7 @@ WHERE Region = '' OR Total < 100 OR Quantity <= 0;
 
 -- Export: persist the staged dataset to CSV, then read it back to prove the
 -- file boundary works before report visuals consume the data.
-CREATE CONNECTION stage_export ON FLATFILE(@ExportPath) WITH(HEADER=ON, ROW_DELIMITER='CRLF');
+CREATE CONNECTION stage_export AS FLATFILE(@ExportPath, HEADER=ON, ROW_DELIMITER='CRLF');
 
 SELECT
     OrderId,
@@ -76,7 +76,7 @@ SELECT
 INTO stage_export.FILE
 FROM #orders_stage;
 
-CREATE CONNECTION exported_orders ON FLATFILE(@ExportPath) WITH(HEADER=ON);
+CREATE CONNECTION exported_orders AS FLATFILE(@ExportPath, HEADER=ON);
 
 SELECT *
 INTO #orders_exported

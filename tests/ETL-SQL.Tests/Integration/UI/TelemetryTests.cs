@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -158,7 +158,7 @@ namespace ETL_SQL.Tests.Integration.UI
             var repl = new ReplUi(ctx, ETL_SQL.TUI.Program.ServiceProvider);
             
             // A script that creates and drops a connection
-            var script = "DROP CONNECTION IF EXISTS m; CREATE CONNECTION m ON MOCKDB(); SELECT 1;";
+            var script = "DROP CONNECTION IF EXISTS m; CREATE CONNECTION m AS MOCKDB(); SELECT 1;";
             
             // Run it twice sequentially in the SAME session
             var input = new StringReader(

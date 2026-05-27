@@ -356,20 +356,37 @@ namespace ETL_SQL.Core.Formatting
                 ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
                 _                                => "CREATE"
             };
-            var onStr      = (s.ConnectionType != null && s.TargetExpression != null) ? $" ON {s.ConnectionType}({s.TargetExpression.ToSql()})" : "";
-            var optionsStr = s.Options != null && s.Options.Count > 0
-                ? " WITH (" + string.Join(", ", s.Options.Select(o => $"{o.Key}={o.Value.ToSql()}")) + ")"
-                : "";
-            return $"{modeStr} CONNECTION {s.ConnectionName}{onStr}{optionsStr};";
+            string body;
+            if (s.TargetExpression != null && s.Options != null && s.Options.Count > 0)
+                body = "(" + s.TargetExpression.ToSql() + ", " + string.Join(", ", s.Options.Select(o => $"{o.Key}={o.Value.ToSql()}")) + ")";
+            else if (s.TargetExpression != null)
+                body = $"({s.TargetExpression.ToSql()})";
+            else if (s.Options != null && s.Options.Count > 0)
+                body = "(" + string.Join(", ", s.Options.Select(o => $"{o.Key}={o.Value.ToSql()}")) + ")";
+            else
+                body = "()";
+            return $"{modeStr} CONNECTION {s.ConnectionName} AS {s.ConnectionType}{body};";
         }
 
         private static string FormatAlterConnection(AlterConnectionStatement s)
         {
-            var onStr      = (s.ConnectionType != null && s.TargetExpression != null) ? $" ON {s.ConnectionType}({s.TargetExpression.ToSql()})" : "";
+            if (s.ConnectionType != null)
+            {
+                string body;
+                if (s.TargetExpression != null && s.Options != null && s.Options.Count > 0)
+                    body = "(" + s.TargetExpression.ToSql() + ", " + string.Join(", ", s.Options.Select(o => $"{o.Key}={o.Value.ToSql()}")) + ")";
+                else if (s.TargetExpression != null)
+                    body = $"({s.TargetExpression.ToSql()})";
+                else if (s.Options != null && s.Options.Count > 0)
+                    body = "(" + string.Join(", ", s.Options.Select(o => $"{o.Key}={o.Value.ToSql()}")) + ")";
+                else
+                    body = "()";
+                return $"ALTER CONNECTION {s.ConnectionName} AS {s.ConnectionType}{body};";
+            }
             var optionsStr = s.Options != null && s.Options.Count > 0
                 ? " WITH (" + string.Join(", ", s.Options.Select(o => $"{o.Key}={o.Value.ToSql()}")) + ")"
                 : "";
-            return $"ALTER CONNECTION {s.ConnectionName}{onStr}{optionsStr};";
+            return $"ALTER CONNECTION {s.ConnectionName}{optionsStr};";
         }
 
         private static string FormatCreateSshKeyPair(CreateSshKeyPairStatement s)

@@ -1,8 +1,8 @@
-# DIRECTORY
+﻿# DIRECTORY
 Connects to a local or UNC file-system folder. SELECT returns a listing of files and subdirectories with their metadata.
 
 Syntax:
-  CREATE CONNECTION <name> ON DIRECTORY(
+  CREATE CONNECTION <name> AS DIRECTORY(
     PATH    = 'C:\data\exports',
     CREATE  = ON | OFF,
     FILTER  = '*.csv',
@@ -16,7 +16,7 @@ Options:
   RECURSE — include subdirectory contents in SELECT output (default OFF)
 
 ```sql
-CREATE CONNECTION Exports ON DIRECTORY(
+CREATE CONNECTION Exports AS DIRECTORY(
   PATH    = 'C:\data\exports',
   CREATE  = ON,
   FILTER  = '*.csv'

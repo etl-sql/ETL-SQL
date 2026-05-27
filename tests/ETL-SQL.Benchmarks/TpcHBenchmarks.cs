@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.IO;
@@ -105,7 +105,7 @@ namespace ETL_SQL.Benchmarks
                 Console.WriteLine("// TpcHBenchmarks.Setup: Evaluator initialized.");
 
                 // Initialize connection once
-                var connSql = "CREATE CONNECTION tpch ON TPCHMOCK() WITH (SupportsSqlPushdown = false);";
+                var connSql = "CREATE CONNECTION tpch AS TPCHMOCK(SupportsSqlPushdown = false);";
                 var tokens = new Lexer(connSql).Tokenize();
                 var script = new Parser(tokens, connSql).Parse();
                 await _evaluator.Evaluate(script);

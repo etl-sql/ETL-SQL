@@ -1,11 +1,11 @@
-# EXECUTE
+﻿# EXECUTE
 Sends a raw command block to an external connection, or runs administrative/portal operations.
 
 ## Syntax
 ```sql
 -- Pass-through SQL block to a connection
 EXECUTE MyDB BEGIN
-  CREATE INDEX idx_tmp ON staging (id);
+  CREATE INDEX idx_tmp AS staging(id);
   UPDATE staging SET active = 1 WHERE loaded_at >= GETDATE();
 END;
 

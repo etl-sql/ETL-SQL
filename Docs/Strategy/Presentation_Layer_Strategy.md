@@ -1,4 +1,4 @@
-# ETL-SQL Presentation Layer Specification
+﻿# ETL-SQL Presentation Layer Specification
 
 > [!IMPORTANT]
 > **Mixed specification and backlog.** Some requirements here remain useful, but parts of this document describe unresolved or historical presentation work. Current implementation facts belong in `Docs/Architecture/Presentation.md`, `Docs/Architecture/TuiEditor.md`, and `Docs/Architecture/VSCodeExtension.md`.
@@ -424,7 +424,7 @@ public async Task ExecuteAsync_ConnectionCreate_EmitsConnectionMessage()
     var sink = new TestOutputSink();
     var session = new ExecutionSession(_serviceProvider, _ctx, sink);
 
-    await session.ExecuteAsync("CREATE CONNECTION m ON MOCKDB();");
+    await session.ExecuteAsync("CREATE CONNECTION m AS MOCKDB();");
 
     Assert.Contains(sink.OfCategory(MessageCategory.Connection),
         m => m.Text.Contains("m") && m.Text.Contains("created"));
@@ -481,7 +481,7 @@ public async Task ConnectionDrop_EmitsDroppedMessage()
     var session = new ExecutionSession(_serviceProvider, _ctx, sink);
 
     await session.ExecuteAsync(@"
-        CREATE CONNECTION m ON MOCKDB();
+        CREATE CONNECTION m AS MOCKDB();
         DROP CONNECTION m;
     ");
 

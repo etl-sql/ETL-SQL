@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -91,7 +91,7 @@ namespace ETL_SQL.Tests.Integration
         {
             var connections = new Dictionary<string, IDataSource>();
             var manager = new MetadataManager(SystemExecutionContext.Instance, connections);
-            string script = "CREATE CONNECTION C ON MOCKDB('dummy');";
+            string script = "CREATE CONNECTION C AS MOCKDB();";
             
             manager.RefreshConnections(script, force: true);
             

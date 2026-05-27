@@ -35,21 +35,20 @@ namespace ETL_SQL.TUI.UI
                 _connections.Clear();
             }
 
-            // Enhanced Regex: captures name, type, and optional target (with or without parens/quotes)
-            var matches = Regex.Matches(script, @"CREATE\s+CONNECTION\s+(\w+)\s+ON\s+(\w+)\s*(?:\(\s*['""]?([^'""\)]*)['""]?\s*\))?(?:\s+WITH\s*\((.*?)\))?", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            // Regex: captures name, type, and paren content for AS TYPE(...) syntax
+            var matches = Regex.Matches(script, @"CREATE\s+CONNECTION\s+(\w+)\s+AS\s+(\w+)\s*\(([^)]*)\)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
             foreach (Match match in matches)
             {
                 var name = match.Groups[1].Value;
                 var type = match.Groups[2].Value.ToUpper();
-                var path = match.Groups[3].Value.Trim();
-                var optionsPart = match.Groups[4].Value;
+                var parenContent = match.Groups[3].Value;
+
+                var pathMatch = Regex.Match(parenContent, @"['""]([^'""]*)['""]");
+                var path = pathMatch.Success ? pathMatch.Groups[1].Value : "";
 
                 var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                if (!string.IsNullOrEmpty(optionsPart))
-                {
-                    var optMatches = Regex.Matches(optionsPart, @"(\w+)\s*=\s*(#?\w+|['""].*?['""])");
-                    foreach (Match om in optMatches) options[om.Groups[1].Value] = om.Groups[2].Value.Trim('\'', '\"');
-                }
+                var optMatches = Regex.Matches(parenContent, @"(\w+)\s*=\s*(#?\w+|['""].*?['""])");
+                foreach (Match om in optMatches) options[om.Groups[1].Value] = om.Groups[2].Value.Trim('\'', '\"');
 
                 if ((type == "FLATFILE" || type == "FILE" || type == "CSV") && File.Exists(path)) _connections[name] = new FlatFileDataSource(_context, path, options, null);
                 else _connections[name] = new MockSqlDataSource(_context, path, type);

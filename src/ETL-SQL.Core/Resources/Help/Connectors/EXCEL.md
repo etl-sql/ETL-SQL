@@ -1,8 +1,8 @@
-# EXCEL
+﻿# EXCEL
 Reads from and writes to Excel workbooks (.xlsx, .xls). Specify a worksheet name and optionally a named range or cell range.
 
 Syntax:
-  CREATE CONNECTION <name> ON EXCEL(
+  CREATE CONNECTION <name> AS EXCEL(
     PATH     = 'file.xlsx',
     SHEET    = 'Sheet1',
     RANGE    = 'A1:D100',
@@ -20,7 +20,7 @@ Options:
   PASSWORD  — workbook password
 
 ```sql
-CREATE CONNECTION Budget ON EXCEL(
+CREATE CONNECTION Budget AS EXCEL(
   PATH   = 'C:\finance\budget_2024.xlsx',
   SHEET  = 'Summary',
   HEADER = ON

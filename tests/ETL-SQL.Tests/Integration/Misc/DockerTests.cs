@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -26,7 +26,7 @@ namespace ETL_SQL.Tests.Integration
             var sql = @"
                 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest');
                 DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
-                CREATE CONNECTION ds ON MSSQL(@conn);
+                CREATE CONNECTION ds AS MSSQL(@conn);
                 EXECUTE ds BEGIN IF OBJECT_ID('DockerTest', 'U') IS NOT NULL DROP TABLE DockerTest; END;
                 CREATE TABLE ds.DockerTest (Val INT);
                 INSERT INTO ds.DockerTest (Val) VALUES (1);
@@ -56,7 +56,7 @@ namespace ETL_SQL.Tests.Integration
             var sql = @"
                 USE DOCKER('postgres:15-alpine');
                 DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
-                CREATE CONNECTION ds ON POSTGRES(@conn);
+                CREATE CONNECTION ds AS POSTGRES(@conn);
                 CREATE TABLE ds.DockerTest (Val INT);
                 INSERT INTO ds.DockerTest (Val) VALUES (1);
                 SELECT Val FROM ds.DockerTest;
@@ -100,7 +100,7 @@ namespace ETL_SQL.Tests.Integration
                 {
                     try
                     {
-                        var script = Parse("CREATE CONNECTION ds ON ORACLE(@conn);");
+                        var script = Parse("CREATE CONNECTION ds AS ORACLE(@conn);");
                         await evaluator.Evaluate(script);
 
                         var connStr = evaluator.GetVariable("@conn")?.ToString();
@@ -144,10 +144,10 @@ namespace ETL_SQL.Tests.Integration
         {
              var sql = @"
                 DECLARE @path varchar(200) = 'test_var.csv';
-                CREATE CONNECTION ds ON FLATFILE(@path);
+                CREATE CONNECTION ds AS FLATFILE(@path);
                 SELECT 100 AS ID, 'VarTest' AS Name INTO #t;
                 INSERT INTO ds SELECT * FROM #t;
-                CREATE CONNECTION ds2 ON FLATFILE(@path);
+                CREATE CONNECTION ds2 AS FLATFILE(@path);
                 SELECT * FROM ds2;
             ";
 
@@ -174,7 +174,7 @@ namespace ETL_SQL.Tests.Integration
         {
             var sql = @"USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest');
 DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
-CREATE CONNECTION ds ON MSSQL(@conn);
+CREATE CONNECTION ds AS MSSQL(@conn);
 EXECUTE ds
 BEGIN
   IF OBJECT_ID('Employee', 'U') IS NOT NULL DROP TABLE Employee;
@@ -206,7 +206,7 @@ SELECT 1";
         {
             var sql = @"USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest');
 DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
-CREATE CONNECTION ds ON MSSQL(@conn);
+CREATE CONNECTION ds AS MSSQL(@conn);
 EXECUTE (
   'IF OBJECT_ID(''Employee'', ''U'') IS NOT NULL DROP TABLE Employee;
   CREATE TABLE Employee (id INT, employee_name NVARCHAR(MAX));

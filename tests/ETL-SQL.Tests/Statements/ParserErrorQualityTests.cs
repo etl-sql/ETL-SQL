@@ -40,11 +40,13 @@ namespace ETL_SQL.Tests.Statements
         [Theory]
         [InlineData("CREATE CONNECTION ;",
             "CREATE CONNECTION", "connection name")]
-        [InlineData("CREATE CONNECTION MyConn SQLSERVER 'server=.' WITH key = 'val';",
+        [InlineData("CREATE CONNECTION MyConn ;",
+            "CREATE CONNECTION", "AS")]
+        [InlineData("CREATE CONNECTION MyConn AS ;",
             "CREATE CONNECTION", "(")]
-        [InlineData("CREATE CONNECTION MyConn SQLSERVER 'server=.' WITH (key 'val');",
+        [InlineData("CREATE CONNECTION MyConn AS MSSQL(key 'val');",
             "CREATE CONNECTION", "=")]
-        [InlineData("CREATE CONNECTION MyConn SQLSERVER 'server=.' WITH (key = 'val'",
+        [InlineData("CREATE CONNECTION MyConn AS MSSQL(key = 'val'",
             "CREATE CONNECTION", ")")]
         public void CreateConnectionError_MessageNamesConstructAndExpectedToken(
             string sql, string construct, string expectedToken)

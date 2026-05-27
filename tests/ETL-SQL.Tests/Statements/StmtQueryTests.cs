@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -30,7 +30,7 @@ namespace ETL_SQL.Tests.Statements
             File.WriteAllText(tempCsv, "SKIP1\nSKIP2\nID,Name\n1,One\n2,Two\n3,Three\nFooter: 3");
 
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            await ev.Evaluate(Parse($"CREATE CONNECTION c ON FLATFILE('{tempCsv}') WITH (START_AT=2, COUNT_AT_END='Footer: COUNT');"));
+            await ev.Evaluate(Parse($"CREATE CONNECTION c AS FLATFILE('{tempCsv}', START_AT=2, COUNT_AT_END='Footer: COUNT');"));
             
             var res = await ev.ExecuteQuery(Parse("SELECT * FROM c;").Statements[0]).FirstAsync();
             Assert.Equal(3, res.Rows.Count);
@@ -46,7 +46,7 @@ namespace ETL_SQL.Tests.Statements
             File.WriteAllText(headerFile, "ExtID,ExtName");
 
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            await ev.Evaluate(Parse($"CREATE CONNECTION c ON FLATFILE('{dataFile.Replace("\\", "/")}') WITH (HEADER='{headerFile.Replace("\\", "/")}');"));
+            await ev.Evaluate(Parse($"CREATE CONNECTION c AS FLATFILE('{dataFile.Replace("\\", "/")}', HEADER='{headerFile.Replace("\\", "/")}');"));
             
             var res = await ev.ExecuteQuery(Parse("SELECT * FROM c;").Statements[0]).FirstAsync();
             Assert.True(res.ColumnNames.Contains("ExtID", StringComparer.OrdinalIgnoreCase), $"External header failed. Found columns: {string.Join(", ", res.ColumnNames)}");

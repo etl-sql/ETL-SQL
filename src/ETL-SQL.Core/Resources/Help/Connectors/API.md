@@ -1,8 +1,8 @@
-# API
+﻿# API
 Connects to REST or HTTP endpoints. Use SELECT to call the endpoint and parse the JSON response into a result set. Use INSERT or EXECUTE to POST or PUT data.
 
 Syntax:
-  CREATE CONNECTION <name> ON API(
+  CREATE CONNECTION <name> AS API(
     URL       = 'https://...',
     METHOD    = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     AUTH_TYPE = 'NONE' | 'BASIC' | 'BEARER' | 'APIKEY',
@@ -23,7 +23,7 @@ Options:
   HEADERS         — additional HTTP headers as a JSON object string
 
 ```sql
-CREATE CONNECTION GithubAPI ON API(
+CREATE CONNECTION GithubAPI AS API(
   URL       = 'https://api.github.com/repos/owner/repo/issues',
   AUTH_TYPE = 'BEARER',
   TOKEN     = @github_token,

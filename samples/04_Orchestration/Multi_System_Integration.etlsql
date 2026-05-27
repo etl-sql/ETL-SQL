@@ -1,4 +1,4 @@
--- ======================================================================
+﻿-- ======================================================================
 -- MEGA SAMPLE: Cross-Database Data Flow & Performance Analysis
 -- ======================================================================
 -- This script demonstrates:
@@ -16,7 +16,7 @@ PRINT 'Starting Mega Sample Orchestration...';
 -- This starts a container if one isn't already running.
 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS dms;
 DECLARE @mssql_conn varchar(500) = dms.CONNECTION_STRING;
-CREATE CONNECTION mssql_ds ON MSSQL(@mssql_conn);
+CREATE CONNECTION mssql_ds AS MSSQL(@mssql_conn);
 
 -- 2. Initialize MSSQL Tables
 PRINT 'Initializing MSSQL Tables...';
@@ -42,7 +42,7 @@ END;
 -- 4. Setup Postgres via Docker for Deposits
 USE DOCKER('postgres:15-alpine') AS dpg;
 DECLARE @pg_conn varchar(500) = dpg.CONNECTION_STRING;
-CREATE CONNECTION pg_ds ON POSTGRES(@pg_conn);
+CREATE CONNECTION pg_ds AS POSTGRES(@pg_conn);
 
 PRINT 'Initializing Postgres Tables...';
 EXECUTE pg_ds

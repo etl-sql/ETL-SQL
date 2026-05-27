@@ -1,8 +1,8 @@
-# JSON
+﻿# JSON
 Reads and writes JSON files. Use ROOT_PATH to navigate to the array node to unpack as rows.
 
 Syntax:
-  CREATE CONNECTION <name> ON JSON(
+  CREATE CONNECTION <name> AS JSON(
     PATH      = 'data.json',
     ROOT_PATH = '$.items',
     ENCODING  = 'UTF-8',
@@ -20,7 +20,7 @@ Options:
   PASSWORD   — passphrase for encryption
 
 ```sql
-CREATE CONNECTION ApiDump ON JSON(
+CREATE CONNECTION ApiDump AS JSON(
   PATH      = 'C:\data\api_response.json',
   ROOT_PATH = '$.data.orders'
 );

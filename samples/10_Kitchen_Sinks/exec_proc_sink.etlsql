@@ -1,4 +1,4 @@
--- PROCEDURES & FUNCTIONS & EXEC Kitchen Sink
+﻿-- PROCEDURES & FUNCTIONS & EXEC Kitchen Sink
 -- Covers: CREATE PROCEDURE, CREATE FUNCTION, EXEC (stored proc), EXEC (dynamic local),
 --         EXEC (block pushdown with MOCKDB), CREATE OR ALTER, DROP PROCEDURE/FUNCTION,
 --         EXEC WITH params, EXEC INTO #temp, RAISERROR
@@ -97,7 +97,7 @@ END CATCH
 
 -- 12. EXEC with MOCKDB pushdown (simulates AT conn syntax)
 PRINT 'Testing EXEC AT MOCKDB...';
-CREATE CONNECTION mock_exec ON MOCKDB();
+CREATE CONNECTION mock_exec AS MOCKDB();
 EXEC ('SELECT 1 AS PushdownResult') AT mock_exec INTO #PushResult;
 SELECT * FROM #PushResult;
 DROP CONNECTION mock_exec;

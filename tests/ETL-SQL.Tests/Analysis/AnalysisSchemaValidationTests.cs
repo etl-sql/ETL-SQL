@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
@@ -30,7 +30,7 @@ namespace ETL_SQL.Tests.Analysis
             var context = new DefaultLintContext { Metadata = metadata };
 
             var sql = @"
-                CREATE CONNECTION MockGenerator ON FLATFILE('test.csv');
+                CREATE CONNECTION MockGenerator AS FLATFILE('test.csv');
                 INSERT INTO MockGenerator.FILE (TransactionID, Amount) VALUES ('TXN1', 100);
             ";
 
@@ -54,7 +54,7 @@ namespace ETL_SQL.Tests.Analysis
             var context = new DefaultLintContext { Metadata = metadata };
 
             var sql = @"
-                CREATE CONNECTION MockGenerator ON FLATFILE('test.csv');
+                CREATE CONNECTION MockGenerator AS FLATFILE('test.csv');
                 INSERT INTO MockGenerator.FILE (TransactionID, Amount) VALUES ('TXN1', 100);
             ";
 
@@ -79,7 +79,7 @@ namespace ETL_SQL.Tests.Analysis
             var context = new DefaultLintContext { Metadata = metadata };
 
             var sql = @"
-                CREATE CONNECTION MyDb ON MSSQL();
+                CREATE CONNECTION MyDb AS MSSQL();
                 INSERT INTO MyDb.Users (ID, Name) VALUES (1, 'Bob');
             ";
 
@@ -102,7 +102,7 @@ namespace ETL_SQL.Tests.Analysis
 
             var missingFile = $"missing-file-{Guid.NewGuid()}.csv";
             var sql = $@"
-                CREATE CONNECTION MockGenerator ON FLATFILE('{missingFile}');
+                CREATE CONNECTION MockGenerator AS FLATFILE('{missingFile}');
                 SELECT * FROM MockGenerator.FILE;
             ";
 
@@ -125,7 +125,7 @@ namespace ETL_SQL.Tests.Analysis
 
             var missingFile = $"missing-file-{Guid.NewGuid()}.csv";
             var sql = $@"
-                CREATE CONNECTION MockGenerator ON FLATFILE('{missingFile}');
+                CREATE CONNECTION MockGenerator AS FLATFILE('{missingFile}');
                 INSERT INTO MockGenerator.FILE (TransactionID, Amount) VALUES ('TXN1', 100);
             ";
 

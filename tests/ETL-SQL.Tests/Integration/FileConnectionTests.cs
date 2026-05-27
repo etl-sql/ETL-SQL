@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -33,7 +33,7 @@ namespace ETL_SQL.Tests.Integration
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             string script = $@"
-                CREATE CONNECTION my_csv ON FLATFILE('{_tempFile.Replace("\\", "/")}') WITH (HEADER = ON);
+                CREATE CONNECTION my_csv AS FLATFILE('{_tempFile.Replace("\\", "/")}', HEADER = ON);
                 SELECT * FROM my_csv.FILE;
             ";
 
@@ -48,7 +48,7 @@ namespace ETL_SQL.Tests.Integration
         [Fact]
         public async Task TestFileConnectionLegacyAliasShouldFail()
         {
-            var source = "CREATE CONNECTION my_conn ON FILE('data.csv');";
+            var source = "CREATE CONNECTION my_conn AS FILE('data.csv');";
             var lexer = new Lexer(source);
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens);
@@ -66,7 +66,7 @@ namespace ETL_SQL.Tests.Integration
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             string script = $@"
-                CREATE CONNECTION my_csv ON FLATFILE('{_tempFile.Replace("\\", "/")}') WITH (HEADER = ON);
+                CREATE CONNECTION my_csv AS FLATFILE('{_tempFile.Replace("\\", "/")}', HEADER = ON);
                 SELECT * FROM my_csv;
             ";
 

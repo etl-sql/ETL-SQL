@@ -1,8 +1,8 @@
--- MSSQL Kitchen Sink
+﻿-- MSSQL Kitchen Sink
 SET WHAT_IF OFF;
 PRINT 'Starting MSSQL container...';
 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS ms;
-CREATE CONNECTION db ON MSSQL(ms.CONNECTION_STRING);
+CREATE CONNECTION db AS MSSQL(ms.CONNECTION_STRING);
 
 PRINT 'Testing MSSQL basic operations...';
 EXECUTE db BEGIN

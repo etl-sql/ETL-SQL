@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -41,7 +41,7 @@ namespace ETL_SQL.Tests.Integration
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             string script = @"
-                CREATE CONNECTION MyDb ON MOCKDB('mock://localhost') WITH (dialect='MSSQL');
+                CREATE CONNECTION MyDb AS MOCKDB();
                 EXECUTE MyDb INTO #RemoteUsers BEGIN SELECT UserID, UserName FROM Users END;
             ";
             await ev.Evaluate(Parse(script));
@@ -100,7 +100,7 @@ namespace ETL_SQL.Tests.Integration
             
             // User's provided complex block
             string script = @"
-                CREATE CONNECTION m ON MOCKDB('mock://localhost') WITH (dialect='MSSQL');
+                CREATE CONNECTION m AS MOCKDB();
                 EXECUTE m INTO #temp
                 BEGIN
                   IF 1=0

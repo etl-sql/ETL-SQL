@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
@@ -26,8 +26,8 @@ namespace ETL_SQL.Tests.Analysis
             linter.AddRule(new AbsolutePathRule());
 
             var sql = @"
-                CREATE CONNECTION c1 ON FLATFILE('C:\Data\file.csv'); -- Absolute (OK)
-                CREATE CONNECTION c2 ON FLATFILE('data\file.csv');   -- Relative (Warn)
+                CREATE CONNECTION c1 AS FLATFILE('C:\Data\file.csv'); -- Absolute (OK)
+                CREATE CONNECTION c2 AS FLATFILE('data\file.csv');   -- Relative (Warn)
                 RUN SCRIPT 'scripts\setup.etlsql';                   -- Relative (Warn)
                 COPY FILE 'C:\temp\a.txt' TO 'b.txt';                -- Destination Relative (Warn)
                 BULK INSERT INTO #t FROM 'data.csv';                 -- Relative (Warn)
@@ -52,7 +52,7 @@ namespace ETL_SQL.Tests.Analysis
             linter.AddRule(new FileSystemSecurityRule());
 
             var sql = @"
-                CREATE CONNECTION c1 ON FLATFILE('C:\Windows\System32\drivers\etc\hosts');
+                CREATE CONNECTION c1 AS FLATFILE('C:\Windows\System32\drivers\etc\hosts');
                 RUN SCRIPT '/etc/shadow';
                 COPY FILE '.git\config' TO 'C:\backups\git_config.txt';
                 BULK INSERT INTO #t FROM 'C:\bin\tools.csv';
@@ -77,9 +77,9 @@ namespace ETL_SQL.Tests.Analysis
             linter.AddRule(new FileSystemSecurityRule());
 
             var sql = @"
-                CREATE CONNECTION c1 ON FLATFILE('C:\');
-                CREATE CONNECTION c2 ON FLATFILE('D:/');
-                CREATE CONNECTION c3 ON FLATFILE('C:\SafeFolder\'); -- OK
+                CREATE CONNECTION c1 AS FLATFILE('C:\');
+                CREATE CONNECTION c2 AS FLATFILE('D:/');
+                CREATE CONNECTION c3 AS FLATFILE('C:\SafeFolder\'); -- OK
             ";
 
             var script = Parse(sql);
@@ -98,9 +98,9 @@ namespace ETL_SQL.Tests.Analysis
             linter.AddRule(new AbsolutePathRule());
 
             var sql = @"
-                CREATE CONNECTION c1 ON FLATFILE('ENC:base64stuff'); -- Secret (OK)
-                CREATE CONNECTION c2 ON FLATFILE('s3://bucket/file.csv'); -- URL (OK)
-                CREATE CONNECTION c3 ON MSSQL() WITH(SERVER='localhost'); -- Not a file connector (OK)
+                CREATE CONNECTION c1 AS FLATFILE('ENC:base64stuff'); -- Secret (OK)
+                CREATE CONNECTION c2 AS FLATFILE('s3://bucket/file.csv'); -- URL (OK)
+                CREATE CONNECTION c3 AS MSSQL(SERVER='localhost'); -- Not a file connector (OK)
             ";
 
             var script = Parse(sql);

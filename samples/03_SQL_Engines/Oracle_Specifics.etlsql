@@ -1,10 +1,10 @@
--- Demonstrates database connectivity and metadata discovery via Docker
+﻿-- Demonstrates database connectivity and metadata discovery via Docker
 -- Note: Requires Docker Desktop running
 
 USE DOCKER('postgres:15-alpine') AS dpg;
 DECLARE @conn varchar(500) = dpg.CONNECTION_STRING;
 
-CREATE CONNECTION db ON POSTGRES(@conn);
+CREATE CONNECTION db AS POSTGRES(@conn);
 
 -- Execute table creation
 EXECUTE db

@@ -1,4 +1,4 @@
--- Main Orchestration: System A Secure Export
+﻿-- Main Orchestration: System A Secure Export
 -- Path: samples/conversion/system_a/export_main.etlsql
 -- @requires: postgres
 
@@ -14,8 +14,7 @@ DECLARE @KeyDir    = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\keys
 DECLARE @ZipFile   = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\hr_migration.zip';
 
 -- 2. Define Source Connection (Postgres)
-CREATE CONNECTION system_a ON POSTGRES()
-    WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+CREATE CONNECTION system_a AS POSTGRES(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
 
 DECLARE @topics LIST = (
     'hr_01_employees', 'hr_02_demographics', 'hr_03_salary_history', 'hr_04_job_history', 
@@ -53,8 +52,7 @@ BEGIN TRY
         DECLARE @pgpPath = @OutputDir + @topic + '.csv.pgp';
         
         -- Write CSV
-        CREATE CONNECTION temp_csv ON FLATFILE()
-            WITH(PATH = @csvPath, DELIMITER = PIPE, HEADER = ON, ENCODING = 'UTF8');
+        CREATE CONNECTION temp_csv AS FLATFILE(PATH = @csvPath, DELIMITER = PIPE, HEADER = ON, ENCODING = 'UTF8');
             
         INSERT INTO temp_csv.FILE SELECT * FROM #ExportSet;
         DROP CONNECTION temp_csv;

@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -25,7 +25,7 @@ namespace ETL_SQL.Tests.Integration
             await File.WriteAllTextAsync(Path.Combine(testDir, "file1.txt"), "hello");
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            await eval.Evaluate(new Lexer($"CREATE CONNECTION MyDir ON DIRECTORY('{testDir}');").TokenizeToScript());
+            await eval.Evaluate(new Lexer($"CREATE CONNECTION MyDir AS DIRECTORY('{testDir}');").TokenizeToScript());
             await eval.Evaluate(new Lexer("SELECT * FROM MyDir;").TokenizeToScript());
 
             Assert.NotNull(eval.LastResult);
@@ -47,8 +47,8 @@ namespace ETL_SQL.Tests.Integration
             await File.WriteAllTextAsync(file, "id\n1");
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            await eval.Evaluate(new Lexer($"CREATE CONNECTION MyDir ON DIRECTORY('{dir}');").TokenizeToScript());
-            await eval.Evaluate(new Lexer($"CREATE CONNECTION MyFile ON FLATFILE('{file}');").TokenizeToScript());
+            await eval.Evaluate(new Lexer($"CREATE CONNECTION MyDir AS DIRECTORY('{dir}');").TokenizeToScript());
+            await eval.Evaluate(new Lexer($"CREATE CONNECTION MyFile AS FLATFILE('{file}');").TokenizeToScript());
 
             await eval.Evaluate(new Lexer("CREATE_DIRECTORY(MyDir + '/subdir');").TokenizeToScript());
             Assert.True(Directory.Exists(Path.Combine(dir, "subdir")), "Path resolution for DIRECTORY connection failed");
@@ -126,8 +126,8 @@ namespace ETL_SQL.Tests.Integration
             string zipCsv = "secure_test.zip";
 
             await File.WriteAllTextAsync(csv, "id,val\n1,secret");
-            await eval.Evaluate(new Lexer($"CREATE CONNECTION RawCsv ON FLATFILE('{csv}');").TokenizeToScript());
-            await eval.Evaluate(new Lexer($"CREATE CONNECTION EncryptedCsv ON FLATFILE('{encCsv}') WITH(ENCRYPT='ON', PASSWORD='MyPass123');").TokenizeToScript());
+            await eval.Evaluate(new Lexer($"CREATE CONNECTION RawCsv AS FLATFILE('{csv}');").TokenizeToScript());
+            await eval.Evaluate(new Lexer($"CREATE CONNECTION EncryptedCsv AS FLATFILE('{encCsv}', ENCRYPT='ON', PASSWORD='MyPass123');").TokenizeToScript());
             
             await eval.Evaluate(new Lexer("INSERT INTO EncryptedCsv SELECT * FROM RawCsv;").TokenizeToScript());
             Assert.True(File.Exists(encCsv), "Encrypted file not created");
@@ -138,7 +138,7 @@ namespace ETL_SQL.Tests.Integration
             await eval.Evaluate(new Lexer("SELECT * FROM EncryptedCsv;").TokenizeToScript());
             Assert.Equal("secret", eval.LastResult?.Rows[0]["val"]?.ToString());
 
-            await eval.Evaluate(new Lexer($"CREATE CONNECTION CompressedCsv ON FLATFILE('{zipCsv}') WITH(COMPRESS='ON');").TokenizeToScript());
+            await eval.Evaluate(new Lexer($"CREATE CONNECTION CompressedCsv AS FLATFILE('{zipCsv}', COMPRESS='ON');").TokenizeToScript());
             await eval.Evaluate(new Lexer("INSERT INTO CompressedCsv SELECT * FROM RawCsv;").TokenizeToScript());
             Assert.True(File.Exists(zipCsv), "Compressed file not created");
 

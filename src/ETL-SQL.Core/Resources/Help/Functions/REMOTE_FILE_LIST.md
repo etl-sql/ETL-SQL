@@ -1,4 +1,4 @@
-# REMOTE_FILE_LIST
+﻿# REMOTE_FILE_LIST
 Returns a table of files on a remote connection (SFTP, FTP, or Azure Blob).
 
 **Category:** File
@@ -20,7 +20,7 @@ Table with columns: `NAME` (STRING), `FULLPATH` (STRING), `SIZE` (DECIMAL bytes)
 
 ## Example
 ```sql
-CREATE CONNECTION sftp_src ON SFTP() WITH (HOST='files.partner.com', USER='etl', KEYFILE='C:\keys\sftp.pem');
+CREATE CONNECTION sftp_src AS SFTP(HOST='files.partner.com', USER='etl', KEYFILE='C:\keys\sftp.pem');
 
 SELECT NAME, SIZE, LASTMODIFIED
 INTO #remote_files

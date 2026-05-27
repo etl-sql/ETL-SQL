@@ -1,4 +1,4 @@
-# DOCKER Operations
+﻿# DOCKER Operations
 Start, stop, pause, resume, and close Docker containers. Use these to spin up sidecar services for a script run and tear them down when done.
 
 Syntax:
@@ -17,7 +17,7 @@ START_DOCKER 'postgres:15' AS TestPG;
 -- Wait for the database to accept connections
 WAITFOR DELAY '00:00:05';
 
-CREATE CONNECTION TestDB ON POSTGRES(
+CREATE CONNECTION TestDB AS POSTGRES(
   HOST     = 'localhost',
   PORT     = 5432,
   DATABASE = 'postgres',

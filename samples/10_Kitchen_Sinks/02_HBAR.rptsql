@@ -1,4 +1,4 @@
--- Kitchen Sink: HBAR Visual
+﻿-- Kitchen Sink: HBAR Visual
 -- This script demonstrates all features of the HBAR (Horizontal Bar) visual type.
 
 SET REPORT TITLE = 'Kitchen Sink: HBAR Visual';

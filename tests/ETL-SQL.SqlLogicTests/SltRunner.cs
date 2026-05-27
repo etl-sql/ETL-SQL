@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime;
 using System.Linq;
@@ -48,7 +48,7 @@ namespace ETL_SQL.SqlLogicTests
 
         private async Task InitializeAsync()
         {
-            var setup = @"CREATE CONNECTION slt ON MOCKDB();
+            var setup = @"CREATE CONNECTION slt AS MOCKDB();
 SET LINEAGE = OFF;
 SET TELEMETRY = OFF;";
             var tokens = new Lexer(setup).Tokenize();

@@ -1,4 +1,4 @@
-# ETL-SQL Specialized Operations & Automation
+﻿# ETL-SQL Specialized Operations & Automation
 
 This document is the technical reference for ETL-SQL's non-query automation features: filesystem management, remote file transfer, email notifications, metadata/lineage tracking, cryptographic key generation, Docker lifecycle integration, and background job scheduling.
 
@@ -97,8 +97,8 @@ ETL-SQL supports path aliasing via connections. If a path string starts with a r
 **Using DIRECTORY connections as path aliases:**
 ```sql
 -- Define a logical name for a physical path
-CREATE CONNECTION source_dir ON DIRECTORY('C:\Users\Chuck\Documents\Input');
-CREATE CONNECTION backup_dir ON DIRECTORY('D:\Backups\Daily');
+CREATE CONNECTION source_dir AS DIRECTORY('C:\Users\Chuck\Documents\Input');
+CREATE CONNECTION backup_dir AS DIRECTORY('D:\Backups\Daily');
 
 -- Use the alias instead of the full path in any file statement or function
 COPY DIRECTORY source_dir TO backup_dir;
@@ -242,8 +242,7 @@ SEND_EMAIL(<smtp_conn>, '<to>', '<from>', '<subject>', '<body>' [, '<cc>', '<bcc
 
 *Example:*
 ```sql
-CREATE CONNECTION mailer ON SMTP('smtp.company.com')
-    WITH(PORT=587, USERNAME='alerts@company.com', PASSWORD='apppassword',
+CREATE CONNECTION mailer AS SMTP('smtp.company.com', PORT=587, USERNAME='alerts@company.com', PASSWORD='apppassword',
          USE_SSL=TRUE, DEFAULT_FROM='alerts@company.com');
 
 -- Clauses can be in any order
@@ -484,8 +483,8 @@ USE DOCKER('postgres:15-alpine') AS dpost;
 DECLARE @ms_conn VARCHAR(500) = dms.CONNECTION_STRING;
 DECLARE @pg_conn VARCHAR(500) = dpost.CONNECTION_STRING;
 
-CREATE CONNECTION stage_sql ON MSSQL(@ms_conn);
-CREATE CONNECTION stage_pg  ON POSTGRES(@pg_conn);
+CREATE CONNECTION stage_sql AS MSSQL(@ms_conn);
+CREATE CONNECTION stage_pg  AS POSTGRES(@pg_conn);
 
 -- Load and validate data
 SELECT * INTO #stage FROM source_db.Orders;

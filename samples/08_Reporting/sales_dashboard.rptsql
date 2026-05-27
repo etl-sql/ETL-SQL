@@ -1,9 +1,9 @@
--- Advanced Sales Dashboard
+﻿-- Advanced Sales Dashboard
 SET REPORT TITLE = 'Global Sales Insights';
 SET REPORT DESCRIPTION = 'Strategic overview of regional performance and long-term trends.';
 
 -- Connections
-CREATE CONNECTION sales_data ON FLATFILE('TestData/test_sales.csv') WITH(HEADER=TRUE);
+CREATE CONNECTION sales_data AS FLATFILE('TestData/test_sales.csv', HEADER=TRUE);
 
 -- Last Month Calculation (March 2026)
 DECLARE @last_month_start DATE = '2026-03-01';

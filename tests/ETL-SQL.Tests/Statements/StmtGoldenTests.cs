@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.IO;
 using System.Linq;
@@ -434,7 +434,7 @@ namespace ETL_SQL.Tests.Statements
                 await TestHelpers.Execute(ev, $@"
                     CREATE TABLE #src (id INT, name VARCHAR);
                     INSERT INTO #src VALUES (1,'Alice'),(2,'Bob');
-                    CREATE CONNECTION csv_out ON FLATFILE ('{EscPath(path)}') WITH (HEADER='ON');
+                    CREATE CONNECTION csv_out AS FLATFILE('{EscPath(path)}', HEADER='ON');
                     INSERT INTO csv_out SELECT * FROM #src;
                 ");
                 Assert.True(File.Exists(path), "CSV file was not created");
@@ -452,7 +452,7 @@ namespace ETL_SQL.Tests.Statements
                 await TestHelpers.Execute(ev, $@"
                     CREATE TABLE #src (id INT, name VARCHAR);
                     INSERT INTO #src VALUES (1,'Alice'),(2,'Bob'),(3,'Carol');
-                    CREATE CONNECTION csv_out ON FLATFILE ('{EscPath(path)}') WITH (HEADER='ON');
+                    CREATE CONNECTION csv_out AS FLATFILE('{EscPath(path)}', HEADER='ON');
                     INSERT INTO csv_out SELECT * FROM #src;
                 ");
                 var lines = await File.ReadAllLinesAsync(path);
@@ -471,13 +471,13 @@ namespace ETL_SQL.Tests.Statements
                 await TestHelpers.Execute(ev, $@"
                     CREATE TABLE #src (id INT, name VARCHAR);
                     INSERT INTO #src VALUES (1,'Alice'),(2,'Bob'),(3,'Carol');
-                    CREATE CONNECTION csv_out ON FLATFILE ('{EscPath(path)}') WITH (HEADER='ON');
+                    CREATE CONNECTION csv_out AS FLATFILE('{EscPath(path)}', HEADER='ON');
                     INSERT INTO csv_out SELECT * FROM #src;
                 ");
 
                 var ev2 = Ev();
                 await TestHelpers.Execute(ev2, $@"
-                    CREATE CONNECTION csv_in ON FLATFILE ('{EscPath(path)}') WITH (HEADER='ON');
+                    CREATE CONNECTION csv_in AS FLATFILE('{EscPath(path)}', HEADER='ON');
                 ");
                 var r = await Q(ev2, "SELECT * FROM csv_in ORDER BY id;");
                 Assert.Equal(3, r.Rows.Count);
@@ -497,7 +497,7 @@ namespace ETL_SQL.Tests.Statements
                 await TestHelpers.Execute(ev, $@"
                     CREATE TABLE #src (product_id INT, product_name VARCHAR);
                     INSERT INTO #src VALUES (1,'Widget');
-                    CREATE CONNECTION csv_out ON FLATFILE ('{EscPath(path)}') WITH (HEADER='ON');
+                    CREATE CONNECTION csv_out AS FLATFILE('{EscPath(path)}', HEADER='ON');
                     INSERT INTO csv_out SELECT * FROM #src;
                 ");
                 var firstLine = (await File.ReadAllLinesAsync(path))[0];
@@ -517,13 +517,13 @@ namespace ETL_SQL.Tests.Statements
                 await TestHelpers.Execute(ev, $@"
                     CREATE TABLE #src (id INT, label VARCHAR, price DECIMAL);
                     INSERT INTO #src VALUES (7,'Gadget',19.99);
-                    CREATE CONNECTION csv_out ON FLATFILE ('{EscPath(path)}') WITH (HEADER='ON');
+                    CREATE CONNECTION csv_out AS FLATFILE('{EscPath(path)}', HEADER='ON');
                     INSERT INTO csv_out SELECT * FROM #src;
                 ");
 
                 var ev2 = Ev();
                 await TestHelpers.Execute(ev2, $@"
-                    CREATE CONNECTION csv_in ON FLATFILE ('{EscPath(path)}') WITH (HEADER='ON');
+                    CREATE CONNECTION csv_in AS FLATFILE('{EscPath(path)}', HEADER='ON');
                 ");
                 var r = await Q(ev2, "SELECT * FROM csv_in;");
                 Assert.Single(r.Rows);
@@ -544,7 +544,7 @@ namespace ETL_SQL.Tests.Statements
                     CREATE TABLE #Layout (EmpId CHAR(5), EmpName VARCHAR(20), Salary CHAR(10));
                     INSERT INTO #Layout VALUES ('00001','Alice','   75000');
                     INSERT INTO #Layout VALUES ('00002','Bob  ','   50000');
-                    CREATE CONNECTION fw_out ON FLATFILE ('{EscPath(path)}') WITH (FORMAT='FIXED', TEMPLATE=#Layout);
+                    CREATE CONNECTION fw_out AS FLATFILE('{EscPath(path)}', FORMAT='FIXED', TEMPLATE=#Layout);
                     INSERT INTO fw_out SELECT EmpId, EmpName, Salary FROM #Layout;
                 ");
 
@@ -554,7 +554,7 @@ namespace ETL_SQL.Tests.Statements
                 var ev2 = Ev();
                 await TestHelpers.Execute(ev2, $@"
                     CREATE TABLE #ReadLayout (EmpId CHAR(5), EmpName VARCHAR(20), Salary CHAR(10));
-                    CREATE CONNECTION fw_in ON FLATFILE ('{EscPath(path)}') WITH (FORMAT='FIXED', TEMPLATE=#ReadLayout, TRIM='ON', HEADER='ON');
+                    CREATE CONNECTION fw_in AS FLATFILE('{EscPath(path)}', FORMAT='FIXED', TEMPLATE=#ReadLayout, TRIM='ON', HEADER='ON');
                 ");
                 var r = await Q(ev2, "SELECT * FROM fw_in ORDER BY EmpId;");
                 Assert.Equal(2, r.Rows.Count);
@@ -581,7 +581,7 @@ namespace ETL_SQL.Tests.Statements
                     CREATE TABLE #Layout (EmpId CHAR(5), EmpName VARCHAR(20), Salary CHAR(10));
                     INSERT INTO #Layout VALUES ('00001','Alice','   75000');
                     INSERT INTO #Layout VALUES ('00002','Bob','  50000');
-                    CREATE CONNECTION fw_out ON FLATFILE ('{EscPath(path)}') WITH (FORMAT='FIXED', TEMPLATE=#Layout);
+                    CREATE CONNECTION fw_out AS FLATFILE('{EscPath(path)}', FORMAT='FIXED', TEMPLATE=#Layout);
                     INSERT INTO fw_out SELECT EmpId, EmpName, Salary FROM #Layout;
                 ");
 
@@ -606,7 +606,7 @@ namespace ETL_SQL.Tests.Statements
                 await TestHelpers.Execute(ev, $@"
                     CREATE TABLE #Layout (EmpId CHAR(5), EmpName VARCHAR(20), Salary CHAR(10));
                     INSERT INTO #Layout VALUES ('A0001','Christopher','     99999');
-                    CREATE CONNECTION fw_out ON FLATFILE ('{EscPath(path)}') WITH (FORMAT='FIXED', TEMPLATE=#Layout);
+                    CREATE CONNECTION fw_out AS FLATFILE('{EscPath(path)}', FORMAT='FIXED', TEMPLATE=#Layout);
                     INSERT INTO fw_out SELECT EmpId, EmpName, Salary FROM #Layout;
                 ");
 

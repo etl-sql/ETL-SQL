@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -47,7 +47,7 @@ namespace ETL_SQL.Tests.Integration
         public async Task TestStarExpansion()
         {
             var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
-            editor._buffer.Load(new[] { "CREATE CONNECTION T1 ON MOCKDB('mock');", "SELECT * FROM T1 AS A" });
+            editor._buffer.Load(new[] { "CREATE CONNECTION T1 AS MOCKDB();", "SELECT * FROM T1 AS A" });
             editor._buffer.CursorLine = 1;
             editor._buffer.CursorColumn = 8; // After *
             editor._metadata.RefreshConnections(editor._buffer.GetText(), force: true);
@@ -61,7 +61,7 @@ namespace ETL_SQL.Tests.Integration
         public async Task TestStarExpansionScenarios()
         {
             var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
-            string setup = "CREATE CONNECTION T1 ON MOCKDB;\nCREATE CONNECTION T2 ON MOCKDB;";
+            string setup = "CREATE CONNECTION T1 AS MOCKDB();\nCREATE CONNECTION T2 AS MOCKDB();";
             editor._buffer.Load((setup + "\nSELECT * FROM T1 AS A, T2").Split('\n'));
             editor._metadata.RefreshConnections(editor._buffer.GetText(), force: true);
             editor._buffer.CursorLine = 2;
@@ -76,7 +76,7 @@ namespace ETL_SQL.Tests.Integration
         public async Task TestPathAutocomplete()
         {
             var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
-            editor._buffer.Load(new[] { "CREATE CONNECTION C ON FLATFILE('./" });
+            editor._buffer.Load(new[] { "CREATE CONNECTION C AS FLATFILE('./" });
             editor._buffer.CursorLine = 0;
             editor._buffer.CursorColumn = editor._buffer.Lines[0].Length;
             await editor.HandleKey(new ConsoleKeyInfo('.', ConsoleKey.OemPeriod, false, false, false)); 

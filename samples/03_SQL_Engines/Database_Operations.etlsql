@@ -1,6 +1,6 @@
--- Connect to Mocking Data Sources
-CREATE CONNECTION my_oracle ON ORACLE('Server=OracleDemo;');
-CREATE CONNECTION my_mssql ON MSSQL('Server=SqlDemo;Database=DemoDb;');
+﻿-- Connect to Mocking Data Sources
+CREATE CONNECTION my_oracle AS ORACLE('Server=OracleDemo;');
+CREATE CONNECTION my_mssql AS MSSQL('Server=SqlDemo;Database=DemoDb;');
 
 -- Test Standalone Updates
 UPDATE my_mssql.DemoDb.dbo.Employee 

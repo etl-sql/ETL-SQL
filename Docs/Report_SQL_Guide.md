@@ -1,4 +1,4 @@
-# Report-SQL Scripting Guide
+﻿# Report-SQL Scripting Guide
 
 Report-SQL extends ETL-SQL with dedicated statement types for building interactive dashboards: `SET REPORT TITLE`, `CREATE DATASET`, `CREATE VISUAL`, `CREATE PAGE`, `CREATE CONTAINER`, `CREATE NAVIGATION`, `CREATE BUTTON`, and `CREATE STYLE` — plus a CLI build tool and live browser hosts for serving reports.
 
@@ -74,7 +74,7 @@ Temp tables are reusable across multiple visuals, debuggable with a plain `SELEC
 
 ```sql
 -- 1. Connect and pull data
-CREATE CONNECTION c ON FLATFILE('data/sales.csv');
+CREATE CONNECTION c AS FLATFILE('data/sales.csv');
 
 SELECT region, SUM(revenue) AS revenue
 INTO #summary
@@ -2309,7 +2309,7 @@ SET REPORT TITLE = 'Sales Dashboard';
 SET REPORT DESCRIPTION = 'Regional and product-level revenue by month.';
 
 DROP CONNECTION IF EXISTS c;
-CREATE CONNECTION c ON FLATFILE('TestData/test_sales.csv');
+CREATE CONNECTION c AS FLATFILE('TestData/test_sales.csv');
 
 -- Shared base dataset (refreshed every hour)
 CREATE DATASET &summary

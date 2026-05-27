@@ -1,4 +1,4 @@
--- Main Orchestration: System B Secure Ingestion
+﻿-- Main Orchestration: System B Secure Ingestion
 -- Path: samples/conversion/system_b/import_main.etlsql
 -- @requires: postgres
 -- 1. Setup Environment
@@ -10,8 +10,7 @@ DECLARE @KeyPath     PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversio
 DECLARE @Passphrase  STRING = 'hr-secret';
 
 -- 2. Define System B Connection
-CREATE CONNECTION system_b ON POSTGRES()
-    WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+CREATE CONNECTION system_b AS POSTGRES(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
 
 DECLARE @topics LIST = (
     'hr_01_employees', 'hr_02_demographics', 'hr_03_salary_history', 'hr_04_job_history', 

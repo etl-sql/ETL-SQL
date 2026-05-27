@@ -1,5 +1,5 @@
--- Test FILTER clause in window functions
-CREATE CONNECTION src ON MOCKDB();
+﻿-- Test FILTER clause in window functions
+CREATE CONNECTION src AS MOCKDB();
 
 SELECT * INTO #sales FROM (
     SELECT '2026-01-01' as Date, 'Electronics' as Category, 50 as Amount

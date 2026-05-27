@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -52,7 +52,7 @@ namespace ETL_SQL.Tests.Integration.Security
             // 3. Create connection using the encrypted value in options (SENSITIVE variable)
             string sql = $@"
                 DECLARE @apiKey SENSITIVE = '{encrypted}';
-                CREATE CONNECTION MySecureApi ON MOCKDB() WITH (API_KEY = @apiKey);
+                CREATE CONNECTION MySecureApi AS MOCKDB(API_KEY = @apiKey);
             ";
             
             await Execute(eval, sql);
@@ -76,7 +76,7 @@ namespace ETL_SQL.Tests.Integration.Security
             
             string encrypted = ETL_SQL.Common.CryptoUtils.Encrypt("new-secret", "test-password");
             
-            await Execute(eval, "CREATE CONNECTION MyApi ON MOCKDB() WITH (KEY = 'old');");
+            await Execute(eval, "CREATE CONNECTION MyApi AS MOCKDB();");
             await Execute(eval, $"ALTER CONNECTION MyApi WITH (KEY = '{encrypted}');");
             
             Assert.True(context.Connections.TryGetValue("MyApi", out var ds));

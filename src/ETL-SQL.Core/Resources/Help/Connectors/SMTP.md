@@ -1,8 +1,8 @@
-# SMTP
+﻿# SMTP
 Connects to an SMTP mail server for sending email. Used with SEND EMAIL operations and report subscription delivery.
 
 Syntax:
-  CREATE CONNECTION <name> ON SMTP(
+  CREATE CONNECTION <name> AS SMTP(
     HOST         = 'smtp.example.com',
     PORT         = 587,
     USERNAME     = 'user@example.com',
@@ -20,7 +20,7 @@ Options:
   DEFAULT_FROM  — default From address when not specified in SEND EMAIL
 
 ```sql
-CREATE CONNECTION MailServer ON SMTP(
+CREATE CONNECTION MailServer AS SMTP(
   HOST         = 'smtp.corp.local',
   PORT         = 587,
   USERNAME     = @smtp_user,

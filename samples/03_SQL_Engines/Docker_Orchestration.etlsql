@@ -1,4 +1,4 @@
-/* 
+﻿/* 
   Sample: Docker-based SQL Server Integration
   Demonstrates:
   - USE DOCKER for containerized SQL Server
@@ -12,7 +12,7 @@ USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest');
 
 -- 2. Define a connection using the dynamic connection string
 DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
-CREATE CONNECTION ds ON MSSQL(@conn);
+CREATE CONNECTION ds AS MSSQL(@conn);
 
 -- 3. Execute a block of ETL-SQL statements on the remote server
 -- Note: Supports omitted types (defaults to NVARCHAR(MAX))

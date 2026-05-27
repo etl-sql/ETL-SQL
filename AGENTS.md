@@ -1,4 +1,4 @@
-# ETL-SQL: AI Agent Instruction Manual
+﻿# ETL-SQL: AI Agent Instruction Manual
 
 Welcome, Agent. You are assisting in the development and operation of **ETL-SQL**, a unique hybrid engine that executes SQL-like syntax against diverse data sources (SQL, NoSQL, FlatFiles) with an emphasis on portability and "Zero-Trust" security.
 
@@ -144,15 +144,15 @@ When a user asks you to write a script, follow this decision tree:
 
 ### 5.1 Is this a simple SELECT for inspection?
 ```sql
-CREATE CONNECTION src ON MSSQL() WITH(SERVER='...', DATABASE='...', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION src AS MSSQL(SERVER='...', DATABASE='...', TRUSTED_CONNECTION=TRUE);
 SELECT TOP 100 * FROM src.dbo.MyTable WHERE Status = 'Active';
 ```
 
 ### 5.2 Is this an Extract → Transform → Load?
 Use the **staged ingestion pattern** (never write directly from source to target without staging):
 ```sql
-CREATE CONNECTION src ON POSTGRES() WITH(HOST='...', DATABASE='...', USER='...', PASSWORD='...');
-CREATE CONNECTION dest ON MSSQL() WITH(SERVER='...', DATABASE='...', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION src AS POSTGRES(HOST='...', DATABASE='...', USER='...', PASSWORD='...');
+CREATE CONNECTION dest AS MSSQL(SERVER='...', DATABASE='...', TRUSTED_CONNECTION=TRUE);
 
 BEGIN TRY
     -- 1. Extract into engine memory
@@ -333,7 +333,7 @@ For full usage and script details, refer to **[scripts/README.md](file:///c:/Use
 | Using `Logger.Instance` in C# engine code | Use injected `ILogger` from `IExecutionContext` |
 | Declaring `class` for AST nodes in C# | Use `record` types for all AST nodes |
 | Using `Firebird` as a connector token | Firebird is not a supported connector; use `ODBC` with a Firebird driver instead |
-| Writing `FROM FLATFILE` or `FROM FILE` in a `CREATE CONNECTION` | `FLATFILE` is the **connector type**; `FILE` is the **table alias** used in queries — `CREATE CONNECTION src ON FLATFILE('my.csv'); SELECT * FROM src` |
+| Writing `FROM FLATFILE` or `FROM FILE` in a `CREATE CONNECTION` | `FLATFILE` is the **connector type**; `FILE` is the **table alias** used in queries — `CREATE CONNECTION src AS FLATFILE('my.csv'); SELECT * FROM src` |
 
 ---
 

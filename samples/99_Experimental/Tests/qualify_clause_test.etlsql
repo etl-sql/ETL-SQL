@@ -1,5 +1,5 @@
--- Test QUALIFY clause
-CREATE CONNECTION src ON MOCKDB();
+﻿-- Test QUALIFY clause
+CREATE CONNECTION src AS MOCKDB();
 
 SELECT * INTO #employees FROM (
     SELECT 'Alice' as Name, 'Engineering' as Dept, 120000 as Salary

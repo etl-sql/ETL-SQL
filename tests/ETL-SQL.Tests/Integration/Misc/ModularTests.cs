@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -140,8 +140,8 @@ namespace ETL_SQL.Tests.Integration
             var res2 = eval.LastResult?.Rows.FirstOrDefault()?.Columns.Values.FirstOrDefault();
             Assert.Equal(12, Convert.ToInt32(res2));
 
-            await eval.Evaluate(new Lexer("CREATE CONNECTION TestConn ON FLATFILE('old.csv');").TokenizeToScript());
-            await eval.Evaluate(new Lexer("ALTER CONNECTION TestConn ON FLATFILE('new.csv');").TokenizeToScript());
+            await eval.Evaluate(new Lexer("CREATE CONNECTION TestConn AS FLATFILE('old.csv');").TokenizeToScript());
+            await eval.Evaluate(new Lexer("ALTER CONNECTION TestConn AS FLATFILE('new.csv');").TokenizeToScript());
             
             Assert.True(eval.Connections.ContainsKey("TestConn"), "Connection not found after ALTER");
             

@@ -1,4 +1,4 @@
-# ETL-SQL User Manual: Thinking in Pipelines
+﻿# ETL-SQL User Manual: Thinking in Pipelines
 
 Welcome to ETL-SQL. This guide is designed to help you transition from thinking in "Single Database SQL" to "Multi-Context Data Flow." Work through each section in order — each one builds on the last.
 
@@ -39,7 +39,7 @@ Save this as `first_hour.etlsql`:
 ```sql
 SET PROFILING ON;
 
-CREATE CONNECTION demo ON MOCKDB();
+CREATE CONNECTION demo AS MOCKDB();
 
 -- Extract: copy remote rows into the engine workspace.
 SELECT
@@ -85,7 +85,7 @@ This one script shows the core workflow used throughout the rest of the manual:
 
 | Step | What happened | Why it matters |
 | :--- | :--- | :--- |
-| Connect | `CREATE CONNECTION demo ON MOCKDB()` | Every source gets a named connection. |
+| Connect | `CREATE CONNECTION demo AS MOCKDB()` | Every source gets a named connection. |
 | Stage | `SELECT ... INTO #orders` | Data enters the engine workspace before transformation. |
 | Validate | `ASSERT ...` | Bad input stops the pipeline before load or delivery. |
 | Transform | `GROUP BY Region` against `#orders` | Engine-side tables let ETL-SQL apply its own functions and rules. |
@@ -136,8 +136,7 @@ Every data source is represented by a named **connection**. Create one before qu
 
 ```sql
 -- Create a connection to SQL Server using Windows auth
-CREATE CONNECTION prod ON MSSQL()
-    WITH(SERVER='sql01', DATABASE='SalesDB', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION prod AS MSSQL(SERVER='sql01', DATABASE='SalesDB', TRUSTED_CONNECTION=TRUE);
 
 -- Query it like any table
 SELECT TOP 100 * FROM prod.dbo.Customers WHERE Status = 'Active';
@@ -147,11 +146,10 @@ SELECT TOP 100 * FROM prod.dbo.Customers WHERE Status = 'Active';
 
 ```sql
 -- Structured (recommended — readable and diffable)
-CREATE CONNECTION mydb ON MSSQL()
-    WITH(SERVER='sql01', DATABASE='HR', USER='etl', PASSWORD='s3cr3t');
+CREATE CONNECTION mydb AS MSSQL(SERVER='sql01', DATABASE='HR', USER='etl', PASSWORD='s3cr3t');
 
 -- Traditional string (useful for encrypted or DSN strings)
-CREATE CONNECTION mydb ON MSSQL('Server=sql01;Database=HR;User=etl;Password=s3cr3t;');
+CREATE CONNECTION mydb AS MSSQL('Server=sql01;Database=HR;User=etl;Password=s3cr3t;');
 ```
 
 ### 2.2 Encrypting Credentials (`ENC:`)
@@ -162,7 +160,7 @@ Never commit plaintext passwords. Use the master password to encrypt connection 
 USE PASSWORD = 'myMasterSecret';
 
 -- The engine auto-decrypts ENC: strings at connection time
-CREATE CONNECTION secure_db ON MSSQL('ENC:U2FsdGVkX1+abc...');
+CREATE CONNECTION secure_db AS MSSQL('ENC:U2FsdGVkX1+abc...');
 ```
 
 > [!TIP]
@@ -187,7 +185,7 @@ BEGIN
 END
 
 USE SETS !DEV;
-CREATE CONNECTION dw ON MSSQL() WITH(SERVER=@server, DATABASE=@db, TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION dw AS MSSQL(SERVER=@server, DATABASE=@db, TRUSTED_CONNECTION=TRUE);
 ```
 
 ### 2.4 Choosing a Connector
@@ -355,7 +353,7 @@ END
 USE SETS !DEV;
 
 -- Now use the variables
-CREATE CONNECTION dw ON MSSQL() WITH(SERVER=@server, DATABASE=@database, TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION dw AS MSSQL(SERVER=@server, DATABASE=@database, TRUSTED_CONNECTION=TRUE);
 
 -- Switch to PROD (prompts for confirmation in interactive mode)
 USE SETS !PROD;
@@ -482,7 +480,7 @@ DROP TABLE IF EXISTS #staging;
 While `FILE_LIST()` is a function that returns a table, you can also mount a directory as a permanent connection. This is useful when you need to join file metadata against other databases:
 
 ```sql
-CREATE CONNECTION raw_files ON DIRECTORY('C:\Incoming\') WITH(RECURSIVE=TRUE);
+CREATE CONNECTION raw_files AS DIRECTORY('C:\Incoming\', RECURSIVE=TRUE);
 
 -- Query it like a table
 SELECT FileName, Size, LastModified
@@ -927,8 +925,7 @@ WHEN NOT MATCHED THEN
 File delivery example:
 
 ```sql
-CREATE CONNECTION out_csv ON FLATFILE('C:\Exports\customer_summary.csv')
-WITH(FORMAT='CSV', HEADER=TRUE);
+CREATE CONNECTION out_csv AS FLATFILE('C:\Exports\customer_summary.csv', FORMAT='CSV', HEADER=TRUE);
 
 INSERT INTO out_csv
 SELECT CustomerId, Revenue, LastSeen
@@ -964,7 +961,7 @@ END
 -- Copy, compress, encrypt, then transmit
 COPY FILE     @src TO @dest WITH(OVERWRITE=ON);
 COMPRESS FILE @dest TO @dest + '.gz' WITH(OVERWRITE=ON);
-ENCRYPT FILE  @dest + '.gz' TO @dest + '.enc' PASSWORD('vaultkey') WITH(OVERWRITE=ON);
+ENCRYPT FILE  @dest + '.gz' TO @dest + '.enc' PASSWORD('vaultkey', OVERWRITE=ON);
 
 -- Upload to SFTP and clean up
 SEND FILE @dest + '.enc' TO '/outbox/' AT sftp_conn;
@@ -1160,7 +1157,7 @@ SELECT * FROM #perf ORDER BY DurationMs DESC LIMIT 10;
 Use the built-in mock database for development without touching production:
 
 ```sql
-CREATE CONNECTION m ON MOCKDB();
+CREATE CONNECTION m AS MOCKDB();
 
 -- Pre-seeded tables: Users, Products, Orders, Employee, departments
 SELECT * FROM m.Users;
@@ -1347,7 +1344,7 @@ USE PASSWORD PROMPT;
 -- Convenient: Sets the password for the current session (variable masking applies)
 USE PASSWORD = 'myMasterSecret';
 
-CREATE CONNECTION db ON MSSQL() WITH(USER='me', PASSWORD='ENC:abc123...');
+CREATE CONNECTION db AS MSSQL(USER='me', PASSWORD='ENC:abc123...');
 ```
 
 ---
@@ -1399,7 +1396,7 @@ SELECT * FROM @audit;
 While `GENERATE` creates custom data, the `MOCKDB` connector provides pre-populated tables (Users, Orders, etc.) for testing standard join and aggregation logic quickly.
 
 ```sql
-CREATE CONNECTION test_src ON MOCKDB();
+CREATE CONNECTION test_src AS MOCKDB();
 SELECT * FROM test_src.Users;
 ```
 
@@ -1557,7 +1554,7 @@ trigger: $myconn
 label: My Standard Connection
 description: Company-standard database connection template
 ---
-CREATE CONNECTION «ConnName» ON MSSQL(
+CREATE CONNECTION «ConnName» AS MSSQL(
   SERVER   = '«prod-sql01.example.com»',
   DATABASE = '«database»',
   TRUSTED_CONNECTION = ON
@@ -1588,7 +1585,7 @@ Typical workflow:
 
 ```sql
 -- 1. Write and lint locally
-CREATE CONNECTION src ON MOCKDB();
+CREATE CONNECTION src AS MOCKDB();
 SELECT * INTO #users FROM src.Users;
 
 -- 2. Add validations before writes
@@ -1611,7 +1608,7 @@ Minimal report shape:
 SET REPORT TITLE = 'Sales Overview';
 SET REPORT DESCRIPTION = 'Daily revenue and order count by region';
 
-CREATE CONNECTION src ON MOCKDB();
+CREATE CONNECTION src AS MOCKDB();
 
 SELECT Region, COUNT(*) AS Orders, SUM(Total) AS Revenue
 INTO #sales

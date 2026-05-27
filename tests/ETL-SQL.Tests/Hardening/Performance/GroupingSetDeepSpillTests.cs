@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,7 +32,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             eval.JoinSpillThreshold = 10;
             eval.ExternalHashPartitions = 4;
 
-            await Execute(eval, "CREATE CONNECTION src ON MOCKDB('local');");
+            await Execute(eval, "CREATE CONNECTION src AS MOCKDB();");
 
             // CUBE(Region, ProductID) should generate 4 grouping sets: (Region, ProductID), (Region), (ProductID), ()
             string sql = @"
@@ -77,7 +77,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             
             eval.JoinSpillThreshold = 1;
 
-            await Execute(eval, "CREATE CONNECTION src ON MOCKDB('local');");
+            await Execute(eval, "CREATE CONNECTION src AS MOCKDB();");
 
             // ROLLUP(Region, ProductID, SaleID) should generate 4 grouping sets: (R,P,S), (R,P), (R), ()
             string sql = @"

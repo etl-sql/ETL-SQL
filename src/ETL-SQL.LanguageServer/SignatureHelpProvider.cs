@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -192,7 +192,7 @@ namespace ETL_SQL.LSP
 
             int activeParam = prefix.Substring(openParen + 1).Count(c => c == ',');
 
-            // 1. Connector help (CREATE CONNECTION ... ON TYPE()
+            // 1. Connector help (CREATE CONNECTION ... AS TYPE()
             if (prefix.Contains("CREATE", StringComparison.OrdinalIgnoreCase) && prefix.Contains("CONNECTION", StringComparison.OrdinalIgnoreCase))
             {
                 var regConnector = _metadata.GetConnector(funcName);

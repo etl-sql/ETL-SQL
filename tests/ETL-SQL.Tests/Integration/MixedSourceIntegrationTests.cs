@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -37,13 +37,13 @@ namespace ETL_SQL.Tests.Integration
             {
                 var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
                 string script = $@"
-                    CREATE CONNECTION json_src ON JSON('{jsonPath.Replace("\\", "/")}');
-                    CREATE CONNECTION parq_dest ON PARQUET('{parquetPath.Replace("\\", "/")}');
+                    CREATE CONNECTION json_src AS JSON('{jsonPath.Replace("\\", "/")}');
+                    CREATE CONNECTION parq_dest AS PARQUET('{parquetPath.Replace("\\", "/")}');
                     
                     -- JSON to Parquet
                     INSERT INTO parq_dest SELECT * FROM json_src;
                     
-                    CREATE CONNECTION db ON MSSQL('{ms.GetConnectionString()}');
+                    CREATE CONNECTION db AS MSSQL('{ms.GetConnectionString()}');
                     
                     EXECUTE db BEGIN
                         CREATE TABLE Users (Id INT, Name VARCHAR(100), JoinDate DATETIME);
@@ -86,8 +86,8 @@ namespace ETL_SQL.Tests.Integration
             {
                 var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
                 string script = $@"
-                    CREATE CONNECTION csv_src ON FLATFILE('{csvPath.Replace("\\", "/")}') WITH (HEADER = ON);
-                    CREATE CONNECTION db ON POSTGRES('{pg.GetConnectionString()}');
+                    CREATE CONNECTION csv_src AS FLATFILE('{csvPath.Replace("\\", "/")}', HEADER = ON);
+                    CREATE CONNECTION db AS POSTGRES('{pg.GetConnectionString()}');
                     
                     EXECUTE db BEGIN
                         CREATE TABLE categories (id INT, category VARCHAR(10), amount DECIMAL);
@@ -96,7 +96,7 @@ namespace ETL_SQL.Tests.Integration
                     -- CSV to Postgres
                     INSERT INTO db.categories SELECT CAST(id AS INT) as id, category, CAST(amount AS DECIMAL) as amount FROM csv_src;
                     
-                    CREATE CONNECTION json_dest ON JSON('{jsonOutPath.Replace("\\", "/")}');
+                    CREATE CONNECTION json_dest AS JSON('{jsonOutPath.Replace("\\", "/")}');
                     
                     -- Postgres to JSON
                     INSERT INTO json_dest SELECT * FROM db.categories;

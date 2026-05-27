@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -33,7 +33,7 @@ namespace ETL_SQL.Tests.Integration.Integration
             Assert.True(File.Exists(path), $"Missing test data: {path}");
 
             await ev.Evaluate(TestHelpers.Parse($@"
-                CREATE CONNECTION emp_json ON JSON('{path}');
+                CREATE CONNECTION emp_json AS JSON('{path}');
                 SELECT id, name, department, salary FROM emp_json;
             "));
 
@@ -51,7 +51,7 @@ namespace ETL_SQL.Tests.Integration.Integration
             Assert.True(File.Exists(path), $"Missing test data: {path}");
 
             await ev.Evaluate(TestHelpers.Parse($@"
-                CREATE CONNECTION prod_xml ON XML('{path}') WITH (ROOT = 'product');
+                CREATE CONNECTION prod_xml AS XML('{path}', ROOT = 'product');
                 SELECT id, name, category, price FROM prod_xml;
             "));
 
@@ -68,7 +68,7 @@ namespace ETL_SQL.Tests.Integration.Integration
             Assert.True(File.Exists(path), $"Missing test data: {path}");
 
             await ev.Evaluate(TestHelpers.Parse($@"
-                CREATE CONNECTION emp_xlsx ON EXCEL('{path}');
+                CREATE CONNECTION emp_xlsx AS EXCEL('{path}');
                 SELECT ID, Name, Department, Salary FROM emp_xlsx;
             "));
 
@@ -86,7 +86,7 @@ namespace ETL_SQL.Tests.Integration.Integration
             Assert.True(File.Exists(path), $"Missing test data: {path}");
 
             await ev.Evaluate(TestHelpers.Parse($@"
-                CREATE CONNECTION large_emp ON FLATFILE('{path}') WITH (HEADER = ON);
+                CREATE CONNECTION large_emp AS FLATFILE('{path}', HEADER = ON);
                 SELECT COUNT(*) AS Total FROM large_emp;
             "));
 
@@ -102,7 +102,7 @@ namespace ETL_SQL.Tests.Integration.Integration
             var path = DataFile("test_employees.json");
 
             await ev.Evaluate(TestHelpers.Parse($@"
-                CREATE CONNECTION emp_json2 ON JSON('{path}');
+                CREATE CONNECTION emp_json2 AS JSON('{path}');
                 SELECT name, salary FROM emp_json2 WHERE department = 'Engineering';
             "));
 

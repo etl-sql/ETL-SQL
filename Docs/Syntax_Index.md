@@ -623,7 +623,7 @@ Options available when creating or altering engine and report objects.
 
 ### 6.1 CREATE CONNECTION
 ```sql
-CREATE CONNECTION name ON <Provider> WITH ( ... )
+CREATE CONNECTION name AS <Provider>( ... )
 ```
 | Option | Description | Documentation |
 | :--- | :--- | :--- |

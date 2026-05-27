@@ -1,4 +1,4 @@
-# Connections
+﻿# Connections
 
 Connections link ETL-SQL to external data sources — databases, files, APIs, and protocols.
 
@@ -40,13 +40,13 @@ Connections link ETL-SQL to external data sources — databases, files, APIs, an
 - `MOCKDB`: In-memory test database
 
 ```sql
-CREATE CONNECTION SalesDB ON MSSQL(
+CREATE CONNECTION SalesDB AS MSSQL(
   SERVER             = 'sql.corp.local',
   DATABASE           = 'Sales',
   TRUSTED_CONNECTION = ON
 );
 
-CREATE CONNECTION ReportCSV ON FLATFILE(
+CREATE CONNECTION ReportCSV AS FLATFILE(
   PATH      = 'C:\reports\output.csv',
   DELIMITER = ','
 );

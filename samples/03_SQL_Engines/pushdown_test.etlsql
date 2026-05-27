@@ -1,6 +1,6 @@
--- Setup a mock connection
+﻿-- Setup a mock connection
 DROP CONNECTION IF EXISTS MyDb;
-CREATE CONNECTION MyDb ON MOCKDB();
+CREATE CONNECTION MyDb AS MOCKDB();
 
 PRINT 'Testing standalone EXECUTE INTO #RemoteUsers...';
 

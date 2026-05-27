@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -85,8 +85,8 @@ namespace ETL_SQL.Tests.Integration
             var context2 = new SuggestionContext 
             { 
                 Prefix = "t", 
-                ScriptBefore = "CREATE CONNECTION C ON FLATFILE('t",
-                FullScript = "CREATE CONNECTION C ON FLATFILE('t"
+                ScriptBefore = "CREATE CONNECTION C AS FLATFILE('t",
+                FullScript = "CREATE CONNECTION C AS FLATFILE('t"
             };
             var results2 = await engine.GetSuggestionsAsync(context2);
             // Verify path suggestions are returned

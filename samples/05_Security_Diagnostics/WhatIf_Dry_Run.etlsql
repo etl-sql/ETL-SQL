@@ -1,7 +1,7 @@
--- Sample: SET WHAT_IF
+﻿-- Sample: SET WHAT_IF
 -- Purpose: Demonstrates the dry-run mode for safe script validation.
 
-CREATE CONNECTION local_db ON MOCKDB();
+CREATE CONNECTION local_db AS MOCKDB();
 
 -- 1. Enable WHAT_IF mode
 SET WHAT_IF ON;

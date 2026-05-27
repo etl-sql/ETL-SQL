@@ -1,8 +1,8 @@
-# FTP
+﻿# FTP
 Connects to an FTP or FTPS server for file transfer operations (SEND FILE, RECEIVE FILE). Not used for SELECT/INSERT — pair it with the TRANSFER operations.
 
 Syntax:
-  CREATE CONNECTION <name> ON FTP(
+  CREATE CONNECTION <name> AS FTP(
     HOST    = 'ftp.example.com',
     PORT    = 21,
     USER    = 'username',
@@ -19,7 +19,7 @@ Options:
   PASSIVE  — use passive mode (default ON)
 
 ```sql
-CREATE CONNECTION DropzoneFTP ON FTP(
+CREATE CONNECTION DropzoneFTP AS FTP(
   HOST     = 'ftp.supplier.com',
   PORT     = 21,
   USER     = @ftp_user,

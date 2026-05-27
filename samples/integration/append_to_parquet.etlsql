@@ -1,4 +1,4 @@
--- ==============================================================================
+﻿-- ==============================================================================
 -- append_to_parquet.etlsql
 -- Reads the CSV generated in the last hour and appends it to a master Parquet file.
 -- Intended to be run hourly via Orchestrator at 5 minutes past the top of the hour.
@@ -17,10 +17,10 @@ BEGIN
 END
 
 PRINT 'Reading ' + @csv_file + '...';
-CREATE CONNECTION csv_conn ON FLATFILE(@csv_file) WITH (HEADER=ON);
+CREATE CONNECTION csv_conn AS FLATFILE(@csv_file, HEADER=ON);
 
 PRINT 'Appending to ' + @parquet_master + '...';
-CREATE CONNECTION parquet_conn ON PARQUET() WITH(PATH=@parquet_master);
+CREATE CONNECTION parquet_conn AS PARQUET(PATH=@parquet_master);
 
 -- INSERT INTO appends to the target connection if it exists, or creates it if not.
 INSERT INTO parquet_conn SELECT * FROM csv_conn;
@@ -30,7 +30,7 @@ PRINT 'Append complete.';
 
 -- 1. Create the dataset from the master Parquet file.
 -- This dataset acts as the semantic layer for the report visuals.
-CREATE OR ALTER CONNECTION parquet_conn ON PARQUET() WITH(PATH='/app/data/manufacturing_master.parquet');
+CREATE OR ALTER CONNECTION parquet_conn AS PARQUET(PATH='/app/data/manufacturing_master.parquet');
 
 CREATE OR ALTER DATASET &manufacturing_data 
     REFRESH EVERY '1h'

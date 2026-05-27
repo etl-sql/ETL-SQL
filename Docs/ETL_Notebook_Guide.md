@@ -1,4 +1,4 @@
-# ETL-SQL Notebooks (.etlnb)
+﻿# ETL-SQL Notebooks (.etlnb)
 
 ETL-SQL Notebooks provide a stateful, iterative environment for writing and running ETL-SQL cells directly inside VS Code.
 
@@ -34,7 +34,7 @@ If a cell execution fails or is cancelled inside a `BEGIN TRANSACTION`, use the 
 
 ### Cell 1: Setup Connections
 ```sql
-CREATE CONNECTION logs ON FLATFILE('C:/Data/app_logs.csv');
+CREATE CONNECTION logs AS FLATFILE('C:/Data/app_logs.csv');
 DECLARE @Threshold INT = 500;
 ```
 

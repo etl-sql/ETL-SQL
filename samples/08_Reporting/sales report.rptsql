@@ -1,8 +1,8 @@
-SET REPORT TITLE = 'Sales Dashboard';
+﻿SET REPORT TITLE = 'Sales Dashboard';
 SET REPORT DESCRIPTION = 'Regional and product-level revenue by month.';
 
 DROP CONNECTION IF EXISTS c;
-CREATE CONNECTION c ON FLATFILE('TestData/test_sales.csv');
+CREATE CONNECTION c AS FLATFILE('TestData/test_sales.csv');
 DECLARE @region varchar(200) = 'All';
 
 -- Shared base dataset (refreshed every hour)

@@ -1,4 +1,4 @@
-using ETL_SQL.Core;
+﻿using ETL_SQL.Core;
 using ETL_SQL.Engine;
 using ETL_SQL.Data;
 
@@ -51,7 +51,7 @@ namespace ETL_SQL.Tests.Statements
             try
             {
                 var script = $@"
-                    CREATE CONNECTION conn ON JSON('{jsonFile.Replace("\\", "\\\\")}');
+                    CREATE CONNECTION conn AS JSON('{jsonFile.Replace("\\", "\\\\")}');
                     CREATE TABLE #Src (Id INT, Val VARCHAR);
                     INSERT INTO #Src VALUES (1, 'A'), (2, 'B');
                     INSERT INTO conn.Data SELECT * FROM #Src;
@@ -81,7 +81,7 @@ namespace ETL_SQL.Tests.Statements
             try
             {
                 var script = $@"
-                    CREATE CONNECTION conn ON FLATFILE('{csvFile.Replace("\\", "\\\\")}') WITH (HEADER='ON');
+                    CREATE CONNECTION conn AS FLATFILE('{csvFile.Replace("\\", "\\\\")}', HEADER='ON');
                     CREATE TABLE #Src (Id INT, Val VARCHAR);
                     INSERT INTO #Src VALUES (1, 'X'), (2, 'Y'), (3, 'Z');
                     INSERT INTO conn.Data SELECT * FROM #Src;

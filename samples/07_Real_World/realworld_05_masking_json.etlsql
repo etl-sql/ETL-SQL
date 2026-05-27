@@ -1,4 +1,4 @@
-/* 
+﻿/* 
     REAL-WORLD SCENARIO 5: Dynamic Data Masking & JSON Export
     ---------------------------------------------------------
     Self contained mock.
@@ -29,7 +29,7 @@ FROM #Employees e
 INNER JOIN #Departments d ON e.DeptID = d.DeptID
 WHERE e.IsActive = 1;
 
-CREATE CONNECTION LocalJsonDump ON FLATFILE('samples/output/masked_profiles.json');
+CREATE CONNECTION LocalJsonDump AS FLATFILE('samples/output/masked_profiles.json');
 
 -- 2. Format to Enterprise JSON Spec
 SELECT 

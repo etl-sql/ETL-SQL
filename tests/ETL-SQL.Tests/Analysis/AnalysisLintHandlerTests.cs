@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -175,7 +175,7 @@ namespace ETL_SQL.Tests.Analysis.Analysis
         [Fact]
         public async Task Lint_UnusedConnection_ReturnsWarning()
         {
-            var script = "CREATE CONNECTION mydb ON MSSQL('server=localhost') WITH (DATABASE='test');";
+            var script = "CREATE CONNECTION mydb AS MSSQL('server=localhost', DATABASE='test');";
             var path = WriteScript("unused_conn.sql", script);
 
             var eval = NewEval();

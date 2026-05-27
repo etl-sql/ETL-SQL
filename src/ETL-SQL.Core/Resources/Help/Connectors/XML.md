@@ -1,8 +1,8 @@
-# XML
+﻿# XML
 Reads and writes XML files. Use ROOT_PATH to specify the XPath expression selecting the repeating element to unpack as rows.
 
 Syntax:
-  CREATE CONNECTION <name> ON XML(
+  CREATE CONNECTION <name> AS XML(
     PATH      = 'data.xml',
     ROOT_PATH = '/root/items/item',
     ENCODING  = 'UTF-8',
@@ -20,7 +20,7 @@ Options:
   PASSWORD   — passphrase for encryption
 
 ```sql
-CREATE CONNECTION OrderFeed ON XML(
+CREATE CONNECTION OrderFeed AS XML(
   PATH      = 'C:\feeds\orders.xml',
   ROOT_PATH = '/Orders/Order'
 );

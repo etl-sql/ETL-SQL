@@ -1,13 +1,13 @@
-# MOCKDB
+﻿# MOCKDB
 An in-memory test database for development and unit-testing scripts without connecting to a live database. MOCKDB accepts all DDL and DML operations and discards its data when the session ends.
 
 Syntax:
-  CREATE CONNECTION <name> ON MOCKDB();
+  CREATE CONNECTION <name> AS MOCKDB();
 
 No options are required.
 
 ```sql
-CREATE CONNECTION TestDB ON MOCKDB();
+CREATE CONNECTION TestDB AS MOCKDB();
 
 -- Create a table on the mock DB
 CREATE TABLE TestDB.dbo.Orders (

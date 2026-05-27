@@ -1,4 +1,4 @@
--- FLATFILE Kitchen Sink
+﻿-- FLATFILE Kitchen Sink
 SET WHAT_IF OFF;
 SET ALLOW_FILE_TYPE_ACCESS = '.dat';
 
@@ -9,28 +9,28 @@ INSERT INTO #sample VALUES (3, 'Charlie', 'IT', 5500.00, '2026-03-05');
 
 -- 1. Standard CSV (Comma, Header ON)
 PRINT 'Testing Standard CSV...';
-CREATE CONNECTION csv_std ON FLATFILE('samples/output/std.csv') WITH(DELIMITER=',', HEADER=ON);
+CREATE CONNECTION csv_std AS FLATFILE('samples/output/std.csv', DELIMITER=',', HEADER=ON);
 INSERT INTO csv_std.FILE SELECT * FROM #sample;
 PRINT 'Inserted ' + @@ROWCOUNT + ' rows into std.csv';
 SELECT * FROM csv_std.FILE;
 
 -- 2. Pipe-delimited, Header OFF, ANSI encoding
 PRINT 'Testing Pipe-delimited, No Header, ANSI...';
-CREATE CONNECTION pipe_no_head ON FLATFILE('samples/output/pipe.txt') WITH(DELIMITER='|', HEADER=OFF, ENCODING='ANSI');
+CREATE CONNECTION pipe_no_head AS FLATFILE('samples/output/pipe.txt', DELIMITER='|', HEADER=OFF, ENCODING='ANSI');
 INSERT INTO pipe_no_head.FILE SELECT * FROM #sample;
 PRINT 'Inserted ' + @@ROWCOUNT + ' rows into pipe.txt';
 SELECT * FROM pipe_no_head.FILE;
 
 -- 3. Tab-delimited, GZip Compressed
 PRINT 'Testing Tab-delimited, Compressed...';
-CREATE CONNECTION tab_gz ON FLATFILE('samples/output/data.tsv.gz') WITH(DELIMITER='	', COMPRESS=ON);
+CREATE CONNECTION tab_gz AS FLATFILE('samples/output/data.tsv.gz', DELIMITER='	', COMPRESS=ON);
 INSERT INTO tab_gz.FILE SELECT * FROM #sample;
 PRINT 'Inserted ' + @@ROWCOUNT + ' rows into data.tsv.gz';
 SELECT * FROM tab_gz.FILE;
 
 -- 4. Encrypted CSV
 PRINT 'Testing Encrypted CSV...';
-CREATE CONNECTION csv_enc ON FLATFILE('samples/output/secret.csv') WITH(ENCRYPT=ON, PASSWORD='super_secret_pass');
+CREATE CONNECTION csv_enc AS FLATFILE('samples/output/secret.csv', ENCRYPT=ON, PASSWORD='super_secret_pass');
 INSERT INTO csv_enc.FILE SELECT * FROM #sample;
 PRINT 'Inserted ' + @@ROWCOUNT + ' rows into secret.csv';
 SELECT * FROM csv_enc.FILE;
@@ -44,7 +44,7 @@ CREATE TABLE #FixedTemplate (
     Salary DECIMAL(10,2) /* @width: 10 */,
     JoinDate DATE      /* @width: 10 */
 );
-CREATE CONNECTION fixed_file ON FLATFILE('samples/output/fixed.dat') WITH(FORMAT='FIXED', TEMPLATE=#FixedTemplate, HEADER=OFF);
+CREATE CONNECTION fixed_file AS FLATFILE('samples/output/fixed.dat', FORMAT='FIXED', TEMPLATE=#FixedTemplate, HEADER=OFF);
 INSERT INTO fixed_file.FILE SELECT * FROM #sample;
 PRINT 'Inserted ' + @@ROWCOUNT + ' rows into fixed.dat';
 SELECT * FROM fixed_file.FILE;
@@ -52,20 +52,19 @@ SELECT * FROM fixed_file.FILE;
 -- 6. Custom Date Format, Culture, and Null mapping
 PRINT 'Testing Custom Formats and Nulls...';
 INSERT INTO #sample VALUES (4, 'Dave', 'Sales', NULL, '2026-04-10');
-CREATE CONNECTION custom_fmt ON FLATFILE('samples/output/custom.csv') 
-    WITH(DELIMITER=';', DATE_FORMAT='yyyy-MM-dd', CULTURE='de-DE', NULL_AS='EMPTY');
+CREATE CONNECTION custom_fmt AS FLATFILE('samples/output/custom.csv', DELIMITER=';', DATE_FORMAT='yyyy-MM-dd', CULTURE='de-DE', NULL_AS='EMPTY');
 INSERT INTO custom_fmt.FILE SELECT * FROM #sample;
 PRINT 'Inserted ' + @@ROWCOUNT + ' rows into custom.csv';
 SELECT * FROM custom_fmt.FILE;
 
 -- 7. Paging (START_AT, END_AT)
 PRINT 'Testing Paging...';
-CREATE CONNECTION paged ON FLATFILE('samples/output/std.csv') WITH(HEADER=ON, START_AT=2, END_AT=3);
+CREATE CONNECTION paged AS FLATFILE('samples/output/std.csv', HEADER=ON, START_AT=2, END_AT=3);
 SELECT * FROM paged.FILE;
 
 -- 8. Trim and Text Qualifier
 PRINT 'Testing Trim and Text Qualifier...';
-CREATE CONNECTION qual ON FLATFILE('samples/output/qual.csv') WITH(TEXT_QUALIFIER=DOUBLEQUOTE, TRIM=ON);
+CREATE CONNECTION qual AS FLATFILE('samples/output/qual.csv', TEXT_QUALIFIER=DOUBLEQUOTE, TRIM=ON);
 INSERT INTO qual.FILE SELECT '  LeadingSpace' AS C1, 'TrailingSpace  ' AS C2, '"WithQuotes"' AS C3;
 PRINT 'Inserted ' + @@ROWCOUNT + ' rows into qual.csv';
 SELECT * FROM qual.FILE;

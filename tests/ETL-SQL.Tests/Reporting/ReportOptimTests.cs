@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading.Tasks;
 using Xunit;
@@ -27,7 +27,7 @@ namespace ETL_SQL.Tests.Reporting
             string scriptPath = Path.Combine(Path.GetTempPath(), "test_report.rptsql");
             File.WriteAllText(scriptPath, $@"
 DECLARE @Cat = 'A';
-CREATE CONNECTION test_csv ON FLATFILE('{csvPath}');
+CREATE CONNECTION test_csv AS FLATFILE('{csvPath}');
 CREATE VISUAL AffectedVisual AS TABLE (SOURCE = 'SELECT * FROM test_csv WHERE Category = @Cat');
 CREATE VISUAL StaticVisual AS TABLE (SOURCE = 'SELECT * FROM test_csv');
 CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A B', MAP('A' = AffectedVisual, 'B' = StaticVisual));

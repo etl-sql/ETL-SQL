@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Diagnostics;
 using System.Collections.Generic;
@@ -840,7 +840,7 @@ namespace ETL_SQL.App
                     var smokeEval = Program.ServiceProvider.GetRequiredService<Evaluator>();
                     smokeEval.SecurityService.IsTestMode = true;
                     var smokeScript = new Parser(new Lexer(
-                        "CREATE CONNECTION _doctor_mock ON MOCKDB(); SELECT * FROM _doctor_mock.Users;").Tokenize()).Parse();
+                        "CREATE CONNECTION _doctor_mock AS MOCKDB(); SELECT * FROM _doctor_mock.Users;").Tokenize()).Parse();
                     await smokeEval.Evaluate(smokeScript);
                     engineDetail = $"MOCKDB query returned {smokeEval.LastResult?.Rows.Count ?? 0} row(s)";
                 }

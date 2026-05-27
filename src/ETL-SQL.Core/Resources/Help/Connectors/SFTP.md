@@ -1,8 +1,8 @@
-# SFTP
+﻿# SFTP
 Connects to an SFTP (SSH File Transfer Protocol) server for secure file transfer. Use SEND FILE and RECEIVE FILE with this connection.
 
 Syntax:
-  CREATE CONNECTION <name> ON SFTP(
+  CREATE CONNECTION <name> AS SFTP(
     HOST       = 'sftp.example.com',
     PORT       = 22,
     USER       = 'username',
@@ -20,7 +20,7 @@ Options:
   PASSPHRASE  — passphrase protecting the private key
 
 ```sql
-CREATE CONNECTION PartnerSFTP ON SFTP(
+CREATE CONNECTION PartnerSFTP AS SFTP(
   HOST    = 'sftp.partner.com',
   PORT    = 22,
   USER    = @sftp_user,

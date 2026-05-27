@@ -1,5 +1,5 @@
--- Generate test sales data using CROSS JOINs
-CREATE CONNECTION csv ON FLATFILE('c:\Users\chuck\scratch\ETL-SQL\samples/data/test_sales.csv') WITH(HEADER=TRUE);
+﻿-- Generate test sales data using CROSS JOINs
+CREATE CONNECTION csv AS FLATFILE('c:\Users\chuck\scratch\ETL-SQL\samples/data/test_sales.csv', HEADER=TRUE);
 
 CREATE TABLE #seeds (i INT);
 INSERT INTO #seeds (i) VALUES (0);

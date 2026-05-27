@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -54,7 +54,7 @@ namespace ETL_SQL.Tests.Core
         [Fact]
         public void TestParseCreateConnection()
         {
-            var source = "CREATE CONNECTION my_conn ON FLATFILE('data.csv') WITH (DELIMITER=PIPE, HEADER=ON);";
+            var source = "CREATE CONNECTION my_conn AS FLATFILE('data.csv', DELIMITER=PIPE, HEADER=ON);";
             var lexer = new Lexer(source);
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens);

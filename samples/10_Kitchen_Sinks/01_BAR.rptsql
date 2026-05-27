@@ -1,4 +1,4 @@
--- Kitchen Sink: BAR Visual
+﻿-- Kitchen Sink: BAR Visual
 -- This script demonstrates all features of the BAR visual type.
 
 SET REPORT TITLE = 'Kitchen Sink: BAR Visual';

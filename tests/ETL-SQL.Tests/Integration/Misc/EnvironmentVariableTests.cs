@@ -1,4 +1,4 @@
-using ETL_SQL.Core;
+﻿using ETL_SQL.Core;
 using ETL_SQL.Engine;
 using ETL_SQL.Data;
 
@@ -30,7 +30,7 @@ namespace ETL_SQL.Tests.Integration
 
             try
             {
-                var script = "CREATE CONNECTION conn ON JSON('${TEST_JSON_PATH}');";
+                var script = "CREATE CONNECTION conn AS JSON('${TEST_JSON_PATH}');";
                 await evaluator.Evaluate(new Lexer(script).TokenizeToScript());
 
                 Assert.True(evaluator.Connections.ContainsKey("conn"));
@@ -53,7 +53,7 @@ namespace ETL_SQL.Tests.Integration
 
             try
             {
-                var script = $@"CREATE CONNECTION conn ON FLATFILE('{csvFile.Replace("\\", "\\\\")}') WITH (HEADER='${{TEST_HEADER_OPT}}');";
+                var script = $@"CREATE CONNECTION conn AS FLATFILE('{csvFile.Replace("\\", "\\\\")}', HEADER='${{TEST_HEADER_OPT}}');";
                 await evaluator.Evaluate(new Lexer(script).TokenizeToScript());
 
                 Assert.True(evaluator.Connections.ContainsKey("conn"));
@@ -73,7 +73,7 @@ namespace ETL_SQL.Tests.Integration
             var evaluator = _serviceProvider.GetRequiredService<Evaluator>();
             
             // Assuming ${NON_EXISTENT_VAR} is not set
-            var script = "CREATE CONNECTION conn ON JSON('${NON_EXISTENT_VAR}');";
+            var script = "CREATE CONNECTION conn AS JSON('${NON_EXISTENT_VAR}');";
             await evaluator.Evaluate(new Lexer(script).TokenizeToScript());
 
             Assert.True(evaluator.Connections.ContainsKey("conn"));

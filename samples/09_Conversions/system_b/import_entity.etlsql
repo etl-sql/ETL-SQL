@@ -1,4 +1,4 @@
--- Sub-script: import_entity.etlsql
+﻿-- Sub-script: import_entity.etlsql
 -- Path: samples/conversion/import_entity.etlsql
 -- Inputs: @Topic (STRING), @FilePath (PATH)
 
@@ -8,8 +8,7 @@ DECLARE @FilePath PATH   INPUT;
 PRINT 'Ingesting ' + @Topic + ' into System B...';
 
 -- 1. Connect to the CSV file
-CREATE CONNECTION csv_source ON FLATFILE()
-    WITH(PATH = @FilePath, DELIMITER = PIPE, HEADER = ON, ENCODING = 'UTF8');
+CREATE CONNECTION csv_source AS FLATFILE(PATH = @FilePath, DELIMITER = PIPE, HEADER = ON, ENCODING = 'UTF8');
 
 -- 2. Stage data in engine memory
 SELECT * INTO #SourceData FROM csv_source.FILE;

@@ -1,4 +1,4 @@
-# Report-SQL Cookbook
+﻿# Report-SQL Cookbook
 
 A collection of copy-paste-ready dashboard recipes for ETL-SQL. Every example is **self-contained** — inline data is included so you can run it immediately and adapt it to your real source.
 
@@ -47,8 +47,7 @@ UNION ALL SELECT 'Apr', 'East',  'Widget A', 105, 12600;
 -- Shared pre-aggregated dataset (swap FLATFILE source here when using real data)
 CREATE DATASET &sales
   REFRESH EVERY '1h'
-  COMPRESS = ON
-  AS (SELECT month, region, product,
+  COMPRESS = AS AS(SELECT month, region, product,
              SUM(units)   AS units,
              SUM(revenue) AS revenue
       FROM #raw

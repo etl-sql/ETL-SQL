@@ -1,4 +1,4 @@
-CREATE CONNECTION dict ON FLATFILE('TestData/categories.csv');
+﻿CREATE CONNECTION dict AS FLATFILE('TestData/categories.csv');
 
 DECLARE @myVar VARCHAR(100) = 'Electronics';
 DECLARE @dt1 DATETIME = '20261231';

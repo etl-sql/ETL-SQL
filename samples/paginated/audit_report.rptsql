@@ -1,4 +1,4 @@
-SET REPORT TITLE = 'System Audit Journal';
+﻿SET REPORT TITLE = 'System Audit Journal';
 SET REPORT DESCRIPTION = 'Comprehensive audit trail with interactive filter panel.';
 
 -- 1. Parameters
@@ -6,7 +6,7 @@ DECLARE @start RELDATE INPUT = 'M-1';
 DECLARE @end   RELDATE INPUT = 'D';
 
 -- 2. Data Ingestion
-CREATE CONNECTION audit_src ON FLATFILE() WITH(
+CREATE CONNECTION audit_src AS FLATFILE(
     PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\paginated\audit_logs.csv',
     FORMAT = 'CSV',
     HAS_HEADER = TRUE

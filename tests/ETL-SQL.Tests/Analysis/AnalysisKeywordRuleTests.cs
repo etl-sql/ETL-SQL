@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using ETL_SQL.Core;
@@ -44,7 +44,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
         public async Task DialectKeyword_Warns_When_TOP_Used_In_Postgres_Pushdown()
         {
             var sql = @"
-CREATE CONNECTION pg_conn ON POSTGRES('Server=localhost;');
+CREATE CONNECTION pg_conn AS POSTGRES('Server=localhost;');
 EXECUTE pg_conn BEGIN
     SELECT TOP 10 id, name FROM users;
 END;";
@@ -58,7 +58,7 @@ END;";
         public async Task DialectKeyword_Warns_When_LIMIT_Used_In_SqlServer_Pushdown()
         {
             var sql = @"
-CREATE CONNECTION ss_conn ON MSSQL('Server=localhost;');
+CREATE CONNECTION ss_conn AS MSSQL('Server=localhost;');
 EXECUTE ss_conn BEGIN
     SELECT id, name FROM users LIMIT 10;
 END;";
@@ -72,7 +72,7 @@ END;";
         public async Task DialectKeyword_NoWarning_For_Valid_Postgres_Pushdown()
         {
             var sql = @"
-CREATE CONNECTION pg_conn ON POSTGRES('Server=localhost;');
+CREATE CONNECTION pg_conn AS POSTGRES('Server=localhost;');
 EXECUTE pg_conn BEGIN
     SELECT id, name FROM users LIMIT 10;
 END;";
@@ -96,7 +96,7 @@ END;";
         public async Task DialectKeyword_Warns_When_TOP_Used_In_Postgres_Select()
         {
             var sql = @"
-CREATE CONNECTION pg_conn ON POSTGRES('Server=localhost;');
+CREATE CONNECTION pg_conn AS POSTGRES('Server=localhost;');
 SELECT TOP 10 id FROM pg_conn.users;";
             var results = await Lint(sql);
             Assert.Contains(results, r => r.RuleName == "DialectKeyword"
@@ -108,7 +108,7 @@ SELECT TOP 10 id FROM pg_conn.users;";
         public async Task DialectKeyword_Warns_When_PERCENT_Used_In_Postgres_Select()
         {
             var sql = @"
-CREATE CONNECTION pg_conn ON POSTGRES('Server=localhost;');
+CREATE CONNECTION pg_conn AS POSTGRES('Server=localhost;');
 SELECT TOP 10 PERCENT id FROM pg_conn.users;";
             var results = await Lint(sql);
             Assert.Contains(results, r => r.RuleName == "DialectKeyword"
@@ -120,7 +120,7 @@ SELECT TOP 10 PERCENT id FROM pg_conn.users;";
         public async Task DialectKeyword_Warns_When_ROWNUM_Used_In_Postgres_Select()
         {
             var sql = @"
-CREATE CONNECTION pg_conn ON POSTGRES('Server=localhost;');
+CREATE CONNECTION pg_conn AS POSTGRES('Server=localhost;');
 SELECT id FROM pg_conn.users WHERE ROWNUM < 10;";
             var results = await Lint(sql);
             Assert.Contains(results, r => r.RuleName == "DialectKeyword"
@@ -132,7 +132,7 @@ SELECT id FROM pg_conn.users WHERE ROWNUM < 10;";
         public async Task DialectKeyword_Warns_When_LIMIT_Used_In_SqlServer_Select()
         {
             var sql = @"
-CREATE CONNECTION ss_conn ON MSSQL('Server=localhost;');
+CREATE CONNECTION ss_conn AS MSSQL('Server=localhost;');
 SELECT id FROM ss_conn.users LIMIT 10;";
             var results = await Lint(sql);
             Assert.Contains(results, r => r.RuleName == "DialectKeyword"
@@ -151,7 +151,7 @@ SELECT id FROM ss_conn.users LIMIT 10;";
             new ConnectorRegistry(connectors);
 
             var sql = @"
-CREATE CONNECTION ora_conn ON ORACLE('Server=localhost;');
+CREATE CONNECTION ora_conn AS ORACLE('Server=localhost;');
 SELECT id FROM ora_conn.users WHERE ROWNUM < 10;";
             var results = await Lint(sql);
             Assert.DoesNotContain(results, r => r.RuleName == "DialectKeyword");
@@ -161,7 +161,7 @@ SELECT id FROM ora_conn.users WHERE ROWNUM < 10;";
         public async Task DialectKeyword_Warns_When_ISNULL_Used_In_Postgres_Pushdown()
         {
             var sql = @"
-CREATE CONNECTION pg_conn ON POSTGRES('Server=localhost;');
+CREATE CONNECTION pg_conn AS POSTGRES('Server=localhost;');
 EXECUTE pg_conn BEGIN
     SELECT ISNULL(col, 0) FROM t;
 END;";

@@ -1,8 +1,8 @@
--- POSTGRES Kitchen Sink
+﻿-- POSTGRES Kitchen Sink
 SET WHAT_IF OFF;
 PRINT 'Starting Postgres container...';
 USE DOCKER('postgres:15-alpine') AS pg;
-CREATE CONNECTION db ON POSTGRES(pg.CONNECTION_STRING);
+CREATE CONNECTION db AS POSTGRES(pg.CONNECTION_STRING);
 
 -- 1. Basic DDL & DML
 PRINT 'Testing Postgres basic operations...';

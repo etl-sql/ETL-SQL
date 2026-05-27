@@ -1,8 +1,8 @@
-# MYSQL
+﻿# MYSQL
 Connects natively to MySQL and MariaDB using the MySqlConnector driver. Supports high-performance bulk copies, connection pooling, and SSL options.
 
 Syntax:
-  CREATE CONNECTION <name> ON MYSQL(
+  CREATE CONNECTION <name> AS MYSQL(
     HOST                       = 'localhost',
     PORT                       = 3306,
     DATABASE                   = 'dbname',
@@ -29,7 +29,7 @@ Options:
   TABLE                      — default table for unqualified SELECT/INSERT
 
 ```sql
-CREATE CONNECTION AppDB ON MYSQL(
+CREATE CONNECTION AppDB AS MYSQL(
   HOST     = 'mysql.corp.local',
   PORT     = 3306,
   DATABASE = 'app',

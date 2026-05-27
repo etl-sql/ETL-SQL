@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -31,7 +31,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             string script = @"
-                CREATE CONNECTION MyDb ON MOCKDB('mock://localhost') WITH (dialect='MSSQL');
+                CREATE CONNECTION MyDb AS MOCKDB();
                 DECLARE @id = 123;
                 EXECUTE MyDb WITH (@id) BEGIN 
                     SELECT * FROM DiagnosticTableA WHERE UserID = ?1 OR AltID = ?1
@@ -59,7 +59,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             string script = @"
-                CREATE CONNECTION MyDb ON MOCKDB('mock://localhost') WITH (dialect='MSSQL');
+                CREATE CONNECTION MyDb AS MOCKDB();
                 DECLARE @c1 ANY = 'A';
                 DECLARE @c2 ANY = 'B';
                 EXECUTE MyDb WITH (@c1, @c2) BEGIN 
@@ -84,7 +84,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             string script = @"
-                CREATE CONNECTION MyDb ON MOCKDB('mock://localhost') WITH (dialect='MSSQL');
+                CREATE CONNECTION MyDb AS MOCKDB();
                 DECLARE @cat_id ANY = 5;
                 EXECUTE (
                   'SELECT id, name FROM DiagnosticTableC WHERE category_id = ?1'

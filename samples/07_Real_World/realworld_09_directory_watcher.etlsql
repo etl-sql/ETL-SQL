@@ -1,4 +1,4 @@
-/* 
+﻿/* 
     REAL-WORLD SCENARIO 9: Event-Driven Directory Watcher
     -----------------------------------------------------
     Self-contained mock.
@@ -9,11 +9,11 @@ CREATE_DIRECTORY('samples/output/pickup/');
 CREATE_DIRECTORY('samples/output/archive/');
 
 -- Drop the mock trigger file
-CREATE CONNECTION TriggerDrop ON FLATFILE('samples/output/pickup/trigger_data.csv');
+CREATE CONNECTION TriggerDrop AS FLATFILE('samples/output/pickup/trigger_data.csv');
 INSERT INTO TriggerDrop.FILE (ID) VALUES (1);
 INSERT INTO TriggerDrop.FILE (ID) VALUES (2);
 
-CREATE CONNECTION IncomingFtpFolder ON DIRECTORY('samples/output/pickup/');
+CREATE CONNECTION IncomingFtpFolder AS DIRECTORY('samples/output/pickup/');
 DECLARE @fileFound INT = 0;
 DECLARE @iterations INT = 0;
 
@@ -34,7 +34,7 @@ BEGIN
         SET @targetName = (SELECT TOP 1 FileName FROM IncomingFtpFolder.FILE WHERE FileName LIKE 'trigger_%.csv');
 
         -- Ad-Hoc dynamic target creation using the variable
-        DECLARE @dynSql VARCHAR(1000) = 'CREATE CONNECTION Payload ON FLATFILE(''' + @targetFile + ''') WITH(HEADER=''ON'');';
+        DECLARE @dynSql VARCHAR(1000) = 'CREATE CONNECTION Payload AS FLATFILE(''' + @targetFile + ''', HEADER=''ON'');';
         EXECUTE(@dynSql);
 
         CREATE TABLE #DWStage (ID INT);

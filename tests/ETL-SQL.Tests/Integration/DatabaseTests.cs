@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -37,7 +37,7 @@ namespace ETL_SQL.Tests.Integration
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             
             // 1. Create MOCKDB connection
-            await Execute(eval, "CREATE CONNECTION MyMock ON MOCKDB('dummy_string');");
+            await Execute(eval, "CREATE CONNECTION MyMock AS MOCKDB();");
             
             // 2. Query mock table
             var sql = "SELECT UserName FROM MyMock.Users WHERE UserID = 1;";

@@ -192,7 +192,7 @@ namespace ETL_SQL.Core.Services
                 if (last.Text.Equals("CREATE", StringComparison.OrdinalIgnoreCase)) results.AddRange(new[] { "CONNECTION", "TABLE", "VIEW", "VISUAL", "PAGE", "DATASET", "STYLE", "CONTAINER", "NAVIGATION", "JOB", "DIRECTORY", "PROCEDURE", "FUNCTION", "INDEX" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
                 else if (last.Text.Equals("SHOW", StringComparison.OrdinalIgnoreCase)) results.AddRange(new[] { "DATASETS", "VIEWS", "JOBS", "JOB", "CONNECTIONS", "TABLES", "COLUMNS", "VARIABLES", "VERSION", "LINEAGE", "TAGS", "PROFILE", "ACTIVE" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
                 else if (last.Text.Equals("USE", StringComparison.OrdinalIgnoreCase)) results.AddRange(new[] { "DATASET", "DOCKER", "SETS", "PASSWORD" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
-                else if (last.Text.Equals("ON", StringComparison.OrdinalIgnoreCase) && prev2?.Text.Equals("CONNECTION", StringComparison.OrdinalIgnoreCase) == true) results.AddRange(_metadata.GetRegisteredNames().Select(c => new Suggestion(c, SuggestionType.Connection, Priority: 0)));
+                else if (last.Text.Equals("AS", StringComparison.OrdinalIgnoreCase) && prev2?.Text.Equals("CONNECTION", StringComparison.OrdinalIgnoreCase) == true) results.AddRange(_metadata.GetRegisteredNames().Select(c => new Suggestion(c, SuggestionType.Connection, Priority: 0)));
                 else if (last.Text.Equals("FROM", StringComparison.OrdinalIgnoreCase) || last.Text.Equals("JOIN", StringComparison.OrdinalIgnoreCase) || last.Text.Equals("INTO", StringComparison.OrdinalIgnoreCase) || last.Text.Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
                 {
                     var conns = _metadata.GetConnections(context.DocumentUri);
@@ -265,14 +265,32 @@ namespace ETL_SQL.Core.Services
             var results = new List<Suggestion>();
             try
             {
-                var tokens = GetLastTokens(context.ScriptBefore, 10);
-                var withIdx = tokens.FindLastIndex(t => t.Text.Equals("WITH", StringComparison.OrdinalIgnoreCase));
-                if (withIdx < 0) return results;
+                var tokens = GetLastTokens(context.ScriptBefore, 12);
+                string? connectorType = null;
 
-                var onIdx = tokens.FindLastIndex(t => t.Text.Equals("ON", StringComparison.OrdinalIgnoreCase));
-                if (onIdx < 0 || onIdx > withIdx) return results;
+                // New syntax: CREATE/ALTER CONNECTION name AS TYPE(target?, opts...)
+                var asIdx = tokens.FindLastIndex(t => t.Text.Equals("AS", StringComparison.OrdinalIgnoreCase));
+                if (asIdx >= 0 && asIdx + 2 < tokens.Count && tokens[asIdx + 2].Text == "(")
+                {
+                    bool hasConnectionBefore = tokens.Take(asIdx).Any(t => t.Text.Equals("CONNECTION", StringComparison.OrdinalIgnoreCase));
+                    if (hasConnectionBefore)
+                        connectorType = tokens[asIdx + 1].Text;
+                }
 
-                var connectorType = tokens[onIdx + 1].Text;
+                // Legacy syntax: ON TYPE ... WITH (opts)
+                if (connectorType == null)
+                {
+                    var withIdx = tokens.FindLastIndex(t => t.Text.Equals("WITH", StringComparison.OrdinalIgnoreCase));
+                    if (withIdx >= 0)
+                    {
+                        var onIdx = tokens.FindLastIndex(t => t.Text.Equals("ON", StringComparison.OrdinalIgnoreCase));
+                        if (onIdx >= 0 && onIdx < withIdx && onIdx + 1 < tokens.Count)
+                            connectorType = tokens[onIdx + 1].Text;
+                    }
+                }
+
+                if (connectorType == null) return results;
+
                 var connector = _metadata.GetConnector(connectorType);
                 if (connector == null) return results;
                 var options = connector.GetSupportedOptions();

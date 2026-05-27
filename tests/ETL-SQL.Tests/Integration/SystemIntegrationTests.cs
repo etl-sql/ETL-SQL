@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using ETL_SQL.Engine;
 using ETL_SQL.Data;
 
@@ -33,7 +33,7 @@ namespace ETL_SQL.Tests.Integration
             var evaluator = CreateEvaluator();
             
             // 1. Create connection
-            await evaluator.Evaluate(Parse("CREATE CONNECTION m ON MOCKDB();"));
+            await evaluator.Evaluate(Parse("CREATE CONNECTION m AS MOCKDB();"));
             
             Assert.True(evaluator.Connections.ContainsKey("m"), "Connection 'm' should be registered");
             
@@ -65,7 +65,7 @@ namespace ETL_SQL.Tests.Integration
             try
             {
                 // 1. Create connection
-                await evaluator.Evaluate(Parse($"CREATE CONNECTION c ON FLATFILE('{testCsv.Replace("\\", "/")}');"));
+                await evaluator.Evaluate(Parse($"CREATE CONNECTION c AS FLATFILE('{testCsv.Replace("\\", "/")}');"));
                 
                 Assert.True(evaluator.Connections.ContainsKey("c"), "Connection 'c' should be registered");
                 
@@ -103,10 +103,10 @@ namespace ETL_SQL.Tests.Integration
         public async Task TestMultipleConnectionsInOneScript()
         {
             var sql = @"
-CREATE CONNECTION c ON FLATFILE('categories.csv');
+CREATE CONNECTION c AS FLATFILE('categories.csv');
 SELECT c.id FROM c;
 
-CREATE CONNECTION m ON MOCKDB();
+CREATE CONNECTION m AS MOCKDB();
 SELECT * FROM m.Users;
 ";
             var script = Parse(sql);

@@ -1,4 +1,4 @@
-# ETL-SQL Data Connectors: Reference & Guide
+﻿# ETL-SQL Data Connectors: Reference & Guide
 
 Connectors define how the ETL-SQL engine interacts with external data sources. This document provides complete option references and instructional examples for every supported connector type.
 
@@ -11,17 +11,23 @@ Every connector supports two equivalent syntaxes. Use whichever is easiest to re
 ### 1.1 Traditional (String-based)
 The connection string is the primary argument. Ideal for native driver DSNs or encrypted (`ENC:…`) secrets.
 ```sql
-CREATE CONNECTION <name> ON <type>('<connection_string>') [WITH(<options>)];
+CREATE CONNECTION <name> AS <type>('<connection_string>');
 ```
 
 ### 1.2 Structured (Property-based)
-All parameters are passed explicitly inside `WITH()`. Recommended for readability and AI-assisted authoring.
+All parameters are passed explicitly as named options. Recommended for readability and AI-assisted authoring.
 ```sql
-CREATE CONNECTION <name> ON <type>() WITH(<properties>, <options>);
+CREATE CONNECTION <name> AS <type>(<property>=<value>, ...);
+```
+
+### 1.3 Mixed (String + extra options)
+When the connector accepts a primary connection string plus additional settings:
+```sql
+CREATE CONNECTION <name> AS <type>('<connection_string>', <option>=<value>, ...);
 ```
 
 > [!TIP]
-> Both forms produce identical results. Mix them on a per-connection basis; there is no performance difference.
+> All forms produce identical results. Mix them on a per-connection basis; there is no performance difference.
 
 ### 1.3 Encrypted Connection Strings (`ENC:`)
 Sensitive connection strings can be encrypted using the engine's master password. The engine detects the `ENC:` prefix automatically and decrypts the string before connecting.
@@ -31,7 +37,7 @@ Sensitive connection strings can be encrypted using the engine's master password
 USE PASSWORD = 'myMasterSecret';
 
 -- The engine will decrypt this at connection time
-CREATE CONNECTION secure_db ON MSSQL('ENC:U2FsdGVkX1+...');
+CREATE CONNECTION secure_db AS MSSQL('ENC:U2FsdGVkX1+...');
 ```
 
 > [!IMPORTANT]
@@ -69,15 +75,13 @@ Aliases: `SQL`, `SQLSERVER`
 *Examples:*
 ```sql
 -- Standard SQL authentication
-CREATE CONNECTION m_sales ON MSSQL()
-    WITH(SERVER='sql01', DATABASE='SalesDB', USER='etl_worker', PASSWORD='s3cr3t');
+CREATE CONNECTION m_sales AS MSSQL(SERVER='sql01', DATABASE='SalesDB', USER='etl_worker', PASSWORD='s3cr3t');
 
 -- Windows Integrated Security (traditional string)
-CREATE CONNECTION m_hr ON MSSQL('Server=sql01;Database=HR;Trusted_Connection=True;');
+CREATE CONNECTION m_hr AS MSSQL('Server=sql01;Database=HR;Trusted_Connection=True;');
 
 -- Read-only replica with SSL
-CREATE CONNECTION m_ro ON MSSQL()
-    WITH(SERVER='sql01', DATABASE='DW', TRUSTED_CONNECTION=TRUE,
+CREATE CONNECTION m_ro AS MSSQL(SERVER='sql01', DATABASE='DW', TRUSTED_CONNECTION=TRUE,
          APPLICATION_INTENT=READONLY, USE_SSL=TRUE, TRUST_SERVER_CERTIFICATE=TRUE);
 ```
 
@@ -104,11 +108,10 @@ Aliases: `NPSQL`, `PG`
 *Examples:*
 ```sql
 -- Structured
-CREATE CONNECTION pg_db ON POSTGRES()
-    WITH(HOST='10.0.0.5', PORT=5432, DATABASE='inventory', USER='admin', PASSWORD='s3cr3t');
+CREATE CONNECTION pg_db AS POSTGRES(HOST='10.0.0.5', PORT=5432, DATABASE='inventory', USER='admin', PASSWORD='s3cr3t');
 
 -- Traditional string
-CREATE CONNECTION pg_legacy ON POSTGRES('Host=localhost;Database=mydb;Username=etl;Password=pass');
+CREATE CONNECTION pg_legacy AS POSTGRES('Host=localhost;Database=mydb;Username=etl;Password=pass');
 ```
 
 ---
@@ -137,11 +140,10 @@ Native connector for MySQL and MariaDB databases. Supports full SQL pushdown, sc
 *Examples:*
 ```sql
 -- Structured property connection
-CREATE CONNECTION mysql_db ON MYSQL()
-    WITH(HOST='127.0.0.1', PORT=3306, DATABASE='inventory', USER='etl_user', PASSWORD='s3cr3t', ALLOW_PUBLIC_KEY_RETRIEVAL=TRUE);
+CREATE CONNECTION mysql_db AS MYSQL(HOST='127.0.0.1', PORT=3306, DATABASE='inventory', USER='etl_user', PASSWORD='s3cr3t', ALLOW_PUBLIC_KEY_RETRIEVAL=TRUE);
 
 -- Traditional connection string
-CREATE CONNECTION mysql_legacy ON MYSQL('Server=localhost;Database=mydb;Uid=etl;Pwd=pass;AllowUserVariables=True;');
+CREATE CONNECTION mysql_legacy AS MYSQL('Server=localhost;Database=mydb;Uid=etl;Pwd=pass;AllowUserVariables=True;');
 ```
 
 **Supported MySQL-specific SQL:**
@@ -183,11 +185,10 @@ Oracle supports two patterns: **Service Name** (for direct connection) and **TNS
 *Examples:*
 ```sql
 -- Service Name pattern (structured)
-CREATE CONNECTION o_dev ON ORACLE()
-    WITH(HOST='oradb.local', PORT=1521, SERVICE_NAME='ORCL', USER='app_user', PASSWORD='pwd');
+CREATE CONNECTION o_dev AS ORACLE(HOST='oradb.local', PORT=1521, SERVICE_NAME='ORCL', USER='app_user', PASSWORD='pwd');
 
 -- TNS Name pattern (traditional)
-CREATE CONNECTION o_prod ON ORACLE('Data Source=MyTNS;User Id=app_user;Password=pwd;');
+CREATE CONNECTION o_prod AS ORACLE('Data Source=MyTNS;User Id=app_user;Password=pwd;');
 ```
 
 ---
@@ -212,11 +213,10 @@ Universal bridge for any source with a local ODBC driver. Supports both DSN-base
 *Examples:*
 ```sql
 -- DSN pattern
-CREATE CONNECTION odbc_prod ON ODBC() WITH(DSN='ProdSales', UID='etl', PWD='pwd');
+CREATE CONNECTION odbc_prod AS ODBC(DSN='ProdSales', UID='etl', PWD='pwd');
 
 -- DSN-less SQLite
-CREATE CONNECTION my_sqlite ON ODBC()
-    WITH(DRIVER='{SQLite3 ODBC Driver}', DATABASE='C:\Data\local.db');
+CREATE CONNECTION my_sqlite AS ODBC(DRIVER='{SQLite3 ODBC Driver}', DATABASE='C:\Data\local.db');
 ```
 
 #### Data Warehouses via ODBC
@@ -236,24 +236,21 @@ The following platforms are supported through the ODBC bridge. Each requires the
 *Connection string examples:*
 ```sql
 -- Amazon Redshift (DSN-less)
-CREATE CONNECTION redshift ON ODBC()
-    WITH(DRIVER='{Amazon Redshift ODBC Driver (x64)}',
+CREATE CONNECTION redshift AS ODBC(DRIVER='{Amazon Redshift ODBC Driver (x64)}',
          SERVER='mycluster.abc123.us-east-1.redshift.amazonaws.com',
          PORT='5439', DATABASE='analytics',
          UID='etl_user', PWD='${REDSHIFT_PASSWORD}',
          TIMEOUT_SECONDS='1800');
 
 -- Azure Synapse Analytics (uses SQL Server ODBC driver)
-CREATE CONNECTION synapse ON ODBC()
-    WITH(DRIVER='{ODBC Driver 18 for SQL Server}',
+CREATE CONNECTION synapse AS ODBC(DRIVER='{ODBC Driver 18 for SQL Server}',
          SERVER='myworkspace.sql.azuresynapse.net',
          DATABASE='AnalyticsDB',
          UID='sqladmin', PWD='${SYNAPSE_PASSWORD}',
          TIMEOUT_SECONDS='1800');
 
 -- Databricks (personal access token auth)
-CREATE CONNECTION databricks ON ODBC()
-    WITH(DRIVER='{Simba Spark ODBC Driver}',
+CREATE CONNECTION databricks AS ODBC(DRIVER='{Simba Spark ODBC Driver}',
          SERVER='adb-1234567890.1.azuredatabricks.net',
          PORT='443',
          HTTPPath='/sql/1.0/warehouses/abcdef123456',
@@ -261,15 +258,13 @@ CREATE CONNECTION databricks ON ODBC()
          SSL='1', TIMEOUT_SECONDS='1800');
 
 -- Trino / Starburst
-CREATE CONNECTION trino ON ODBC()
-    WITH(DRIVER='{Starburst ODBC Driver}',
+CREATE CONNECTION trino AS ODBC(DRIVER='{Starburst ODBC Driver}',
          SERVER='trino.internal.example.com', PORT='8443',
          DATABASE='analytics', UID='etl', PWD='${TRINO_PASSWORD}',
          TIMEOUT_SECONDS='1800');
 
 -- Dremio
-CREATE CONNECTION dremio ON ODBC()
-    WITH(DRIVER='{Dremio ODBC Driver 64-bit}',
+CREATE CONNECTION dremio AS ODBC(DRIVER='{Dremio ODBC Driver 64-bit}',
          SERVER='dremio.internal.example.com', PORT='31010',
          UID='etl', PWD='${DREMIO_PASSWORD}',
          TIMEOUT_SECONDS='1800');
@@ -303,13 +298,11 @@ Native connector for Snowflake Cloud Data Platform. Supports full SQL pushdown, 
 *Examples:*
 ```sql
 -- Username + password
-CREATE CONNECTION sf ON SNOWFLAKE()
-    WITH(HOST='myorg-myaccount', USERNAME='etl_user', PASSWORD='s3cr3t',
+CREATE CONNECTION sf AS SNOWFLAKE(HOST='myorg-myaccount', USERNAME='etl_user', PASSWORD='s3cr3t',
          DATABASE='PROD', SCHEMA='STAGING', WAREHOUSE='LOAD_WH');
 
 -- Private-key JWT (recommended for production)
-CREATE CONNECTION sf ON SNOWFLAKE()
-    WITH(HOST='myorg-myaccount.snowflakecomputing.com',
+CREATE CONNECTION sf AS SNOWFLAKE(HOST='myorg-myaccount.snowflakecomputing.com',
          USERNAME='etl_user',
          PRIVATE_KEY_FILE='/etc/certs/snowflake_rsa_key.p8',
          DATABASE='ANALYTICS', WAREHOUSE='TRANSFORM_WH');
@@ -361,13 +354,11 @@ Native connector for Google BigQuery. Uses the BigQuery REST API (not ADO.NET). 
 *Examples:*
 ```sql
 -- Service-account auth with a fixed dataset
-CREATE CONNECTION bq ON BIGQUERY()
-    WITH(PROJECT_ID='my-gcp-project', DATASET='analytics',
+CREATE CONNECTION bq AS BIGQUERY(PROJECT_ID='my-gcp-project', DATASET='analytics',
          CREDENTIAL_FILE='/etc/sa/bigquery-sa.json', LOCATION='US');
 
 -- ADC (workload identity / developer machine)
-CREATE CONNECTION bq ON BIGQUERY()
-    WITH(PROJECT_ID='my-gcp-project', DATASET='analytics');
+CREATE CONNECTION bq AS BIGQUERY(PROJECT_ID='my-gcp-project', DATASET='analytics');
 
 -- SQL pushdown — BigQuery Standard SQL sent directly
 SELECT account_id, SUM(revenue) AS total
@@ -442,20 +433,16 @@ Querying a `FLATFILE` connection via `SELECT` the table name is `FILE` and the c
 *Examples:*
 ```sql
 -- Pipe-delimited with explicit encoding
-CREATE CONNECTION csv_in ON FLATFILE()
-    WITH(PATH='C:\Data\employees.csv', HEADER=ON, DELIMITER=PIPE, ENCODING=UTF8);
+CREATE CONNECTION csv_in AS FLATFILE(PATH='C:\Data\employees.csv', HEADER=ON, DELIMITER=PIPE, ENCODING=UTF8);
 
 -- Encrypted and GZip-compressed
-CREATE CONNECTION secure_file ON FLATFILE('C:\Data\payroll.csv.gz')
-    WITH(COMPRESS=ON, ENCRYPT=ON, PASSWORD='s3cr3t');
+CREATE CONNECTION secure_file AS FLATFILE('C:\Data\payroll.csv.gz', COMPRESS=ON, ENCRYPT=ON, PASSWORD='s3cr3t');
 
 -- European locale with semicolon delimiter and custom date format
-CREATE CONNECTION eu_data ON FLATFILE('C:\Data\german_sales.csv')
-    WITH(DELIMITER=SEMICOLON, CULTURE='de-DE', DATE_FORMAT='dd.MM.yyyy');
+CREATE CONNECTION eu_data AS FLATFILE('C:\Data\german_sales.csv', DELIMITER=SEMICOLON, CULTURE='de-DE', DATE_FORMAT='dd.MM.yyyy');
 
 -- Skip header and first 2 data rows, stop at row 1000
-CREATE CONNECTION paged ON FLATFILE('C:\Data\big.csv')
-    WITH(HEADER=ON, START_AT=3, END_AT=1000);
+CREATE CONNECTION paged AS FLATFILE('C:\Data\big.csv', HEADER=ON, START_AT=3, END_AT=1000);
 ```
 
 #### Fixed-Width Files
@@ -476,8 +463,7 @@ CREATE TABLE #EmpLayout (
 );
 
 -- 2. Create the connection
-CREATE CONNECTION fixed_emp ON FLATFILE('employees.dat')
-    WITH(FORMAT='FIXED', TEMPLATE=#EmpLayout, HEADER=OFF, TRIM=ON);
+CREATE CONNECTION fixed_emp AS FLATFILE('employees.dat', FORMAT='FIXED', TEMPLATE=#EmpLayout, HEADER=OFF, TRIM=ON);
 
 -- 3. Query as normal
 SELECT * FROM fixed_emp;
@@ -511,12 +497,10 @@ Querying a `EXCEL` connection via `SELECT` the table name is `FILE` and the colu
 *Examples:*
 ```sql
 -- Specific sheet and range
-CREATE CONNECTION xl_src ON EXCEL('C:\Reports\Q4.xlsx')
-    WITH(SHEET='Summary', HEADER=ON, RANGE='A1:F500');
+CREATE CONNECTION xl_src AS EXCEL('C:\Reports\Q4.xlsx', SHEET='Summary', HEADER=ON, RANGE='A1:F500');
 
 -- Write an encrypted workbook
-CREATE CONNECTION xl_out ON EXCEL()
-    WITH(PATH='C:\Secure\payroll.xlsx', ENCRYPT=ON, PASSWORD='safe_pass');
+CREATE CONNECTION xl_out AS EXCEL(PATH='C:\Secure\payroll.xlsx', ENCRYPT=ON, PASSWORD='safe_pass');
 ```
 
 ---
@@ -541,10 +525,10 @@ Querying a `JSON` connection via `SELECT` the table name is `FILE`.
 *Examples:*
 ```sql
 -- Drill into a nested array
-CREATE CONNECTION json_src ON JSON('C:\Data\orders.json') WITH(ROOT_PATH='$.data.orders');
+CREATE CONNECTION json_src AS JSON('C:\Data\orders.json', ROOT_PATH='$.data.orders');
 
 -- Compressed JSON
-CREATE CONNECTION json_gz ON JSON() WITH(PATH='C:\Data\events.json.gz', COMPRESS=ON);
+CREATE CONNECTION json_gz AS JSON(PATH='C:\Data\events.json.gz', COMPRESS=ON);
 ```
 
 ---
@@ -569,11 +553,10 @@ Querying a `XML` connection via `SELECT` the table name is `FILE`.
 *Examples:*
 ```sql
 -- XPath root selector
-CREATE CONNECTION xml_src ON XML('C:\Data\catalog.xml') WITH(ROOT_PATH='/Catalog/Product');
+CREATE CONNECTION xml_src AS XML('C:\Data\catalog.xml', ROOT_PATH='/Catalog/Product');
 
 -- Encrypted XML archive
-CREATE CONNECTION xml_vault ON XML()
-    WITH(PATH='C:\Vault\archive.xml', ENCRYPT=ON, PASSWORD='vault_pass');
+CREATE CONNECTION xml_vault AS XML(PATH='C:\Vault\archive.xml', ENCRYPT=ON, PASSWORD='vault_pass');
 ```
 
 ---
@@ -594,10 +577,10 @@ Apache Parquet columnar format. Ideal for high-throughput analytics and interope
 *Examples:*
 ```sql
 -- Write a Snappy-compressed Parquet file (default)
-CREATE CONNECTION pq_out ON PARQUET() WITH(PATH='C:\Data\output.parquet');
+CREATE CONNECTION pq_out AS PARQUET(PATH='C:\Data\output.parquet');
 
 -- Maximum compression for archival
-CREATE CONNECTION pq_archive ON PARQUET('C:\Archive\data.parquet') WITH(COMPRESSION=ZSTD);
+CREATE CONNECTION pq_archive AS PARQUET('C:\Archive\data.parquet', COMPRESSION=ZSTD);
 ```
 
 ---
@@ -618,8 +601,7 @@ Apache Avro format. Schema is embedded within the file. Optionally reference an 
 *Examples:*
 ```sql
 -- Read Avro with an external schema definition
-CREATE CONNECTION avro_src ON AVRO('C:\Data\events.avro')
-    WITH(SCHEMA_FILE='C:\Schemas\events.avsc');
+CREATE CONNECTION avro_src AS AVRO('C:\Data\events.avro', SCHEMA_FILE='C:\Schemas\events.avsc');
 ```
 
 ### 3.7 Local Directory (`DIRECTORY`)
@@ -632,7 +614,7 @@ Treats a local filesystem folder as a data source for file management operations
 
 *Examples:*
 ```sql
-CREATE CONNECTION data_dir ON DIRECTORY('C:\Data\Incoming') WITH(CREATE=ON);
+CREATE CONNECTION data_dir AS DIRECTORY('C:\Data\Incoming', CREATE=ON);
 
 -- List all files in the directory as a result set
 SELECT FileName, Size, LastModified FROM data_dir;
@@ -672,12 +654,10 @@ Secure File Transfer Protocol over SSH. Supports password and key-pair authentic
 *Examples:*
 ```sql
 -- Password authentication
-CREATE CONNECTION sftp_pwd ON SFTP()
-    WITH(HOST='sftp.example.com', USER='admin', PASSWORD='s3cr3t');
+CREATE CONNECTION sftp_pwd AS SFTP(HOST='sftp.example.com', USER='admin', PASSWORD='s3cr3t');
 
 -- Key-pair authentication (recommended for production)
-CREATE CONNECTION sftp_key ON SFTP('sftp.example.com')
-    WITH(USER='deploy', KEYFILE='/home/etl/.ssh/id_rsa', PASSPHRASE='keypass');
+CREATE CONNECTION sftp_key AS SFTP('sftp.example.com', USER='deploy', KEYFILE='/home/etl/.ssh/id_rsa', PASSPHRASE='keypass');
 ```
 
 ---
@@ -700,10 +680,10 @@ Legacy File Transfer Protocol. Supports active and passive mode depending on the
 *Examples:*
 ```sql
 -- Structured
-CREATE CONNECTION ftp_src ON FTP() WITH(HOST='ftp.example.com', USER='ftpuser', PASSWORD='ftppass');
+CREATE CONNECTION ftp_src AS FTP(HOST='ftp.example.com', USER='ftpuser', PASSWORD='ftppass');
 
 -- Traditional
-CREATE CONNECTION ftp_legacy ON FTP('ftp.example.com') WITH(USER='ftpuser', PASSWORD='ftppass');
+CREATE CONNECTION ftp_legacy AS FTP('ftp.example.com', USER='ftpuser', PASSWORD='ftppass');
 ```
 
 ---
@@ -725,12 +705,10 @@ Cloud storage connector for reading and writing files in Azure Blob Storage cont
 *Examples:*
 ```sql
 -- Full connection string (SAS or AccountKey)
-CREATE CONNECTION cloud ON AZURE_BLOB('DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=abc...')
-    WITH(CONTAINER='backup-archive');
+CREATE CONNECTION cloud AS AZURE_BLOB('DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=abc...', CONTAINER='backup-archive');
 
 -- Structured with account credentials
-CREATE CONNECTION cloud_struct ON AZURE_BLOB()
-    WITH(ACCOUNT_NAME='myaccount', ACCOUNT_KEY='abc...', CONTAINER='raw-data');
+CREATE CONNECTION cloud_struct AS AZURE_BLOB(ACCOUNT_NAME='myaccount', ACCOUNT_KEY='abc...', CONTAINER='raw-data');
 ```
 
 ---
@@ -757,35 +735,30 @@ Universal connector for web services and REST APIs returning JSON data.
 *Examples:*
 ```sql
 -- Public GitHub API — array is the root response
-CREATE CONNECTION github_issues ON API()
-    WITH(URL='https://api.github.com/repos/microsoft/terminal/issues', ROOT_PATH='$');
+CREATE CONNECTION github_issues AS API(URL='https://api.github.com/repos/microsoft/terminal/issues', ROOT_PATH='$');
 
 SELECT title, created_at FROM github_issues;
 
 -- Bearer token authentication
-CREATE CONNECTION my_api ON API()
-    WITH(URL='https://api.example.com/v1/customers',
+CREATE CONNECTION my_api AS API(URL='https://api.example.com/v1/customers',
          AUTH_TYPE='BEARER',
          TOKEN='sk_live_abc123');
 
 -- APIKEY header auth
-CREATE CONNECTION weather ON API()
-    WITH(URL='https://api.weather.com/data',
+CREATE CONNECTION weather AS API(URL='https://api.weather.com/data',
          AUTH_TYPE='APIKEY',
          TOKEN='my_api_key_value',
          HEADER_NAME='X-API-Key');
 
 -- POST with a JSON body
-CREATE CONNECTION submit ON API()
-    WITH(URL='https://api.example.com/events',
+CREATE CONNECTION submit AS API(URL='https://api.example.com/events',
          METHOD='POST',
          AUTH_TYPE='BEARER',
          TOKEN='tok_live_xyz',
          BODY='{"type":"etl_run","status":"complete"}');
 
 -- Paginated API with OFFSET-style paging
-CREATE CONNECTION pages ON API()
-    WITH(URL='https://api.example.com/records',
+CREATE CONNECTION pages AS API(URL='https://api.example.com/records',
          ROOT_PATH='$.data',
          PAG_TYPE='OFFSET',
          PAG_LIMIT=100);
@@ -809,8 +782,7 @@ Outbound-only email connector used with the `SEND EMAIL` statement.
 *Examples:*
 ```sql
 -- Gmail with TLS
-CREATE CONNECTION mailer ON SMTP('smtp.gmail.com')
-    WITH(PORT=587, USERNAME='alerts@example.com', PASSWORD='apppassword',
+CREATE CONNECTION mailer AS SMTP('smtp.gmail.com', PORT=587, USERNAME='alerts@example.com', PASSWORD='apppassword',
          USE_SSL=TRUE, DEFAULT_FROM='alerts@example.com');
 
 SEND EMAIL
@@ -829,7 +801,7 @@ SEND EMAIL
 ETL-SQL provides a built-in, zero-configuration in-memory database for script development and testing. No credentials, no server, no configuration required.
 
 ```sql
-CREATE CONNECTION <name> ON MOCKDB();
+CREATE CONNECTION <name> AS MOCKDB();
 ```
 
 ### Pre-populated Tables
@@ -846,7 +818,7 @@ All tables are pre-seeded with sample rows. `INSERT`, `UPDATE`, and `DELETE` ope
 
 *Example:*
 ```sql
-CREATE CONNECTION m ON MOCKDB();
+CREATE CONNECTION m AS MOCKDB();
 
 SELECT u.UserName, o.Total
 INTO #UserOrders
@@ -872,7 +844,7 @@ Sets the master password for the current session used to decrypt `ENC:` connecti
 
 ```sql
 USE PASSWORD = 'myMasterSecret';
-CREATE CONNECTION db ON MSSQL('ENC:U2FsdGVkX1+...');
+CREATE CONNECTION db AS MSSQL('ENC:U2FsdGVkX1+...');
 ```
 
 > [!NOTE]
@@ -934,8 +906,7 @@ ALTER CONNECTION remote_srv WITH(PASSWORD='new_rotated_password');
 Upserts a connection. If it exists, it is completely rebuilt with only the new options provided (previous options are NOT preserved).
 
 ```sql
-CREATE OR ALTER CONNECTION remote_srv ON MSSQL('Server=db;Database=DW;')
-    WITH(TABLE='dbo.Config');
+CREATE OR ALTER CONNECTION remote_srv AS MSSQL('Server=db;Database=DW;', TABLE='dbo.Config');
 ```
 
 ### 7.4 `SHOW CONNECTIONS`
@@ -973,8 +944,7 @@ Connects to an ETL-SQL Report Portal service for scripted administration: user/g
 | `PASSWORD` | Portal admin password (use `ENC:` in production) | Yes |
 
 ```sql
-CREATE CONNECTION portal ON REPORTPORTAL()
-    WITH(HOST     = 'http://portal.corp.example:5000',
+CREATE CONNECTION portal AS REPORTPORTAL(HOST     = 'http://portal.corp.example:5000',
          USER     = 'admin',
          PASSWORD = ENC:U2FsdGVkX1+...);
 
@@ -1038,8 +1008,7 @@ Connects to an ETL-SQL Orchestrator service for remote job management via API ke
 | `API_KEY` | Orchestrator API key (use `ENC:` in production) | No |
 
 ```sql
-CREATE CONNECTION orch ON ORCHESTRATOR()
-    WITH(HOST    = 'http://orchestrator.corp.example:5001',
+CREATE CONNECTION orch AS ORCHESTRATOR(HOST    = 'http://orchestrator.corp.example:5001',
          API_KEY = ENC:U2FsdGVkX1+...);
 
 EXECUTE orch BEGIN

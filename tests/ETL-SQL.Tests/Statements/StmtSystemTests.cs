@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -106,7 +106,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             eval.RedirectOutput = true; // mirrors TUI ConsoleEditor
 
             var script = TestHelpers.Parse(@"
-                CREATE CONNECTION m ON MOCKDB();
+                CREATE CONNECTION m AS MOCKDB();
                 SELECT * FROM m.Users;
                 SHOW PROFILE;
             ");

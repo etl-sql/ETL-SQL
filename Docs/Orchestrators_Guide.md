@@ -1,4 +1,4 @@
-# ETL-SQL Orchestrator's Guide
+﻿# ETL-SQL Orchestrator's Guide
 
 **Audience:** Operators, data engineers, and pipeline administrators who need to schedule, run, and monitor ETL-SQL jobs from the command line.
 
@@ -140,7 +140,7 @@ ETL-SQL encrypt "Server=prod-sql;Database=DW;User Id=sa;Password=S3cr3t!" --pass
 # Encrypted: ENC:U2FsdGVkX1+...
 
 # Use in a script:
-# CREATE CONNECTION prod ON MSSQL('ENC:U2FsdGVkX1+...') WITH(TRUSTED_CONNECTION=FALSE);
+# CREATE CONNECTION prod AS MSSQL('ENC:U2FsdGVkX1+...', TRUSTED_CONNECTION=FALSE);
 ```
 
 > [!IMPORTANT]

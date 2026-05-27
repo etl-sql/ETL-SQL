@@ -1,4 +1,4 @@
--- PARQUET Kitchen Sink
+﻿-- PARQUET Kitchen Sink
 SET WHAT_IF OFF;
 
 -- Data prep
@@ -7,21 +7,21 @@ INSERT INTO #samples VALUES (2, 'Bob', 6000.00);
 
 -- 1. Default (Snappy)
 PRINT 'Testing Parquet (Default Snappy)...';
-CREATE CONNECTION pq_std ON PARQUET('samples/output/std.parquet');
+CREATE CONNECTION pq_std AS PARQUET('samples/output/std.parquet');
 INSERT INTO pq_std.FILE SELECT * FROM #samples;
 PRINT 'Inserted into std.parquet';
 SELECT * FROM pq_std.FILE;
 
 -- 2. GZip Compression
 PRINT 'Testing Parquet (GZip)...';
-CREATE CONNECTION pq_gz ON PARQUET('samples/output/gz.parquet') WITH(COMPRESSION=GZIP);
+CREATE CONNECTION pq_gz AS PARQUET('samples/output/gz.parquet', COMPRESSION=GZIP);
 INSERT INTO pq_gz.FILE SELECT * FROM #samples;
 PRINT 'Inserted into gz.parquet';
 SELECT * FROM pq_gz.FILE;
 
 -- 3. ZStd Compression
 PRINT 'Testing Parquet (ZStd)...';
-CREATE CONNECTION pq_zstd ON PARQUET('samples/output/zstd.parquet') WITH(COMPRESSION=ZSTD);
+CREATE CONNECTION pq_zstd AS PARQUET('samples/output/zstd.parquet', COMPRESSION=ZSTD);
 INSERT INTO pq_zstd.FILE SELECT * FROM #samples;
 PRINT 'Inserted into zstd.parquet';
 SELECT * FROM pq_zstd.FILE;

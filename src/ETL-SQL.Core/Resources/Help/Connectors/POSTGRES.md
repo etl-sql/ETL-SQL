@@ -1,8 +1,8 @@
-# POSTGRES
+﻿# POSTGRES
 Connects to PostgreSQL using the Npgsql driver. Supports schemas, PostgreSQL-specific types, and SSL.
 
 Syntax:
-  CREATE CONNECTION <name> ON POSTGRES(
+  CREATE CONNECTION <name> AS POSTGRES(
     HOST     = 'localhost',
     PORT     = 5432,
     DATABASE = 'dbname',
@@ -22,7 +22,7 @@ Options:
   TABLE           — default table for unqualified SELECT/INSERT
 
 ```sql
-CREATE CONNECTION AppDB ON POSTGRES(
+CREATE CONNECTION AppDB AS POSTGRES(
   HOST     = 'pg.corp.local',
   PORT     = 5432,
   DATABASE = 'app',

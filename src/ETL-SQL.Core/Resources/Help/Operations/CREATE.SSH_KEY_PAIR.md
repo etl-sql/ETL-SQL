@@ -1,4 +1,4 @@
-# SSH_KEY_PAIR
+﻿# SSH_KEY_PAIR
 Generates an RSA or ECDSA SSH key pair and writes the private and public key files to the specified path.
 
 Syntax:
@@ -22,7 +22,7 @@ CREATE SSH_KEY_PAIR 'C:\keys\partner_deploy'
   WITH (BITS = 4096, ALGORITHM = 'RSA', PASSPHRASE = @key_passphrase);
 
 -- Use the generated key for SFTP
-CREATE CONNECTION DeployServer ON SFTP(
+CREATE CONNECTION DeployServer AS SFTP(
   HOST    = 'sftp.partner.com',
   USER    = 'deploy',
   KEYFILE = 'C:\keys\partner_deploy'

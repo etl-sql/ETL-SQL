@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using ETL_SQL.Services;
 using ETL_SQL.Common;
 using System;
@@ -13,9 +13,9 @@ namespace ETL_SQL.Tests.Hardening
         {
             var security = new SecurityService(NullLogger.Instance) { MasterPassword = "StrongPassword" };
             
-            var original = "CREATE CONNECTION my_mock ON MOCKDB('dummy_conn_str');";
+            var original = "CREATE CONNECTION my_mock AS MOCKDB('dummy_conn_str');";
             var encrypted = security.EncryptScript(original, "StrongPassword");
-            
+
             // Should contain ENC: prefix
             Assert.Contains("ENC:", encrypted);
             Assert.DoesNotContain("dummy_conn_str", encrypted);
@@ -30,7 +30,7 @@ namespace ETL_SQL.Tests.Hardening
             var security = new SecurityService(NullLogger.Instance) { MasterPassword = "StrongPassword" };
             
             // Explicitly disable encryption
-            var original = "CREATE CONNECTION my_mock ON MOCKDB('dummy_conn_str') WITH (ENCRYPT=OFF);";
+            var original = "CREATE CONNECTION my_mock AS MOCKDB(ENCRYPT=OFF);";
             var encrypted = security.EncryptScript(original, "StrongPassword");
             
             // Should be unchanged
@@ -45,10 +45,10 @@ namespace ETL_SQL.Tests.Hardening
             
             var original = @"
                 -- This should be encrypted
-                CREATE CONNECTION c1 ON MOCKDB('secret1');
-                
+                CREATE CONNECTION c1 AS MOCKDB('secret1');
+
                 -- This should NOT be encrypted
-                CREATE CONNECTION c2 ON MOCKDB('plain2') WITH (ENCRYPT=OFF);
+                CREATE CONNECTION c2 AS MOCKDB('plain2', ENCRYPT=OFF);
             ";
             
             var encrypted = security.EncryptScript(original, "pwd");

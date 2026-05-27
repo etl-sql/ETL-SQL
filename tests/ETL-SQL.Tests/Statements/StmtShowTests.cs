@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -47,7 +47,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             try
             {
                 var script = $@"
-CREATE CONNECTION mycsv ON FLATFILE('{csvPath}');
+CREATE CONNECTION mycsv AS FLATFILE('{csvPath}');
 SHOW TABLES ON mycsv;";
                 var eval = NewEval();
                 await eval.Evaluate(TestHelpers.Parse(script));
@@ -130,7 +130,7 @@ SHOW COLUMNS FOR #t;";
             try
             {
                 var script = $@"
-CREATE CONNECTION myconn ON FLATFILE('{csvPath}');
+CREATE CONNECTION myconn AS FLATFILE('{csvPath}');
 SHOW CONNECTIONS;";
                 var eval = NewEval();
                 await eval.Evaluate(TestHelpers.Parse(script));
@@ -154,7 +154,7 @@ SHOW CONNECTIONS;";
             try
             {
                 var script = $@"
-CREATE CONNECTION c1 ON FLATFILE('{csvPath}');
+CREATE CONNECTION c1 AS FLATFILE('{csvPath}');
 SHOW CONNECTIONS INTO #conn_list;
 SELECT * FROM #conn_list;";
                 var eval = NewEval();

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -73,7 +73,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new ConnectionAuthConflictRule();
             var results = await Lint(rule,
                 "IF 1 = 1 BEGIN " +
-                "  CREATE CONNECTION c1 ON MSSQL() WITH (TRUSTED_CONNECTION = 'TRUE', USER_ID = 'sa'); " +
+                "  CREATE CONNECTION c1 AS MSSQL(TRUSTED_CONNECTION = 'TRUE', USER_ID = 'sa'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -84,7 +84,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new ConnectionAuthConflictRule();
             var results = await Lint(rule,
                 "WHILE 1 = 0 BEGIN " +
-                "  CREATE CONNECTION c2 ON MSSQL() WITH (TRUSTED_CONNECTION = 'TRUE', USER_ID = 'sa'); " +
+                "  CREATE CONNECTION c2 AS MSSQL(TRUSTED_CONNECTION = 'TRUE', USER_ID = 'sa'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -95,7 +95,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new ConnectionAuthConflictRule();
             var results = await Lint(rule,
                 "FOR @i = 1 TO 1 BEGIN " +
-                "  CREATE CONNECTION c3 ON MSSQL() WITH (TRUSTED_CONNECTION = 'TRUE', USER_ID = 'sa'); " +
+                "  CREATE CONNECTION c3 AS MSSQL(TRUSTED_CONNECTION = 'TRUE', USER_ID = 'sa'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -106,7 +106,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new ConnectionAuthConflictRule();
             var results = await Lint(rule,
                 "FOREACH @x IN (SELECT 1 AS n) BEGIN " +
-                "  CREATE CONNECTION c4 ON MSSQL() WITH (TRUSTED_CONNECTION = 'TRUE', USER_ID = 'sa'); " +
+                "  CREATE CONNECTION c4 AS MSSQL(TRUSTED_CONNECTION = 'TRUE', USER_ID = 'sa'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -117,7 +117,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new ConnectionAuthConflictRule();
             var results = await Lint(rule,
                 "BEGIN TRY " +
-                "  CREATE CONNECTION c5 ON MSSQL() WITH (TRUSTED_CONNECTION = 'TRUE', USER_ID = 'sa'); " +
+                "  CREATE CONNECTION c5 AS MSSQL(TRUSTED_CONNECTION = 'TRUE', USER_ID = 'sa'); " +
                 "END TRY BEGIN CATCH SELECT 1; END CATCH");
             Assert.NotEmpty(results);
         }
@@ -128,7 +128,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new ConnectionAuthConflictRule();
             var results = await Lint(rule,
                 "BEGIN " +
-                "  CREATE CONNECTION c6 ON MSSQL() WITH (TRUSTED_CONNECTION = 'TRUE', USER_ID = 'sa'); " +
+                "  CREATE CONNECTION c6 AS MSSQL(TRUSTED_CONNECTION = 'TRUE', USER_ID = 'sa'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -138,7 +138,7 @@ namespace ETL_SQL.Tests.Coverage
         {
             var rule = new ConnectionAuthConflictRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION c7 ON MSSQL('server=localhost');");
+                "CREATE CONNECTION c7 AS MSSQL('server=localhost');");
             Assert.Empty(results);
         }
 
@@ -332,7 +332,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
                 "FOR @i = 1 TO 1 BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('/data/file.csv'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('/data/file.csv'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -343,7 +343,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
                 "FOREACH @x IN (SELECT 1 AS n) BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('/data/file.csv'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('/data/file.csv'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -354,7 +354,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
                 "PARALLEL BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('/data/file.csv'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('/data/file.csv'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -396,7 +396,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new FlatFileDelimiterConflictRule();
             var results = await Lint(rule,
                 "IF 1 = 1 BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('data.csv') WITH (DELIMITER = ';', ROW_DELIMITER = ';'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('data.csv', DELIMITER = ';', ROW_DELIMITER = ';'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -407,7 +407,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new FlatFileDelimiterConflictRule();
             var results = await Lint(rule,
                 "WHILE 1 = 0 BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('data.csv') WITH (DELIMITER = '|', ROW_DELIMITER = '|'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('data.csv', DELIMITER = '|', ROW_DELIMITER = '|'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -418,7 +418,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new FlatFileDelimiterConflictRule();
             var results = await Lint(rule,
                 "FOR @i = 1 TO 1 BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('data.csv') WITH (DELIMITER = '\\t', ROW_DELIMITER = '\\t'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('data.csv', DELIMITER = '\\t', ROW_DELIMITER = '\\t'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -429,7 +429,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new FlatFileDelimiterConflictRule();
             var results = await Lint(rule,
                 "FOREACH @x IN (SELECT 1 AS n) BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('data.csv') WITH (DELIMITER = ',', ROW_DELIMITER = ','); " +
+                "  CREATE CONNECTION fc AS FLATFILE('data.csv', DELIMITER = ',', ROW_DELIMITER = ','); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -440,7 +440,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new FlatFileDelimiterConflictRule();
             var results = await Lint(rule,
                 "BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('data.csv') WITH (DELIMITER = ' ', ROW_DELIMITER = ' '); " +
+                "  CREATE CONNECTION fc AS FLATFILE('data.csv', DELIMITER = ' ', ROW_DELIMITER = ' '); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -471,7 +471,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
                 "IF 1 = 1 BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('relative/path.csv'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('relative/path.csv'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -482,7 +482,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
                 "WHILE 1 = 0 BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('relative/path.csv'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('relative/path.csv'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -493,7 +493,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
                 "FOR @i = 1 TO 1 BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('relative/path.csv'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('relative/path.csv'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -504,7 +504,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
                 "FOREACH @x IN (SELECT 1 AS n) BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('relative/path.csv'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('relative/path.csv'); " +
                 "END");
             Assert.NotEmpty(results);
         }
@@ -515,7 +515,7 @@ namespace ETL_SQL.Tests.Coverage
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
                 "PARALLEL BEGIN " +
-                "  CREATE CONNECTION fc ON FLATFILE('relative/path.csv'); " +
+                "  CREATE CONNECTION fc AS FLATFILE('relative/path.csv'); " +
                 "END");
             Assert.NotEmpty(results);
         }

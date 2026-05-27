@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -34,7 +34,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             eval.Telemetry.TelemetryEnabled = true;
 
             // 1. Setup Mock Connection
-            await Execute(eval, "CREATE CONNECTION src ON MOCKDB('local');");
+            await Execute(eval, "CREATE CONNECTION src AS MOCKDB();");
 
             // 2. Run query with multiple window signatures (incompatible)
             // Group 1: OVER(PARTITION BY Region ORDER BY SaleID)

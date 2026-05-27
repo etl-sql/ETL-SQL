@@ -1,4 +1,4 @@
-import { describe, it } from 'vitest';
+﻿import { describe, it } from 'vitest';
 import * as cp from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -122,7 +122,7 @@ describe('Engine Integration (Real Pipe)', () => {
                         if (msg.type === 'status' && msg.status === 'ready') {
                             const cmd = {
                                 Action: 'run',
-                                Script: 'CREATE CONNECTION m ON MOCKDB(); SELECT 1 as val;'
+                                Script: 'CREATE CONNECTION m AS MOCKDB(); SELECT 1 as val;'
                             };
                             child.stdin.write(JSON.stringify(cmd) + '\r\n');
                         }

@@ -36,7 +36,7 @@ namespace ETL_SQL.Services
         }
 
         private readonly ILogger _logger;
-        [GeneratedRegex(@"(CREATE\s+CONNECTION\s+\w+\s+ON\s+\w+\s*\()(.*?)(\))(?:\s+WITH\s*\((.*?)\))?", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+        [GeneratedRegex(@"(CREATE\s+CONNECTION\s+\w+\s+AS\s+\w+\s*\()(.*?)(\))", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
         private static partial Regex ConnRegex();
         [GeneratedRegex(@"((?:PASSWORD|API_KEY|APIKEY)\s*=\s*)(['""])(.*?)\2", RegexOptions.IgnoreCase)]
         private static partial Regex PasswordOptionRegex();
@@ -761,26 +761,40 @@ namespace ETL_SQL.Services
             return scrubbed;
         }
 
+        private static string? ExtractFirstQuotedString(string content)
+        {
+            int i = 0;
+            while (i < content.Length && char.IsWhiteSpace(content[i])) i++;
+            if (i >= content.Length || (content[i] != '\'' && content[i] != '"')) return null;
+            var q = content[i];
+            int end = i + 1;
+            while (end < content.Length && content[end] != q) end++;
+            if (end >= content.Length) return null;
+            return content[i..(end + 1)];
+        }
+
+        private static string ReplaceFirstQuotedString(string content, Func<char, string, string> replacer)
+        {
+            int i = 0;
+            while (i < content.Length && char.IsWhiteSpace(content[i])) i++;
+            if (i >= content.Length || (content[i] != '\'' && content[i] != '"')) return content;
+            var q = content[i];
+            int end = i + 1;
+            while (end < content.Length && content[end] != q) end++;
+            if (end >= content.Length) return content;
+            var inner = content[(i + 1)..end];
+            return content[..i] + replacer(q, inner) + content[(end + 1)..];
+        }
+
         private static string ScrubConnectionDetails(string text)
         {
             return ConnRegex().Replace(text, m =>
             {
-                var result = m.Value;
-                var targetWithQuotes = m.Groups[2].Value.Trim();
-                if (targetWithQuotes.Length >= 2 && (targetWithQuotes.StartsWith("'") || targetWithQuotes.StartsWith("\"")))
-                {
-                    var quote = targetWithQuotes[0].ToString();
-                    result = result.Replace(targetWithQuotes, $"{quote}<connection>{quote}");
-                }
-
-                if (m.Groups[4].Success)
-                {
-                    var options = m.Groups[4].Value;
-                    var scrubbedOptions = StringOptionRegex().Replace(options, opt => $"{opt.Groups[1].Value}{opt.Groups[2].Value}<placeholder>{opt.Groups[2].Value}");
-                    result = result.Replace(options, scrubbedOptions);
-                }
-
-                return result;
+                var parenContent = m.Groups[2].Value;
+                var newContent = ReplaceFirstQuotedString(parenContent, (q, _) => $"{q}<connection>{q}");
+                newContent = StringOptionRegex().Replace(newContent, opt =>
+                    $"{opt.Groups[1].Value}{opt.Groups[2].Value}<placeholder>{opt.Groups[2].Value}");
+                return m.Groups[1].Value + newContent + m.Groups[3].Value;
             });
         }
 
@@ -788,32 +802,19 @@ namespace ETL_SQL.Services
         {
             return ConnRegex().Replace(text, m =>
             {
-                var result = m.Value;
-                var targetWithQuotes = m.Groups[2].Value.Trim();
-                if (targetWithQuotes.Length >= 2 && (targetWithQuotes.StartsWith("'") || targetWithQuotes.StartsWith("\"")))
+                var parenContent = m.Groups[2].Value;
+                var newContent = ReplaceFirstQuotedString(parenContent, (q, inner) =>
                 {
-                    var quote = targetWithQuotes[0];
-                    var target = targetWithQuotes.Trim(quote);
-                    if (!target.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var encrypted = CryptoUtils.Encrypt(target, password);
-                        result = result.Replace(targetWithQuotes, quote + encrypted + quote);
-                    }
-                }
-
-                if (m.Groups[4].Success)
+                    if (inner.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return $"{q}{inner}{q}";
+                    return $"{q}{CryptoUtils.Encrypt(inner, password)}{q}";
+                });
+                newContent = StringOptionRegex().Replace(newContent, opt =>
                 {
-                    var options = m.Groups[4].Value;
-                    var encryptedOptions = StringOptionRegex().Replace(options, opt =>
-                    {
-                        var value = opt.Groups[3].Value;
-                        if (value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return opt.Value;
-                        return $"{opt.Groups[1].Value}{opt.Groups[2].Value}{CryptoUtils.Encrypt(value, password)}{opt.Groups[2].Value}";
-                    });
-                    result = result.Replace(options, encryptedOptions);
-                }
-
-                return result;
+                    var value = opt.Groups[3].Value;
+                    if (value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return opt.Value;
+                    return $"{opt.Groups[1].Value}{opt.Groups[2].Value}{CryptoUtils.Encrypt(value, password)}{opt.Groups[2].Value}";
+                });
+                return m.Groups[1].Value + newContent + m.Groups[3].Value;
             });
         }
 
@@ -826,48 +827,33 @@ namespace ETL_SQL.Services
 
             return ConnRegex().Replace(text, m =>
             {
-                var targetWithQuotes = m.Groups[2].Value.Trim();
-                var options = m.Groups[4].Value;
-                
-                if (options.Contains("ENCRYPT=OFF", StringComparison.OrdinalIgnoreCase))
+                var parenContent = m.Groups[2].Value;
+
+                if (parenContent.Contains("ENCRYPT=OFF", StringComparison.OrdinalIgnoreCase))
                     return m.Value;
 
-                var result = m.Value;
-
-                // 1. Encrypt Target (Connection String) if it's a quoted string and contains '='
-                if (targetWithQuotes.Length >= 2 && (targetWithQuotes.StartsWith("'") || targetWithQuotes.StartsWith("\"")))
+                // 1. Encrypt positional target if it looks like a connection string
+                var newContent = ReplaceFirstQuotedString(parenContent, (q, inner) =>
                 {
-                    var quote = targetWithQuotes[0];
-                    var target = targetWithQuotes.Trim(quote);
-                    
-                    if (!target.StartsWith("ENC:") && (target.Contains("=") || !Path.HasExtension(target)))
-                    {
-                        var encrypted = CryptoUtils.Encrypt(target, password);
-                        result = result.Replace(targetWithQuotes, quote + encrypted + quote);
-                    }
-                }
+                    if (inner.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return $"{q}{inner}{q}";
+                    if (inner.Contains("=") || !Path.HasExtension(inner))
+                        return $"{q}{CryptoUtils.Encrypt(inner, password)}{q}";
+                    return $"{q}{inner}{q}";
+                });
 
-                // 2. Encrypt PASSWORD option in WITH clause
-                if (m.Groups[4].Success)
+                // 2. Encrypt PASSWORD/API_KEY/APIKEY options
+                newContent = PasswordOptionRegex().Replace(newContent, pm =>
                 {
-                    var updatedOptions = PasswordOptionRegex().Replace(options, pm =>
-                    {
-                        var pwd = pm.Groups[3].Value;
-                        if (!string.IsNullOrEmpty(pwd) && !pwd.StartsWith("ENC:"))
-                        {
-                            var encryptedPwd = CryptoUtils.Encrypt(pwd, password);
-                            return pm.Groups[1].Value + pm.Groups[2].Value + encryptedPwd + pm.Groups[2].Value;
-                        }
-                        return pm.Value;
-                    });
+                    var pwd = pm.Groups[3].Value;
+                    if (!string.IsNullOrEmpty(pwd) && !pwd.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
+                        return pm.Groups[1].Value + pm.Groups[2].Value + CryptoUtils.Encrypt(pwd, password) + pm.Groups[2].Value;
+                    return pm.Value;
+                });
 
-                    if (updatedOptions != options)
-                    {
-                        result = result.Replace(options, updatedOptions);
-                    }
-                }
+                if (newContent == parenContent)
+                    return m.Value;
 
-                return result;
+                return m.Groups[1].Value + newContent + m.Groups[3].Value;
             });
         }
 
@@ -878,27 +864,26 @@ namespace ETL_SQL.Services
         {
             foreach (Match m in ConnRegex().Matches(text))
             {
-                var targetWithQuotes = m.Groups[2].Value.Trim();
-                var options = m.Groups[4].Value;
-                
-                if (options.Contains("ENCRYPT=OFF", StringComparison.OrdinalIgnoreCase))
+                var parenContent = m.Groups[2].Value;
+
+                if (parenContent.Contains("ENCRYPT=OFF", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                // Check target string
-                if (targetWithQuotes.Length >= 2 && (targetWithQuotes.StartsWith("'") || targetWithQuotes.StartsWith("\"")))
+                // Check positional target
+                var firstQuoted = ExtractFirstQuotedString(parenContent);
+                if (firstQuoted != null && firstQuoted.Length >= 2)
                 {
-                    var quote = targetWithQuotes[0];
-                    var target = targetWithQuotes.Trim(quote);
-                    if (!target.StartsWith("ENC:") && target.Contains("="))
+                    var inner = firstQuoted[1..^1];
+                    if (!inner.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase) && inner.Contains("="))
                         return true;
                 }
 
-                // Check PASSWORD option in WITH clause
-                if (m.Groups[4].Success && PasswordOptionRegex().IsMatch(options))
+                // Check PASSWORD/API_KEY/APIKEY option
+                if (PasswordOptionRegex().IsMatch(parenContent))
                 {
-                    var pm = PasswordOptionRegex().Match(options);
+                    var pm = PasswordOptionRegex().Match(parenContent);
                     var pwd = pm.Groups[3].Value;
-                    if (!string.IsNullOrEmpty(pwd) && !pwd.StartsWith("ENC:"))
+                    if (!string.IsNullOrEmpty(pwd) && !pwd.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
                         return true;
                 }
             }

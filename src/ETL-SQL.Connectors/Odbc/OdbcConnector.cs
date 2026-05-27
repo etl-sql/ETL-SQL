@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Data.Odbc;
@@ -86,10 +86,10 @@ namespace ETL_SQL.Connectors.Odbc
 Enables connectivity to any data source via standard ODBC.
 
 Property Mode:
-  CREATE CONNECTION my_odbc ON ODBC() WITH(DSN='MyDSN', UID='user', PWD='pwd');
+  CREATE CONNECTION my_odbc AS ODBC(DSN='MyDSN', UID='user', PWD='pwd');
   
 DSN-less Mode:
-  CREATE CONNECTION my_sqllite ON ODBC() WITH(DRIVER='{SQLite3 ODBC Driver}', DATABASE='mydb.db');
+  CREATE CONNECTION my_sqllite AS ODBC(DRIVER='{SQLite3 ODBC Driver}', DATABASE='mydb.db');
 
 Supported Options:
   DSN              - Pre-configured Data Source Name.

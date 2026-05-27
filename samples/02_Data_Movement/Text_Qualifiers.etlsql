@@ -1,15 +1,15 @@
--- Test TEXT_QUALIFIER option on read and write
+﻿-- Test TEXT_QUALIFIER option on read and write
 
 -- Read a CSV that has quoted fields (with embedded commas and escaped quotes)
-CREATE CONNECTION src ON FLATFILE('TestData/test_qualified.csv') WITH (TEXT_QUALIFIER = DOUBLEQUOTE);
+CREATE CONNECTION src AS FLATFILE('TestData/test_qualified.csv', TEXT_QUALIFIER = DOUBLEQUOTE);
 
 -- Write the data back out with the same qualifier so embedded commas are preserved
-CREATE CONNECTION dst ON FLATFILE('samples/output/test_qualified_output.csv') WITH (TEXT_QUALIFIER = DOUBLEQUOTE);
+CREATE CONNECTION dst AS FLATFILE('samples/output/test_qualified_output.csv', TEXT_QUALIFIER = DOUBLEQUOTE);
 
 -- Stream from source to destination
 INSERT INTO dst
 SELECT * FROM src;
 
 -- Also preview the raw read to verify embedded commas parsed correctly
-CREATE CONNECTION verify_conn ON FLATFILE('TestData/test_qualified.csv') WITH (TEXT_QUALIFIER = DOUBLEQUOTE);
+CREATE CONNECTION verify_conn AS FLATFILE('TestData/test_qualified.csv', TEXT_QUALIFIER = DOUBLEQUOTE);
 SELECT * FROM verify_conn;

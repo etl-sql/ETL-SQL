@@ -722,34 +722,56 @@ namespace ETL_SQL.Core.Parser.Components
             var name = ConsumeIdentifier("Expected connection name after ALTER CONNECTION").Value;
             string? connectionType = null;
             Expression? target = null;
-
-            if (Match(TokenType.ON))
-            {
-                var typeToken = Advance();
-                connectionType = typeToken.Value;
-                // Deprecation handled by DeprecatedConnectionSyntaxRule
-
-                bool hasParen = Match(TokenType.LPAREN);
-                if (hasParen && _parser.Current.Type == TokenType.RPAREN)
-                    target = new LiteralExpression("", TokenType.STRING_LITERAL);
-                else if (!hasParen && (_parser.Current.Type == TokenType.WITH || _parser.Current.Type == TokenType.SEMICOLON))
-                    target = null;
-                else
-                    target = ParseExpression();
-                if (hasParen) Consume(TokenType.RPAREN, "Expected ')' after target string");
-            }
-
             Dictionary<string, Expression>? options = null;
-            if (Match(TokenType.WITH))
+
+            if (Match(TokenType.AS))
             {
+                // Full replacement: ALTER CONNECTION name AS TYPE(options_or_string)
+                connectionType = Advance().Value;
+                Consume(TokenType.LPAREN, "Expected '(' after connection type");
+
+                if (_parser.Current.Type != TokenType.RPAREN)
+                {
+                    if (_parser.Peek.Type == TokenType.EQUALS)
+                    {
+                        options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+                        while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+                        {
+                            string key = Advance().Value;
+                            Consume(TokenType.EQUALS, "Expected '=' after option name in ALTER CONNECTION");
+                            options[key] = ParseExpression();
+                            if (!Match(TokenType.COMMA)) break;
+                        }
+                    }
+                    else
+                    {
+                        target = ParseExpression();
+                        if (Match(TokenType.COMMA))
+                        {
+                            options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+                            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+                            {
+                                string key = Advance().Value;
+                                Consume(TokenType.EQUALS, "Expected '=' after option name in ALTER CONNECTION");
+                                options[key] = ParseExpression();
+                                if (!Match(TokenType.COMMA)) break;
+                            }
+                        }
+                    }
+                }
+
+                Consume(TokenType.RPAREN, "Expected ')' to close ALTER CONNECTION");
+            }
+            else if (Match(TokenType.WITH))
+            {
+                // Partial update: ALTER CONNECTION name WITH(opts) — merges into existing, no type change
                 options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
                 Consume(TokenType.LPAREN, "Expected '(' after WITH");
                 while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
                 {
                     string key = Advance().Value;
                     Consume(TokenType.EQUALS, "Expected '=' after option key");
-                    var val = ParseExpression();
-                    options[key] = val;
+                    options[key] = ParseExpression();
                     if (!Match(TokenType.COMMA)) break;
                 }
                 Consume(TokenType.RPAREN, "Expected ')' at end of WITH options");
@@ -882,51 +904,57 @@ namespace ETL_SQL.Core.Parser.Components
         private Statement ParseCreateConnection(Token startToken, ObjectCreationMode mode)
         {
             var name = ConsumeIdentifier("Expected connection name after CREATE CONNECTION").Value;
-            string? connectionType = null;
-            Expression? target = null;
 
-            if (Match(TokenType.ON) || mode == ObjectCreationMode.Create)
+            Consume(TokenType.AS, "Expected AS after connection name in CREATE CONNECTION");
+            var connectionType = Advance().Value;
+            Consume(TokenType.LPAREN, "Expected '(' after connection type in CREATE CONNECTION");
+
+            Expression? target = null;
+            Dictionary<string, Expression>? options = null;
+
+            if (_parser.Current.Type != TokenType.RPAREN)
             {
-                if (Match(TokenType.TYPE))
+                // A positional target starts with: a string literal, a variable (@var), a function call
+                // (peek is '('), or a member access (peek is '.'). Everything else is a named option.
+                // If it's a bare identifier NOT followed by '=', '(' or '.', it's a malformed named
+                // option ("key 'val'" instead of "key = 'val'") — we let Consume(EQUALS) report it.
+                bool isPositionalStart = _parser.Current.Type == TokenType.STRING_LITERAL
+                    || _parser.Current.Type == TokenType.VARIABLE
+                    || _parser.Peek.Type == TokenType.LPAREN
+                    || _parser.Peek.Type == TokenType.DOT;
+
+                if (isPositionalStart)
                 {
-                    connectionType = Advance().Value;
-                    Consume(TokenType.TARGET, "Expected TARGET after connection type");
+                    // Positional target first: AS TYPE('str') or AS TYPE(@var) or AS TYPE(func())
                     target = ParseExpression();
+                    if (Match(TokenType.COMMA))
+                    {
+                        options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+                        while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+                        {
+                            string key = Advance().Value;
+                            Consume(TokenType.EQUALS, "Expected '=' after option name in CREATE CONNECTION");
+                            options[key] = ParseExpression();
+                            if (!Match(TokenType.COMMA)) break;
+                        }
+                    }
                 }
                 else
                 {
-                    var typeToken = Advance();
-                    connectionType = typeToken.Value;
-                    // Deprecation handled by DeprecatedConnectionSyntaxRule
-
-                    bool hasParen = Match(TokenType.LPAREN);
-                    if (hasParen && _parser.Current.Type == TokenType.RPAREN)
-                        target = new LiteralExpression("", TokenType.STRING_LITERAL);
-                    else if (!hasParen && (_parser.Current.Type == TokenType.WITH || _parser.Current.Type == TokenType.SEMICOLON))
-                        target = null;
-                    else
-                        target = ParseExpression();
-
-                    if (hasParen) Consume(TokenType.RPAREN, "Expected ')' after target in CREATE CONNECTION");
+                    // All named options: AS TYPE(KEY=val, ...) — or malformed "key 'val'" which
+                    // falls here so Consume(EQUALS) produces the correct error message.
+                    options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+                    while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+                    {
+                        string key = Advance().Value;
+                        Consume(TokenType.EQUALS, "Expected '=' after option name in CREATE CONNECTION");
+                        options[key] = ParseExpression();
+                        if (!Match(TokenType.COMMA)) break;
+                    }
                 }
             }
 
-            Dictionary<string, Expression>? options = null;
-            if (Match(TokenType.WITH))
-            {
-                options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
-                Consume(TokenType.LPAREN, "Expected '(' after WITH in CREATE CONNECTION");
-                while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
-                {
-                    string key = Advance().Value;
-                    Consume(TokenType.EQUALS, "Expected '=' after option name in CREATE CONNECTION WITH(...)");
-                    var val = ParseExpression();
-                    options[key] = val;
-                    if (!Match(TokenType.COMMA)) break;
-                }
-                Consume(TokenType.RPAREN, "Expected ')' to close WITH options in CREATE CONNECTION");
-            }
-
+            Consume(TokenType.RPAREN, "Expected ')' to close CREATE CONNECTION");
             Consume(TokenType.SEMICOLON, "Expected ';' at the end of CREATE CONNECTION");
             return new CreateConnectionStatement(name, connectionType, target, options, mode) { Line = startToken.Line, Column = startToken.Column };
         }

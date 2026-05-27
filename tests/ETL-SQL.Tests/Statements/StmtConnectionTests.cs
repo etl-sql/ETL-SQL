@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
@@ -30,7 +30,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
 
             // 1. Create a connection
-            await Execute("CREATE CONNECTION my_mock ON MOCKDB();", evaluator);
+            await Execute("CREATE CONNECTION my_mock AS MOCKDB();", evaluator);
             Assert.True(((IExecutionContext)evaluator).Connections.ContainsKey("my_mock"));
 
             // 2. Drop the connection
@@ -52,8 +52,8 @@ namespace ETL_SQL.Tests.Statements.Statements
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
 
-            await Execute("CREATE CONNECTION alter_conn ON MOCKDB();", evaluator);
-            await Execute("ALTER CONNECTION alter_conn ON MOCKDB();", evaluator);
+            await Execute("CREATE CONNECTION alter_conn AS MOCKDB();", evaluator);
+            await Execute("ALTER CONNECTION alter_conn AS MOCKDB();", evaluator);
             Assert.True(((IExecutionContext)evaluator).Connections.ContainsKey("alter_conn"));
         }
 
@@ -63,7 +63,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
 
             await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () =>
-                await Execute("ALTER CONNECTION nonexistent_alter ON MOCKDB();", evaluator));
+                await Execute("ALTER CONNECTION nonexistent_alter AS MOCKDB();", evaluator));
         }
 
         [Fact]
@@ -71,7 +71,7 @@ namespace ETL_SQL.Tests.Statements.Statements
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
 
-            await Execute("CREATE OR ALTER CONNECTION coalt_conn ON MOCKDB();", evaluator);
+            await Execute("CREATE OR ALTER CONNECTION coalt_conn AS MOCKDB();", evaluator);
             Assert.True(((IExecutionContext)evaluator).Connections.ContainsKey("coalt_conn"));
         }
 
@@ -80,9 +80,9 @@ namespace ETL_SQL.Tests.Statements.Statements
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
 
-            await Execute("CREATE CONNECTION coalt_existing ON MOCKDB();", evaluator);
+            await Execute("CREATE CONNECTION coalt_existing AS MOCKDB();", evaluator);
             // Second call should succeed (alters the existing one, not throw duplicate)
-            await Execute("CREATE OR ALTER CONNECTION coalt_existing ON MOCKDB();", evaluator);
+            await Execute("CREATE OR ALTER CONNECTION coalt_existing AS MOCKDB();", evaluator);
             Assert.True(((IExecutionContext)evaluator).Connections.ContainsKey("coalt_existing"));
         }
 
@@ -91,9 +91,9 @@ namespace ETL_SQL.Tests.Statements.Statements
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
 
-            await Execute("CREATE CONNECTION dup_conn ON MOCKDB();", evaluator);
+            await Execute("CREATE CONNECTION dup_conn AS MOCKDB();", evaluator);
             await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () =>
-                await Execute("CREATE CONNECTION dup_conn ON MOCKDB();", evaluator));
+                await Execute("CREATE CONNECTION dup_conn AS MOCKDB();", evaluator));
         }
 
         [Fact]
@@ -102,7 +102,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
 
             // Test parsing of the new names
-            await Execute("CREATE CONNECTION smtp ON SMTP('localhost');", evaluator);
+            await Execute("CREATE CONNECTION smtp AS SMTP('localhost');", evaluator);
 
             // This verifies the PARSER accepts SEND_EMAIL
             // We expect an execution failure because localhost:25 isn't open, but Parser should succeed.

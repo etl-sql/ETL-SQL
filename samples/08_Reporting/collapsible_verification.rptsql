@@ -1,7 +1,7 @@
--- Drawer & Pinnable Container Verification
+﻿-- Drawer & Pinnable Container Verification
 -- This script tests the DRAWER container type with ICON and PINNABLE layout.
 
-CREATE CONNECTION mock ON MOCKDB();
+CREATE CONNECTION mock AS MOCKDB();
 
 SELECT 'John' as name, 100 as sales, 'East' as region
 INTO #data;

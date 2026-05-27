@@ -1,4 +1,4 @@
-# ETL-SQL Grammar & Orchestration Syntax
+﻿# ETL-SQL Grammar & Orchestration Syntax
 
 This document is the authoritative reference for the ETL-SQL scripting language. It defines every statement type, clause, and keyword â€” everything needed to write, administer, and automate with ETL-SQL.
 
@@ -66,7 +66,7 @@ Stored as a string at declaration time. When the value is passed to any file I/O
 
 - Strips surrounding double-quotes that Windows *Copy as path* adds (e.g. `"C:\tmp\file.csv"`)
 - **Connector Support**: Accepts a connector name as the root segment: `MyDrive/subdir/file.csv`.
-- **Directory Connections**: For local folders, you can use a `DIRECTORY` connection name as the path itself: `CREATE CONNECTION d ON DIRECTORY('C:\tmp'); COPY DIRECTORY d TO 'C:\Backup';`.
+- **Directory Connections**: For local folders, you can use a `DIRECTORY` connection name as the path itself: `CREATE CONNECTION d AS DIRECTORY('C:\tmp'); COPY DIRECTORY d TO 'C:\Backup';`.
 - **Normalization**: Normalizes separators, resolves relative paths against the script's working directory.
 - **Security**: Validates the resolved path against configured security boundaries (allowed root paths, permitted file extensions).
 
@@ -194,7 +194,7 @@ USE PASSWORD = 'my-master-key';
 DECLARE @pwd ENCRYPTED = 'ENC:abc123==';
 
 -- Connection automatically handles decryption
-CREATE CONNECTION MyDb ON MSSQL(PASSWORD = @pwd); 
+CREATE CONNECTION MyDb AS MSSQL(PASSWORD = @pwd); 
 
 -- Linter will warn here, and runtime will mask output
 PRINT 'The password is: ' + @pwd; 
@@ -339,7 +339,7 @@ Sets the master decryption password for the session, used to decrypt `ENC:` conn
 
 ```sql
 USE PASSWORD = 'myMasterSecret';
-CREATE CONNECTION db ON MSSQL('ENC:U2FsdGVkX1+...');
+CREATE CONNECTION db AS MSSQL('ENC:U2FsdGVkX1+...');
 ```
 
 ### 1.7 `CLEAR SESSION`
@@ -474,7 +474,7 @@ When `ON`, save helpers remove plaintext sensitive values from saved source. Thi
 SET NO_SAVE_SENSITIVE = ON;
 USE PASSWORD = 'dev-only';
 DECLARE @apiToken SENSITIVE = 'local-token';
-CREATE CONNECTION api ON REST() WITH(API_KEY = 'local-key');
+CREATE CONNECTION api AS REST(API_KEY = 'local-key');
 
 -- Saved source uses placeholders/prompt form instead of those values.
 ```
@@ -488,8 +488,7 @@ When `ON`, save helpers replace `CREATE CONNECTION` targets and quoted connectio
 
 ```sql
 SET NO_SAVE_CONNECTION = ON;
-CREATE CONNECTION prod ON POSTGRES('Host=db01;Username=etl;Password=pw;')
-WITH(HOST = 'db01', DATABASE = 'warehouse', USERNAME = 'etl', PASSWORD = 'pw');
+CREATE CONNECTION prod AS POSTGRES('Host=db01;Username=etl;Password=pw;', HOST = 'db01', DATABASE = 'warehouse', USERNAME = 'etl', PASSWORD = 'pw');
 ```
 
 ### 2.7 `SET CONNECTION_ENCRYPTION`
@@ -502,8 +501,7 @@ When `ON`, save helpers encrypt the `CREATE CONNECTION` target and quoted `WITH(
 ```sql
 SET CONNECTION_ENCRYPTION = ON;
 USE PASSWORD = 'dev-only';
-CREATE CONNECTION prod ON POSTGRES('Host=db01;Username=etl;Password=pw;')
-WITH(HOST = 'db01', DATABASE = 'warehouse', USERNAME = 'etl', PASSWORD = 'pw');
+CREATE CONNECTION prod AS POSTGRES('Host=db01;Username=etl;Password=pw;', HOST = 'db01', DATABASE = 'warehouse', USERNAME = 'etl', PASSWORD = 'pw');
 ```
 
 `NO_SAVE_CONNECTION` takes precedence over `CONNECTION_ENCRYPTION` because it removes connection details instead of preserving them encrypted.
@@ -617,7 +615,7 @@ CREATE OR ALTER CONNECTION <alias> ON <ConnectorType>(...);
 ```sql
 -- SQL Server (Common options: HOST, DATABASE, USER, PASSWORD, TRUSTED_CONNECTION, 
 -- USE_SSL, TRUST_SERVER_CERTIFICATE, APPLICATION_INTENT, CONNECT_TIMEOUT, POOL_SIZE)
-CREATE CONNECTION prod ON MSSQL(
+CREATE CONNECTION prod AS MSSQL(
     HOST = 'sql-server.company.com',
     DATABASE = 'Warehouse',
     TRUSTED_CONNECTION = TRUE,
@@ -625,7 +623,7 @@ CREATE CONNECTION prod ON MSSQL(
 );
 
 -- PostgreSQL (Common options: HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, POOLING)
-CREATE CONNECTION pg ON POSTGRES(
+CREATE CONNECTION pg AS POSTGRES(
     HOST = 'pg-server.company.com',
     DATABASE = 'analytics',
     USER = 'etl',
@@ -634,7 +632,7 @@ CREATE CONNECTION pg ON POSTGRES(
 );
 
 -- Oracle (Common options: HOST, PORT, SERVICE_NAME, TNS_NAME, USER, PASSWORD)
-CREATE CONNECTION ora ON ORACLE(
+CREATE CONNECTION ora AS ORACLE(
     HOST = 'ora-server.company.com',
     SERVICE_NAME = 'ORCL',
     USER = 'etl',
@@ -642,14 +640,14 @@ CREATE CONNECTION ora ON ORACLE(
 );
 
 -- ODBC (Common options: DSN, DRIVER, SERVER, DATABASE, UID, PWD)
-CREATE CONNECTION legacy ON ODBC(DSN = 'MyLegacyDSN');
+CREATE CONNECTION legacy AS ODBC(DSN = 'MyLegacyDSN');
 ```
 
 **File Connectors**
 
 ```sql
 -- Flat file (Common: PATH, FORMAT, DELIMITER, HEADER, ENCODING, SKIP, COMPRESS, ENCRYPT)
-CREATE CONNECTION sales_csv ON FLATFILE(
+CREATE CONNECTION sales_csv AS FLATFILE(
     PATH = 'C:\Data\sales.csv',
     FORMAT = 'CSV',
     DELIMITER = ',',
@@ -658,27 +656,27 @@ CREATE CONNECTION sales_csv ON FLATFILE(
 );
 
 -- Parquet (Common: PATH, COMPRESSION)
-CREATE CONNECTION facts ON PARQUET(
+CREATE CONNECTION facts AS PARQUET(
     PATH = 'C:\Data\facts.parquet',
     COMPRESSION = 'SNAPPY'
 );
 
 -- JSON / XML (Common: PATH, ROOT_PATH, ENCODING)
-CREATE CONNECTION config ON JSON(PATH = 'C:\Data\config.json', ROOT_PATH = '$.settings');
+CREATE CONNECTION config AS JSON(PATH = 'C:\Data\config.json', ROOT_PATH = '$.settings');
 ```
 
 **Transfer Connectors**
 
 ```sql
 -- SFTP (Common: HOST, PORT, USER, PASSWORD, KEYFILE, PASSPHRASE)
-CREATE CONNECTION remote_sftp ON SFTP(
+CREATE CONNECTION remote_sftp AS SFTP(
     HOST = 'sftp.company.com',
     USER = 'etl',
     KEYFILE = 'C:\Keys\id_rsa'
 );
 
 -- Azure Blob Storage (Common: ACCOUNT_NAME, ACCOUNT_KEY, CONTAINER)
-CREATE CONNECTION blob ON AZUREBLOB(
+CREATE CONNECTION blob AS AZUREBLOB(
     ACCOUNT_NAME = 'mystorageaccount',
     CONTAINER = 'mycontainer',
     ACCOUNT_KEY = ENC:...
@@ -689,7 +687,7 @@ CREATE CONNECTION blob ON AZUREBLOB(
 
 ```sql
 -- REST API (Common: URL, METHOD, AUTH_TYPE, TOKEN, BODY, ROOT_PATH, PAG_TYPE, PAG_LIMIT)
-CREATE CONNECTION api ON REST(
+CREATE CONNECTION api AS REST(
     URL = 'https://api.company.com/v1',
     AUTH_TYPE = 'BEARER',
     TOKEN = 'tkn_123',
@@ -697,7 +695,7 @@ CREATE CONNECTION api ON REST(
 );
 
 -- SMTP (Common: HOST, PORT, USER, PASSWORD, USE_SSL, DEFAULT_FROM)
-CREATE CONNECTION mailer ON SMTP(
+CREATE CONNECTION mailer AS SMTP(
     HOST = 'smtp.company.com',
     PORT = 587,
     USER = 'alerts@company.com',
@@ -710,16 +708,16 @@ CREATE CONNECTION mailer ON SMTP(
 
 ```sql
 -- In-memory mock database â€” useful for testing without a real database
-CREATE CONNECTION testdb ON MOCKDB();
+CREATE CONNECTION testdb AS MOCKDB();
 
 -- Local directory connector â€” treats a folder as a queryable table
-CREATE CONNECTION logs_dir ON DIRECTORY('C:\Logs\') WITH(RECURSIVE=TRUE);
+CREATE CONNECTION logs_dir AS DIRECTORY('C:\Logs\', RECURSIVE=TRUE);
 ```
 
 **Service Connectors**
 ```sql
 -- Report Portal
-CREATE CONNECTION portal ON REPORTPORTAL(
+CREATE CONNECTION portal AS REPORTPORTAL(
     HOST = 'report-server.company.com',
     PORT = 5000,
     USER = 'admin',
@@ -727,7 +725,7 @@ CREATE CONNECTION portal ON REPORTPORTAL(
 );
 
 -- Orchestrator
-CREATE CONNECTION orch ON ORCHESTRATOR(
+CREATE CONNECTION orch AS ORCHESTRATOR(
     HOST = 'orch-server.company.com',
     PORT = 5001,
     USER = 'admin',
@@ -739,12 +737,12 @@ CREATE CONNECTION orch ON ORCHESTRATOR(
 Modifies an existing connection. Use this to rotate passwords or update server addresses without dropping the connection.
 
 ```sql
-ALTER CONNECTION prod ON MSSQL(
+ALTER CONNECTION prod AS MSSQL(
     PASSWORD = ENC:...
 );
 
 -- Rename or change target only
-ALTER CONNECTION stage ON POSTGRES('prod-server-v2');
+ALTER CONNECTION stage AS POSTGRES('prod-server-v2');
 ```
 
 ### 3.3 `DROP CONNECTION`
@@ -1610,7 +1608,7 @@ DROP TABLE IF EXISTS #temp_staging;
 
 ### 10.4 `CREATE INDEX` / `DROP INDEX`
 ```sql
-CREATE UNIQUE INDEX IX_Customers_Email ON Customers (Email ASC);
+CREATE UNIQUE INDEX IX_Customers_Email AS Customers(Email ASC);
 DROP INDEX Customers.IX_Customers_Email;
 DROP INDEX IF EXISTS Customers.IX_Customers_Email;
 ```
@@ -1946,7 +1944,7 @@ TO 'C:\Recovered\finance-load';
 > Standard `CREATE JOB` statements do not support cron strings or the `AT <alias>` clause. Cron expressions are only supported in Portal Refresh Jobs (see §15.3).
 
 ### 15.2 Remote Orchestrator Job Creation
-To create a job on a remote orchestrator, wrap the `CREATE JOB` statement inside an `EXECUTE <alias> BEGIN ... END` block. The alias must be a connection configured with `ON ORCHESTRATOR()`.
+To create a job on a remote orchestrator, wrap the `CREATE JOB` statement inside an `EXECUTE <alias> BEGIN ... END` block. The alias must be a connection configured with `AS ORCHESTRATOR()`.
 
 ```sql
 EXECUTE orch_conn BEGIN
@@ -2113,7 +2111,7 @@ SEND EMAIL
 
 ### 17.2 Example
 ```sql
-CREATE CONNECTION mailer ON SMTP(
+CREATE CONNECTION mailer AS SMTP(
     HOST         = 'smtp.company.com',
     PORT         = 587,
     USER         = 'alerts@company.com',
@@ -2157,7 +2155,7 @@ USE DOCKER('gvenzl/oracle-free:latest')                  AS ora_db;
 After startup the connection string is available via the alias:
 ```sql
 DECLARE @conn VARCHAR(500) = mssql_db.CONNECTION_STRING;
-CREATE CONNECTION stage_db ON MSSQL(@conn);
+CREATE CONNECTION stage_db AS MSSQL(@conn);
 ```
 
 ### 18.2 Supported Images
@@ -2187,8 +2185,8 @@ Function-style aliases: `START_DOCKER`, `STOP_DOCKER`, `CLOSE_DOCKER`.
 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS src;
 USE DOCKER('postgres:15-alpine')                         AS dst;
 
-CREATE CONNECTION source_db ON MSSQL(src.CONNECTION_STRING);
-CREATE CONNECTION target_db ON POSTGRES(dst.CONNECTION_STRING);
+CREATE CONNECTION source_db AS MSSQL(src.CONNECTION_STRING);
+CREATE CONNECTION target_db AS POSTGRES(dst.CONNECTION_STRING);
 
 SELECT * INTO #tmp FROM source_db.dbo.Customers;
 INSERT INTO target_db.public.customers SELECT * FROM #tmp;
@@ -2583,12 +2581,12 @@ CREATE OR ALTER NAVIGATION <name> AS TAB|BUTTON|LINK ( ... );
 
 ## Appendix B: Report Portal Admin Language
 
-Portal admin statements execute inside an `EXECUTE portal BEGIN...END` block. The `portal` alias must be a connection created with `ON REPORTPORTAL(...)`.
+Portal admin statements execute inside an `EXECUTE portal BEGIN...END` block. The `portal` alias must be a connection created with `AS REPORTPORTAL(...)`.
 
 Portal catalog names, user names, group names, recipients, report names, and paths are string literals. Local aliases such as `portal`, `orch`, and `smtp` are identifiers. Secret-bearing fields such as `PASSWORD` remain expression positions so `ENC:` values and variables are accepted.
 
 ```sql
-CREATE CONNECTION portal ON REPORTPORTAL(
+CREATE CONNECTION portal AS REPORTPORTAL(
     HOST = 'report-server.company.com',
     PORT = 5000,
     USER = 'admin',
@@ -2880,12 +2878,12 @@ END
 
 ## Appendix C: Orchestrator Remote Management
 
-Orchestrator admin statements execute inside an `EXECUTE orch BEGIN...END` block. The `orch` alias must be a connection created with `ON ORCHESTRATOR(...)`.
+Orchestrator admin statements execute inside an `EXECUTE orch BEGIN...END` block. The `orch` alias must be a connection created with `AS ORCHESTRATOR(...)`.
 
 For targeting a remote Orchestrator from a standalone `CREATE JOB` statement (outside a block), use the `AT <alias>` form documented in Â§15.2.
 
 ```sql
-CREATE CONNECTION orch ON ORCHESTRATOR(
+CREATE CONNECTION orch AS ORCHESTRATOR(
     HOST = 'orch-server.company.com',
     PORT = 5001,
     USER = 'admin',

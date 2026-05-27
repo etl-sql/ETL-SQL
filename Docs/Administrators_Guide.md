@@ -1,4 +1,4 @@
-# ETL-SQL Administrator's Guide
+﻿# ETL-SQL Administrator's Guide
 
 This guide is for operators who install, configure, back up, and monitor ETL-SQL in production or shared test environments. For day-to-day portal administration, see [ReportPortal_Administrators_Guide.md](ReportPortal_Administrators_Guide.md). For command-line job operations, see [Orchestrators_Guide.md](Orchestrators_Guide.md).
 
@@ -265,7 +265,7 @@ trigger: $myconn
 label: Production DB Connection
 description: Company-standard production database connection
 ---
-CREATE CONNECTION «ConnName» ON MSSQL(
+CREATE CONNECTION «ConnName» AS MSSQL(
   SERVER             = '«prod-sql01.example.com»',
   DATABASE           = '«database»',
   TRUSTED_CONNECTION = ON

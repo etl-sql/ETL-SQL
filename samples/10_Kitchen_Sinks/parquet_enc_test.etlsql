@@ -1,8 +1,8 @@
--- Parquet Encryption Test
+﻿-- Parquet Encryption Test
 SET WHAT_IF OFF;
 SELECT 1 AS ID INTO #T;
 PRINT 'Testing Parquet Encryption...';
-CREATE CONNECTION pq_enc ON PARQUET('samples/output/enc.parquet') WITH(ENCRYPT=ON, PASSWORD='secret_pass');
+CREATE CONNECTION pq_enc AS PARQUET('samples/output/enc.parquet', ENCRYPT=ON, PASSWORD='secret_pass');
 INSERT INTO pq_enc.FILE SELECT * FROM #T;
 PRINT 'Reading encrypted Parquet...';
 SELECT * FROM pq_enc.FILE;

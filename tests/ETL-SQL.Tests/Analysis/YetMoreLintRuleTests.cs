@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
@@ -159,7 +159,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new UnusedConnectionRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION myconn ON FLATFILE('/data/file.csv');" +
+                "CREATE CONNECTION myconn AS FLATFILE('/data/file.csv');" +
                 "SELECT * FROM myconn.data;");
             Assert.Empty(results);
         }
@@ -169,7 +169,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new UnusedConnectionRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION unusedconn ON FLATFILE('/data/file.csv');");
+                "CREATE CONNECTION unusedconn AS FLATFILE('/data/file.csv');");
             Assert.NotEmpty(results);
             Assert.Equal("UnusedConnection", results[0].RuleName);
         }
@@ -179,7 +179,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new UnusedConnectionRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION targetconn ON FLATFILE('/out.csv');" +
+                "CREATE CONNECTION targetconn AS FLATFILE('/out.csv');" +
                 "INSERT INTO targetconn.table (Id) VALUES (1);");
             Assert.Empty(results);
         }
@@ -189,7 +189,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new UnusedConnectionRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION ac ON FLATFILE('/f.csv');" +
+                "CREATE CONNECTION ac AS FLATFILE('/f.csv');" +
                 "ALTER CONNECTION ac WITH (ENCODING = 'UTF-8');");
             Assert.Empty(results);
         }
@@ -199,7 +199,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new UnusedConnectionRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION dc ON FLATFILE('/f.csv');" +
+                "CREATE CONNECTION dc AS FLATFILE('/f.csv');" +
                 "DROP CONNECTION dc;");
             Assert.Empty(results);
         }
@@ -209,8 +209,8 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new UnusedConnectionRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION used ON FLATFILE('/f1.csv');" +
-                "CREATE CONNECTION unused ON FLATFILE('/f2.csv');" +
+                "CREATE CONNECTION used AS FLATFILE('/f1.csv');" +
+                "CREATE CONNECTION unused AS FLATFILE('/f2.csv');" +
                 "SELECT * FROM used.data;");
             Assert.Single(results);
             Assert.Contains("unused", results[0].Message);
@@ -223,7 +223,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION fc ON FLATFILE('data/file.csv');");
+                "CREATE CONNECTION fc AS FLATFILE('data/file.csv');");
             Assert.NotEmpty(results);
             Assert.Equal("AbsolutePath", results[0].RuleName);
         }
@@ -233,7 +233,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION fc ON FLATFILE('C:\\data\\file.csv');");
+                "CREATE CONNECTION fc AS FLATFILE('C:\\data\\file.csv');");
             Assert.Empty(results);
         }
 
@@ -242,7 +242,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION fc ON FLATFILE('/data/file.csv');");
+                "CREATE CONNECTION fc AS FLATFILE('/data/file.csv');");
             Assert.Empty(results);
         }
 
@@ -251,7 +251,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION fc ON FLATFILE('\\\\server\\share\\file.csv');");
+                "CREATE CONNECTION fc AS FLATFILE('\\\\server\\share\\file.csv');");
             Assert.Empty(results);
         }
 
@@ -260,7 +260,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION fc ON FLATFILE('ENC:encrypted_path');");
+                "CREATE CONNECTION fc AS FLATFILE('ENC:encrypted_path');");
             Assert.Empty(results);
         }
 
@@ -269,7 +269,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION fc ON FLATFILE('s3://bucket/file.csv');");
+                "CREATE CONNECTION fc AS FLATFILE('s3://bucket/file.csv');");
             Assert.Empty(results);
         }
 
@@ -305,7 +305,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION mssql ON MSSQL(SERVER = 'server', DATABASE = 'db', USERNAME = 'u', PASSWORD = 'p');");
+                "CREATE CONNECTION mssql AS MSSQL(SERVER = 'server', DATABASE = 'db', USERNAME = 'u', PASSWORD = 'p');");
             Assert.Empty(results);
         }
 
@@ -314,7 +314,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION ec ON EXCEL('relative/workbook.xlsx');");
+                "CREATE CONNECTION ec AS EXCEL('relative/workbook.xlsx');");
             Assert.NotEmpty(results);
         }
 
@@ -323,7 +323,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new AbsolutePathRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION jc ON JSON('relative/data.json');");
+                "CREATE CONNECTION jc AS JSON('relative/data.json');");
             Assert.NotEmpty(results);
         }
 
@@ -700,7 +700,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION fc ON FLATFILE('/data/safe/file.csv');");
+                "CREATE CONNECTION fc AS FLATFILE('/data/safe/file.csv');");
             Assert.NotEmpty(results);
             Assert.All(results, r => Assert.Equal("FileSystemSecurity", r.RuleName));
         }
@@ -710,7 +710,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION fc ON FLATFILE('C:\\');");
+                "CREATE CONNECTION fc AS FLATFILE('C:\\');");
             var warnings = results.Where(r => r.Severity == LintSeverity.Warning).ToList();
             Assert.NotEmpty(warnings);
         }
@@ -720,7 +720,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION fc ON FLATFILE('C:\\WINDOWS\\system32\\file.txt');");
+                "CREATE CONNECTION fc AS FLATFILE('C:\\WINDOWS\\system32\\file.txt');");
             var warnings = results.Where(r => r.Severity == LintSeverity.Warning).ToList();
             Assert.NotEmpty(warnings);
         }
@@ -730,7 +730,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION fc ON FLATFILE('ENC:encpath');");
+                "CREATE CONNECTION fc AS FLATFILE('ENC:encpath');");
             Assert.Empty(results);
         }
 
@@ -739,7 +739,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new FileSystemSecurityRule();
             var results = await Lint(rule,
-                "CREATE CONNECTION fc ON FLATFILE('https://example.com/file.csv');");
+                "CREATE CONNECTION fc AS FLATFILE('https://example.com/file.csv');");
             Assert.Empty(results);
         }
 

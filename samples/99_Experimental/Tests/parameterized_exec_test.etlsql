@@ -1,7 +1,7 @@
--- Parameterized EXECUTE / Pushdown Test
+﻿-- Parameterized EXECUTE / Pushdown Test
 -- Verifies fixes for positional parameters in native blocks
 
-CREATE CONNECTION ds ON MOCKDB();
+CREATE CONNECTION ds AS MOCKDB();
 
 DECLARE @id int = 1;
 DECLARE @name varchar(50) = 'John';

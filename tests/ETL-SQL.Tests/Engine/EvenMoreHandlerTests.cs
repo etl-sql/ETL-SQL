@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -81,7 +81,7 @@ namespace ETL_SQL.Tests.Engine
             {
                 var path = tmpCsv.Replace("\\", "\\\\");
                 var eval = await RunAndGet(
-                    $"CREATE CONNECTION fc ON FLATFILE('{path}');" +
+                    $"CREATE CONNECTION fc AS FLATFILE('{path}');" +
                     $"SHOW CONNECTION fc CONFIG;");
                 Assert.NotNull(eval.LastResult);
             }
@@ -97,7 +97,7 @@ namespace ETL_SQL.Tests.Engine
             {
                 var path = tmpCsv.Replace("\\", "\\\\");
                 var eval = await RunAndGet(
-                    $"CREATE CONNECTION fc2 ON FLATFILE('{path}');" +
+                    $"CREATE CONNECTION fc2 AS FLATFILE('{path}');" +
                     $"SHOW CONNECTION fc2 CONFIG INTO #cfg;" +
                     $"SELECT * FROM #cfg;");
                 Assert.NotNull(eval.LastResult);
@@ -374,7 +374,7 @@ namespace ETL_SQL.Tests.Engine
             {
                 var path = tmpCsv.Replace("\\", "\\\\");
                 await Run(
-                    $"CREATE CONNECTION ac ON FLATFILE('{path}');" +
+                    $"CREATE CONNECTION ac AS FLATFILE('{path}');" +
                     $"ALTER CONNECTION ac WITH (ENCODING = 'UTF-8');");
             }
             finally { if (File.Exists(tmpCsv)) File.Delete(tmpCsv); }

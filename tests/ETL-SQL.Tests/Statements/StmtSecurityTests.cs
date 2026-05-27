@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
@@ -130,7 +130,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             // We need to ensure MOCKDB is registered, which it should be in TestSetup/DependencyInjectionSetup
             var sql = $@"
                 USE PASSWORD = '{pass}';
-                CREATE CONNECTION test_security_conn ON MOCKDB('{enc}');
+                CREATE CONNECTION test_security_conn AS MOCKDB('{enc}');
             ";
             
             var script = TestHelpers.Parse(sql);
@@ -154,7 +154,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             
             var sql = $@"
                 USE PASSWORD = 'wrong_pass';
-                CREATE CONNECTION test_fail_conn ON MOCKDB('{enc}');
+                CREATE CONNECTION test_fail_conn AS MOCKDB('{enc}');
             ";
             
             var script = TestHelpers.Parse(sql);

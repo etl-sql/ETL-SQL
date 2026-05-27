@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -55,7 +55,7 @@ namespace ETL_SQL.Tests.Integration.UI
         {
             // Scenario: SELECT * FROM m.
             var engine = new SuggestionEngine();
-            var ctx = CreateContext("CREATE CONNECTION m ON MOCKDB(); SELECT * FROM m.", "m.");
+            var ctx = CreateContext("CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.", "m.");
 
             var results = (await engine.GetSuggestionsAsync(ctx)).ToList();
 
@@ -72,7 +72,7 @@ namespace ETL_SQL.Tests.Integration.UI
         {
             // Scenario: SELECT * FROM m.Users
             var engine = new SuggestionEngine();
-            var script = "CREATE CONNECTION m ON MOCKDB(); SELECT * FROM m.Users";
+            var script = "CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.Users";
             var ctx = CreateContext(script, "*");
 
             var results = (await engine.GetSuggestionsAsync(ctx)).ToList();
@@ -94,7 +94,7 @@ namespace ETL_SQL.Tests.Integration.UI
         {
             // Scenario: SELECT u.* FROM m.Users AS u JOIN Orders AS o ON 1=1
             var engine = new SuggestionEngine();
-            var script = "CREATE CONNECTION m ON MOCKDB(); SELECT u.* FROM m.Users AS u JOIN Orders AS o ON 1=1";
+            var script = "CREATE CONNECTION m AS MOCKDB(); SELECT u.* FROM m.Users AS u JOIN Orders AS o ON 1=1";
             var ctx = CreateContext(script, "u.*");
 
             var results = (await engine.GetSuggestionsAsync(ctx)).ToList();
@@ -116,7 +116,7 @@ namespace ETL_SQL.Tests.Integration.UI
             // Scenario: SELECT * FROM Or
             // "Or" matches "ORDER BY" (keyword) but also "Orders" (table)
             var engine = new SuggestionEngine();
-            var ctx = CreateContext("CREATE CONNECTION m ON MOCKDB(); SELECT * FROM Or", "Or");
+            var ctx = CreateContext("CREATE CONNECTION m AS MOCKDB(); SELECT * FROM Or", "Or");
 
             var results = (await engine.GetSuggestionsAsync(ctx)).ToList();
 
@@ -131,7 +131,7 @@ namespace ETL_SQL.Tests.Integration.UI
         {
             // Scenario: SELECT * FROM Users JOIN 
             var engine = new SuggestionEngine();
-            var ctx = CreateContext("CREATE CONNECTION m ON MOCKDB(); SELECT * FROM m.Users JOIN ", "");
+            var ctx = CreateContext("CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.Users JOIN ", "");
 
             var results = (await engine.GetSuggestionsAsync(ctx)).ToList();
 

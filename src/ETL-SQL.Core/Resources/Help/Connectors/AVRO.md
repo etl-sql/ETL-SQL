@@ -1,8 +1,8 @@
-# AVRO
+﻿# AVRO
 Reads and writes Apache Avro binary files. The schema is either embedded in the file or supplied via SCHEMA_FILE.
 
 Syntax:
-  CREATE CONNECTION <name> ON AVRO(
+  CREATE CONNECTION <name> AS AVRO(
     PATH        = 'file.avro',
     SCHEMA_FILE = 'schema.avsc',
     ENCRYPT     = ON | OFF,
@@ -16,7 +16,7 @@ Options:
   PASSWORD     — passphrase for encryption
 
 ```sql
-CREATE CONNECTION Events ON AVRO(
+CREATE CONNECTION Events AS AVRO(
   PATH = 'C:\data\events_2024.avro'
 );
 

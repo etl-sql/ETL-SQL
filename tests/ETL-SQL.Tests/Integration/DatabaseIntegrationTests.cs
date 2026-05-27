@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -27,8 +27,8 @@ namespace ETL_SQL.Tests.Integration
         private async Task<Evaluator> GetEvaluator()
         {
              var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-             await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION ms ON MSSQL('{_fixture.SqlConnectionString}');").Tokenize()).Parse());
-             await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION pg ON POSTGRES('{_fixture.PostgresConnectionString}');").Tokenize()).Parse());
+             await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION ms AS MSSQL('{_fixture.SqlConnectionString}');").Tokenize()).Parse());
+             await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION pg AS POSTGRES('{_fixture.PostgresConnectionString}');").Tokenize()).Parse());
              return eval;
         }
 
@@ -84,11 +84,11 @@ namespace ETL_SQL.Tests.Integration
             AnsiConsole.MarkupLine("  - Scenario: Complex Join (Oracle + FlatFile) -> MSSQL...");
             
             var eval = await GetEvaluator();
-            await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION ora ON ORACLE('{_fixture.OracleConnectionString}');").Tokenize()).Parse());
+            await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION ora AS ORACLE('{_fixture.OracleConnectionString}');").Tokenize()).Parse());
             
             string csvPath = Path.Combine(AppContext.BaseDirectory, "regions_final.csv");
             await File.WriteAllTextAsync(csvPath, "RegionID,RegionName\n1,North\n2,South");
-            await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION csv ON FLATFILE('{csvPath.Replace("\\", "/")}');").Tokenize()).Parse());
+            await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION csv AS FLATFILE('{csvPath.Replace("\\", "/")}');").Tokenize()).Parse());
 
             await eval.Evaluate(new Parser(new Lexer("CREATE TABLE ora.Sales_Final (ID INT, RID INT, Amt DECIMAL);").Tokenize()).Parse());
             await eval.Evaluate(new Parser(new Lexer("INSERT INTO ora.Sales_Final VALUES (101, 1, 500.00), (102, 2, 750.00), (103, 1, 250.00);").Tokenize()).Parse());

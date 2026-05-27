@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Linq;
 using Xunit;
 using ETL_SQL.Core.Metadata;
@@ -104,8 +104,8 @@ public class SnippetLibraryTests
     [Fact]
     public void ConvertToLspTabStops_PreservesPlaceholderText()
     {
-        var result = SnippetLibrary.ConvertToLspTabStops("ON MSSQL(SERVER = '«server»')");
-        Assert.Equal("ON MSSQL(SERVER = '${1:server}')", result);
+        var result = SnippetLibrary.ConvertToLspTabStops("AS MSSQL(SERVER = '«server»')");
+        Assert.Equal("AS MSSQL(SERVER = '${1:server}')", result);
     }
 
     // ── GetByPrefix filtering ─────────────────────────────────────────────────
@@ -245,7 +245,7 @@ public class SnippetLibraryTests
     public void MssqlSnippet_ContainsMssqlConnector()
     {
         var mssql = SnippetLibrary.Instance.GetAll().First(s => s.Trigger == "$mssql");
-        Assert.Contains("ON MSSQL(", mssql.TuiBody);
+        Assert.Contains("AS MSSQL(", mssql.TuiBody);
         Assert.Contains("SERVER", mssql.TuiBody);
         Assert.Contains("DATABASE", mssql.TuiBody);
     }

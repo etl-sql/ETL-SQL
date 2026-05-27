@@ -1,4 +1,4 @@
-# ETL-SQL Cookbook: Production ETL Patterns
+﻿# ETL-SQL Cookbook: Production ETL Patterns
 
 This document provides self-contained, high-fidelity recipes for real-world ETL tasks. These patterns demonstrate the full lifecycle of data movement, from inception to archival. Every recipe is runnable as-is with correctly provisioned connections.
 
@@ -11,8 +11,8 @@ This pattern extracts data from a remote source, stages it in the Engine workspa
 
 ```sql
 -- 1. Setup Infrastructure
-CREATE CONNECTION pg_legacy ON POSTGRES('Host=legacy;Database=Sales;Username=etl;Password=...');
-CREATE OR ALTER CONNECTION prod_sql ON MSSQL('ENC:U2FsdGVkX1+...');
+CREATE CONNECTION pg_legacy AS POSTGRES('Host=legacy;Database=Sales;Username=etl;Password=...');
+CREATE OR ALTER CONNECTION prod_sql AS MSSQL('ENC:U2FsdGVkX1+...');
 
 BEGIN TRY
     -- 2. Extract & Stage (Isolation)
@@ -58,8 +58,8 @@ A robust pattern for exporting sensitive internal data, securing it, and transmi
 ```sql
 -- Setup connections
 -- Note: SFTP uses PASSWORD, not PASS
-CREATE CONNECTION sftp_vendor ON SFTP('vendor.corp.com') WITH(USER='ext_user', PASSWORD='...');
-CREATE CONNECTION ledger_out ON FLATFILE('C:\Exports\monthly_ledger.csv') WITH(HEADER=ON);
+CREATE CONNECTION sftp_vendor AS SFTP('vendor.corp.com', USER='ext_user', PASSWORD='...');
+CREATE CONNECTION ledger_out AS FLATFILE('C:\Exports\monthly_ledger.csv', HEADER=ON);
 
 BEGIN TRY
     -- 1. Extract to local formatted file via a FLATFILE connection
@@ -71,7 +71,7 @@ BEGIN TRY
     -- 2. Post-Processing (Archive & Secure)
     -- Note: WITH() options use = for assignment
     COMPRESS FILE 'C:\Exports\monthly_ledger.csv' TO 'C:\Exports\ledger.zip' WITH(OVERWRITE=ON);
-    ENCRYPT FILE  'C:\Exports\ledger.zip' TO 'C:\Exports\ledger.zip.enc' PASSWORD('MasterSecret2026') WITH(OVERWRITE=ON);
+    ENCRYPT FILE  'C:\Exports\ledger.zip' TO 'C:\Exports\ledger.zip.enc' PASSWORD('MasterSecret2026', OVERWRITE=ON);
 
     -- 3. Transmit
     SEND FILE 'C:\Exports\ledger.zip.enc' TO '/inbox/incoming/' AT sftp_vendor;
@@ -209,9 +209,9 @@ Compare local flat files against a remote production database to identify missin
 ```sql
 -- Pattern Scenario: Bank Statement Reconciliation
 -- Always use absolute paths for file connections
-CREATE CONNECTION bank_csv    ON FLATFILE('C:\Inbox\bank_stmt.csv') WITH(HEADER=ON);
-CREATE CONNECTION local_db    ON MSSQL() WITH(SERVER='Prod', DATABASE='Accounts', TRUSTED_CONNECTION=TRUE);
-CREATE CONNECTION recon_out   ON FLATFILE('C:\Out\recon_errors.csv') WITH(HEADER=ON);
+CREATE CONNECTION bank_csv    AS FLATFILE('C:\Inbox\bank_stmt.csv', HEADER=ON);
+CREATE CONNECTION local_db    AS MSSQL(SERVER='Prod', DATABASE='Accounts', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION recon_out   AS FLATFILE('C:\Out\recon_errors.csv', HEADER=ON);
 
 -- 1. Stage both sides into Engine memory
 SELECT TranID, Amount INTO #Bank     FROM bank_csv;
@@ -268,8 +268,8 @@ END
 Anonymize sensitive customer data for compliance before moving it from PROD to a Dev/QA environment.
 
 ```sql
-CREATE CONNECTION prod     ON MSSQL() WITH(SERVER='prod-db', DATABASE='Customers', TRUSTED_CONNECTION=TRUE);
-CREATE CONNECTION qa_env   ON MSSQL() WITH(SERVER='qa-db',   DATABASE='Customers', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION prod     AS MSSQL(SERVER='prod-db', DATABASE='Customers', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION qa_env   AS MSSQL(SERVER='qa-db',   DATABASE='Customers', TRUSTED_CONNECTION=TRUE);
 
 -- 1. Mask and hash into a staging table
 SELECT 
@@ -294,9 +294,9 @@ Join data from three different platforms (SQL, Postgres, and CSV) in a single en
 
 ```sql
 -- Pre-requisite: connections named mssql_conn, pg_conn, csv_conn must be established
-CREATE CONNECTION mssql_conn ON MSSQL()    WITH(SERVER='sql01', DATABASE='Sales', TRUSTED_CONNECTION=TRUE);
-CREATE CONNECTION pg_conn    ON POSTGRES() WITH(HOST='pg01', DATABASE='Geo', USER='etl', PASSWORD='...');
-CREATE CONNECTION csv_conn   ON FLATFILE('C:\Data\coupons.csv') WITH(HEADER=ON);
+CREATE CONNECTION mssql_conn AS MSSQL(SERVER='sql01', DATABASE='Sales', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION pg_conn    AS POSTGRES(HOST='pg01', DATABASE='Geo', USER='etl', PASSWORD='...');
+CREATE CONNECTION csv_conn   AS FLATFILE('C:\Data\coupons.csv', HEADER=ON);
 
 -- The engine stages each source and joins them in engine memory
 SELECT 
@@ -318,8 +318,7 @@ SELECT * FROM #CrossPlatformResult ORDER BY S.ID;
 Centralized error reporting pattern using `SEND EMAIL` configured for webhook-style SMTP.
 
 ```sql
-CREATE CONNECTION alerts_smtp ON SMTP('smtp.company.com')
-    WITH(PORT=587, USERNAME='alerts@company.com', PASSWORD='apppassword', USE_SSL=TRUE);
+CREATE CONNECTION alerts_smtp AS SMTP('smtp.company.com', PORT=587, USERNAME='alerts@company.com', PASSWORD='apppassword', USE_SSL=TRUE);
 
 CREATE PROCEDURE NotifyTeam @Msg STRING, @Level STRING
 AS
@@ -355,7 +354,7 @@ FROM (SELECT Category, Quarter, Amount FROM #MonthlySales) AS src
 PIVOT (SUM(Amount) FOR Quarter IN ([Q1], [Q2], [Q3], [Q4])) AS pvt;
 
 -- Export to Excel — always create a named connection first
-CREATE CONNECTION xl_out ON EXCEL('C:\Reports\Quarterly_Summary.xlsx') WITH(HEADER=ON);
+CREATE CONNECTION xl_out AS EXCEL('C:\Reports\Quarterly_Summary.xlsx', HEADER=ON);
 INSERT INTO xl_out SELECT * FROM #Report;
 
 PRINT 'Quarterly report exported.';
@@ -367,8 +366,8 @@ PRINT 'Quarterly report exported.';
 Split a single large production table into multiple encrypted country-specific CSV files and SFTP them to separate vendor folders.
 
 ```sql
-CREATE CONNECTION prod        ON MSSQL()  WITH(SERVER='prod-db', DATABASE='Sales', TRUSTED_CONNECTION=TRUE);
-CREATE CONNECTION vendor_sftp ON SFTP()   WITH(HOST='sftp.vendor.com', USER='upload', PASSWORD='...');
+CREATE CONNECTION prod        AS MSSQL(SERVER='prod-db', DATABASE='Sales', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION vendor_sftp AS SFTP(HOST='sftp.vendor.com', USER='upload', PASSWORD='...');
 
 DECLARE @Countries LIST = (SELECT DISTINCT Country FROM prod.Sales);
 
@@ -379,11 +378,11 @@ BEGIN
     DECLARE @RemotePath  = '/inbox/' + @C + '/';
 
     -- Create the per-country CSV connection and write
-    CREATE OR ALTER CONNECTION country_out ON FLATFILE(@OutFile) WITH(HEADER=ON);
+    CREATE OR ALTER CONNECTION country_out AS FLATFILE(@OutFile, HEADER=ON);
     INSERT INTO country_out SELECT * FROM prod.Sales WHERE Country = @C;
 
     -- Encrypt and transmit (SQL style — includes password)
-    ENCRYPT FILE @OutFile TO @EncFile PASSWORD('ExportSecret2026') WITH(OVERWRITE=ON);
+    ENCRYPT FILE @OutFile TO @EncFile PASSWORD('ExportSecret2026', OVERWRITE=ON);
     SEND FILE @EncFile TO @RemotePath AT vendor_sftp;
 
     -- Cleanup local files
@@ -403,9 +402,9 @@ The most fundamental production ETL pattern. Store a watermark (the last success
 **Pattern Scenario:** Incremental customer sync from a source database.
 
 ```sql
-CREATE CONNECTION src    ON MSSQL() WITH(SERVER='src-db',     DATABASE='CRM',       TRUSTED_CONNECTION=TRUE);
-CREATE CONNECTION dest   ON MSSQL() WITH(SERVER='dest-db',    DATABASE='Warehouse',  TRUSTED_CONNECTION=TRUE);
-CREATE CONNECTION ctl_db ON MSSQL() WITH(SERVER='control-db', DATABASE='ETLControl', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION src    AS MSSQL(SERVER='src-db',     DATABASE='CRM',       TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION dest   AS MSSQL(SERVER='dest-db',    DATABASE='Warehouse',  TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION ctl_db AS MSSQL(SERVER='control-db', DATABASE='ETLControl', TRUSTED_CONNECTION=TRUE);
 
 BEGIN TRY
     -- 1. Read the last successful watermark
@@ -469,8 +468,8 @@ The simplest load strategy — wipe the target and reload completely from source
 **Pattern Scenario:** Nightly full reload of a product reference table.
 
 ```sql
-CREATE CONNECTION src  ON POSTGRES() WITH(HOST='pg01', DATABASE='Products', USER='etl', PASSWORD='...');
-CREATE CONNECTION dest ON MSSQL()    WITH(SERVER='dw01', DATABASE='Warehouse', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION src  AS POSTGRES(HOST='pg01', DATABASE='Products', USER='etl', PASSWORD='...');
+CREATE CONNECTION dest AS MSSQL(SERVER='dw01', DATABASE='Warehouse', TRUSTED_CONNECTION=TRUE);
 
 BEGIN TRY
     BEGIN TRANSACTION;
@@ -508,8 +507,8 @@ Assert data quality before loading. This pattern catches bad data (nulls, orphan
 **Pattern Scenario:** Quality-gate a staging table before merging into production.
 
 ```sql
-CREATE CONNECTION dest      ON MSSQL() WITH(SERVER='prod-db', DATABASE='Sales',   TRUSTED_CONNECTION=TRUE);
-CREATE CONNECTION quarantine ON MSSQL() WITH(SERVER='dq-db',   DATABASE='DataQuality', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION dest      AS MSSQL(SERVER='prod-db', DATABASE='Sales',   TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION quarantine AS MSSQL(SERVER='dq-db',   DATABASE='DataQuality', TRUSTED_CONNECTION=TRUE);
 
 -- Assume #staging is already loaded by a prior step
 
@@ -576,8 +575,7 @@ Pull data from a REST API and load it into a database table. The `API` connector
 **Pattern Scenario:** Sync GitHub issues from a public repository API into a tracking database.
 
 ```sql
-CREATE CONNECTION github ON API()
-    WITH(
+CREATE CONNECTION github AS API(
         URL       = 'https://api.github.com/repos/myorg/myrepo/issues',
         AUTH_TYPE = 'Bearer',
         TOKEN     = 'ENC:U2FsdGVk...',    -- GitHub Personal Access Token (encrypted)
@@ -586,8 +584,7 @@ CREATE CONNECTION github ON API()
         PAG_LIMIT = 100
     );
 
-CREATE CONNECTION dest ON MSSQL()
-    WITH(SERVER='tracker-db', DATABASE='Issues', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION dest AS MSSQL(SERVER='tracker-db', DATABASE='Issues', TRUSTED_CONNECTION=TRUE);
 
 BEGIN TRY
     -- 1. Pull all open issues from the API (pagination handled automatically)
@@ -628,9 +625,9 @@ Instead of failing an entire load when individual rows are bad, route problem ro
 **Pattern Scenario:** Process an order feed where some rows have invalid product codes.
 
 ```sql
-CREATE CONNECTION src  ON MSSQL() WITH(SERVER='src', DATABASE='Orders',   TRUSTED_CONNECTION=TRUE);
-CREATE CONNECTION dest ON MSSQL() WITH(SERVER='dw',  DATABASE='Warehouse', TRUSTED_CONNECTION=TRUE);
-CREATE CONNECTION dlq  ON MSSQL() WITH(SERVER='dw',  DATABASE='Warehouse', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION src  AS MSSQL(SERVER='src', DATABASE='Orders',   TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION dest AS MSSQL(SERVER='dw',  DATABASE='Warehouse', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION dlq  AS MSSQL(SERVER='dw',  DATABASE='Warehouse', TRUSTED_CONNECTION=TRUE);
 
 -- 1. Stage the inbound feed
 SELECT * INTO #inbound FROM src.dbo.OrderFeed WHERE Processed = 0;
@@ -679,7 +676,7 @@ Build and execute SQL statements at runtime — essential for parameterized tabl
 **Pattern Scenario:** Archive orders for each tenant into their own table.
 
 ```sql
-CREATE CONNECTION orders_db ON MSSQL() WITH(SERVER='multi-db', DATABASE='Orders', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION orders_db AS MSSQL(SERVER='multi-db', DATABASE='Orders', TRUSTED_CONNECTION=TRUE);
 
 DECLARE @Tenants LIST = (SELECT DISTINCT TenantId FROM orders_db.dbo.Orders);
 
@@ -774,12 +771,11 @@ This pattern compiles and packages a multi-file script folder into an immutable 
 
 ```sql
 -- 1. Infrastructure Connections
-CREATE CONNECTION src_db ON MSSQL('Server=prod_db;Database=Finance;Trusted_Connection=True;');
-CREATE CONNECTION pg_dest ON POSTGRES('Host=dest_db;Database=Analytics;Username=loader;Password=...');
+CREATE CONNECTION src_db AS MSSQL('Server=prod_db;Database=Finance;Trusted_Connection=True;');
+CREATE CONNECTION pg_dest AS POSTGRES('Host=dest_db;Database=Analytics;Username=loader;Password=...');
 
 -- Note: Remote administration connections must use ENCRYPT/ENC options
-CREATE CONNECTION local_orch ON ORCHESTRATOR()
-    WITH(HOST = 'http://localhost:5001', API_KEY = ENC:U2FsdGVkX1+...);
+CREATE CONNECTION local_orch AS ORCHESTRATOR(HOST = 'http://localhost:5001', API_KEY = ENC:U2FsdGVkX1+...);
 
 BEGIN TRY
     -- 2. Publish the source directory as an immutable script bundle

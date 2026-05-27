@@ -1,8 +1,8 @@
-# ORACLE
+﻿# ORACLE
 Connects to Oracle Database using a host/service combination or a TNS alias.
 
 Syntax:
-  CREATE CONNECTION <name> ON ORACLE(
+  CREATE CONNECTION <name> AS ORACLE(
     HOST         = 'oracle.corp.local',
     PORT         = 1521,
     SERVICE_NAME = 'ORCL',
@@ -21,7 +21,7 @@ Options:
   TABLE           — default table for unqualified SELECT/INSERT
 
 ```sql
-CREATE CONNECTION FinanceDB ON ORACLE(
+CREATE CONNECTION FinanceDB AS ORACLE(
   HOST         = 'oracle.finance.corp',
   PORT         = 1521,
   SERVICE_NAME = 'FINPROD',

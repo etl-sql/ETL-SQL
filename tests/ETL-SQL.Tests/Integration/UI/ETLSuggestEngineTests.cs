@@ -8,7 +8,7 @@ namespace ETL_SQL.Tests.Integration.UI
         [Fact]
         public void HighlightLine_ApiKey_ShouldBeMasked()
         {
-            string line = "CREATE CONNECTION orch WITH(API_KEY='MyAdminpass1!');";
+            string line = "CREATE CONNECTION orch AS ORCHESTRATOR(API_KEY='MyAdminpass1!');";
             bool endsInMultiline;
             string highlighted = ETLSuggestEngine.HighlightLine(line, 0, 100, false, out endsInMultiline);
 
@@ -21,7 +21,7 @@ namespace ETL_SQL.Tests.Integration.UI
         [Fact]
         public void HighlightLine_EncryptedPassword_ShouldBeMasked()
         {
-            string line = "CREATE CONNECTION portal WITH(PASSWORD='ENC:AcXpkzRv...');";
+            string line = "CREATE CONNECTION portal AS REPORTPORTAL(PASSWORD='ENC:AcXpkzRv...');";
             bool endsInMultiline;
             string highlighted = ETLSuggestEngine.HighlightLine(line, 0, 100, false, out endsInMultiline);
 
@@ -45,7 +45,7 @@ namespace ETL_SQL.Tests.Integration.UI
             string line = "SET @pass = 'secret';";
             // In this case 'secret' follows @pass which is NOT in our sensitive list
             // Let's test one that IS.
-            line = "CREATE CONNECTION c WITH(PASSWORD='1234567890');";
+            line = "CREATE CONNECTION c AS MSSQL(PASSWORD='1234567890');";
             bool endsInMultiline;
             string highlighted = ETLSuggestEngine.HighlightLine(line, 0, 100, false, out endsInMultiline);
 

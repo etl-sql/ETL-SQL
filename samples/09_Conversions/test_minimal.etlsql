@@ -1,5 +1,5 @@
--- @requires: postgres
-CREATE CONNECTION system_a ON POSTGRES() WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+﻿-- @requires: postgres
+CREATE CONNECTION system_a AS POSTGRES(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
 EXECUTE system_a BEGIN
     DROP TABLE IF EXISTS test_table;
     CREATE TABLE test_table (id INT);

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using ETL_SQL.Data;
@@ -58,11 +58,10 @@ namespace ETL_SQL.Connectors.Rest
 Connects to any HTTPS endpoint returning JSON data.
 
 Basic Usage:
-  CREATE CONNECTION my_api ON API() WITH(URL='https://api.example.com/data');
+  CREATE CONNECTION my_api AS API(URL='https://api.example.com/data');
 
 With Authentication:
-  CREATE CONNECTION github ON API() 
-    WITH(URL='https://api.github.com/repos/microsoft/terminal/issues', AUTH_TYPE='BEARER', TOKEN='my_token');
+  CREATE CONNECTION github AS API(URL='https://api.github.com/repos/microsoft/terminal/issues', AUTH_TYPE='BEARER', TOKEN='my_token');
 
 Supported Options:
   URL         - The base endpoint URL.

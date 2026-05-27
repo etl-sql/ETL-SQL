@@ -1,4 +1,4 @@
-# Fuzzy Matching Strategy
+﻿# Fuzzy Matching Strategy
 
 **Status:** Phases 1–4 shipped; Phase 5 deferred  
 **Date:** 2026-05-14  
@@ -105,7 +105,7 @@ ORDER BY a.id, score DESC;
 -- Phonetic join (fast — it's an exact join on the encoded value)
 SELECT a.*, b.*
 FROM   #dirty a
-JOIN   #reference b ON SOUNDEX(a.name) = SOUNDEX(b.name);
+JOIN   #reference b AS SOUNDEX(a.name) = SOUNDEX(b.name);
 
 -- Composite score combining two algorithms
 SELECT a.id,
@@ -128,7 +128,7 @@ Document this limit clearly. For the initial phase, recommend the phonetic block
 SELECT a.*, b.*, SIMILARITY(a.name, b.name) AS score
 INTO   #candidates
 FROM   #dirty a
-JOIN   #reference b ON METAPHONE(a.name) = METAPHONE(b.name);   -- blocking pass
+JOIN   #reference b AS METAPHONE(a.name) = METAPHONE(b.name);   -- blocking pass
 
 SELECT *, ROW_NUMBER() OVER (PARTITION BY a_id ORDER BY score DESC) AS rank
 FROM #candidates
@@ -280,7 +280,7 @@ FROM (
 JOIN (
     SELECT *, ROW_NUMBER() OVER (ORDER BY NORMALIZE(name, 'COMPANY')) AS rn
     FROM #dirty
-) b ON ABS(a.rn - b.rn) <= 3    -- window size
+) b AS ABS(a.rn - b.rn) <= 3    -- window size
      AND a.id < b.id             -- avoid self-match and duplicates
 WHERE SIMILARITY(a.name, b.name) > 0.75;
 ```

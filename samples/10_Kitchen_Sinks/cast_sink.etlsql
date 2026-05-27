@@ -1,9 +1,9 @@
--- ==============================================================================
+﻿-- ==============================================================================
 -- ETL-SQL Kitchen Sink: CAST and TRY_CAST Operations
 -- Demonstrates type conversion and error handling for data transformation.
 -- ==============================================================================
 
-CREATE CONNECTION m ON MOCKDB();
+CREATE CONNECTION m AS MOCKDB();
 
 PRINT '--- 1. Basic Casting ---';
 DECLARE @str_val = '123.45';

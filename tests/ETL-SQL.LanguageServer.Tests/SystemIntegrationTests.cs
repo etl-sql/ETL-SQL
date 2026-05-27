@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -51,7 +51,7 @@ namespace ETL_SQL.LanguageServer.Tests
             var normalizedUri = uri.ToString(); 
 
             // 1. Analyze script with alias
-            var script = "CREATE CONNECTION m ON MOCKDB();\r\nSELECT u. FROM m.Users AS u;";
+            var script = "CREATE CONNECTION m AS MOCKDB();\r\nSELECT u. FROM m.Users AS u;";
             _output.WriteLine("Analyzing script...");
             await handler.AnalyzeAsync(uri, script);
 
@@ -77,7 +77,7 @@ namespace ETL_SQL.LanguageServer.Tests
 
             // Assert: Should see columns from Users (UserID, UserName, Email)
             Assert.Contains(list, i => i.Label == "u.UserID");
-            script = "CREATE CONNECTION m ON MOCKDB();\r\nSELECT u.* FROM m.Users AS u;";
+            script = "CREATE CONNECTION m AS MOCKDB();\r\nSELECT u.* FROM m.Users AS u;";
             await handler.AnalyzeAsync(uri, script);
             
             completionParams = new CompletionParams
@@ -96,7 +96,7 @@ namespace ETL_SQL.LanguageServer.Tests
              Assert.Contains("u.UserID, u.UserName, u.Email", expandItem.InsertText);
 
             // 4. Test expansion WITHOUT alias: SELECT * FROM m.Users;
-            script = "CREATE CONNECTION m ON MOCKDB();\r\nSELECT * FROM m.Users;";
+            script = "CREATE CONNECTION m AS MOCKDB();\r\nSELECT * FROM m.Users;";
             await handler.AnalyzeAsync(uri, script);
             
             completionParams = new CompletionParams

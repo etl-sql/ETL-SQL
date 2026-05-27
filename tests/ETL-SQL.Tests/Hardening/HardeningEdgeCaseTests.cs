@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -84,7 +84,7 @@ namespace ETL_SQL.Tests.Hardening
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             // Using MockSqlDataSource to simulate remote plan
-            await ev.Evaluate(TestHelpers.Parse("CREATE CONNECTION RemotePlan ON MSSQL('Server=Remote') WITH(PASSWORD='abc');"));
+            await ev.Evaluate(TestHelpers.Parse("CREATE CONNECTION RemotePlan AS MSSQL('Server=Remote', PASSWORD='abc');"));
             
             var res = await ev.ExecuteQuery(TestHelpers.Parse("EXPLAIN SELECT * FROM RemotePlan.Users;").Statements[0]).FirstAsync();
             

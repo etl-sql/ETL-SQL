@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -29,7 +29,7 @@ namespace ETL_SQL.Tests.Integration
 </Root>");
 
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            await ev.Evaluate(Parse($"CREATE CONNECTION x ON XML('{tempXml}');"));
+            await ev.Evaluate(Parse($"CREATE CONNECTION x AS XML('{tempXml}');"));
             var res = await ev.ExecuteQuery(Parse("SELECT * FROM x;").Statements[0]).FirstAsync();
             
             Assert.Equal(2, res.Rows.Count);
@@ -49,7 +49,7 @@ namespace ETL_SQL.Tests.Integration
 </Root>");
 
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            await ev.Evaluate(Parse($"CREATE CONNECTION x ON XML('{tempXml}');"));
+            await ev.Evaluate(Parse($"CREATE CONNECTION x AS XML('{tempXml}');"));
             var res = await ev.ExecuteQuery(Parse("SELECT * FROM x;").Statements[0]).FirstAsync();
             
             Assert.Equal(2, res.Rows.Count);
@@ -73,7 +73,7 @@ namespace ETL_SQL.Tests.Integration
 </Response>");
 
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            await ev.Evaluate(Parse($"CREATE CONNECTION x ON XML('{tempXml}') WITH (ROOT_PATH='Response.Data');"));
+            await ev.Evaluate(Parse($"CREATE CONNECTION x AS XML('{tempXml}', ROOT_PATH='Response.Data');"));
             var res = await ev.ExecuteQuery(Parse("SELECT * FROM x;").Statements[0]).FirstAsync();
             
             Assert.Equal(2, res.Rows.Count);

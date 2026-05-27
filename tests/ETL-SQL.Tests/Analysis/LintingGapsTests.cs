@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
@@ -102,7 +102,7 @@ CREATE VISUAL ShareChart AS PIE (
             linter.AddRule(new DeprecatedConnectionSyntaxRule());
 
             // FILE is deprecated, FLOATFILE should be used
-            var sql = "CREATE CONNECTION my_conn ON FILE('data.csv');";
+            var sql = "CREATE CONNECTION my_conn AS FILE('data.csv');";
             var script = Parse(sql);
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
 
@@ -118,7 +118,7 @@ CREATE VISUAL ShareChart AS PIE (
             var linter = new Linter();
             linter.AddRule(new DeprecatedConnectionSyntaxRule());
 
-            var sql = "ALTER CONNECTION my_conn ON FILE('new_data.csv');";
+            var sql = "ALTER CONNECTION my_conn AS FILE('new_data.csv');";
             var script = Parse(sql);
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
 
@@ -192,7 +192,7 @@ CREATE VISUAL ShareChart AS PIE (
             var linter = new Linter();
             linter.AddRule(new FlatFileDelimiterConflictRule());
 
-            var sql = "CREATE CONNECTION myfile ON FLATFILE ('data.csv') WITH (DELIMITER = ',', ROW_DELIMITER = ',');";
+            var sql = "CREATE CONNECTION myfile AS FLATFILE('data.csv', DELIMITER = ',', ROW_DELIMITER = ',');";
             var script = Parse(sql);
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
 
@@ -207,7 +207,7 @@ CREATE VISUAL ShareChart AS PIE (
             var linter = new Linter();
             linter.AddRule(new FlatFileDelimiterConflictRule());
 
-            var sql = "CREATE CONNECTION myfile ON FLATFILE ('data.csv') WITH (DELIMITER = ',', ROW_DELIMITER = '\\n');";
+            var sql = "CREATE CONNECTION myfile AS FLATFILE('data.csv', DELIMITER = ',', ROW_DELIMITER = '\\n');";
             var script = Parse(sql);
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
 

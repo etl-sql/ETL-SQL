@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using ETL_SQL.Engine;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
@@ -105,7 +105,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task Evaluator_SupportsSubqueryWithGroupBy()
         {
             var evaluator = CreateEvaluator();
-            await evaluator.EvaluateStatement(Parse("CREATE CONNECTION src ON MOCKDB();"));
+            await evaluator.EvaluateStatement(Parse("CREATE CONNECTION src AS MOCKDB();"));
             
             // Populate #data using DUAL to avoid MOCKDB pushdown side-effects for literals
             await evaluator.EvaluateStatement(Parse("SELECT 1 as id, 'A' as cat, 10.0 as val INTO #data FROM DUAL;"));
@@ -135,7 +135,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task Evaluator_SupportsSubqueryWithWindowFunction()
         {
             var evaluator = CreateEvaluator();
-            await evaluator.EvaluateStatement(Parse("CREATE CONNECTION src ON MOCKDB();"));
+            await evaluator.EvaluateStatement(Parse("CREATE CONNECTION src AS MOCKDB();"));
             await evaluator.EvaluateStatement(Parse("SELECT 1 as id, 10.0 as val INTO #data FROM src;"));
             await evaluator.EvaluateStatement(Parse("INSERT INTO #data SELECT 2, 20.0 FROM src;"));
 
@@ -154,7 +154,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task Evaluator_SupportsNestedCorrelatedSubqueries()
         {
             var evaluator = CreateEvaluator();
-            await evaluator.EvaluateStatement(Parse("CREATE CONNECTION src ON MOCKDB();"));
+            await evaluator.EvaluateStatement(Parse("CREATE CONNECTION src AS MOCKDB();"));
             await evaluator.EvaluateStatement(Parse("SELECT 1 as a INTO #t1 FROM src;"));
             await evaluator.EvaluateStatement(Parse("SELECT 1 as b INTO #t2 FROM src;"));
             await evaluator.EvaluateStatement(Parse("SELECT 1 as c INTO #t3 FROM src;"));

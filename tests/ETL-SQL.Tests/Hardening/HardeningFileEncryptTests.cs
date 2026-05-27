@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Common;
 using System;
@@ -104,10 +104,10 @@ namespace ETL_SQL.Tests.Hardening
         public async Task Linter_EncryptionRules()
         {
             var sql = @"
-                CREATE CONNECTION c1 ON FLATFILE('data.csv') WITH (ENCRYPT=ON);
-                CREATE CONNECTION c2 ON FLATFILE('data.csv') WITH (ENCRYPT=ON, PASSWORD='abc');
-                CREATE CONNECTION c3 ON FLATFILE('data.csv') WITH (ENCRYPT=ON, KEYFILE='k.pem');
-                CREATE CONNECTION c4 ON FLATFILE('data.csv') WITH (ENCRYPT=ON, PASSWORD='abc', ALGORITHM='INVALID');
+                CREATE CONNECTION c1 AS FLATFILE('data.csv', ENCRYPT=ON);
+                CREATE CONNECTION c2 AS FLATFILE('data.csv', ENCRYPT=ON, PASSWORD='abc');
+                CREATE CONNECTION c3 AS FLATFILE('data.csv', ENCRYPT=ON, KEYFILE='k.pem');
+                CREATE CONNECTION c4 AS FLATFILE('data.csv', ENCRYPT=ON, PASSWORD='abc', ALGORITHM='INVALID');
             ";
 
             var lexer = new Lexer(sql);

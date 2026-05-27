@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -37,7 +37,7 @@ namespace ETL_SQL.Tests.Integration
         private async Task TestDataTypes(Evaluator eval, string connStr)
         {
             AnsiConsole.MarkupLine("  - Testing Postgres Data Types...");
-            await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION db ON POSTGRES('{connStr}');").Tokenize()).Parse());
+            await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION db AS POSTGRES('{connStr}');").Tokenize()).Parse());
             
             string sql = @"
                 CREATE TABLE db.typetest (

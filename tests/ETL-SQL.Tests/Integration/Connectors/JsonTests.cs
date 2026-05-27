@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -79,7 +79,7 @@ namespace ETL_SQL.Tests.Integration
 
             try
             {
-                var source = @"CREATE CONNECTION src ON JSON ('" + jsonFile + @"');
+                var source = @"CREATE CONNECTION src AS JSON('" + jsonFile + @"');
                                SELECT grp, SUM(val) as total FROM src GROUP BY grp ORDER BY grp;";
                 
                 var lexer = new Lexer(source);

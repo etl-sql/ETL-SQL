@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.IO;
 using System.Linq;
@@ -19,8 +19,8 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestJsonExport()
         {
             var sql = @"
-                CREATE CONNECTION src ON JSON ('test_data.json');
-                CREATE CONNECTION dest ON JSON ('export.json');
+                CREATE CONNECTION src AS JSON('test_data.json');
+                CREATE CONNECTION dest AS JSON('export.json');
 
                 -- Create dummy data
                 SELECT 1 AS ID, 'Alice' AS Name, 30 AS Age
@@ -52,7 +52,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestAdvancedJsonExport()
         {
             var sql = @"
-                CREATE CONNECTION dest ON JSON ('export_adv.json');
+                CREATE CONNECTION dest AS JSON('export_adv.json');
 
                 SELECT 1 AS [User.ID], 'Alice' AS [User.Info.Name], 'New York' AS [User.Info.Address.City], 'Active' AS Status
                 INTO #data;
@@ -82,7 +82,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestXmlExport()
         {
             var sql = @"
-                CREATE CONNECTION dest ON XML ('export.xml');
+                CREATE CONNECTION dest AS XML('export.xml');
 
                 SELECT 1 AS [ID], 'Alice' AS [Details.Name], 'NY' AS [Details.Loc]
                 INTO #data;
@@ -110,7 +110,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestCsvExport()
         {
             var sql = @"
-                CREATE CONNECTION dest ON FLATFILE ('export.csv');
+                CREATE CONNECTION dest AS FLATFILE('export.csv');
 
                 SELECT 1 AS ID, 'Alice' AS Name
                 INTO #data;

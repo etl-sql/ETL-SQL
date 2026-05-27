@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
@@ -12,7 +12,7 @@ namespace ETL_SQL.Connectors.ReportPortal
     /// Connector type for connecting to a remote ETL-SQL Report Portal.
     /// Usage inside an ETL-SQL script:
     /// <code>
-    /// CREATE CONNECTION portal ON REPORTPORTAL(
+    /// CREATE CONNECTION portal AS REPORTPORTAL(
     ///     HOST = 'http://report-server:5000',
     ///     USER = 'admin',
     ///     PASSWORD = ENC:...
@@ -50,7 +50,7 @@ namespace ETL_SQL.Connectors.ReportPortal
         public Dictionary<string, string[]> GetOptionValues() => [];
         public string GetHelp() =>
             "REPORTPORTAL — connects to an ETL-SQL Report Portal for remote administration.\n" +
-            "Usage: CREATE CONNECTION <alias> ON REPORTPORTAL(HOST='http://...', USER='admin', PASSWORD=ENC:...);\n" +
+            "Usage: CREATE CONNECTION <alias> AS REPORTPORTAL(HOST='http://...', USER='admin', PASSWORD=ENC:...);\n" +
             "Then: EXECUTE <alias> BEGIN ... END";
 
         public IDataSource CreateDataSource(

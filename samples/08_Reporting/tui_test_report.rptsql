@@ -1,8 +1,8 @@
--- TUI Report Preview Test Script
+﻿-- TUI Report Preview Test Script
 -- Use Alt+R in the TUI IDE to view this graphical report, 
 -- or run 'etl-sql-report print samples/08_Reporting/tui_test_report.rptsql' from the CLI.
 
-CREATE CONNECTION db ON MOCKDB();
+CREATE CONNECTION db AS MOCKDB();
 
 -- 1. Prepare data for standard and advanced charts
 CREATE DATASET &SalesSummary AS (

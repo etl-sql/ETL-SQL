@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -90,7 +90,7 @@ namespace ETL_SQL.Tests.Integration.Integration
             var (eval1, code1) = await RunSessionStep(@"
                 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest');
                 DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
-                CREATE CONNECTION m ON MSSQL(@conn);
+                CREATE CONNECTION m AS MSSQL(@conn);
             ");
             Assert.Equal(0, code1);
             Assert.True(eval1.Connections.ContainsKey("m"));
@@ -175,7 +175,7 @@ namespace ETL_SQL.Tests.Integration.Integration
             // 12th run: Fails gracefully
             AnsiConsole.MarkupLine("  - Step 12: Verify connection failure to closed Docker");
             var (eval12, code12) = await RunSessionStep(@"
-                CREATE CONNECTION m ON MSSQL(@conn);
+                CREATE CONNECTION m AS MSSQL(@conn);
                 SELECT TOP 1 * FROM m.dbo.SessionStateTestEmployee;
             ");
             Assert.Equal(1, code12); // Should fail to connect
@@ -185,7 +185,7 @@ namespace ETL_SQL.Tests.Integration.Integration
             var (eval13, code13) = await RunSessionStep(@"
                 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest');
                 SET @conn = DOCKER.CONNECTION_STRING;
-                CREATE CONNECTION m ON MSSQL(@conn);
+                CREATE CONNECTION m AS MSSQL(@conn);
             ");
             Assert.Equal(0, code13);
 

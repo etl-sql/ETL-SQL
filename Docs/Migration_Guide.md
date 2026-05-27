@@ -1,4 +1,4 @@
-# ETL-SQL Migration Guide (v0.9.0)
+﻿# ETL-SQL Migration Guide (v0.9.0)
 
 ETL-SQL v0.9.0 is the current release baseline. Because the app has not had a public stable release before this baseline, this guide is mainly for repository maintainers, early testers, and anyone updating pre-release scripts from older branches.
 
@@ -88,7 +88,7 @@ END
 `GO` separates script batches. This is useful when a script needs one batch to define objects or state before a later batch consumes them.
 
 ```sql
-CREATE CONNECTION src ON MOCKDB();
+CREATE CONNECTION src AS MOCKDB();
 GO
 
 SELECT * FROM src.Users;

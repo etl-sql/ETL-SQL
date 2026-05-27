@@ -1,4 +1,4 @@
-# TRANSFER Operations
+﻿# TRANSFER Operations
 SEND FILE and RECEIVE FILE move files between the local file system and a remote server connection (SFTP, FTP, or Azure Blob).
 
 Syntax:
@@ -9,7 +9,7 @@ The connection must be of type SFTP, FTP, or AZURE_BLOB.
 
 ```sql
 -- Download today's data file from an SFTP server
-CREATE CONNECTION DataFeed ON SFTP(
+CREATE CONNECTION DataFeed AS SFTP(
   HOST    = 'sftp.supplier.com',
   USER    = @user,
   KEYFILE = 'C:\keys\supplier_rsa'

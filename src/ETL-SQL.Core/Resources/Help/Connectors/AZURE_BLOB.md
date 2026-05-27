@@ -1,15 +1,15 @@
-# AZURE_BLOB
+﻿# AZURE_BLOB
 Reads files stored in Azure Blob Storage. Use as a source in SELECT to list or read blobs, or as a target to write output files.
 
 Syntax:
-  CREATE CONNECTION <name> ON AZURE_BLOB(
+  CREATE CONNECTION <name> AS AZURE_BLOB(
     ACCOUNT_NAME = 'storageaccount',
     ACCOUNT_KEY  = '<key>',
     CONTAINER    = 'container-name'
   );
 
   -- Or with a full SAS / connection string:
-  CREATE CONNECTION <name> ON AZURE_BLOB(
+  CREATE CONNECTION <name> AS AZURE_BLOB(
     CONNECTION_STRING = 'DefaultEndpointsProtocol=https;...',
     CONTAINER         = 'container-name'
   );
@@ -22,7 +22,7 @@ Options:
   PREFIX            — blob name prefix filter when listing
 
 ```sql
-CREATE CONNECTION ReportBlobs ON AZURE_BLOB(
+CREATE CONNECTION ReportBlobs AS AZURE_BLOB(
   ACCOUNT_NAME = 'mystorage',
   ACCOUNT_KEY  = @blob_key,
   CONTAINER    = 'reports'

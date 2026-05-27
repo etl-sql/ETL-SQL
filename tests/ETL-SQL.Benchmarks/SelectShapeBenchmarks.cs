@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -104,7 +104,7 @@ namespace ETL_SQL.Benchmarks
 
                 _evaluator = new Evaluator(handlers, sp, registry, tracker.Object, docker.Object, connectors, sessions, security, l, new LanguageHelpRegistry(), new EvaluatorComponentRegistry());
 
-                var connSql = "CREATE CONNECTION shapes ON SHAPEMOCK() WITH (SupportsSqlPushdown = false);";
+                var connSql = "CREATE CONNECTION shapes AS SHAPEMOCK(SupportsSqlPushdown = false);";
                 await _evaluator.Evaluate(new Parser(new Lexer(connSql).Tokenize()).Parse());
 
                 Console.WriteLine("// SelectShapeBenchmarks.Setup: Connection established.");

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
@@ -299,7 +299,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var linter = new Linter();
             linter.AddRule(new UnusedConnectionRule());
-            var script = Parse("CREATE CONNECTION myConn ON FLATFILE('data.csv');");
+            var script = Parse("CREATE CONNECTION myConn AS FLATFILE('data.csv');");
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
             Assert.Single(results);
             Assert.Equal(LintSeverity.Warning, results[0].Severity);
@@ -311,7 +311,7 @@ namespace ETL_SQL.Tests.Analysis
             var linter = new Linter();
             linter.AddRule(new UnusedConnectionRule());
             var script = Parse(@"
-                CREATE CONNECTION myConn ON FLATFILE('data.csv');
+                CREATE CONNECTION myConn AS FLATFILE('data.csv');
                 SELECT * FROM myConn.MyTable;
             ");
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
@@ -443,7 +443,7 @@ namespace ETL_SQL.Tests.Analysis
             var linter = new Linter();
             linter.AddRule(new ConnectionForwardReferenceRule());
             // Use newline so the SELECT is on line 1 and CREATE CONNECTION is on line 2
-            var script = Parse("SELECT * FROM myConn.Table1;\nCREATE CONNECTION myConn ON FLATFILE('x.csv');");
+            var script = Parse("SELECT * FROM myConn.Table1;\nCREATE CONNECTION myConn AS FLATFILE('x.csv');");
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
             // If the table reference is parsed with ConnectionName, the forward ref is detected
             // If not, just verify the rule runs without throwing
@@ -455,7 +455,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var linter = new Linter();
             linter.AddRule(new ConnectionForwardReferenceRule());
-            var script = Parse("CREATE CONNECTION myConn ON FLATFILE('x.csv');\nSELECT * FROM myConn.Table1;");
+            var script = Parse("CREATE CONNECTION myConn AS FLATFILE('x.csv');\nSELECT * FROM myConn.Table1;");
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
             Assert.Empty(results);
         }
@@ -491,7 +491,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var linter = new Linter();
             linter.AddRule(new FlatFileDelimiterConflictRule());
-            var script = Parse("CREATE CONNECTION f ON FLATFILE('data.csv') WITH (DELIMITER = ',', QUOTE_CHAR = '\"');");
+            var script = Parse("CREATE CONNECTION f AS FLATFILE('data.csv', DELIMITER = ',', QUOTE_CHAR = '\"');");
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
             Assert.Empty(results);
         }
@@ -527,7 +527,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var linter = new Linter();
             linter.AddRule(new AbsolutePathRule());
-            var script = Parse("CREATE CONNECTION f ON FLATFILE('/data/files/data.csv');");
+            var script = Parse("CREATE CONNECTION f AS FLATFILE('/data/files/data.csv');");
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
             Assert.Empty(results);
         }
@@ -537,7 +537,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var linter = new Linter();
             linter.AddRule(new AbsolutePathRule());
-            var script = Parse("CREATE CONNECTION f ON FLATFILE('data.csv');");
+            var script = Parse("CREATE CONNECTION f AS FLATFILE('data.csv');");
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
             Assert.NotEmpty(results);
         }

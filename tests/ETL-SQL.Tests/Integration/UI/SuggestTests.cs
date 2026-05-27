@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -70,7 +70,7 @@ namespace ETL_SQL.Tests.Integration
         public async Task TestFilePathSuggestions()
         {
             // This test depends on the environment, but we can check if it triggers
-            var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("Tes", "CREATE CONNECTION C ON FLATFILE('Tes", new Dictionary<string, IDataSource>());
+            var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("Tes", "CREATE CONNECTION C AS FLATFILE('Tes", new Dictionary<string, IDataSource>());
             // If TestData directory exists, it should have some hits
             if (System.IO.Directory.Exists("TestData"))
             {
@@ -105,17 +105,17 @@ namespace ETL_SQL.Tests.Integration
         [Fact]
         public async Task TestWithClauseSuggestions()
         {
-            string script = "CREATE CONNECTION my_csv ON FLATFILE('test.csv') WITH (";
+            string script = "CREATE CONNECTION my_csv AS FLATFILE('test.csv', ";
             var sugg = await ETLSuggestEngine.GetSuggestionsAsync("", script, new Dictionary<string, IDataSource>());
             Assert.True(sugg.Any(s => s.Text == "DELIMITER") && sugg.Any(s => s.Text == "HEADER"), "Should suggest options for FILE connection");
             Assert.True(sugg.Any(s => s.Text == "ROW_DELIMITER"), "Should suggest ROW_DELIMITER");
 
-            string scriptVal = "CREATE CONNECTION my_csv ON FLATFILE('test.csv') WITH (DELIMITER = ";
+            string scriptVal = "CREATE CONNECTION my_csv AS FLATFILE('test.csv', DELIMITER = ";
             var suggVal = await ETLSuggestEngine.GetSuggestionsAsync("", scriptVal, new Dictionary<string, IDataSource>());
             Assert.True(suggVal.Any(s => s.Text == "PIPE") && suggVal.Any(s => s.Text == "TAB"), "Should suggest values for DELIMITER");
             Assert.True(suggVal.Any(s => s.Text == "SEMICOLON"), "Should suggest SEMICOLON for DELIMITER");
 
-            string scriptRow = "CREATE CONNECTION my_csv ON FLATFILE('test.csv') WITH (ROW_DELIMITER = ";
+            string scriptRow = "CREATE CONNECTION my_csv AS FLATFILE('test.csv', ROW_DELIMITER = ";
             var suggRow = await ETLSuggestEngine.GetSuggestionsAsync("", scriptRow, new Dictionary<string, IDataSource>());
             Assert.True(suggRow.Any(s => s.Text == "CRLF") && suggRow.Any(s => s.Text == "TILDE"), "Should suggest values for ROW_DELIMITER");
         }
@@ -229,7 +229,7 @@ namespace ETL_SQL.Tests.Integration
         [Fact]
         public async Task TestTextQualifierSuggestions()
         {
-            string script = "CREATE CONNECTION cs ON FLATFILE('TestData/test_qualified_output.csv') WITH(TEXT_QUALIFIER=D";
+            string script = "CREATE CONNECTION cs AS FLATFILE('TestData/test_qualified_output.csv', TEXT_QUALIFIER=D";
             var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("D", script, new Dictionary<string, ETL_SQL.Data.IDataSource>());
             
             // Should suggest DOUBLEQUOTE and DOUBLEQUOTES in alpha order

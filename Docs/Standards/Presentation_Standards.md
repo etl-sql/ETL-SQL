@@ -1,4 +1,4 @@
-# ETL-SQL Presentation Layer Standards
+﻿# ETL-SQL Presentation Layer Standards
 
 **Applies to ETL-SQL 0.7.0 — Established with the ScriptOutput / IOutputSink architecture**
 
@@ -183,7 +183,7 @@ Mixing the two creates fragile tests that break when either layer changes.
 Three scripts are the canonical regression canaries for performance:
 
 1. `SELECT 1;` — the minimum viable execution
-2. `CREATE CONNECTION m ON MOCKDB(); SELECT * FROM m.Users;` — connection + query
+2. `CREATE CONNECTION m AS MOCKDB(); SELECT * FROM m.Users;` — connection + query
 3. A session round-trip script — write a variable, close session, restore, verify
 
 If `Performance.TotalMs` increases by more than 2x on any of these scripts between releases,

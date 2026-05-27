@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
@@ -16,7 +16,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             // Arrange
             var scriptText = @"
-                CREATE CONNECTION s ON MSSQL('conn_string');
+                CREATE CONNECTION s AS MSSQL('conn_string');
                 EXECUTE s
                 BEGIN
                     CREATE TABLE dbo.SourceSystem(id int, description varchar(200));
@@ -50,11 +50,11 @@ namespace ETL_SQL.Tests.Analysis
         {
             // Arrange - Native SQL that ETL-SQL parser might fail on (e.g. non-standard column constraints)
             var scriptText = @"
-                CREATE CONNECTION s ON MSSQL('conn_string');
+                CREATE CONNECTION s AS MSSQL('conn_string');
                 EXECUTE s
                 BEGIN
                     -- This is native SQL that our parser might not like (e.g. specific dialect hint)
-                    CREATE TABLE NativeTable(id int) WITH (OPTIMIZATION_HINT = 1);
+                    CREATE TABLE NativeTable(id int, OPTIMIZATION_HINT = 1);
                 END
                 SELECT * FROM s.NativeTable;
             ";

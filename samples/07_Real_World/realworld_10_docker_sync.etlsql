@@ -1,4 +1,4 @@
-/* 
+﻿/* 
     REAL-WORLD SCENARIO 10: Orchestrated Cross-Database Sync via Docker
     -------------------------------------------------------------------
     Self-contained. Employs a robust TRY/CATCH to gracefully degrade if Docker daemon 
@@ -17,8 +17,8 @@ BEGIN TRY
     DECLARE @pgConn VARCHAR(500) = dockerPostgres.CONNECTION_STRING;
 
     -- 3. Register standard engine connections linking to the Docker APIs
-    CREATE CONNECTION MasterSql ON MSSQL(@sqlConn);
-    CREATE CONNECTION SlavePg ON POSTGRES(@pgConn);
+    CREATE CONNECTION MasterSql AS MSSQL(@sqlConn);
+    CREATE CONNECTION SlavePg AS POSTGRES(@pgConn);
 
     PRINT 'Containers online. Populating Master Dimension Schema...';
 

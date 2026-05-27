@@ -1,7 +1,7 @@
--- Slicer Default Value Test
+﻿-- Slicer Default Value Test
 DECLARE @region VARCHAR(50) = 'East';
 
-CREATE CONNECTION mock ON MOCKDB() WITH (ROWS=100);
+CREATE CONNECTION mock AS MOCKDB();
 
 -- Source data for the slicer
 SELECT DISTINCT region INTO #regions FROM (

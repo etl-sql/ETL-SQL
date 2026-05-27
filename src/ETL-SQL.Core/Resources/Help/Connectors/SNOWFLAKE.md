@@ -1,8 +1,8 @@
-# SNOWFLAKE
+﻿# SNOWFLAKE
 Connects to the Snowflake Cloud Data Platform. Supports full SQL pushdown, transactions, and both username/password and private-key (JWT) authentication.
 
 Syntax:
-  CREATE CONNECTION <name> ON SNOWFLAKE(
+  CREATE CONNECTION <name> AS SNOWFLAKE(
     HOST             = 'myorg-myaccount.snowflakecomputing.com',
     DATABASE         = 'dbname',
     SCHEMA           = 'PUBLIC',
@@ -28,7 +28,7 @@ Options:
 
 ```sql
 -- Username/password authentication
-CREATE CONNECTION Analytics ON SNOWFLAKE(
+CREATE CONNECTION Analytics AS SNOWFLAKE(
   HOST      = 'myorg-acct.snowflakecomputing.com',
   DATABASE  = 'PROD_DW',
   SCHEMA    = 'SALES',
@@ -48,7 +48,7 @@ PRINT 'Regions loaded: ' + @@ROWCOUNT;
 
 ```sql
 -- Key-pair (JWT) authentication
-CREATE CONNECTION AnalyticsJWT ON SNOWFLAKE(
+CREATE CONNECTION AnalyticsJWT AS SNOWFLAKE(
   HOST             = 'myorg-acct.snowflakecomputing.com',
   DATABASE         = 'PROD_DW',
   WAREHOUSE        = 'COMPUTE_WH',

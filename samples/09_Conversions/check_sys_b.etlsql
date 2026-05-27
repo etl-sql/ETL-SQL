@@ -1,9 +1,8 @@
--- @requires: postgres
+﻿-- @requires: postgres
 -- Verification Script: check_sys_b.etlsql
 -- Path: samples/conversion/check_sys_b.etlsql
 
-CREATE CONNECTION system_b ON POSTGRES()
-    WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+CREATE CONNECTION system_b AS POSTGRES(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
 
 PRINT 'Verifying System B Ingestion...';
 

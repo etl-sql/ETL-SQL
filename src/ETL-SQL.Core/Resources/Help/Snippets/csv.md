@@ -1,9 +1,9 @@
----
+﻿---
 trigger: $csv
-label: CREATE CONNECTION … ON FLATFILE (CSV)
+label: CREATE CONNECTION … AS FLATFILE(CSV)
 description: Delimited text file connection with CSV defaults
 ---
-CREATE CONNECTION «ConnName» ON FLATFILE(
+CREATE CONNECTION «ConnName» AS FLATFILE(
   PATH      = '«path/to/file.csv»',
   DELIMITER = ',',
   HEADER    = ON

@@ -29,8 +29,7 @@ namespace ETL_SQL.Tests.Integration
         public async Task TestEmailStatementParsing()
         {
             string script = @"
-                CREATE CONNECTION MyEmail TYPE SMTP TARGET 'localhost'
-                WITH (PORT = 25);
+                CREATE CONNECTION MyEmail AS SMTP('localhost', PORT = 25);
 
                  SEND EMAIL FROM 'sender@example.com'
                     TO 'test@example.com'

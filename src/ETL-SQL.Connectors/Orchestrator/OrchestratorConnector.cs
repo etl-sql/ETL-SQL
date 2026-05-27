@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
@@ -12,7 +12,7 @@ namespace ETL_SQL.Connectors.Orchestrator
     /// Connector type for connecting to a remote ETL-SQL Orchestrator service.
     /// Usage inside an ETL-SQL script:
     /// <code>
-    /// CREATE CONNECTION orch ON ORCHESTRATOR(
+    /// CREATE CONNECTION orch AS ORCHESTRATOR(
     ///     HOST = 'http://orch-server:5001',
     ///     API_KEY = ENC:...
     /// );
@@ -48,7 +48,7 @@ namespace ETL_SQL.Connectors.Orchestrator
         public Dictionary<string, string[]> GetOptionValues() => [];
         public string GetHelp() =>
             "ORCHESTRATOR — connects to an ETL-SQL Orchestrator service for remote job management.\n" +
-            "Usage: CREATE CONNECTION <alias> ON ORCHESTRATOR() WITH(HOST='http://...', PASSWORD='api-key');\n" +
+            "Usage: CREATE CONNECTION <alias> AS ORCHESTRATOR(HOST='http://...', PASSWORD='api-key');\n" +
             "Then: EXECUTE <alias> BEGIN ... END";
 
         public IDataSource CreateDataSource(

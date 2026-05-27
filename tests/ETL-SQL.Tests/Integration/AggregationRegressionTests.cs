@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -29,7 +29,7 @@ namespace ETL_SQL.Tests.Integration
                 
                 // We use a simple GROUP BY which triggers streamAggregate -> ExternalAggregateEngine
                 string script = $@"
-                    CREATE CONNECTION c ON FLATFILE('{csvPath.Replace("\\", "/")}') WITH (HEADER = ON);
+                    CREATE CONNECTION c AS FLATFILE('{csvPath.Replace("\\", "/")}', HEADER = ON);
                     
                     SELECT category, SUM(units) as total_units, SUM(revenue) as total_revenue
                     INTO #summary

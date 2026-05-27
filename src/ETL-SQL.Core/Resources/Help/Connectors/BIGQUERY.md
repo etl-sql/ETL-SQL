@@ -1,10 +1,10 @@
-# BIGQUERY
+﻿# BIGQUERY
 Connects to Google BigQuery using the REST API. Supports full SQL pushdown and streaming inserts.
 Auth: service account JSON file or Application Default Credentials (ADC) when omitted.
 Transactions are not supported — BigQuery DML is auto-committed per statement.
 
 Syntax:
-  CREATE CONNECTION <name> ON BIGQUERY(
+  CREATE CONNECTION <name> AS BIGQUERY(
     PROJECT_ID      = 'my-gcp-project',
     DATASET         = 'my_dataset',
     CREDENTIAL_FILE = 'C:\keys\sa.json'
@@ -20,7 +20,7 @@ Options:
 
 ```sql
 -- Service account authentication
-CREATE CONNECTION BQ ON BIGQUERY(
+CREATE CONNECTION BQ AS BIGQUERY(
   PROJECT_ID      = 'analytics-prod-12345',
   DATASET         = 'sales',
   CREDENTIAL_FILE = 'C:\keys\bq-service-account.json'
@@ -37,7 +37,7 @@ PRINT 'Regions loaded: ' + @@ROWCOUNT;
 
 ```sql
 -- Application Default Credentials (gcloud auth application-default login)
-CREATE CONNECTION BQ_ADC ON BIGQUERY(
+CREATE CONNECTION BQ_ADC AS BIGQUERY(
   PROJECT_ID = 'analytics-prod-12345',
   DATASET    = 'dw',
   LOCATION   = 'US'

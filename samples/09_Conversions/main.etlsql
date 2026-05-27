@@ -1,4 +1,4 @@
--- Main Orchestration: HR Data Conversion (30 Entities)
+﻿-- Main Orchestration: HR Data Conversion (30 Entities)
 -- Path: samples/09_Conversions/main.etlsql
 -- @requires: postgres
 
@@ -8,8 +8,7 @@ DECLARE @OutputDir  PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversion
 DECLARE @ZipFile    PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\hr_migration.zip';
 
 -- 2. Define System A Connection
-CREATE CONNECTION system_a ON POSTGRES() 
-    WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+CREATE CONNECTION system_a AS POSTGRES(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
 
 DECLARE @entities LIST = (
     'hr_01_employees', 'hr_02_demographics', 'hr_03_salary_history', 'hr_04_job_history', 

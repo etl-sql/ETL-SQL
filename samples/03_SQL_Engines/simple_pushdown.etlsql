@@ -1,4 +1,4 @@
-CREATE CONNECTION MyDb ON MOCKDB('mock://localhost') WITH (dialect='MSSQL');
+﻿CREATE CONNECTION MyDb AS MOCKDB();
 PRINT 'Testing pushdown INCORPORATING #TempTable...';
 EXECUTE MyDb INTO #RemoteUsers BEGIN SELECT UserID, UserName FROM Users END;
 SELECT 'Captured ' + CAST(COUNT(*) AS STR) + ' rows into #RemoteUsers' FROM #RemoteUsers;

@@ -1,4 +1,4 @@
--- ==============================================================================
+﻿-- ==============================================================================
 -- generate_manufacturing.etlsql
 -- Generates hourly manufacturing data and saves it to a timestamped CSV.
 -- Intended to be run hourly via Orchestrator at the top of the hour.
@@ -29,7 +29,7 @@ DECLARE @filename  STRING = '/app/data/manufacturing_' + @timestamp + '.csv';
 PRINT 'Exporting to ' + @filename + '...';
 
 -- Write to CSV
-CREATE CONNECTION export_conn ON FLATFILE(@filename) WITH(HEADER=ON);
+CREATE CONNECTION export_conn AS FLATFILE(@filename, HEADER=ON);
 INSERT INTO export_conn SELECT * FROM #machine_data;
 
 PRINT 'Generation complete.';

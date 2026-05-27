@@ -1,6 +1,6 @@
-USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest');
+﻿USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest');
 DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
-CREATE CONNECTION m ON MSSQL(@conn);
+CREATE CONNECTION m AS MSSQL(@conn);
 
 EXECUTE m BEGIN CREATE TABLE dbo.Employee (id INT PRIMARY KEY,[name] NVARCHAR(100)); INSERT INTO dbo.Employee (id, [name]) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'John'); END
 SELECT * INTO #temp FROM m.dbo.Employee;

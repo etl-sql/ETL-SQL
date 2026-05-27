@@ -1,4 +1,4 @@
-/* 
+﻿/* 
     REAL-WORLD SCENARIO 2: Secure File Transfer & Alerting
     ------------------------------------------------------
     Self-contained dummy using Local directories simulating SFTP drops.
@@ -10,7 +10,7 @@ BEGIN TRY
     CREATE TABLE #oracle_Ledger (AccountId INT, TransactionId INT, Amount DECIMAL, PostedDate DATETIME);
     INSERT INTO #oracle_Ledger VALUES (5021, 999123, 1000.50, TRUNC(GETDATE()));
 
-    CREATE CONNECTION LocalExport ON FLATFILE('samples/output/daily_finances.csv') WITH (HEADER = 'ON');
+    CREATE CONNECTION LocalExport AS FLATFILE('samples/output/daily_finances.csv', HEADER = 'ON');
     
     SELECT AccountId, TransactionId, Amount, PostedDate
     INTO LocalExport.Main

@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Parser.Components;
 using ETL_SQL.Core;

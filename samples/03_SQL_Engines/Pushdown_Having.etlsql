@@ -1,4 +1,4 @@
-CREATE CONNECTION myDb ON MSSQL('Server=Demo;');
+﻿CREATE CONNECTION myDb AS MSSQL('Server=Demo;');
 
 SELECT SUM(Val) AS TotalVal
 INTO myDb

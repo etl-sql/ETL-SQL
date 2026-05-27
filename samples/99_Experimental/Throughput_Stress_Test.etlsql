@@ -1,9 +1,8 @@
 PRINT 'Starting Big Data Stress Test (1M rows)...';
 
--- Explicitly define connections for the files with correct TARGET syntax
-CREATE CONNECTION BigData TYPE FLATFILE TARGET 'TestData/test_large_1M.csv' WITH (HEADER = 'ON');
-CREATE CONNECTION SmallData TYPE FLATFILE TARGET 'TestData/test_stress_SmallTable.csv' WITH (HEADER = 'ON');
-CREATE CONNECTION ResultOut TYPE FLATFILE TARGET 'samples/output/test_StressResult.csv' WITH (HEADER = 'ON');
+CREATE CONNECTION BigData AS FLATFILE('TestData/test_large_1M.csv', HEADER = 'ON');
+CREATE CONNECTION SmallData AS FLATFILE('TestData/test_stress_SmallTable.csv', HEADER = 'ON');
+CREATE CONNECTION ResultOut AS FLATFILE('samples/output/test_StressResult.csv', HEADER = 'ON');
 
 -- Perform a large scale join
 -- Using HASH JOIN to test the optimized streaming hash join

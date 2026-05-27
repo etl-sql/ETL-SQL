@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 using System;
 using System.IO;
 using System.Linq;
@@ -24,8 +24,8 @@ namespace ETL_SQL.Tests.Repro
             try
             {
                 var sql = $@"
-                    CREATE CONNECTION m ON MOCKDB();
-                    CREATE CONNECTION c ON FLATFILE('{csvPath.Replace("\\", "\\\\")}') WITH (ROW_DELIMITER='CRLF');
+                    CREATE CONNECTION m AS MOCKDB();
+                    CREATE CONNECTION c AS FLATFILE('{csvPath.Replace("\\", "\\\\")}', ROW_DELIMITER='CRLF');
                     SELECT *
                     INTO c.FILE
                     FROM m.Users;
@@ -66,7 +66,7 @@ namespace ETL_SQL.Tests.Repro
             try
             {
                 var sql = $@"
-                    CREATE CONNECTION c ON FLATFILE('{csvPath.Replace("\\", "\\\\")}') WITH (HEADER='ON');
+                    CREATE CONNECTION c AS FLATFILE('{csvPath.Replace("\\", "\\\\")}', HEADER='ON');
                     INSERT INTO c.FILE (ID, Name) VALUES (1, 'Alice');
                     INSERT INTO c.FILE (ID, Name) VALUES (2, 'Bob');
                 ";
@@ -102,8 +102,8 @@ namespace ETL_SQL.Tests.Repro
             try
             {
                 var sql = $@"
-                    CREATE CONNECTION m ON MOCKDB();
-                    CREATE CONNECTION p ON PARQUET('{pqPath.Replace("\\", "\\\\")}');
+                    CREATE CONNECTION m AS MOCKDB();
+                    CREATE CONNECTION p AS PARQUET('{pqPath.Replace("\\", "\\\\")}');
                     SELECT *
                     INTO p.FILE
                     FROM m.Users;
