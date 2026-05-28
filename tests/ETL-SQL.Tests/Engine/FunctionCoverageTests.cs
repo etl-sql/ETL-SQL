@@ -396,6 +396,55 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal("June", result);
         }
 
+        [Fact]
+        public async Task Extract_Epoch_ReturnsUnixTime()
+        {
+            // 1970-01-01 00:00:00 UTC -> 0
+            Assert.Equal(0m, await EvalNum("EXTRACT(EPOCH FROM '1970-01-01 00:00:00')"));
+            // 2026-05-28 13:20:00 UTC -> 1779974400
+            Assert.Equal(1779974400m, await EvalNum("EXTRACT(EPOCH FROM '2026-05-28 13:20:00')"));
+        }
+
+        [Fact]
+        public async Task Extract_AdditionalFields_ReturnCorrectValues()
+        {
+            Assert.Equal(2m, await EvalNum("EXTRACT(QUARTER FROM '2026-05-28')"));
+            Assert.Equal(22m, await EvalNum("EXTRACT(WEEK FROM '2026-05-28')"));
+            Assert.Equal(4m, await EvalNum("EXTRACT(ISODOW FROM '2026-05-28')")); // Thursday
+            Assert.Equal(202m, await EvalNum("EXTRACT(DECADE FROM '2026-05-28')"));
+            Assert.Equal(21m, await EvalNum("EXTRACT(CENTURY FROM '2026-05-28')"));
+            Assert.Equal(3m, await EvalNum("EXTRACT(MILLENNIUM FROM '2026-05-28')"));
+        }
+
+        [Fact]
+        public async Task ToTimestamp_ConvertsEpochToDate()
+        {
+            var eval = Eval();
+            await eval.Evaluate(Parse("DECLARE @d DATETIME = TO_TIMESTAMP(1779974400.123);"));
+            var val = eval.GetVariable("@d");
+            Assert.NotNull(val);
+            var dt = Assert.IsType<DateTime>(val);
+            Assert.Equal(new DateTime(2026, 5, 28, 13, 20, 0, 123, DateTimeKind.Utc), dt.ToUniversalTime(), TimeSpan.FromMilliseconds(1));
+        }
+
+        [Fact]
+        public async Task DateTrunc_TruncatesDate()
+        {
+            var eval = Eval();
+            await eval.Evaluate(Parse("DECLARE @d DATETIME = DATE_TRUNC(MONTH, '2026-05-17 12:34:56');"));
+            var val = eval.GetVariable("@d");
+            Assert.NotNull(val);
+            var dt = Assert.IsType<DateTime>(val);
+            Assert.Equal(new DateTime(2026, 5, 1, 0, 0, 0), dt);
+        }
+
+        [Fact]
+        public async Task DatePart_ReturnsIntegerPart()
+        {
+            Assert.Equal(2026m, await EvalNum("DATE_PART(YEAR, '2026-05-28')"));
+            Assert.Equal(5m, await EvalNum("DATE_PART(MONTH, '2026-05-28')"));
+        }
+
         // ── Logic / conversion functions ──────────────────────────────────────
 
         [Fact]

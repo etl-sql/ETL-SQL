@@ -618,7 +618,7 @@ namespace ETL_SQL.Engine
             for (int i = 0; i < f.Arguments.Count; i++)
             {
                 var arg = f.Arguments[i];
-                if (i == 0 && (fn == "DATEPART" || fn == "DATEDIFF" || fn == "DATENAME" || fn == "DATEADD") && arg is IdentifierExpression idArg)
+                if (i == 0 && (fn == "DATEPART" || fn == "DATEDIFF" || fn == "DATENAME" || fn == "DATEADD" || fn == "DATE_TRUNC" || fn == "DATE_PART") && arg is IdentifierExpression idArg)
                 {
                     args.Add(idArg.Name);
                 }
@@ -1228,6 +1228,13 @@ namespace ETL_SQL.Engine
                 "MILLISECOND" => dt.Millisecond,
                 "DOW" => (int)dt.DayOfWeek,
                 "DOY" => dt.DayOfYear,
+                "EPOCH" => (decimal)(new DateTime(dt.Ticks, dt.Kind == DateTimeKind.Unspecified ? DateTimeKind.Utc : dt.Kind).ToUniversalTime() - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds,
+                "QUARTER" => (dt.Month - 1) / 3 + 1,
+                "WEEK" => System.Globalization.ISOWeek.GetWeekOfYear(dt),
+                "ISODOW" => dt.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)dt.DayOfWeek,
+                "DECADE" => (int)Math.Floor(dt.Year / 10.0),
+                "CENTURY" => (int)Math.Ceiling(dt.Year / 100.0),
+                "MILLENNIUM" => (int)Math.Ceiling(dt.Year / 1000.0),
                 _ => null
             };
         }

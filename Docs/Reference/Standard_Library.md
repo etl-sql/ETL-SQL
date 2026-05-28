@@ -1,4 +1,4 @@
-﻿# ETL-SQL Standard Library & Data Types Reference
+# ETL-SQL Standard Library & Data Types Reference
 
 This document is the authoritative dictionary for all built-in types, casting behaviors, and scalar/aggregate/window functions within the ETL-SQL engine.
 
@@ -222,8 +222,9 @@ FROM #comments;
 | `DATEADD` | `DATEADD(part, n, date)` | Date with N intervals added. Parts: `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND` |
 | `DATEDIFF` | `DATEDIFF(part, start, end)` | Count of part boundaries crossed between two dates |
 | `DATEPART` | `DATEPART(part, date)` | Integer value of the date part (e.g. month → 4) |
+| `DATE_PART` | `DATE_PART(part, date)` | Integer value of the date part (alias for `DATEPART`) |
 | `DATENAME` | `DATENAME(part, date)` | String name of the date part (e.g. month → `'April'`) |
-| `EXTRACT` | `EXTRACT(field FROM source)` | ANSI-style part extraction (`YEAR`, `MONTH`, `DAY`, `DOW`, `DOY`, `HOUR`, `MINUTE`, `SECOND`) |
+| `EXTRACT` | `EXTRACT(field FROM source)` | ANSI-style part extraction (`YEAR`, `MONTH`, `DAY`, `DOW`, `DOY`, `HOUR`, `MINUTE`, `SECOND`, `EPOCH`, `QUARTER`, `WEEK`, `ISODOW`, `DECADE`, `CENTURY`, `MILLENNIUM`) |
 | `YEAR` | `YEAR(date)` | Integer year |
 | `MONTH` | `MONTH(date)` | Integer month (1–12) |
 | `DAY` | `DAY(date)` | Integer day of month |
@@ -232,6 +233,8 @@ FROM #comments;
 | `DATETIMEFROMPARTS` | `DATETIMEFROMPARTS(y, m, d, h, mi, s, ms)` | Constructs `DATETIME` from component parts |
 | `TIMEFROMPARTS` | `TIMEFROMPARTS(h, mi, s, frac, prec)` | Constructs `TIME` from parts |
 | `TRUNC` / `TO_DATE` | `TRUNC(datetime)` | Truncates the time portion; returns date |
+| `DATE_TRUNC` | `DATE_TRUNC(part, date)` | Truncates date to specified boundary (Postgres-compatible parameter order) |
+| `TO_TIMESTAMP` | `TO_TIMESTAMP(seconds)` | Converts Unix epoch seconds (with fractional seconds) to a `DATETIME` |
 | `AT TIME ZONE` | `expr AT TIME ZONE 'tz_id'` | Converts expression to the specified timezone |
 
 **Common Windows timezone IDs:** `UTC`, `Eastern Standard Time`, `Central Standard Time`, `Mountain Standard Time`, `Pacific Standard Time`, `GMT Standard Time`, `W. Europe Standard Time`, `Tokyo Standard Time`

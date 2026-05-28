@@ -26,9 +26,9 @@ namespace ETL_SQL.Core.Data
             ["SMALLINT"] = v => Math.Truncate(Convert.ToDecimal(v)),
             ["BIGINT"] = v => Math.Truncate(Convert.ToDecimal(v)),
             ["REAL"] = v => Convert.ToSingle(v),
-            ["DATETIME"] = v => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt) ? dt : DateTime.Parse(v.ToString() ?? ""),
-            ["DATE"] = v => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt) ? dt.Date : DateTime.Parse(v.ToString() ?? "").Date,
-            ["TIMESTAMP"] = v => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt) ? dt : DateTime.Parse(v.ToString() ?? ""),
+            ["DATETIME"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? ""))),
+            ["DATE"] = v => v is DateTime dt ? dt.Date : (v is DateTimeOffset dto ? dto.DateTime.Date : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2.Date : DateTime.Parse(v.ToString() ?? "").Date)),
+            ["TIMESTAMP"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? ""))),
 
             ["TIME"] = v => TimeSpan.Parse(v.ToString() ?? "00:00:00"),
             ["STRING"] = v => v.ToString(),

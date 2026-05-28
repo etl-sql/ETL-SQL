@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -96,6 +96,9 @@ namespace ETL_SQL.LSP
             { "MONTH",        ("MONTH(date)",                        "Returns the month component of a date.",                      new[] { "date" }) },
             { "DAY",          ("DAY(date)",                          "Returns the day component of a date.",                        new[] { "date" }) },
             { "DATEFROMPARTS",("DATEFROMPARTS(year, month, day)",    "Constructs a DATE from parts.",                               new[] { "year", "month", "day" }) },
+            { "TO_TIMESTAMP", ("TO_TIMESTAMP(seconds)",              "Converts Unix epoch seconds to a DATETIME.",                  new[] { "seconds" }) },
+            { "DATE_TRUNC",   ("DATE_TRUNC(part, date)",             "Truncates a date to the specified date part boundary.",       new[] { "part", "date" }) },
+            { "DATE_PART",    ("DATE_PART(part, date)",              "Returns an integer representing the specified date part.",    new[] { "part", "date" }) },
 
             // Logic/Null
             { "COALESCE",     ("COALESCE(expression1, expression2, ...)", "Returns the first non-null expression.",                 new[] { "expression1", "expression2" }) },

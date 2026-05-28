@@ -37,6 +37,9 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("TO_DATE", (args, ctx) => args.Count >= 1 ? EvaluationUtils.CastToType(args[0], "DATETIME") : null, "TO_DATE(str[, fmt]): Converts a string to a date.");
             registry.RegisterWithHelp("RELDATE", (args, ctx) => args.Count == 0 ? null : RelDateResolver.Resolve(args[0]?.ToString() ?? "", ctx.WeekStartDay), "RELDATE(expr): Resolves a relative date expression (e.g. 'D-7', 'M-1', 'W-1').");
             registry.RegisterWithHelp("DATEADD", DateAdd, "DATEADD(datepart, number, date): Adds a value to a date.");
+            registry.RegisterWithHelp("TO_TIMESTAMP", ToTimestamp, "TO_TIMESTAMP(seconds): Converts Unix epoch seconds to a DATETIME.");
+            registry.RegisterWithHelp("DATE_TRUNC", DateTrunc, "DATE_TRUNC(datepart, date): Truncates a date to the specified date part boundary.");
+            registry.RegisterWithHelp("DATE_PART", DatePart, "DATE_PART(datepart, date): Returns an integer representing the specified date part.");
         }
 
         private static object? DateName(List<object?> args, IExecutionContext ctx)
@@ -175,6 +178,46 @@ namespace ETL_SQL.Engine.Functions
                 "SECOND" or "SS" or "S" => dt.AddSeconds(val),
                 "MILLISECOND" or "MS" => dt.AddMilliseconds(val),
                 _ => dt
+            };
+        }
+
+        private static object? ToTimestamp(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+
+            try
+            {
+                double seconds = Convert.ToDouble(args[0], System.Globalization.CultureInfo.InvariantCulture);
+                var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                return epoch.AddSeconds(seconds);
+            }
+            catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
+            {
+                throw new ExecutionException($"Invalid numeric value '{args[0]}' for TO_TIMESTAMP.", ex);
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                throw new ExecutionException($"Epoch value '{args[0]}' is out of range for TO_TIMESTAMP.", ex);
+            }
+        }
+
+        private static object? DateTrunc(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 2 || args[1] == null) return null;
+            string part = args[0]?.ToString()?.ToUpperInvariant() ?? "DAY";
+            if (!EvaluationUtils.TryToDateTime(args[1], out var dt)) return null;
+
+            return part switch
+            {
+                "YEAR" or "YYYY" or "YY" => new DateTime(dt.Year, 1, 1),
+                "QUARTER" or "QQ" or "Q" => new DateTime(dt.Year, ((dt.Month - 1) / 3) * 3 + 1, 1),
+                "MONTH" or "MM" or "M" => new DateTime(dt.Year, dt.Month, 1),
+                "WEEK" or "WW" or "WK" => GetStartOfWeek(dt),
+                "DAY" or "DD" or "D" => dt.Date,
+                "HOUR" or "HH" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, 0, 0),
+                "MINUTE" or "MI" or "N" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0),
+                "SECOND" or "SS" or "S" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second),
+                _ => dt.Date
             };
         }
     }
