@@ -115,6 +115,12 @@ namespace ETL_SQL.Engine.Handlers
                 case ThresholdType.Lineage:
                     context.LineageEnabled = Convert.ToBoolean(val);
                     break;
+                case ThresholdType.TruncateString:
+                    context.TruncateString = Convert.ToBoolean(val);
+                    break;
+                case ThresholdType.SkipError:
+                    context.SkipError = Convert.ToBoolean(val);
+                    break;
             }
 
 

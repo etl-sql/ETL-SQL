@@ -67,6 +67,70 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("REGEXP_REPLACE", RegexpReplace, "REGEXP_REPLACE(str, pat, repl): Replaces matches of a pattern with a replacement string.");
             registry.RegisterWithHelp("REGEXP_INSTR", RegexpInstr, "REGEXP_INSTR(str, pattern): Returns the 1-based position of the first pattern match.");
             registry.RegisterWithHelp("REGEXP_COUNT", RegexpCount, "REGEXP_COUNT(str, pattern): Returns the number of times a pattern occurs in the string.");
+            registry.RegisterWithHelp("LPAD", Lpad, "LPAD(str, length [, pad_str]): Left-pads str to length using pad_str (defaults to space). Truncates if str exceeds length.");
+            registry.RegisterWithHelp("RPAD", Rpad, "RPAD(str, length [, pad_str]): Right-pads str to length using pad_str (defaults to space). Truncates if str exceeds length.");
+            registry.RegisterWithHelp("REPEAT", (args, ctx) => {
+                if (args.Count < 2 || args[0] == null) return null;
+                string s = args[0]!.ToString()!;
+                int n = Math.Max(0, Convert.ToInt32(args[1]));
+                long totalLength = (long)s.Length * n;
+                ctx.SecurityService.ValidateStringSize(totalLength, ctx.MaxStringResultSize, ctx.AllowLargeStringResults, ctx.CurrentScriptPath);
+                return string.Concat(Enumerable.Repeat(s, n));
+            }, "REPEAT(str, n): Repeats a string n times.");
+        }
+
+        private static object? Lpad(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
+            string str = args[0]!.ToString()!;
+            if (!int.TryParse(args[1]?.ToString(), out int length)) return null;
+            if (length <= 0) return "";
+            
+            ctx.SecurityService.ValidateStringSize(length, ctx.MaxStringResultSize, ctx.AllowLargeStringResults, ctx.CurrentScriptPath);
+
+            if (str.Length >= length)
+            {
+                return str.Substring(0, length);
+            }
+
+            string padStr = args.Count >= 3 && args[2] != null ? args[2]!.ToString()! : " ";
+            if (string.IsNullOrEmpty(padStr)) return str;
+            
+            int padLength = length - str.Length;
+            var sb = new System.Text.StringBuilder(length);
+            while (sb.Length < padLength)
+            {
+                sb.Append(padStr);
+            }
+            string padding = sb.ToString().Substring(0, padLength);
+            return padding + str;
+        }
+
+        private static object? Rpad(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
+            string str = args[0]!.ToString()!;
+            if (!int.TryParse(args[1]?.ToString(), out int length)) return null;
+            if (length <= 0) return "";
+
+            ctx.SecurityService.ValidateStringSize(length, ctx.MaxStringResultSize, ctx.AllowLargeStringResults, ctx.CurrentScriptPath);
+
+            if (str.Length >= length)
+            {
+                return str.Substring(0, length);
+            }
+
+            string padStr = args.Count >= 3 && args[2] != null ? args[2]!.ToString()! : " ";
+            if (string.IsNullOrEmpty(padStr)) return str;
+
+            int padLength = length - str.Length;
+            var sb = new System.Text.StringBuilder(length);
+            while (sb.Length < padLength)
+            {
+                sb.Append(padStr);
+            }
+            string padding = sb.ToString().Substring(0, padLength);
+            return str + padding;
         }
 
         private static object? Len(List<object?> args, IExecutionContext ctx)

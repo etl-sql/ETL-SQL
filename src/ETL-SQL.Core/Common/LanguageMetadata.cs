@@ -169,7 +169,12 @@ namespace ETL_SQL.Common
             // Lineage & governance functions
             "GET_TAGS", "GET_TAG_VALUE", "HAS_TAG",
             // Fuzzy matching functions (Phases 1-3)
-            "NORMALIZE", "SIMILARITY", "LEVENSHTEIN", "SOUNDEX", "METAPHONE", "DMETAPHONE", "DMETAPHONE_ALT", "NGRAMS", "NGRAM_TOKENS"
+            "NORMALIZE", "SIMILARITY", "LEVENSHTEIN", "SOUNDEX", "METAPHONE", "DMETAPHONE", "DMETAPHONE_ALT", "NGRAMS", "NGRAM_TOKENS",
+            "BITAND", "BITOR", "BITXOR", "BITNOT", "BITSHIFTLEFT", "BITSHIFTRIGHT", "BIT_COUNT",
+            "PI", "DEGREES", "RADIANS", "COT", "REPEAT",
+            "FILE_HASH", "FILE_SIZE", "FILE_MODIFIED",
+            "PATH_COMBINE", "PATH_FILENAME", "PATH_EXTENSION", "PATH_DIRECTORY",
+            "CONNECTION_PROPERTY"
         };
 
         public static string EngineVersion => typeof(LanguageMetadata).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";

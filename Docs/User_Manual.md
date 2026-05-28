@@ -1,4 +1,4 @@
-﻿# ETL-SQL User Manual: Thinking in Pipelines
+# ETL-SQL User Manual: Thinking in Pipelines
 
 Welcome to ETL-SQL. This guide is designed to help you transition from thinking in "Single Database SQL" to "Multi-Context Data Flow." Work through each section in order — each one builds on the last.
 
@@ -765,8 +765,45 @@ EXPECT SCHEMA #staging (
 ) ON DRIFT WARN;
 ```
 
-> [!TIP]
-> Place `ASSERT` and `EXPECT SCHEMA` checks immediately after a source extract and before any `MERGE` or `DELETE`. This pattern catches schema changes from upstream teams before they corrupt your target.
+### 7.4 Truncation and Error Handling Configurations
+
+ETL-SQL provides flags to handle string truncation and data type conversion failures gracefully. These can be set globally at the script level or connection-by-connection.
+
+#### Truncation Control (`TRUNCATE_STRING`)
+- **Default (`OFF`):** Strings exceeding target column or fixed-width file field widths will cause execution to fail fast.
+- **Enabled (`ON`):** The engine will silently truncate strings to fit the target field width.
+
+```sql
+-- Script Level
+SET TRUNCATE_STRING = ON;
+
+-- Connection Level
+CREATE CONNECTION dest AS FLATFILE('C:\Exports\data.txt', FORMAT = 'FIXED', TRUNCATE_STRING = ON);
+```
+
+#### Error Tolerance (`SKIP_ERROR`)
+- **Default (`OFF`):** Any type mismatch (e.g. malformed date, parsing errors) or primary key violation will cause the script to fail fast.
+- **Enabled (`ON`):** Mismatched data types are converted to `NULL` (or default values), allowing the rest of the row to be inserted. Duplicate keys/primary key violations cause the entire row to be skipped.
+
+```sql
+-- Script Level
+SET SKIP_ERROR = ON;
+
+-- Connection Level
+CREATE CONNECTION db AS MYSQL(HOST='...', SKIP_ERROR = ON);
+```
+
+#### Aggregated Diagnostic Error Messages
+When `SKIP_ERROR = OFF` and `TRUNCATE_STRING = OFF`, the engine will evaluate the **entire row** (and all rows in the current batch) and collect all validation errors instead of stopping at the first failure. It then throws a single consolidated error showing all column and truncation details:
+
+```text
+Row validation failed:
+- Column 'FirstName' is trying to insert a string with length 1000 into a 250 character column (Value: 'John...')
+- Column 'BirthDate' (value '1995-13-45') cannot be converted to target type DATETIME
+```
+
+> [!WARNING]
+> High-performance bulk connection loading protocols (such as SQL Server `SqlBulkCopy` or Postgres `COPY`) bypass engine-side row-by-row checks to maintain speed. They will fail fast natively if truncation or constraint boundaries are breached, regardless of these session configurations.
 
 ---
 

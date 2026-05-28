@@ -1,4 +1,4 @@
-﻿# ETL-SQL Data Connectors: Reference & Guide
+# ETL-SQL Data Connectors: Reference & Guide
 
 Connectors define how the ETL-SQL engine interacts with external data sources. This document provides complete option references and instructional examples for every supported connector type.
 
@@ -42,6 +42,18 @@ CREATE CONNECTION secure_db AS MSSQL('ENC:U2FsdGVkX1+...');
 
 > [!IMPORTANT]
 > The `ENC:` prefix is handled entirely by the engine — connectors never see the encrypted string. Use the **ETL-SQL Encryptor** tool to encrypt strings using your master password.
+
+### 1.4 Error Handling & Truncation Options
+All database and flat-file connectors support options to control how the engine behaves when inserting data that exceeds column lengths or violates types:
+
+| Option | Description | Values | Default |
+| :--- | :--- | :--- | :--- |
+| `TRUNCATE_STRING` | Controls string truncation behavior. When `ON`/`TRUE`, strings exceeding target column/file width are silently truncated to fit. When `OFF`/`FALSE`, truncation causes a validation failure. | `ON` / `OFF` / `TRUE` / `FALSE` | `OFF` |
+| `SKIP_ERROR` | Controls error tolerance. When `ON`/`TRUE`, conversion errors set the column value to `NULL` and proceed. Primary key or unique constraint violations skip the entire row. When `OFF`/`FALSE`, any validation failure aborts the execution. | `ON` / `OFF` / `TRUE` / `FALSE` | `OFF` |
+
+> [!NOTE]
+> Connection-level settings override script-level global `SET` defaults.
+> Database connections utilizing native high-performance bulk protocols (e.g. `SqlBulkCopy` / `COPY`) bypass engine-side validation to prioritize throughput and will fail fast natively if truncation or type boundaries are violated, regardless of these settings.
 
 ---
 

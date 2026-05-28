@@ -1,4 +1,4 @@
-﻿# ETL-SQL Grammar & Orchestration Syntax
+# ETL-SQL Grammar & Orchestration Syntax
 
 This document is the authoritative reference for the ETL-SQL scripting language. It defines every statement type, clause, and keyword â€” everything needed to write, administer, and automate with ETL-SQL.
 
@@ -549,7 +549,19 @@ Override `appsettings.json` defaults for the current session.
 | `SET SPILL_FORMAT = 'AUTO'\|'JSON'\|'PARQUET'` | AUTO | Storage format for spilled engine data |
 
 
-### 2.10 `SET WEEK_START_DAY`
+### 2.10 Validation & Error Handling Options
+Configure row validation, string truncation, and error skipping behavior for the current session.
+
+| Command | Default | Description |
+| :--- | :--- | :--- |
+| `SET TRUNCATE_STRING = ON\|OFF` | OFF | When ON, strings exceeding target column/file width are silently truncated to fit. When OFF, truncation triggers a validation error. |
+| `SET SKIP_ERROR = ON\|OFF` | OFF | When ON, data conversion/type mismatch errors set the column to NULL and proceed. Primary key/unique constraint violations skip the entire row. When OFF, validation errors abort execution. |
+
+> [!NOTE]
+> Database connections utilizing native high-performance bulk protocols (e.g. `SqlBulkCopy` / `COPY`) bypass engine-side validation to prioritize throughput and will fail fast natively if truncation or type boundaries are violated, regardless of session overrides.
+
+
+### 2.11 `SET WEEK_START_DAY`
 Override the first day of the week for `RELDATE` week-boundary expressions (`W`, `W-1`, `WE`, `WE-1`, etc.) for the current script.
 
 ```sql
@@ -558,7 +570,7 @@ SET WEEK_START_DAY = 'Sunday';   -- valid for this script only
 
 Valid values (case-insensitive): `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday`. The engine default is `Monday`; the organisation default can be changed with `Engine.StartOfWeek` in `appsettings.json`.
 
-### 2.11 Observability & Telemetry
+### 2.12 Observability & Telemetry
 
 ETL-SQL provides two layers of performance monitoring: **Telemetry** and **Profiling**.
 

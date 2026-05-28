@@ -60,6 +60,9 @@ namespace ETL_SQL.LSP
             { "STRING_SPLIT", ("STRING_SPLIT(string, separator)",    "Splits a string into a table of substrings.",                 new[] { "string", "separator" }) },
             { "TO_STR",       ("TO_STR(value)",                      "Converts a value to a string (alias for CAST AS STRING).",    new[] { "value" }) },
             { "TRY_CAST",     ("TRY_CAST(expr AS type)",             "Converts to a type, returning NULL on failure.",              new[] { "expr", "type" }) },
+            { "LPAD",         ("LPAD(string, length [, pad_string])", "Pads the left side of a string with another string.",         new[] { "string", "length", "pad_string" }) },
+            { "RPAD",         ("RPAD(string, length [, pad_string])", "Pads the right side of a string with another string.",        new[] { "string", "length", "pad_string" }) },
+            { "REPEAT",       ("REPEAT(string, count)",              "Repeats a string a specified number of times (alias for REPLICATE).", new[] { "string", "count" }) },
 
             // Math
             { "ABS",          ("ABS(number)",                        "Returns the absolute value.",                                 new[] { "number" }) },
@@ -80,6 +83,17 @@ namespace ETL_SQL.LSP
             { "EXP",          ("EXP(n)",                             "Returns e raised to the power n.",                            new[] { "n" }) },
             { "LOG",          ("LOG(n)",                             "Returns the natural logarithm of n.",                         new[] { "n" }) },
             { "LN",           ("LN(n)",                              "Returns the natural logarithm of n.",                         new[] { "n" }) },
+            { "BITAND",       ("BITAND(a, b)",                       "Performs a bitwise AND operation on two integers.",           new[] { "a", "b" }) },
+            { "BITOR",        ("BITOR(a, b)",                        "Performs a bitwise OR operation on two integers.",            new[] { "a", "b" }) },
+            { "BITXOR",       ("BITXOR(a, b)",                       "Performs a bitwise XOR operation on two integers.",           new[] { "a", "b" }) },
+            { "BITNOT",       ("BITNOT(a)",                          "Performs a bitwise NOT operation on an integer.",             new[] { "a" }) },
+            { "BITSHIFTLEFT", ("BITSHIFTLEFT(a, n)",                 "Performs a bitwise left shift on 'a' by 'n' bits.",           new[] { "a", "n" }) },
+            { "BITSHIFTRIGHT",("BITSHIFTRIGHT(a, n)",                "Performs a bitwise right shift on 'a' by 'n' bits.",          new[] { "a", "n" }) },
+            { "BIT_COUNT",    ("BIT_COUNT(a)",                       "Returns the number of set bits (popcount) in the integer.",   new[] { "a" }) },
+            { "PI",           ("PI()",                               "Returns the value of PI.",                                    Array.Empty<string>()) },
+            { "DEGREES",      ("DEGREES(radians)",                   "Converts radians to degrees.",                                new[] { "radians" }) },
+            { "RADIANS",      ("RADIANS(degrees)",                   "Converts degrees to radians.",                                new[] { "degrees" }) },
+            { "COT",          ("COT(number)",                        "Returns the cotangent of the angle in radians.",              new[] { "number" }) },
 
             // Date
             { "GETDATE",      ("GETDATE()",                          "Returns the current system date and time.",                   Array.Empty<string>()) },
@@ -110,12 +124,20 @@ namespace ETL_SQL.LSP
             { "GREATEST",     ("GREATEST(value1, value2, ...)",     "Returns the largest value in a list.",                        new[] { "value1", "value2" }) },
             { "LEAST",        ("LEAST(value1, value2, ...)",        "Returns the smallest value in a list.",                       new[] { "value1", "value2" }) },
             { "COUNT",        ("COUNT(expression)",                 "Returns the number of items in a group.",                     new[] { "expression" }) },
+            { "CONNECTION_PROPERTY", ("CONNECTION_PROPERTY(conn_name, prop_name)", "Returns the value of a connection property, masking sensitive properties.", new[] { "conn_name", "prop_name" }) },
 
             // File/directory
             { "FILE_EXISTS",      ("FILE_EXISTS(path)",                          "Returns true if the file exists.",               new[] { "path" }) },
             { "DIRECTORY_EXISTS", ("DIRECTORY_EXISTS(path)",                     "Returns true if the directory exists.",          new[] { "path" }) },
             { "FILE_LIST",        ("FILE_LIST(path [, recursive])",              "Returns a list of files in a directory.",        new[] { "path", "recursive" }) },
             { "REMOTE_FILE_LIST", ("REMOTE_FILE_LIST(connectionName [, path])", "Returns files from a remote connection.",         new[] { "connectionName", "path" }) },
+            { "FILE_HASH",        ("FILE_HASH(path [, algorithm])",              "Computes the cryptographic hash of a file.",                  new[] { "path", "algorithm" }) },
+            { "FILE_SIZE",        ("FILE_SIZE(path)",                            "Returns the size of a local file in bytes.",                  new[] { "path" }) },
+            { "FILE_MODIFIED",    ("FILE_MODIFIED(path)",                        "Returns the last write timestamp of a file.",                 new[] { "path" }) },
+            { "PATH_COMBINE",     ("PATH_COMBINE(p1, p2 [, ...])",               "Combines multiple path segments into a single path.",         new[] { "p1", "p2" }) },
+            { "PATH_FILENAME",    ("PATH_FILENAME(path)",                        "Extracts the filename and extension from a path.",            new[] { "path" }) },
+            { "PATH_EXTENSION",   ("PATH_EXTENSION(path)",                       "Extracts the extension from a path.",                         new[] { "path" }) },
+            { "PATH_DIRECTORY",   ("PATH_DIRECTORY(path)",                       "Extracts the directory information from a path.",             new[] { "path" }) },
 
             // List
             { "APPEND_TO_LIST",   ("APPEND_TO_LIST(list, value)",  "Appends a value to a list.",                                   new[] { "list", "value" }) },

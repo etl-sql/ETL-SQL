@@ -96,6 +96,8 @@ namespace ETL_SQL.Core.Common
         public bool IsProfiling { get; set; }
         public bool IsWhatIf { get; set; }
         public bool LineageEnabled { get; set; } = true;
+        public bool TruncateString { get; set; }
+        public bool SkipError { get; set; }
         public bool DisplayExecuteTree { get; set; }
         public bool IsVerbose { get; set; }
         public bool ShowPassword { get; set; }

@@ -77,4 +77,9 @@ namespace ETL_SQL.Core.Common.Exceptions
             ConnectionAlias = alias;
         }
     }
+
+    public class RowSkipException : ETLException
+    {
+        public RowSkipException(string message) : base(message) { }
+    }
 }

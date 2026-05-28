@@ -35,6 +35,7 @@
     </PackageReference>
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="Cronos" />
+    <PackageReference Include="Microsoft.OpenApi" />
   </ItemGroup>
 
   <Target Name="CopyManualAssetsOnPublish" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">

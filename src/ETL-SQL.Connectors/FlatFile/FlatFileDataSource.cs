@@ -567,8 +567,14 @@ namespace ETL_SQL.Connectors.FlatFile
                             headersWritten = true;
                         }
 
+                        var truncateEnabled = IsTruncateStringEnabled();
+                        var skipErrorEnabled = IsSkipErrorEnabled();
+                        var errors = new List<string>();
+                        int rowNum = 0;
+
                         foreach (var row in batch.Rows)
                         {
+                            rowNum++;
                             string line;
                             if (_fixedColumns != null)
                             {
@@ -577,6 +583,25 @@ namespace ETL_SQL.Connectors.FlatFile
                                 foreach (var col in _fixedColumns)
                                 {
                                     var raw = row[col.Name]?.ToString() ?? "";
+                                    if (raw.Length > col.Length)
+                                    {
+                                        if (truncateEnabled)
+                                        {
+                                            raw = raw.Substring(0, col.Length);
+                                        }
+                                        else
+                                        {
+                                            var errMsg = $"Row {rowNum}: Column '{col.Name}' is trying to insert a string with length {raw.Length} into a {col.Length} character column (Value: '{raw}')";
+                                            if (skipErrorEnabled)
+                                            {
+                                                raw = ""; // skip that column (pad with spaces)
+                                            }
+                                            else
+                                            {
+                                                errors.Add(errMsg);
+                                            }
+                                        }
+                                    }
                                     sb.Append(raw.Length >= col.Length
                                         ? raw[..col.Length]
                                         : raw.PadRight(col.Length));
@@ -592,6 +617,11 @@ namespace ETL_SQL.Connectors.FlatFile
                             }
                             await writer.WriteLineAsync(line).ConfigureAwait(false);
                             totalRows++;
+                        }
+
+                        if (errors.Count > 0)
+                        {
+                            throw new ExecutionException("Fixed-width file write validation failed:\n" + string.Join("\n", errors));
                         }
                     }
 
@@ -716,6 +746,24 @@ namespace ETL_SQL.Connectors.FlatFile
                 System.IO.File.Delete(_filePath);
             }
             await Task.CompletedTask;
+        }
+
+        private bool IsTruncateStringEnabled()
+        {
+            if (_options != null && _options.TryGetValue("TRUNCATE_STRING", out var tsStr))
+            {
+                return tsStr.Equals("ON", StringComparison.OrdinalIgnoreCase) || tsStr.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+            }
+            return _context?.TruncateString ?? false;
+        }
+
+        private bool IsSkipErrorEnabled()
+        {
+            if (_options != null && _options.TryGetValue("SKIP_ERROR", out var seStr))
+            {
+                return seStr.Equals("ON", StringComparison.OrdinalIgnoreCase) || seStr.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+            }
+            return _context?.SkipError ?? false;
         }
 
         public async ValueTask DisposeAsync()

@@ -1,11 +1,11 @@
-# DEGREES
-Converts an angle value in radians to degrees.
+# COT
+Returns the cotangent of the angle specified in radians.
 
 **Category:** Math
 
 ## Syntax
 ```sql
-DEGREES(radians)
+COT(radians)
 ```
 
 ## Parameters
@@ -14,13 +14,13 @@ DEGREES(radians)
 | `radians` | `DECIMAL` / `FLOAT` | The angle in radians |
 
 ## Returns
-`DECIMAL` — The angle in degrees. Returns `NULL` if input is `NULL`.
+`DECIMAL` — The cotangent value. Returns `NULL` if input is `NULL` or results in division by zero (e.g. at 0 radians).
 
 ## Example
 ```sql
-SELECT DEGREES(PI());   -- → 180
+SELECT COT(0.5);        -- → 1.830487721712452
 ```
 
 ## See Also
 - [Standard Library — §5.2 Trigonometric](../../../../../Docs/Reference/Standard_Library.md#52-trigonometric)
-- Related: [`RADIANS`](RADIANS.md), [`PI`](PI.md)
+- Related: [`TAN`](TAN.md), [`SIN`](SIN.md), [`COS`](COS.md)

@@ -348,6 +348,8 @@ namespace ETL_SQL.Core
         
         bool IsWhatIf { get; set; }
         bool LineageEnabled { get; set; }
+        bool TruncateString { get; set; }
+        bool SkipError { get; set; }
         bool TelemetryEnabled { get; set; }
         bool DisplayExecuteTree { get; set; }
         /// <summary>The ID of the currently executing node in this task/context.</summary>

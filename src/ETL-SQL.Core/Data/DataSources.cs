@@ -237,8 +237,24 @@ namespace ETL_SQL.Data
             }
         }
 
-        public async Task ValidateRow(Row row)
+        private int? GetMaxLen(string dataType)
         {
+            if (string.IsNullOrEmpty(dataType)) return null;
+            int idx = dataType.IndexOf('(');
+            if (idx == -1) return null;
+            int endIdx = dataType.IndexOf(')', idx);
+            if (endIdx == -1) return null;
+            string lenStr = dataType.Substring(idx + 1, endIdx - idx - 1).Trim();
+            if (int.TryParse(lenStr, out int result)) return result;
+            return null;
+        }
+
+        public Task ValidateRow(Row row) => ValidateRow(row, _batches);
+
+        public async Task ValidateRow(Row row, IEnumerable<DataTable> activeBatches)
+        {
+            var errors = new List<string>();
+
             foreach (var kv in Schema)
             {
                 var col = kv.Value;
@@ -247,32 +263,99 @@ namespace ETL_SQL.Data
                 // 0. Type Coercion
                 if (val != null && val != DBNull.Value)
                 {
-                    row[col.ColumnName] = val = TypeConverter.Cast(val, col.DataType);
+                    try
+                    {
+                        row[col.ColumnName] = val = TypeConverter.Cast(val, col.DataType);
+                    }
+                    catch (Exception ex)
+                    {
+                        if (ExecutionContext?.SkipError == true)
+                        {
+                            row[col.ColumnName] = val = null;
+                        }
+                        else
+                        {
+                            errors.Add($"Column '{col.ColumnName}' (value '{val}') cannot be converted to target type {col.DataType}. Detail: {ex.Message}");
+                        }
+                    }
+                }
+
+                // 0b. String Truncation Check
+                if (val is string strVal)
+                {
+                    var maxLen = GetMaxLen(col.DataType);
+                    if (maxLen.HasValue && strVal.Length > maxLen.Value)
+                    {
+                        if (ExecutionContext?.TruncateString == true)
+                        {
+                            row[col.ColumnName] = val = strVal.Substring(0, maxLen.Value);
+                        }
+                        else
+                        {
+                            errors.Add($"Column '{col.ColumnName}' is trying to insert a string with length {strVal.Length} into a {maxLen.Value} character column (Value: '{strVal}')");
+                        }
+                    }
                 }
 
                 // 1. NOT NULL
                 if (!col.IsNullable && (val == null || val == DBNull.Value))
-                    throw new ExecutionException($"Column {col.ColumnName} does not allow nulls.");
+                {
+                    if (ExecutionContext?.SkipError == true)
+                    {
+                        throw new RowSkipException($"Column '{col.ColumnName}' does not allow nulls.");
+                    }
+                    else
+                    {
+                        errors.Add($"Column '{col.ColumnName}' does not allow nulls.");
+                    }
+                }
 
                 // 2. Column-level CHECK
                 if (col.CheckConstraint != null && Validator != null)
                 {
                     if (!await Validator.ValidateCheckConstraint(col.CheckConstraint, row))
-                        throw new ExecutionException($"Check constraint violation on column {col.ColumnName}");
+                    {
+                        if (ExecutionContext?.SkipError == true)
+                        {
+                            throw new RowSkipException($"Check constraint violation on column {col.ColumnName}");
+                        }
+                        else
+                        {
+                            errors.Add($"Check constraint violation on column {col.ColumnName}");
+                        }
+                    }
                 }
 
                 // 3. Column-level FK
                 if (col.ForeignKey != null && Validator != null)
                 {
                     if (!await Validator.ValidateForeignKey(col.ForeignKey, new List<string> { col.ColumnName }, row))
-                        throw new ExecutionException($"Foreign key violation on column {col.ColumnName} (value: {val})");
+                    {
+                        if (ExecutionContext?.SkipError == true)
+                        {
+                            throw new RowSkipException($"Foreign key violation on column {col.ColumnName} (value: {val})");
+                        }
+                        else
+                        {
+                            errors.Add($"Foreign key violation on column {col.ColumnName} (value: {val})");
+                        }
+                    }
                 }
 
                 // 4. Column-level Unique
-                if (col.IsUnique)
+                if (col.IsUnique || col.IsPrimaryKey)
                 {
-                    if (_index.IsDuplicate(new List<string> { col.ColumnName }, row, _batches))
-                        throw new ExecutionException($"Unique constraint violation on column {col.ColumnName} (value: {val})");
+                    if (_index.IsDuplicate(new List<string> { col.ColumnName }, row, activeBatches))
+                    {
+                        if (ExecutionContext?.SkipError == true)
+                        {
+                            throw new RowSkipException($"Unique constraint violation on column {col.ColumnName} (value: {val})");
+                        }
+                        else
+                        {
+                            errors.Add($"Unique constraint violation on column {col.ColumnName} (value: {val})");
+                        }
+                    }
                 }
             }
 
@@ -282,32 +365,82 @@ namespace ETL_SQL.Data
                 if (tc is TableCheckConstraint c && Validator != null)
                 {
                     if (!await Validator.ValidateCheckConstraint(c.Expression, row))
-                        throw new ExecutionException($"Check constraint violation: {tc.ConstraintName ?? "unnamed"}");
+                    {
+                        if (ExecutionContext?.SkipError == true)
+                        {
+                            throw new RowSkipException($"Check constraint violation: {tc.ConstraintName ?? "unnamed"}");
+                        }
+                        else
+                        {
+                            errors.Add($"Check constraint violation: {tc.ConstraintName ?? "unnamed"}");
+                        }
+                    }
                 }
                 else if (tc is TableForeignKeyConstraint fk && Validator != null)
                 {
                     if (!await Validator.ValidateForeignKey(fk.Reference, fk.Columns, row))
                     {
                         var vals = string.Join(", ", fk.Columns.Select(col => row[col]?.ToString() ?? "NULL"));
-                        throw new ExecutionException($"Foreign key violation: {tc.ConstraintName ?? "unnamed"} (values: {vals})");
+                        if (ExecutionContext?.SkipError == true)
+                        {
+                            throw new RowSkipException($"Foreign key violation: {tc.ConstraintName ?? "unnamed"} (values: {vals})");
+                        }
+                        else
+                        {
+                            errors.Add($"Foreign key violation: {tc.ConstraintName ?? "unnamed"} (values: {vals})");
+                        }
                     }
                 }
                 else if (tc is TablePrimaryKeyConstraint pk)
                 {
+                    bool hasNull = false;
                     foreach (var colName in pk.Columns)
                     {
                         var val = row[colName];
                         if (val == null || val == DBNull.Value)
-                            throw new ExecutionException($"Primary key column {colName} cannot be null.");
+                        {
+                            hasNull = true;
+                            if (ExecutionContext?.SkipError == true)
+                            {
+                                throw new RowSkipException($"Primary key column {colName} cannot be null.");
+                            }
+                            else
+                            {
+                                errors.Add($"Primary key column {colName} cannot be null.");
+                            }
+                        }
                     }
-                    if (_index.IsDuplicate(pk.Columns, row, _batches))
-                        throw new ExecutionException($"Primary key violation: {tc.ConstraintName ?? "unnamed"}");
+                    if (!hasNull && _index.IsDuplicate(pk.Columns, row, activeBatches))
+                    {
+                        if (ExecutionContext?.SkipError == true)
+                        {
+                            throw new RowSkipException($"Primary key violation: {tc.ConstraintName ?? "unnamed"}");
+                        }
+                        else
+                        {
+                            errors.Add($"Primary key violation: {tc.ConstraintName ?? "unnamed"}");
+                        }
+                    }
                 }
                 else if (tc is TableUniqueConstraint uk)
                 {
-                    if (_index.IsDuplicate(uk.Columns, row, _batches))
-                        throw new ExecutionException($"Unique constraint violation: {tc.ConstraintName ?? "unnamed"}");
+                    if (_index.IsDuplicate(uk.Columns, row, activeBatches))
+                    {
+                        if (ExecutionContext?.SkipError == true)
+                        {
+                            throw new RowSkipException($"Unique constraint violation: {tc.ConstraintName ?? "unnamed"}");
+                        }
+                        else
+                        {
+                            errors.Add($"Unique constraint violation: {tc.ConstraintName ?? "unnamed"}");
+                        }
+                    }
                 }
+            }
+
+            if (errors.Count > 0)
+            {
+                throw new ExecutionException(string.Join(Environment.NewLine, errors));
             }
         }
 
@@ -604,21 +737,38 @@ namespace ETL_SQL.Data
                         }
                     }
 
-                    foreach (var row in b.Rows) await ValidateRow(row);
+                    var processedBatch = new DataTable();
+                    processedBatch.SetColumns(_columnOrder);
+
+                    foreach (var row in b.Rows)
+                    {
+                        try
+                        {
+                            var rowClone = row.Clone();
+                            await ValidateRow(rowClone, _batches.Concat(new[] { processedBatch }));
+                            await processedBatch.AddRowAsync(rowClone);
+                        }
+                        catch (RowSkipException)
+                        {
+                            // Skip this row
+                        }
+                    }
+
+                    if (processedBatch.Rows.Count == 0) continue;
 
                     long threshold = ExecutionContext?.TempTableSpillThresholdRows ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
                     
-                    if (_totalRowCount + b.Rows.Count > threshold)
+                    if (_totalRowCount + processedBatch.Rows.Count > threshold)
                     {
                         if (ExecutionContext != null)
                         {
                             var chunkName = $"{Guid.NewGuid():N}.tmp";
                             await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
                             {
-                                await writer.WriteRowsAsync(b.Rows);
+                                await writer.WriteRowsAsync(processedBatch.Rows);
                             }
                             _spillChunkNames.Add(chunkName);
-                            _totalRowCount += b.Rows.Count;
+                            _totalRowCount += processedBatch.Rows.Count;
 
                             if (ExecutionContext.Telemetry.IsProfiling)
                                 ExecutionContext.LoggingContext.Logger.Debug("Temp table threshold reached ({Threshold} rows). Spilled batch to chunk: {ChunkName}", threshold, chunkName);
@@ -627,15 +777,15 @@ namespace ETL_SQL.Data
                         }
                     }
 
-                    _batches.Add(b);
-                    _totalRowCount += b.Rows.Count;
+                    _batches.Add(processedBatch);
+                    _totalRowCount += processedBatch.Rows.Count;
                     
                     if (_index.Count > 0)
                     {
                         foreach (var col in _index.Keys.ToList())
                         {
                             if (_index.TryGetColumns(col, out var cols))
-                                _index.UpdateIndexWithBatch(cols!, b);
+                                _index.UpdateIndexWithBatch(cols!, processedBatch);
                         }
                     }
                 }

@@ -194,7 +194,15 @@ namespace ETL_SQL.Connectors.Postgres
                 {
                     foreach (var param in parameters)
                     {
-                        cmd.Parameters.AddWithValue($"p{paramCount++}", param ?? DBNull.Value);
+                        var pName = $"p{paramCount++}";
+                        if (param is string strVal)
+                        {
+                            cmd.Parameters.Add(new NpgsqlParameter(pName, NpgsqlTypes.NpgsqlDbType.Unknown) { Value = strVal });
+                        }
+                        else
+                        {
+                            cmd.Parameters.AddWithValue(pName, param ?? DBNull.Value);
+                        }
                     }
                 }
 

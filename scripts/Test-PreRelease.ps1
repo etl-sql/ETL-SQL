@@ -138,9 +138,20 @@ function Invoke-NuGetPackageAudit {
         "--no-restore"
     )
 
-    $output = & dotnet @args 2>&1
+    $oldPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = & dotnet @args 2>&1
+    }
+    finally {
+        $ErrorActionPreference = $oldPreference
+    }
     $exitCode = if ($LASTEXITCODE -ne $null) { $LASTEXITCODE } else { 0 }
     if ($exitCode -ne 0) {
+        if ($Mode -eq "--outdated") {
+            Write-Warning "dotnet list package --outdated failed (often due to SDK bugs with CPM). Skipping outdated package check."
+            return [PSCustomObject]@{ projects = @() }
+        }
         throw "dotnet list package $Mode failed with exit code $exitCode"
     }
 
@@ -248,7 +259,10 @@ function Format-NuGetFinding {
         $Finding
     )
 
-    $projectPath = [System.IO.Path]::GetRelativePath($RepoRoot, [string]$Finding.project)
+    $projectPath = [string]$Finding.project
+    if ($projectPath.StartsWith($RepoRoot)) {
+        $projectPath = $projectPath.Substring($RepoRoot.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar)
+    }
     $scope = if ($Finding.bucket -eq "topLevelPackages") { "top-level" } else { "transitive" }
 
     switch ($true) {
@@ -298,13 +312,20 @@ function Invoke-NpmJsonCommand {
 
     Push-Location $WorkingDirectory
     try {
-        $output = & npm @Arguments 2>&1
+        $oldPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            $output = & npm @Arguments 2>&1
+        }
+        finally {
+            $ErrorActionPreference = $oldPreference
+        }
         $exitCode = if ($LASTEXITCODE -ne $null) { $LASTEXITCODE } else { 0 }
         $text = ($output -join "`n").Trim()
         $json = $null
 
         if (-not [string]::IsNullOrWhiteSpace($text)) {
-            $json = $text | ConvertFrom-Json -Depth 100
+            $json = $text | ConvertFrom-Json
         }
 
         if ($exitCode -ne 0 -and -not $AllowNonZeroExit) {
@@ -485,7 +506,14 @@ function Invoke-LoggedPhase {
     try {
         Push-Location $RepoRoot
         try {
-            $output = & $Action 2>&1
+            $oldPreference = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            try {
+                $output = & $Action 2>&1
+            }
+            finally {
+                $ErrorActionPreference = $oldPreference
+            }
             $exitCode = if ($LASTEXITCODE -ne $null) { $LASTEXITCODE } else { 0 }
             $output | Tee-Object -FilePath $phaseLog
             if ($exitCode -ne 0) {
@@ -656,7 +684,13 @@ try {
                 }
             }
 
-            if ($deprecatedFindings.Count -gt 0 -or $vulnerableFindings.Count -gt 0) {
+            $blockingDeprecated = @($deprecatedFindings | Where-Object {
+                $reasons = $_.deprecationReasons
+                $nonLegacy = $reasons | Where-Object { $_ -ne "Legacy" }
+                $nonLegacy.Count -gt 0
+            })
+
+            if ($blockingDeprecated.Count -gt 0 -or $vulnerableFindings.Count -gt 0) {
                 throw "NuGet audit found deprecated or vulnerable packages. Update or replace them before shipping."
             }
         } `

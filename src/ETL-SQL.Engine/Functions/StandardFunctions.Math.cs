@@ -56,8 +56,68 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("AVG", Avg, "AVG(expression): Returns the average of values in a collection.");
             registry.RegisterWithHelp("MIN", Min, "MIN(expression): Returns the minimum value in a collection.");
             registry.RegisterWithHelp("MAX", Max, "MAX(expression): Returns the maximum value in a collection.");
-            registry.RegisterWithHelp("STDDEV", StdDev, "STDDEV(expression): Returns the statistical standard deviation.");
+            registry.RegisterWithHelp("STDDEV", StdDev, "STDDEV(expression): Returns the statistical deviation.");
             registry.RegisterWithHelp("VAR", Variance, "VAR(expression): Returns the statistical variance.");
+
+            // Bitwise Functions
+            registry.RegisterWithHelp("BITAND", (args, ctx) => {
+                if (args.Count < 2 || args[0] == null || args[1] == null) return null;
+                return (decimal)(Convert.ToInt64(args[0]) & Convert.ToInt64(args[1]));
+            }, "BITAND(a, b): Performs a bitwise AND operation on two integers.");
+
+            registry.RegisterWithHelp("BITOR", (args, ctx) => {
+                if (args.Count < 2 || args[0] == null || args[1] == null) return null;
+                return (decimal)(Convert.ToInt64(args[0]) | Convert.ToInt64(args[1]));
+            }, "BITOR(a, b): Performs a bitwise OR operation on two integers.");
+
+            registry.RegisterWithHelp("BITXOR", (args, ctx) => {
+                if (args.Count < 2 || args[0] == null || args[1] == null) return null;
+                return (decimal)(Convert.ToInt64(args[0]) ^ Convert.ToInt64(args[1]));
+            }, "BITXOR(a, b): Performs a bitwise XOR operation on two integers.");
+
+            registry.RegisterWithHelp("BITNOT", (args, ctx) => {
+                if (args.Count < 1 || args[0] == null) return null;
+                return (decimal)(~Convert.ToInt64(args[0]));
+            }, "BITNOT(a): Performs a bitwise NOT operation on an integer.");
+
+            registry.RegisterWithHelp("BITSHIFTLEFT", (args, ctx) => {
+                if (args.Count < 2 || args[0] == null || args[1] == null) return null;
+                return (decimal)(Convert.ToInt64(args[0]) << Convert.ToInt32(args[1]));
+            }, "BITSHIFTLEFT(a, n): Performs a bitwise left shift on 'a' by 'n' bits.");
+
+            registry.RegisterWithHelp("BITSHIFTRIGHT", (args, ctx) => {
+                if (args.Count < 2 || args[0] == null || args[1] == null) return null;
+                return (decimal)(Convert.ToInt64(args[0]) >> Convert.ToInt32(args[1]));
+            }, "BITSHIFTRIGHT(a, n): Performs a bitwise right shift on 'a' by 'n' bits.");
+
+            registry.RegisterWithHelp("BIT_COUNT", (args, ctx) => {
+                if (args.Count < 1 || args[0] == null) return null;
+                long val = Convert.ToInt64(args[0]);
+                return (decimal)System.Numerics.BitOperations.PopCount((ulong)val);
+            }, "BIT_COUNT(a): Returns the number of set bits (popcount) in the integer.");
+
+            // Trigonometric / Math Constants
+            registry.RegisterWithHelp("PI", (args, ctx) => (decimal)Math.PI, "PI(): Returns the value of PI.");
+
+            registry.RegisterWithHelp("DEGREES", (args, ctx) => {
+                if (args.Count < 1 || args[0] == null) return null;
+                double rad = Convert.ToDouble(args[0]);
+                return (decimal)(rad * (180.0 / Math.PI));
+            }, "DEGREES(radians): Converts radians to degrees.");
+
+            registry.RegisterWithHelp("RADIANS", (args, ctx) => {
+                if (args.Count < 1 || args[0] == null) return null;
+                double deg = Convert.ToDouble(args[0]);
+                return (decimal)(deg * (Math.PI / 180.0));
+            }, "RADIANS(degrees): Converts degrees to radians.");
+
+            registry.RegisterWithHelp("COT", (args, ctx) => {
+                if (args.Count < 1 || args[0] == null) return null;
+                double val = Convert.ToDouble(args[0]);
+                double tan = Math.Tan(val);
+                if (tan == 0) return null;
+                return (decimal)(1.0 / tan);
+            }, "COT(n): Returns the cotangent of a number.");
         }
 
         private static object? Round(List<object?> args, IExecutionContext ctx)

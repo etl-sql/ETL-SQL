@@ -206,6 +206,8 @@ namespace ETL_SQL.Engine
         /// <summary>When true, string comparisons are case-sensitive. Defaults to false. Settable at runtime via SET CASE_SENSITIVE.</summary>
         public bool CaseSensitiveComparison { get => _options.CaseSensitiveComparison; set => _options.CaseSensitiveComparison = value; }
         public bool LineageEnabled { get => _options.LineageEnabled; set => _options.LineageEnabled = value; }
+        public bool TruncateString { get => _options.TruncateString; set => _options.TruncateString = value; }
+        public bool SkipError { get => _options.SkipError; set => _options.SkipError = value; }
 
         /// <summary>Last script lexing duration in milliseconds.</summary>
         public long LastLexTimeMs { get; set; }

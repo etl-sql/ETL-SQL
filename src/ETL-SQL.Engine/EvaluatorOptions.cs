@@ -48,6 +48,8 @@ namespace ETL_SQL.Engine
         // --- Features ---
         public bool TelemetryEnabled { get; set; } = true;
         public bool LineageEnabled { get; set; } = true;
+        public bool TruncateString { get; set; } = false;
+        public bool SkipError { get; set; } = false;
         public bool SpillEncryptionEnabled { get; set; } = true;
         public bool SpillCompressionEnabled { get; set; } = true;
         public string SpillFormat { get; set; } = "Arrow";

@@ -43,6 +43,8 @@ namespace ETL_SQL.Engine.Functions
                 ctx.SecurityService.ValidateEnvVar(name);
                 return Environment.GetEnvironmentVariable(name);
             }, "ENV('VAR_NAME'): Returns the value of a host environment variable (subject to security allow-list).");
+            
+            registry.RegisterWithHelp("CONNECTION_PROPERTY", ConnectionProperty, "CONNECTION_PROPERTY(conn_name, prop_name): Returns the value of a connection property, masking sensitive properties.");
         }
 
         private static object? AddToList(List<object?> args, IExecutionContext ctx)
@@ -119,6 +121,55 @@ namespace ETL_SQL.Engine.Functions
             } catch {
                 return null;
             }
+        }
+
+        private static object? ConnectionProperty(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
+            string connName = args[0]!.ToString()!;
+            string propName = args[1]!.ToString()!;
+
+            if (!ctx.Connections.TryGetValue(connName, out var ds))
+            {
+                return null;
+            }
+
+            if (propName.Equals("PATH", StringComparison.OrdinalIgnoreCase))
+            {
+                return ds.Path;
+            }
+            if (propName.Equals("TYPE", StringComparison.OrdinalIgnoreCase) ||
+                propName.Equals("CONNECTOR", StringComparison.OrdinalIgnoreCase) ||
+                propName.Equals("CONNECTOR_TYPE", StringComparison.OrdinalIgnoreCase))
+            {
+                return ds.ConnectorType;
+            }
+
+            if (ds.Options != null)
+            {
+                var match = ds.Options.FirstOrDefault(kv => kv.Key.Equals(propName, StringComparison.OrdinalIgnoreCase));
+                if (match.Key != null)
+                {
+                    bool isSensitive = match.Key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase) ||
+                                       match.Key.Contains("CONNECTIONSTRING", StringComparison.OrdinalIgnoreCase) ||
+                                       match.Key.Contains("SECRET", StringComparison.OrdinalIgnoreCase) ||
+                                       match.Key.Contains("APIKEY", StringComparison.OrdinalIgnoreCase) ||
+                                       match.Key.Contains("API_KEY", StringComparison.OrdinalIgnoreCase) ||
+                                       match.Key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase) ||
+                                       match.Key.Contains("CREDENTIAL", StringComparison.OrdinalIgnoreCase) ||
+                                       match.Key.Contains("PRIVATEKEY", StringComparison.OrdinalIgnoreCase) ||
+                                       match.Key.Contains("KEYFILE", StringComparison.OrdinalIgnoreCase) ||
+                                       match.Value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase);
+
+                    if (isSensitive)
+                    {
+                        return "********";
+                    }
+                    return match.Value;
+                }
+            }
+
+            return null;
         }
     }
 }

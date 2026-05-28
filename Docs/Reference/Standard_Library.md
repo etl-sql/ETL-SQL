@@ -165,6 +165,9 @@ SELECT CAST('[0.1, 0.2]' AS VECTOR)    AS v;
 
 | Function | Signature | Returns |
 | :--- | :--- | :--- |
+| `LPAD` | `LPAD(str, len [, pad_str])` | Left-pads string to target length |
+| `RPAD` | `RPAD(str, len [, pad_str])` | Right-pads string to target length |
+| `REPEAT` | `REPEAT(str, n)` | Repeats string N times (alias for `REPLICATE`) |
 | `FORMAT` | `FORMAT(val, fmt)` | Value formatted by .NET format string (e.g. `'yyyy-MM-dd'`, `'N2'`) |
 | `STR` | `STR(float [, len [, dec]])` | Numeric value as a right-padded string |
 | `REPLICATE` | `REPLICATE(str, n)` | String repeated N times |
@@ -282,6 +285,10 @@ SELECT OrderDate AT TIME ZONE 'UTC' AS UtcDate FROM #orders;
 
 | Function | Returns |
 | :--- | :--- |
+| `PI()` | Returns the mathematical constant $\pi$ |
+| `DEGREES(r)` | Converts radians to degrees |
+| `RADIANS(d)` | Converts degrees to radians |
+| `COT(r)` | Cotangent |
 | `SIN(r)` | Sine |
 | `COS(r)` | Cosine |
 | `TAN(r)` | Tangent |
@@ -298,6 +305,18 @@ DECLARE @rad = @deg * (3.14159265 / 180.0);
 SELECT SIN(@rad), COS(@rad), TAN(@rad);
 SELECT ATAN2(1.0, 1.0) AS Angle45;   -- ~0.785 radians (π/4)
 ```
+
+### 5.3 Bitwise Functions
+
+| Function | Signature | Returns |
+| :--- | :--- | :--- |
+| `BITAND` | `BITAND(a, b)` | Bitwise AND of two integers |
+| `BITOR` | `BITOR(a, b)` | Bitwise OR of two integers |
+| `BITXOR` | `BITXOR(a, b)` | Bitwise XOR of two integers |
+| `BITNOT` | `BITNOT(a)` | Bitwise NOT of an integer |
+| `BITSHIFTLEFT` | `BITSHIFTLEFT(a, n)` | Bitwise left shift of `a` by `n` bits |
+| `BITSHIFTRIGHT` | `BITSHIFTRIGHT(a, n)` | Bitwise right shift of `a` by `n` bits |
+| `BIT_COUNT` | `BIT_COUNT(a)` | Popcount (count of set bits) of an integer |
 
 ---
 
@@ -376,6 +395,7 @@ SELECT IIF(Score >= 90, 'Pass', 'Fail') AS Result FROM #tests;
 | `ERROR_STATE()` | Error state code inside `CATCH` block |
 | `ERROR_LINE()` | Line number where error occurred |
 | `ENV(variable)` | Value of a host environment variable (see security note below) |
+| `CONNECTION_PROPERTY(conn, prop)` | Value of a connection option, masking passwords/keys |
 | `@@TRANCOUNT` | Current transaction nesting level |
 | `@@VERSION` | Full engine version and metadata string |
 | `@@RESULTSETS` | Number of result sets produced by the last statement |
@@ -633,6 +653,13 @@ SHOW VARIABLES;
 | `DIRECTORY_EXISTS` | `DIRECTORY_EXISTS(path)` | `TRUE` if the directory exists |
 | `FILE_LIST` | `FILE_LIST(path [, recursive])` | Table: `NAME`, `PATH`, `EXTENSION`, `SIZE`, `LASTMODIFIED`, `ISREADONLY`, `CREATIONTIME` |
 | `REMOTE_FILE_LIST` | `REMOTE_FILE_LIST(conn_name [, path])` | Table from SFTP/FTP/Blob: `NAME`, `FULLPATH`, `SIZE`, `LASTMODIFIED`, `ISDIRECTORY` |
+| `FILE_HASH` | `FILE_HASH(path [, algo])` | Lowercase hex checksum of file (`MD5`, `SHA1`, `SHA256`, `SHA512`) |
+| `FILE_SIZE` | `FILE_SIZE(path)` | Size of local file in bytes |
+| `FILE_MODIFIED` | `FILE_MODIFIED(path)` | Last write timestamp as a `DATETIME` |
+| `PATH_COMBINE` | `PATH_COMBINE(p1, p2 [, ...])` | Combines path segments securely |
+| `PATH_FILENAME` | `PATH_FILENAME(path)` | Extracts the filename and extension portion |
+| `PATH_EXTENSION` | `PATH_EXTENSION(path)` | Extracts the extension portion (with leading dot) |
+| `PATH_DIRECTORY` | `PATH_DIRECTORY(path)` | Extracts the directory path portion |
 
 #### `FILE_LIST` / `DIRECTORY` Schema
 Returns a table with one row per file found:

@@ -28,7 +28,9 @@ namespace ETL_SQL.Core
         MaxInternalOperations,
         InteractiveMode,
         CaseSensitive,
-        Lineage
+        Lineage,
+        TruncateString,
+        SkipError
     }
 
     public record SetThresholdStatement(ThresholdType Type, Expression Value) : Statement
