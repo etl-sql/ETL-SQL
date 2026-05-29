@@ -58,6 +58,46 @@ namespace ETL_SQL.Tests.Orchestration
                 return Task.CompletedTask;
             }
 
+            public Task<bool> FileExistsAsync(string remotePath)
+            {
+                return Task.FromResult(RemoteFiles.ContainsKey(remotePath));
+            }
+
+            public Task<bool> DirectoryExistsAsync(string remotePath)
+            {
+                string prefix = remotePath.EndsWith('/') ? remotePath : remotePath + "/";
+                return Task.FromResult(RemoteFiles.Keys.Any(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            public Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
+            {
+                if (RemoteFiles.TryGetValue(remoteSource, out var content))
+                {
+                    if (overwrite || !RemoteFiles.ContainsKey(remoteDest))
+                    {
+                        RemoteFiles[remoteDest] = content;
+                        RemoteFiles.Remove(remoteSource);
+                    }
+                }
+                return Task.CompletedTask;
+            }
+
+            public Task CreateDirectoryAsync(string remotePath)
+            {
+                return Task.CompletedTask;
+            }
+
+            public Task DeleteDirectoryAsync(string remotePath)
+            {
+                string prefix = remotePath.EndsWith('/') ? remotePath : remotePath + "/";
+                var keysToDelete = RemoteFiles.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
+                foreach (var key in keysToDelete)
+                {
+                    RemoteFiles.Remove(key);
+                }
+                return Task.CompletedTask;
+            }
+
             public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
             {
                 var table = new DataTable();
@@ -159,6 +199,151 @@ namespace ETL_SQL.Tests.Orchestration
 
             // Cleanup
             if (File.Exists(localFile)) File.Delete(localFile);
+        }
+
+        [Fact]
+        public async Task Test_RemoteFileOperations()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = services.GetRequiredService<Evaluator>();
+            var mockFs = new MockRemoteFileSystem();
+            evaluator.Connections["MYREMOTE"] = mockFs;
+
+            // Delete Test
+            mockFs.RemoteFiles["to_delete.txt"] = "delete me";
+            await RunScriptAsync(evaluator, "DELETE FILE 'to_delete.txt' AT MYREMOTE;");
+            Assert.False(mockFs.RemoteFiles.ContainsKey("to_delete.txt"));
+
+            // Rename Test
+            mockFs.RemoteFiles["old_name.txt"] = "rename me";
+            await RunScriptAsync(evaluator, "RENAME FILE 'old_name.txt' TO 'new_name.txt' AT MYREMOTE;");
+            Assert.False(mockFs.RemoteFiles.ContainsKey("old_name.txt"));
+            Assert.Equal("rename me", mockFs.RemoteFiles["new_name.txt"]);
+
+            // Move Test
+            await RunScriptAsync(evaluator, "MOVE FILE 'new_name.txt' TO 'archive/moved.txt' AT MYREMOTE;");
+            Assert.False(mockFs.RemoteFiles.ContainsKey("new_name.txt"));
+            Assert.Equal("rename me", mockFs.RemoteFiles["archive/moved.txt"]);
+        }
+
+        [Fact]
+        public async Task Test_RemoteDirectoryOperations()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = services.GetRequiredService<Evaluator>();
+            var mockFs = new MockRemoteFileSystem();
+            evaluator.Connections["MYREMOTE"] = mockFs;
+
+            // Create Directory should succeed without error
+            await RunScriptAsync(evaluator, "CREATE DIRECTORY 'some_dir/' AT MYREMOTE;");
+
+            // Delete Directory
+            mockFs.RemoteFiles["some_dir/file1.txt"] = "content1";
+            mockFs.RemoteFiles["some_dir/file2.txt"] = "content2";
+            mockFs.RemoteFiles["other_dir/file3.txt"] = "content3";
+
+            await RunScriptAsync(evaluator, "DELETE DIRECTORY 'some_dir/' AT MYREMOTE;");
+
+            Assert.False(mockFs.RemoteFiles.ContainsKey("some_dir/file1.txt"));
+            Assert.False(mockFs.RemoteFiles.ContainsKey("some_dir/file2.txt"));
+            Assert.True(mockFs.RemoteFiles.ContainsKey("other_dir/file3.txt"));
+        }
+
+        [Fact]
+        public async Task Test_WildcardFileTransfers()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = services.GetRequiredService<Evaluator>();
+            var mockFs = new MockRemoteFileSystem();
+            evaluator.Connections["MYREMOTE"] = mockFs;
+
+            string tempDir = Path.Combine(Path.GetTempPath(), "temp_wildcards_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            
+            string file1 = Path.Combine(tempDir, "a.txt");
+            string file2 = Path.Combine(tempDir, "b.txt");
+            string file3 = Path.Combine(tempDir, "c.log");
+            
+            File.WriteAllText(file1, "file1 content");
+            File.WriteAllText(file2, "file2 content");
+            File.WriteAllText(file3, "file3 content");
+
+            try
+            {
+                // Send wildcard matching *.txt
+                string sqlSend = $"SEND FILE '{Path.Combine(tempDir, "*.txt").Replace("\\", "\\\\")}' TO 'remote_wildcard/' AT MYREMOTE;";
+                await RunScriptAsync(evaluator, sqlSend);
+
+                Assert.True(mockFs.RemoteFiles.ContainsKey("remote_wildcard/a.txt"));
+                Assert.True(mockFs.RemoteFiles.ContainsKey("remote_wildcard/b.txt"));
+                Assert.False(mockFs.RemoteFiles.ContainsKey("remote_wildcard/c.log"));
+
+                // Receive wildcard matching *.txt back to a new folder
+                string receiveDir = Path.Combine(Path.GetTempPath(), "temp_received_" + Guid.NewGuid().ToString("N"));
+                string sqlReceive = $"RECEIVE FILE FROM 'remote_wildcard/*.txt' TO '{receiveDir.Replace("\\", "\\\\")}' AT MYREMOTE;";
+                await RunScriptAsync(evaluator, sqlReceive);
+
+                Assert.True(File.Exists(Path.Combine(receiveDir, "a.txt")));
+                Assert.True(File.Exists(Path.Combine(receiveDir, "b.txt")));
+                Assert.False(File.Exists(Path.Combine(receiveDir, "c.log")));
+
+                // Cleanup received directory
+                if (Directory.Exists(receiveDir)) Directory.Delete(receiveDir, true);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
+        }
+
+        [Fact]
+        public async Task Test_RemoteFileExistsFunction()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = services.GetRequiredService<Evaluator>();
+            var mockFs = new MockRemoteFileSystem();
+            evaluator.Connections["MYREMOTE"] = mockFs;
+
+            mockFs.RemoteFiles["folder/test.txt"] = "content";
+
+            // Test file exists
+            string sqlExists = "SELECT REMOTE_FILE_EXISTS('MYREMOTE', 'folder/test.txt') AS ExistsVal;";
+            var lexerExists = new Lexer(sqlExists);
+            var parserExists = new Parser(lexerExists.Tokenize());
+            var scriptExists = parserExists.Parse();
+            var resultsExists = new List<DataTable>();
+            await foreach (var batch in evaluator.ExecuteQuery(scriptExists.Statements[0])) resultsExists.Add(batch);
+            
+            Assert.Single(resultsExists);
+            var rowsExists = resultsExists[0].Rows.ToList();
+            Assert.Single(rowsExists);
+            Assert.Equal(1m, rowsExists[0]["ExistsVal"]);
+
+            // Test directory exists (matches prefix folder/)
+            string sqlDirExists = "SELECT REMOTE_FILE_EXISTS('MYREMOTE', 'folder/') AS ExistsVal;";
+            var lexerDirExists = new Lexer(sqlDirExists);
+            var parserDirExists = new Parser(lexerDirExists.Tokenize());
+            var scriptDirExists = parserDirExists.Parse();
+            var resultsDirExists = new List<DataTable>();
+            await foreach (var batch in evaluator.ExecuteQuery(scriptDirExists.Statements[0])) resultsDirExists.Add(batch);
+            
+            Assert.Single(resultsDirExists);
+            var rowsDirExists = resultsDirExists[0].Rows.ToList();
+            Assert.Single(rowsDirExists);
+            Assert.Equal(1m, rowsDirExists[0]["ExistsVal"]);
+
+            // Test not exists
+            string sqlNotExists = "SELECT REMOTE_FILE_EXISTS('MYREMOTE', 'folder/notfound.txt') AS ExistsVal;";
+            var lexerNotExists = new Lexer(sqlNotExists);
+            var parserNotExists = new Parser(lexerNotExists.Tokenize());
+            var scriptNotExists = parserNotExists.Parse();
+            var resultsNotExists = new List<DataTable>();
+            await foreach (var batch in evaluator.ExecuteQuery(scriptNotExists.Statements[0])) resultsNotExists.Add(batch);
+            
+            Assert.Single(resultsNotExists);
+            var rowsNotExists = resultsNotExists[0].Rows.ToList();
+            Assert.Single(rowsNotExists);
+            Assert.Equal(0m, rowsNotExists[0]["ExistsVal"]);
         }
     }
 }

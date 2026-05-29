@@ -53,6 +53,46 @@ namespace ETL_SQL.Tests.Orchestration
                 return Task.CompletedTask;
             }
 
+            public Task<bool> FileExistsAsync(string remotePath)
+            {
+                return Task.FromResult(RemoteFiles.ContainsKey(remotePath));
+            }
+
+            public Task<bool> DirectoryExistsAsync(string remotePath)
+            {
+                string prefix = remotePath.EndsWith('/') ? remotePath : remotePath + "/";
+                return Task.FromResult(RemoteFiles.Keys.Any(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            public Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
+            {
+                if (RemoteFiles.TryGetValue(remoteSource, out var content))
+                {
+                    if (overwrite || !RemoteFiles.ContainsKey(remoteDest))
+                    {
+                        RemoteFiles[remoteDest] = content;
+                        RemoteFiles.Remove(remoteSource);
+                    }
+                }
+                return Task.CompletedTask;
+            }
+
+            public Task CreateDirectoryAsync(string remotePath)
+            {
+                return Task.CompletedTask;
+            }
+
+            public Task DeleteDirectoryAsync(string remotePath)
+            {
+                string prefix = remotePath.EndsWith('/') ? remotePath : remotePath + "/";
+                var keysToDelete = RemoteFiles.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
+                foreach (var key in keysToDelete)
+                {
+                    RemoteFiles.Remove(key);
+                }
+                return Task.CompletedTask;
+            }
+
             public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
             {
                 var table = new DataTable();

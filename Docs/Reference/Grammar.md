@@ -2006,6 +2006,11 @@ RENAME FILE  '<source>' TO '<new_name>'   [WITH (OVERWRITE = ON|OFF)];
 DELETE FILE  '<path>';
 DELETE FILE  '<path>' IF EXISTS;
 
+-- Remote file operations (AT <connection>)
+MOVE FILE    '<source>' TO '<destination>' AT <connection> [WITH (OVERWRITE = ON|OFF)];
+RENAME FILE  '<source>' TO '<new_name>'   AT <connection> [WITH (OVERWRITE = ON|OFF)];
+DELETE FILE  '<path>' AT <connection>;
+
 -- Wildcard sources
 COPY FILE 'C:\Incoming\*.csv' TO 'C:\Archive\';
 ```
@@ -2023,12 +2028,14 @@ All path arguments (`<src>`, `<dest>`, `<path>`) can be either a literal string 
 
 ```sql
 CREATE DIRECTORY '<path>' [IF NOT EXISTS];
+CREATE DIRECTORY '<path>' AT <connection>;
 
 COPY DIRECTORY   '<src>' TO '<dest>'     [WITH (OVERWRITE = ON|OFF)];
 MOVE DIRECTORY   '<src>' TO '<dest>'     [WITH (OVERWRITE = ON|OFF)];
 RENAME DIRECTORY '<src>' TO '<new_name>' [WITH (OVERWRITE = ON|OFF)];
 
 DELETE DIRECTORY          '<path>' [IF EXISTS];
+DELETE DIRECTORY          '<path>' AT <connection>;
 DELETE DIRECTORY_CONTENTS '<path>' [WITH (RECURSIVE = ON|OFF)];
 
 COMPRESS DIRECTORY   '<src>' TO '<dest.zip>' [WITH (OVERWRITE = ON|OFF)];
@@ -2071,6 +2078,7 @@ RECEIVE FILE FROM '<remote_path>' TO '<local_path>' AT <connection> [WITH (OVERW
 | `DIRECTORY_EXISTS(path)` | `TRUE` if the directory exists |
 | `FILE_LIST(path [, pattern [, recursive]])` | Table: `Name`, `Path`, `Extension`, `Size`, `LastModified` |
 | `REMOTE_FILE_LIST(conn, path)` | Table: `Name`, `FullPath`, `Size`, `LastModified`, `IsDirectory` |
+| `REMOTE_FILE_EXISTS(conn, path)` | `TRUE` if the remote file or directory exists |
 
 ```sql
 IF FILE_EXISTS('C:\Incoming\payload.csv')

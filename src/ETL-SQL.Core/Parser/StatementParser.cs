@@ -56,10 +56,22 @@ namespace ETL_SQL.Core.Parser
             _dispatchMap[TokenType.INSERT]        = () => { var t = _parser.Previous; return DataParser.ParseInsert(t); };
             _dispatchMap[TokenType.REPLACE]       = () => { var t = _parser.Previous; return DataParser.ParseInsert(t); };
             _dispatchMap[TokenType.UPDATE]        = () => { var t = _parser.Previous; return DataParser.ParseUpdate(t); };
-            _dispatchMap[TokenType.MERGE]         = () => { var t = _parser.Previous; return DataParser.ParseMerge(t); };
+            _dispatchMap[TokenType.MERGE]         = () => {
+                var t = _parser.Previous;
+                if (_parser.Current.Type == TokenType.FILES)
+                {
+                    _parser.Advance();
+                    return ExtensionParser.ParseMergeFiles(t);
+                }
+                return DataParser.ParseMerge(t);
+            };
             _dispatchMap[TokenType.PRINT]         = () => SystemParser.ParsePrint();
             _dispatchMap[TokenType.WAITFOR]       = () => { var t = _parser.Previous; return ExtensionParser.ParseWaitFor(t); };
             _dispatchMap[TokenType.WAIT]          = () => { var t = _parser.Previous; return ExtensionParser.ParseWait(t); };
+            _dispatchMap[TokenType.CONVERT]       = () => { var t = _parser.Previous; return ExtensionParser.ParseConvertFileEncoding(t); };
+            _dispatchMap[TokenType.SPLIT]         = () => { var t = _parser.Previous; return ExtensionParser.ParseSplitFile(t); };
+            _dispatchMap[TokenType.SYNC]          = () => { var t = _parser.Previous; return ExtensionParser.ParseSyncDirectory(t); };
+            _dispatchMap[TokenType.VERIFY]        = () => { var t = _parser.Previous; return ExtensionParser.ParseVerifyFileIntegrity(t); };
             _dispatchMap[TokenType.RAISEERROR]    = () => FlowParser.ParseRaiseError();
             _dispatchMap[TokenType.ASSERT]        = () => { var t = _parser.Previous; return FlowParser.ParseAssert(t); };
             _dispatchMap[TokenType.EXPECT]        = () => { var t = _parser.Previous; return FlowParser.ParseExpectSchema(t); };

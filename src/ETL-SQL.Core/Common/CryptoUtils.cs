@@ -385,5 +385,97 @@ namespace ETL_SQL.Common
             using var pgp = new PGP(keys);
             await pgp.DecryptFileAsync(new FileInfo(inputFile), new FileInfo(outputFile));
         }
+
+        /// <summary>
+        /// Validates a file's lock status (waiting for lock to clear) and expected hash integrity.
+        /// </summary>
+        public static void ValidateFileAccess(string filePath, Dictionary<string, string>? options, ETL_SQL.Core.IExecutionContext context)
+        {
+            if (options == null) return;
+            if (!File.Exists(filePath)) return;
+
+            // 1. Wait for lock
+            if (options.TryGetValue("WAIT_FOR_LOCK", out var wfl) && 
+                (wfl.Equals("ON", StringComparison.OrdinalIgnoreCase) || wfl.Equals("TRUE", StringComparison.OrdinalIgnoreCase)))
+            {
+                int timeoutSec = 30;
+                if (options.TryGetValue("LOCK_TIMEOUT_SEC", out var lts) && int.TryParse(lts, out var ltsv))
+                {
+                    timeoutSec = ltsv;
+                }
+
+                var start = DateTime.UtcNow;
+                var timeout = TimeSpan.FromSeconds(timeoutSec);
+                bool success = false;
+                while (DateTime.UtcNow - start < timeout)
+                {
+                    if (File.Exists(filePath))
+                    {
+                        try
+                        {
+                            using (var fs = File.Open(filePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                            {
+                                success = true;
+                                break;
+                            }
+                        }
+                        catch (IOException)
+                        {
+                            // locked
+                        }
+                    }
+                    System.Threading.Thread.Sleep(200);
+                }
+
+                if (!success && !File.Exists(filePath))
+                {
+                    throw new ExecutionException($"Timeout waiting for file to arrive and unlock: {filePath}");
+                }
+            }
+
+            // 2. Hash validation
+            if (options.TryGetValue("EXPECTED_HASH", out var eh) && !string.IsNullOrEmpty(eh))
+            {
+                string expectedHash = eh.Trim('\'', '\"').ToLowerInvariant();
+                string algo = "SHA256";
+                if (options.TryGetValue("ALGORITHM", out var a))
+                {
+                    algo = a.ToUpperInvariant();
+                }
+
+                using var stream = File.OpenRead(filePath);
+                byte[] hashBytes;
+                if (algo == "MD5")
+                {
+                    using var hasher = MD5.Create();
+                    hashBytes = hasher.ComputeHash(stream);
+                }
+                else if (algo == "SHA1" || algo == "SHA-1")
+                {
+                    using var hasher = SHA1.Create();
+                    hashBytes = hasher.ComputeHash(stream);
+                }
+                else if (algo == "SHA256" || algo == "SHA-256" || algo == "SHA2_256")
+                {
+                    using var hasher = SHA256.Create();
+                    hashBytes = hasher.ComputeHash(stream);
+                }
+                else if (algo == "SHA512" || algo == "SHA-512" || algo == "SHA2_512")
+                {
+                    using var hasher = SHA512.Create();
+                    hashBytes = hasher.ComputeHash(stream);
+                }
+                else
+                {
+                    throw new ExecutionException($"Unsupported hash algorithm: {algo}. Supported: MD5, SHA1, SHA256, SHA512.");
+                }
+
+                string actualHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+                if (actualHash != expectedHash)
+                {
+                    throw new ExecutionException($"File integrity check failed: Expected hash '{expectedHash}' but got '{actualHash}' for file '{filePath}'.");
+                }
+            }
+        }
     }
 }

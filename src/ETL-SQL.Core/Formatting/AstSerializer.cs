@@ -85,6 +85,12 @@ namespace ETL_SQL.Core.Formatting
             FileOperationStatement         s => FormatFileOperation(s),
             DirectoryOperationStatement    s => FormatDirectoryOperation(s),
             FileTransferStatement          s => FormatFileTransfer(s),
+            WaitForFileStatement           s => $"WAITFOR FILE UNLOCKED {s.Path.ToSql()}" + (s.Timeout != null ? $" TIMEOUT {s.Timeout.ToSql()}" : "") + (s.PollInterval != null ? $" POLL_INTERVAL_MS {s.PollInterval.ToSql()}" : "") + ";",
+            ConvertFileEncodingStatement   s => $"CONVERT FILE ENCODING {s.Source.ToSql()} TO {s.Destination.ToSql()} FROM_ENCODING {s.FromEncoding.ToSql()} TO_ENCODING {s.ToEncoding.ToSql()}" + (s.Overwrite != null ? $" WITH(OVERWRITE={s.Overwrite.ToSql()})" : "") + ";",
+            SplitFileStatement             s => $"SPLIT FILE {s.Source.ToSql()} TO {s.DestinationDir.ToSql()} WITH(LIMIT_TYPE={s.LimitType.ToSql()}, LIMIT_VALUE={s.LimitValue.ToSql()}" + (s.Prefix != null ? $", PREFIX={s.Prefix.ToSql()}" : "") + (s.Overwrite != null ? $", OVERWRITE={s.Overwrite.ToSql()}" : "") + ");",
+            MergeFilesStatement            s => $"MERGE FILES {s.Source.ToSql()} TO {s.Destination.ToSql()}" + (s.Header != null || s.Overwrite != null ? " WITH(" + string.Join(", ", new[] { s.Header != null ? $"HEADER={s.Header.ToSql()}" : null, s.Overwrite != null ? $"OVERWRITE={s.Overwrite.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
+            SyncDirectoryStatement         s => $"SYNC DIRECTORY {s.Source.ToSql()} TO {s.Destination.ToSql()}" + (s.DeleteExtra != null || s.Overwrite != null || s.Recursive != null ? " WITH(" + string.Join(", ", new[] { s.DeleteExtra != null ? $"DELETE_EXTRA={s.DeleteExtra.ToSql()}" : null, s.Overwrite != null ? $"OVERWRITE={s.Overwrite.ToSql()}" : null, s.Recursive != null ? $"RECURSIVE={s.Recursive.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
+            VerifyFileIntegrityStatement   s => $"VERIFY FILE INTEGRITY {s.Source.ToSql()}" + (s.HashFile != null || s.ExpectedHash != null || s.Algorithm != null ? " WITH(" + string.Join(", ", new[] { s.HashFile != null ? $"HASH_FILE={s.HashFile.ToSql()}" : null, s.ExpectedHash != null ? $"EXPECTED_HASH={s.ExpectedHash.ToSql()}" : null, s.Algorithm != null ? $"ALGORITHM={s.Algorithm.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
 
             // ── Docker ──
             DockerStatement                s => s.Alias != null ? $"USE DOCKER({s.ImageName.ToSql()}) AS {s.Alias};" : $"USE DOCKER({s.ImageName.ToSql()});",

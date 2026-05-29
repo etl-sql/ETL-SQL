@@ -44,7 +44,10 @@ namespace ETL_SQL.Connectors.FlatFile
             { "PASSWORD", Array.Empty<string>() },
             { "CULTURE", Array.Empty<string>() },
             { "TRIM", new[] { "ON", "OFF" } },
-            { "FORMAT", new[] { "DELIMITED", "FIXED" } }
+            { "FORMAT", new[] { "DELIMITED", "FIXED" } },
+            { "EXPECTED_HASH", Array.Empty<string>() },
+            { "WAIT_FOR_LOCK", new[] { "ON", "OFF", "TRUE", "FALSE" } },
+            { "LOCK_TIMEOUT_SEC", Array.Empty<string>() }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase)

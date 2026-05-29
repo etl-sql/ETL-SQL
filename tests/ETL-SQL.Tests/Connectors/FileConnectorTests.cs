@@ -1078,5 +1078,77 @@ namespace ETL_SQL.Tests.Connectors
             var cs = ConnectionStringBuilder.Build("BLOB", props);
             Assert.NotEmpty(cs);
         }
+
+        [Fact]
+        public async Task TestFlatFileConnector_ExpectedHash_Valid()
+        {
+            var content = "id,name\n1,Alice\n2,Bob";
+            var path = Write("hash_valid.csv", content);
+
+            byte[] hashBytes;
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            {
+                hashBytes = sha.ComputeHash(Encoding.UTF8.GetBytes(content));
+            }
+            string correctHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+
+            var connector = new FlatFileConnector();
+            var options = new Dictionary<string, string>
+            {
+                { "HEADER", "ON" },
+                { "EXPECTED_HASH", correctHash },
+                { "ALGORITHM", "SHA256" }
+            };
+
+            var dataSource = connector.CreateDataSource(Ctx, path, options);
+            var columns = await dataSource.GetColumnsAsync();
+            Assert.Contains("id", columns);
+            Assert.Contains("name", columns);
+
+            var batches = await dataSource.ReadBatches().ToListAsync();
+            var rows = batches.SelectMany(b => b.Rows).ToList();
+            Assert.Equal(2, rows.Count);
+        }
+
+        [Fact]
+        public async Task TestFlatFileConnector_ExpectedHash_Invalid_Throws()
+        {
+            var content = "id,name\n1,Alice\n2,Bob";
+            var path = Write("hash_invalid.csv", content);
+
+            var connector = new FlatFileConnector();
+            var options = new Dictionary<string, string>
+            {
+                { "HEADER", "ON" },
+                { "EXPECTED_HASH", "wronghash12345" },
+                { "ALGORITHM", "SHA256" }
+            };
+
+            var dataSource = connector.CreateDataSource(Ctx, path, options);
+            await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () =>
+            {
+                await dataSource.ReadBatches().ToListAsync();
+            });
+        }
+
+        [Fact]
+        public async Task TestFlatFileConnector_WaitForLock()
+        {
+            var content = "id,name\n1,Alice\n2,Bob";
+            var path = Write("lock_wait.csv", content);
+
+            var connector = new FlatFileConnector();
+            var options = new Dictionary<string, string>
+            {
+                { "HEADER", "ON" },
+                { "WAIT_FOR_LOCK", "ON" },
+                { "LOCK_TIMEOUT_SEC", "2" }
+            };
+
+            var dataSource = connector.CreateDataSource(Ctx, path, options);
+            var batches = await dataSource.ReadBatches().ToListAsync();
+            var rows = batches.SelectMany(b => b.Rows).ToList();
+            Assert.Equal(2, rows.Count);
+        }
     }
 }

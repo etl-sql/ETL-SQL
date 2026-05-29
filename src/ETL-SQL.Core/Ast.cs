@@ -1143,8 +1143,9 @@ namespace ETL_SQL.Core
         public Expression? KeyFile { get; }
         public Expression? PgpKey { get; }
         public bool IfExists { get; set; }
+        public string? ConnectionName { get; }
 
-        public FileOperationStatement(FileOpType type, Expression source, Expression? destination = null, Expression? overwrite = null, Expression? password = null, Expression? keyFile = null, Expression? pgpKey = null, bool ifExists = false)
+        public FileOperationStatement(FileOpType type, Expression source, Expression? destination = null, Expression? overwrite = null, Expression? password = null, Expression? keyFile = null, Expression? pgpKey = null, bool ifExists = false, string? connectionName = null)
         {
             Type = type;
             Source = source;
@@ -1154,6 +1155,7 @@ namespace ETL_SQL.Core
             KeyFile = keyFile;
             PgpKey = pgpKey;
             IfExists = ifExists;
+            ConnectionName = connectionName;
         }
     }
 
@@ -1168,8 +1170,9 @@ namespace ETL_SQL.Core
         public Expression? KeyFile { get; }
         public Expression? PgpKey { get; }
         public bool IfExists { get; set; }
+        public string? ConnectionName { get; }
 
-        public DirectoryOperationStatement(DirectoryOpType type, Expression path, Expression? destination = null, Expression? overwrite = null, Expression? recursive = null, Expression? password = null, Expression? keyFile = null, Expression? pgpKey = null, bool ifExists = false)
+        public DirectoryOperationStatement(DirectoryOpType type, Expression path, Expression? destination = null, Expression? overwrite = null, Expression? recursive = null, Expression? password = null, Expression? keyFile = null, Expression? pgpKey = null, bool ifExists = false, string? connectionName = null)
         {
             Type = type;
             Path = path;
@@ -1180,8 +1183,23 @@ namespace ETL_SQL.Core
             KeyFile = keyFile;
             PgpKey = pgpKey;
             IfExists = ifExists;
+            ConnectionName = connectionName;
         }
     }
+
+
+    public record WaitForFileStatement(Expression Path, Expression? Timeout = null, Expression? PollInterval = null) : Statement;
+
+    public record ConvertFileEncodingStatement(Expression Source, Expression Destination, Expression FromEncoding, Expression ToEncoding, Expression? Overwrite = null) : Statement;
+
+    public record SplitFileStatement(Expression Source, Expression DestinationDir, Expression LimitType, Expression LimitValue, Expression? Prefix = null, Expression? Overwrite = null) : Statement;
+
+    public record MergeFilesStatement(Expression Source, Expression Destination, Expression? Header = null, Expression? Overwrite = null) : Statement;
+
+    public record SyncDirectoryStatement(Expression Source, Expression Destination, Expression? DeleteExtra = null, Expression? Overwrite = null, Expression? Recursive = null) : Statement;
+
+    public record VerifyFileIntegrityStatement(Expression Source, Expression? HashFile = null, Expression? ExpectedHash = null, Expression? Algorithm = null) : Statement;
+
 
 
 

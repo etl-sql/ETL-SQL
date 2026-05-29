@@ -168,6 +168,85 @@ namespace ETL_SQL.Connectors
             }
         }
 
+        public async Task<bool> FileExistsAsync(string remotePath)
+        {
+            try
+            {
+                var container = GetContainer();
+                var blobClient = container.GetBlobClient(remotePath);
+                return await blobClient.ExistsAsync();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Azure Blob", ex);
+            }
+        }
+
+        public async Task<bool> DirectoryExistsAsync(string remotePath)
+        {
+            try
+            {
+                var container = GetContainer();
+                string prefix = remotePath.EndsWith('/') ? remotePath : remotePath + "/";
+                var result = container.GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix, default);
+                await foreach (var item in result)
+                {
+                    return true;
+                }
+                return false;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Azure Blob", ex);
+            }
+        }
+
+        public async Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
+        {
+            try
+            {
+                var container = GetContainer();
+                var srcBlob = container.GetBlobClient(remoteSource);
+                var destBlob = container.GetBlobClient(remoteDest);
+
+                if (!overwrite && await destBlob.ExistsAsync())
+                    throw new ExecutionException($"Destination blob already exists: {remoteDest}");
+
+                var operation = await destBlob.StartCopyFromUriAsync(srcBlob.Uri);
+                await operation.WaitForCompletionAsync();
+                await srcBlob.DeleteIfExistsAsync();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Azure Blob", ex);
+            }
+        }
+
+        public Task CreateDirectoryAsync(string remotePath)
+        {
+            // Blob storage directories are virtual, no creation needed
+            return Task.CompletedTask;
+        }
+
+        public async Task DeleteDirectoryAsync(string remotePath)
+        {
+            try
+            {
+                var container = GetContainer();
+                string prefix = remotePath.EndsWith('/') ? remotePath : remotePath + "/";
+                var blobs = container.GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix, default);
+                await foreach (var blob in blobs)
+                {
+                    var blobClient = container.GetBlobClient(blob.Name);
+                    await blobClient.DeleteIfExistsAsync();
+                }
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Azure Blob", ex);
+            }
+        }
+
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
             ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Azure Blob", ShouldWrapProviderException);
 
