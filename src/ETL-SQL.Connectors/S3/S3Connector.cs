@@ -110,9 +110,36 @@ namespace ETL_SQL.Connectors.S3
             return _client;
         }
 
-        public Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
+        public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
-            return Task.FromResult("S3 Storage Connector v1.0");
+            var opts = _options;
+            var bucket = opts.GetValueOrDefault("BUCKET", connectionString);
+            if (string.IsNullOrWhiteSpace(bucket))
+            {
+                return "S3 Storage Connector v1.0 (Offline - No Bucket Specified)";
+            }
+
+            var host = GetHost(connectionString, opts);
+            if (!string.IsNullOrEmpty(host))
+            {
+                context.SecurityService.ValidateHost(host);
+            }
+
+            try
+            {
+                var client = GetClient();
+                var request = new ListObjectsV2Request
+                {
+                    BucketName = bucket,
+                    MaxKeys = 1
+                };
+                var response = await client.ListObjectsV2Async(request);
+                return $"S3 Storage Connector v1.0 (Connected - Bucket: {bucket}, Status: {response.HttpStatusCode})";
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("S3", ex);
+            }
         }
 
         public HashSet<string> GetSupportedFunctions() => new();

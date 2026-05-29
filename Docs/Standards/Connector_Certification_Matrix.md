@@ -131,7 +131,7 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 | **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA (Mock)** | **~ GA (gaps)** | **✓ GA** | **✓ GA (Mock)** | **✓ GA (Mock)** | **✓ GA (Mock)** | **✓ GA (Mock)** |
+| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** |
 
 ### API Notes
 - Streaming is best-effort: paginated API responses are yielded page-by-page (compliant), but `ReadBatches` for non-paginated endpoints buffers the full response body.
@@ -148,11 +148,11 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 
 ### SharePoint Notes
 - Implements both remote filesystem operations (`IRemoteFileSystem`) and tabular queries (`IDataSource` against lists).
-- Verified via `SharePointAndADConnectorTests` mocking the Entra ID OAuth authentication token exchange and standard OData file/folder/list payloads.
+- Verified via mock auth/OData payload unit tests and real `SharePointIntegrationTests` utilizing a local HTTP loopback server to verify active REST connections, list retrieval, and file synchronization.
 
 ### Active Directory / LDAP Notes
 - `LdapConnection` synchronous request send-action behaves under a partial Rule 2 rating (`~`). Re-wraps LDAP exception codes to standardized engine `ExecutionException`.
-- Verified via mock LDAP test sequences translating standard SQL filter blocks into formatted LDAP query groups.
+- Verified via mock unit tests and real `ActiveDirectoryIntegrationTests` / `PortalLdapIntegrationTests` using a Docker-backed OpenLDAP container to verify active directory metadata retrieval, filter context translation, user auto-provisioning, and role-mapping sync.
 
 ### SQLite Notes
 - Uses local file or memory databases via Microsoft.Data.Sqlite. Rule 4 (ResolvePath) is applied on the Database File path context at construction time to respect the security boundaries.
@@ -162,18 +162,18 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 ### S3 Compatible Notes
 - AWS S3 SDK (AWSSDK.S3) handles custom HTTP endpoints, region configurations, and path-style addressing.
 - Egress policies are validated against parsed endpoints before resolving client handlers.
-- Checked using mocked client interface transport checks for uploads, downloads, key presence, and directory listings.
+- Verified via mock transport tests and real `S3IntegrationTests` utilizing a Docker-backed MinIO container to verify connection status validation, bucket listing, uploads, downloads, and lifecycle operations.
 
 ### MongoDB Notes
 - Flattens nested BSON documents and arrays into valid JSON strings using ToJson() to preserve complex data hierarchies.
 - Schema discovery queries the first document in the collection dynamically; subsequent rows map to these discovered columns.
-- Verified via `MongodbAndKafkaConnectorTests` using mocked database client and collection cursors.
+- Verified via mock unit tests and real `MongodbIntegrationTests` using a Docker-backed MongoDB container to verify active connection validation (ping/buildInfo) and collection queries.
 
 ### Kafka Notes
 - Rule 2 async-poll rating is partial (`~`) because the underlying Confluent.Kafka consumer only exposes a synchronous `Consume(TimeSpan)` loop rather than async overloads.
 - Batch-bounded reads are supported through `TIMEOUT_MS` and `MAX_MESSAGES` controls to prevent infinite stream blocks.
 - Writes translate each data row into a JSON message published to the broker.
-- Verified via `MongodbAndKafkaConnectorTests` with mocked producers, consumers, and consumer-loop limits.
+- Verified via mock unit tests and real `KafkaIntegrationTests` using a Docker-backed Redpanda container to verify active connection checks, and message production/consumption loops.
 
 ---
 

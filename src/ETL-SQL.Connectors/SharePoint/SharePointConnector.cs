@@ -98,7 +98,57 @@ namespace ETL_SQL.Connectors
 
         public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
-            return "SharePoint REST API Connector v1.0";
+            if (string.IsNullOrEmpty(_siteUrl) || !Uri.TryCreate(_siteUrl, UriKind.Absolute, out var uri))
+            {
+                return "SharePoint REST API Connector v1.0 (Offline - Invalid Site URL)";
+            }
+            
+            context.SecurityService.ValidateHost(uri.Host);
+
+            try
+            {
+                await AuthenticateAsync();
+                string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web";
+                
+                _httpClient.DefaultRequestHeaders.Accept.Clear();
+                _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                var response = await _httpClient.GetAsync(requestUrl);
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new ExecutionException($"SharePoint site connection failed. HTTP Status: {response.StatusCode}");
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                string siteTitle = "Unknown SharePoint Site";
+                
+                using var doc = JsonDocument.Parse(json);
+                JsonElement dProp;
+                if (doc.RootElement.TryGetProperty("d", out dProp))
+                {
+                    if (dProp.TryGetProperty("Title", out var titleProp))
+                    {
+                        siteTitle = titleProp.GetString() ?? siteTitle;
+                    }
+                }
+                else if (doc.RootElement.TryGetProperty("value", out var valProp))
+                {
+                    if (valProp.TryGetProperty("Title", out var titleProp))
+                    {
+                        siteTitle = titleProp.GetString() ?? siteTitle;
+                    }
+                }
+                else if (doc.RootElement.TryGetProperty("Title", out var titleProp))
+                {
+                    siteTitle = titleProp.GetString() ?? siteTitle;
+                }
+
+                return $"SharePoint REST API Connector v1.0 (Connected - Site: {siteTitle})";
+            }
+            catch (Exception ex)
+            {
+                throw ConnectorExceptionWrapper.Wrap("SharePoint", ex);
+            }
         }
 
         public HashSet<string> GetSupportedFunctions() => new();

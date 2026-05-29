@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
@@ -14,9 +15,36 @@ namespace ETL_SQL.Connectors.Mongodb
         public IReadOnlyList<string> Aliases => new[] { "MONGO" };
         public bool IsFileBased => false;
 
-        public Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
+        public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
-            return Task.FromResult("MongoDB Connector v1.0 (MongoDB.Driver)");
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                return "MongoDB Connector v1.0 (Offline - No Connection String Specified)";
+            }
+
+            var host = GetHost(connectionString);
+            if (!string.IsNullOrEmpty(host))
+            {
+                context.SecurityService.ValidateHost(host);
+            }
+
+            try
+            {
+                var client = new MongoClient(connectionString);
+                var adminDb = client.GetDatabase("admin");
+                var pingCommand = new BsonDocument("ping", 1);
+                await adminDb.RunCommandAsync<BsonDocument>(pingCommand);
+
+                var buildInfoCommand = new BsonDocument("buildInfo", 1);
+                var buildInfoResult = await adminDb.RunCommandAsync<BsonDocument>(buildInfoCommand);
+                string mongoVersion = buildInfoResult.GetValue("version", "Unknown").ToString();
+
+                return $"MongoDB Connector v1.0 (Connected - Server Version: {mongoVersion})";
+            }
+            catch (Exception ex)
+            {
+                throw Shared.ConnectorExceptionWrapper.Wrap("MongoDB", ex);
+            }
         }
 
         public HashSet<string> GetSupportedFunctions() => new();

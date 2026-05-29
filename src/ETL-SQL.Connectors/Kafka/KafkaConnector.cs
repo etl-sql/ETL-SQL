@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Confluent.Kafka;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
 
@@ -13,9 +14,35 @@ namespace ETL_SQL.Connectors.Kafka
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
         public bool IsFileBased => false;
 
-        public Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
+        public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
-            return Task.FromResult("Apache Kafka Connector v1.0 (Confluent.Kafka)");
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                return "Apache Kafka Connector v1.0 (Offline - No servers specified)";
+            }
+
+            var host = GetHost(connectionString);
+            if (!string.IsNullOrEmpty(host))
+            {
+                context.SecurityService.ValidateHost(host);
+            }
+
+            try
+            {
+                var config = new AdminClientConfig
+                {
+                    BootstrapServers = connectionString
+                };
+
+                using var adminClient = new AdminClientBuilder(config).Build();
+                var metadata = await Task.Run(() => adminClient.GetMetadata(TimeSpan.FromSeconds(5)));
+                
+                return $"Apache Kafka Connector v1.0 (Connected - Brokers: {metadata.Brokers.Count}, Topics: {metadata.Topics.Count})";
+            }
+            catch (Exception ex)
+            {
+                throw Shared.ConnectorExceptionWrapper.Wrap("Kafka", ex);
+            }
         }
 
         public HashSet<string> GetSupportedFunctions() => new();

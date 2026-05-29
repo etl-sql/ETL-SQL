@@ -113,7 +113,48 @@ namespace ETL_SQL.Connectors
 
         public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
-            return "Active Directory / LDAP Connector v1.0";
+            if (!string.IsNullOrEmpty(_host))
+            {
+                context.SecurityService.ValidateHost(_host);
+            }
+
+            try
+            {
+                using var connection = GetConnection();
+                connection.Bind();
+
+                var request = new SearchRequest(
+                    "",
+                    "(objectClass=*)",
+                    SearchScope.Base,
+                    "dnsHostName", "supportedLDAPVersion"
+                );
+
+                var response = (SearchResponse)connection.SendRequest(request);
+                string dnsName = _host;
+                string ldapVer = "3";
+
+                if (response.Entries.Count > 0)
+                {
+                    var entry = response.Entries[0];
+                    var hostAttr = entry.Attributes["dnsHostName"];
+                    if (hostAttr != null && hostAttr.Count > 0)
+                    {
+                        dnsName = hostAttr[0]?.ToString() ?? dnsName;
+                    }
+                    var verAttr = entry.Attributes["supportedLDAPVersion"];
+                    if (verAttr != null && verAttr.Count > 0)
+                    {
+                        ldapVer = string.Join(",", verAttr.Cast<object>().Select(o => o.ToString()));
+                    }
+                }
+
+                return $"Active Directory / LDAP Connector v1.0 (Connected - Host: {dnsName}, Supported LDAP Versions: {ldapVer})";
+            }
+            catch (Exception ex)
+            {
+                throw ConnectorExceptionWrapper.Wrap("Active Directory", ex);
+            }
         }
 
         public HashSet<string> GetSupportedFunctions() => new();
@@ -220,10 +261,10 @@ namespace ETL_SQL.Connectors
 
             return _filterContext.ToLowerInvariant() switch
             {
-                "users" or "user" => "(&(objectCategory=person)(objectClass=user))",
-                "groups" or "group" => "(objectClass=group)",
+                "users" or "user" => "(|(objectClass=user)(objectClass=inetOrgPerson)(objectClass=person))",
+                "groups" or "group" => "(|(objectClass=group)(objectClass=groupOfNames)(objectClass=groupOfUniqueNames))",
                 "computers" or "computer" => "(objectClass=computer)",
-                "contacts" or "contact" => "(objectClass=contact)",
+                "contacts" or "contact" => "(|(objectClass=contact)(objectClass=organizationalPerson))",
                 _ => $"(objectClass={_filterContext})"
             };
         }
