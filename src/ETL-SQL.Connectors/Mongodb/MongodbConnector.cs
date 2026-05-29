@@ -133,16 +133,21 @@ namespace ETL_SQL.Connectors.Mongodb
 
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
         {
-            if (string.IsNullOrEmpty(connectionString)) return null;
+            string connStr = connectionString;
+            if (string.IsNullOrEmpty(connStr) && options != null)
+            {
+                connStr = BuildConnectionString(options);
+            }
+            if (string.IsNullOrEmpty(connStr)) return null;
             try
             {
-                var mongoUrl = new MongoUrl(connectionString);
+                var mongoUrl = new MongoUrl(connStr);
                 var server = mongoUrl.Servers.FirstOrDefault();
                 return server?.Host;
             }
             catch
             {
-                if (Uri.TryCreate(connectionString, UriKind.Absolute, out var uri))
+                if (Uri.TryCreate(connStr, UriKind.Absolute, out var uri))
                 {
                     return uri.Host;
                 }

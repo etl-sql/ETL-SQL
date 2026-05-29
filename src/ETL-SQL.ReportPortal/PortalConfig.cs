@@ -37,6 +37,7 @@ public class LdapIdentityConfig
     public string Server { get; set; } = "localhost";
     public int Port { get; set; } = 389;
     public bool UseSsl { get; set; } = false;
+    public bool AllowSelfSignedCertificates { get; set; } = false;
     public string Domain { get; set; } = "";
     public string BaseDn { get; set; } = "";
     public string? ServiceUser { get; set; }

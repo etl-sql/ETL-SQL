@@ -66,9 +66,15 @@ namespace ETL_SQL.Connectors.Kafka
             }
 
             // Egress Security Hardening: Validate bootstrap server hosts
-            if (!string.IsNullOrEmpty(connectionString))
+            string connStr = connectionString;
+            if (string.IsNullOrEmpty(connStr) && options != null)
             {
-                var servers = connectionString.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                connStr = BuildConnectionString(options);
+            }
+
+            if (!string.IsNullOrEmpty(connStr))
+            {
+                var servers = connStr.Split(',', StringSplitOptions.RemoveEmptyEntries);
                 foreach (var server in servers)
                 {
                     var parts = server.Split(':');
@@ -95,8 +101,13 @@ namespace ETL_SQL.Connectors.Kafka
 
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
         {
-            if (string.IsNullOrEmpty(connectionString)) return null;
-            var servers = connectionString.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            string connStr = connectionString;
+            if (string.IsNullOrEmpty(connStr) && options != null)
+            {
+                connStr = BuildConnectionString(options);
+            }
+            if (string.IsNullOrEmpty(connStr)) return null;
+            var servers = connStr.Split(',', StringSplitOptions.RemoveEmptyEntries);
             if (servers.Length > 0)
             {
                 var parts = servers[0].Split(':');

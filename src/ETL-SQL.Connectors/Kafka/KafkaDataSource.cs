@@ -103,6 +103,10 @@ namespace ETL_SQL.Connectors.Kafka
                     {
                         break;
                     }
+                    if (result == null)
+                    {
+                        await Task.Delay(50);
+                    }
                     continue;
                 }
 

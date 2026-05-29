@@ -32,7 +32,8 @@ public class AuthController(
         }
         else if (req.Username.Contains("\\"))
         {
-            cleanUsername = req.Username.Split('\\')[1];
+            var parts = req.Username.Split('\\');
+            cleanUsername = parts.Length > 1 ? parts[1] : parts[0];
         }
 
         var user = await userManager.FindByNameAsync(cleanUsername);
@@ -66,102 +67,113 @@ public class AuthController(
 
         if (useLdap && ldapResult != null)
         {
-            if (user == null)
+            using var transaction = await db.Database.BeginTransactionAsync();
+            try
             {
-                // Auto-provision user
-                user = new PortalUser
+                if (user == null)
                 {
-                    UserName           = ldapResult.Username,
-                    Email              = ldapResult.Email ?? $"{ldapResult.Username}@{config.Identity.Ldap.Domain}",
-                    FirstName          = ldapResult.FirstName,
-                    LastName           = ldapResult.LastName,
-                    IsActive           = true,
-                    MustChangePassword = false,
-                    Provider           = "LDAP"
-                };
+                    // Auto-provision user
+                    user = new PortalUser
+                    {
+                        UserName           = ldapResult.Username,
+                        Email              = ldapResult.Email ?? $"{ldapResult.Username}@{config.Identity.Ldap.Domain}",
+                        FirstName          = ldapResult.FirstName,
+                        LastName           = ldapResult.LastName,
+                        IsActive           = true,
+                        MustChangePassword = false,
+                        Provider           = "LDAP"
+                    };
 
-                var createResult = await userManager.CreateAsync(user);
-                if (!createResult.Succeeded)
-                {
-                    return BadRequest(new { errors = createResult.Errors.Select(e => e.Description) });
+                    var createResult = await userManager.CreateAsync(user);
+                    if (!createResult.Succeeded)
+                    {
+                        await transaction.RollbackAsync();
+                        return BadRequest(new { errors = createResult.Errors.Select(e => e.Description) });
+                    }
                 }
-            }
-            else
-            {
-                // Sync user details
-                user.Email = ldapResult.Email ?? user.Email;
-                user.FirstName = ldapResult.FirstName ?? user.FirstName;
-                user.LastName = ldapResult.LastName ?? user.LastName;
-                user.IsActive = true;
-                await userManager.UpdateAsync(user);
-            }
-
-            // Sync Group memberships & Roles
-            var mappedRoles = new List<string>();
-            foreach (var groupDn in ldapResult.Groups)
-            {
-                var cn = ParseCn(groupDn);
-                if (config.Identity.Ldap.RoleMappings.TryGetValue(groupDn, out var roleDn))
+                else
                 {
-                    mappedRoles.Add(roleDn);
+                    // Sync user details
+                    user.Email = ldapResult.Email ?? user.Email;
+                    user.FirstName = ldapResult.FirstName ?? user.FirstName;
+                    user.LastName = ldapResult.LastName ?? user.LastName;
+                    user.IsActive = true;
+                    await userManager.UpdateAsync(user);
                 }
-                else if (config.Identity.Ldap.RoleMappings.TryGetValue(cn, out var roleCn))
+
+                // Sync Group memberships & Roles
+                var mappedRoles = new List<string>();
+                foreach (var groupDn in ldapResult.Groups)
                 {
-                    mappedRoles.Add(roleCn);
+                    var cn = ParseCn(groupDn);
+                    if (config.Identity.Ldap.RoleMappings.TryGetValue(groupDn, out var roleDn))
+                    {
+                        mappedRoles.Add(roleDn);
+                    }
+                    else if (config.Identity.Ldap.RoleMappings.TryGetValue(cn, out var roleCn))
+                    {
+                        mappedRoles.Add(roleCn);
+                    }
                 }
-            }
 
-            var currentRoles = await userManager.GetRolesAsync(user);
-            var rolesToAdd = mappedRoles.Except(currentRoles, StringComparer.OrdinalIgnoreCase).ToList();
-            var rolesToRemove = currentRoles.Except(mappedRoles, StringComparer.OrdinalIgnoreCase).ToList();
+                var currentRoles = await userManager.GetRolesAsync(user);
+                var rolesToAdd = mappedRoles.Except(currentRoles, StringComparer.OrdinalIgnoreCase).ToList();
+                var rolesToRemove = currentRoles.Except(mappedRoles, StringComparer.OrdinalIgnoreCase).ToList();
 
-            if (rolesToRemove.Any())
-            {
-                await userManager.RemoveFromRolesAsync(user, rolesToRemove);
-            }
-            if (rolesToAdd.Any())
-            {
-                foreach (var role in rolesToAdd)
+                if (rolesToRemove.Any())
                 {
-                    await userManager.AddToRoleAsync(user, role);
+                    await userManager.RemoveFromRolesAsync(user, rolesToRemove);
                 }
-            }
-
-            // Sync portal groups (where Provider == "LDAP")
-            var ldapGroups = await db.Groups.Where(g => g.Provider == "LDAP").ToListAsync();
-            var userAdGroups = ldapResult.Groups;
-            var userAdCns = userAdGroups.Select(ParseCn).ToList();
-
-            var matchingGroupIds = new List<int>();
-            foreach (var g in ldapGroups)
-            {
-                var targetAdName = !string.IsNullOrEmpty(g.AdGroup) ? g.AdGroup : g.Name;
-                bool isMember = userAdGroups.Any(dn => dn.Equals(targetAdName, StringComparison.OrdinalIgnoreCase)) ||
-                                userAdCns.Any(cn => cn.Equals(targetAdName, StringComparison.OrdinalIgnoreCase));
-                if (isMember)
+                if (rolesToAdd.Any())
                 {
-                    matchingGroupIds.Add(g.Id);
+                    foreach (var role in rolesToAdd)
+                    {
+                        await userManager.AddToRoleAsync(user, role);
+                    }
                 }
+
+                // Sync portal groups (where Provider == "LDAP")
+                var ldapGroups = await db.Groups.Where(g => g.Provider == "LDAP").ToListAsync();
+                var userAdGroups = ldapResult.Groups;
+                var userAdCns = userAdGroups.Select(ParseCn).ToList();
+
+                var matchingGroupIds = new List<int>();
+                foreach (var g in ldapGroups)
+                {
+                    var targetAdName = !string.IsNullOrEmpty(g.AdGroup) ? g.AdGroup : g.Name;
+                    bool isMember = userAdGroups.Any(dn => dn.Equals(targetAdName, StringComparison.OrdinalIgnoreCase)) ||
+                                    userAdCns.Any(cn => cn.Equals(targetAdName, StringComparison.OrdinalIgnoreCase));
+                    if (isMember)
+                    {
+                        matchingGroupIds.Add(g.Id);
+                    }
+                }
+
+                var currentUserLdapMemberships = await db.UserGroups
+                    .Where(ug => ug.UserId == user.Id && ug.Group.Provider == "LDAP")
+                    .ToListAsync();
+
+                var currentUserLdapGroupIds = currentUserLdapMemberships.Select(ug => ug.GroupId).ToList();
+                var membershipsToAdd = matchingGroupIds.Except(currentUserLdapGroupIds).ToList();
+                var membershipsToRemove = currentUserLdapMemberships.Where(ug => !matchingGroupIds.Contains(ug.GroupId)).ToList();
+
+                if (membershipsToRemove.Any())
+                {
+                    db.UserGroups.RemoveRange(membershipsToRemove);
+                }
+                foreach (var groupId in membershipsToAdd)
+                {
+                    db.UserGroups.Add(new UserGroup { UserId = user.Id, GroupId = groupId });
+                }
+
+                await db.SaveChangesAsync();
+                await transaction.CommitAsync();
             }
-
-            var currentUserLdapMemberships = await db.UserGroups
-                .Where(ug => ug.UserId == user.Id && ug.Group.Provider == "LDAP")
-                .ToListAsync();
-
-            var currentUserLdapGroupIds = currentUserLdapMemberships.Select(ug => ug.GroupId).ToList();
-            var membershipsToAdd = matchingGroupIds.Except(currentUserLdapGroupIds).ToList();
-            var membershipsToRemove = currentUserLdapMemberships.Where(ug => !matchingGroupIds.Contains(ug.GroupId)).ToList();
-
-            if (membershipsToRemove.Any())
+            catch (Exception)
             {
-                db.UserGroups.RemoveRange(membershipsToRemove);
+                await transaction.RollbackAsync();
+                throw;
             }
-            foreach (var groupId in membershipsToAdd)
-            {
-                db.UserGroups.Add(new UserGroup { UserId = user.Id, GroupId = groupId });
-            }
-
-            await db.SaveChangesAsync();
         }
         else
         {

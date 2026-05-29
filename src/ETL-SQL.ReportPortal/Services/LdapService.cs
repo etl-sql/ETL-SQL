@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.DirectoryServices.Protocols;
 using System.Net;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace ETL_SQL.ReportPortal.Services
@@ -10,10 +11,12 @@ namespace ETL_SQL.ReportPortal.Services
     public class LdapService : ILdapService
     {
         private readonly PortalConfig _config;
+        private readonly ILogger<LdapService> _logger;
 
-        public LdapService(IOptions<PortalConfig> config)
+        public LdapService(IOptions<PortalConfig> config, ILogger<LdapService> logger)
         {
             _config = config.Value;
+            _logger = logger;
         }
 
         public async Task<LdapUserResult?> AuthenticateAsync(string username, string password)
@@ -43,7 +46,10 @@ namespace ETL_SQL.ReportPortal.Services
                 if (ldapConfig.UseSsl)
                 {
                     connection.SessionOptions.SecureSocketLayer = true;
-                    connection.SessionOptions.VerifyServerCertificate = (conn, cert) => true;
+                    if (ldapConfig.AllowSelfSignedCertificates)
+                    {
+                        connection.SessionOptions.VerifyServerCertificate = (conn, cert) => true;
+                    }
                 }
                 else
                 {
@@ -70,7 +76,8 @@ namespace ETL_SQL.ReportPortal.Services
                     cleanUsername = username.Split('\\')[1];
                 }
 
-                string searchFilter = $"(&(objectClass=user)(sAMAccountName={cleanUsername}))";
+                string escapedUsername = EscapeLdapFilter(cleanUsername);
+                string searchFilter = $"(&(objectClass=user)(sAMAccountName={escapedUsername}))";
                 
                 string baseDn = ldapConfig.BaseDn;
                 if (string.IsNullOrEmpty(baseDn) && !string.IsNullOrEmpty(ldapConfig.Domain))
@@ -121,9 +128,9 @@ namespace ETL_SQL.ReportPortal.Services
 
                 return result;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Return null on failure to authenticate
+                _logger.LogWarning(ex, "LDAP authentication failed for user '{Username}' due to connection, bind, or search error.", username);
                 return null;
             }
             finally
@@ -143,6 +150,25 @@ namespace ETL_SQL.ReportPortal.Services
                 }
             }
             return null;
+        }
+
+        private static string EscapeLdapFilter(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return "";
+            var sb = new System.Text.StringBuilder(input.Length);
+            foreach (char c in input)
+            {
+                switch (c)
+                {
+                    case '\\': sb.Append("\\5c"); break;
+                    case '*':  sb.Append("\\2a"); break;
+                    case '(':  sb.Append("\\28"); break;
+                    case ')':  sb.Append("\\29"); break;
+                    case '\0': sb.Append("\\00"); break;
+                    default:   sb.Append(c); break;
+                }
+            }
+            return sb.ToString();
         }
     }
 }
