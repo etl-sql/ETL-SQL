@@ -1,0 +1,176 @@
+/* GENERATED FILE - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.css
+ * Edit the canonical source, then run: .\scripts\sync-assets.ps1
+ */
+/*
+ * ETL-SQL Designer — shared component styles
+ *
+ * Tokens follow the portal's --portal-* scheme so the designer inherits
+ * the active theme automatically when hosted in the portal.  VS Code host
+ * overrides these same properties with VS Code theme variables.
+ *
+ * Three layout areas, each activated by Phase:
+ *   .etlsql-dag-*       Phase 2 — DAG canvas wrapper
+ *   .etlsql-editor-*    Phase 3 — CodeMirror editor wrapper
+ *   .etlsql-designer-*  Phase 4 — full WYSIWYG designer shell
+ */
+
+/* ── Phase 2: DAG canvas ────────────────────────────────────────────────── */
+
+.etlsql-dag-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 320px;
+    background: var(--portal-surface, #ffffff);
+    border-radius: var(--portal-radius, 8px);
+    overflow: hidden;
+}
+
+.etlsql-dag-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--portal-muted, #7a8798);
+    font-size: 0.875rem;
+}
+
+/* ── Phase 3: Script editor wrapper ────────────────────────────────────── */
+
+.etlsql-editor-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+    overflow: hidden;
+    border: 1px solid var(--portal-border, #d9e0ea);
+    border-radius: var(--portal-radius-sm, 5px);
+    background: var(--portal-surface, #ffffff);
+}
+
+/* CodeMirror host — fills the container */
+.etlsql-editor-container .cm-editor {
+    height: 100%;
+    font-size: 0.875rem;
+}
+
+/* ── Phase 4: Full designer shell ───────────────────────────────────────── */
+
+.etlsql-designer {
+    display: grid;
+    grid-template-rows: 48px 1fr;
+    grid-template-columns: 220px 1fr 280px;
+    grid-template-areas:
+        "topbar  topbar   topbar"
+        "sidebar canvas  props";
+    width: 100%;
+    height: 100%;
+    background: var(--portal-bg, #f3f5f8);
+    color: var(--portal-text, #172033);
+    font-family: var(--portal-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+    font-size: 0.875rem;
+    overflow: hidden;
+}
+
+.etlsql-designer-topbar {
+    grid-area: topbar;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    background: var(--portal-topbar, #182336);
+    color: #ffffff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 10;
+}
+
+.etlsql-designer-sidebar {
+    grid-area: sidebar;
+    overflow-y: auto;
+    background: var(--portal-surface, #ffffff);
+    border-right: 1px solid var(--portal-border, #d9e0ea);
+    padding: 8px 0;
+}
+
+.etlsql-designer-canvas {
+    grid-area: canvas;
+    overflow: auto;
+    position: relative;
+    background: var(--portal-bg-soft, #eef2f7);
+}
+
+.etlsql-designer-props {
+    grid-area: props;
+    overflow-y: auto;
+    background: var(--portal-surface, #ffffff);
+    border-left: 1px solid var(--portal-border, #d9e0ea);
+    padding: 12px;
+}
+
+/* Page tab strip (inside topbar) */
+.etlsql-designer-pages {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.etlsql-designer-page-tab {
+    padding: 4px 12px;
+    border-radius: var(--portal-radius-sm, 5px);
+    cursor: pointer;
+    color: var(--portal-topbar-muted, #b7c2d2);
+    white-space: nowrap;
+    font-size: 0.8125rem;
+    border: none;
+    background: transparent;
+}
+.etlsql-designer-page-tab:hover,
+.etlsql-designer-page-tab.active {
+    background: var(--portal-topbar-active, rgba(255,255,255,0.12));
+    color: #ffffff;
+}
+
+/* Script toggle overlay */
+.etlsql-designer-script-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    flex-direction: column;
+    background: var(--portal-surface, #ffffff);
+}
+.etlsql-designer-script-overlay.active {
+    display: flex;
+}
+
+.etlsql-designer-script-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    background: var(--portal-surface-subtle, #f8fafc);
+    flex-shrink: 0;
+}
+
+.etlsql-designer-script-body {
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Preview-disabled badge */
+.etlsql-preview-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    background: var(--portal-warning-soft, #fff4d6);
+    color: var(--portal-warning, #a05a00);
+    cursor: default;
+}

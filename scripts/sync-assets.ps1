@@ -50,6 +50,13 @@ function Get-ExpectedContent {
     $content = [System.IO.File]::ReadAllText($File.FullName)
     if ($File.Extension -eq ".js" -or $File.Extension -eq ".css") {
         $relativePath = (Get-AssetRelativePath -Path $File.FullName).Replace('\', '/')
+
+        # Vendored third-party bundles (e.g. designer/codemirror/) are committed
+        # pre-built and must not have a generated-file banner prepended.
+        if ($relativePath -like "designer/codemirror/*") {
+            return $content
+        }
+
         $sourcePath = "src/ETL-SQL.ReportRuntime/Resources/Shared/$relativePath"
         $banner = @"
 /* GENERATED FILE - DO NOT EDIT.
@@ -124,19 +131,22 @@ foreach ($File in $Files) {
     # 2. ReportPlayer (Static Web Files)
     Sync-Or-Check -File $File -TargetDir $PlayerWwwRoot -Label "ReportPlayer"
 
-    # 3. ReportPortal (Categorized JS/CSS/maps)
+    # 3. ReportPortal (Categorized JS/CSS/maps/designer)
     if ((Test-Path $PortalJsDir) -and (Test-Path $PortalCssDir)) {
         $relativePath = Get-AssetRelativePath -Path $File.FullName
+        $portalRoot = Join-Path $PSScriptRoot "..\src\ETL-SQL.ReportPortal\wwwroot"
         if ($relativePath -like "maps\*") {
-            $portalRoot = Join-Path $PSScriptRoot "..\src\ETL-SQL.ReportPortal\wwwroot"
+            # Maps preserve their subdirectory under wwwroot/maps/
             Sync-Or-Check -File $File -TargetDir $portalRoot -Label "ReportPortal (Maps)"
+        } elseif ($relativePath -like "designer\*") {
+            # Designer files preserve their full subdirectory under wwwroot/designer/
+            Sync-Or-Check -File $File -TargetDir $portalRoot -Label "ReportPortal (Designer)"
         } elseif ($File.Extension -eq ".js") {
             Sync-Or-Check -File $File -TargetDir $PortalJsDir -Label "ReportPortal (JS)"
         } elseif ($File.Extension -eq ".css") {
             Sync-Or-Check -File $File -TargetDir $PortalCssDir -Label "ReportPortal (CSS)"
         } else {
-             # Fallback: copy to JS dir or root? We'll put it in JS for now if it's a lib
-             Sync-Or-Check -File $File -TargetDir $PortalJsDir -Label "ReportPortal (Misc)"
+            Sync-Or-Check -File $File -TargetDir $PortalJsDir -Label "ReportPortal (Misc)"
         }
     }
 }
