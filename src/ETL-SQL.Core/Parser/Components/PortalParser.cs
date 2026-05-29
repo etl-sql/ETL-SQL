@@ -14,14 +14,14 @@ namespace ETL_SQL.Core.Parser.Components
 
         // ── Users ─────────────────────────────────────────────────────────────
 
-        // CREATE USER 'username' WITH (EMAIL=..., PASSWORD=..., ROLE=...[, FIRST_NAME=..., LAST_NAME=...])
+        // CREATE USER 'username' WITH (EMAIL=..., PASSWORD=..., ROLE=...[, FIRST_NAME=..., LAST_NAME=..., PROVIDER=...])
         public Statement ParseCreateUser(Token start)
         {
             string username = ConsumeStringLiteral("Expected username string literal");
             Consume(TokenType.WITH, "Expected WITH after username");
             Consume(TokenType.LPAREN, "Expected '('");
 
-            string? email = null, role = null, firstName = null, lastName = null;
+            string? email = null, role = null, firstName = null, lastName = null, provider = null;
             Expression? password = null;
 
             ParseOptionList(() =>
@@ -35,15 +35,17 @@ namespace ETL_SQL.Core.Parser.Components
                     case "ROLE":       role      = Advance().Value;                    break;
                     case "FIRST_NAME": firstName = ConsumeStringLiteral("Expected first name string literal"); break;
                     case "LAST_NAME":  lastName  = ConsumeStringLiteral("Expected last name string literal");  break;
+                    case "PROVIDER":   provider  = ConsumeStringLiteral("Expected provider string literal");   break;
                     default: ParseExpression(); break; // skip unknown
                 }
             });
 
-            if (email    is null) throw new SyntaxException("CREATE USER requires EMAIL", start.Line, start.Column);
-            if (password is null) throw new SyntaxException("CREATE USER requires PASSWORD", start.Line, start.Column);
+            if (email is null) throw new SyntaxException("CREATE USER requires EMAIL", start.Line, start.Column);
+            if (password is null && (provider == null || !provider.Equals("LDAP", StringComparison.OrdinalIgnoreCase)))
+                throw new SyntaxException("CREATE USER requires PASSWORD unless PROVIDER = 'LDAP'", start.Line, start.Column);
             role ??= "Viewer";
 
-            return new CreatePortalUserStatement(username, email, password, role, firstName, lastName)
+            return new CreatePortalUserStatement(username, email, password, role, firstName, lastName, provider)
             { Line = start.Line, Column = start.Column };
         }
 
@@ -89,11 +91,13 @@ namespace ETL_SQL.Core.Parser.Components
 
         // ── Groups ────────────────────────────────────────────────────────────
 
-        // CREATE GROUP 'name' [WITH (DESCRIPTION=...)]
+        // CREATE GROUP 'name' [WITH (DESCRIPTION=..., PROVIDER=..., AD_GROUP=...)]
         public Statement ParseCreateGroup(Token start)
         {
             string name = ConsumeStringLiteral("Expected group name string literal");
             string? description = null;
+            string? provider = null;
+            string? adGroup = null;
             if (Match(TokenType.WITH))
             {
                 Consume(TokenType.LPAREN, "Expected '('");
@@ -101,13 +105,24 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     string key = Advance().Value;
                     Consume(TokenType.EQUALS, "Expected '='");
-                    if (key.Equals("DESCRIPTION", StringComparison.OrdinalIgnoreCase))
-                        description = ConsumeStringLiteral("Expected description string literal");
-                    else
-                        ParseExpression();
+                    switch (key.ToUpperInvariant())
+                    {
+                        case "DESCRIPTION":
+                            description = ConsumeStringLiteral("Expected description string literal");
+                            break;
+                        case "PROVIDER":
+                            provider = ConsumeStringLiteral("Expected provider string literal");
+                            break;
+                        case "AD_GROUP":
+                            adGroup = ConsumeStringLiteral("Expected ad_group string literal");
+                            break;
+                        default:
+                            ParseExpression();
+                            break;
+                    }
                 });
             }
-            return new CreatePortalGroupStatement(name, description)
+            return new CreatePortalGroupStatement(name, description, provider, adGroup)
             { Line = start.Line, Column = start.Column };
         }
 

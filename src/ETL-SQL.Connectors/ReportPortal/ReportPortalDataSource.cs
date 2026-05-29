@@ -177,7 +177,9 @@ namespace ETL_SQL.Connectors.ReportPortal
         {
             var password = stmt.Password is not null
                 ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() ?? ""
-                : throw new ExecutionException("CREATE USER requires PASSWORD");
+                : (stmt.Provider != null && stmt.Provider.Equals("LDAP", StringComparison.OrdinalIgnoreCase))
+                    ? null
+                    : throw new ExecutionException("CREATE USER requires PASSWORD");
 
             var req = new
             {
@@ -186,7 +188,8 @@ namespace ETL_SQL.Connectors.ReportPortal
                 Password  = password,
                 Role      = stmt.Role ?? "Viewer",
                 FirstName = stmt.FirstName,
-                LastName  = stmt.LastName
+                LastName  = stmt.LastName,
+                Provider  = stmt.Provider
             };
             await CallAsync(HttpMethod.Post, "api/admin/users", req,
                 $"User '{stmt.Username}' created.");
@@ -265,7 +268,13 @@ namespace ETL_SQL.Connectors.ReportPortal
 
         private async Task CreateGroupAsync(CreatePortalGroupStatement stmt, IExecutionContext context)
         {
-            var req = new { Name = stmt.Name, Description = stmt.Description };
+            var req = new
+            {
+                Name = stmt.Name,
+                Description = stmt.Description,
+                Provider = stmt.Provider,
+                AdGroup = stmt.AdGroup
+            };
             await CallAsync(HttpMethod.Post, "api/admin/groups", req,
                 $"Group '{stmt.Name}' created.");
         }

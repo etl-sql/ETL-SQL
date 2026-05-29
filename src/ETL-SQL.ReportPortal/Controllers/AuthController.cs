@@ -17,23 +17,171 @@ public class AuthController(
     TokenService             tokenService,
     AuditService             auditService,
     PortalDbContext          db,
-    PortalConfig             config) : ControllerBase
+    PortalConfig             config,
+    ILdapService             ldapService) : ControllerBase
 {
     [HttpPost("login")]
     [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequest req)
     {
-        var user = await userManager.FindByNameAsync(req.Username);
-        if (user is null || !user.IsActive)
-            return Unauthorized(new { error = "Invalid credentials" });
-
-        var result = await signInManager.CheckPasswordSignInAsync(user, req.Password, lockoutOnFailure: true);
-        if (!result.Succeeded)
+        bool isDomainQualified = req.Username.Contains("@") || req.Username.Contains("\\");
+        string cleanUsername = req.Username;
+        if (req.Username.Contains("@"))
         {
-            await auditService.LogAsync(user.Id, "LOGIN_FAILED", "User", user.Id.ToString());
-            if (result.IsLockedOut)
-                return StatusCode(429, new { error = "Account locked. Try again in 15 minutes." });
-            return Unauthorized(new { error = "Invalid credentials" });
+            cleanUsername = req.Username.Split('@')[0];
+        }
+        else if (req.Username.Contains("\\"))
+        {
+            cleanUsername = req.Username.Split('\\')[1];
+        }
+
+        var user = await userManager.FindByNameAsync(cleanUsername);
+
+        bool useLdap = false;
+        if (config.Identity.Ldap.Enabled)
+        {
+            if (user != null && user.Provider == "LDAP")
+            {
+                useLdap = true;
+            }
+            else if (user == null && (isDomainQualified || !string.IsNullOrEmpty(config.Identity.Ldap.Domain)))
+            {
+                useLdap = true;
+            }
+        }
+
+        LdapUserResult? ldapResult = null;
+        if (useLdap)
+        {
+            ldapResult = await ldapService.AuthenticateAsync(req.Username, req.Password);
+            if (ldapResult == null)
+            {
+                if (user != null)
+                {
+                    await auditService.LogAsync(user.Id, "LOGIN_FAILED", "User", user.Id.ToString(), "LDAP authentication failed.");
+                }
+                return Unauthorized(new { error = "Invalid LDAP credentials" });
+            }
+        }
+
+        if (useLdap && ldapResult != null)
+        {
+            if (user == null)
+            {
+                // Auto-provision user
+                user = new PortalUser
+                {
+                    UserName           = ldapResult.Username,
+                    Email              = ldapResult.Email ?? $"{ldapResult.Username}@{config.Identity.Ldap.Domain}",
+                    FirstName          = ldapResult.FirstName,
+                    LastName           = ldapResult.LastName,
+                    IsActive           = true,
+                    MustChangePassword = false,
+                    Provider           = "LDAP"
+                };
+
+                var createResult = await userManager.CreateAsync(user);
+                if (!createResult.Succeeded)
+                {
+                    return BadRequest(new { errors = createResult.Errors.Select(e => e.Description) });
+                }
+            }
+            else
+            {
+                // Sync user details
+                user.Email = ldapResult.Email ?? user.Email;
+                user.FirstName = ldapResult.FirstName ?? user.FirstName;
+                user.LastName = ldapResult.LastName ?? user.LastName;
+                user.IsActive = true;
+                await userManager.UpdateAsync(user);
+            }
+
+            // Sync Group memberships & Roles
+            var mappedRoles = new List<string>();
+            foreach (var groupDn in ldapResult.Groups)
+            {
+                var cn = ParseCn(groupDn);
+                if (config.Identity.Ldap.RoleMappings.TryGetValue(groupDn, out var roleDn))
+                {
+                    mappedRoles.Add(roleDn);
+                }
+                else if (config.Identity.Ldap.RoleMappings.TryGetValue(cn, out var roleCn))
+                {
+                    mappedRoles.Add(roleCn);
+                }
+            }
+
+            var currentRoles = await userManager.GetRolesAsync(user);
+            var rolesToAdd = mappedRoles.Except(currentRoles, StringComparer.OrdinalIgnoreCase).ToList();
+            var rolesToRemove = currentRoles.Except(mappedRoles, StringComparer.OrdinalIgnoreCase).ToList();
+
+            if (rolesToRemove.Any())
+            {
+                await userManager.RemoveFromRolesAsync(user, rolesToRemove);
+            }
+            if (rolesToAdd.Any())
+            {
+                foreach (var role in rolesToAdd)
+                {
+                    await userManager.AddToRoleAsync(user, role);
+                }
+            }
+
+            // Sync portal groups (where Provider == "LDAP")
+            var ldapGroups = await db.Groups.Where(g => g.Provider == "LDAP").ToListAsync();
+            var userAdGroups = ldapResult.Groups;
+            var userAdCns = userAdGroups.Select(ParseCn).ToList();
+
+            var matchingGroupIds = new List<int>();
+            foreach (var g in ldapGroups)
+            {
+                var targetAdName = !string.IsNullOrEmpty(g.AdGroup) ? g.AdGroup : g.Name;
+                bool isMember = userAdGroups.Any(dn => dn.Equals(targetAdName, StringComparison.OrdinalIgnoreCase)) ||
+                                userAdCns.Any(cn => cn.Equals(targetAdName, StringComparison.OrdinalIgnoreCase));
+                if (isMember)
+                {
+                    matchingGroupIds.Add(g.Id);
+                }
+            }
+
+            var currentUserLdapMemberships = await db.UserGroups
+                .Where(ug => ug.UserId == user.Id && ug.Group.Provider == "LDAP")
+                .ToListAsync();
+
+            var currentUserLdapGroupIds = currentUserLdapMemberships.Select(ug => ug.GroupId).ToList();
+            var membershipsToAdd = matchingGroupIds.Except(currentUserLdapGroupIds).ToList();
+            var membershipsToRemove = currentUserLdapMemberships.Where(ug => !matchingGroupIds.Contains(ug.GroupId)).ToList();
+
+            if (membershipsToRemove.Any())
+            {
+                db.UserGroups.RemoveRange(membershipsToRemove);
+            }
+            foreach (var groupId in membershipsToAdd)
+            {
+                db.UserGroups.Add(new UserGroup { UserId = user.Id, GroupId = groupId });
+            }
+
+            await db.SaveChangesAsync();
+        }
+        else
+        {
+            // Local authentication
+            if (user is null || !user.IsActive)
+                return Unauthorized(new { error = "Invalid credentials" });
+
+            if (user.Provider == "LDAP")
+            {
+                return Unauthorized(new { error = "Invalid LDAP credentials" });
+            }
+
+            var result = await signInManager.CheckPasswordSignInAsync(user, req.Password, lockoutOnFailure: true);
+            if (!result.Succeeded)
+            {
+                await auditService.LogAsync(user.Id, "LOGIN_FAILED", "User", user.Id.ToString());
+                if (result.IsLockedOut)
+                    return StatusCode(429, new { error = "Account locked. Try again in 15 minutes." });
+                return Unauthorized(new { error = "Invalid credentials" });
+            }
         }
 
         var roles       = await userManager.GetRolesAsync(user);
@@ -100,6 +248,9 @@ public class AuthController(
         var user   = await userManager.FindByIdAsync(userId.Value.ToString());
         if (user is null) return NotFound();
 
+        if (user.Provider == "LDAP")
+            return BadRequest(new { errors = new[] { "Password changes are not supported for LDAP accounts." } });
+
         var result = await userManager.ChangePasswordAsync(user, req.CurrentPassword, req.NewPassword);
         if (!result.Succeeded)
             return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
@@ -128,5 +279,20 @@ public class AuthController(
         if (userId is null) return Unauthorized();
         await auditService.LogAsync(userId.Value, "LOGOUT", "User", userId.Value.ToString());
         return NoContent();
+    }
+
+    private static string ParseCn(string dn)
+    {
+        if (string.IsNullOrEmpty(dn)) return "";
+        var parts = dn.Split(',');
+        foreach (var part in parts)
+        {
+            var trimmed = part.Trim();
+            if (trimmed.StartsWith("CN=", StringComparison.OrdinalIgnoreCase))
+            {
+                return trimmed[3..];
+            }
+        }
+        return dn;
     }
 }

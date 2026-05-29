@@ -2285,8 +2285,8 @@ namespace ETL_SQL.Core
     // REPORTPORTAL connection. The PortalConnector translates them into REST calls.
 
     public record CreatePortalUserStatement(
-        string Username, string Email, Expression Password,
-        string Role, string? FirstName, string? LastName) : Statement;
+        string Username, string Email, Expression? Password,
+        string Role, string? FirstName, string? LastName, string? Provider = null) : Statement;
 
     public record AlterPortalUserStatement(
         string Username,
@@ -2297,7 +2297,7 @@ namespace ETL_SQL.Core
 
     public record DropPortalUserStatement(string Username, bool Cascade) : Statement;
 
-    public record CreatePortalGroupStatement(string Name, string? Description) : Statement;
+    public record CreatePortalGroupStatement(string Name, string? Description, string? Provider = null, string? AdGroup = null) : Statement;
 
     public record DropPortalGroupStatement(string Name, bool Cascade) : Statement;
 

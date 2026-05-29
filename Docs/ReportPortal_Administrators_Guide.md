@@ -115,6 +115,17 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
         "ClientId": "",
         "TenantId": "",
         "GroupClaimTypes": [ "groups", "roles" ]
+      },
+      "Ldap": {
+        "Enabled": false,
+        "Server": "localhost",
+        "Port": 389,
+        "UseSsl": false,
+        "Domain": "",
+        "BaseDn": "",
+        "ServiceUser": "",
+        "ServicePassword": "",
+        "RoleMappings": {}
       }
     },
     "FirstRun": {
@@ -139,12 +150,21 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Jwt.Secret` | *(required)* | HMAC-SHA256 signing secret. **Must be at least 32 characters.** The portal will refuse to start without it. |
 | `Jwt.ExpiryMinutes` | `60` | How long an access token is valid. |
 | `Jwt.RefreshExpiryDays` | `7` | How long a refresh token is valid. |
-| `Identity.Provider` | `Local` | Authentication provider. `Local` is the bundled provider. OIDC configuration keys are reserved for enterprise authentication deployments. |
+| `Identity.Provider` | `Local` | Main authentication provider model (`Local` or `Oidc`). If LDAP is enabled, directory logins are supported alongside the selected main provider. |
 | `Identity.Oidc.Authority` | *(empty)* | OIDC authority URL, for example `https://login.microsoftonline.com/<tenant-id>/v2.0`. |
 | `Identity.Oidc.ClientId` | *(empty)* | OIDC client/application id. |
 | `Identity.Oidc.GroupClaimTypes` | `groups`, `roles` | Claims the portal will map into portal groups for folder and dataset ACLs. |
+| `Identity.Ldap.Enabled` | `false` | Set to `true` to enable LDAP and Active Directory integration. |
+| `Identity.Ldap.Server` | `localhost` | The hostname or IP address of the LDAP/AD server. |
+| `Identity.Ldap.Port` | `389` | The server connection port (usually 389 for plain/STARTTLS, 636 for LDAPS/SSL). |
+| `Identity.Ldap.UseSsl` | `false` | Set to `true` to establish connections via SSL/TLS (LDAPS). |
+| `Identity.Ldap.Domain` | *(empty)* | Default DNS or NetBIOS domain suffix used to qualify logins (e.g. `corp.local`). |
+| `Identity.Ldap.BaseDn` | *(empty)* | LDAP directory base search path (e.g. `OU=Users,DC=corp,DC=local`). |
+| `Identity.Ldap.ServiceUser` | *(empty)* | Optional service account distinguished name or UPN for searching. |
+| `Identity.Ldap.ServicePassword` | *(empty)* | Optional password for the service account. |
+| `Identity.Ldap.RoleMappings` | *(empty)* | Key-value pairs mapping Active Directory groups (full DNs or short CNs) to Portal Roles (`Admin`, `Publisher`, `Viewer`). |
 | `FirstRun.AdminUsername` | `admin` | Username created on first start if no users exist yet. |
-| `Engine.StartOfWeek` | `Monday` | Day used as the start of week when resolving `RELDATE` week-boundary expressions (`W`, `W-1`, etc.). Accepted values: `Monday`–`Sunday`. Can be overridden per-script with `SET WEEK_START_DAY = '<day>'`. |
+| `Engine.StartOfWeek` | `Monday` | Day used as the start of week when resolving `RELDATE` week-boundary expressions (`W`, `W-1`, etc.). |
 
 > [!IMPORTANT]
 > **`Jwt.Secret` must be set before production use.** Generate a strong random string of at least 32 characters and set it via an environment variable rather than storing it in the checked-in `appsettings.json`:
@@ -172,10 +192,12 @@ Open **Admin → Users** to manage accounts.
 
 ### 4.1 Enterprise Identity Path
 
-The first supported enterprise identity path is **OpenID Connect**, with Microsoft Entra ID as the reference provider. LDAP bind and Windows Integrated Authentication are intentionally not the v1 enterprise path because they are host/network specific and do not map cleanly to browser, API, and embed-token workflows.
+The portal supports integration with enterprise identity providers via two primary paths: **OpenID Connect (OIDC)** and **LDAP / Active Directory (AD)**.
 
-The portal keeps its existing `Admin`, `Publisher`, and `Viewer` roles plus folder/dataset ACL groups. OIDC users will be provisioned into the portal identity store on first login, and configured OIDC group claims (`groups` or `roles`) will map to portal groups for ACL resolution. Until the OIDC login handler is enabled, use local portal users and groups as the active implementation.
+#### OpenID Connect (OIDC)
+Microsoft Entra ID is the reference provider. OIDC users will be provisioned into the portal identity store on first login, and configured OIDC group claims (`groups` or `roles`) will map to portal groups for ACL resolution.
 
+To configure OIDC, update `appsettings.json` with the following configuration:
 ```json
 {
   "Portal": {
@@ -192,7 +214,67 @@ The portal keeps its existing `Admin`, `Publisher`, and `Viewer` roles plus fold
 }
 ```
 
-Scripted user and group administration remains the canonical bootstrap and fallback path. Enterprise group membership should flow into the same portal group model rather than creating a second ACL system.
+#### LDAP / Active Directory (AD)
+LDAP bind authentication enables directory verification for user logins, auto-provisioning of user metadata (email, display name), automatic role assignments based on security groups, and dynamic synchronization of portal group memberships.
+
+To enable and configure LDAP, update `appsettings.json` under `"Identity"`:
+```json
+{
+  "Portal": {
+    "Identity": {
+      "Provider": "Local",
+      "Ldap": {
+        "Enabled": true,
+        "Server": "domaincontroller.corp.local",
+        "Port": 389,
+        "UseSsl": false,
+        "Domain": "corp.local",
+        "BaseDn": "OU=Users,DC=corp,DC=local",
+        "ServiceUser": "",
+        "ServicePassword": "",
+        "RoleMappings": {
+          "CN=GG-Portal-Admins,OU=Groups,DC=corp,DC=local": "Admin",
+          "GG-Portal-Publishers": "Publisher"
+        }
+      }
+    }
+  }
+}
+```
+
+##### Key LDAP Integration Details:
+1. **Login Bind & Username Formats**: When `Ldap.Enabled` is `true`, users can log in using either their simple username, a domain-qualified format (`CORP\username`), or a User Principal Name (UPN) format (`username@corp.local`). If the user does not exist in the database, the portal authenticates them against the directory, maps roles/groups, and auto-provisions a `PortalUser` record with their directory metadata (`displayName`, `mail`, `givenName`, `sn`).
+2. **Local User Fallback**: Local portal accounts (users configured with `Provider == "Local"`, such as the default `admin` account) bypass LDAP authentication entirely and authenticate against local hashes. This ensures that administrators can always log in using a local emergency account even if active directory is down or unreachable.
+3. **Password Changes**: Password change requests via the `/api/auth/change-password` endpoint are strictly blocked for accounts authenticated via LDAP. All password policy enforcement and resets must be handled on the directory level.
+4. **Role Mappings**: Active Directory group memberships (retrieved via the standard `memberOf` user attribute) are matched against the configured `RoleMappings`. Users will automatically be assigned portal roles (`Admin`, `Publisher`, `Viewer`) corresponding to their active directory security groups.
+5. **Group Synchronization**: Portal groups created with `Provider = "LDAP"` automatically synchronize their member lists against Active Directory security groups during login:
+   - The user is added to matching LDAP portal groups they belong to in AD.
+   - The user is removed from any LDAP portal groups they no longer belong to in AD.
+   - **Safety Boundary**: Local portal groups (`Provider == "Local"`) are completely ignored during this synchronization, allowing manual group assignments to be preserved.
+
+##### Scripted LDAP Administration:
+Administrators can script-manage LDAP users and groups inside `EXECUTE portal BEGIN...END` blocks:
+```sql
+-- Creating an AD / LDAP user (password is optional/ignored)
+CREATE USER 'john' WITH (
+  EMAIL    = 'john@corp.local',
+  ROLE     = 'Publisher',
+  PROVIDER = 'LDAP'
+);
+
+-- Creating a group mapped to a specific Active Directory security group
+CREATE GROUP 'Finance Viewers' WITH (
+  DESCRIPTION = 'Portal representation of AD Readers group',
+  PROVIDER    = 'LDAP',
+  AD_GROUP    = 'CN=GG-Finance-Readers,OU=Groups,DC=corp,DC=local'
+);
+
+-- Match by Name (Default when PROVIDER = 'LDAP' and AD_GROUP is omitted)
+CREATE GROUP 'GG-Finance-Readers' WITH (
+  DESCRIPTION = 'Finance Report Viewers AD Group',
+  PROVIDER    = 'LDAP'
+);
+```
 
 ### 4.2 Roles
 

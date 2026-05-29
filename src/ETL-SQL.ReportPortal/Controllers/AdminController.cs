@@ -39,7 +39,7 @@ public class AdminController(
             var roles  = await userManager.GetRolesAsync(u);
             var groups = u.UserGroups.Select(ug => ug.Group.Name).ToList();
             dtos.Add(new UserDto(u.Id, u.UserName!, u.Email, u.FirstName, u.LastName,
-                u.IsActive, u.MustChangePassword, u.CreatedAt, roles, groups));
+                u.IsActive, u.MustChangePassword, u.CreatedAt, roles, groups, u.Provider));
         }
         return Ok(dtos);
     }
@@ -47,6 +47,7 @@ public class AdminController(
     [HttpPost("users")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest req)
     {
+        var provider = req.Provider ?? "Local";
         var user = new PortalUser
         {
             UserName           = req.Username,
@@ -54,9 +55,22 @@ public class AdminController(
             FirstName          = req.FirstName,
             LastName           = req.LastName,
             IsActive           = true,
-            MustChangePassword = true
+            MustChangePassword = provider != "LDAP",
+            Provider           = provider
         };
-        var result = await userManager.CreateAsync(user, req.Password);
+
+        IdentityResult result;
+        if (provider == "LDAP")
+        {
+            result = await userManager.CreateAsync(user);
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(req.Password))
+                return BadRequest(new { errors = new[] { "Password is required for local users." } });
+            result = await userManager.CreateAsync(user, req.Password);
+        }
+
         if (!result.Succeeded)
             return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
 
@@ -66,7 +80,7 @@ public class AdminController(
         await audit.LogAsync(CurrentUserId, "CREATE_USER", "User", user.Id.ToString(), req.Username);
         return CreatedAtAction(nameof(GetUser), new { id = user.Id },
             new UserDto(user.Id, user.UserName!, user.Email, user.FirstName, user.LastName,
-                true, true, user.CreatedAt, [req.Role], []));
+                true, user.MustChangePassword, user.CreatedAt, [req.Role], [], user.Provider));
     }
 
     [HttpGet("users/{id:int}")]
@@ -80,7 +94,7 @@ public class AdminController(
         var roles  = await userManager.GetRolesAsync(user);
         var groups = user.UserGroups.Select(ug => ug.Group.Name).ToList();
         return Ok(new UserDto(user.Id, user.UserName!, user.Email, user.FirstName, user.LastName,
-            user.IsActive, user.MustChangePassword, user.CreatedAt, roles, groups));
+            user.IsActive, user.MustChangePassword, user.CreatedAt, roles, groups, user.Provider));
     }
 
     [HttpPut("users/{id:int}")]
@@ -266,7 +280,7 @@ public class AdminController(
     {
         var groups = await db.Groups
             .Select(g => new GroupDto(g.Id, g.Name, g.Description,
-                g.UserGroups.Count))
+                g.UserGroups.Count, g.Provider, g.AdGroup))
             .ToListAsync();
         return Ok(groups);
     }
@@ -277,19 +291,25 @@ public class AdminController(
         if (await db.Groups.AnyAsync(g => g.Name == req.Name))
             return Conflict(new { error = $"Group '{req.Name}' already exists" });
 
-        var group = new Group { Name = req.Name, Description = req.Description };
+        var group = new Group
+        {
+            Name = req.Name,
+            Description = req.Description,
+            Provider = req.Provider ?? "Local",
+            AdGroup = req.AdGroup
+        };
         db.Groups.Add(group);
         await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "CREATE_GROUP", "Group", group.Id.ToString(), req.Name);
         return CreatedAtAction(nameof(GetGroup), new { id = group.Id },
-            new GroupDto(group.Id, group.Name, group.Description, 0));
+            new GroupDto(group.Id, group.Name, group.Description, 0, group.Provider, group.AdGroup));
     }
 
     [HttpGet("groups/{id:int}")]
     public async Task<IActionResult> GetGroup(int id)
     {
         var group = await db.Groups
-            .Select(g => new GroupDto(g.Id, g.Name, g.Description, g.UserGroups.Count))
+            .Select(g => new GroupDto(g.Id, g.Name, g.Description, g.UserGroups.Count, g.Provider, g.AdGroup))
             .FirstOrDefaultAsync(g => g.Id == id);
         return group is null ? NotFound() : Ok(group);
     }
@@ -309,6 +329,12 @@ public class AdminController(
 
         if (req.Description is not null)
             group.Description = req.Description;
+
+        if (req.Provider is not null)
+            group.Provider = req.Provider;
+
+        if (req.AdGroup is not null)
+            group.AdGroup = req.AdGroup;
 
         await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "UPDATE_GROUP", "Group", id.ToString());

@@ -3,10 +3,11 @@ namespace ETL_SQL.ReportPortal.Models;
 public record CreateUserRequest(
     string Username,
     string Email,
-    string Password,
+    string? Password,
     string Role,
     string? FirstName,
-    string? LastName);
+    string? LastName,
+    string? Provider = null);
 
 public record ResetPasswordRequest(string NewPassword);
 
@@ -20,7 +21,8 @@ public record UserDto(
     bool MustChangePassword,
     DateTime CreatedAt,
     IList<string> Roles,
-    IList<string> Groups);
+    IList<string> Groups,
+    string? Provider = null);
 
 public record UpdateUserRequest(
     string? Email,
@@ -29,10 +31,10 @@ public record UpdateUserRequest(
     string? Role,
     bool? IsActive);
 
-public record CreateGroupRequest(string Name, string? Description);
-public record UpdateGroupRequest(string? Name, string? Description);
+public record CreateGroupRequest(string Name, string? Description, string? Provider = null, string? AdGroup = null);
+public record UpdateGroupRequest(string? Name, string? Description, string? Provider = null, string? AdGroup = null);
 
-public record GroupDto(int Id, string Name, string? Description, int MemberCount);
+public record GroupDto(int Id, string Name, string? Description, int MemberCount, string? Provider = null, string? AdGroup = null);
 
 public record AddUserToGroupRequest(string? Username, int? UserId);
 

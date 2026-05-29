@@ -20,6 +20,7 @@ public class IdentityConfig
 {
     public string Provider { get; set; } = "Local";
     public OidcIdentityConfig Oidc { get; set; } = new();
+    public LdapIdentityConfig Ldap { get; set; } = new();
 }
 
 public class OidcIdentityConfig
@@ -28,6 +29,19 @@ public class OidcIdentityConfig
     public string? ClientId { get; set; }
     public string? TenantId { get; set; }
     public string[] GroupClaimTypes { get; set; } = ["groups", "roles"];
+}
+
+public class LdapIdentityConfig
+{
+    public bool Enabled { get; set; } = false;
+    public string Server { get; set; } = "localhost";
+    public int Port { get; set; } = 389;
+    public bool UseSsl { get; set; } = false;
+    public string Domain { get; set; } = "";
+    public string BaseDn { get; set; } = "";
+    public string? ServiceUser { get; set; }
+    public string? ServicePassword { get; set; }
+    public Dictionary<string, string> RoleMappings { get; set; } = new();
 }
 
 public class OrchestratorConfig

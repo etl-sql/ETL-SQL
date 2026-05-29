@@ -13,6 +13,7 @@ public class PortalUser : IdentityUser<int>
     public string? MiddleInitial        { get; set; }
     public bool    IsActive             { get; set; } = true;
     public bool    MustChangePassword   { get; set; } = false;
+    public string  Provider             { get; set; } = "Local";
     public DateTime CreatedAt           { get; set; } = DateTime.UtcNow;
 
     public ICollection<UserGroup>    UserGroups    { get; set; } = [];
@@ -36,6 +37,8 @@ public class Group
     public int     Id          { get; set; }
     public string  Name        { get; set; } = "";
     public string? Description { get; set; }
+    public string  Provider    { get; set; } = "Local";
+    public string? AdGroup     { get; set; }
 
     public ICollection<UserGroup>  UserGroups  { get; set; } = [];
     public ICollection<FolderAcl>  FolderAcls  { get; set; } = [];
