@@ -260,6 +260,7 @@ let currentReportId   = null;
 let currentFolderName = '';
 let currentActivePage = null;  // tracks active report page for back/refresh
 let isAdmin           = false;
+let canDesign         = false;
 let currentReports    = [];
 let reportSearchTerm  = '';
 let reportSortMode    = 'name';
@@ -306,6 +307,9 @@ async function init() {
     document.getElementById('topbarUser').textContent = payload.sub || payload.unique_name || '';
     const roles = payload.role || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || [];
     isAdmin = Array.isArray(roles) ? roles.includes('Admin') : roles === 'Admin';
+    canDesign = Array.isArray(roles)
+      ? (roles.includes('Admin') || roles.includes('Publisher'))
+      : (roles === 'Admin' || roles === 'Publisher');
     if (isAdmin) document.getElementById('adminNav').style.display = '';
     const canOrch = Array.isArray(roles)
       ? (roles.includes('Admin') || roles.includes('OrchestratorManager'))
@@ -1095,6 +1099,7 @@ function renderNoSnapshot(id) {
         </div>
         <div class="viewer-actions">
           <button class="btn btn-primary btn-sm" id="execBtn">Run Report</button>
+          ${canDesign ? `<button class="btn btn-outline btn-sm" id="designBtn">Design</button>` : ''}
           <button class="btn btn-outline btn-sm" id="subBtn">Subscribe</button>
         </div>
       </div>
@@ -1111,6 +1116,9 @@ function renderNoSnapshot(id) {
   document.getElementById('subBtn').addEventListener('click', () => openSubscribeModal(id));
   document.getElementById('backBtn').addEventListener('click', () =>
     currentFolderId ? loadReportList(currentFolderId, currentFolderName) : null);
+  document.getElementById('designBtn')?.addEventListener('click', () => {
+    window.location.href = `/designer.html?id=${id}`;
+  });
 }
 
 function renderViewer(report, snapshot, initialPage = null) {
@@ -1139,6 +1147,7 @@ function renderViewer(report, snapshot, initialPage = null) {
         </div>
         <div class="viewer-actions">
           <button class="btn btn-primary btn-sm" id="refreshBtn">Refresh</button>
+          ${canDesign ? `<button class="btn btn-outline btn-sm" id="designBtn">Design</button>` : ''}
           <button class="btn btn-outline btn-sm" id="structureBtn">Structure</button>
           <button class="btn btn-outline btn-sm" id="dependenciesBtn">Dependencies</button>
           <button class="btn btn-outline btn-sm" id="historyBtn">History</button>
@@ -1154,6 +1163,9 @@ function renderViewer(report, snapshot, initialPage = null) {
 
   document.getElementById('backBtn').addEventListener('click', () => {
     if (currentFolderId) loadReportList(currentFolderId, currentFolderName);
+  });
+  document.getElementById('designBtn')?.addEventListener('click', () => {
+    window.location.href = `/designer.html?id=${report.id}`;
   });
   document.getElementById('refreshBtn').addEventListener('click', () => runAndPoll(report.id, report));
   document.getElementById('structureBtn').addEventListener('click', () => showStructure(report.id));

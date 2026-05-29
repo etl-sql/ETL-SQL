@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Report Designer — ETL-SQL Portal</title>
+  <link rel="stylesheet" href="/css/portal.css">
+  <link rel="stylesheet" href="/designer/designer.css">
+  <style>
+    body, html { margin: 0; padding: 0; overflow: hidden; }
+    .app-shell  { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    #designerHost { flex: 1; overflow: hidden; position: relative; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div id="designerHost"></div>
+</div>
+
+<script src="/js/echarts.min.js"></script>
+<script type="module">
+import { auth, authApi, foldersApi, reportsApi } from '/js/api.js';
+import { applyPortalBranding } from '/js/branding.js';
+import { createDesigner } from '/designer/designer.js';
+
+if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
+applyPortalBranding();
+
+const params     = new URLSearchParams(window.location.search);
+const reportId   = params.get('id')       ? parseInt(params.get('id'), 10)       : null;
+const folderId   = params.get('folderId') ? parseInt(params.get('folderId'), 10) : null;
+
+const container = document.getElementById('designerHost');
+
+// ── Load initial state ─────────────────────────────────────────────────────
+async function authFetch(url, opts = {}) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: { ...(opts.headers || {}), Authorization: `Bearer ${auth.getToken()}` }
+  });
+  if (res.status === 401) { auth.redirectToLogin(); return null; }
+  return res;
+}
+
+async function apiJson(url, opts = {}) {
+  if (opts.body && typeof opts.body === 'object') {
+    opts = { ...opts, body: JSON.stringify(opts.body),
+             headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) } };
+  }
+  const res = await authFetch(url, opts);
+  if (!res) return null;
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || res.statusText); }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+let initialState      = null;
+let initialReportName = 'New Report';
+let initialFolderId   = folderId;
+
+if (reportId) {
+  try {
+    const report = await apiJson(`/api/reports/${reportId}`);
+    if (report) {
+      initialReportName = report.name;
+      initialFolderId   = report.folderId;
+    }
+    const sc = await apiJson(`/api/reports/${reportId}/script-content`);
+    if (sc?.scriptText) {
+      const parsed = await apiJson('/api/designer/parse', { method: 'POST', body: { script: sc.scriptText } });
+      if (parsed?.designState?.pages?.length) initialState = parsed.designState;
+    }
+  } catch (err) {
+    console.warn('Designer: failed to load report', err);
+  }
+}
+
+createDesigner(container, {
+  designState:  initialState,
+  reportId,
+  reportName:   initialReportName,
+  folderId:     initialFolderId,
+  apiBase:      '',
+  host:         'portal',
+  authFetch,
+  onSave:  () => { window.location.href = '/index.html'; },
+  onCancel:() => { history.back(); },
+});
+</script>
+</body>
+</html>

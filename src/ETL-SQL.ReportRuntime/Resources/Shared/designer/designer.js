@@ -365,20 +365,485 @@ export async function createScriptEditor(container, opts = {}) {
 /**
  * Mount the full WYSIWYG report designer into `container`.
  *
- * Renders a four-zone shell (top bar, visual picker sidebar, canvas, properties
- * panel) and wires up the Script ↔ Designer toggle.
+ * Four zones: top bar (page tabs, script toggle, save/cancel), left sidebar
+ * (visual palette, datasets, component tree), canvas (12-col CSS grid),
+ * properties panel (selected-visual editor).
  *
  * @param {HTMLElement} container
  * @param {Object}      [opts]
- * @param {Object|null} [opts.designState=null]  Parsed DesignState JSON (null = new report).
- * @param {string}      [opts.apiBase='']        Portal API base URL (empty = same origin).
- * @param {string}      [opts.host='portal']     'portal' | 'vscode'
- * @param {Function}    [opts.onSave]            Called with DesignState on save.
- * @param {Function}    [opts.onCancel]          Called when user cancels.
+ * @param {Object|null} [opts.designState=null]   Parsed DesignState JSON (null = new report).
+ * @param {number|null} [opts.reportId=null]       Existing report ID for save.
+ * @param {string}      [opts.reportName='New Report']
+ * @param {number|null} [opts.folderId=null]
+ * @param {string}      [opts.apiBase='']          Portal API base URL.
+ * @param {Function}    [opts.authFetch]            (url, fetchInit) → Promise<Response>. Falls back to plain fetch.
+ * @param {Function}    [opts.onSave]               Called after successful save.
+ * @param {Function}    [opts.onCancel]             Called on back/cancel.
  * @returns {{ dispose: Function }}
  */
 export function createDesigner(container, opts = {}) {
-    // Implemented in Phase 4.
-    void container; void opts;
-    return { dispose: () => {} };
+
+    // ── State ────────────────────────────────────────────────────────────────
+    const state = opts.designState
+        ? JSON.parse(JSON.stringify(opts.designState))
+        : { pages: [], datasets: [] };
+    if (!state.pages?.length)
+        state.pages = [{ id: 'p1', name: 'Page 1', mode: 'Dashboard', visuals: [] }];
+    if (!state.datasets) state.datasets = [];
+
+    let pageIdx     = 0;
+    let selVisualId = null;
+    let scriptEditor = null;
+    let reportName  = opts.reportName ?? 'New Report';
+    const reportId  = opts.reportId   ?? null;
+    const folderId  = opts.folderId   ?? null;
+    const apiBase   = opts.apiBase    ?? '';
+    const _fetch    = opts.authFetch  ?? ((url, o) => fetch(url, o));
+
+    // ── Visual type registry ──────────────────────────────────────────────────
+    const VTYPES = [
+        ['BAR','#3b82f6'],['LINE','#06b6d4'],['AREA','#0891b2'],['PIE','#8b5cf6'],
+        ['SCATTER','#6366f1'],['GAUGE','#a855f7'],['FUNNEL','#d946ef'],['TREEMAP','#ec4899'],
+        ['TABLE','#64748b'],['CARD','#10b981'],['TEXT','#f59e0b'],['SLICER','#f97316'],
+    ];
+    const VCOLOR = Object.fromEntries(VTYPES.map(([t, c]) => [t, c]));
+    const ROLES  = ['X', 'Y', 'VALUE', 'CATEGORY', 'SERIES', 'LABEL', 'TOOLTIP'];
+
+    // ── API helper ────────────────────────────────────────────────────────────
+    async function apiJson(url, method = 'GET', body = null) {
+        const init = { method, headers: {} };
+        if (body !== null) {
+            init.headers['Content-Type'] = 'application/json';
+            init.body = JSON.stringify(body);
+        }
+        const res = await _fetch(apiBase + url, init);
+        if (!res) return null;
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || res.statusText); }
+        if (res.status === 204) return null;
+        return res.json();
+    }
+
+    // ── Utilities ─────────────────────────────────────────────────────────────
+    const uid       = () => 'v_' + Math.random().toString(36).slice(2, 8);
+    const curPage   = () => state.pages[pageIdx];
+    const curVis    = () => curPage()?.visuals ?? [];
+    const findVis   = id => { for (const p of state.pages) for (const v of p.visuals ?? []) if (v.id === id) return v; return null; };
+    const maxRow    = vs => vs.length ? Math.max(...vs.map(v => (v.gridRow || 1) + (v.gridRowSpan || 4) - 1)) : 0;
+    const esc       = s  => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+    // ── DOM scaffold ──────────────────────────────────────────────────────────
+    container.innerHTML = '';
+    const root = document.createElement('div');
+    root.className = 'etlsql-designer';
+    container.appendChild(root);
+
+    // Top bar
+    const topbar = document.createElement('div');
+    topbar.className = 'etlsql-designer-topbar';
+    topbar.innerHTML = `
+        <button class="btn btn-sm" id="dsgn-back">← Reports</button>
+        <input id="dsgn-name" class="etlsql-dsgn-name-input" type="text" placeholder="Report name" />
+        <div class="etlsql-designer-pages" id="dsgn-pages"></div>
+        <button class="btn btn-sm" id="dsgn-add-page">+ Page</button>
+        <button class="btn btn-sm" id="dsgn-script-toggle">⌨ Script</button>
+        <span class="etlsql-preview-badge">Preview: VS Code only</span>
+        <button class="btn btn-sm btn-primary" id="dsgn-save">Save</button>
+        <button class="btn btn-sm" id="dsgn-cancel">Cancel</button>
+    `;
+    root.appendChild(topbar);
+    topbar.querySelector('#dsgn-name').value = reportName;
+
+    // Sidebar
+    const sidebar = document.createElement('div');
+    sidebar.className = 'etlsql-designer-sidebar';
+    sidebar.innerHTML = `
+        <div class="etlsql-dsgn-section">
+            <div class="etlsql-dsgn-section-hdr">Add Visual</div>
+            <div class="etlsql-dsgn-palette" id="dsgn-palette"></div>
+        </div>
+        <div class="etlsql-dsgn-section">
+            <div class="etlsql-dsgn-section-hdr">
+                Datasets <button class="btn btn-xs" id="dsgn-add-ds">+</button>
+            </div>
+            <div id="dsgn-ds-list"></div>
+        </div>
+        <div class="etlsql-dsgn-section">
+            <div class="etlsql-dsgn-section-hdr">On This Page</div>
+            <div id="dsgn-tree"></div>
+        </div>
+    `;
+    for (const [type, color] of VTYPES) {
+        const btn = document.createElement('button');
+        btn.className = 'etlsql-dsgn-palette-btn';
+        btn.dataset.vtype = type;
+        btn.textContent = type;
+        btn.style.setProperty('--vc', color);
+        sidebar.querySelector('#dsgn-palette').appendChild(btn);
+    }
+    root.appendChild(sidebar);
+
+    // Canvas
+    const canvasWrap = document.createElement('div');
+    canvasWrap.className = 'etlsql-designer-canvas';
+    const canvasGrid = document.createElement('div');
+    canvasGrid.className = 'etlsql-dsgn-grid';
+    canvasWrap.appendChild(canvasGrid);
+    root.appendChild(canvasWrap);
+
+    // Properties panel
+    const propsPanel = document.createElement('div');
+    propsPanel.className = 'etlsql-designer-props';
+    root.appendChild(propsPanel);
+
+    // Script overlay
+    const scriptOverlay = document.createElement('div');
+    scriptOverlay.className = 'etlsql-designer-script-overlay';
+    scriptOverlay.innerHTML = `
+        <div class="etlsql-designer-script-toolbar">
+            <strong style="flex:1">Script</strong>
+            <button class="btn btn-sm btn-primary" id="dsgn-script-apply">↺ Update Designer</button>
+            <button class="btn btn-sm" id="dsgn-script-close">✕ Close</button>
+        </div>
+        <div class="etlsql-designer-script-body etlsql-editor-container" id="dsgn-script-host"></div>
+    `;
+    root.appendChild(scriptOverlay);
+
+    // Save-as modal
+    const saveModal = document.createElement('div');
+    saveModal.className = 'etlsql-dsgn-modal-bg';
+    saveModal.innerHTML = `
+        <div class="etlsql-dsgn-modal-card">
+            <div class="etlsql-dsgn-modal-hdr">Save Report</div>
+            <label class="etlsql-dsgn-label">Name<input id="dsgn-modal-name" class="form-control" /></label>
+            <label class="etlsql-dsgn-label" style="margin-top:8px">Folder ID (optional)
+                <input id="dsgn-modal-folder" class="form-control" type="number" />
+            </label>
+            <div class="etlsql-dsgn-modal-actions">
+                <button class="btn btn-sm" id="dsgn-modal-cancel">Cancel</button>
+                <button class="btn btn-sm btn-primary" id="dsgn-modal-ok">Save</button>
+            </div>
+        </div>
+    `;
+    root.appendChild(saveModal);
+
+    // ── Render ────────────────────────────────────────────────────────────────
+
+    function renderPageTabs() {
+        const strip = topbar.querySelector('#dsgn-pages');
+        strip.innerHTML = '';
+        state.pages.forEach((p, i) => {
+            const tab = document.createElement('button');
+            tab.className = 'etlsql-designer-page-tab' + (i === pageIdx ? ' active' : '');
+            tab.textContent = p.name || `Page ${i + 1}`;
+            tab.dataset.idx = String(i);
+            strip.appendChild(tab);
+        });
+    }
+
+    function renderCanvas() {
+        canvasGrid.innerHTML = '';
+        const visuals = curVis();
+        if (!visuals.length) {
+            const ph = document.createElement('div');
+            ph.className = 'etlsql-dsgn-canvas-empty';
+            ph.textContent = 'Click a visual type in the sidebar to add it here';
+            canvasGrid.appendChild(ph);
+            return;
+        }
+        const rows = maxRow(visuals) + 2;
+        canvasGrid.style.gridTemplateRows = `repeat(${rows}, 60px)`;
+        for (const v of visuals) {
+            const card = document.createElement('div');
+            card.className = 'etlsql-dsgn-visual-card' + (v.id === selVisualId ? ' selected' : '');
+            card.dataset.vid = v.id;
+            card.style.gridColumn = `${v.gridCol || 1} / span ${v.gridColSpan || 12}`;
+            card.style.gridRow    = `${v.gridRow || 1} / span ${v.gridRowSpan || 4}`;
+            card.style.setProperty('--vc', VCOLOR[v.type] || '#64748b');
+            card.innerHTML = `
+                <div class="etlsql-dsgn-vcard-badge">${v.type}</div>
+                <div class="etlsql-dsgn-vcard-name">${esc(v.title || v.name)}</div>
+                <button class="etlsql-dsgn-vcard-del" data-del="${v.id}">✕</button>
+            `;
+            canvasGrid.appendChild(card);
+        }
+    }
+
+    function renderTree() {
+        const tree = sidebar.querySelector('#dsgn-tree');
+        tree.innerHTML = '';
+        for (const v of curVis()) {
+            const item = document.createElement('div');
+            item.className = 'etlsql-dsgn-tree-item' + (v.id === selVisualId ? ' selected' : '');
+            item.dataset.vid = v.id;
+            item.textContent = `${v.name} (${v.type})`;
+            tree.appendChild(item);
+        }
+    }
+
+    function renderDatasets() {
+        const list = sidebar.querySelector('#dsgn-ds-list');
+        list.innerHTML = '';
+        for (const ds of state.datasets) {
+            const row = document.createElement('div');
+            row.className = 'etlsql-dsgn-ds-item';
+            row.innerHTML = `<span>#${esc(ds.name)}</span><button data-dsid="${ds.id}" title="Remove">✕</button>`;
+            list.appendChild(row);
+        }
+    }
+
+    function renderProps() {
+        propsPanel.innerHTML = '';
+        const v = selVisualId ? findVis(selVisualId) : null;
+        if (!v) {
+            propsPanel.innerHTML = '<p class="etlsql-dsgn-props-empty">Select a visual on the canvas to edit its properties.</p>';
+            return;
+        }
+        const mappings = v.mappings || {};
+        const dsOpts = state.datasets
+            .map(d => `<option value="${esc(d.name)}"${v.dataset === d.name ? ' selected' : ''}>#${esc(d.name)}</option>`)
+            .join('');
+
+        propsPanel.innerHTML = `
+            <div class="etlsql-dsgn-props-section">
+                <div class="etlsql-dsgn-props-hdr">Properties</div>
+                <label class="etlsql-dsgn-label">Name<input id="pp-name" class="form-control" value="${esc(v.name)}"></label>
+                <label class="etlsql-dsgn-label">Type
+                    <select id="pp-type" class="form-control">
+                        ${VTYPES.map(([t]) => `<option${v.type === t ? ' selected' : ''}>${t}</option>`).join('')}
+                    </select>
+                </label>
+                <label class="etlsql-dsgn-label">Title<input id="pp-title" class="form-control" value="${esc(v.title || '')}"></label>
+                <label class="etlsql-dsgn-label">Dataset
+                    <select id="pp-ds" class="form-control">
+                        <option value="">— none —</option>${dsOpts}
+                    </select>
+                </label>
+            </div>
+            <div class="etlsql-dsgn-props-section">
+                <div class="etlsql-dsgn-props-hdr">Mappings</div>
+                ${ROLES.map(r => `
+                    <div class="etlsql-dsgn-map-row">
+                        <span>${r}</span>
+                        <input type="text" data-role="${r}" class="form-control" value="${esc(mappings[r] || '')}" placeholder="column">
+                    </div>`).join('')}
+            </div>
+            <div class="etlsql-dsgn-props-section">
+                <div class="etlsql-dsgn-props-hdr">Grid Position</div>
+                <div class="etlsql-dsgn-grid4">
+                    <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
+                    <label>Row<input type="number" id="pp-row"   class="form-control" min="1"          value="${v.gridRow || 1}"></label>
+                    <label>W  <input type="number" id="pp-cspan" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
+                    <label>H  <input type="number" id="pp-rspan" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
+                </div>
+                <button class="btn btn-sm etlsql-dsgn-del-btn" id="pp-delete">Remove Visual</button>
+            </div>
+        `;
+
+        const on = (sel, fn) => propsPanel.querySelector(sel)?.addEventListener('change', fn);
+        on('#pp-name',  e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
+        on('#pp-type',  e => { v.type  = e.target.value; renderCanvas(); renderTree(); });
+        on('#pp-title', e => { v.title = e.target.value; renderCanvas(); });
+        on('#pp-ds',    e => { v.dataset = e.target.value || null; });
+        on('#pp-col',   e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
+        on('#pp-row',   e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
+        on('#pp-cspan', e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
+        on('#pp-rspan', e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
+
+        for (const role of ROLES) {
+            propsPanel.querySelector(`[data-role="${role}"]`)?.addEventListener('change', ev => {
+                if (!v.mappings) v.mappings = {};
+                if (ev.target.value) v.mappings[role] = ev.target.value;
+                else delete v.mappings[role];
+            });
+        }
+        propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
+    }
+
+    function renderAll() {
+        renderPageTabs();
+        renderCanvas();
+        renderTree();
+        renderDatasets();
+        renderProps();
+    }
+
+    // ── Actions ───────────────────────────────────────────────────────────────
+
+    function selectVisual(id) {
+        selVisualId = id;
+        renderCanvas();
+        renderTree();
+        renderProps();
+    }
+
+    function deleteVisual(id) {
+        for (const page of state.pages) {
+            const i = (page.visuals || []).findIndex(v => v.id === id);
+            if (i >= 0) { page.visuals.splice(i, 1); break; }
+        }
+        if (selVisualId === id) selVisualId = null;
+        renderCanvas();
+        renderTree();
+        renderProps();
+    }
+
+    function addVisual(type) {
+        const page = curPage();
+        if (!page.visuals) page.visuals = [];
+        const newId = uid();
+        page.visuals.push({
+            id: newId,
+            name: type.toLowerCase() + '_' + newId.slice(2),
+            type,
+            gridCol: 1,
+            gridRow: maxRow(page.visuals) + 1,
+            gridColSpan: 12,
+            gridRowSpan: 4,
+            title: '',
+            dataset: null,
+            mappings: {},
+            options: {},
+        });
+        selVisualId = newId;
+        renderCanvas();
+        renderTree();
+        renderProps();
+    }
+
+    function addPage() {
+        const n = state.pages.length + 1;
+        state.pages.push({ id: `p${n}_${Date.now()}`, name: `Page ${n}`, mode: 'Dashboard', visuals: [] });
+        pageIdx = state.pages.length - 1;
+        selVisualId = null;
+        renderAll();
+    }
+
+    function addDataset() {
+        const name = prompt('Dataset name (used as #name in rptsql):');
+        if (!name?.trim()) return;
+        state.datasets.push({ id: 'ds_' + uid(), name: name.trim(), query: 'SELECT 1 AS Placeholder' });
+        renderDatasets();
+        renderProps();
+    }
+
+    // ── Script overlay ────────────────────────────────────────────────────────
+
+    async function openScript() {
+        let text = '';
+        try {
+            const r = await apiJson('/api/designer/generate', 'POST', { designState: state });
+            text = r?.script ?? '';
+        } catch { text = '-- Failed to generate script\n'; }
+        scriptOverlay.classList.add('active');
+        const host = scriptOverlay.querySelector('#dsgn-script-host');
+        host.innerHTML = '';
+        scriptEditor = await createScriptEditor(host, { value: text });
+    }
+
+    function closeScript() {
+        scriptOverlay.classList.remove('active');
+        scriptEditor?.dispose();
+        scriptEditor = null;
+    }
+
+    async function applyScript() {
+        if (!scriptEditor) return;
+        try {
+            const r = await apiJson('/api/designer/parse', 'POST', { script: scriptEditor.getValue() });
+            if (r?.designState?.pages?.length) {
+                Object.assign(state, r.designState);
+                if (!state.datasets) state.datasets = [];
+                pageIdx = 0;
+                selVisualId = null;
+                closeScript();
+                renderAll();
+            } else {
+                alert(r?.error || 'Could not parse script.');
+            }
+        } catch (e) { alert(e.message); }
+    }
+
+    // ── Save ──────────────────────────────────────────────────────────────────
+
+    async function saveReport() {
+        reportName = topbar.querySelector('#dsgn-name').value.trim() || reportName;
+        try {
+            const r = await apiJson('/api/designer/generate', 'POST', { designState: state });
+            const script = r?.script ?? '';
+            if (reportId) {
+                await apiJson(`/api/reports/${reportId}/script-content`, 'PUT', { scriptText: script });
+                opts.onSave?.();
+            } else {
+                saveModal.querySelector('#dsgn-modal-name').value   = reportName;
+                saveModal.querySelector('#dsgn-modal-folder').value = folderId ?? '';
+                saveModal._script = script;
+                saveModal.style.display = 'flex';
+            }
+        } catch (e) { alert('Save failed: ' + e.message); }
+    }
+
+    async function saveAsNew() {
+        const name   = saveModal.querySelector('#dsgn-modal-name').value.trim() || 'New Report';
+        const folder = parseInt(saveModal.querySelector('#dsgn-modal-folder').value, 10) || null;
+        const script = saveModal._script;
+        try {
+            const up = await apiJson('/api/scripts/upload', 'POST', { fileName: name + '.rptsql', scriptText: script });
+            await apiJson('/api/reports', 'POST', {
+                name, folderId: folder,
+                scriptPath: up?.path ?? up?.scriptPath ?? name + '.rptsql',
+                isPublished: false,
+            });
+            saveModal.style.display = 'none';
+            opts.onSave?.();
+        } catch (e) { alert('Save failed: ' + e.message); }
+    }
+
+    // ── Event wiring ──────────────────────────────────────────────────────────
+
+    topbar.querySelector('#dsgn-back').addEventListener('click',    () => opts.onCancel?.());
+    topbar.querySelector('#dsgn-cancel').addEventListener('click',  () => opts.onCancel?.());
+    topbar.querySelector('#dsgn-save').addEventListener('click',    saveReport);
+    topbar.querySelector('#dsgn-add-page').addEventListener('click', addPage);
+    topbar.querySelector('#dsgn-name').addEventListener('change',   e => { reportName = e.target.value; });
+    topbar.querySelector('#dsgn-script-toggle').addEventListener('click', () =>
+        scriptOverlay.classList.contains('active') ? closeScript() : openScript());
+
+    topbar.querySelector('#dsgn-pages').addEventListener('click', e => {
+        const tab = e.target.closest('.etlsql-designer-page-tab');
+        if (tab) { pageIdx = +tab.dataset.idx; selVisualId = null; renderAll(); }
+    });
+
+    sidebar.querySelector('#dsgn-palette').addEventListener('click', e => {
+        const btn = e.target.closest('.etlsql-dsgn-palette-btn');
+        if (btn) addVisual(btn.dataset.vtype);
+    });
+
+    canvasGrid.addEventListener('click', e => {
+        const del = e.target.closest('[data-del]');
+        if (del) { deleteVisual(del.dataset.del); return; }
+        const card = e.target.closest('.etlsql-dsgn-visual-card');
+        if (card) selectVisual(card.dataset.vid);
+        else { selVisualId = null; renderCanvas(); renderTree(); renderProps(); }
+    });
+
+    sidebar.querySelector('#dsgn-tree').addEventListener('click', e => {
+        const item = e.target.closest('.etlsql-dsgn-tree-item');
+        if (item) selectVisual(item.dataset.vid);
+    });
+
+    sidebar.querySelector('#dsgn-add-ds').addEventListener('click', addDataset);
+    sidebar.querySelector('#dsgn-ds-list').addEventListener('click', e => {
+        const del = e.target.closest('[data-dsid]');
+        if (del) { state.datasets = state.datasets.filter(d => d.id !== del.dataset.dsid); renderDatasets(); renderProps(); }
+    });
+
+    scriptOverlay.querySelector('#dsgn-script-close').addEventListener('click',  closeScript);
+    scriptOverlay.querySelector('#dsgn-script-apply').addEventListener('click',  applyScript);
+    saveModal.querySelector('#dsgn-modal-cancel').addEventListener('click', () => { saveModal.style.display = 'none'; });
+    saveModal.querySelector('#dsgn-modal-ok').addEventListener('click', () => saveAsNew().catch(e => alert(e.message)));
+
+    // ── Initial render ────────────────────────────────────────────────────────
+    renderAll();
+
+    return { dispose: () => { closeScript(); container.innerHTML = ''; } };
 }

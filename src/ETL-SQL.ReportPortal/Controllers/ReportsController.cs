@@ -1242,6 +1242,56 @@ public class ReportsController : ControllerBase
         return NoContent();
     }
 
+    // ── GET /api/reports/{id}/script-content ─────────────────────────────────
+
+    [HttpGet("reports/{id:int}/script-content")]
+    [Authorize(Roles = "Admin,Publisher")]
+    public async Task<IActionResult> GetScriptContent(int id)
+    {
+        var report = await db.Reports.Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolved))
+            return Forbid();
+
+        var text = System.IO.File.Exists(resolved)
+            ? await System.IO.File.ReadAllTextAsync(resolved)
+            : string.Empty;
+        return Ok(new ScriptContentResponse(text));
+    }
+
+    // ── PUT /api/reports/{id}/script-content ──────────────────────────────────
+
+    [HttpPut("reports/{id:int}/script-content")]
+    [Authorize(Roles = "Admin,Publisher")]
+    public async Task<IActionResult> SaveScriptContent(int id, [FromBody] ScriptContentRequest req)
+    {
+        var report = await db.Reports.Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolved))
+            return Forbid();
+
+        await System.IO.File.WriteAllTextAsync(resolved, req.ScriptText, System.Text.Encoding.UTF8);
+
+        var hash = "sha256:" + Convert.ToHexString(
+            SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(req.ScriptText))).ToLowerInvariant();
+        report.PublishedScriptHash = hash;
+        report.ScriptLastModified  = DateTime.UtcNow;
+        report.UpdatedAt           = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "DESIGNER_SAVE", "Report", id.ToString(), report.Name);
+        return NoContent();
+    }
+
     // ── POST /api/scripts/upload ──────────────────────────────────────────────
 
     [HttpPost("scripts/upload")]
