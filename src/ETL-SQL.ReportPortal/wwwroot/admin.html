@@ -557,6 +557,23 @@
   </div>
 </div>
 
+<!-- Dataset Lineage DAG modal -->
+<div id="datasetLineageModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="dsLineageTitle">
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Lineage</span>
+        <h3 class="modal-title" id="dsLineageTitle">Dataset Lineage</h3>
+        <p class="modal-subtitle">Source tables that feed this dataset, aggregated across recent runs.</p>
+      </div>
+    </div>
+    <div id="dsLineageDag" style="height:420px;min-height:420px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="dsLineageCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Dataset Viewer modal -->
 <div id="datasetViewerModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="dv-title">
   <div class="modal-card dv-modal">
@@ -599,9 +616,11 @@
   <button class="btn btn-primary btn-sm dv-picker-apply" id="dv-pickerApply">Apply</button>
 </div>
 
+<script src="/js/echarts.min.js"></script>
 <script type="module">
-import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi } from '/js/api.js';
+import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi, catalogApi } from '/js/api.js';
 import { applyPortalBranding } from '/js/branding.js';
+import { renderDag } from '/designer/designer.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
@@ -1450,6 +1469,7 @@ async function loadDatasets() {
         <td>
           <div class="table-actions">
             <button class="btn btn-outline btn-sm" data-action="view" data-id="${d.id}" data-name="${escAttr(d.name)}">View Data</button>
+            <button class="btn btn-outline btn-sm" data-action="lineage" data-id="${d.id}" data-name="${escAttr(d.name)}">Lineage</button>
             <button class="btn btn-outline btn-sm" data-action="refresh" data-id="${d.id}">Refresh</button>
             <button class="btn btn-outline btn-sm" data-action="edit" data-id="${d.id}">Edit</button>
             <button class="btn btn-outline btn-sm" data-action="acl" data-id="${d.id}" data-name="${escAttr(d.name)}">Permissions</button>
@@ -1476,6 +1496,9 @@ async function handleDatasetAction(btn) {
 
   if (action === 'view') {
     dvOpen(id, btn.dataset.name || 'Dataset');
+    return;
+  } else if (action === 'lineage') {
+    showDatasetLineage(btn.dataset.name || 'Dataset');
     return;
   } else if (action === 'delete') {
     if (!confirm('Delete this dataset? This removes the registry entry and cached data.')) return;
@@ -1510,6 +1533,47 @@ async function handleDatasetAction(btn) {
     }).catch(() => {});
   }
 }
+
+// ── Dataset Lineage DAG ────────────────────────────────────────────────────────
+let dsLineageDagInstance = null;
+
+async function showDatasetLineage(datasetName) {
+  const $modal = document.getElementById('datasetLineageModal');
+  const $dag   = document.getElementById('dsLineageDag');
+  document.getElementById('dsLineageTitle').textContent = `Lineage — ${datasetName}`;
+  $modal.style.display = 'flex';
+  $dag.innerHTML = '<div class="loading-state"><span class="spinner"></span><span>Loading lineage…</span></div>';
+  if (dsLineageDagInstance) { dsLineageDagInstance.dispose(); dsLineageDagInstance = null; }
+
+  try {
+    const rows = await catalogApi.lineage('table', { name: datasetName, limit: 100 }) ?? [];
+    const tableSet = new Set();
+    const edgeMap  = new Map();
+    for (const row of rows) {
+      const target = row.targetTable;
+      if (!target) continue;
+      tableSet.add(target);
+      for (const src of (row.sourceTables || [])) {
+        tableSet.add(src);
+        edgeMap.set(`${src}→${target}`, { source: src, target });
+      }
+    }
+    $dag.innerHTML = '';
+    const nodes = [...tableSet].map(t => ({
+      id: t, label: t,
+      type: t.toLowerCase() === datasetName.toLowerCase() ? 'dataset' : 'table'
+    }));
+    const edges = [...edgeMap.values()];
+    dsLineageDagInstance = renderDag($dag, { nodes, edges });
+  } catch (err) {
+    $dag.innerHTML = `<div class="empty-state">Failed to load lineage: ${esc(err.message)}</div>`;
+  }
+}
+
+document.getElementById('dsLineageCloseBtn').addEventListener('click', () => {
+  document.getElementById('datasetLineageModal').style.display = 'none';
+  if (dsLineageDagInstance) { dsLineageDagInstance.dispose(); dsLineageDagInstance = null; }
+});
 
 async function loadDatasetAcl(datasetId) {
   const $wrap = document.getElementById('dsAclTableWrap');

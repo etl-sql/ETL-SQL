@@ -45,6 +45,28 @@
       text-transform: uppercase;
       letter-spacing: .04em;
     }
+    .orch-detail-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--portal-border-soft);
+      background: var(--portal-surface-subtle);
+      flex-shrink: 0;
+    }
+    .orch-detail-tab {
+      padding: 8px 16px;
+      font-size: .83em;
+      font-weight: 600;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      color: var(--portal-muted);
+      transition: color .15s, border-color .15s;
+    }
+    .orch-detail-tab.active {
+      color: var(--portal-accent);
+      border-bottom-color: var(--portal-accent);
+    }
+    .orch-detail-tab:hover:not(.active) { color: var(--portal-text); }
   </style>
 </head>
 <body>
@@ -142,7 +164,11 @@
         <h3 id="detailJobName">Job Details</h3>
         <button class="btn-icon" id="closeDetailBtn" title="Close">✕</button>
       </div>
-      <div class="orch-detail-body">
+      <div class="orch-detail-tabs">
+        <button class="orch-detail-tab active" data-tab="details" id="detailTabDetails">Details</button>
+        <button class="orch-detail-tab" data-tab="flow" id="detailTabFlow">Script Flow</button>
+      </div>
+      <div class="orch-detail-body" id="detailPanelDetails">
         <div class="orch-detail-section">
           <label>Schedule</label>
           <div class="orch-detail-meta">
@@ -165,6 +191,9 @@
             <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading…</span></div>
           </div>
         </div>
+      </div>
+      <div class="orch-detail-body" id="detailPanelFlow" style="display:none">
+        <div id="jobDagContainer" class="etlsql-dag-container" style="height:360px;"></div>
       </div>
     </aside>
 
@@ -260,6 +289,7 @@
 <script type="module">
 import { auth, authApi } from '/js/api.js';
 import { applyPortalBranding } from '/js/branding.js';
+import { renderDag } from '/designer/designer.js';
 
 // ── Auth guard ─────────────────────────────────────────────────────────────────
 if (!auth.isLoggedIn()) window.location.href = '/login.html';
@@ -321,6 +351,7 @@ const api = {
   scripts:  () => apiJson(`${BASE}/scripts`),
   scriptContent: (path) => apiJson(`${BASE}/scripts/content?path=${encodeURIComponent(path)}`),
   stop:     () => apiFetch(`${BASE}/service/stop`, { method: 'POST' }),
+  dag:      (name) => apiJson(`${BASE}/jobs/${encodeURIComponent(name)}/dag`),
 };
 
 // ── State ──────────────────────────────────────────────────────────────────────
@@ -333,6 +364,8 @@ let pollHandle = null;
 let jobsFilter = 'all';
 let metricJobNames = new Map();
 let metricHistoryByJob = new Map();
+let dagInstance  = null;
+let dagJobName   = null;
 
 // ── Polling ────────────────────────────────────────────────────────────────────
 async function poll() {
@@ -706,6 +739,12 @@ async function openDetail(job, historyOverride = null) {
     '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading…</span></div>';
   document.getElementById('detailPanel').classList.add('open');
 
+  // Reset to Details tab whenever a new job is opened
+  document.querySelectorAll('.orch-detail-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'details'));
+  document.getElementById('detailPanelDetails').style.display = '';
+  document.getElementById('detailPanelFlow').style.display    = 'none';
+  dagJobName = null;
+
   // Update selected row highlight
   document.querySelectorAll('tr.job-row').forEach(r => r.classList.remove('selected'));
   document.querySelector(`tr.job-row[data-name="${cssEscape(jobValue(job, 'Name'))}"]`)?.classList.add('selected');
@@ -725,6 +764,8 @@ function closeDetail() {
   selectedJob = null;
   document.getElementById('detailPanel').classList.remove('open');
   document.querySelectorAll('tr.job-row').forEach(r => r.classList.remove('selected'));
+  if (dagInstance) { dagInstance.dispose(); dagInstance = null; }
+  dagJobName = null;
 }
 
 function renderHistoryTable(entries) {
@@ -783,6 +824,37 @@ function renderSparkline(entries) {
 }
 
 document.getElementById('closeDetailBtn').addEventListener('click', closeDetail);
+
+// ── Detail tab switching ───────────────────────────────────────────────────────
+document.querySelectorAll('.orch-detail-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.orch-detail-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const isFlow = tab.dataset.tab === 'flow';
+    document.getElementById('detailPanelDetails').style.display = isFlow ? 'none' : '';
+    document.getElementById('detailPanelFlow').style.display    = isFlow ? '' : 'none';
+    if (isFlow && selectedJob && dagJobName !== jobValue(selectedJob, 'Name')) loadDetailDag(selectedJob);
+  });
+});
+
+async function loadDetailDag(job) {
+  const name = jobValue(job, 'Name');
+  dagJobName = name;
+  const container = document.getElementById('jobDagContainer');
+  container.innerHTML = '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Analyzing script…</span></div>';
+  if (dagInstance) { dagInstance.dispose(); dagInstance = null; }
+  try {
+    const data = await api.dag(name);
+    container.innerHTML = '';
+    if (!data.nodes?.length) {
+      container.innerHTML = '<div class="etlsql-dag-empty">No structured statements found in this script.</div>';
+      return;
+    }
+    dagInstance = renderDag(container, data);
+  } catch (err) {
+    container.innerHTML = `<div class="etlsql-dag-empty">Could not build flow: ${escHtml(err.message)}</div>`;
+  }
+}
 
 // ── Create job modal ───────────────────────────────────────────────────────────
 async function openCreateModal() {

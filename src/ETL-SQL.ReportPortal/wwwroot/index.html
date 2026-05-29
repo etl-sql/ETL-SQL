@@ -74,6 +74,23 @@
   <a class="portal-legal-link" href="/third-party-notices" target="_blank" rel="noopener">Third-party notices</a>
 </div>
 
+<!-- ── Structure modal ──────────────────────────────────────────────────── -->
+<div id="structureModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="structureTitle">
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Structure</span>
+        <h3 class="modal-title" id="structureTitle">Report Structure</h3>
+        <p class="modal-subtitle">Datasets, pages, and visuals defined in this report script.</p>
+      </div>
+    </div>
+    <div id="structureDag" style="height:420px;min-height:420px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="structureCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Export modal ─────────────────────────────────────────────────────── -->
 <div id="exportModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
   <div class="modal-card modal-sm">
@@ -228,9 +245,11 @@
   </div>
 </div>
 
+<script src="/js/echarts.min.js"></script>
 <script type="module">
 import { auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
 import { applyPortalBranding } from '/js/branding.js';
+import { renderDag } from '/designer/designer.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
@@ -1120,6 +1139,7 @@ function renderViewer(report, snapshot, initialPage = null) {
         </div>
         <div class="viewer-actions">
           <button class="btn btn-primary btn-sm" id="refreshBtn">Refresh</button>
+          <button class="btn btn-outline btn-sm" id="structureBtn">Structure</button>
           <button class="btn btn-outline btn-sm" id="dependenciesBtn">Dependencies</button>
           <button class="btn btn-outline btn-sm" id="historyBtn">History</button>
           <button class="btn btn-outline btn-sm" id="exportBtn">Export</button>
@@ -1136,6 +1156,7 @@ function renderViewer(report, snapshot, initialPage = null) {
     if (currentFolderId) loadReportList(currentFolderId, currentFolderName);
   });
   document.getElementById('refreshBtn').addEventListener('click', () => runAndPoll(report.id, report));
+  document.getElementById('structureBtn').addEventListener('click', () => showStructure(report.id));
   document.getElementById('dependenciesBtn').addEventListener('click', () => showDependencies(report.id));
   document.getElementById('historyBtn').addEventListener('click', () => showHistory(report.id));
   document.getElementById('exportBtn').addEventListener('click', () => showExport(report.id));
@@ -1289,6 +1310,34 @@ function renderRunFailure(id, report, message) {
     if (currentFolderId) loadReportList(currentFolderId, currentFolderName);
   });
 }
+
+// ── Structure DAG modal ────────────────────────────────────────────────────────
+let structureDagInstance = null;
+
+async function showStructure(id) {
+  const $modal = document.getElementById('structureModal');
+  const $dag   = document.getElementById('structureDag');
+  $modal.style.display = 'flex';
+  $dag.innerHTML = '<div class="loading-state"><span class="spinner"></span><span>Loading structure…</span></div>';
+  if (structureDagInstance) { structureDagInstance.dispose(); structureDagInstance = null; }
+
+  try {
+    const res = await fetch(`/api/reports/${id}/structure`, {
+      headers: { Authorization: `Bearer ${auth.getToken()}` }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    $dag.innerHTML = '';
+    structureDagInstance = renderDag($dag, data);
+  } catch (err) {
+    $dag.innerHTML = `<div class="empty-state">Failed to load structure: ${esc(err.message)}</div>`;
+  }
+}
+
+document.getElementById('structureCloseBtn').addEventListener('click', () => {
+  document.getElementById('structureModal').style.display = 'none';
+  if (structureDagInstance) { structureDagInstance.dispose(); structureDagInstance = null; }
+});
 
 // ── Export modal ───────────────────────────────────────────────────────────────
 function showExport(id) {

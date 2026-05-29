@@ -396,6 +396,81 @@ public class ReportsController : ControllerBase
         return Ok(dto);
     }
 
+    // ── GET /api/reports/{id}/structure ─────────────────────────────────────
+
+    [HttpGet("reports/{id:int}/structure")]
+    public async Task<IActionResult> GetStructure(int id)
+    {
+        var report = await db.Reports
+            .Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null) return Forbid();
+
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
+        if (!System.IO.File.Exists(resolvedScriptPath))
+            return Ok(new DagDto([], []));
+
+        var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);
+        List<DagNodeDto> nodes = [];
+        List<DagEdgeDto> edges = [];
+
+        try
+        {
+            var tokens = new Lexer(scriptText).Tokenize();
+            var script = new CoreParser(tokens, scriptText).Parse();
+
+            var knownSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string? currentPage = null;
+
+            foreach (var ds in script.Statements.OfType<CreateDatasetStatement>())
+            {
+                nodes.Add(new DagNodeDto($"ds:{ds.TempTableName}", ds.TempTableName, "dataset", null));
+                knownSources.Add(ds.TempTableName);
+            }
+
+            foreach (var stmt in script.Statements)
+            {
+                if (stmt is CreatePageStatement page)
+                {
+                    currentPage = page.Name;
+                    nodes.Add(new DagNodeDto($"page:{page.Name}", page.Name, "page", null));
+                }
+                else if (stmt is CreateVisualStatement vis)
+                {
+                    var label = $"{vis.VisualType} · {vis.Name}";
+                    nodes.Add(new DagNodeDto(
+                        $"vis:{vis.Name}", label, "visual",
+                        new { page = currentPage, visualType = vis.VisualType.ToString() }));
+
+                    if (currentPage is not null)
+                        edges.Add(new DagEdgeDto($"page:{currentPage}", $"vis:{vis.Name}", null));
+
+                    if (vis.Source.TempTableName is string tableName)
+                    {
+                        var sourceId = knownSources.Contains(tableName) ? $"ds:{tableName}" : $"table:{tableName}";
+                        if (!nodes.Any(n => n.Id == sourceId))
+                        {
+                            nodes.Add(new DagNodeDto(sourceId, tableName, "table", null));
+                            knownSources.Add(tableName);
+                        }
+                        edges.Add(new DagEdgeDto(sourceId, $"vis:{vis.Name}", null));
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            return UnprocessableEntity(new { Error = $"Could not parse report script: {ex.Message}" });
+        }
+
+        return Ok(new DagDto(nodes, edges));
+    }
+
     // ── GET /api/reports/{id}/history ────────────────────────────────────────
 
     [HttpGet("reports/{id:int}/history")]
