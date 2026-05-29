@@ -175,10 +175,12 @@ Connectors define how to communicate with external data sources.
 | `AZURE_BLOB` | Transfer | [AZURE_BLOB.md](../src/ETL-SQL.Core/Resources/Help/Connectors/AZURE_BLOB.md) | ACCOUNT_NAME, ACCOUNT_KEY, CONTAINER |
 | `API` / `REST` | Service | [API.md](../src/ETL-SQL.Core/Resources/Help/Connectors/API.md) | URL, METHOD, AUTH_TYPE, TOKEN, BODY, ROOT_PATH, ... |
 | `SMTP` | Service | [SMTP.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SMTP.md) | HOST, PORT, USER, PASSWORD, USE_SSL, DEFAULT_FROM |
+| `SHAREPOINT` | Transfer/Service | [SHAREPOINT.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SHAREPOINT.md) | URL, AUTH_MODE, USER, PASSWORD, DOMAIN, CLIENT_ID, CLIENT_SECRET, TENANT_ID, DOCUMENT_LIBRARY, LIST_NAME |
 | `DIRECTORY` | Service | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Connectors/DIRECTORY.md) | PATH, RECURSIVE, ... |
 | `MOCKDB` | Testing | [MOCKDB.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MOCKDB.md) | - |
 | `REPORTPORTAL` | Admin Service | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | HOST, PORT, USER, PASSWORD |
 | `ORCHESTRATOR` | Admin Service | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#82-orchestrator-orchestrator) | HOST, PORT, API_KEY |
+| `ACTIVE_DIRECTORY` | Admin Service | [ACTIVE_DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ACTIVE_DIRECTORY.md) | HOST, PORT, USE_SSL, AUTH_MODE, USER, PASSWORD, DOMAIN, BASE_DN, FILTER_CONTEXT, FILTER, ATTRIBUTES |
 
 ### 2.1 File-Based Table Alias
 `FILE` is the default table name used when querying any file-based connection (e.g. `SELECT * FROM src` where `src` is a FLATFILE connection).
@@ -1093,7 +1095,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 ---
 
 <!-- BEGIN GENERATED CANONICAL TOKEN INDEX -->
-## 19. Canonical Token Inventory
+## 18. Canonical Token Inventory
 
 > Generated from `src/ETL-SQL.Core/Common/LanguageMetadata.cs`. Run `node ./scripts/generate-syntax-index.js` after adding, removing, or renaming language tokens.
 
@@ -1208,6 +1210,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `FOR` | Control Flow | Canonical language token |
 | `FOREACH` | Control Flow | Canonical language token |
 | `GO` | Control Flow | Canonical language token |
+| `GOTO` | Control Flow | Canonical language token |
 | `IF` | Control Flow | Canonical language token |
 | `RAISEERROR` | Control Flow | Canonical language token |
 | `RAISERROR` | Control Flow | Canonical language token |
@@ -1319,6 +1322,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `DELETE_FILE` | File & Directory Operations | Canonical language token |
 | `ENCRYPT_DIRECTORY` | File & Directory Operations | Canonical language token |
 | `ENCRYPT_FILE` | File & Directory Operations | Canonical language token |
+| `FILES` | File & Directory Operations | Canonical language token |
 | `FILES` | File & Directory Operations | Canonical language token |
 | `MOVE` | File & Directory Operations | Canonical language token |
 | `MOVE_DIRECTORY` | File & Directory Operations | Canonical language token |
@@ -1638,10 +1642,14 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `COLUMNS` | General | Canonical language token |
 | `COMMENT` | General | Canonical language token |
 | `CONNECTIONS` | General | Canonical language token |
+| `CONVERT` | General | Canonical language token |
 | `DATA_SOURCE` | General | Canonical language token |
+| `DELETE_EXTRA` | General | Canonical language token |
 | `DISABLE` | General | Canonical language token |
 | `DISCONNECT` | General | Canonical language token |
 | `ENABLE` | General | Canonical language token |
+| `ENCODING` | General | Canonical language token |
+| `EXPECTED_HASH` | General | Canonical language token |
 | `EXPORT_CSV` | General | Canonical language token |
 | `EXPORT_EXCEL` | General | Canonical language token |
 | `EXPORT_PDF` | General | Canonical language token |
@@ -1649,11 +1657,16 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `FALSE` | General | Canonical language token |
 | `FILTER` | General | Canonical language token |
 | `FORMAT` | General | Canonical language token |
+| `FROM_ENCODING` | General | Canonical language token |
+| `HASH_FILE` | General | Canonical language token |
 | `HELP` | General | Canonical language token |
 | `ICON` | General | Canonical language token |
 | `IN` | General | Canonical language token |
 | `INPUT` | General | Canonical language token |
+| `INTEGRITY` | General | Canonical language token |
 | `LEADING` | General | Canonical language token |
+| `LIMIT_TYPE` | General | Canonical language token |
+| `LIMIT_VALUE` | General | Canonical language token |
 | `LINEAGE` | General | Canonical language token |
 | `LINEAGE_TAGS` | General | Canonical language token |
 | `LOAD` | General | Canonical language token |
@@ -1670,6 +1683,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `PARALLEL` | General | Canonical language token |
 | `PERSIST` | General | Canonical language token |
 | `PLACING` | General | Canonical language token |
+| `POLL_INTERVAL_MS` | General | Canonical language token |
 | `POSITION` | General | Canonical language token |
 | `PRINT` | General | Canonical language token |
 | `REFRESH` | General | Canonical language token |
@@ -1683,24 +1697,33 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `SESSIONS` | General | Canonical language token |
 | `SETS` | General | Canonical language token |
 | `SHUTDOWN` | General | Canonical language token |
+| `SKIP_ERROR` | General | Canonical language token |
+| `SPLIT` | General | Canonical language token |
 | `SUBSTRING` | General | Canonical language token |
+| `SYNC` | General | Canonical language token |
 | `TABLES` | General | Canonical language token |
 | `TAG` | General | Canonical language token |
 | `TAGS` | General | Canonical language token |
 | `TARGET` | General | Canonical language token |
+| `TIMEOUT` | General | Canonical language token |
 | `TO` | General | Canonical language token |
+| `TO_ENCODING` | General | Canonical language token |
 | `TRAILING` | General | Canonical language token |
 | `TRIM` | General | Canonical language token |
 | `TRUE` | General | Canonical language token |
+| `TRUNCATE_STRING` | General | Canonical language token |
 | `TYPE` | General | Canonical language token |
+| `UNLOCKED` | General | Canonical language token |
 | `VALUE` | General | Canonical language token |
 | `VARIABLES` | General | Canonical language token |
+| `VERIFY` | General | Canonical language token |
 | `ZONES` | General | Canonical language token |
 
 ### 18.17 Connector Types
 
 | Token | Group | Notes |
 | :--- | :--- | :--- |
+| `ACTIVE_DIRECTORY` | Connector | Canonical connector token |
 | `AVRO` | Connector | Canonical connector token |
 | `AZURE_BLOB` | Connector | Canonical connector token |
 | `CSV` | Connector | Canonical connector token |
@@ -1722,6 +1745,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `REPORT_PORTAL` | Connector | Canonical connector token |
 | `REPORTPORTAL` | Connector | Canonical connector token |
 | `SFTP` | Connector | Canonical connector token |
+| `SHAREPOINT` | Connector | Canonical connector token |
 | `SMTP` | Connector | Canonical connector token |
 | `XML` | Connector | Canonical connector token |
 
@@ -1738,6 +1762,13 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `ATAN2` | Function | Canonical built-in function |
 | `AVG` | Function | Canonical built-in function |
 | `BINARY_CHECKSUM` | Function | Canonical built-in function |
+| `BIT_COUNT` | Function | Canonical built-in function |
+| `BITAND` | Function | Canonical built-in function |
+| `BITNOT` | Function | Canonical built-in function |
+| `BITOR` | Function | Canonical built-in function |
+| `BITSHIFTLEFT` | Function | Canonical built-in function |
+| `BITSHIFTRIGHT` | Function | Canonical built-in function |
+| `BITXOR` | Function | Canonical built-in function |
 | `CAST` | Function | Canonical built-in function |
 | `CEILING` | Function | Canonical built-in function |
 | `CHAR` | Function | Canonical built-in function |
@@ -1745,19 +1776,24 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `CHECKSUM` | Function | Canonical built-in function |
 | `COALESCE` | Function | Canonical built-in function |
 | `CONCAT` | Function | Canonical built-in function |
+| `CONNECTION_PROPERTY` | Function | Canonical built-in function |
 | `CORR` | Function | Canonical built-in function |
 | `COS` | Function | Canonical built-in function |
+| `COT` | Function | Canonical built-in function |
 | `COUNT` | Function | Canonical built-in function |
 | `COVAR_POP` | Function | Canonical built-in function |
 | `COVAR_SAMP` | Function | Canonical built-in function |
 | `CUME_DIST` | Function | Canonical built-in function |
 | `DATALENGTH` | Function | Canonical built-in function |
+| `DATE_PART` | Function | Canonical built-in function |
+| `DATE_TRUNC` | Function | Canonical built-in function |
 | `DATEDIFF` | Function | Canonical built-in function |
 | `DATEPART` | Function | Canonical built-in function |
 | `DATETIMEFROMPARTS` | Function | Canonical built-in function |
 | `DATETIMEOFFSETSFROMPARTS` | Function | Canonical built-in function |
 | `DECODE` | Function | Canonical built-in function |
 | `DECOMPRESS_FILE` | Function | Canonical built-in function |
+| `DEGREES` | Function | Canonical built-in function |
 | `DENSE_RANK` | Function | Canonical built-in function |
 | `DIRECTORY_EXISTS` | Function | Canonical built-in function |
 | `DMETAPHONE` | Function | Canonical built-in function |
@@ -1765,7 +1801,10 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `EXP` | Function | Canonical built-in function |
 | `EXTRACTVALUE` | Function | Canonical built-in function |
 | `FILE_EXISTS` | Function | Canonical built-in function |
+| `FILE_HASH` | Function | Canonical built-in function |
 | `FILE_LIST` | Function | Canonical built-in function |
+| `FILE_MODIFIED` | Function | Canonical built-in function |
+| `FILE_SIZE` | Function | Canonical built-in function |
 | `FIRST_VALUE` | Function | Canonical built-in function |
 | `FLOOR` | Function | Canonical built-in function |
 | `FORMAT` | Function | Canonical built-in function |
@@ -1814,13 +1853,19 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `NVL` | Function | Canonical built-in function |
 | `NVL2` | Function | Canonical built-in function |
 | `OPENJSON` | Function | Canonical built-in function |
+| `PATH_COMBINE` | Function | Canonical built-in function |
+| `PATH_DIRECTORY` | Function | Canonical built-in function |
+| `PATH_EXTENSION` | Function | Canonical built-in function |
+| `PATH_FILENAME` | Function | Canonical built-in function |
 | `PATINDEX` | Function | Canonical built-in function |
 | `PERCENT_RANK` | Function | Canonical built-in function |
 | `PERCENTILE_CONT` | Function | Canonical built-in function |
 | `PERCENTILE_DISC` | Function | Canonical built-in function |
+| `PI` | Function | Canonical built-in function |
 | `POSITION` | Function | Canonical built-in function |
 | `POWER` | Function | Canonical built-in function |
 | `QUOTENAME` | Function | Canonical built-in function |
+| `RADIANS` | Function | Canonical built-in function |
 | `RANDOM` | Function | Canonical built-in function |
 | `RANDOM_DECIMAL` | Function | Canonical built-in function |
 | `RANDOM_INT` | Function | Canonical built-in function |
@@ -1834,6 +1879,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `REGEXP_SUBSTR` | Function | Canonical built-in function |
 | `RELDATE` | Function | Canonical built-in function |
 | `REMOVE_FROM_LIST` | Function | Canonical built-in function |
+| `REPEAT` | Function | Canonical built-in function |
 | `REPLACE` | Function | Canonical built-in function |
 | `REPLICATE` | Function | Canonical built-in function |
 | `ROUND` | Function | Canonical built-in function |
@@ -1865,6 +1911,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `TAN` | Function | Canonical built-in function |
 | `TIMEFROMPARTS` | Function | Canonical built-in function |
 | `TO_STR` | Function | Canonical built-in function |
+| `TO_TIMESTAMP` | Function | Canonical built-in function |
 | `TRANSLATE` | Function | Canonical built-in function |
 | `TRIM` | Function | Canonical built-in function |
 | `TRUNC` | Function | Canonical built-in function |
@@ -1965,6 +2012,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `@quality` | Tag | Standard governance tag |
 | `@sensitive` | Tag | Standard governance tag |
 | `@sla` | Tag | Standard governance tag |
+| `@source_column` | Tag | Standard governance tag |
 | `@source_system` | Tag | Standard governance tag |
 | `@source_table` | Tag | Standard governance tag |
 | `@steward` | Tag | Standard governance tag |

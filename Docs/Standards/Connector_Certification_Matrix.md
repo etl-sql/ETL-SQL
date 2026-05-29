@@ -112,26 +112,26 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 
 ## Remote / Network Connectors
 
-| Requirement | SFTP | FTP | AZURE_BLOB | API | SMTP |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Rule 1** — No SQL evaluation inside connector | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 2** — All I/O via async overloads | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 3** — Credentials never in logs/exceptions | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 4** — File I/O via ResolvePath (local staging) | ✓ | ✓ | ✓ | N/A | N/A |
-| **Rule 5** — Provider exceptions wrapped as ExecutionException | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 6** — Sensitive options masked | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 7** — O(1) memory streaming | ✓ | ✓ | ✓ | ~ | N/A |
-| **Rule 8** — IDatabaseSource + pushdown | N/A | N/A | N/A | N/A | N/A |
-| **Rule 9** — GetExcludedKeywords | N/A | N/A | N/A | N/A | N/A |
-| **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T2** — Negative path / credential tests | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **✓ GA** |
+| Requirement | SFTP | FTP | AZURE_BLOB | API | SMTP | SHAREPOINT | AD |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Rule 1** — No SQL evaluation inside connector | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 2** — All I/O via async overloads | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ~ |
+| **Rule 3** — Credentials never in logs/exceptions | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 4** — File I/O via ResolvePath (local staging) | ✓ | ✓ | ✓ | N/A | N/A | ✓ | N/A |
+| **Rule 5** — Provider exceptions wrapped as ExecutionException | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 6** — Sensitive options masked | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 7** — O(1) memory streaming | ✓ | ✓ | ✓ | ~ | N/A | ✓ | ✓ |
+| **Rule 8** — IDatabaseSource + pushdown | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
+| **Rule 9** — GetExcludedKeywords | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
+| **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T2** — Negative path / credential tests | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **✓ GA (Mock)** | **✓ GA (Mock)** |
 
 ### API Notes
 - Streaming is best-effort: paginated API responses are yielded page-by-page (compliant), but `ReadBatches` for non-paginated endpoints buffers the full response body.
@@ -145,6 +145,14 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 - Exception wrapping tests added (T4 ✓).
 - FTP has Docker-backed coverage for mapped-port connection setup, `PORT` option handling through `CreateDataSource`, root listing, upload/download round trip, and wrong-password provider failure wrapping.
 - AZURE_BLOB has Azurite-backed smoke, upload/list/download, bad account key, expired SAS token, blocked host, and connection-string host parsing coverage.
+
+### SharePoint Notes
+- Implements both remote filesystem operations (`IRemoteFileSystem`) and tabular queries (`IDataSource` against lists).
+- Verified via `SharePointAndADConnectorTests` mocking the Entra ID OAuth authentication token exchange and standard OData file/folder/list payloads.
+
+### Active Directory / LDAP Notes
+- `LdapConnection` synchronous request send-action behaves under a partial Rule 2 rating (`~`). Re-wraps LDAP exception codes to standardized engine `ExecutionException`.
+- Verified via mock LDAP test sequences translating standard SQL filter blocks into formatted LDAP query groups.
 
 ---
 

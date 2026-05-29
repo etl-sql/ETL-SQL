@@ -1,4 +1,4 @@
-﻿# Connections
+# Connections
 
 Connections link ETL-SQL to external data sources — databases, files, APIs, and protocols.
 
@@ -34,6 +34,11 @@ Connections link ETL-SQL to external data sources — databases, files, APIs, an
 - `FTP` / `FTPS`: FTP file transfer
 - `AZURE_BLOB`: Azure Blob Storage
 - `SMTP`: Email sending
+- `SHAREPOINT` / `SP`: SharePoint Document Library and List service
+
+**Directory and Admin services**
+
+- `ACTIVE_DIRECTORY` / `AD` / `LDAP`: LDAP User/Group directory queries
 
 **Other**
 
