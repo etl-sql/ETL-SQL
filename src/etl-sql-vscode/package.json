@@ -25,6 +25,7 @@
     "onView:etlsql-sidebar",
     "onView:etlsql-results-view",
     "onCommand:etlsql.previewReport",
+    "onCommand:etlsql.openReportDesigner",
     "onCommand:etlsql.runScript",
     "onCommand:etlsql.runSelection",
     "onCommand:etlsql.showLineage",
@@ -134,6 +135,11 @@
         "command": "etlsql.previewReport",
         "title": "ETL-SQL: Preview Report",
         "icon": "$(graph)"
+      },
+      {
+        "command": "etlsql.openReportDesigner",
+        "title": "ETL-SQL: Open Report Designer",
+        "icon": "$(edit)"
       },
       {
         "command": "etlsql.runScript",
@@ -264,6 +270,11 @@
           "command": "etlsql.previewReport",
           "group": "etlsql",
           "when": "resourceLangId == etlsql"
+        },
+        {
+          "command": "etlsql.openReportDesigner",
+          "group": "etlsql",
+          "when": "resourceLangId == etlsql"
         }
       ],
       "editor/title": [
@@ -284,6 +295,11 @@
         },
         {
           "command": "etlsql.previewReport",
+          "group": "navigation@1",
+          "when": "resourceLangId == etlsql"
+        },
+        {
+          "command": "etlsql.openReportDesigner",
           "group": "navigation@1",
           "when": "resourceLangId == etlsql"
         },

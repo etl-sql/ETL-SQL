@@ -14,6 +14,7 @@ import { ReplManager } from './ReplManager';
 import { ConnectionsProvider, Connection } from './connectionsProvider';
 import { SidebarProvider } from './sidebarProvider';
 import { ReportPreviewPanel } from './reportPreviewPanel';
+import { ReportDesignerPanel } from './reportDesignerPanel';
 import * as crypto from 'crypto';
 import { ETLNotebookSerializer } from './notebookSerializer';
 import { ETLNotebookController } from './notebookController';
@@ -214,6 +215,7 @@ export async function activate(context: vscode.ExtensionContext) {
             outputChannel.appendLine("Language Client started successfully.");
             connectionsProvider.client = client;
             sidebarProvider.client = client;
+            ReportDesignerPanel.setLspClient(client);
             connectionsProvider.refresh();
             syncConnectionsToLsp();
 
@@ -364,6 +366,19 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.window.showWarningMessage('ETL-SQL: Preview Report is intended for .rptsql files.');
         }
         ReportPreviewPanel.open(context, scriptPath);
+    }));
+
+    // Phase 5: Open Report Designer command
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.openReportDesigner', (uri?: vscode.Uri) => {
+        const scriptPath = uri?.fsPath ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+        if (!scriptPath) {
+            vscode.window.showErrorMessage('ETL-SQL: Open a .rptsql file first.');
+            return;
+        }
+        if (!scriptPath.endsWith('.rptsql')) {
+            vscode.window.showWarningMessage('ETL-SQL: Report Designer is intended for .rptsql files.');
+        }
+        ReportDesignerPanel.open(context, scriptPath);
     }));
 
     // Security: Secure Connections command (Quick Fix target)

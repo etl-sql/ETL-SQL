@@ -381,6 +381,7 @@ export async function createScriptEditor(container, opts = {}) {
  * @param {number|null} [opts.folderId=null]
  * @param {string}      [opts.apiBase='']          Portal API base URL.
  * @param {Function}    [opts.authFetch]            (url, fetchInit) → Promise<Response>. Falls back to plain fetch.
+ * @param {Function}    [opts.onSaveScript]         (script: string) → Promise. VS Code host override — bypasses portal API save.
  * @param {Function}    [opts.onSave]               Called after successful save.
  * @param {Function}    [opts.onCancel]             Called on back/cancel.
  * @returns {{ dispose: Function }}
@@ -774,6 +775,11 @@ export function createDesigner(container, opts = {}) {
         try {
             const r = await apiJson('/api/designer/generate', 'POST', { designState: state });
             const script = r?.script ?? '';
+            if (opts.onSaveScript) {
+                await opts.onSaveScript(script);
+                opts.onSave?.();
+                return;
+            }
             if (reportId) {
                 await apiJson(`/api/reports/${reportId}/script-content`, 'PUT', { scriptText: script });
                 opts.onSave?.();
