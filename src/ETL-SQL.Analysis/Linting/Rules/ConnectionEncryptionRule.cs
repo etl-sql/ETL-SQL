@@ -142,10 +142,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 }
             }
 
-            // 2. Check Options (PASSWORD, API_KEY, APIKEY)
+            // 2. Check Options (PASSWORD, API_KEY, APIKEY, CLIENT_SECRET, CLIENTSECRET)
             if (conn.Options != null)
             {
-                var sensitiveKeys = new[] { "PASSWORD", "API_KEY", "APIKEY" };
+                var sensitiveKeys = new[] { "PASSWORD", "API_KEY", "APIKEY", "CLIENT_SECRET", "CLIENTSECRET" };
                 foreach (var key in sensitiveKeys)
                 {
                     if (conn.Options.TryGetValue(key, out var valExpr) && valExpr is LiteralExpression valLit && valLit.Value is string valStr)
@@ -154,7 +154,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                         {
                             var msg = key == "PASSWORD"
                                 ? $"Connection '{conn.ConnectionName}' uses a plaintext password. Use a Master Password to encrypt this for better security."
-                                : $"Connection '{conn.ConnectionName}' uses a plaintext password or credential. Use a Master Password to encrypt this for better security.";
+                                : $"Connection '{conn.ConnectionName}' uses a plaintext password or credential ({key}). Use a Master Password to encrypt this for better security.";
 
                             results.Add(new LintResult
                             {

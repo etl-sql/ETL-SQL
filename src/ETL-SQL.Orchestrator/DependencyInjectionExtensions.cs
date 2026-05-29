@@ -97,6 +97,8 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IConnector, BigQueryConnector>();
             services.AddSingleton<IConnector, ReportPortalConnector>();
             services.AddSingleton<IConnector, OrchestratorConnector>();
+            services.AddSingleton<IConnector, SharePointConnector>();
+            services.AddSingleton<IConnector, ActiveDirectoryConnector>();
             
             services.AddSingleton<IConnector>(sp => new FtpConnector(
                 configuration["Connectors:Ftp:Host"] ?? "localhost",

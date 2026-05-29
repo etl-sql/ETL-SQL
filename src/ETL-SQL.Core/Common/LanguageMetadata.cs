@@ -50,7 +50,8 @@ namespace ETL_SQL.Common
             "FLATFILE", "CSV", "EXCEL", "JSON", "XML", "AVRO", "PARQUET",
             "MSSQL", "ORACLE", "POSTGRES", "MOCKDB", "ODBC",
             "SFTP", "FTP", "FTP_CONN", "AZURE_BLOB", "SMTP", "DOCKER", "DIRECTORY",
-            "REPORTPORTAL", "REPORT_PORTAL", "ORCHESTRATOR", "ORCH"
+            "REPORTPORTAL", "REPORT_PORTAL", "ORCHESTRATOR", "ORCH",
+            "SHAREPOINT", "ACTIVE_DIRECTORY"
         };
 
         public static readonly HashSet<string> Keywords = new(StringComparer.OrdinalIgnoreCase)

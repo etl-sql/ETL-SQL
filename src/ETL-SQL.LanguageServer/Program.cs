@@ -74,6 +74,8 @@ namespace ETL_SQL.LSP
                         registry.Register(new ETL_SQL.Connectors.AzureBlobConnector());
                         registry.Register(new ETL_SQL.Connectors.FtpConnector());
                         registry.Register(new ETL_SQL.Connectors.Directory.DirectoryConnector());
+                        registry.Register(new ETL_SQL.Connectors.SharePointConnector());
+                        registry.Register(new ETL_SQL.Connectors.ActiveDirectoryConnector());
 
                         var functionRegistry = new Engine.Functions.FunctionRegistry();
                         Engine.Functions.StandardFunctions.Register(functionRegistry);

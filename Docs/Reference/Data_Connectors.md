@@ -806,6 +806,49 @@ SEND EMAIL
 
 ---
 
+### 4.6 SharePoint (`SHAREPOINT`)
+Aliases: `SP`
+
+Manages files in SharePoint Document Libraries (remote file system operations) and reads/writes SharePoint Lists.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `AUTH_MODE` | Authentication mode: `INTEGRATED`, `AD_WINDOWS`, `ENTRA_ID`, `ADFS` (Default: `INTEGRATED`) | No |
+| `USER` | Domain account username or service account (for `AD_WINDOWS` and `ADFS`) | No |
+| `PASSWORD` | Password (for `AD_WINDOWS` and `ADFS`) | No |
+| `DOMAIN` | Domain name (for `AD_WINDOWS` and `ADFS`) | No |
+| `CLIENT_ID` | Microsoft Entra ID Application Client ID (for `ENTRA_ID`) | No |
+| `CLIENT_SECRET` | Microsoft Entra ID Application Client Secret (for `ENTRA_ID`) | No |
+| `TENANT_ID` | Microsoft Entra ID Tenant ID/Directory ID (for `ENTRA_ID`) | No |
+| `DOCUMENT_LIBRARY` | Target Document Library path/title (Default: `Shared Documents`) | No |
+| `LIST_NAME` | Default list title for list queries | No |
+
+> [!IMPORTANT]
+> - `CLIENT_SECRET` and `PASSWORD` should always be encrypted using `ENC:` string values.
+> - Plaintext secrets in `CLIENT_SECRET` or `CLIENTSECRET` will trigger a linter warning.
+> - When using `AUTH_MODE = 'ENTRA_ID'`, the options `TENANT_ID`, `CLIENT_ID`, and `CLIENT_SECRET` are mutually required.
+
+*Examples:*
+```sql
+-- Client Credentials (Entra ID - Recommended for Cloud)
+CREATE CONNECTION sp_cloud AS SHAREPOINT('https://tenant.sharepoint.com/sites/Finance',
+         AUTH_MODE     = 'ENTRA_ID',
+         TENANT_ID     = '00000000-0000-0000-0000-000000000000',
+         CLIENT_ID     = '11111111-1111-1111-1111-111111111111',
+         CLIENT_SECRET = ENC:U2FsdGVkX1+...);
+
+-- Domain credentials (On-Premises / AD_WINDOWS)
+CREATE CONNECTION sp_onprem AS SHAREPOINT('https://sharepoint.local/sites/HR',
+         AUTH_MODE = 'AD_WINDOWS',
+         USER      = 'sp_service',
+         PASSWORD  = ENC:U2FsdGVkX1+...,
+         DOMAIN    = 'CORP');
+
+-- Integrated authentication
+CREATE CONNECTION sp_integrated AS SHAREPOINT('https://tenant.sharepoint.com/sites/IT',
+         AUTH_MODE = 'INTEGRATED');
+```
+
 ---
 
 ## 5. Development & Testing: `MOCKDB`
@@ -1032,6 +1075,47 @@ END;
 
 ---
 
+### 8.3 Active Directory (`ACTIVE_DIRECTORY`)
+Aliases: `AD`, `LDAP`
+
+Connects to an Active Directory or LDAP server to perform user, group, and computer lookups. Standard SQL `WHERE` clauses (e.g. `sAMAccountName = 'smith'`) are parsed and translated dynamically into native LDAP filter queries.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `HOST` | Server host name or IP address (e.g. `ldap.corp.com`) | Yes (structured) |
+| `PORT` | Directory port (Default: `389` for LDAP, `636` for LDAPS) | No |
+| `USE_SSL` / `LDAPS` | Enable SSL encryption / LDAPS connection (`TRUE`/`FALSE`) | No |
+| `AUTH_MODE` | Authentication mode: `INTEGRATED`, `SIMPLE` (Basic auth over SSL), `NEGOTIATE` (negotiate credentials) (Default: `INTEGRATED`) | No |
+| `USER` | Login username / Bind Distinguished Name (DN) | No |
+| `PASSWORD` | Login password (use `ENC:` prefix) | No |
+| `DOMAIN` | Domain name | No |
+| `BASE_DN` | LDAP Search Base Distinguished Name (e.g. `OU=Users,DC=corp,DC=com`) | No |
+| `FILTER_CONTEXT` | Scope context: `users`, `groups`, or `computers` (Default: `users`) | No |
+| `FILTER` | Raw LDAP query filter (overrides `FILTER_CONTEXT` and standard AD parsing) | No |
+| `ATTRIBUTES` | Comma-separated list of attributes to query | No |
+
+> [!CAUTION]
+> `AUTH_MODE = 'SIMPLE'` transmits credentials in plaintext unless `USE_SSL=TRUE` (LDAPS) is active. It is highly recommended to use `USE_SSL=TRUE` with simple binding.
+
+*Examples:*
+```sql
+-- Search users with Negotiate auth over standard LDAP
+CREATE CONNECTION ad_corp AS ACTIVE_DIRECTORY(
+         HOST       = 'ldap.corp.example.com',
+         BASE_DN    = 'DC=corp,DC=example,DC=com',
+         AUTH_MODE  = 'NEGOTIATE',
+         USER       = 'domain_service',
+         PASSWORD   = ENC:U2FsdGVkX1+...,
+         DOMAIN     = 'CORP');
+
+-- Query using AD connection
+SELECT sAMAccountName, displayName, mail, memberOf
+FROM ad_corp
+WHERE sAMAccountName = 'jdoe';
+```
+
+---
+
 ## 9. Quick Reference Table
 
 | Token | Aliases | Type | Pushdown | Transactional |
@@ -1052,6 +1136,8 @@ END;
 | `FTP` | `FTP_CONN`, `FTPS` | Protocol | — | — |
 | `AZURE_BLOB` | `BLOB` | Protocol | — | — |
 | `SMTP` | `EMAIL` | Protocol | — | — |
+| `SHAREPOINT` | `SP` | Protocol | — | — |
 | `REPORTPORTAL` | `REPORT_PORTAL` | Admin Service | — | — |
 | `ORCHESTRATOR` | `ORCH` | Admin Service | — | — |
+| `ACTIVE_DIRECTORY` | `AD`, `LDAP` | Admin Service | — | — |
 | `DIRECTORY` | — | File | — | — |

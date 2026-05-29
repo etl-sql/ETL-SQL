@@ -130,7 +130,8 @@ namespace ETL_SQL.TUI
             services.AddSingleton<IConnector>(new FtpConnector(ftpHost, ftpUser, ftpPass));
             services.AddSingleton<IConnector>(new SftpConnector(sftpHost, sftpUser, sftpPass));
             services.AddSingleton<IConnector>(new AzureBlobConnector(azureConn, azureContainer));
-
+            services.AddSingleton<IConnector, SharePointConnector>();
+            services.AddSingleton<IConnector, ActiveDirectoryConnector>();
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
 
             // ── Evaluator + execution ──────────────────────────────────────────
