@@ -646,13 +646,13 @@ SHOW VARIABLES;
 ---
 
 ## 14. File System Functions
-
 | Function | Signature | Returns |
 | :--- | :--- | :--- |
 | `FILE_EXISTS` | `FILE_EXISTS(path)` | `TRUE` if the file exists |
 | `DIRECTORY_EXISTS` | `DIRECTORY_EXISTS(path)` | `TRUE` if the directory exists |
 | `FILE_LIST` | `FILE_LIST(path [, recursive])` | Table: `NAME`, `PATH`, `EXTENSION`, `SIZE`, `LASTMODIFIED`, `ISREADONLY`, `CREATIONTIME` |
 | `REMOTE_FILE_LIST` | `REMOTE_FILE_LIST(conn_name [, path])` | Table from SFTP/FTP/Blob: `NAME`, `FULLPATH`, `SIZE`, `LASTMODIFIED`, `ISDIRECTORY` |
+| `REMOTE_FILE_EXISTS` | `REMOTE_FILE_EXISTS(conn_name, path)` | `TRUE` if the remote file or directory exists |
 | `FILE_HASH` | `FILE_HASH(path [, algo])` | Lowercase hex checksum of file (`MD5`, `SHA1`, `SHA256`, `SHA512`) |
 | `FILE_SIZE` | `FILE_SIZE(path)` | Size of local file in bytes |
 | `FILE_MODIFIED` | `FILE_MODIFIED(path)` | Last write timestamp as a `DATETIME` |
@@ -660,6 +660,7 @@ SHOW VARIABLES;
 | `PATH_FILENAME` | `PATH_FILENAME(path)` | Extracts the filename and extension portion |
 | `PATH_EXTENSION` | `PATH_EXTENSION(path)` | Extracts the extension portion (with leading dot) |
 | `PATH_DIRECTORY` | `PATH_DIRECTORY(path)` | Extracts the directory path portion |
+
 
 #### `FILE_LIST` / `DIRECTORY` Schema
 Returns a table with one row per file found:

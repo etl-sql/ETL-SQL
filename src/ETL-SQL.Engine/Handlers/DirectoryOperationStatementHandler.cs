@@ -28,6 +28,49 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (DirectoryOperationStatement)statement;
             
+            if (!string.IsNullOrEmpty(stmt.ConnectionName))
+            {
+                // Remote execution context
+                if (!context.Connections.TryGetValue(stmt.ConnectionName, out var ds) || ds is not IRemoteFileSystem remoteFs)
+                {
+                    throw new ExecutionException($"Connection '{stmt.ConnectionName}' not found or does not support remote directory operations.");
+                }
+
+                string remotePath = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "";
+
+                // Security Hardening: Count this as a directory operation
+                context.IncrementOperationCount(OperationType.FileSystem, remotePath);
+
+                if (context.IsWhatIf)
+                {
+                    _logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_DIRECTORY on connection '{stmt.ConnectionName}': {remotePath}", ConsoleColor.Yellow);
+                    return;
+                }
+
+                try
+                {
+                    switch (stmt.Type)
+                    {
+                        case DirectoryOpType.Create:
+                            await remoteFs.CreateDirectoryAsync(remotePath);
+                            _logger.WriteLine($"Remote directory created: {stmt.ConnectionName}:{remotePath}", ConsoleColor.Green);
+                            break;
+                        case DirectoryOpType.Delete:
+                            await remoteFs.DeleteDirectoryAsync(remotePath);
+                            _logger.WriteLine($"Remote directory deleted: {stmt.ConnectionName}:{remotePath}", ConsoleColor.Green);
+                            break;
+                        default:
+                            throw new ExecutionException($"Directory operation '{stmt.Type}' is not supported on remote systems.");
+                    }
+                }
+                catch (ExecutionException) { throw; }
+                catch (Exception ex)
+                {
+                    throw new ExecutionException($"Remote directory operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
+                }
+                return;
+            }
+
             string pathVal = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "";
             string path = context.ResolvePath(pathVal);
 

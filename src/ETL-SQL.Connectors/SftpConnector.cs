@@ -200,6 +200,75 @@ namespace ETL_SQL.Connectors
             }
         }
 
+        public async Task<bool> FileExistsAsync(string remotePath)
+        {
+            try
+            {
+                EnsureConnected();
+                return await Task.Run(() => Client.Exists(remotePath) && !Client.Get(remotePath).IsDirectory);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
+        }
+
+        public async Task<bool> DirectoryExistsAsync(string remotePath)
+        {
+            try
+            {
+                EnsureConnected();
+                return await Task.Run(() => Client.Exists(remotePath) && Client.Get(remotePath).IsDirectory);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
+        }
+
+        public async Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
+        {
+            try
+            {
+                EnsureConnected();
+                if (overwrite && await Task.Run(() => Client.Exists(remoteDest)))
+                {
+                    await Task.Run(() => Client.DeleteFile(remoteDest));
+                }
+                await Task.Run(() => Client.RenameFile(remoteSource, remoteDest));
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
+        }
+
+        public async Task CreateDirectoryAsync(string remotePath)
+        {
+            try
+            {
+                EnsureConnected();
+                await Task.Run(() => Client.CreateDirectory(remotePath));
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
+        }
+
+        public async Task DeleteDirectoryAsync(string remotePath)
+        {
+            try
+            {
+                EnsureConnected();
+                await Task.Run(() => Client.DeleteDirectory(remotePath));
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SFTP", ex);
+            }
+        }
+
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
             ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "SFTP", ShouldWrapProviderException);
 

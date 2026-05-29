@@ -19,5 +19,10 @@ namespace ETL_SQL.Data
         Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true);
         Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true);
         Task DeleteFileAsync(string remotePath);
+        Task<bool> FileExistsAsync(string remotePath);
+        Task<bool> DirectoryExistsAsync(string remotePath);
+        Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true);
+        Task CreateDirectoryAsync(string remotePath);
+        Task DeleteDirectoryAsync(string remotePath);
     }
 }

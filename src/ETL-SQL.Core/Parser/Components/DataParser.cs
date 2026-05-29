@@ -96,8 +96,10 @@ namespace ETL_SQL.Core.Parser.Components
                 var path = ParseExpression();
                 Expression? overwrite = null;
                 if (Match(TokenType.WITH)) overwrite = ParseWithOverwrite();
+                string? connectionName = null;
+                if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
                 Match(TokenType.SEMICOLON);
-                return new DirectoryOperationStatement(DirectoryOpType.Create, path, null, overwrite) { Line = startToken.Line, Column = startToken.Column };
+                return new DirectoryOperationStatement(DirectoryOpType.Create, path, null, overwrite, connectionName: connectionName) { Line = startToken.Line, Column = startToken.Column };
             }
 
             if (_parser.Current.Type == TokenType.UNIQUE || _parser.Current.Type == TokenType.INDEX)
@@ -426,16 +428,20 @@ namespace ETL_SQL.Core.Parser.Components
                 bool ifExists = false;
                 if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS after IF"); ifExists = true; }
                 var source = ParseExpression();
+                string? connectionName = null;
+                if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
                 Match(TokenType.SEMICOLON);
-                return new FileOperationStatement(FileOpType.Delete, source, ifExists: ifExists) { Line = startToken.Line, Column = startToken.Column };
+                return new FileOperationStatement(FileOpType.Delete, source, ifExists: ifExists, connectionName: connectionName) { Line = startToken.Line, Column = startToken.Column };
             }
             if (Match(TokenType.DIRECTORY))
             {
                 bool ifExists = false;
                 if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS after IF"); ifExists = true; }
                 var path = ParseExpression();
+                string? connectionName = null;
+                if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
                 Match(TokenType.SEMICOLON);
-                return new DirectoryOperationStatement(DirectoryOpType.Delete, path, ifExists: ifExists) { Line = startToken.Line, Column = startToken.Column };
+                return new DirectoryOperationStatement(DirectoryOpType.Delete, path, ifExists: ifExists, connectionName: connectionName) { Line = startToken.Line, Column = startToken.Column };
             }
             if (Match(TokenType.DIRECTORY_CONTENTS))
             {

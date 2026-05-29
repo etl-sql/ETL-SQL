@@ -1,4 +1,4 @@
-﻿# ETL-SQL Specialized Operations & Automation
+# ETL-SQL Specialized Operations & Automation
 
 This document is the technical reference for ETL-SQL's non-query automation features: filesystem management, remote file transfer, email notifications, metadata/lineage tracking, cryptographic key generation, Docker lifecycle integration, and background job scheduling.
 
@@ -110,6 +110,62 @@ DELETE FILE 'source_dir/stale_lock.txt';
 
 This pattern is highly recommended for scripts that move between environments (Dev/Test/Prod) as it isolates the physical path logic to a single `CREATE CONNECTION` block.
 
+### 1.7 Advanced File Operations (ETL & Integrity Extensions)
+
+ETL-SQL includes several advanced file system operations built to replace custom script/program implementations in data integration pipelines.
+
+#### 1.7.1 WAITFOR FILE UNLOCKED
+Blocks pipeline execution until a file arrives on the filesystem and is fully unlocked (i.e. not being written to by another process).
+```sql
+WAITFOR FILE UNLOCKED '<path>' [WITH(TIMEOUT = <seconds>, POLL_INTERVAL_MS = <ms>)];
+```
+- **TIMEOUT**: Maximum seconds to wait before throwing a timeout exception (default: `30` seconds).
+- **POLL_INTERVAL_MS**: Polling check interval in milliseconds (default: `500` ms).
+
+#### 1.7.2 CONVERT FILE ENCODING
+Performs stream-based transcoding from one encoding standard to another.
+```sql
+CONVERT FILE ENCODING '<source>' TO '<destination>' WITH(FROM_ENCODING = '<enc>', TO_ENCODING = '<enc>' [, OVERWRITE = ON|OFF]);
+```
+- **FROM_ENCODING** (Required): Source encoding standard (e.g. `UTF8`, `ANSI`, `ASCII`, `UNICODE`, `UTF32`).
+- **TO_ENCODING** (Required): Target encoding standard.
+- **OVERWRITE**: Replaces destination file if it already exists (default: `ON`).
+
+#### 1.7.3 SPLIT FILE
+Splits a larger text file into multiple chunk files based on row count or byte size.
+```sql
+SPLIT FILE '<source>' TO '<destination_dir>' WITH(LIMIT_TYPE = 'ROWS'|'SIZE', LIMIT_VALUE = <val> [, PREFIX = '<prefix>', OVERWRITE = ON|OFF]);
+```
+- **LIMIT_TYPE** (Required): Split strategy. Must be `ROWS` or `SIZE`.
+- **LIMIT_VALUE** (Required): Number of rows or size limits (e.g. `1000` for ROWS, `50MB` or `100KB` for SIZE).
+- **PREFIX**: Name prefix for generated part files (default: `part_`).
+- **OVERWRITE**: Replaces existing part files in the destination directory (default: `ON`).
+
+#### 1.7.4 MERGE FILES
+Concatenates multiple files (supports wildcards or array inputs) into a single destination file.
+```sql
+MERGE FILES '<source_pattern>' TO '<destination>' [WITH(HEADER = ON|OFF, OVERWRITE = ON|OFF)];
+```
+- **HEADER**: If `ON`, assumes files are CSVs and strips the header row from subsequent files during merge (default: `ON`).
+- **OVERWRITE**: Overwrites the destination file if it exists (default: `ON`).
+
+#### 1.7.5 SYNC DIRECTORY
+Mirrors a source directory to a destination directory, doing fast file transfers based on modified times and sizes.
+```sql
+SYNC DIRECTORY '<source_dir>' TO '<destination_dir>' [WITH(DELETE_EXTRA = ON|OFF, OVERWRITE = ON|OFF, RECURSIVE = ON|OFF)];
+```
+- **DELETE_EXTRA**: Deletes files in destination directory that do not exist in source directory (default: `OFF`).
+- **OVERWRITE**: Overwrites modified/changed files (default: `ON`).
+- **RECURSIVE**: Traverses directories recursively (default: `OFF`).
+
+#### 1.7.6 VERIFY FILE INTEGRITY
+Computes file hashes and validates them against expected hex strings or a companion checksum file.
+```sql
+VERIFY FILE INTEGRITY '<source>' WITH(EXPECTED_HASH = '<hash>' | HASH_FILE = '<path>' [, ALGORITHM = 'SHA256'|'SHA1'|'MD5'|'SHA512']);
+```
+- **EXPECTED_HASH** or **HASH_FILE** (one is Required): Direct expected hash string, or the path to a companion checksum file (e.g. `.sha256`).
+- **ALGORITHM**: Hash computation algorithm (default: `SHA256`).
+
 ---
 
 ## 2. Filesystem Query Functions
@@ -180,7 +236,51 @@ FROM REMOTE_FILE_LIST(remote_sftp, '/var/ftp/incoming/');
 | `Size` | `BIGINT` | File size in bytes |
 | `LastModified` | `DATETIME` | Last-modified timestamp |
 
-### 2.4 Examples
+### 2.4 `REMOTE_FILE_EXISTS` — Existence Check
+
+Returns `1` (true) if a remote file or directory exists under the specified connection, or `0` (false) otherwise.
+
+```sql
+SELECT REMOTE_FILE_EXISTS('remote_sftp', '/var/ftp/incoming/payload.csv') AS IsPayloadPresent;
+```
+
+### 2.5 Wildcard File Transfers
+
+`SEND FILE` and `RECEIVE FILE` support standard wildcards (`*` and `?`) to transfer multiple files at once.
+
+```sql
+-- Upload all txt files in a local directory to a remote folder
+SEND FILE 'C:\LocalDrop\*.txt' TO '/remote/incoming/' AT remote_sftp;
+
+-- Download all CSV files matching a pattern from a remote connection to a local folder
+RECEIVE FILE FROM '/remote/incoming/sales_*.csv' TO 'C:\LocalDrop\' AT remote_sftp;
+```
+
+### 2.6 Remote Filesystem Operations
+
+Execute standard file and directory management operations directly on a remote host by appending `AT <connection>`.
+
+```sql
+-- Delete a remote file
+DELETE FILE '/remote/incoming/old_payload.csv' AT remote_sftp;
+
+-- Rename a remote file
+RENAME FILE '/remote/incoming/old_name.txt' TO 'new_name.txt' AT remote_sftp WITH(OVERWRITE=ON);
+
+-- Move a remote file
+MOVE FILE '/remote/incoming/sales.csv' TO '/remote/archive/sales_2026.csv' AT remote_sftp;
+
+-- Create a remote directory
+CREATE DIRECTORY '/remote/incoming/new_folder/' AT remote_sftp;
+
+-- Delete a remote directory
+DELETE DIRECTORY '/remote/incoming/old_folder/' AT remote_sftp;
+```
+
+> [!NOTE]
+> For connection types that do not support physical directories natively (e.g. `AZURE_BLOB`), `CREATE DIRECTORY` is evaluated as a no-op since directories are virtual, and `DELETE DIRECTORY` recursively deletes all blobs containing that directory path prefix.
+
+### 2.7 Examples
 
 ```sql
 -- Assuming a configured SFTP connection named remote_sftp:

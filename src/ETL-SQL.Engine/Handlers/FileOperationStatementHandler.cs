@@ -27,13 +27,86 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (FileOperationStatement)statement;
             
+            if (!string.IsNullOrEmpty(stmt.ConnectionName))
+            {
+                // Remote execution context
+                if (!context.Connections.TryGetValue(stmt.ConnectionName, out var ds) || ds is not IRemoteFileSystem remoteFs)
+                {
+                    throw new ExecutionException($"Connection '{stmt.ConnectionName}' not found or does not support remote file operations.");
+                }
+
+                string remoteSource = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
+                string? remoteDest = stmt.Destination != null ? (await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() : null;
+                // Security Hardening: Count this as a file operation for runaway protection
+                context.IncrementOperationCount(OperationType.FileSystem, remoteSource, 1);
+
+                if (context.IsWhatIf)
+                {
+                    context.Log($"WHAT IF: Would perform {stmt.Type}_FILE on connection '{stmt.ConnectionName}': {remoteSource}{(remoteDest != null ? " -> " + remoteDest : "")}", ConsoleColor.Yellow);
+                    return;
+                }
+
+                bool remoteOverwrite = true; // Default to true for backward compatibility with underscore functions
+                if (stmt.Overwrite != null)
+                {
+                    var ovrVal = await context.EvaluateValue(stmt.Overwrite, new Row());
+                    if (ovrVal != null)
+                    {
+                        if (ovrVal is bool b) remoteOverwrite = b;
+                        else if (string.Equals(ovrVal.ToString(), "ON", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = true;
+                        else if (string.Equals(ovrVal.ToString(), "OFF", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = false;
+                        else if (string.Equals(ovrVal.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = true;
+                        else if (string.Equals(ovrVal.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = false;
+                    }
+                }
+
+                _logger.Debug("Remote File Operation: {OperationType} on {Connection}:{Source}{Dest}", stmt.Type, stmt.ConnectionName, remoteSource, remoteDest != null ? $" -> {remoteDest}" : "");
+
+                try
+                {
+                    switch (stmt.Type)
+                    {
+                        case FileOpType.Delete:
+                            await remoteFs.DeleteFileAsync(remoteSource);
+                            context.Log($"Remote file deleted: {stmt.ConnectionName}:{remoteSource}", ConsoleColor.Green);
+                            break;
+                        case FileOpType.Move:
+                        case FileOpType.Rename:
+                            if (remoteDest == null)
+                                throw new ExecutionException($"{stmt.Type}_FILE requires a destination name.");
+                            
+                            string finalDest = remoteDest;
+                            if (stmt.Type == FileOpType.Rename && !remoteDest.Contains("/") && !remoteDest.Contains("\\"))
+                            {
+                                // It's just a file name, keep it in the same directory as source
+                                var lastSlash = remoteSource.LastIndexOfAny(new[] { '/', '\\' });
+                                if (lastSlash >= 0)
+                                {
+                                    finalDest = remoteSource.Substring(0, lastSlash + 1) + remoteDest;
+                                }
+                            }
+
+                            await remoteFs.RenameFileAsync(remoteSource, finalDest, remoteOverwrite);
+                            context.Log($"Remote file {(stmt.Type == FileOpType.Move ? "moved" : "renamed")}: {stmt.ConnectionName}:{remoteSource} -> {finalDest}", ConsoleColor.Green);
+                            break;
+                        default:
+                            throw new ExecutionException($"File operation '{stmt.Type}' is not supported on remote systems.");
+                    }
+                }
+                catch (ExecutionException) { throw; }
+                catch (Exception ex)
+                {
+                    throw new ExecutionException($"Remote file operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
+                }
+                return;
+            }
+
             string sourceVal = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
             string source = context.ResolvePath(sourceVal); // Resolving path first ensures it's checked against safe zones
             string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
 
             // Security Hardening: Count this as a file operation for runaway protection
             context.IncrementOperationCount(OperationType.FileSystem, source, 1);
-
             if (context.IsWhatIf)
             {
                 context.Log($"WHAT IF: Would perform {stmt.Type}_FILE", ConsoleColor.Yellow);
@@ -57,7 +130,6 @@ namespace ETL_SQL.Engine.Handlers
             _logger.Debug("File Operation: {OperationType} on {Source}{Dest}", stmt.Type, source, dest != null ? $" -> {dest}" : "");
 
             // Performance / Stability: If the file was JUST written by a preceding INSERT/SELECT INTO, 
-            // it might be locked for a few ms. We'll do a tiny retry if the file is missing but expected.
             if (stmt.Type != FileOpType.Delete && !File.Exists(source))
             {
                 for (int i = 0; i < 3; i++)

@@ -40,6 +40,7 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly CultureInfo _culture = CultureInfo.InvariantCulture;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context; // Optional for backward compatibility, but required for security enforcement
+        private bool _hasValidatedAccess = false;
 
         private class FixedWidthColumn
         {
@@ -698,8 +699,19 @@ namespace ETL_SQL.Connectors.FlatFile
             }
         }
 
+        private void ValidateFileAccess()
+        {
+            if (_hasValidatedAccess) return;
+            _hasValidatedAccess = true;
+            if (_context != null)
+            {
+                CryptoUtils.ValidateFileAccess(_filePath, _options, _context);
+            }
+        }
+
         private string PrepareReadPath(List<string> tempFiles, string extension)
         {
+            ValidateFileAccess();
             var effectivePath = _filePath;
 
             if (_encryption.Enabled)

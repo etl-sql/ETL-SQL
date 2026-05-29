@@ -21,6 +21,7 @@ namespace ETL_SQL.Engine.Functions
         public static void Register(IFunctionRegistry registry)
         {
             registry.RegisterWithHelp("REMOTE_FILE_LIST", RemoteFileList, "REMOTE_FILE_LIST(conn_str, [path]): Returns a table of files from a remote connection (SFTP/FTP/Blob).");
+            registry.RegisterWithHelp("REMOTE_FILE_EXISTS", RemoteFileExists, "REMOTE_FILE_EXISTS(conn_str, path): Returns true if the remote file or directory exists.");
             registry.RegisterWithHelp("FILE_LIST", FileList, "FILE_LIST(path, [recursive]): Returns a table of files in a local directory.");
             registry.RegisterWithHelp("DIRECTORY", FileList, "DIRECTORY(path, [recursive]): Alias for FILE_LIST.");
             registry.RegisterWithHelp("FILE_EXISTS", FileExists, "FILE_EXISTS(path): Returns true if the file exists.");
@@ -186,6 +187,31 @@ namespace ETL_SQL.Engine.Functions
                 });
             }
             return table;
+        }
+
+        private static async Task<object?> RemoteFileExists(List<object?> args, IExecutionContext context)
+        {
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
+            string connName = args[0]!.ToString()!;
+            string path = args[1]!.ToString()!;
+
+            if (!context.Connections.TryGetValue(connName, out var ds) || ds is not IRemoteFileSystem remoteFs)
+            {
+                throw new ExecutionException($"Connection '{connName}' not found or does not support IRemoteFileSystem.");
+            }
+
+            try
+            {
+                var fileExists = await remoteFs.FileExistsAsync(path);
+                if (fileExists) return 1m;
+
+                var dirExists = await remoteFs.DirectoryExistsAsync(path);
+                return dirExists ? 1m : 0m;
+            }
+            catch (Exception ex)
+            {
+                throw new ExecutionException($"REMOTE_FILE_EXISTS failed for '{path}' on '{connName}': {ex.Message}", ex);
+            }
         }
     }
 }

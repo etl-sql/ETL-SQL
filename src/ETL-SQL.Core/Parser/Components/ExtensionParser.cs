@@ -216,6 +216,7 @@ namespace ETL_SQL.Core.Parser.Components
             };
 
             Expression? source = null, dest = null, overwrite = null, password = null, keyFile = null, pgpKey = null;
+            string? connectionName = null;
             bool isFunctionStyle = Match(TokenType.LPAREN);
 
             bool ifExists = false;
@@ -260,6 +261,7 @@ namespace ETL_SQL.Core.Parser.Components
                     else if (Match(TokenType.KEYFILE)) { keyFile = ParseExpression(); }
                     else if (Match(TokenType.PGP_KEY)) { pgpKey = ParseExpression(); }
                     else if (Match(TokenType.WITH)) { overwrite = ParseWithOverwrite(); }
+                    else if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
                     else if (source == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                         source = ParseExpression();
                     else if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS after IF"); ifExists = true; }
@@ -270,7 +272,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new FileOperationStatement(type, source, dest, overwrite, password, keyFile, pgpKey, ifExists) { Line = startToken.Line, Column = startToken.Column };
+            return new FileOperationStatement(type, source, dest, overwrite, password, keyFile, pgpKey, ifExists, connectionName) { Line = startToken.Line, Column = startToken.Column };
         }
 
         public Statement ParseDirectoryOperation(Token startToken)
@@ -291,6 +293,7 @@ namespace ETL_SQL.Core.Parser.Components
             };
 
             Expression? path = null, extra = null, overwrite = null, recursive = null, password = null, keyFile = null, pgpKey = null;
+            string? connectionName = null;
             bool ifExists = false;
             bool isFunctionStyle = Match(TokenType.LPAREN);
 
@@ -358,6 +361,7 @@ namespace ETL_SQL.Core.Parser.Components
                         }
                         Consume(TokenType.RPAREN, "Expected ')' after WITH options");
                     }
+                    else if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
                     else if (path == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                         path = ParseExpression();
                     else if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS after IF"); ifExists = true; }
@@ -368,7 +372,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new DirectoryOperationStatement(type, path, extra, overwrite, recursive, password, keyFile, pgpKey, ifExists) { Line = startToken.Line, Column = startToken.Column };
+            return new DirectoryOperationStatement(type, path, extra, overwrite, recursive, password, keyFile, pgpKey, ifExists, connectionName) { Line = startToken.Line, Column = startToken.Column };
 
         }
 
@@ -482,9 +486,14 @@ namespace ETL_SQL.Core.Parser.Components
             Match(TokenType.SEMICOLON);
             return new LintStatement(path) { Line = startToken.Line, Column = startToken.Column };
         }
-
         public Statement ParseWaitFor(Token startToken)
         {
+            if (Match(TokenType.FILE))
+            {
+                Consume(TokenType.UNLOCKED, "Expected UNLOCKED after WAITFOR FILE");
+                return ParseWaitForFileStatement(startToken);
+            }
+
             if (Match(TokenType.LPAREN))
             {
                 if (Match(TokenType.DELAY))
@@ -507,15 +516,64 @@ namespace ETL_SQL.Core.Parser.Components
 
             WaitType type = WaitType.Delay;
             if (Match(TokenType.TIME)) type = WaitType.Time;
-            else Consume(TokenType.DELAY, "Expected DELAY, TIME, or (condition) after WAITFOR");
+            else if (!Match(TokenType.DELAY)) Consume(TokenType.DELAY, "Expected DELAY, TIME, or (condition) after WAITFOR");
             var expr = ParseExpression();
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new WaitForStatement(expr, type) { Line = startToken.Line, Column = startToken.Column };
         }
 
+        private WaitForFileStatement ParseWaitForFileStatement(Token startToken)
+        {
+            var path = ParseExpression();
+            Expression? timeout = null;
+            Expression? pollInterval = null;
+            
+            if (Match(TokenType.WITH))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+                {
+                    string key = Advance().Value.ToUpperInvariant();
+                    Consume(TokenType.EQUALS, "Expected '=' after option key");
+                    var val = ParseExpression();
+                    if (key == "TIMEOUT") timeout = val;
+                    else if (key == "POLL_INTERVAL_MS") pollInterval = val;
+                    if (!Match(TokenType.COMMA)) break;
+                }
+                Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+            }
+            else
+            {
+                while (true)
+                {
+                    if (Match(TokenType.TIMEOUT))
+                    {
+                        timeout = ParseExpression();
+                    }
+                    else if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("POLL_INTERVAL_MS", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Advance();
+                        pollInterval = ParseExpression();
+                    }
+                    else if (Match(TokenType.POLL_INTERVAL_MS))
+                    {
+                        pollInterval = ParseExpression();
+                    }
+                    else break;
+                }
+            }
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            return new WaitForFileStatement(path, timeout, pollInterval) { Line = startToken.Line, Column = startToken.Column };
+        }
+
         public Statement ParseWait(Token startToken)
         {
             Consume(TokenType.UNTIL, "Expected UNTIL after WAIT");
+            if (Match(TokenType.FILE))
+            {
+                Consume(TokenType.UNLOCKED, "Expected UNLOCKED after WAIT UNTIL FILE");
+                return ParseWaitForFileStatement(startToken);
+            }
             var condition = ParseExpression();
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new WaitForStatement(condition, WaitType.Until) { Line = startToken.Line, Column = startToken.Column };
@@ -690,6 +748,165 @@ namespace ETL_SQL.Core.Parser.Components
             bool isOutput = Match(TokenType.OUTPUT);
             bool isInput  = Match(TokenType.INPUT);
             return new ExecuteParameter(expr, name, isOutput, isInput);
+        }
+
+        public Statement ParseConvertFileEncoding(Token startToken)
+        {
+            Consume(TokenType.FILE, "Expected FILE after CONVERT");
+            Consume(TokenType.ENCODING, "Expected ENCODING after CONVERT FILE");
+            var source = ParseExpression();
+            Consume(TokenType.TO, "Expected TO after source file path");
+            var destination = ParseExpression();
+            
+            Expression? fromEncoding = null;
+            Expression? toEncoding = null;
+            Expression? overwrite = null;
+            
+            if (Match(TokenType.WITH))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+                {
+                    string key = Advance().Value.ToUpperInvariant();
+                    Consume(TokenType.EQUALS, "Expected '=' after option key");
+                    var val = ParseExpression();
+                    if (key == "FROM_ENCODING") fromEncoding = val;
+                    else if (key == "TO_ENCODING") toEncoding = val;
+                    else if (key == "OVERWRITE") overwrite = val;
+                    if (!Match(TokenType.COMMA)) break;
+                }
+                Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+            }
+            
+            if (fromEncoding == null) throw new SyntaxException("FROM_ENCODING option is mandatory in CONVERT FILE ENCODING", startToken.Line, startToken.Column);
+            if (toEncoding == null) throw new SyntaxException("TO_ENCODING option is mandatory in CONVERT FILE ENCODING", startToken.Line, startToken.Column);
+            
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            return new ConvertFileEncodingStatement(source, destination, fromEncoding, toEncoding, overwrite) { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        public Statement ParseSplitFile(Token startToken)
+        {
+            Consume(TokenType.FILE, "Expected FILE after SPLIT");
+            var source = ParseExpression();
+            Consume(TokenType.TO, "Expected TO after source file path");
+            var destDir = ParseExpression();
+            
+            Expression? limitType = null;
+            Expression? limitValue = null;
+            Expression? prefix = null;
+            Expression? overwrite = null;
+            
+            Consume(TokenType.WITH, "Expected WITH after destination path in SPLIT FILE");
+            Consume(TokenType.LPAREN, "Expected '(' after WITH");
+            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+            {
+                string key = Advance().Value.ToUpperInvariant();
+                Consume(TokenType.EQUALS, "Expected '=' after option key");
+                var val = ParseExpression();
+                if (key == "LIMIT_TYPE") limitType = val;
+                else if (key == "LIMIT_VALUE") limitValue = val;
+                else if (key == "PREFIX") prefix = val;
+                else if (key == "OVERWRITE") overwrite = val;
+                if (!Match(TokenType.COMMA)) break;
+            }
+            Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+            
+            if (limitType == null) throw new SyntaxException("LIMIT_TYPE option is mandatory in SPLIT FILE", startToken.Line, startToken.Column);
+            if (limitValue == null) throw new SyntaxException("LIMIT_VALUE option is mandatory in SPLIT FILE", startToken.Line, startToken.Column);
+            
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            return new SplitFileStatement(source, destDir, limitType, limitValue, prefix, overwrite) { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        public Statement ParseMergeFiles(Token startToken)
+        {
+            var source = ParseExpression();
+            Consume(TokenType.TO, "Expected TO after source in MERGE FILES");
+            var destination = ParseExpression();
+            
+            Expression? header = null;
+            Expression? overwrite = null;
+            
+            if (Match(TokenType.WITH))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+                {
+                    string key = Advance().Value.ToUpperInvariant();
+                    Consume(TokenType.EQUALS, "Expected '=' after option key");
+                    var val = ParseExpression();
+                    if (key == "HEADER") header = val;
+                    else if (key == "OVERWRITE") overwrite = val;
+                    if (!Match(TokenType.COMMA)) break;
+                }
+                Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+            }
+            
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            return new MergeFilesStatement(source, destination, header, overwrite) { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        public Statement ParseSyncDirectory(Token startToken)
+        {
+            Consume(TokenType.DIRECTORY, "Expected DIRECTORY after SYNC");
+            var source = ParseExpression();
+            Consume(TokenType.TO, "Expected TO after source directory path");
+            var destination = ParseExpression();
+            
+            Expression? deleteExtra = null;
+            Expression? overwrite = null;
+            Expression? recursive = null;
+            
+            if (Match(TokenType.WITH))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+                {
+                    string key = Advance().Value.ToUpperInvariant();
+                    Consume(TokenType.EQUALS, "Expected '=' after option key");
+                    var val = ParseExpression();
+                    if (key == "DELETE_EXTRA") deleteExtra = val;
+                    else if (key == "OVERWRITE") overwrite = val;
+                    else if (key == "RECURSIVE") recursive = val;
+                    if (!Match(TokenType.COMMA)) break;
+                }
+                Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+            }
+            
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            return new SyncDirectoryStatement(source, destination, deleteExtra, overwrite, recursive) { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        public Statement ParseVerifyFileIntegrity(Token startToken)
+        {
+            Consume(TokenType.FILE, "Expected FILE after VERIFY");
+            Consume(TokenType.INTEGRITY, "Expected INTEGRITY after VERIFY FILE");
+            var source = ParseExpression();
+            
+            Expression? hashFile = null;
+            Expression? expectedHash = null;
+            Expression? algorithm = null;
+            
+            Consume(TokenType.WITH, "Expected WITH after file path in VERIFY FILE INTEGRITY");
+            Consume(TokenType.LPAREN, "Expected '(' after WITH");
+            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+            {
+                string key = Advance().Value.ToUpperInvariant();
+                Consume(TokenType.EQUALS, "Expected '=' after option key");
+                var val = ParseExpression();
+                if (key == "HASH_FILE") hashFile = val;
+                else if (key == "EXPECTED_HASH") expectedHash = val;
+                else if (key == "ALGORITHM") algorithm = val;
+                if (!Match(TokenType.COMMA)) break;
+            }
+            Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+            
+            if (hashFile == null && expectedHash == null)
+                throw new SyntaxException("Either HASH_FILE or EXPECTED_HASH must be specified in VERIFY FILE INTEGRITY", startToken.Line, startToken.Column);
+            
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            return new VerifyFileIntegrityStatement(source, hashFile, expectedHash, algorithm) { Line = startToken.Line, Column = startToken.Column };
         }
     }
 }

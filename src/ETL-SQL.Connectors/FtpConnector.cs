@@ -180,6 +180,78 @@ namespace ETL_SQL.Connectors
             }
         }
 
+        public Task<bool> FileExistsAsync(string remotePath)
+        {
+            try
+            {
+                EnsureConnected();
+                return Task.FromResult(_client!.FileExists(remotePath));
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("FTP", ex);
+            }
+        }
+
+        public Task<bool> DirectoryExistsAsync(string remotePath)
+        {
+            try
+            {
+                EnsureConnected();
+                return Task.FromResult(_client!.DirectoryExists(remotePath));
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("FTP", ex);
+            }
+        }
+
+        public Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
+        {
+            try
+            {
+                EnsureConnected();
+                if (overwrite && _client!.FileExists(remoteDest))
+                {
+                    _client.DeleteFile(remoteDest);
+                }
+                _client!.Rename(remoteSource, remoteDest);
+                return Task.CompletedTask;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("FTP", ex);
+            }
+        }
+
+        public Task CreateDirectoryAsync(string remotePath)
+        {
+            try
+            {
+                EnsureConnected();
+                _client!.CreateDirectory(remotePath);
+                return Task.CompletedTask;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("FTP", ex);
+            }
+        }
+
+        public Task DeleteDirectoryAsync(string remotePath)
+        {
+            try
+            {
+                EnsureConnected();
+                _client!.DeleteDirectory(remotePath);
+                return Task.CompletedTask;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("FTP", ex);
+            }
+        }
+
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
             ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "FTP", ShouldWrapProviderException);
 
