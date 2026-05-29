@@ -37,22 +37,16 @@ Bring the newly added connectors fully in line with `Docs/Standards/Connectors_S
 - [x] Re-run the connector certification checks after the above fixes.
   - All 3,187 tests pass. Matrix reviewed and accurate; updated review date to 2026-05-29.
 
-## UI
+## Portal UI — Visual Designer & DAG Visualization
 
-Create a cross-platform UI for creating ETL-SQL and Reports.  This would be similar to TUI in that it ships with the product and does not require anything else like VS Code.
+> Strategy document: [Docs/Architecture/PortalUI.md](Docs/Architecture/PortalUI.md)
+>
+> Branch: `v0.9.0-portal-ui`
+>
+> Approach: DAG visualization + WYSIWYG report designer + lite script editor delivered within the existing Report Portal and VS Code extension. No new desktop app. Portal designer is configuration-only (no query execution); live preview runs locally via VS Code extension or ReportPlayer.
 
-- [ ] Cross-platform UI (Avalonia UI?  I'm open here, doesn't even need to be c#)
-- [ ] Users create a DAG, visualizing pills containing steps and connecting them by arrows.  Connections and options would be set in a window pane.
-- [ ] On a separate tab users can also drag and drop chart elements to create reports, visualizing a Power BI-esc reporting page where they can set do a more WYSIWYG design of the report.  Options would be set in a pane on the right hand side
-- [ ] Script editor would be included to allow the user to type scripts.
-- [ ] Buttons to go back and forth between script and UI view.  Create script takes what you built and shows the script view.  Update UI takes script and builds UI.  Some guardrails are needed.  Must have a PAGE defined in the report, can't be in the middle of creating an object like CONNECTION, VISUAL, etc.  Each statement must be runnable.
-- [ ] What it is not is a query builder
-- [ ] Output is saved as a etl-sql script, nothing else.  We are script-first.
-
-Questions:
-- What fails?
-- What is a bad idea?
-- What works?
-- What will be difficult?
-- Why should we not do this?
-- Why should we do this?
+- [ ] **Phase 1 — Foundation**: Shared designer component skeleton, CodeMirror 6 bundle, sync-assets wiring
+- [ ] **Phase 2 — DAG Visualization**: Dataset lineage DAG (Admin), report structure DAG (viewer), orchestrator script-as-DAG (job panel) — all read-only, all using ECharts
+- [ ] **Phase 3 — CodeMirror Integration**: rptsql syntax mode, orchestrator inline job script editor with audit logging
+- [ ] **Phase 4 — Report Designer (Portal)**: Full-page designer at `/designer`, four-zone layout, Designer ↔ Script toggle, parse/generate API endpoints
+- [ ] **Phase 5 — VS Code Designer Panel**: Webview panel loading shared designer component, live preview via Language Server / ReportPlayer
