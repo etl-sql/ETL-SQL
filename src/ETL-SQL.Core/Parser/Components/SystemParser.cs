@@ -961,8 +961,10 @@ namespace ETL_SQL.Core.Parser.Components
             string op = ">=";
             if (Match(TokenType.GREATER_EQUALS)) op = ">=";
             else if (Match(TokenType.GREATER_THAN)) op = ">";
+            else if (Match(TokenType.LESS_EQUALS)) op = "<=";
+            else if (Match(TokenType.LESS_THAN)) op = "<";
             else if (Match(TokenType.EQUALS)) op = "=";
-            else throw new SyntaxException("Expected operator (>=, >, or =) after REQUIRE VERSION", _parser.Current.Line, _parser.Current.Column);
+            else throw new SyntaxException("Expected operator (>=, >, <=, <, or =) after REQUIRE VERSION", _parser.Current.Line, _parser.Current.Column);
             var version = Consume(TokenType.STRING_LITERAL, "Expected version string literal after REQUIRE operator").Value.Trim('\'', '\"');
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new RequireVersionStatement(op, version) { Line = startToken.Line, Column = startToken.Column };

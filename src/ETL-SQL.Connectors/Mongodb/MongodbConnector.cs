@@ -76,8 +76,7 @@ namespace ETL_SQL.Connectors.Mongodb
             { "PORT", Array.Empty<string>() },
             { "USER", Array.Empty<string>() },
             { "UID", Array.Empty<string>() },
-            { "PASSWORD", Array.Empty<string>() },
-            { "PWD", Array.Empty<string>() }
+            { "PASSWORD", Array.Empty<string>() }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new();
@@ -135,7 +134,7 @@ namespace ETL_SQL.Connectors.Mongodb
             string host = properties.GetValueOrDefault("HOST", properties.GetValueOrDefault("SERVER", "localhost"));
             string portStr = properties.GetValueOrDefault("PORT", "27017");
             string user = properties.GetValueOrDefault("USER", properties.GetValueOrDefault("UID", ""));
-            string password = properties.GetValueOrDefault("PASSWORD", properties.GetValueOrDefault("PWD", ""));
+            string password = properties.GetValueOrDefault("PASSWORD", "");
             string database = properties.GetValueOrDefault("DATABASE", properties.GetValueOrDefault("DB", ""));
 
             var builder = new System.Text.StringBuilder("mongodb://");

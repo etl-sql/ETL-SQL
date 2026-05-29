@@ -468,7 +468,7 @@ Controls save-time scrubbing for sensitive values. Default: `OFF`.
 
 Admin default: `Engine:NoSaveSensitive` in `appsettings.json`.
 
-When `ON`, save helpers remove plaintext sensitive values from saved source. This includes literal `USE PASSWORD` statements, `SENSITIVE`/`ENCRYPTED` declarations with literal values, credential-like `WITH()` options, and password fragments in connection strings.
+When `ON`, save helpers remove plaintext sensitive values from saved source. This includes literal `USE PASSWORD` statements, `SENSITIVE`/`ENCRYPTED` declarations with literal values, connection option values containing passwords, and password fragments in connection strings.
 
 ```sql
 SET NO_SAVE_SENSITIVE = ON;
@@ -496,7 +496,7 @@ Controls save-time encryption for connection details. Default: `OFF`.
 
 Admin default: `Engine:ConnectionEncryption` in `appsettings.json`.
 
-When `ON`, save helpers encrypt the `CREATE CONNECTION` target and quoted `WITH()` option values using the script/master password. If the same file has `USE PASSWORD = 'literal'`, editors can use that value for save-time encryption and then rewrite the source to `USE PASSWORD PROMPT`.
+When `ON`, save helpers encrypt the `CREATE CONNECTION` target and connection option values using the script/master password. If the same file has `USE PASSWORD = 'literal'`, editors can use that value for save-time encryption and then rewrite the source to `USE PASSWORD PROMPT`.
 
 ```sql
 SET CONNECTION_ENCRYPTION = ON;
@@ -651,7 +651,7 @@ CREATE CONNECTION ora AS ORACLE(
     PASSWORD = ENC:...
 );
 
--- ODBC (Common options: DSN, DRIVER, SERVER, DATABASE, UID, PWD)
+-- ODBC (Common options: DSN, DRIVER, SERVER, DATABASE, UID, PASSWORD)
 CREATE CONNECTION legacy AS ODBC(DSN = 'MyLegacyDSN');
 ```
 

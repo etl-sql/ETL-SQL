@@ -16,3 +16,20 @@ Enable enterprise single sign-on (SSO) and centralized access management for the
 
 ## Engine version features separation
  - [ ] As version increase how do we assign a script as validated to run against the version 1.0 engine but not 2.0 engine.  How can we make the engine version aware?
+
+## Connector standards follow-up
+
+Bring the newly added connectors fully in line with `Docs/Standards/Connectors_Standards.md` and the certification matrix.
+
+- [ ] Enforce `SET WHAT_IF` dry-run behavior in all write-capable connectors.
+  - `BigQueryDataSource`, `SnowflakeDataSource`, `SqliteDataSource`, `MongodbDataSource`, `KafkaDataSource`, and `SharePointConnector` currently have write/destructive paths that do not consistently short-circuit on `IsWhatIf`.
+- [ ] Remove connector-side handling of `ENC:` values.
+  - `MongodbDataSource` still decrypts `ENC:`-prefixed options inside the connector boundary instead of relying on the engine.
+- [ ] Route local staging paths through `ResolvePath()`.
+  - `S3Connector` and `SharePointConnector` still use direct `File.Exists`, `File.OpenRead`, `File.Create`, and related path operations on caller-supplied local paths.
+- [ ] Align Active Directory filter behavior with the test expectations or update the tests to the intended filter mapping.
+  - Current implementation returns broader LDAP filters than `tests/ETL-SQL.Tests/Connectors/SharePointAndADConnectorTests.cs` expects.
+- [ ] Register `BIGQUERY` and `SNOWFLAKE` consistently in all host containers.
+  - They are present in Orchestrator registration, but not in the TUI and Language Server registration blocks.
+- [ ] Re-run the connector certification checks after the above fixes.
+  - Confirm the matrix in `Docs/Standards/Connector_Certification_Matrix.md` matches actual behavior and test coverage.

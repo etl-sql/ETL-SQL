@@ -199,7 +199,6 @@ namespace ETL_SQL.Connectors
             else if (props.TryGetValue("UID", out var uid)) builder.UserID = uid;
             
             if (props.TryGetValue("PASSWORD", out var pass)) builder.Password = pass;
-            else if (props.TryGetValue("PWD", out var pwd)) builder.Password = pwd;
             
             if (props.TryGetValue("PORT", out var portStr) && uint.TryParse(portStr, out var port)) builder.Port = port;
 
@@ -311,7 +310,7 @@ namespace ETL_SQL.Connectors
             if (props.TryGetValue("UID", out var user) || props.TryGetValue("USER", out user))
                 builder.Append($";UID={user}");
 
-            if (props.TryGetValue("PWD", out var pass) || props.TryGetValue("PASSWORD", out pass))
+            if (props.TryGetValue("PASSWORD", out var pass))
                 builder.Append($";PWD={pass}");
 
             if (props.TryGetValue("CONNECT_TIMEOUT", out var timeout))
@@ -321,9 +320,9 @@ namespace ETL_SQL.Connectors
             foreach (var kvp in props)
             {
                 var key = kvp.Key.ToUpper();
-                if (key == "DSN" || key == "DRIVER" || key == "SERVER" || key == "PORT" || 
-                    key == "DATABASE" || key == "UID" || key == "USER" || 
-                    key == "PWD" || key == "PASSWORD" || key == "CONNECT_TIMEOUT" || 
+                if (key == "DSN" || key == "DRIVER" || key == "SERVER" || key == "PORT" ||
+                    key == "DATABASE" || key == "UID" || key == "USER" ||
+                    key == "PASSWORD" || key == "CONNECT_TIMEOUT" ||
                     key == "TABLE") continue;
 
                 builder.Append($";{kvp.Key}={kvp.Value}");

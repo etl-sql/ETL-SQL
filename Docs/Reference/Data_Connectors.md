@@ -138,7 +138,7 @@ Native connector for MySQL and MariaDB databases. Supports full SQL pushdown, sc
 | `HOST` / `SERVER` | Server name or IP address | Yes (structured) |
 | `DATABASE` | Target database name | Yes (structured) |
 | `USER` / `UID` | Login username | Yes (structured) |
-| `PASSWORD` / `PWD` | Login password | Yes (structured) |
+| `PASSWORD` | Login password | Yes (structured) |
 | `PORT` | Listening port (Default: `3306`) | No |
 | `SSL_MODE` | TLS mode: `NONE`, `PREFERRED`, `REQUIRED`, `VERIFYCA`, `VERIFYFULL` (Default: `PREFERRED`) | No |
 | `ALLOW_PUBLIC_KEY_RETRIEVAL` | Allow RSA public key retrieval from server (`TRUE`/`FALSE`, Default: `FALSE`) | No |
@@ -216,7 +216,7 @@ Universal bridge for any source with a local ODBC driver. Supports both DSN-base
 | `PORT` | Listening port | No |
 | `DATABASE` | Database name or file path | No |
 | `UID` | Login username | No |
-| `PWD` | Login password | No |
+| `PASSWORD` | Login password | No |
 | `CONNECT_TIMEOUT` | Login timeout in seconds | No |
 
 > [!NOTE]
@@ -225,7 +225,7 @@ Universal bridge for any source with a local ODBC driver. Supports both DSN-base
 *Examples:*
 ```sql
 -- DSN pattern
-CREATE CONNECTION odbc_prod AS ODBC(DSN='ProdSales', UID='etl', PWD='pwd');
+CREATE CONNECTION odbc_prod AS ODBC(DSN='ProdSales', UID='etl', PASSWORD='pwd');
 
 -- DSN-less SQLite
 CREATE CONNECTION my_sqlite AS ODBC(DRIVER='{SQLite3 ODBC Driver}', DATABASE='C:\Data\local.db');
@@ -251,14 +251,14 @@ The following platforms are supported through the ODBC bridge. Each requires the
 CREATE CONNECTION redshift AS ODBC(DRIVER='{Amazon Redshift ODBC Driver (x64)}',
          SERVER='mycluster.abc123.us-east-1.redshift.amazonaws.com',
          PORT='5439', DATABASE='analytics',
-         UID='etl_user', PWD='${REDSHIFT_PASSWORD}',
+         UID='etl_user', PASSWORD='${REDSHIFT_PASSWORD}',
          TIMEOUT_SECONDS='1800');
 
 -- Azure Synapse Analytics (uses SQL Server ODBC driver)
 CREATE CONNECTION synapse AS ODBC(DRIVER='{ODBC Driver 18 for SQL Server}',
          SERVER='myworkspace.sql.azuresynapse.net',
          DATABASE='AnalyticsDB',
-         UID='sqladmin', PWD='${SYNAPSE_PASSWORD}',
+         UID='sqladmin', PASSWORD='${SYNAPSE_PASSWORD}',
          TIMEOUT_SECONDS='1800');
 
 -- Databricks (personal access token auth)
@@ -266,19 +266,19 @@ CREATE CONNECTION databricks AS ODBC(DRIVER='{Simba Spark ODBC Driver}',
          SERVER='adb-1234567890.1.azuredatabricks.net',
          PORT='443',
          HTTPPath='/sql/1.0/warehouses/abcdef123456',
-         AuthMech='3', UID='token', PWD='${DATABRICKS_PAT}',
+         AuthMech='3', UID='token', PASSWORD='${DATABRICKS_PAT}',
          SSL='1', TIMEOUT_SECONDS='1800');
 
 -- Trino / Starburst
 CREATE CONNECTION trino AS ODBC(DRIVER='{Starburst ODBC Driver}',
          SERVER='trino.internal.example.com', PORT='8443',
-         DATABASE='analytics', UID='etl', PWD='${TRINO_PASSWORD}',
+         DATABASE='analytics', UID='etl', PASSWORD='${TRINO_PASSWORD}',
          TIMEOUT_SECONDS='1800');
 
 -- Dremio
 CREATE CONNECTION dremio AS ODBC(DRIVER='{Dremio ODBC Driver 64-bit}',
          SERVER='dremio.internal.example.com', PORT='31010',
-         UID='etl', PWD='${DREMIO_PASSWORD}',
+         UID='etl', PASSWORD='${DREMIO_PASSWORD}',
          TIMEOUT_SECONDS='1800');
 ```
 

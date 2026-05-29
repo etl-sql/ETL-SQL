@@ -198,7 +198,7 @@ public interface IConnector
     /// <summary>
     /// Default command timeout in seconds. OLTP connectors return 30; data warehouse
     /// connectors (Snowflake, BigQuery) return 1800 (30 min). Scripts may override
-    /// per-connection with CREATE CONNECTION … WITH(TIMEOUT_SECONDS = n).
+    /// per-connection with ALTER CONNECTION … WITH(TIMEOUT_SECONDS = n).
     /// </summary>
     int CommandTimeoutSeconds => 30;
 
@@ -581,7 +581,7 @@ public Dictionary<string, string[]> GetSupportedOptions() => new()
 // PASSWORD = ***   ← masked; never the actual value
 ```
 
-The masking rule applies to any key containing: `PASS`, `KEY`, `TOKEN`, `SECRET`, `PWD`, `CREDENTIAL`.
+The masking rule applies to any key containing: `PASS`, `KEY`, `TOKEN`, `SECRET`, `CREDENTIAL`.
 
 ---
 

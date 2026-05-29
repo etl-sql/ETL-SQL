@@ -162,7 +162,7 @@ Connectors define how to communicate with external data sources.
 | `POSTGRES` | SQL | [POSTGRES.md](../src/ETL-SQL.Core/Resources/Help/Connectors/POSTGRES.md) | HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, ... |
 | `ORACLE` | SQL | [ORACLE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ORACLE.md) | HOST, PORT, SERVICE_NAME, USER, PASSWORD, ... |
 | `SQLITE` | SQL | [SQLITE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SQLITE.md) | DATABASE, PATH, PASSWORD, TIMEOUT_SECONDS, TABLE |
-| `ODBC` | SQL | [ODBC.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ODBC.md) | DSN, DRIVER, SERVER, DATABASE, UID, PWD, ... |
+| `ODBC` | SQL | [ODBC.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ODBC.md) | DSN, DRIVER, SERVER, DATABASE, UID, PASSWORD, ... |
 | `SNOWFLAKE` | SQL | [SNOWFLAKE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SNOWFLAKE.md) | HOST, DATABASE, SCHEMA, WAREHOUSE, USERNAME, PASSWORD, PRIVATE_KEY_FILE, ... |
 | `BIGQUERY` | SQL | [BIGQUERY.md](../src/ETL-SQL.Core/Resources/Help/Connectors/BIGQUERY.md) | PROJECT_ID, DATASET_ID, KEY_FILE, ... |
 | `MONGODB` | NoSQL Document | [MONGODB.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MONGODB.md) | URI, DATABASE, COLLECTION, HOST, PORT, USER, PASSWORD, TIMEOUT_SECONDS |
@@ -637,7 +637,7 @@ CREATE CONNECTION name AS <Provider>( ... )
 | `PORT` | Network port | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `DATABASE` | Database name | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `USER` / `UID` | Username | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
-| `PASSWORD` / `PWD` | Password (can be 'ENC:...') | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
+| `PASSWORD` | Password (can be 'ENC:...') | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `TRUSTED_CONNECTION`| Use Windows Auth (MSSQL only) | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `ENCRYPT` | Enable SSL/TLS encryption | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `PATH` | Root path for file-based connectors | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |

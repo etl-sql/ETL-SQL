@@ -67,7 +67,7 @@ To ensure portable security, connectors must support the `ENC:` prefix for all s
 
 ### 5.3 Non-Bypassable Path Resolution
 For connectors that interact with the local filesystem (e.g., `FLATFILE`, `PARQUET`, `SQLITE`, `JSON`), the global sandbox must remain airtight.
-- **Enforcement**: All file paths provided in `CREATE CONNECTION` or `WITH(PATH=...)` MUST be passed through the engine's `SecurityService.ResolvePath()` method.
+- **Enforcement**: All file paths provided in `CREATE CONNECTION` options (e.g., `PATH=...`) MUST be passed through the engine's `SecurityService.ResolvePath()` method.
 - **Goal**: This prevents "Sandbox Escapes" (e.g., using `../` to access system files) and ensures that script-level operations are confined to the approved workspace.
 
 ### 5.4 Secure-by-Default Transport

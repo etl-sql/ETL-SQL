@@ -50,7 +50,6 @@ namespace ETL_SQL.Connectors.MySql
             { "USER", Array.Empty<string>() },
             { "UID", Array.Empty<string>() },
             { "PASSWORD", Array.Empty<string>() },
-            { "PWD", Array.Empty<string>() },
             { "PORT", Array.Empty<string>() },
             { "POOLING", new[] { "TRUE", "FALSE" } },
             { "MIN_POOL_SIZE", Array.Empty<string>() },

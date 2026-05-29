@@ -48,7 +48,7 @@ namespace ETL_SQL.Connectors.Odbc
             { "SERVER", Array.Empty<string>() },
             { "DATABASE", Array.Empty<string>() },
             { "UID", Array.Empty<string>() },
-            { "PWD", Array.Empty<string>() },
+            { "PASSWORD", Array.Empty<string>() },
             { "TIMEOUT_SECONDS", Array.Empty<string>() },
             { "TABLE", Array.Empty<string>() }
         };

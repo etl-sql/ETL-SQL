@@ -95,7 +95,7 @@ The inner exception must NOT be chained. Inner exceptions may contain server pat
 
 `GetSupportedOptions()` declares option keys — including sensitive keys like `PASSWORD`, `API_KEY`, `TOKEN`. When values for these keys are returned in any display context (`SHOW CONNECTION`, `GetOptionValues()`, IDE hover), the value must be replaced with `***`.
 
-The masking rule applies to any option key that contains: `PASS`, `KEY`, `TOKEN`, `SECRET`, `PWD`, `CREDENTIAL`, `AUTH`.
+The masking rule applies to any option key that contains: `PASS`, `KEY`, `TOKEN`, `SECRET`, `CREDENTIAL`, `AUTH`.
 
 ```csharp
 // CORRECT — key declared for linter/IDE; value masked when displayed

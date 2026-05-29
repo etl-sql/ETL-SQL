@@ -93,7 +93,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 return;
 
             bool hasUserId   = conn.Options.ContainsKey("USER_ID")   || conn.Options.ContainsKey("UID");
-            bool hasPassword = conn.Options.ContainsKey("PASSWORD")  || conn.Options.ContainsKey("PWD");
+            bool hasPassword = conn.Options.ContainsKey("PASSWORD");
 
             if (hasUserId)
             {

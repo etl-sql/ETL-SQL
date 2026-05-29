@@ -38,10 +38,6 @@ namespace ETL_SQL.Connectors.Mongodb
                 {
                     decryptedOptions["PASSWORD"] = context.DecryptValue(pwd) ?? "";
                 }
-                else if (decryptedOptions.TryGetValue("PWD", out var pwd2) && pwd2.StartsWith("ENC:") && context != null)
-                {
-                    decryptedOptions["PWD"] = context.DecryptValue(pwd2) ?? "";
-                }
 
                 var conn = new MongodbConnector();
                 connStr = conn.BuildConnectionString(decryptedOptions);

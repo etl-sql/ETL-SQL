@@ -28,8 +28,10 @@ namespace ETL_SQL.Engine.Handlers
             bool satisfied = stmt.Operator switch
             {
                 ">=" => currentVersion >= requiredVersion,
-                ">" => currentVersion > requiredVersion,
-                "=" => currentVersion == requiredVersion,
+                ">"  => currentVersion > requiredVersion,
+                "<=" => currentVersion <= requiredVersion,
+                "<"  => currentVersion < requiredVersion,
+                "="  => currentVersion == requiredVersion,
                 _ => throw new ExecutionException($"Unsupported operator '{stmt.Operator}' in REQUIRE statement", null, stmt.Line, stmt.Column)
             };
 

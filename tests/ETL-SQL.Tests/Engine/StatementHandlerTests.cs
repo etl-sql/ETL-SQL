@@ -93,6 +93,32 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
+        public async Task RequireVersion_LtEq_FutureVersion_Passes()
+        {
+            await Run("REQUIRE VERSION <= '9999.0.0';");
+        }
+
+        [Fact]
+        public async Task RequireVersion_LtEq_OldVersion_Throws()
+        {
+            await Assert.ThrowsAsync<ExecutionException>(
+                () => Run("REQUIRE VERSION <= '0.0.1';"));
+        }
+
+        [Fact]
+        public async Task RequireVersion_Lt_FutureVersion_Passes()
+        {
+            await Run("REQUIRE VERSION < '9999.0.0';");
+        }
+
+        [Fact]
+        public async Task RequireVersion_Lt_OldVersion_Throws()
+        {
+            await Assert.ThrowsAsync<ExecutionException>(
+                () => Run("REQUIRE VERSION < '0.0.1';"));
+        }
+
+        [Fact]
         public async Task RequireVersion_InvalidVersionString_ThrowsExecutionException()
         {
             await Assert.ThrowsAsync<ExecutionException>(

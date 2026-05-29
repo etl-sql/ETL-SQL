@@ -244,7 +244,27 @@ These rules apply when you are editing the ETL-SQL engine source code — **not*
 - **Async**: All I/O calls must use the `Async` overloads with a `CancellationToken`. No `.Result`, `.Wait()`, or `GetAwaiter().GetResult()` in connector or handler code.
 - **Exceptions**: Connector-level provider exceptions (`SqlException`, `NpgsqlException`, etc.) must be caught and re-thrown as `ExecutionException` with a sanitized message. Never let raw provider exceptions escape the connector boundary.
 
-For full engine coding standards, see **[Standards/Connectors_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md)** and **[Architecture/Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md)**.
+### 8.1 Connector-Specific Rules
+
+These apply when authoring or modifying any `IConnector` / `IDataSource` implementation:
+
+- **Option naming**: All `WITH()`-style option keys must be **UPPERCASE with underscores** (`TIMEOUT_SECONDS`, `MIN_POOL_SIZE`, `CREDENTIAL_FILE`). Never PascalCase, camelCase, or mixed.
+- **PASSWORD only — no PWD**: `PASSWORD` is the only accepted option key for passwords in any connector. Never add `PWD` as an alias or fallback. The `ConnectionStringBuilder` is responsible for mapping `PASSWORD` → the driver-native keyword (`PWD`, `Password`, etc.) when building the wire connection string.
+- **Timeout defaults**: OLTP connectors (MSSQL, Postgres, Oracle, MySQL, SQLite, ODBC) default to **30 seconds**. Data warehouse connectors (Snowflake, BigQuery) default to **1800 seconds** (30 min). Both must read `TIMEOUT_SECONDS` from options to allow override.
+- **Constructor signature**: `IDataSource` implementations use `(IExecutionContext context, string connectionString, string? tableName, Dictionary<string, string>? options)` — this order exactly.
+- **ResolvePath for file path options**: Any connector option accepting a file path (`CREDENTIAL_FILE`, `KEY_FILE`, `CERT_FILE`, `PRIVATE_KEY_FILE`, `PATH`) must call `context.ResolvePath()` before any I/O, even when the connector is not in the engine tier.
+- **No aliases / no legacy fallbacks**: If two option names existed, pick one and remove the other. Product has no live users — consistency now costs nothing.
+- **CREATE CONNECTION syntax**: Options go directly in parentheses after the type name. `WITH()` is not used on `CREATE CONNECTION`. `WITH()` is valid in CTEs and `ALTER CONNECTION` only.
+
+```sql
+-- Correct
+CREATE CONNECTION sales AS MSSQL(SERVER='sql01', DATABASE='SalesDB', USER='etl_worker', PASSWORD='s3cr3t');
+
+-- Wrong (stale syntax — WITH() is not valid on CREATE CONNECTION)
+CREATE CONNECTION sales AS MSSQL WITH(SERVER='sql01', DATABASE='SalesDB');
+```
+
+For the full 10-inviolable-rules + 25-item checklist, see **[Standards/Connectors_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md)** and **[Architecture/Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md)**.
 
 ---
 
@@ -257,6 +277,32 @@ Use only free and open-source software for new third-party libraries, tools, and
 - Before adding or upgrading a dependency, check its license metadata and update `THIRD-PARTY-NOTICES.md` and `THIRD-PARTY-INVENTORY.md` when applicable.
 - Preserve license and copyright banners in bundled JavaScript, CSS, fonts, images, and generated browser assets.
 - Existing non-FOSS or commercially conditioned dependencies are grandfathered only until replaced; do not expand their use without explicit approval.
+
+### 9.1 Before Adding Any NuGet Package
+
+1. **Search first**: Check `Directory.Packages.props` — if a package already handles the need, use it. Do not add a second library for the same domain.
+2. **Try BCL/framework first**: If `System.*` or `Microsoft.*` provides the capability, use it. External packages are for capabilities the framework doesn't cover.
+3. **One library per domain**: Any second library doing the same job as an existing one requires explicit justification.
+
+**Four-question evaluation checklist:**
+1. License: OSI-approved? If not, stop — existing policy.
+2. Maintenance: Last commit within 12 months? If abandoned, find an alternative.
+3. Transitive deps: Run `dotnet list package --include-transitive` after adding — any conflicts?
+4. Necessity: Can the need be met with ~50 lines of BCL code? If yes, write it inline.
+
+**What to update when adding a library:**
+- `Directory.Packages.props` — add version under the appropriate property group (`$(MicrosoftExtensionsVersion)`, `$(SerilogVersion)`, etc.)
+- `THIRD-PARTY-NOTICES.md` — license attribution
+- `THIRD-PARTY-INVENTORY.md` — inventory entry
+
+**Approved library table (one per domain — do not duplicate):**
+
+| Domain | Approved | Do Not Add |
+| :--- | :--- | :--- |
+| JSON | `System.Text.Json` (BCL) | Newtonsoft.Json |
+| Logging | `Serilog` | NLog, log4net, direct console sinks |
+| Session store | `Microsoft.Data.Sqlite` | EF Core for engine use |
+| PGP crypto | `PgpCore` | Standalone BouncyCastle |
 
 ---
 
@@ -334,6 +380,62 @@ For full usage and script details, refer to **[scripts/README.md](file:///c:/Use
 | Declaring `class` for AST nodes in C# | Use `record` types for all AST nodes |
 | Using `Firebird` as a connector token | Firebird is not a supported connector; use `ODBC` with a Firebird driver instead |
 | Writing `FROM FLATFILE` or `FROM FILE` in a `CREATE CONNECTION` | `FLATFILE` is the **connector type**; `FILE` is the **table alias** used in queries — `CREATE CONNECTION src AS FLATFILE('my.csv'); SELECT * FROM src` |
+| Using `PWD=` as a connection option | Always use `PASSWORD=`. The `ConnectionStringBuilder` maps it to `PWD` internally when the driver requires it. |
+| Writing `CREATE CONNECTION ... WITH(option=value)` | `WITH()` is not valid on `CREATE CONNECTION`. Options go directly in parentheses: `CREATE CONNECTION c AS MSSQL(SERVER='s', PASSWORD='p')` |
+
+---
+
+## 14. Breaking Change Protocol
+
+A **breaking change** is any modification that could produce different results for identical script input. This includes:
+- **Syntax changes** — keyword renamed, clause made required, operator removed
+- **Semantic changes** — same syntax, different output (the silent and most dangerous kind)
+- **Type system changes** — implicit coercions, NULL propagation edge cases
+- **Runtime behavior** — pushdown decisions that change observable ordering or type coercions
+
+### Protocol — follow all three steps when introducing a breaking change:
+
+1. Add a `// COMPAT_BREAK: x.y` comment at the exact line of change in the source
+2. Add an entry to `BREAKING_CHANGES.md` at repo root (format: `version | category | description | migration path`)
+3. Write a regression test proving old vs. new behavior — mark the test class with `[Trait("CompatBreak", "x.y")]`
+
+For **parser syntax removals**: keep the old form parsing (with a lint warning emitted) for one minor version before removing it entirely.
+
+### High-risk sites — apply extra scrutiny here:
+- `ExpressionEvaluator.cs` — operator precedence, NULL propagation, implicit coercions
+- `Evaluator.IsSqlPushdown()` — pushdown decisions change observable ordering/types
+- `ExternalAggregateEngine`, `ExternalJoinEngine`, `ExternalWindowEngine`, `ExternalSortEngine` — spill behavior affects determinism
+- `StatementParser.cs` — any removal of previously-valid syntax
+
+**Do not add behavioral shims** ("run v1 semantics on a v3 engine"). Shims accumulate indefinitely and make the engine unmaintainable. The migration linter is the compatibility layer — build it when a major version ships with breaking changes, not before.
+
+---
+
+## 15. Syntax Consistency Rules
+
+These rules apply when **adding new language syntax** (keywords, statements, or connection options) to the engine.
+
+### Keyword tokens
+All ETL-SQL keywords must be **UPPERCASE, underscore-separated**: `ENGINE_COMPAT`, `WEEK_START_DAY`, `SCRIPT_HASH_POLICY`, `REQUIRE`. Never CamelCase, never mixed-case tokens.
+
+### When to add a keyword vs. a connection option
+- **Add a keyword** when: the concept is part of core control flow — an ON/OFF toggle, a mode selection between fundamentally different behaviors
+- **Add a connection option** when: it is a configuration value, connector-specific, or optional-by-default
+- Never add a keyword for something that varies per-connector or is optional
+
+### Statement naming convention
+- AST record: `{Verb}{Noun}Statement` — `SetEngineCompatStatement`, `RequireVersionStatement`, `CreateConnectionStatement`
+- Handler: `{Verb}{Noun}StatementHandler` — must match the record name exactly
+- AST record properties: **PascalCase** — `TargetTable`, `ConnectionName`, `CompatVersion`, `IfNotExists`
+- No abbreviations except universally understood ones (`Sql`, `Id`)
+
+### Option value conventions
+| Value type | Form | Example |
+| :--- | :--- | :--- |
+| Boolean | `ON`/`OFF` or `TRUE`/`FALSE` — pick one, never accept both silently | `POOLING = TRUE` |
+| Numeric | Unquoted | `TIMEOUT_SECONDS = 30` |
+| String | Single-quoted | `SERVER = 'localhost'` |
+| Enum | UPPERCASE, normalized — never expose raw provider casing | `SSL_MODE = 'REQUIRED'` not `'Required'` |
 
 ---
 
