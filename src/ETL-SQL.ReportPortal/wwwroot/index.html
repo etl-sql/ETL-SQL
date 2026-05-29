@@ -696,6 +696,7 @@ function renderCatalogReportList(title, reports, emptyText) {
 
 const LINEAGE_VIEW_KEY = 'etlsql_lineage_views';
 const lineageState = { kind: 'table', query: '', column: '', tagValue: '', from: '', to: '', limit: 100, rows: [], savedViews: [], selectedView: '', view: 'table' };
+let lineageDagInstance = null;
 
 function showLineageCatalog() {
   setSidebarViewActive('lineage');
@@ -821,6 +822,7 @@ async function loadLineageResults() {
 
 function renderLineageResults(rows) {
   const $results = document.getElementById('lineageResults');
+  if (lineageDagInstance) { lineageDagInstance.dispose(); lineageDagInstance = null; }
   if (!rows.length) {
     lineageState.rows = [];
     $results.innerHTML = renderLineageEmpty('No matching lineage history was found.');
@@ -877,7 +879,7 @@ function renderLineageDag(rows) {
     }
   }
 
-  renderDag(container, { nodes, edges });
+  lineageDagInstance = renderDag(container, { nodes, edges });
 }
 
 function renderLineageRow(row) {
