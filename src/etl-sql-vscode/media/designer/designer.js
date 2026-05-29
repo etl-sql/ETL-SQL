@@ -202,6 +202,109 @@ export function renderDag(container, { nodes, edges }, options = {}) {
 // Phase 3 — Script Editor
 // ─────────────────────────────────────────────────────────────────────────────
 
+// rptsql token classification sets — sourced from LanguageMetadata.cs
+const _KW = new Set([
+    'SELECT','FROM','WHERE','INSERT','UPDATE','DELETE','SET','INTO','VALUES',
+    'ORDER','BY','GROUP','HAVING','LIMIT','OFFSET','TOP','DISTINCT','ALL',
+    'AS','ON','CASE','WHEN','THEN','ELSE','END','WITH','OUTPUT',
+    'CREATE','TABLE','DATASET','VISUAL','PAGE','SECTION','COLUMN','INDEX',
+    'PROCEDURE','CONNECTION','DROP','ALTER','ADD','CONSTRAINT',
+    'PRIMARY','KEY','FOREIGN','REFERENCES','DEFAULT','UNIQUE',
+    'IF','WHILE','FOR','FOREACH','BEGIN','RETURN','BREAK',
+    'CONTINUE','TRY','CATCH','THROW','DECLARE','PRINT','EXEC','EXECUTE',
+    'JOIN','INNER','LEFT','RIGHT','FULL','OUTER','CROSS','APPLY','UNION',
+    'INTERSECT','EXCEPT',
+    'AND','OR','NOT','LIKE','IN','IS','BETWEEN','EXISTS','ANY','SOME',
+    'NULL','TRUE','FALSE',
+    'REQUIRE','VERSION','RUN','SCRIPT','USE','LOAD','SAVE','EXPORT','IMPORT',
+]);
+
+const _FUNC = new Set([
+    'CAST','CONVERT','COUNT','SUM','AVG','MIN','MAX','FIRST','LAST',
+    'ROW_NUMBER','RANK','DENSE_RANK','NTILE','LAG','LEAD',
+    'FIRST_VALUE','LAST_VALUE','PERCENTILE_CONT','PERCENTILE_DISC',
+    'COALESCE','NULLIF','IIF','ISNULL','NVL',
+    'UPPER','LOWER','TRIM','LTRIM','RTRIM','LEN','LENGTH','SUBSTRING',
+    'REPLACE','STUFF','CHARINDEX','PATINDEX','CONCAT','FORMAT',
+    'YEAR','MONTH','DAY','DATEPART','DATEDIFF','DATEADD','GETDATE','NOW',
+    'SYSDATETIME','CURRENT_TIMESTAMP',
+    'ABS','CEILING','FLOOR','ROUND','POWER','SQRT','SIGN','RAND',
+    'NEWID','CHECKSUM','HASHBYTES',
+    'STRING_AGG','LISTAGG','ARRAY_AGG','JSON_VALUE','JSON_QUERY',
+]);
+
+const _TYPE = new Set([
+    'INT','INTEGER','TINYINT','SMALLINT','BIGINT',
+    'DECIMAL','NUMERIC','FLOAT','REAL','MONEY','SMALLMONEY',
+    'VARCHAR','NVARCHAR','CHAR','NCHAR','TEXT','NTEXT',
+    'DATETIME','DATETIME2','DATE','TIME','DATETIMEOFFSET','TIMESTAMP',
+    'BIT','BINARY','VARBINARY','IMAGE',
+    'UNIQUEIDENTIFIER','XML','JSON','CURSOR','VARIANT',
+]);
+
+// Lazy-load the CodeMirror bundle once; subsequent calls reuse the same promise.
+let _cmPromise = null;
+function _loadCm() {
+    if (!_cmPromise) _cmPromise = import('./codemirror/codemirror-bundle.min.js');
+    return _cmPromise;
+}
+
+// Cached rptsql StreamLanguage instance (shared across all editor instances).
+let _rptsqlLang = null;
+function _getRptsqlLang(cm) {
+    if (_rptsqlLang) return _rptsqlLang;
+    const { StreamLanguage, tags: t } = cm;
+    _rptsqlLang = StreamLanguage.define({
+        name: 'rptsql',
+        token(stream) {
+            if (stream.eatSpace()) return null;
+            if (stream.match('--'))  { stream.skipToEnd(); return 'lineComment'; }
+            if (stream.match('/*'))  {
+                while (!stream.eol()) { if (stream.match('*/')) break; stream.next(); }
+                return 'blockComment';
+            }
+            const ch = stream.peek();
+            if (ch === "'" || ch === '"') {
+                stream.next();
+                while (!stream.eol() && stream.next() !== ch) {}
+                return 'string';
+            }
+            if (ch === '[') {
+                stream.next();
+                while (!stream.eol() && stream.next() !== ']') {}
+                return 'quotedId';
+            }
+            if (stream.match(/^[0-9]+\.?[0-9]*/)) return 'number';
+            if (stream.match(/^[a-zA-Z_@#][a-zA-Z0-9_@#$]*/)) {
+                const word = stream.current().toUpperCase();
+                if (_KW.has(word))   return 'keyword';
+                if (_FUNC.has(word)) return 'fn';
+                if (_TYPE.has(word)) return 'typeName';
+                return null;
+            }
+            if (stream.match(/^(<>|!=|>=|<=|=>|->|::)/)) return 'op';
+            if (stream.match(/^[=<>!+\-*\/&|^~%]/))      return 'op';
+            stream.next();
+            return null;
+        },
+        tokenTable: {
+            lineComment:  t.lineComment,
+            blockComment: t.blockComment,
+            string:       t.string,
+            number:       t.number,
+            keyword:      t.keyword,
+            fn:           t.function(t.variableName),
+            typeName:     t.typeName,
+            quotedId:     t.special(t.variableName),
+            op:           t.operator,
+        },
+        languageData: {
+            commentTokens: { line: '--', block: { open: '/*', close: '*/' } },
+        },
+    });
+    return _rptsqlLang;
+}
+
 /**
  * Mount a CodeMirror 6 rptsql editor into `container`.
  *
@@ -218,12 +321,44 @@ export function renderDag(container, { nodes, edges }, options = {}) {
  *   Returns a promise so callers can await the dynamic bundle load.
  */
 export async function createScriptEditor(container, opts = {}) {
-    // Implemented in Phase 3.
-    void container; void opts;
+    const cm = await _loadCm();
+    const {
+        EditorState,
+        EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection,
+        defaultKeymap, history, historyKeymap, indentWithTab,
+        syntaxHighlighting, defaultHighlightStyle, bracketMatching,
+        searchKeymap, highlightSelectionMatches,
+    } = cm;
+
+    const extensions = [
+        lineNumbers(),
+        highlightActiveLine(),
+        highlightActiveLineGutter(),
+        drawSelection(),
+        history(),
+        bracketMatching(),
+        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        highlightSelectionMatches(),
+        keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+        _getRptsqlLang(cm),
+        EditorState.readOnly.of(opts.readOnly ?? false),
+    ];
+
+    if (opts.onChange) {
+        extensions.push(EditorView.updateListener.of(update => {
+            if (update.docChanged) opts.onChange(update.state.doc.toString());
+        }));
+    }
+
+    const state = EditorState.create({ doc: opts.value ?? '', extensions });
+    const view  = new EditorView({ state, parent: container });
+
     return {
-        getValue: () => opts.value ?? '',
-        setValue: (_v) => {},
-        dispose: () => {},
+        getValue: () => view.state.doc.toString(),
+        setValue: (text) => view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: text },
+        }),
+        dispose: () => view.destroy(),
     };
 }
 

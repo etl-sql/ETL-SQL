@@ -49,6 +49,25 @@
 .etlsql-editor-container .cm-editor {
     height: 100%;
     font-size: 0.875rem;
+    font-family: var(--portal-font-mono, "Cascadia Code", "Fira Code", "Consolas", monospace);
+}
+
+.etlsql-editor-container .cm-editor.cm-focused {
+    outline: none;
+}
+
+.etlsql-editor-container .cm-gutters {
+    background: var(--portal-surface-subtle, #f8fafc);
+    border-right: 1px solid var(--portal-border, #d9e0ea);
+    color: var(--portal-muted, #7a8798);
+}
+
+.etlsql-editor-container .cm-activeLineGutter {
+    background: var(--portal-accent-soft, #eff6ff);
+}
+
+.etlsql-editor-container .cm-activeLine {
+    background: var(--portal-accent-soft, #eff6ff);
 }
 
 /* ── Phase 4: Full designer shell ───────────────────────────────────────── */

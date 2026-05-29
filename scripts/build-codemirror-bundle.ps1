@@ -9,9 +9,7 @@
 # After building, run sync-assets to push to portal and VS Code:
 #   .\scripts\sync-assets.ps1
 
-param(
-    [string]$Version = "6.0.1"
-)
+param()
 
 $ErrorActionPreference = "Stop"
 $Root    = Split-Path -Parent $MyInvocation.MyCommand.Definition | Split-Path -Parent
@@ -67,17 +65,19 @@ export {
     searchKeymap,
     highlightSelectionMatches,
 } from '@codemirror/search';
+export { tags } from '@lezer/highlight';
 "@ | Set-Content (Join-Path $TmpDir "entry.js") -Encoding UTF8
 
     Write-Host "  Installing CodeMirror packages..." -ForegroundColor Yellow
     Push-Location $TmpDir
-    npm install --silent `
-        "@codemirror/state@$Version" `
-        "@codemirror/view@$Version" `
-        "@codemirror/commands@$Version" `
-        "@codemirror/language@$Version" `
-        "@codemirror/search@$Version" `
-        esbuild
+    $npmOut = npm install `
+        "@codemirror/state" `
+        "@codemirror/view" `
+        "@codemirror/commands" `
+        "@codemirror/language" `
+        "@codemirror/search" `
+        esbuild 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "npm install failed: $npmOut" }
     Pop-Location
 
     $EsBuild  = Join-Path $TmpDir "node_modules\.bin\esbuild.cmd"

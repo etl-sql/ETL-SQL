@@ -67,6 +67,13 @@
       border-bottom-color: var(--portal-accent);
     }
     .orch-detail-tab:hover:not(.active) { color: var(--portal-text); }
+    .orch-script-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .orch-script-header label { margin: 0; }
   </style>
 </head>
 <body>
@@ -178,8 +185,11 @@
           </div>
         </div>
         <div class="orch-detail-section">
-          <label>Script <small>(as of last save)</small></label>
-          <pre class="orch-script-preview" id="detailScript">—</pre>
+          <div class="orch-script-header">
+            <label>Script</label>
+            <button class="btn btn-sm btn-primary" id="saveScriptBtn" style="display:none">Save</button>
+          </div>
+          <div id="detailScriptEditor" class="etlsql-editor-container" style="height:300px;"></div>
         </div>
         <div class="orch-detail-section" id="sparklineSection">
           <label>Duration trend (last 30 runs, seconds)</label>
@@ -289,7 +299,7 @@
 <script type="module">
 import { auth, authApi } from '/js/api.js';
 import { applyPortalBranding } from '/js/branding.js';
-import { renderDag } from '/designer/designer.js';
+import { renderDag, createScriptEditor } from '/designer/designer.js';
 
 // ── Auth guard ─────────────────────────────────────────────────────────────────
 if (!auth.isLoggedIn()) window.location.href = '/login.html';
@@ -366,6 +376,8 @@ let metricJobNames = new Map();
 let metricHistoryByJob = new Map();
 let dagInstance  = null;
 let dagJobName   = null;
+let scriptEditor = null;
+let scriptOriginalValue = '';
 
 // ── Polling ────────────────────────────────────────────────────────────────────
 async function poll() {
@@ -734,7 +746,7 @@ async function openDetail(job, historyOverride = null) {
   document.getElementById('detailSchedule').textContent = fmtSchedule(job);
   document.getElementById('detailLastRun').textContent  = fmtDt(jobValue(job, 'LastRun'));
   document.getElementById('detailNextRun').textContent  = fmtDt(jobValue(job, 'NextRun'));
-  document.getElementById('detailScript').textContent   = jobValue(job, 'Script') || '—';
+  initScriptEditor(jobValue(job, 'Script') || '');
   document.getElementById('historyTableWrap').innerHTML =
     '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading…</span></div>';
   document.getElementById('detailPanel').classList.add('open');
@@ -766,6 +778,8 @@ function closeDetail() {
   document.querySelectorAll('tr.job-row').forEach(r => r.classList.remove('selected'));
   if (dagInstance) { dagInstance.dispose(); dagInstance = null; }
   dagJobName = null;
+  if (scriptEditor) { scriptEditor.dispose(); scriptEditor = null; }
+  document.getElementById('saveScriptBtn').style.display = 'none';
 }
 
 function renderHistoryTable(entries) {
@@ -824,6 +838,47 @@ function renderSparkline(entries) {
 }
 
 document.getElementById('closeDetailBtn').addEventListener('click', closeDetail);
+
+async function initScriptEditor(scriptText) {
+  if (scriptEditor) { scriptEditor.dispose(); scriptEditor = null; }
+  const container = document.getElementById('detailScriptEditor');
+  container.innerHTML = '';
+  scriptOriginalValue = scriptText;
+  const saveBtn = document.getElementById('saveScriptBtn');
+  saveBtn.style.display = '';
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save';
+  scriptEditor = await createScriptEditor(container, {
+    value: scriptOriginalValue,
+    onChange: () => {
+      saveBtn.disabled = false;
+      if (saveBtn.textContent === 'Saved ✓') saveBtn.textContent = 'Save';
+    },
+  });
+}
+
+document.getElementById('saveScriptBtn').addEventListener('click', async () => {
+  if (!selectedJob || !scriptEditor) return;
+  const btn  = document.getElementById('saveScriptBtn');
+  const name = jobValue(selectedJob, 'Name');
+  btn.disabled  = true;
+  btn.textContent = 'Saving…';
+  try {
+    const res = await api.update(name, { ScriptText: scriptEditor.getValue() });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.Error || res.statusText);
+    }
+    scriptOriginalValue = scriptEditor.getValue();
+    btn.textContent = 'Saved ✓';
+    showToast(`Script for '${name}' saved.`);
+    setTimeout(() => { if (btn.textContent === 'Saved ✓') btn.textContent = 'Save'; }, 2000);
+  } catch (err) {
+    showToast(`Save failed: ${err.message}`, true);
+    btn.disabled  = false;
+    btn.textContent = 'Save';
+  }
+});
 
 // ── Detail tab switching ───────────────────────────────────────────────────────
 document.querySelectorAll('.orch-detail-tab').forEach(tab => {
