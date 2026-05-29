@@ -121,6 +121,8 @@ namespace ETL_SQL.Connectors.Snowflake
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            if (_context != null && _context.IsWhatIf) return;
+
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Snowflake data source write.");
 
@@ -365,6 +367,7 @@ namespace ETL_SQL.Connectors.Snowflake
 
         private async Task TruncateAsync()
         {
+            if (_context != null && _context.IsWhatIf) return;
             await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {QuoteIdentifier(_tableName!)}")) { }
         }
 

@@ -84,11 +84,6 @@ namespace ETL_SQL.Connectors
                     string pass = _options.GetValueOrDefault("PASSWORD", "");
                     string domain = _options.GetValueOrDefault("DOMAIN", "");
                     
-                    if (pass.StartsWith("ENC:"))
-                    {
-                        pass = context.DecryptValue(pass) ?? "";
-                    }
-
                     clientHandler.Credentials = new NetworkCredential(user, pass, domain);
                 }
                 
@@ -216,11 +211,6 @@ namespace ETL_SQL.Connectors
             string tenantId = _options.GetValueOrDefault("TENANT_ID", "");
             string clientId = _options.GetValueOrDefault("CLIENT_ID", "");
             string clientSecret = _options.GetValueOrDefault("CLIENT_SECRET", "");
-            if (clientSecret.StartsWith("ENC:") && _context != null)
-            {
-                clientSecret = _context.DecryptValue(clientSecret) ?? "";
-            }
-
             if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
             {
                 throw new ExecutionException("ENTRA_ID authentication requires TENANT_ID, CLIENT_ID, and CLIENT_SECRET.");
@@ -354,6 +344,7 @@ namespace ETL_SQL.Connectors
 
         public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
         {
+            if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
             
             if (!File.Exists(localPath))
@@ -403,6 +394,7 @@ namespace ETL_SQL.Connectors
 
         public async Task DeleteFileAsync(string remotePath)
         {
+            if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
             string relativeUrl = GetServerRelativeUrl(remotePath);
             string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{Uri.EscapeDataString(relativeUrl)}')";
@@ -446,6 +438,7 @@ namespace ETL_SQL.Connectors
 
         public async Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
         {
+            if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
             string srcUrl = GetServerRelativeUrl(remoteSource);
             string destUrl = GetServerRelativeUrl(remoteDest);
@@ -461,6 +454,7 @@ namespace ETL_SQL.Connectors
 
         public async Task CreateDirectoryAsync(string remotePath)
         {
+            if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
             string relativeUrl = GetServerRelativeUrl(remotePath);
             string parentPath = System.IO.Path.GetDirectoryName(relativeUrl)?.Replace('\\', '/') ?? "";
@@ -480,6 +474,7 @@ namespace ETL_SQL.Connectors
 
         public async Task DeleteDirectoryAsync(string remotePath)
         {
+            if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
             string relativeUrl = GetServerRelativeUrl(remotePath);
             string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{Uri.EscapeDataString(relativeUrl)}')";
@@ -566,6 +561,8 @@ namespace ETL_SQL.Connectors
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            if (_context != null && _context.IsWhatIf) return;
+
             await AuthenticateAsync();
             string list = string.IsNullOrEmpty(_listName) ? throw new ExecutionException("LIST_NAME option must be configured to write to SharePoint lists.") : _listName;
 

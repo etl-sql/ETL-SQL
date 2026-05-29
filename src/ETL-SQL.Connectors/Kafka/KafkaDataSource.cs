@@ -145,6 +145,8 @@ namespace ETL_SQL.Connectors.Kafka
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            if (_context != null && _context.IsWhatIf) return;
+
             var config = GetProducerConfig();
             var producer = GetProducer(config);
 
@@ -219,10 +221,6 @@ namespace ETL_SQL.Connectors.Kafka
         {
             string username = _options.GetValueOrDefault("SASL_USERNAME", "");
             string password = _options.GetValueOrDefault("SASL_PASSWORD", "");
-            if (password.StartsWith("ENC:") && _context != null)
-            {
-                password = _context.DecryptValue(password) ?? "";
-            }
 
             if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
             {

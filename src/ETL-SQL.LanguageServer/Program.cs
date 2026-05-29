@@ -80,6 +80,8 @@ namespace ETL_SQL.LSP
                         registry.Register(new ETL_SQL.Connectors.S3.S3Connector());
                         registry.Register(new ETL_SQL.Connectors.Mongodb.MongodbConnector());
                         registry.Register(new ETL_SQL.Connectors.Kafka.KafkaConnector());
+                        registry.Register(new ETL_SQL.Connectors.BigQuery.BigQueryConnector());
+                        registry.Register(new ETL_SQL.Connectors.Snowflake.SnowflakeConnector());
 
                         var functionRegistry = new Engine.Functions.FunctionRegistry();
                         Engine.Functions.StandardFunctions.Register(functionRegistry);

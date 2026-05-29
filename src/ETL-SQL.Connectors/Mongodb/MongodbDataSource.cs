@@ -121,6 +121,8 @@ namespace ETL_SQL.Connectors.Mongodb
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            if (_context != null && _context.IsWhatIf) return;
+
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No collection specified for MongoDB data source write.");
 

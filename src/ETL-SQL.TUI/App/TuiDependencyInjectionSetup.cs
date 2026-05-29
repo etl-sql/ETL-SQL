@@ -140,6 +140,8 @@ namespace ETL_SQL.TUI
             services.AddSingleton<IConnector, S3Connector>();
             services.AddSingleton<IConnector, MongodbConnector>();
             services.AddSingleton<IConnector, KafkaConnector>();
+            services.AddSingleton<IConnector, ETL_SQL.Connectors.BigQuery.BigQueryConnector>();
+            services.AddSingleton<IConnector, ETL_SQL.Connectors.Snowflake.SnowflakeConnector>();
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
 
             // ── Evaluator + execution ──────────────────────────────────────────

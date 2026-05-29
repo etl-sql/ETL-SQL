@@ -142,6 +142,8 @@ namespace ETL_SQL.Connectors.Sqlite
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            if (_context != null && _context.IsWhatIf) return;
+
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for SQLite data source write.");
 
@@ -218,6 +220,8 @@ namespace ETL_SQL.Connectors.Sqlite
 
         public async Task TruncateAsync()
         {
+            if (_context != null && _context.IsWhatIf) return;
+
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for SQLite truncate.");
 
