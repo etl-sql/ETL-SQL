@@ -15,7 +15,13 @@ Connections link ETL-SQL to external data sources — databases, files, APIs, an
 - `MSSQL` / `SQLSERVER`: Microsoft SQL Server and Azure SQL
 - `POSTGRES` / `PG`: PostgreSQL
 - `ORACLE`: Oracle Database
+- `SQLITE` / `SQLITE3`: Local or in-memory SQLite database
 - `ODBC`: Any ODBC-compatible source
+
+**NoSQL and messaging systems**
+
+- `MONGODB` / `MONGO`: MongoDB document store
+- `KAFKA`: Apache Kafka event streams
 
 **File formats**
 
@@ -33,6 +39,7 @@ Connections link ETL-SQL to external data sources — databases, files, APIs, an
 - `SFTP` / `SSH`: Secure file transfer
 - `FTP` / `FTPS`: FTP file transfer
 - `AZURE_BLOB`: Azure Blob Storage
+- `S3` / `AWS_S3`: Amazon S3 or S3-compatible cloud object storage
 - `SMTP`: Email sending
 - `SHAREPOINT` / `SP`: SharePoint Document Library and List service
 

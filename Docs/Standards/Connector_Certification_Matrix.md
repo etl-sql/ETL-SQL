@@ -28,31 +28,31 @@ Connector certification tests now carry connector-specific traits such as `Conne
 
 These connectors implement `IDatabaseSource` with `SupportsSqlPushdown = true`.
 
-| Requirement | MSSQL | POSTGRES | MYSQL | ORACLE | ODBC | SNOWFLAKE | BIGQUERY |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Rule 1** — No SQL evaluation inside connector | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 2** — All I/O via async overloads | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
-| **Rule 3** — Credentials never in logs/exceptions | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 4** — File I/O via ResolvePath | N/A | N/A | N/A | N/A | N/A | ~ | ✓ |
-| **Rule 5** — Provider exceptions wrapped as ExecutionException | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
-| **Rule 6** — Sensitive options masked in metadata output | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 7** — O(1) memory streaming via ReadBatches | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 8** — Implements IDatabaseSource + pushdown | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 9** — GetExcludedKeywords declared | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
-| **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T2** — Negative path tests | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
-| **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **GetExcludedKeywords non-empty** | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
-| **DW: IsDataWarehouse + timeout** | N/A | N/A | N/A | N/A | N/A | ✓ | ✓ |
-| **DW: TIMEOUT_SECONDS option** | N/A | N/A | N/A | N/A | N/A | ✓ | ✓ |
-| **DW: ADC / workload identity auth** | N/A | N/A | N/A | N/A | N/A | ~ | ✓ |
-| **DW: ITransactionalDataSource** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | N/A |
-| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **✓ GA** |
+| Requirement | MSSQL | POSTGRES | MYSQL | ORACLE | SQLITE | ODBC | SNOWFLAKE | BIGQUERY |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Rule 1** — No SQL evaluation inside connector | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 2** — All I/O via async overloads | ✓ | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
+| **Rule 3** — Credentials never in logs/exceptions | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 4** — File I/O via ResolvePath | N/A | N/A | N/A | N/A | ✓ | N/A | ~ | ✓ |
+| **Rule 5** — Provider exceptions wrapped as ExecutionException | ✓ | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
+| **Rule 6** — Sensitive options masked in metadata output | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 7** — O(1) memory streaming via ReadBatches | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 8** — Implements IDatabaseSource + pushdown | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 9** — GetExcludedKeywords declared | ✓ | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
+| **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T2** — Negative path tests | ✓ | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
+| **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **GetExcludedKeywords non-empty** | ✓ | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ✓ |
+| **DW: IsDataWarehouse + timeout** | N/A | N/A | N/A | N/A | N/A | N/A | ✓ | ✓ |
+| **DW: TIMEOUT_SECONDS option** | N/A | N/A | N/A | N/A | ✓ | N/A | ✓ | ✓ |
+| **DW: ADC / workload identity auth** | N/A | N/A | N/A | N/A | N/A | N/A | ~ | ✓ |
+| **DW: ITransactionalDataSource** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | N/A |
+| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **✓ GA** |
 
 ### ODBC Notes
 - ODBC wraps arbitrary third-party drivers. Async behavior and exception types depend on the underlying driver. Rule 2 and Rule 5 compliance is best-effort at the ETL-SQL boundary.
@@ -112,26 +112,26 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 
 ## Remote / Network Connectors
 
-| Requirement | SFTP | FTP | AZURE_BLOB | API | SMTP | SHAREPOINT | AD |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Rule 1** — No SQL evaluation inside connector | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 2** — All I/O via async overloads | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ~ |
-| **Rule 3** — Credentials never in logs/exceptions | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 4** — File I/O via ResolvePath (local staging) | ✓ | ✓ | ✓ | N/A | N/A | ✓ | N/A |
-| **Rule 5** — Provider exceptions wrapped as ExecutionException | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 6** — Sensitive options masked | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Rule 7** — O(1) memory streaming | ✓ | ✓ | ✓ | ~ | N/A | ✓ | ✓ |
-| **Rule 8** — IDatabaseSource + pushdown | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
-| **Rule 9** — GetExcludedKeywords | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
-| **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T2** — Negative path / credential tests | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **✓ GA (Mock)** | **✓ GA (Mock)** |
+| Requirement | SFTP | FTP | AZURE_BLOB | S3 | API | SMTP | SHAREPOINT | AD | MONGODB | KAFKA |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Rule 1** — No SQL evaluation inside connector | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 2** — All I/O via async overloads | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ~ | ✓ | ~ |
+| **Rule 3** — Credentials never in logs/exceptions | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 4** — File I/O via ResolvePath (local staging) | ✓ | ✓ | ✓ | ✓ | N/A | N/A | ✓ | N/A | N/A | N/A |
+| **Rule 5** — Provider exceptions wrapped as ExecutionException | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 6** — Sensitive options masked | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Rule 7** — O(1) memory streaming | ✓ | ✓ | ✓ | ✓ | ~ | N/A | ✓ | ✓ | ✓ | ✓ |
+| **Rule 8** — IDatabaseSource + pushdown | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
+| **Rule 9** — GetExcludedKeywords | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
+| **Rule 10** — DisposeAsync releases all resources | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T1** — Smoke test present | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T2** — Negative path / credential tests | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T3** — Credential masking test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **ENC: support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA (Mock)** | **~ GA (gaps)** | **✓ GA** | **✓ GA (Mock)** | **✓ GA (Mock)** | **✓ GA (Mock)** | **✓ GA (Mock)** |
 
 ### API Notes
 - Streaming is best-effort: paginated API responses are yielded page-by-page (compliant), but `ReadBatches` for non-paginated endpoints buffers the full response body.
@@ -153,6 +153,27 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 ### Active Directory / LDAP Notes
 - `LdapConnection` synchronous request send-action behaves under a partial Rule 2 rating (`~`). Re-wraps LDAP exception codes to standardized engine `ExecutionException`.
 - Verified via mock LDAP test sequences translating standard SQL filter blocks into formatted LDAP query groups.
+
+### SQLite Notes
+- Uses local file or memory databases via Microsoft.Data.Sqlite. Rule 4 (ResolvePath) is applied on the Database File path context at construction time to respect the security boundaries.
+- Dialect exclusions such as `TOP` and pushdown keywords (`LIMIT`, `OFFSET`) are fully declared.
+- Verified via `SqliteAndS3ConnectorTests` asserting in-memory and temp-file table execution, data batch streams, and transactional rollback/commit.
+
+### S3 Compatible Notes
+- AWS S3 SDK (AWSSDK.S3) handles custom HTTP endpoints, region configurations, and path-style addressing.
+- Egress policies are validated against parsed endpoints before resolving client handlers.
+- Checked using mocked client interface transport checks for uploads, downloads, key presence, and directory listings.
+
+### MongoDB Notes
+- Flattens nested BSON documents and arrays into valid JSON strings using ToJson() to preserve complex data hierarchies.
+- Schema discovery queries the first document in the collection dynamically; subsequent rows map to these discovered columns.
+- Verified via `MongodbAndKafkaConnectorTests` using mocked database client and collection cursors.
+
+### Kafka Notes
+- Rule 2 async-poll rating is partial (`~`) because the underlying Confluent.Kafka consumer only exposes a synchronous `Consume(TimeSpan)` loop rather than async overloads.
+- Batch-bounded reads are supported through `TIMEOUT_MS` and `MAX_MESSAGES` controls to prevent infinite stream blocks.
+- Writes translate each data row into a JSON message published to the broker.
+- Verified via `MongodbAndKafkaConnectorTests` with mocked producers, consumers, and consumer-loop limits.
 
 ---
 

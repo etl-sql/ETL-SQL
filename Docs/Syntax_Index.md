@@ -161,9 +161,11 @@ Connectors define how to communicate with external data sources.
 | `MSSQL` | SQL | [MSSQL.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MSSQL.md) | HOST, DATABASE, USER, PASSWORD, TRUSTED_CONNECTION, ... |
 | `POSTGRES` | SQL | [POSTGRES.md](../src/ETL-SQL.Core/Resources/Help/Connectors/POSTGRES.md) | HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, ... |
 | `ORACLE` | SQL | [ORACLE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ORACLE.md) | HOST, PORT, SERVICE_NAME, USER, PASSWORD, ... |
+| `SQLITE` | SQL | [SQLITE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SQLITE.md) | DATABASE, PATH, PASSWORD, TIMEOUT_SECONDS, TABLE |
 | `ODBC` | SQL | [ODBC.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ODBC.md) | DSN, DRIVER, SERVER, DATABASE, UID, PWD, ... |
 | `SNOWFLAKE` | SQL | [SNOWFLAKE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SNOWFLAKE.md) | HOST, DATABASE, SCHEMA, WAREHOUSE, USERNAME, PASSWORD, PRIVATE_KEY_FILE, ... |
 | `BIGQUERY` | SQL | [BIGQUERY.md](../src/ETL-SQL.Core/Resources/Help/Connectors/BIGQUERY.md) | PROJECT_ID, DATASET_ID, KEY_FILE, ... |
+| `MONGODB` | NoSQL Document | [MONGODB.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MONGODB.md) | URI, DATABASE, COLLECTION, HOST, PORT, USER, PASSWORD, TIMEOUT_SECONDS |
 | `FLATFILE` | File | [FLATFILE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/FLATFILE.md) | PATH, FORMAT, DELIMITER, HEADER, ENCODING, ... |
 | `EXCEL` | File | [EXCEL.md](../src/ETL-SQL.Core/Resources/Help/Connectors/EXCEL.md) | PATH, SHEET, RANGE, HEADER, ... |
 | `JSON` | File | [JSON.md](../src/ETL-SQL.Core/Resources/Help/Connectors/JSON.md) | PATH, ROOT_PATH, ENCODING, ... |
@@ -173,9 +175,11 @@ Connectors define how to communicate with external data sources.
 | `SFTP` | Transfer | [SFTP.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SFTP.md) | HOST, PORT, USER, PASSWORD, KEYFILE, PASSPHRASE |
 | `FTP` | Transfer | [FTP.md](../src/ETL-SQL.Core/Resources/Help/Connectors/FTP.md) | HOST, PORT, USER, PASSWORD, USE_SSL |
 | `AZURE_BLOB` | Transfer | [AZURE_BLOB.md](../src/ETL-SQL.Core/Resources/Help/Connectors/AZURE_BLOB.md) | ACCOUNT_NAME, ACCOUNT_KEY, CONTAINER |
+| `S3` | Transfer | [S3.md](../src/ETL-SQL.Core/Resources/Help/Connectors/S3.md) | BUCKET, ENDPOINT, ACCESS_KEY, SECRET_KEY, REGION, FORCE_PATH_STYLE |
 | `API` / `REST` | Service | [API.md](../src/ETL-SQL.Core/Resources/Help/Connectors/API.md) | URL, METHOD, AUTH_TYPE, TOKEN, BODY, ROOT_PATH, ... |
 | `SMTP` | Service | [SMTP.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SMTP.md) | HOST, PORT, USER, PASSWORD, USE_SSL, DEFAULT_FROM |
 | `SHAREPOINT` | Transfer/Service | [SHAREPOINT.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SHAREPOINT.md) | URL, AUTH_MODE, USER, PASSWORD, DOMAIN, CLIENT_ID, CLIENT_SECRET, TENANT_ID, DOCUMENT_LIBRARY, LIST_NAME |
+| `KAFKA` | Streaming | [KAFKA.md](../src/ETL-SQL.Core/Resources/Help/Connectors/KAFKA.md) | BOOTSTRAP_SERVERS, TOPIC, GROUP_ID, AUTO_OFFSET_RESET, TIMEOUT_MS, MAX_MESSAGES, SASL_USERNAME, SASL_PASSWORD, SASL_MECHANISM, SECURITY_PROTOCOL |
 | `DIRECTORY` | Service | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Connectors/DIRECTORY.md) | PATH, RECURSIVE, ... |
 | `MOCKDB` | Testing | [MOCKDB.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MOCKDB.md) | - |
 | `REPORTPORTAL` | Admin Service | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | HOST, PORT, USER, PASSWORD |
@@ -1734,7 +1738,9 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `FTP` | Connector | Canonical connector token |
 | `FTP_CONN` | Connector | Canonical connector token |
 | `JSON` | Connector | Canonical connector token |
+| `KAFKA` | Connector | Canonical connector token |
 | `MOCKDB` | Connector | Canonical connector token |
+| `MONGODB` | Connector | Canonical connector token |
 | `MSSQL` | Connector | Canonical connector token |
 | `ODBC` | Connector | Canonical connector token |
 | `ORACLE` | Connector | Canonical connector token |
@@ -1744,9 +1750,11 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `POSTGRES` | Connector | Canonical connector token |
 | `REPORT_PORTAL` | Connector | Canonical connector token |
 | `REPORTPORTAL` | Connector | Canonical connector token |
+| `S3` | Connector | Canonical connector token |
 | `SFTP` | Connector | Canonical connector token |
 | `SHAREPOINT` | Connector | Canonical connector token |
 | `SMTP` | Connector | Canonical connector token |
+| `SQLITE` | Connector | Canonical connector token |
 | `XML` | Connector | Canonical connector token |
 
 ### 18.18 Built-in Functions

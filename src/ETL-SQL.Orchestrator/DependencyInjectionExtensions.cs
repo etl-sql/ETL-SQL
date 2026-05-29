@@ -30,6 +30,10 @@ using ETL_SQL.Connectors.Snowflake;
 using ETL_SQL.Connectors.BigQuery;
 using ETL_SQL.Connectors.ReportPortal;
 using ETL_SQL.Connectors.Orchestrator;
+using ETL_SQL.Connectors.Sqlite;
+using ETL_SQL.Connectors.S3;
+using ETL_SQL.Connectors.Mongodb;
+using ETL_SQL.Connectors.Kafka;
 using ETL_SQL.Connectors;
 
 namespace ETL_SQL.Orchestrator
@@ -99,6 +103,10 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IConnector, OrchestratorConnector>();
             services.AddSingleton<IConnector, SharePointConnector>();
             services.AddSingleton<IConnector, ActiveDirectoryConnector>();
+            services.AddSingleton<IConnector, SqliteConnector>();
+            services.AddSingleton<IConnector, S3Connector>();
+            services.AddSingleton<IConnector, MongodbConnector>();
+            services.AddSingleton<IConnector, KafkaConnector>();
             
             services.AddSingleton<IConnector>(sp => new FtpConnector(
                 configuration["Connectors:Ftp:Host"] ?? "localhost",

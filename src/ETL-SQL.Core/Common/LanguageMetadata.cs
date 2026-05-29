@@ -51,7 +51,7 @@ namespace ETL_SQL.Common
             "MSSQL", "ORACLE", "POSTGRES", "MOCKDB", "ODBC",
             "SFTP", "FTP", "FTP_CONN", "AZURE_BLOB", "SMTP", "DOCKER", "DIRECTORY",
             "REPORTPORTAL", "REPORT_PORTAL", "ORCHESTRATOR", "ORCH",
-            "SHAREPOINT", "ACTIVE_DIRECTORY"
+            "SHAREPOINT", "ACTIVE_DIRECTORY", "SQLITE", "S3", "MONGODB", "KAFKA"
         };
 
         public static readonly HashSet<string> Keywords = new(StringComparer.OrdinalIgnoreCase)

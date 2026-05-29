@@ -464,7 +464,7 @@ namespace ETL_SQL.Core.Parser.Components
                     var bundleName = Consume(TokenType.STRING_LITERAL, "Expected bundle name string after SHOW BUNDLE VERSIONS").Value;
                     stmt = new ShowBundleVersionsStatement(bundleName);
                 }
-                else if (MatchIdentifier("FILES"))
+                else if (Match(TokenType.FILES) || MatchIdentifier("FILES"))
                 {
                     var bundleName = Consume(TokenType.STRING_LITERAL, "Expected bundle name string after SHOW BUNDLE FILES").Value;
                     Consume(TokenType.VERSION, "Expected VERSION after bundle name");

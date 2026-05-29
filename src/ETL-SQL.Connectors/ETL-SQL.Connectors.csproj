@@ -6,12 +6,16 @@
 
   <ItemGroup>
     <PackageReference Include="Apache.Avro" />
+    <PackageReference Include="AWSSDK.S3" />
     <PackageReference Include="Azure.Storage.Blobs" />
     <PackageReference Include="ExcelDataReader" />
     <PackageReference Include="ExcelDataReader.DataSet" />
     <PackageReference Include="FluentFTP" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="MongoDB.Driver" />
+    <PackageReference Include="Confluent.Kafka" />
     <PackageReference Include="MySqlConnector" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Oracle.ManagedDataAccess.Core" />

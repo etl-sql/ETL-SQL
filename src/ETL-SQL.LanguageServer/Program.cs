@@ -76,6 +76,10 @@ namespace ETL_SQL.LSP
                         registry.Register(new ETL_SQL.Connectors.Directory.DirectoryConnector());
                         registry.Register(new ETL_SQL.Connectors.SharePointConnector());
                         registry.Register(new ETL_SQL.Connectors.ActiveDirectoryConnector());
+                        registry.Register(new ETL_SQL.Connectors.Sqlite.SqliteConnector());
+                        registry.Register(new ETL_SQL.Connectors.S3.S3Connector());
+                        registry.Register(new ETL_SQL.Connectors.Mongodb.MongodbConnector());
+                        registry.Register(new ETL_SQL.Connectors.Kafka.KafkaConnector());
 
                         var functionRegistry = new Engine.Functions.FunctionRegistry();
                         Engine.Functions.StandardFunctions.Register(functionRegistry);

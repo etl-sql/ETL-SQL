@@ -1,4 +1,4 @@
-﻿using Xunit;
+using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,6 +15,7 @@ using Spectre.Console;
 
 namespace ETL_SQL.Tests.Integration.Integration
 {
+    [Trait("Category", "Integration")]
     public class SessionPersistenceTests : IDisposable
     {
         private readonly string _sessionDir;

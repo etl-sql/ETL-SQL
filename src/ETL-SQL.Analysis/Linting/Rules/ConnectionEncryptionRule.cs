@@ -145,7 +145,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
             // 2. Check Options (PASSWORD, API_KEY, APIKEY, CLIENT_SECRET, CLIENTSECRET)
             if (conn.Options != null)
             {
-                var sensitiveKeys = new[] { "PASSWORD", "API_KEY", "APIKEY", "CLIENT_SECRET", "CLIENTSECRET" };
+                var sensitiveKeys = new[] { "PASSWORD", "API_KEY", "APIKEY", "CLIENT_SECRET", "CLIENTSECRET", "SECRET_KEY", "SECRETKEY", "SASL_PASSWORD", "SASL_JAAS_CONFIG" };
                 foreach (var key in sensitiveKeys)
                 {
                     if (conn.Options.TryGetValue(key, out var valExpr) && valExpr is LiteralExpression valLit && valLit.Value is string valStr)

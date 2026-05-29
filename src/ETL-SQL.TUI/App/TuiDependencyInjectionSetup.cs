@@ -27,6 +27,10 @@ using ETL_SQL.Connectors.Rest;
 using ETL_SQL.Connectors.Odbc;
 using ETL_SQL.Connectors.ReportPortal;
 using ETL_SQL.Connectors.Orchestrator;
+using ETL_SQL.Connectors.Sqlite;
+using ETL_SQL.Connectors.S3;
+using ETL_SQL.Connectors.Mongodb;
+using ETL_SQL.Connectors.Kafka;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Execution;
@@ -132,6 +136,10 @@ namespace ETL_SQL.TUI
             services.AddSingleton<IConnector>(new AzureBlobConnector(azureConn, azureContainer));
             services.AddSingleton<IConnector, SharePointConnector>();
             services.AddSingleton<IConnector, ActiveDirectoryConnector>();
+            services.AddSingleton<IConnector, SqliteConnector>();
+            services.AddSingleton<IConnector, S3Connector>();
+            services.AddSingleton<IConnector, MongodbConnector>();
+            services.AddSingleton<IConnector, KafkaConnector>();
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
 
             // ── Evaluator + execution ──────────────────────────────────────────
