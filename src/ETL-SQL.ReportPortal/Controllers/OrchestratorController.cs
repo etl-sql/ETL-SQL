@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ETL_SQL.Core;
@@ -11,7 +12,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [ApiController]
 [Route("api/orchestrator")]
 [Authorize(Policy = "OrchestratorAccess")]
-public class OrchestratorController(OrchestratorProxyService proxy) : ControllerBase
+public class OrchestratorController(OrchestratorProxyService proxy, AuditService audit) : ControllerBase
 {
     // ── Status & metrics ──────────────────────────────────────────────────────
 
@@ -63,6 +64,12 @@ public class OrchestratorController(OrchestratorProxyService proxy) : Controller
         {
             var body = await resp.Content.ReadAsStringAsync();
             return StatusCode((int)resp.StatusCode, body);
+        }
+        if (!string.IsNullOrEmpty(req.ScriptText))
+        {
+            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            int? userId = uid is not null && int.TryParse(uid, out var id) ? id : null;
+            await audit.LogAsync(userId, "JobScriptEdited", "Job", name, null);
         }
         return NoContent();
     }

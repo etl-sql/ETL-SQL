@@ -145,7 +145,7 @@ Follows the identical pattern used for `ETL-SQL.ReportRuntime/Resources/Shared/`
 
 **Portal**: The designer loads at `/designer` and `/designer/new` as a full-page HTML shell that imports `designer.js`. API calls go to `/api/designer/*`.
 
-**VS Code extension**: A `ReportDesignerPanel` (TypeScript, `src/etl-sql-vscode/src/panels/ReportDesignerPanel.ts`) creates a `vscode.WebviewPanel`, injects the extension's resource URI scheme, and loads the same `designer.js`. Preview triggers are routed to the Language Server / local ReportPlayer rather than a remote API.
+**VS Code extension**: A `ReportDesignerPanel` (TypeScript, `src/etl-sql-vscode/src/reportDesignerPanel.ts`) creates a `vscode.WebviewPanel`, injects the extension's resource URI scheme, and loads the same `designer.js`. Preview triggers are routed to the Language Server / local ReportPlayer rather than a remote API.
 
 ---
 
@@ -233,7 +233,7 @@ Deliverables:
 - `src/ETL-SQL.ReportRuntime/Resources/Shared/designer/` directory with placeholder `designer.js` and `designer.css`
 - CodeMirror 6 bundle committed to `designer/codemirror/`
 - `sync-assets.ps1` updated to sync `designer/` to portal and VS Code extension
-- Sync destinations added to `.gitignore` (they are generated)
+- Sync destinations are checked in (not gitignored) — each synced file includes a banner identifying its canonical source
 - `Docs/Architecture/PortalUI.md` (this document)
 
 ### Phase 2 — DAG Visualization
@@ -260,7 +260,7 @@ Deliverables:
 - rptsql CodeMirror 6 language mode (keyword set, string/comment tokenization)
 - "Edit Script" mode in orchestrator job detail panel:
   - Toggle replaces the read-only `<pre>` preview with a CodeMirror editor
-  - `PUT /api/orchestrator/jobs/{name}/script` saves inline
+  - `PUT /api/orchestrator/jobs/{name}` with `ScriptText` field saves inline (re-uses the existing job update endpoint)
   - If `HashPolicy = Block`, a warning badge is shown before save; user must confirm
   - Save is recorded in portal AuditLog (`event: JobScriptEdited`)
 - "Cancel" reverts to last-saved content without a server round-trip
@@ -318,7 +318,7 @@ New API endpoints introduced by this initiative:
 |---|---|---|---|
 | `GET` | `/api/reports/{id}/structure` | 2 | Report structure as DAG nodes/edges |
 | `GET` | `/api/orchestrator/jobs/{name}/dag` | 2 | Job script as DAG nodes/edges |
-| `PUT` | `/api/orchestrator/jobs/{name}/script` | 3 | Update inline job script |
+| `PUT` | `/api/orchestrator/jobs/{name}` | 3 | Update inline job script (existing endpoint, `ScriptText` field) |
 | `POST` | `/api/designer/parse` | 4 | rptsql string → DesignState JSON |
 | `POST` | `/api/designer/generate` | 4 | DesignState JSON → rptsql string |
 

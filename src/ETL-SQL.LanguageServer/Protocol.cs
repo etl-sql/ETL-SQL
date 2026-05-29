@@ -93,22 +93,22 @@ namespace ETL_SQL.LSP
 
     public class DesignerParseParams : IRequest<DesignerParseResponse>
     {
-        public string Script { get; set; } = "";
+        public string script { get; set; } = "";
     }
 
     public class DesignerParseResponse
     {
-        public string? DesignStateJson { get; set; }
-        public string? Error { get; set; }
+        public string? designStateJson { get; set; }
+        public string? error { get; set; }
     }
 
     public class DesignerGenerateParams : IRequest<DesignerGenerateResponse>
     {
-        public string DesignStateJson { get; set; } = "";
+        public string designStateJson { get; set; } = "";
     }
 
     public class DesignerGenerateResponse
     {
-        public string Script { get; set; } = "";
+        public string script { get; set; } = "";
     }
 }

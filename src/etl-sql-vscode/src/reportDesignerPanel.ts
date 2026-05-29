@@ -74,7 +74,7 @@ export class ReportDesignerPanel {
         const { type, id } = msg;
 
         if (type === 'apiRequest') {
-            await this._handleApiRequest(id, msg as ApiRequestMsg);
+            await this._handleApiRequest(id, msg as unknown as ApiRequestMsg);
         } else if (type === 'save') {
             await this._handleSave(id, msg.script as string);
         } else if (type === 'cancel') {
@@ -92,21 +92,21 @@ export class ReportDesignerPanel {
         try {
             if (msg.url.endsWith('/api/designer/parse')) {
                 const body   = msg.body as { script: string };
-                const result = await client.sendRequest<{ DesignStateJson?: string; Error?: string }>(
+                const result = await client.sendRequest<{ designStateJson?: string; error?: string }>(
                     'etlsql/designerParse',
-                    { Script: body.script ?? '' }
+                    { script: body.script ?? '' }
                 );
-                if (result.Error) { this._reply(id, null, result.Error); return; }
-                const designState = result.DesignStateJson ? JSON.parse(result.DesignStateJson) : null;
+                if (result.error) { this._reply(id, null, result.error); return; }
+                const designState = result.designStateJson ? JSON.parse(result.designStateJson) : null;
                 this._reply(id, { designState });
 
             } else if (msg.url.endsWith('/api/designer/generate')) {
                 const body   = msg.body as { designState: unknown };
-                const result = await client.sendRequest<{ Script: string }>(
+                const result = await client.sendRequest<{ script: string }>(
                     'etlsql/designerGenerate',
-                    { DesignStateJson: JSON.stringify(body.designState) }
+                    { designStateJson: JSON.stringify(body.designState) }
                 );
-                this._reply(id, { script: result.Script });
+                this._reply(id, { script: result.script });
 
             } else {
                 this._reply(id, null, `Unsupported URL: ${msg.url}`);
@@ -217,6 +217,9 @@ export class ReportDesignerPanel {
     await _postAndWait({ type: 'save', id, script });
   };
 
+  // Expose postMessage so the module script can use it without re-acquiring the API
+  window.__vscPostMessage = function(msg) { vscodeApi.postMessage(msg); };
+
   window.__INIT__ = ${initJson};
 </script>
 
@@ -250,7 +253,7 @@ export class ReportDesignerPanel {
     authFetch:     window.__vscodeFetch,
     onSaveScript:  window.__vscodeSave,
     onSave:        () => { /* panel stays open after save */ },
-    onCancel:      () => { acquireVsCodeApi().postMessage({ type: 'cancel' }); },
+    onCancel:      () => { window.__vscPostMessage({ type: 'cancel' }); },
   });
 </script>
 </body>

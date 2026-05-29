@@ -42,6 +42,8 @@ public class DesignerController : ControllerBase
     [HttpPost("generate")]
     public IActionResult Generate([FromBody] GenerateDesignerRequest req)
     {
+        if (req.DesignState.Pages == null || req.DesignState.Pages.Count == 0)
+            return BadRequest(new { Error = "Design state must contain at least one page." });
         var script = StateToScript(req.DesignState);
         return Ok(new GenerateDesignerResponse(script));
     }

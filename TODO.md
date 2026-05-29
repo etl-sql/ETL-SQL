@@ -45,8 +45,8 @@ Bring the newly added connectors fully in line with `Docs/Standards/Connectors_S
 >
 > Approach: DAG visualization + WYSIWYG report designer + lite script editor delivered within the existing Report Portal and VS Code extension. No new desktop app. Portal designer is configuration-only (no query execution); live preview runs locally via VS Code extension or ReportPlayer.
 
-- [ ] **Phase 1 — Foundation**: Shared designer component skeleton, CodeMirror 6 bundle, sync-assets wiring
-- [ ] **Phase 2 — DAG Visualization**: Dataset lineage DAG (Admin), report structure DAG (viewer), orchestrator script-as-DAG (job panel) — all read-only, all using ECharts
-- [ ] **Phase 3 — CodeMirror Integration**: rptsql syntax mode, orchestrator inline job script editor with audit logging
-- [ ] **Phase 4 — Report Designer (Portal)**: Full-page designer at `/designer`, four-zone layout, Designer ↔ Script toggle, parse/generate API endpoints
-- [ ] **Phase 5 — VS Code Designer Panel**: Webview panel loading shared designer component, live preview via Language Server / ReportPlayer
+- [x] **Phase 1 — Foundation**: Shared designer component skeleton, CodeMirror 6 bundle, sync-assets wiring
+- [x] **Phase 2 — DAG Visualization**: Dataset lineage DAG (Admin), report structure DAG (viewer), orchestrator script-as-DAG (job panel) — all read-only, all using ECharts
+- [x] **Phase 3 — CodeMirror Integration**: rptsql syntax mode, orchestrator inline job script editor with audit logging
+- [x] **Phase 4 — Report Designer (Portal)**: Full-page designer at `/designer`, four-zone layout, Designer ↔ Script toggle, parse/generate API endpoints
+- [x] **Phase 5 — VS Code Designer Panel**: Webview panel loading shared designer component, live preview via Language Server / ReportPlayer

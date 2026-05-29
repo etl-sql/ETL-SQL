@@ -39,20 +39,20 @@ namespace ETL_SQL.LSP
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(request.Script))
+                if (string.IsNullOrWhiteSpace(request.script))
                     return Task.FromResult(new DesignerParseResponse
-                        { DesignStateJson = JsonSerializer.Serialize(EmptyState(), _json) });
+                        { designStateJson = JsonSerializer.Serialize(EmptyState(), _json) });
 
-                var tokens = new Lexer(request.Script).Tokenize();
-                var ast    = new CoreParser(tokens, request.Script).Parse();
+                var tokens = new Lexer(request.script).Tokenize();
+                var ast    = new CoreParser(tokens, request.script).Parse();
                 var state  = ScriptToState(ast);
                 return Task.FromResult(new DesignerParseResponse
-                    { DesignStateJson = JsonSerializer.Serialize(state, _json) });
+                    { designStateJson = JsonSerializer.Serialize(state, _json) });
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "LSP: etlsql/designerParse failed");
-                return Task.FromResult(new DesignerParseResponse { Error = ex.Message });
+                return Task.FromResult(new DesignerParseResponse { error = ex.Message });
             }
         }
 
@@ -60,15 +60,15 @@ namespace ETL_SQL.LSP
         {
             try
             {
-                var state  = JsonSerializer.Deserialize<LspDesignState>(request.DesignStateJson, _json)
+                var state  = JsonSerializer.Deserialize<LspDesignState>(request.designStateJson, _json)
                              ?? new LspDesignState(new List<LspDesignPage>(), new List<LspDesignDataset>());
                 var script = StateToScript(state);
-                return Task.FromResult(new DesignerGenerateResponse { Script = script });
+                return Task.FromResult(new DesignerGenerateResponse { script = script });
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "LSP: etlsql/designerGenerate failed");
-                return Task.FromResult(new DesignerGenerateResponse { Script = $"-- Error: {ex.Message}\n" });
+                return Task.FromResult(new DesignerGenerateResponse { script = $"-- Error: {ex.Message}\n" });
             }
         }
 

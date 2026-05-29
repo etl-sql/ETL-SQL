@@ -695,7 +695,7 @@ function renderCatalogReportList(title, reports, emptyText) {
 }
 
 const LINEAGE_VIEW_KEY = 'etlsql_lineage_views';
-const lineageState = { kind: 'table', query: '', column: '', tagValue: '', from: '', to: '', limit: 100, rows: [], savedViews: [], selectedView: '' };
+const lineageState = { kind: 'table', query: '', column: '', tagValue: '', from: '', to: '', limit: 100, rows: [], savedViews: [], selectedView: '', view: 'table' };
 
 function showLineageCatalog() {
   setSidebarViewActive('lineage');
@@ -731,6 +731,7 @@ function showLineageCatalog() {
         <input id="lineageTo" class="lineage-date" type="date" value="${escAttr(lineageState.to)}" aria-label="To date">
         <button class="btn btn-primary" type="submit">Search</button>
         <button class="btn btn-outline" id="lineageExportBtn" type="button" ${lineageState.rows.length ? '' : 'disabled'}>Export CSV</button>
+        <button class="btn btn-outline" id="lineageViewToggle" type="button">${lineageState.view === 'graph' ? 'Table' : 'Graph'}</button>
         <select id="lineageSavedView" class="library-sort lineage-saved" aria-label="Saved lineage view">
           <option value="">Saved views</option>
           ${savedOptions}
@@ -760,6 +761,11 @@ function showLineageCatalog() {
     await loadLineageResults();
   });
   document.getElementById('lineageExportBtn').addEventListener('click', exportLineageCsv);
+  document.getElementById('lineageViewToggle').addEventListener('click', () => {
+    lineageState.view = lineageState.view === 'graph' ? 'table' : 'graph';
+    document.getElementById('lineageViewToggle').textContent = lineageState.view === 'graph' ? 'Table' : 'Graph';
+    if (lineageState.rows.length) renderLineageResults(lineageState.rows);
+  });
   document.getElementById('lineageSavedView').addEventListener('change', applySelectedLineageView);
   document.getElementById('lineageSaveViewBtn').addEventListener('click', saveCurrentLineageView);
   document.getElementById('lineageDeleteViewBtn').addEventListener('click', deleteSelectedLineageView);
@@ -821,6 +827,11 @@ function renderLineageResults(rows) {
     return;
   }
 
+  if (lineageState.view === 'graph') {
+    renderLineageDag(rows);
+    return;
+  }
+
   $results.innerHTML = `
     <div class="lineage-result-list">
       ${rows.map(renderLineageRow).join('')}
@@ -832,6 +843,41 @@ function renderLineageResults(rows) {
       openReport(+btn.dataset.openReport);
     });
   });
+}
+
+function renderLineageDag(rows) {
+  const $results = document.getElementById('lineageResults');
+  $results.innerHTML = '<div id="lineageDagContainer" style="height:480px;"></div>';
+  const container = document.getElementById('lineageDagContainer');
+
+  const targets = new Set(rows.map(r => r.targetTable).filter(Boolean));
+  const sources = new Set(rows.flatMap(r => r.sourceTables || []).filter(Boolean));
+  const allTables = new Set([...targets, ...sources]);
+
+  const nodeMap = {};
+  [...allTables].forEach((name, i) => {
+    const isTarget = targets.has(name);
+    const isSource = sources.has(name);
+    const type = isTarget && isSource ? 'dataset' : isTarget ? 'io' : 'table';
+    nodeMap[name] = { id: `t${i}`, label: name, type };
+  });
+
+  const nodes = Object.values(nodeMap);
+  const seenEdges = new Set();
+  const edges = [];
+  for (const row of rows) {
+    if (!row.targetTable || !nodeMap[row.targetTable]) continue;
+    for (const src of (row.sourceTables || [])) {
+      if (!src || !nodeMap[src]) continue;
+      const key = `${src}->${row.targetTable}`;
+      if (!seenEdges.has(key)) {
+        seenEdges.add(key);
+        edges.push({ source: nodeMap[src].id, target: nodeMap[row.targetTable].id, label: row.operation || null });
+      }
+    }
+  }
+
+  renderDag(container, { nodes, edges });
 }
 
 function renderLineageRow(row) {
