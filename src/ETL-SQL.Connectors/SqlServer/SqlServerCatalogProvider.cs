@@ -12,7 +12,7 @@ namespace ETL_SQL.Connectors.SqlServer
     /// Reads <c>sys.columns</c>, <c>sys.extended_properties</c>, and primary-key constraints
     /// to populate <c>@db_*</c> lineage tags.
     /// </summary>
-    public sealed class SqlServerCatalogProvider : ICatalogMetadataProvider
+    public sealed class SqlServerCatalogProvider : ICatalogMetadataProvider, IViewDefinitionProvider
     {
         private readonly string _connectionString;
 
@@ -102,6 +102,25 @@ WHERE fs.name = @schema AND ft.name = @table;";
                     ReferencedColumn: rdr.GetString(2)));
             }
             return results;
+        }
+
+        public async Task<string?> GetViewDefinitionAsync(string schema, string objectName, CancellationToken ct = default)
+        {
+            const string sql = @"
+SELECT m.definition
+FROM sys.sql_modules m
+JOIN sys.objects o ON m.object_id = o.object_id
+JOIN sys.schemas s ON s.schema_id = o.schema_id
+WHERE o.type IN ('V', 'P', 'TF', 'IF')
+  AND s.name = @schema AND o.name = @name;";
+
+            await using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+            await using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@schema", schema);
+            cmd.Parameters.AddWithValue("@name", objectName);
+            var result = await cmd.ExecuteScalarAsync(ct);
+            return result is string def && !string.IsNullOrWhiteSpace(def) ? def : null;
         }
     }
 }

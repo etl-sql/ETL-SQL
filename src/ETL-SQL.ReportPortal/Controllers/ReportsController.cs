@@ -534,6 +534,38 @@ public class ReportsController : ControllerBase
                     }
                 }
             }
+
+            // Enrich table and dataset nodes with column-level lineage for DAG expansion
+            var colTracker = new LineageTracker(ETL_SQL.Common.NullLogger.Instance);
+            new LineageAnalyzer(colTracker).Analyze(script);
+            var allLineage = colTracker.GetFullLineage().ToList();
+
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                var node = nodes[i];
+                if (node.Type != "table" && node.Type != "dataset") continue;
+
+                var nodeEntries = allLineage
+                    .Where(e => e.TargetColumn != null &&
+                                e.TargetTable.Equals(node.Label, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (nodeEntries.Count == 0) continue;
+
+                var columns = nodeEntries
+                    .Select(e => e.TargetColumn!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(c => c)
+                    .ToList();
+
+                var colEdges = nodeEntries
+                    .Where(e => e.SourceTables.Count > 0 && e.SourceColumns.Count > 0)
+                    .Select(e => new { tgtCol = e.TargetColumn, srcTable = e.SourceTables[0], srcCol = e.SourceColumns[0] })
+                    .Distinct()
+                    .ToList<object>();
+
+                nodes[i] = node with { Meta = new { columns, colEdges } };
+            }
         }
         catch (Exception ex)
         {

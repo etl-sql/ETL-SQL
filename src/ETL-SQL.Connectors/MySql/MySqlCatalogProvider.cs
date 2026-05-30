@@ -11,7 +11,7 @@ namespace ETL_SQL.Connectors.MySql
     /// Imports column metadata from the MySQL / MariaDB system catalog.
     /// Reads <c>information_schema.columns</c> and primary/foreign key constraints.
     /// </summary>
-    public sealed class MySqlCatalogProvider : ICatalogMetadataProvider
+    public sealed class MySqlCatalogProvider : ICatalogMetadataProvider, IViewDefinitionProvider
     {
         private readonly string _connectionString;
 
@@ -92,6 +92,22 @@ WHERE kcu.TABLE_SCHEMA = @schema
                     ReferencedColumn: rdr.GetString(2)));
             }
             return results;
+        }
+
+        public async Task<string?> GetViewDefinitionAsync(string schema, string objectName, CancellationToken ct = default)
+        {
+            const string sql = @"
+SELECT VIEW_DEFINITION
+FROM information_schema.VIEWS
+WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @name;";
+
+            await using var conn = new MySqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+            await using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@schema", schema);
+            cmd.Parameters.AddWithValue("@name", objectName);
+            var result = await cmd.ExecuteScalarAsync(ct);
+            return result is string def && !string.IsNullOrWhiteSpace(def) ? def : null;
         }
     }
 }

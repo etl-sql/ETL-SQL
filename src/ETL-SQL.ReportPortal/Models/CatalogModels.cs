@@ -36,3 +36,10 @@ public record CatalogLineageHistoryDto(
     int? ReportId,
     string? ReportName,
     string? FolderPath);
+
+public record DownstreamReportDto(
+    int? ReportId,
+    string? ReportName,
+    string? FolderPath,
+    int RunCount,
+    DateTime LastSeen);

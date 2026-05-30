@@ -21,11 +21,16 @@
 // Phase 2 — DAG Visualization
 // ─────────────────────────────────────────────────────────────────────────────
 
+function _h(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 const _TYPE_COLOR = {
     dataset:     '#10b981',
     visual:      '#3b82f6',
     page:        '#8b5cf6',
     table:       '#64748b',
+    column:      '#94a3b8',
     statement:   '#475569',
     conditional: '#f59e0b',
     loop:        '#f97316',
@@ -42,11 +47,14 @@ function _nodeSymbol(type) {
     if (type === 'visual')                          return 'diamond';
     if (type === 'page')                            return 'roundRect';
     if (type === 'dataset' || type === 'table')     return 'roundRect';
+    if (type === 'column')                          return 'circle';
     return 'circle';
 }
 
 function _nodeSize(type) {
-    return type === 'page' ? 44 : 36;
+    if (type === 'page')   return 44;
+    if (type === 'column') return 18;
+    return 36;
 }
 
 /**
@@ -130,63 +138,142 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         return { dispose: () => {}, resize: () => {} };
     }
 
-    const pos = _computeLayout(nodes, edges);
+    const expandedNodes = new Set();
 
-    const eNodes = nodes.map(n => ({
-        id:         n.id,
-        name:       n.label,
-        x:          pos[n.id]?.x ?? 0,
-        y:          pos[n.id]?.y ?? 0,
-        symbol:     _nodeSymbol(n.type),
-        symbolSize: _nodeSize(n.type),
-        label:      { show: true, formatter: '{b}', fontSize: 11, overflow: 'truncate', width: 140 },
-        itemStyle:  { color: _nodeColor(n.type), borderColor: 'transparent' },
-        emphasis:   { itemStyle: { borderColor: '#fff', borderWidth: 2 } },
-        tooltip:    {
-            formatter: () => {
-                const meta = n.meta ? Object.entries(n.meta)
-                    .map(([k, v]) => `<br/><span style="color:#94a3b8">${k}:</span> ${v}`)
-                    .join('') : '';
-                return `<strong>${n.label}</strong><br/>
-                    <span style="color:#94a3b8">type:</span> ${n.type ?? ''}${meta}`;
+    function buildGraph() {
+        const allNodes = [...nodes];
+        const allEdges = [...(edges ?? [])];
+
+        // Inject column sub-nodes for expanded table/dataset nodes
+        const pos = _computeLayout(nodes, edges);
+        const COL_SPREAD = 160;
+        const COL_OFFSET_Y = 90;
+
+        for (const n of nodes) {
+            if (!expandedNodes.has(n.id)) continue;
+            const cols = n.meta?.columns;
+            if (!cols?.length) continue;
+
+            const parentPos = pos[n.id] ?? { x: 0, y: 0 };
+            const count = cols.length;
+            cols.forEach((col, i) => {
+                const colId = `${n.id}__col__${col}`;
+                allNodes.push({
+                    id: colId, label: col, type: 'column',
+                    meta: { parent: n.id, column: col },
+                });
+                pos[colId] = {
+                    x: parentPos.x + (i - (count - 1) / 2) * (COL_SPREAD / Math.max(count, 4)),
+                    y: parentPos.y + COL_OFFSET_Y,
+                };
+            });
+
+            // Column-to-column edges from colEdges metadata
+            for (const ce of (n.meta?.colEdges ?? [])) {
+                const srcNodeId = Object.keys(pos).find(id => {
+                    const nd = allNodes.find(x => x.id === id);
+                    return nd && (nd.label === ce.srcTable || nd.id === `ds:${ce.srcTable}` || nd.id === `table:${ce.srcTable}`);
+                });
+                if (!srcNodeId || !expandedNodes.has(srcNodeId)) continue;
+                const srcColId = `${srcNodeId}__col__${ce.srcCol}`;
+                const tgtColId = `${n.id}__col__${ce.tgtCol}`;
+                if (allNodes.find(x => x.id === srcColId) && allNodes.find(x => x.id === tgtColId))
+                    allEdges.push({ source: srcColId, target: tgtColId, label: null });
+            }
+        }
+
+        return { allNodes, allEdges, pos };
+    }
+
+    function toECharts({ allNodes, allEdges, pos }) {
+        const eNodes = allNodes.map(n => ({
+            id:         n.id,
+            name:       n.label,
+            x:          pos[n.id]?.x ?? 0,
+            y:          pos[n.id]?.y ?? 0,
+            symbol:     _nodeSymbol(n.type),
+            symbolSize: _nodeSize(n.type),
+            label:      {
+                show: true, formatter: '{b}', fontSize: n.type === 'column' ? 9 : 11,
+                overflow: 'truncate', width: n.type === 'column' ? 80 : 140,
             },
-        },
-        _meta: n.meta,
-    }));
+            itemStyle: {
+                color: _nodeColor(n.type),
+                borderColor: n.meta?.columns?.length && !expandedNodes.has(n.id)
+                    ? '#10b981' : 'transparent',
+                borderWidth: 2,
+            },
+            emphasis:  { itemStyle: { borderColor: '#fff', borderWidth: 2 } },
+            tooltip:   {
+                formatter: () => {
+                    if (n.type === 'column') return `<strong>${_h(n.label)}</strong><br/><span style="color:#94a3b8">column of</span> ${_h(n.meta?.parent)}`;
+                    const cols = n.meta?.columns;
+                    const hint = cols?.length
+                        ? `<br/><span style="color:#10b981">${expandedNodes.has(n.id) ? '▲ click to collapse' : '▼ click to expand columns'}</span>`
+                        : '';
+                    const meta = n.meta ? Object.entries(n.meta)
+                        .filter(([k]) => k !== 'columns' && k !== 'colEdges')
+                        .map(([k, v]) => `<br/><span style="color:#94a3b8">${_h(k)}:</span> ${_h(v)}`)
+                        .join('') : '';
+                    return `<strong>${_h(n.label)}</strong><br/><span style="color:#94a3b8">type:</span> ${_h(n.type)}${meta}${hint}`;
+                },
+            },
+            _meta: n.meta,
+        }));
 
-    const eEdges = (edges ?? []).map(e => ({
-        source:     e.source,
-        target:     e.target,
-        label:      e.label ? { show: true, formatter: e.label, fontSize: 10, color: '#94a3b8' } : { show: false },
-        lineStyle:  { color: '#94a3b8', width: 1.5 },
-    }));
+        const eEdges = allEdges.map(e => ({
+            source:    e.source,
+            target:    e.target,
+            label:     e.label ? { show: true, formatter: e.label, fontSize: 10, color: '#94a3b8' } : { show: false },
+            lineStyle: {
+                color: e.source?.includes('__col__') || e.target?.includes('__col__') ? '#cbd5e1' : '#94a3b8',
+                width: e.source?.includes('__col__') ? 1 : 1.5,
+                type:  e.source?.includes('__col__') ? 'dashed' : 'solid',
+            },
+        }));
+
+        return { eNodes, eEdges };
+    }
 
     const chart = ec.init(container, null, { renderer: 'canvas' });
 
-    chart.setOption({
-        tooltip: { show: true, confine: true },
-        series: [{
-            type:         'graph',
-            layout:       'none',
-            nodes:        eNodes,
-            edges:        eEdges,
-            roam:         true,
-            zoom:         0.9,
-            center:       ['50%', '50%'],
-            edgeSymbol:   ['none', 'arrow'],
-            edgeSymbolSize: 8,
-            lineStyle:    { curveness: 0.15 },
-            label:        { position: 'inside', color: '#fff' },
-            emphasis:     { focus: 'adjacency' },
-        }],
-    });
-
-    if (options.onNodeClick) {
-        chart.on('click', params => {
-            if (params.dataType === 'node')
-                options.onNodeClick(params.data.id, params.data._meta);
-        });
+    function render() {
+        const graph = buildGraph();
+        const { eNodes, eEdges } = toECharts(graph);
+        chart.setOption({
+            tooltip: { show: true, confine: true },
+            series: [{
+                type:           'graph',
+                layout:         'none',
+                nodes:          eNodes,
+                edges:          eEdges,
+                roam:           true,
+                zoom:           0.9,
+                center:         ['50%', '50%'],
+                edgeSymbol:     ['none', 'arrow'],
+                edgeSymbolSize: 8,
+                lineStyle:      { curveness: 0.15 },
+                label:          { position: 'inside', color: '#fff' },
+                emphasis:       { focus: 'adjacency' },
+            }],
+        }, true);
     }
+
+    render();
+
+    chart.on('click', params => {
+        if (params.dataType !== 'node') return;
+        const meta = params.data._meta;
+        // Expand/collapse nodes that have column data
+        if (meta?.columns?.length) {
+            const nodeId = params.data.id;
+            if (expandedNodes.has(nodeId)) expandedNodes.delete(nodeId);
+            else expandedNodes.add(nodeId);
+            render();
+        }
+        if (options.onNodeClick)
+            options.onNodeClick(params.data.id, meta);
+    });
 
     return {
         dispose: () => chart.dispose(),

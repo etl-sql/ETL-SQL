@@ -18,15 +18,18 @@ CREATE PAGE [Trends] AS DASHBOARD (
 );
 ```
 - [ ] When exiting design it returns to the homepage instead of back to the report we were editing.
-- [ ] Lineage link in the left sidebar looks nice but doesn't have any data in it. → Root cause: `PersistAdHocInteractions` defaults to `false` in `src/appsettings.json`. Setting it to `true` enables catalog persistence for ad-hoc portal runs via `TryPersistAdHocLineageAsync()` in `ExecutionController.cs`. Orchestrator jobs always persist regardless of this flag.
+- [x] Lineage link in the left sidebar looks nice but doesn't have any data in it. → Fixed: flipped `PersistAdHocInteractions` to `true` in `src/appsettings.json`. Ad-hoc portal runs now persist lineage to the catalog.
+- [ ] Lineage modal needs to be wider especially for long ones you have to scroll all the way to the bottom to scroll to the right
+- [ ] Structure looks like it wants to work but its all jumbled together.  See screenshot:
+C:\Users\chuck\scratch\ETL-SQL\brain\Screenshot 2026-05-10 155716.png
 
 ### Lineage (Future Work)
-- [ ] **Ad-hoc run lineage catalog persistence** — `TryPersistAdHocLineageAsync()` exists in `ExecutionController.cs` and calls `SaveLineageAsync()`, but is gated behind `PersistAdHocInteractions: false` in `appsettings.json` (off by default). Decide whether to flip the default to `true`, or surface it as a portal setting. This is why the sidebar Lineage catalog is empty until a scheduled job runs.
-- [ ] **Cross-report downstream impact analysis** — add a portal feature: "which other reports use this table/column?" The `CatalogLineageHistoryDto` already includes `reportId`/`reportName`; needs an aggregate API endpoint + UI in the Dependencies or Catalog view.
+- [x] **Ad-hoc run lineage catalog persistence** — Flipped `PersistAdHocInteractions` to `true` in `appsettings.json`. `TryPersistAdHocLineageAsync()` in `ExecutionController.cs` is now active for all ad-hoc portal runs.
+- [x] **Cross-report downstream impact analysis** — Added `GET /api/catalog/lineage/downstream?table={name}` endpoint; Dependencies modal "Downstream Impact" section now lists other reports that consume the same source tables.
 - [x] **OpenLineage export** — Completed: OpenLineage JSON serialization added to support Marquez, DataHub, Airflow, and Apache Atlas.
 - [x] **Database catalog import** — Completed: Built `ICatalogMetadataProvider` for SQL Server, PostgreSQL, and MySQL to pull comments, nullability, and primary key status dynamically.
-- [ ] **Standard tag governance / enforcement** — `StandardTags` HashSet is already defined in `LanguageMetadata.cs` with all 20 standard tags, but zero linting rules use it. Need: (1) a lint rule that warns on unknown tag keys (e.g. `@is_pii` vs `@pii`), (2) case-normalization so `@PII` and `@pii` resolve to the same tag, and (3) a `SensitiveExportLintRule` warning when PII-tagged columns flow to unencrypted targets.
+- [x] **Standard tag governance / enforcement** — Added `UnknownTagLintRule` in `ETL-SQL.Analysis/Linting/Rules/`; warns when `/* @tag */` key is not in `LanguageMetadata.StandardTags` (auto-discovered, no DI registration needed). Case-normalization was already handled by the OrdinalIgnoreCase Metadata dictionary.
 - [x] Report structure button looks OK but I think we can do better. → Fixed: Structure DAG now shows source tables → temp tables → datasets → visuals (with axis labels). Dependencies modal filters RESULTSET noise and shows TransformationKind badges, source columns, and security tag badges.
-- [ ] **Unqualified Column Precision** — Fix the static analyzer fallback in `LineageAnalyzer.cs` that maps unqualified join columns to all source tables, resolving it by matching column names against known table schemas.
-- [ ] **View & Stored Procedure Transparency** — Update metadata catalog providers to fetch view/procedure definitions and recursively parse them to trace lineage through view queries.
-- [ ] **Interactive Column Flows (Portal DAG)** — Implement collapsible column-level sub-nodes in ECharts (`designer.js`) to support column-to-column flow tracing.
+- [x] **Unqualified Column Precision** — `LineageAnalyzer.cs` fallback now uses `Tracker.GetColumnMetadata()` to narrow fan-out to only source tables that have the column already tracked.
+- [x] **View & Stored Procedure Transparency** — Added `IViewDefinitionProvider` interface; implemented in SQL Server (`sys.sql_modules`), PostgreSQL (`pg_get_viewdef`), and MySQL (`INFORMATION_SCHEMA.VIEWS`); `ExpandViewLineageAsync` in `Evaluator.cs` parses view DDL recursively and records `VIEW_EXPAND` lineage entries.
+- [x] **Interactive Column Flows (Portal DAG)** — `renderDag()` now supports click-to-expand column sub-nodes; `GetStructure()` enriches table/dataset nodes with `columns` + `colEdges` from `LineageAnalyzer`; column-to-column edges drawn when both parent nodes are expanded. HTML-escaped via `_h()` helper.

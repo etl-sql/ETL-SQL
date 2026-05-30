@@ -125,6 +125,50 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
         return Ok(await ToLineageDtosAsync(FilterRunWindow(entries, from, to).Take(limit)));
     }
 
+    [HttpGet("lineage/downstream")]
+    public async Task<IActionResult> LineageDownstream([FromQuery] string table, [FromQuery] int limit = 50)
+    {
+        table = table?.Trim() ?? "";
+        if (table.Length == 0)
+            return BadRequest(new { error = "Table name is required." });
+
+        limit = Math.Clamp(limit, 1, 200);
+        var entries = await lineageCatalog.GetHistoryForSourceAsync(table, limit * 20);
+        var visibleFolderIds = await GetVisibleFolderIdsAsync();
+
+        var reportIds = entries
+            .Select(e => TryParseReportId(e.JobName))
+            .Where(id => id.HasValue).Select(id => id!.Value)
+            .ToHashSet();
+
+        var reports = reportIds.Count == 0
+            ? new Dictionary<int, Report>()
+            : await db.Reports
+                .Include(r => r.Folder)
+                .Where(r => !r.IsDeleted && reportIds.Contains(r.Id) && visibleFolderIds.Contains(r.FolderId))
+                .ToDictionaryAsync(r => r.Id);
+
+        var result = entries
+            .GroupBy(e => TryParseReportId(e.JobName))
+            .Select(g =>
+            {
+                var reportId = g.Key;
+                reports.TryGetValue(reportId ?? -1, out var report);
+                return new DownstreamReportDto(
+                    report?.Id,
+                    report?.Name,
+                    report?.Folder.Path,
+                    g.Count(),
+                    g.Max(e => e.RunAt));
+            })
+            .Where(d => d.ReportId.HasValue)
+            .OrderByDescending(d => d.LastSeen)
+            .Take(limit)
+            .ToList();
+
+        return Ok(result);
+    }
+
     [HttpGet("lineage/source-file")]
     public async Task<IActionResult> LineageForSourceFile([FromQuery] string path, [FromQuery] int limit = 100, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null)
     {

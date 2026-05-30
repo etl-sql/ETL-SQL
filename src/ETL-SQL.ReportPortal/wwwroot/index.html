@@ -1422,13 +1422,32 @@ async function showDependencies(id) {
 
   try {
     const data = await reportsApi.dependencies(id);
-    $body.innerHTML = renderDependencies(data);
+    // Fetch downstream impact for each unique source table (cap at 10 sources)
+    const sourceNames = [...new Set((data.sources || []).map(s => s.name || s.objectName).filter(Boolean))].slice(0, 10);
+    let downstream = [];
+    if (sourceNames.length > 0) {
+      try {
+        const results = await Promise.all(
+          sourceNames.map(t => fetch(`/api/catalog/lineage/downstream?table=${encodeURIComponent(t)}`).then(r => r.ok ? r.json() : []))
+        );
+        const seen = new Map();
+        for (const list of results) {
+          for (const item of list) {
+            const key = item.reportId ?? item.reportName ?? '';
+            if (key && (!seen.has(key) || seen.get(key).lastSeen < item.lastSeen))
+              seen.set(key, item);
+          }
+        }
+        downstream = [...seen.values()].sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
+      } catch { /* catalog may be empty — silently skip */ }
+    }
+    $body.innerHTML = renderDependencies(data, downstream);
   } catch (err) {
     $body.innerHTML = `<div class="empty-state">Failed to load dependencies: ${esc(err.message)}</div>`;
   }
 }
 
-function renderDependencies(data) {
+function renderDependencies(data, downstream = []) {
   const snapshot = data.snapshot
     ? `<span>Snapshot ${esc(formatBuiltAt(data.snapshot.builtAt))}</span>`
     : '<span>No snapshot yet</span>';
@@ -1461,7 +1480,8 @@ function renderDependencies(data) {
     ${renderDependencyTable('Registered Datasets', ['Dataset', 'Folder', 'Access', 'Rows', 'Sources'], registryRows)}
     ${renderDependencyTable('Refresh Jobs', ['Job', 'Interval', 'Last Refresh'], jobRows)}
     ${renderDependencyTable('Sources', ['Connection', 'Object', 'Kind'], sourceRows)}
-    ${renderDependencyTable('Lineage and Tags', ['Target', 'Role / Column', 'Operation', 'Transformation', 'Sources → Columns', 'Tags'], lineageRows || null)}`;
+    ${renderDependencyTable('Lineage and Tags', ['Target', 'Role / Column', 'Operation', 'Transformation', 'Sources → Columns', 'Tags'], lineageRows || null)}
+    ${renderDownstreamImpact(downstream)}`;
 }
 
 const _VISUAL_ROLES = new Set(['XAXIS','YAXIS','COLOR','SIZE','LABEL','VALUE','CATEGORY','TOOLTIP','DETAIL','SERIES','AGGREGATE','FILTER','DRILLTHROUGH','BUBBLESIZE','LATITUDE','LONGITUDE']);
@@ -1540,8 +1560,37 @@ function renderDependencyTable(title, headers, rows) {
     </div>`;
 }
 
+function renderDownstreamImpact(downstream) {
+  const items = (downstream || []).filter(d => d.reportName);
+  const title = 'Downstream Impact';
+  if (!items.length) {
+    return `<div class="dependency-section"><h4>${esc(title)}</h4><p class="text-muted">No downstream consumers found in lineage catalog.</p></div>`;
+  }
+  const chips = items.map(d => {
+    const path = d.folderPath ? `${esc(d.folderPath)} / ` : '';
+    const runs = `${d.runCount} run${d.runCount !== 1 ? 's' : ''}`;
+    const last = esc(formatBuiltAt(d.lastSeen));
+    const inner = `<span class="viewer-meta-pill" title="${path}${esc(d.reportName)} · ${runs} · last ${last}">${path}${esc(d.reportName)}</span>`;
+    const rid = Number(d.reportId);
+    return Number.isInteger(rid) && rid > 0
+      ? `<a href="#" data-downstream-report-id="${rid}" style="text-decoration:none">${inner}</a>`
+      : inner;
+  }).join(' ');
+  return `<div class="dependency-section"><h4>${esc(title)}</h4>
+    <p class="text-sm text-muted" style="margin:0 0 8px">Source tables in this report are consumed by ${items.length} other report${items.length !== 1 ? 's' : ''}:</p>
+    <div class="viewer-meta" style="flex-wrap:wrap;gap:6px">${chips}</div></div>`;
+}
+
 document.getElementById('dependenciesCloseBtn').addEventListener('click', () => {
   document.getElementById('dependenciesModal').style.display = 'none';
+});
+
+document.getElementById('dependenciesModal').addEventListener('click', e => {
+  const link = e.target.closest('[data-downstream-report-id]');
+  if (!link) return;
+  e.preventDefault();
+  const rid = parseInt(link.dataset.downstreamReportId, 10);
+  if (Number.isInteger(rid) && rid > 0) openReport(rid);
 });
 
 async function showHistory(id) {

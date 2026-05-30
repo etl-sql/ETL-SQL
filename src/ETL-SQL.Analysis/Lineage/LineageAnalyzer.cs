@@ -116,7 +116,18 @@ namespace ETL_SQL.Analysis.Lineage
 
                     if (!resolvedSources.Any() && (sel.FromTable != null || sel.Joins.Any()))
                     {
-                        resolvedSources = sel.GetSourceTables().ToList();
+                        var allSources = sel.GetSourceTables().ToList();
+                        if (sourceCols.Count > 0)
+                        {
+                            var narrowed = allSources
+                                .Where(t => sourceCols.Any(c => Tracker.GetColumnMetadata(t, c) != null))
+                                .ToList();
+                            resolvedSources = narrowed.Count > 0 ? narrowed : allSources;
+                        }
+                        else
+                        {
+                            resolvedSources = allSources;
+                        }
                     }
 
                     var inherited = Tracker.InheritMetadata(resolvedSources, sourceCols, out var derived)

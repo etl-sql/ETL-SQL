@@ -680,6 +680,18 @@ namespace ETL_SQL.Engine
                             LineageTracker.Record(rel.ReferencedTable, Array.Empty<string>(), "DB_CATALOG",
                                 targetColumn: rel.ReferencedColumn, metadata: refMeta);
                         }
+
+                        // Attempt view/procedure definition expansion (best-effort, inside outer try)
+                        if (provider is IViewDefinitionProvider vdp)
+                        {
+                            try
+                            {
+                                var def = await vdp.GetViewDefinitionAsync(schema, table, ct);
+                                if (!string.IsNullOrWhiteSpace(def))
+                                    await ExpandViewLineageAsync(src, def, ct);
+                            }
+                            catch { /* unparseable DDL or unsupported object — silently skip */ }
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -688,6 +700,36 @@ namespace ETL_SQL.Engine
                 }
             }
         }
+
+        private async Task ExpandViewLineageAsync(string viewQualifiedName, string viewDdl, System.Threading.CancellationToken ct)
+        {
+            // Guard: only expand each view once to prevent infinite recursion through nested views
+            _expandedViews ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!_expandedViews.Add(viewQualifiedName)) return;
+
+            try
+            {
+                var tokens = new Lexer(viewDdl).Tokenize();
+                var viewScript = new ETL_SQL.Core.Parser.Parser(tokens, viewDdl).Parse();
+                var viewTracker = new LineageTracker(ETL_SQL.Common.NullLogger.Instance);
+                new LineageAnalyzer(viewTracker).Analyze(viewScript);
+
+                foreach (var entry in viewTracker.GetFullLineage())
+                {
+                    // Re-record: target is the view name (so downstream consumers see the true upstream)
+                    LineageTracker.Record(
+                        viewQualifiedName,
+                        entry.SourceTables,
+                        "VIEW_EXPAND",
+                        targetColumn: entry.TargetColumn,
+                        sourceColumns: entry.SourceColumns,
+                        line: entry.Line);
+                }
+            }
+            catch { /* unparseable DDL — silently skip */ }
+        }
+
+        private HashSet<string>? _expandedViews;
 
         public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)
         {

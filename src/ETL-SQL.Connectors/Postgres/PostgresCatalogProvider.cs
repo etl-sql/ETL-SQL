@@ -12,7 +12,7 @@ namespace ETL_SQL.Connectors.Postgres
     /// Reads <c>information_schema.columns</c>, <c>pg_catalog.obj_description</c>, and
     /// primary-key / foreign-key constraints to populate <c>@db_*</c> lineage tags.
     /// </summary>
-    public sealed class PostgresCatalogProvider : ICatalogMetadataProvider
+    public sealed class PostgresCatalogProvider : ICatalogMetadataProvider, IViewDefinitionProvider
     {
         private readonly string _connectionString;
 
@@ -101,6 +101,24 @@ WHERE tc.constraint_type = 'FOREIGN KEY'
                     ReferencedColumn: rdr.GetString(2)));
             }
             return results;
+        }
+
+        public async Task<string?> GetViewDefinitionAsync(string schema, string objectName, CancellationToken ct = default)
+        {
+            const string sql = @"
+SELECT pg_get_viewdef(c.oid, true)
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind IN ('v', 'm')
+  AND n.nspname = @schema AND c.relname = @name;";
+
+            await using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@schema", schema);
+            cmd.Parameters.AddWithValue("@name", objectName);
+            var result = await cmd.ExecuteScalarAsync(ct);
+            return result is string def && !string.IsNullOrWhiteSpace(def) ? def : null;
         }
     }
 }

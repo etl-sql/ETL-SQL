@@ -41,6 +41,16 @@ namespace ETL_SQL.Data
 
 
     /// <summary>
+    /// Optional interface a catalog provider can implement to fetch view/procedure DDL so
+    /// lineage can be traced through database-side objects rather than stopping at the object name.
+    /// </summary>
+    public interface IViewDefinitionProvider
+    {
+        /// <summary>Returns the SQL definition of a view or stored procedure, or null if not found / not supported.</summary>
+        Task<string?> GetViewDefinitionAsync(string schema, string objectName, CancellationToken ct = default);
+    }
+
+    /// <summary>
     /// Defines the contract for external database connectors (SQL Server, PostgreSql, etc.).
     /// Each connector provides metadata and data source creation capabilities.
     /// </summary>
