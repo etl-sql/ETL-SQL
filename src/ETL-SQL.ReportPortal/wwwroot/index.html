@@ -1440,8 +1440,17 @@ function renderDependencies(data) {
     <tr><td>${esc(j.orchestratorJobName)}</td><td>${esc(j.refreshInterval || 'Manual')}</td><td>${esc(j.lastRefreshedAt ? formatBuiltAt(j.lastRefreshedAt) : 'Never')}</td></tr>`).join('');
   const sourceRows = (data.sources || []).map(s => `
     <tr><td>${esc(s.connection || 'Engine')}</td><td>${esc(s.objectName || s.name)}</td><td>${esc(s.kind)}</td></tr>`).join('');
-  const lineageRows = (data.lineageEntries || []).map(e => `
-    <tr><td>${esc(e.targetColumn ? `${e.target}.${e.targetColumn}` : e.target)}</td><td>${esc(e.operation)}</td><td>${esc((e.sources || []).join(', ') || 'None')}</td><td>${esc(formatTags(e.tags))}</td></tr>`).join('');
+
+  const meaningful = (data.lineageEntries || []).filter(e => e.target !== 'RESULTSET');
+  const lineageRows = meaningful.map(e => {
+    const targetCell = esc(e.target);
+    const roleCell   = e.targetColumn ? formatLineageRole(e.targetColumn) : '';
+    const opCell     = esc(e.operation);
+    const xformCell  = formatTransformationKind(e.transformationKind, e.transformationExpression);
+    const srcCell    = formatSourcesWithColumns(e.sources, e.sourceColumns);
+    const tagsCell   = formatTagBadges(e.tags, e.derivedFromDescriptions);
+    return `<tr><td>${targetCell}</td><td>${roleCell}</td><td>${opCell}</td><td>${xformCell}</td><td>${srcCell}</td><td>${tagsCell}</td></tr>`;
+  }).join('');
 
   return `
     <div class="dependency-summary">
@@ -1452,12 +1461,72 @@ function renderDependencies(data) {
     ${renderDependencyTable('Registered Datasets', ['Dataset', 'Folder', 'Access', 'Rows', 'Sources'], registryRows)}
     ${renderDependencyTable('Refresh Jobs', ['Job', 'Interval', 'Last Refresh'], jobRows)}
     ${renderDependencyTable('Sources', ['Connection', 'Object', 'Kind'], sourceRows)}
-    ${renderDependencyTable('Lineage and Tags', ['Target', 'Operation', 'Sources', 'Tags'], lineageRows)}`;
+    ${renderDependencyTable('Lineage and Tags', ['Target', 'Role / Column', 'Operation', 'Transformation', 'Sources → Columns', 'Tags'], lineageRows || null)}`;
 }
 
-function formatTags(tags) {
-  if (!tags || typeof tags !== 'object') return '';
-  return Object.entries(tags).map(([key, value]) => `${key}: ${value}`).join(', ');
+const _VISUAL_ROLES = new Set(['XAXIS','YAXIS','COLOR','SIZE','LABEL','VALUE','CATEGORY','TOOLTIP','DETAIL','SERIES','AGGREGATE','FILTER','DRILLTHROUGH','BUBBLESIZE','LATITUDE','LONGITUDE']);
+
+function formatLineageRole(col) {
+  if (!col) return '';
+  if (_VISUAL_ROLES.has(col.toUpperCase()))
+    return `<span class="badge badge-refresh" style="font-size:.72em">${esc(col)}</span>`;
+  return `<code style="font-size:.8em">${esc(col)}</code>`;
+}
+
+const _XFORM_CLASSES = {
+  Aggregation:     'badge-warning',
+  FunctionCall:    'badge-refresh',
+  Cast:            'badge-neutral',
+  WindowFunction:  'badge-stale',
+  Arithmetic:      'badge-neutral',
+  CaseExpression:  'badge-stale',
+  StringOperation: 'badge-neutral',
+  Subquery:        'badge-neutral',
+  Conditional:     'badge-stale',
+  Literal:         'badge-neutral',
+};
+
+function formatTransformationKind(kind, expr) {
+  if (!kind || kind === 'PassThrough' || kind === 'Unknown') return '';
+  const cls = _XFORM_CLASSES[kind] || 'badge-neutral';
+  const title = expr ? ` title="${esc(expr)}"` : '';
+  return `<span class="badge ${cls}" style="font-size:.72em; cursor:default"${title}>${esc(kind)}</span>`;
+}
+
+function formatSourcesWithColumns(sources, sourceCols) {
+  const srcs = sources || [];
+  const cols = sourceCols || [];
+  if (!srcs.length) return '<span style="color:var(--portal-muted)">—</span>';
+  return srcs.map((s, i) => {
+    const col = cols[i];
+    return col ? `<code style="font-size:.8em">${esc(s)}.${esc(col)}</code>` : esc(s);
+  }).join('<br>');
+}
+
+const _SECURITY_TAGS = { pii: 'badge-error', phi: 'badge-error', pci: 'badge-error', sensitive: 'badge-warning' };
+const _CLASS_TAGS    = { confidential: 'badge-warning', restricted: 'badge-error', internal: 'badge-neutral', public: 'badge-ok' };
+const _INFO_TAGS     = new Set(['owner','domain','steward','contact','quality','freshness','sla','nullable','encrypted_at_rest']);
+
+function formatTagBadges(tags, derivedFromDescriptions) {
+  if ((!tags || typeof tags !== 'object') && !derivedFromDescriptions) return '';
+  const parts = [];
+
+  const desc = (tags && tags['d']) || derivedFromDescriptions;
+  if (desc) parts.push(`<span style="display:block;font-size:.78em;color:var(--portal-text-soft);margin-bottom:3px;font-style:italic">${esc(desc)}</span>`);
+
+  for (const [k, v] of Object.entries(tags || {})) {
+    if (k === 'd') continue;
+    const key = k.toLowerCase();
+    if (_SECURITY_TAGS[key] && (v === 'true' || v === '1'))
+      parts.push(`<span class="badge ${_SECURITY_TAGS[key]}" style="font-size:.72em">${esc(k.toUpperCase())}</span>`);
+    else if (key === 'classification' && _CLASS_TAGS[v?.toLowerCase()])
+      parts.push(`<span class="badge ${_CLASS_TAGS[v.toLowerCase()]}" style="font-size:.72em">${esc(v)}</span>`);
+    else if (_INFO_TAGS.has(key))
+      parts.push(`<span class="chip badge-neutral" style="font-size:.72em;padding:1px 6px;border-radius:8px;background:var(--portal-surface-subtle);color:var(--portal-muted)">${esc(k)}: ${esc(v)}</span>`);
+    else
+      parts.push(`<span style="font-size:.78em;color:var(--portal-muted)">${esc(k)}: ${esc(v)}</span>`);
+  }
+  return parts.join(' ');
 }
 
 function renderDependencyTable(title, headers, rows) {

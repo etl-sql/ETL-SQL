@@ -261,8 +261,8 @@ namespace ETL_SQL.Connectors
 
             return _filterContext.ToLowerInvariant() switch
             {
-                "users" or "user" => "(&(objectCategory=person)(objectClass=user))",
-                "groups" or "group" => "(objectClass=group)",
+                "users" or "user" => "(|(&(objectCategory=person)(objectClass=user))(objectClass=inetOrgPerson))",
+                "groups" or "group" => "(|(objectClass=group)(objectClass=groupOfNames)(objectClass=groupOfUniqueNames))",
                 "computers" or "computer" => "(objectClass=computer)",
                 "contacts" or "contact" => "(objectClass=contact)",
                 _ => $"(objectClass={_filterContext})"

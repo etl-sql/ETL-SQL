@@ -116,14 +116,28 @@ namespace ETL_SQL.Engine.Services
                     ? Enumerable.Empty<string>()
                     : new[] { statement.Source.TempTableName };
 
+            var sourceList = sources.ToList();
+
             _tracker.Record(
                 $"report:{statement.Name}",
-                sources,
+                sourceList,
                 "CREATE VISUAL",
                 line: statement.Line,
                 column: statement.Column,
                 endLine: statement.EndLine,
                 endColumn: statement.EndColumn);
+
+            foreach (var mapping in statement.Mappings)
+            {
+                _tracker.Record(
+                    $"report:{statement.Name}",
+                    sourceList,
+                    "CREATE VISUAL",
+                    targetColumn: mapping.Role,
+                    sourceColumns: new[] { mapping.Column },
+                    line: mapping.Line,
+                    column: ((AstNode)mapping).Column);
+            }
         }
     }
 }

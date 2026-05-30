@@ -107,8 +107,9 @@ namespace ETL_SQL.Analysis.Lineage
                 if (sel.FromTable != null) tableMapping[sel.FromTable.Alias ?? sel.FromTable.TableName] = sel.FromTable.TableName;
                 foreach (var join in sel.Joins) tableMapping[join.Table.Alias ?? join.Table.TableName] = join.Table.TableName;
 
-                foreach (var col in sel.Columns)
+                for (int colIndex = 0; colIndex < sel.Columns.Count; colIndex++)
                 {
+                    var col = sel.Columns[colIndex];
                     var sourceCols = col.Expression.GetSourceColumns().ToList();
                     var rawSources = col.Expression.GetSourceTables().ToList();
                     var resolvedSources = rawSources.Select(s => tableMapping.TryGetValue(s, out var real) ? real : s).ToList();
@@ -141,7 +142,7 @@ namespace ETL_SQL.Analysis.Lineage
                         }
                     }
 
-                    string alias = col.Alias ?? (col.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : "expr");
+                    string alias = col.Alias ?? (col.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"expr_{colIndex + 1}");
 
                     // Update AST node for IDE hover persistence
                     col.Metadata = inherited;
@@ -304,6 +305,15 @@ namespace ETL_SQL.Analysis.Lineage
                     sources = new List<string>();
                 }
                 Tracker.Record(target, sources, "CREATE VISUAL", line: visual.Line, column: visual.Column, endLine: visual.EndLine, endColumn: visual.EndColumn);
+
+                foreach (var mapping in visual.Mappings)
+                {
+                    Tracker.Record(target, sources, "CREATE VISUAL",
+                        targetColumn: mapping.Role,
+                        sourceColumns: new[] { mapping.Column },
+                        line: mapping.Line,
+                        column: ((AstNode)mapping).Column);
+                }
             }
         }
 

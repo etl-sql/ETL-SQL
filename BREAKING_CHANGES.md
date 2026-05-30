@@ -24,7 +24,6 @@ All syntax and behavior documented in:
 
 as of this version constitutes the **v1.0 baseline**. No migration required from prior versions.
 
-**Connector option baseline:** All connection options use `PASSWORD` (not `PWD`). `CREATE CONNECTION` uses direct parentheses after the type name — `WITH()` is not valid on `CREATE CONNECTION`.
 
 ---
 

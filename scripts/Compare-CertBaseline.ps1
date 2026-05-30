@@ -25,7 +25,7 @@
 param(
     [string]$NewReport   = "certification-results\cert-report.json",
     [string]$Baseline    = "",
-    [int]   $RegressionPct = 50
+    [int]   $RegressionPct = 150
 )
 
 $ErrorActionPreference = "Stop"

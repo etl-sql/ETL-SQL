@@ -43,10 +43,10 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Theory]
-        [InlineData("users", "(&(objectCategory=person)(objectClass=user))")]
-        [InlineData("user", "(&(objectCategory=person)(objectClass=user))")]
-        [InlineData("groups", "(objectClass=group)")]
-        [InlineData("group", "(objectClass=group)")]
+        [InlineData("users", "(|(&(objectCategory=person)(objectClass=user))(objectClass=inetOrgPerson))")]
+        [InlineData("user", "(|(&(objectCategory=person)(objectClass=user))(objectClass=inetOrgPerson))")]
+        [InlineData("groups", "(|(objectClass=group)(objectClass=groupOfNames)(objectClass=groupOfUniqueNames))")]
+        [InlineData("group", "(|(objectClass=group)(objectClass=groupOfNames)(objectClass=groupOfUniqueNames))")]
         [InlineData("computers", "(objectClass=computer)")]
         [InlineData("contacts", "(objectClass=contact)")]
         [InlineData("custom", "(objectClass=custom)")]

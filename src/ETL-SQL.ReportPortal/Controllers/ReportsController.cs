@@ -424,41 +424,113 @@ public class ReportsController : ControllerBase
             var tokens = new Lexer(scriptText).Tokenize();
             var script = new CoreParser(tokens, scriptText).Parse();
 
-            var knownSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            string? currentPage = null;
+            // Pass 1 — collect all tables produced by SELECT INTO and CREATE DATASET
+            var producers = new Dictionary<string, (List<string> Sources, bool HasGroupBy)>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var ds in script.Statements.OfType<CreateDatasetStatement>())
+            foreach (var stmt in script.Statements)
             {
-                nodes.Add(new DagNodeDto($"ds:{ds.TempTableName}", ds.TempTableName, "dataset", null));
-                knownSources.Add(ds.TempTableName);
+                if (stmt is SelectStatement sel && sel.IntoTable is not null)
+                {
+                    producers[sel.IntoTable.TableName] = (
+                        sel.GetSourceTables().ToList(),
+                        sel.GroupBy?.Count > 0 || sel.GroupingSet is not null);
+                }
+                else if (stmt is CreateDatasetStatement ds)
+                {
+                    var selQuery = ds.SourceQuery as SelectStatement;
+                    producers[ds.TempTableName] = (
+                        ds.SourceQuery.GetSourceTables().ToList(),
+                        selQuery?.GroupBy?.Count > 0 || selQuery?.GroupingSet is not null);
+                }
             }
 
+            // Pass 2 — walk backwards from each visual to find only relevant ancestors
+            var relevant = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            void WalkAncestors(string table)
+            {
+                if (!relevant.Add(table)) return;
+                if (producers.TryGetValue(table, out var info))
+                    foreach (var src in info.Sources) WalkAncestors(src);
+            }
+
+            string? currentPage = null;
+            var visuals = script.Statements.OfType<CreateVisualStatement>().ToList();
+
+            foreach (var vis in visuals)
+            {
+                if (vis.Source.TempTableName is string t)
+                    WalkAncestors(t);
+                else if (vis.Source.InlineSelect is Statement inl)
+                    foreach (var src in inl.GetSourceTables()) WalkAncestors(src);
+            }
+
+            // Build nodes — datasets (green), temp/source tables (gray)
+            var datasetNames = new HashSet<string>(
+                script.Statements.OfType<CreateDatasetStatement>().Select(d => d.TempTableName),
+                StringComparer.OrdinalIgnoreCase);
+
+            var addedNodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            string EnsureTableNode(string name)
+            {
+                var isDataset = datasetNames.Contains(name);
+                var nodeId = isDataset ? $"ds:{name}" : $"table:{name}";
+                if (addedNodes.Add(nodeId))
+                    nodes.Add(new DagNodeDto(nodeId, name, isDataset ? "dataset" : "table", null));
+                return nodeId;
+            }
+
+            // Add edges for all producer relationships (restricted to relevant ancestors)
+            foreach (var kvp in producers)
+            {
+                var target = kvp.Key;
+                if (!relevant.Contains(target)) continue;
+                var (srcs, hasGroupBy) = kvp.Value;
+                var edgeLabel = hasGroupBy ? "GROUP BY" : "SELECT";
+                var targetId = EnsureTableNode(target);
+                foreach (var src in srcs)
+                {
+                    var srcId = EnsureTableNode(src);
+                    edges.Add(new DagEdgeDto(srcId, targetId, edgeLabel));
+                }
+            }
+
+            // Add visual and page nodes, plus dataset→visual edges with axis labels
             foreach (var stmt in script.Statements)
             {
                 if (stmt is CreatePageStatement page)
                 {
                     currentPage = page.Name;
-                    nodes.Add(new DagNodeDto($"page:{page.Name}", page.Name, "page", null));
+                    var pageId = $"page:{page.Name}";
+                    if (addedNodes.Add(pageId))
+                        nodes.Add(new DagNodeDto(pageId, page.Name, "page", null));
                 }
                 else if (stmt is CreateVisualStatement vis)
                 {
+                    var visId = $"vis:{vis.Name}";
                     var label = $"{vis.VisualType} · {vis.Name}";
-                    nodes.Add(new DagNodeDto(
-                        $"vis:{vis.Name}", label, "visual",
-                        new { page = currentPage, visualType = vis.VisualType.ToString() }));
+                    if (addedNodes.Add(visId))
+                        nodes.Add(new DagNodeDto(visId, label, "visual",
+                            new { page = currentPage, visualType = vis.VisualType.ToString() }));
 
                     if (currentPage is not null)
-                        edges.Add(new DagEdgeDto($"page:{currentPage}", $"vis:{vis.Name}", null));
+                        edges.Add(new DagEdgeDto($"page:{currentPage}", visId, null));
 
-                    if (vis.Source.TempTableName is string tableName)
+                    var axisLabel = BuildMappingLabel(vis.Mappings);
+
+                    if (vis.Source.TempTableName is string srcTable)
                     {
-                        var sourceId = knownSources.Contains(tableName) ? $"ds:{tableName}" : $"table:{tableName}";
-                        if (!nodes.Any(n => n.Id == sourceId))
+                        var srcId = EnsureTableNode(srcTable);
+                        edges.Add(new DagEdgeDto(srcId, visId, axisLabel));
+                    }
+                    else if (vis.Source.InlineSelect is Statement inl)
+                    {
+                        foreach (var src in inl.GetSourceTables())
                         {
-                            nodes.Add(new DagNodeDto(sourceId, tableName, "table", null));
-                            knownSources.Add(tableName);
+                            var srcId = EnsureTableNode(src);
+                            edges.Add(new DagEdgeDto(srcId, visId, axisLabel));
                         }
-                        edges.Add(new DagEdgeDto(sourceId, $"vis:{vis.Name}", null));
                     }
                 }
             }
@@ -469,6 +541,16 @@ public class ReportsController : ControllerBase
         }
 
         return Ok(new DagDto(nodes, edges));
+
+        static string? BuildMappingLabel(List<VisualMapping> mappings)
+        {
+            var x = mappings.FirstOrDefault(m => m.Role.Equals("XAXIS", StringComparison.OrdinalIgnoreCase))?.Column;
+            var y = mappings.FirstOrDefault(m => m.Role.Equals("YAXIS", StringComparison.OrdinalIgnoreCase))?.Column;
+            var parts = new List<string>();
+            if (x is not null) parts.Add($"X: {x}");
+            if (y is not null) parts.Add($"Y: {y}");
+            return parts.Count > 0 ? string.Join(" · ", parts) : null;
+        }
     }
 
     // ── GET /api/reports/{id}/history ────────────────────────────────────────
@@ -1151,7 +1233,11 @@ public class ReportsController : ControllerBase
                     e.SourceTables.ToList(),
                     e.SourceColumns.ToList(),
                     e.Metadata,
-                    e.Line))
+                    e.Line,
+                    e.TransformationKind == TransformationKind.Unknown ? null : e.TransformationKind.ToString(),
+                    e.TransformationExpression,
+                    e.FunctionsApplied,
+                    e.DerivedFromDescriptions))
                 .ToList();
         }
         catch

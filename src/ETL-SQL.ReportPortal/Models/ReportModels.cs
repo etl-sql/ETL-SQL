@@ -214,7 +214,11 @@ public record ReportDependencyLineageDto(
     IReadOnlyList<string> Sources,
     IReadOnlyList<string> SourceColumns,
     IReadOnlyDictionary<string, string> Tags,
-    int Line);
+    int Line,
+    string? TransformationKind,
+    string? TransformationExpression,
+    IReadOnlyList<string>? FunctionsApplied,
+    string? DerivedFromDescriptions);
 
 public record ReportHistoryDto(
     ReportDependencyReportDto Report,
