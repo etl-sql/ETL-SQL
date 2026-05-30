@@ -684,6 +684,13 @@
             card._maxOriginalParent = null;
             card._maxNextSibling    = null;
         }
+
+        // Reset inline dimensions on chart container divs to let layout reflow correctly
+        card.querySelectorAll('.chart-wrapper > div').forEach(el => {
+            el.style.width = '100%';
+            el.style.height = '100%';
+        });
+
         // Restore original background
         card.style.backgroundColor = card._maxOrigBg      || '';
         card.style.backgroundImage = card._maxOrigBgImage || '';
