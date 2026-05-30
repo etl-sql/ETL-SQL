@@ -176,7 +176,7 @@ namespace ETL_SQL.Connectors.Kafka
 
                         var message = new Message<string, string>
                         {
-                            Key = key,
+                            Key = key!,
                             Value = value
                         };
 

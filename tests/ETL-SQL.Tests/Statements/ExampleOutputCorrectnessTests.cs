@@ -253,7 +253,7 @@ namespace ETL_SQL.Tests.Statements
                 """);
 
             Assert.NotNull(result);
-            Assert.Equal(1, result.Rows.Count);
+            Assert.Single(result.Rows);
 
             var missing = result.Rows[0];
             Assert.Equal(1002,                    Convert.ToInt32(missing["AccountID"]));

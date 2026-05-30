@@ -138,7 +138,7 @@ namespace ETL_SQL.Reporting.Renderers
 
             int width = 50;
             int height = 12;
-            var canvas = new Canvas(width, height) { PixelWidth = 1 };
+            var canvas = new Canvas(width, height);
 
             for (int i = 0; i < points.Count - 1; i++)
             {
@@ -186,7 +186,7 @@ namespace ETL_SQL.Reporting.Renderers
 
             int width = 50;
             int height = 12;
-            var canvas = new Canvas(width, height) { PixelWidth = 1 };
+            var canvas = new Canvas(width, height);
 
             foreach (var p in points)
             {

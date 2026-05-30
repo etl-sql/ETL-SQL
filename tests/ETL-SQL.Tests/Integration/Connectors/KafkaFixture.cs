@@ -16,8 +16,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
         public async Task InitializeAsync()
         {
-            _container = new ContainerBuilder()
-                .WithImage("redpandadata/redpanda:latest")
+            _container = new ContainerBuilder("redpandadata/redpanda:latest")
                 .WithPortBinding(9092, 9092)
                 .WithCommand("redpanda", "start", "--mode", "dev-container")
                 .WithWaitStrategy(Wait.ForUnixContainer()

@@ -40,8 +40,7 @@ namespace ETL_SQL.ReportPortal.Tests
             public async Task InitializeAsync()
             {
                 // 1. Start the container
-                _ldapContainer = new ContainerBuilder()
-                    .WithImage("osixia/openldap:1.5.0")
+                _ldapContainer = new ContainerBuilder("osixia/openldap:1.5.0")
                     .WithPortBinding(389, true)
                     .WithEnvironment("LDAP_ORGANISATION", "ETL-SQL")
                     .WithEnvironment("LDAP_DOMAIN", "etl-sql.org")

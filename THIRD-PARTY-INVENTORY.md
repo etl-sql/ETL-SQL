@@ -20,8 +20,10 @@ About screens. It is not legal advice.
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Apache.Arrow | 23.0.0 | runtime | Apache-2.0 | expression | https://arrow.apache.org/ | src/ETL-SQL.Engine/ETL-SQL.Engine.csproj |
 | Apache.Avro | 1.12.1 | runtime | LICENSE | file | https://avro.apache.org/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| AWSSDK.S3 | 4.0.20.4 | runtime | Apache-2.0 | expression | https://github.com/aws/aws-sdk-net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Azure.Storage.Blobs | 12.28.0 | runtime | MIT | expression | https://github.com/Azure/azure-sdk-for-net/blob/Azure.Storage.Blobs_12.28.0/sdk/storage/Azure.Storage.Blobs/README.md | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | BenchmarkDotNet | 0.15.8 | test | MIT | expression | https://github.com/dotnet/BenchmarkDotNet | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj |
+| Confluent.Kafka | 2.8.0 | runtime | Apache-2.0 | expression | https://github.com/confluentinc/confluent-kafka-dotnet/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | coverlet.collector | 10.0.1 | test | MIT | expression | https://github.com/coverlet-coverage/coverlet | tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | Cronos | 0.13.0 | runtime | MIT | expression | https://github.com/HangfireIO/Cronos | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
 | Docker.DotNet.Enhanced | 4.2.0 | runtime | MIT | expression | https://licenses.nuget.org/MIT | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
@@ -34,7 +36,7 @@ About screens. It is not legal advice.
 | Microsoft.AspNetCore.Identity.EntityFrameworkCore | 10.0.8 | runtime | MIT | expression | https://asp.net/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
 | Microsoft.AspNetCore.Mvc.Testing | 10.0.8 | test | MIT | expression | https://asp.net/ | tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj |
 | Microsoft.Data.SqlClient | 7.0.1 | runtime | MIT | expression | https://aka.ms/sqlclientproject | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| Microsoft.Data.Sqlite | 10.0.8 | runtime | MIT | expression | https://docs.microsoft.com/dotnet/standard/data/sqlite/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
+| Microsoft.Data.Sqlite | 10.0.8 | runtime | MIT | expression | https://docs.microsoft.com/dotnet/standard/data/sqlite/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
 | Microsoft.EntityFrameworkCore.Design | 10.0.8 | runtime | MIT | expression | https://docs.microsoft.com/ef/core/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
 | Microsoft.EntityFrameworkCore.Sqlite | 10.0.8 | runtime, test | MIT | expression | https://docs.microsoft.com/ef/core/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj |
 | Microsoft.Extensions.Configuration | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
@@ -53,6 +55,8 @@ About screens. It is not legal advice.
 | Microsoft.Extensions.Options | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
 | Microsoft.Extensions.Options.ConfigurationExtensions | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
 | Microsoft.NET.Test.Sdk | 18.6.0 | test | MIT | expression | https://github.com/microsoft/vstest | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
+| Microsoft.OpenApi | 2.7.5 | runtime | MIT | expression | https://github.com/Microsoft/OpenAPI.NET | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
+| MongoDB.Driver | 3.1.0 | runtime | Apache-2.0 | expression | https://www.mongodb.com/docs/drivers/csharp/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Moq | 4.20.72 | test | BSD-3-Clause | expression | https://github.com/moq/moq | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | MySqlConnector | 2.5.0 | runtime | MIT | expression | https://mysqlconnector.net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Npgsql | 10.0.2 | runtime | PostgreSQL | expression | https://github.com/npgsql/npgsql | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
@@ -79,7 +83,7 @@ About screens. It is not legal advice.
 | System.Data.Odbc | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | System.Linq.Async | 7.0.1 | runtime, test | MIT | expression | https://github.com/dotnet/reactive | src/ETL-SQL.Core/ETL-SQL.Core.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | System.Security.Cryptography.ProtectedData | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
-| Testcontainers | 4.12.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
+| Testcontainers | 4.12.0 | runtime, test | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj |
 | Testcontainers.MsSql | 4.12.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
 | Testcontainers.MySql | 4.12.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
 | Testcontainers.Oracle | 4.12.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |

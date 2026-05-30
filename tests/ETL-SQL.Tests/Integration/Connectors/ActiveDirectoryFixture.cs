@@ -33,8 +33,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
         public async Task InitializeAsync()
         {
-            _container = new ContainerBuilder()
-                .WithImage("osixia/openldap:1.5.0")
+            _container = new ContainerBuilder("osixia/openldap:1.5.0")
                 .WithPortBinding(389, true)
                 .WithEnvironment("LDAP_ORGANISATION", "ETL-SQL")
                 .WithEnvironment("LDAP_DOMAIN", "etl-sql.org")

@@ -260,7 +260,7 @@ namespace ETL_SQL.Tests.Connectors
             }
 
             Assert.Single(batches);
-            Assert.Equal(1, batches[0].Rows.Count);
+            Assert.Single(batches[0].Rows);
             Assert.Equal(1, Convert.ToInt32(batches[0].Rows[0]["Partition"]));
             Assert.Equal(555L, Convert.ToInt64(batches[0].Rows[0]["Offset"]));
             Assert.Equal("key-1", batches[0].Rows[0]["Key"]);

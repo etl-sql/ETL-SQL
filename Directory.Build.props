@@ -20,4 +20,7 @@
     <IncludeNativeLibrariesForSelfExtract Condition="'$(RuntimeIdentifier)' != ''">true</IncludeNativeLibrariesForSelfExtract>
     <DebugType>embedded</DebugType>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SharpCompress" />
+  </ItemGroup>
 </Project>

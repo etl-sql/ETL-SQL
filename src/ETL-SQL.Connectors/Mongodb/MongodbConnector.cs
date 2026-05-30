@@ -37,7 +37,7 @@ namespace ETL_SQL.Connectors.Mongodb
 
                 var buildInfoCommand = new BsonDocument("buildInfo", 1);
                 var buildInfoResult = await adminDb.RunCommandAsync<BsonDocument>(buildInfoCommand);
-                string mongoVersion = buildInfoResult.GetValue("version", "Unknown").ToString();
+                string mongoVersion = buildInfoResult.GetValue("version", "Unknown")?.ToString() ?? "Unknown";
 
                 return $"MongoDB Connector v1.0 (Connected - Server Version: {mongoVersion})";
             }

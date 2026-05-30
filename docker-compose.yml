@@ -30,6 +30,7 @@ services:
       - Portal__DatabasePath=/app/data/portal.db
       - Portal__ScriptRootPath=/app/Reports
       - Portal__SnapshotDirectory=/app/Snapshots
+      - Portal__Jwt__Secret=LocalDevelopmentSecretKeyForPortal_32CharsMinimum!
     depends_on:
       - orchestrator-srv
 
