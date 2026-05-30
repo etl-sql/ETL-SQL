@@ -311,6 +311,8 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.INTERACTIVE_MODE)) return SystemParser.ParseSetThreshold(ThresholdType.InteractiveMode);
             if (_parser.Match(TokenType.CASE_SENSITIVE)) return SystemParser.ParseSetThreshold(ThresholdType.CaseSensitive);
             if (_parser.Match(TokenType.LINEAGE)) return SystemParser.ParseSetThreshold(ThresholdType.Lineage);
+            if (_parser.Match(TokenType.LINEAGE_NAMESPACE)) return SystemParser.ParseSetThreshold(ThresholdType.LineageNamespace);
+            if (_parser.Match(TokenType.LINEAGE_IMPORT_CATALOG)) return SystemParser.ParseSetThreshold(ThresholdType.LineageImportCatalog);
             if (_parser.Match(TokenType.TRUNCATE_STRING)) return SystemParser.ParseSetThreshold(ThresholdType.TruncateString);
             if (_parser.Match(TokenType.SKIP_ERROR)) return SystemParser.ParseSetThreshold(ThresholdType.SkipError);
             if (_parser.Match(TokenType.PERSIST)) return SystemParser.ParseSetPersist();

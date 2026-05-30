@@ -20,24 +20,31 @@ namespace ETL_SQL.Engine.Handlers
 
             context.SecurityService.ValidateThresholdOverride(s.Type, val, context);
 
-            int intVal = Convert.ToInt32(val);
+            int intVal = 0;
+            if (s.Type != ThresholdType.LineageNamespace)
+            {
+                intVal = Convert.ToInt32(val);
+            }
             
-            if (s.Type == ThresholdType.ExternalHashPartitions && intVal < 1)
+            if (s.Type != ThresholdType.LineageNamespace)
             {
-                throw new ExecutionException("EXTERNAL_HASH_PARTITIONS must be at least 1.");
-            }
+                if (s.Type == ThresholdType.ExternalHashPartitions && intVal < 1)
+                {
+                    throw new ExecutionException("EXTERNAL_HASH_PARTITIONS must be at least 1.");
+                }
 
-            if ((s.Type == ThresholdType.BatchSize || 
-                 s.Type == ThresholdType.ForeachPageSize || 
-                 s.Type == ThresholdType.ExternalSortChunkSize || 
-                 s.Type == ThresholdType.MaxMessages) && intVal < 1)
-            {
-                throw new ExecutionException($"{s.Type.ToString().ToUpperInvariant()} must be at least 1.");
-            }
+                if ((s.Type == ThresholdType.BatchSize || 
+                     s.Type == ThresholdType.ForeachPageSize || 
+                     s.Type == ThresholdType.ExternalSortChunkSize || 
+                     s.Type == ThresholdType.MaxMessages) && intVal < 1)
+                {
+                    throw new ExecutionException($"{s.Type.ToString().ToUpperInvariant()} must be at least 1.");
+                }
 
-            if (s.Type == ThresholdType.MaxSmtpEmailsPerScript && intVal < 0)
-            {
-                throw new ExecutionException("MAX_SMTP_EMAILS_PER_SCRIPT must be zero or greater.");
+                if (s.Type == ThresholdType.MaxSmtpEmailsPerScript && intVal < 0)
+                {
+                    throw new ExecutionException("MAX_SMTP_EMAILS_PER_SCRIPT must be zero or greater.");
+                }
             }
 
 
@@ -115,6 +122,12 @@ namespace ETL_SQL.Engine.Handlers
                 case ThresholdType.Lineage:
                     context.LineageEnabled = Convert.ToBoolean(val);
                     break;
+                case ThresholdType.LineageNamespace:
+                    context.LineageNamespace = val.ToString();
+                    break;
+                case ThresholdType.LineageImportCatalog:
+                    context.LineageImportCatalog = Convert.ToBoolean(val);
+                    break;
                 case ThresholdType.TruncateString:
                     context.TruncateString = Convert.ToBoolean(val);
                     break;
@@ -126,7 +139,7 @@ namespace ETL_SQL.Engine.Handlers
 
             if (context.IsVerbose)
             {
-                context.Logger.Debug("Set {Type} to {Value}", s.Type, intVal);
+                context.Logger.Debug("Set {Type} to {Value}", s.Type, s.Type == ThresholdType.LineageNamespace ? val : intVal);
             }
         }
     }

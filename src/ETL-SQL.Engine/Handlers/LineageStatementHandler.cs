@@ -36,8 +36,25 @@ namespace ETL_SQL.Engine.Handlers
             {
                 var fullPath = context.ResolvePath(stmt.ExportPath);
                 var scriptName = context.LineageTracker.GlobalMetadata.TryGetValue("author", out var a) ? a : null;
+                var jobNamespace = context.LineageNamespace ?? "etl-sql";
+
+                var connectionNamespaces = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kv in context.Connections)
+                {
+                    if (kv.Value != null)
+                    {
+                        connectionNamespaces[kv.Key] = OpenLineageExporter.ResolveConnectionNamespace(kv.Key, kv.Value);
+                    }
+                }
+
                 await OpenLineageExporter.ExportToFileAsync(
-                    context.LineageTracker, context.SessionId ?? "session", scriptName, fullPath, _logger);
+                    context.LineageTracker,
+                    context.SessionId ?? "session",
+                    scriptName,
+                    fullPath,
+                    jobNamespace,
+                    connectionNamespaces,
+                    _logger);
                 _logger.WriteLine($"OpenLineage export written to: {fullPath}", ConsoleColor.Green);
                 return;
             }

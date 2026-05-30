@@ -96,6 +96,8 @@ namespace ETL_SQL.Core.Common
         public bool IsProfiling { get; set; }
         public bool IsWhatIf { get; set; }
         public bool LineageEnabled { get; set; } = true;
+        public string? LineageNamespace { get; set; } = "etl-sql";
+        public bool LineageImportCatalog { get; set; }
         public bool TruncateString { get; set; }
         public bool SkipError { get; set; }
         public bool DisplayExecuteTree { get; set; }

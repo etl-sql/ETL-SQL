@@ -83,8 +83,8 @@ createDesigner(container, {
   apiBase:      '',
   host:         'portal',
   authFetch,
-  onSave:  () => { window.location.href = '/index.html'; },
-  onCancel:() => { history.back(); },
+  onSave:  () => { window.location.href = reportId ? `/index.html#report-${reportId}` : '/index.html'; },
+  onCancel:() => { window.location.href = reportId ? `/index.html#report-${reportId}` : '/index.html'; },
 });
 </script>
 </body>

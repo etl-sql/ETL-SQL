@@ -262,21 +262,24 @@ public class DesignerController : ControllerBase
     {
         if (visuals.Count == 0) return ".";
         int maxRow = visuals.Max(v => v.GridRow + v.GridRowSpan - 1);
-        var grid   = new string[maxRow, GridCols];
+        // Use only as many columns as the visuals actually occupy, not the full 12-column grid.
+        // This avoids trailing rows of ". . . . . . . ." that appear when visuals span fewer columns.
+        int usedCols = Math.Min(GridCols, visuals.Max(v => v.GridCol + v.GridColSpan - 1));
+        var grid   = new string[maxRow, usedCols];
         for (int r = 0; r < maxRow; r++)
-            for (int c = 0; c < GridCols; c++)
+            for (int c = 0; c < usedCols; c++)
                 grid[r, c] = ".";
 
         foreach (var v in visuals)
         {
             var slot = SanitizeSlotName(v.Name);
             for (int r = v.GridRow - 1; r < v.GridRow - 1 + v.GridRowSpan && r < maxRow; r++)
-                for (int c = v.GridCol - 1; c < v.GridCol - 1 + v.GridColSpan && c < GridCols; c++)
+                for (int c = v.GridCol - 1; c < v.GridCol - 1 + v.GridColSpan && c < usedCols; c++)
                     grid[r, c] = slot;
         }
 
         var rows = Enumerable.Range(0, maxRow)
-            .Select(r => string.Join(" ", Enumerable.Range(0, GridCols).Select(c => grid[r, c])));
+            .Select(r => string.Join(" ", Enumerable.Range(0, usedCols).Select(c => grid[r, c])));
         return string.Join(" / ", rows);
     }
 

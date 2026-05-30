@@ -348,6 +348,8 @@ namespace ETL_SQL.Core
         
         bool IsWhatIf { get; set; }
         bool LineageEnabled { get; set; }
+        string? LineageNamespace { get; set; }
+        bool LineageImportCatalog { get; set; }
         bool TruncateString { get; set; }
         bool SkipError { get; set; }
         bool TelemetryEnabled { get; set; }

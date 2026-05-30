@@ -29,6 +29,8 @@ namespace ETL_SQL.Core
         InteractiveMode,
         CaseSensitive,
         Lineage,
+        LineageNamespace,
+        LineageImportCatalog,
         TruncateString,
         SkipError
     }

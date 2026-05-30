@@ -2,26 +2,11 @@
 
 ## Bugs
 ### Report Portal
-- [ ] Script Page structure is not generating correctly.  Structure as a lot of . . . . . . . . and is repeated twice
-```sql
-CREATE PAGE [Trends] AS DASHBOARD (
-    LAYOUT (
-        STRUCTURE = 'ComboRevenueReturns ComboRevenueReturns WaterfallDelta WaterfallDelta . . . . . . . . / ScatterQtyRev ScatterQtyRev ScatterQtyRev ScatterQtyRev . . . . . . . . / HBarRep HBarRep BoxRevDist BoxRevDist . . . . . . . .',
-        MAP (
-            'ComboRevenueReturns' = ComboRevenueReturns,
-            'WaterfallDelta' = WaterfallDelta,
-            'ScatterQtyRev' = ScatterQtyRev,
-            'HBarRep' = HBarRep,
-            'BoxRevDist' = BoxRevDist
-        )
-    )
-);
-```
-- [ ] When exiting design it returns to the homepage instead of back to the report we were editing.
+- [x] Script Page structure had trailing `. . . . . . . .` dots → Fixed: `BuildStructure()` in `DesignerController.cs` now trims the grid to the actual max column used by visuals, not the full 12-column width.
+- [x] When exiting design it returns to the homepage → Fixed: `designer.html` `onSave`/`onCancel` now navigate to `/index.html#report-{id}`; `openReportHashView()` in `index.html` handles the `#report-{n}` hash and calls `openReport(id)`.
 - [x] Lineage link in the left sidebar looks nice but doesn't have any data in it. → Fixed: flipped `PersistAdHocInteractions` to `true` in `src/appsettings.json`. Ad-hoc portal runs now persist lineage to the catalog.
-- [ ] Lineage modal needs to be wider especially for long ones you have to scroll all the way to the bottom to scroll to the right
-- [ ] Structure looks like it wants to work but its all jumbled together.  See screenshot:
-C:\Users\chuck\scratch\ETL-SQL\brain\Screenshot 2026-05-10 155716.png
+- [x] Lineage/Dependencies modal too narrow → Added `.modal-xl { width: min(920px, calc(100vw - 40px)) }` to `portal.css`; both `structureModal` and `dependenciesModal` now use `modal-xl`.
+- [x] Structure DAG jumbled → Container height 420px → 600px; `LAYER_H` 130 → 160, `NODE_W` 200 → 240, initial zoom 0.9 → 0.65 in `designer.js`; assets synced.
 
 ### Lineage (Future Work)
 - [x] **Ad-hoc run lineage catalog persistence** — Flipped `PersistAdHocInteractions` to `true` in `appsettings.json`. `TryPersistAdHocLineageAsync()` in `ExecutionController.cs` is now active for all ad-hoc portal runs.

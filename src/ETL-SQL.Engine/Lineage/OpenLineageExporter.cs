@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Lineage
 {
@@ -20,7 +21,7 @@ namespace ETL_SQL.Engine.Lineage
     {
         private static readonly HttpClient _http = new();
 
-        public static async Task ExportToFileAsync(
+        public static Task ExportToFileAsync(
             ILineageTracker tracker,
             string sessionId,
             string? scriptName,
@@ -28,9 +29,21 @@ namespace ETL_SQL.Engine.Lineage
             ILogger logger,
             CancellationToken ct = default)
         {
+            return ExportToFileAsync(tracker, sessionId, scriptName, filePath, "etl-sql", logger, ct);
+        }
+
+        public static async Task ExportToFileAsync(
+            ILineageTracker tracker,
+            string sessionId,
+            string? scriptName,
+            string filePath,
+            string jobNamespace,
+            ILogger logger,
+            CancellationToken ct = default)
+        {
             try
             {
-                var json = BuildRunEvent(tracker, sessionId, scriptName);
+                var json = BuildRunEvent(tracker, sessionId, scriptName, jobNamespace, null);
                 var dir = Path.GetDirectoryName(filePath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
@@ -43,7 +56,32 @@ namespace ETL_SQL.Engine.Lineage
             }
         }
 
-        public static async Task ExportToHttpAsync(
+        public static async Task ExportToFileAsync(
+            ILineageTracker tracker,
+            string sessionId,
+            string? scriptName,
+            string filePath,
+            string jobNamespace,
+            IReadOnlyDictionary<string, string> connectionNamespaces,
+            ILogger logger,
+            CancellationToken ct = default)
+        {
+            try
+            {
+                var json = BuildRunEvent(tracker, sessionId, scriptName, jobNamespace, connectionNamespaces);
+                var dir = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+                await File.AppendAllTextAsync(filePath, json + "\n", ct);
+                logger.Info("OpenLineage event appended to: {Path}", filePath);
+            }
+            catch (Exception ex)
+            {
+                logger.Warning("OpenLineage file export failed: {Message}", ex.Message);
+            }
+        }
+
+        public static Task ExportToHttpAsync(
             ILineageTracker tracker,
             string sessionId,
             string? scriptName,
@@ -51,9 +89,45 @@ namespace ETL_SQL.Engine.Lineage
             ILogger logger,
             CancellationToken ct = default)
         {
+            return ExportToHttpAsync(tracker, sessionId, scriptName, endpoint, "etl-sql", logger, ct);
+        }
+
+        public static async Task ExportToHttpAsync(
+            ILineageTracker tracker,
+            string sessionId,
+            string? scriptName,
+            string endpoint,
+            string jobNamespace,
+            ILogger logger,
+            CancellationToken ct = default)
+        {
             try
             {
-                var json = BuildRunEvent(tracker, sessionId, scriptName);
+                var json = BuildRunEvent(tracker, sessionId, scriptName, jobNamespace, null);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await _http.PostAsync(endpoint, content, ct);
+                if (!response.IsSuccessStatusCode)
+                    logger.Warning("OpenLineage HTTP export returned {Status}: {Endpoint}", (int)response.StatusCode, endpoint);
+            }
+            catch (Exception ex)
+            {
+                logger.Warning("OpenLineage HTTP export failed: {Message}", ex.Message);
+            }
+        }
+
+        public static async Task ExportToHttpAsync(
+            ILineageTracker tracker,
+            string sessionId,
+            string? scriptName,
+            string endpoint,
+            string jobNamespace,
+            IReadOnlyDictionary<string, string> connectionNamespaces,
+            ILogger logger,
+            CancellationToken ct = default)
+        {
+            try
+            {
+                var json = BuildRunEvent(tracker, sessionId, scriptName, jobNamespace, connectionNamespaces);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
                 var response = await _http.PostAsync(endpoint, content, ct);
                 if (!response.IsSuccessStatusCode)
@@ -69,7 +143,12 @@ namespace ETL_SQL.Engine.Lineage
         /// Builds an OpenLineage RunEvent JSON string from the current lineage tracker state.
         /// The result is a single-line JSON object suitable for .jsonl files.
         /// </summary>
-        public static string BuildRunEvent(ILineageTracker tracker, string sessionId, string? scriptName)
+        public static string BuildRunEvent(
+            ILineageTracker tracker,
+            string sessionId,
+            string? scriptName,
+            string jobNamespace = "etl-sql",
+            IReadOnlyDictionary<string, string>? connectionNamespaces = null)
         {
             var entries = tracker.GetFullLineage().ToList();
             var now = DateTime.UtcNow.ToString("O");
@@ -89,13 +168,13 @@ namespace ETL_SQL.Engine.Lineage
                 foreach (var src in entry.SourceTables)
                 {
                     if (!nsCache.ContainsKey(src))
-                        nsCache[src] = ResolveNamespace(src, sessionId);
+                        nsCache[src] = ResolveNamespace(src, sessionId, connectionNamespaces);
                 }
             }
             foreach (var target in outputTables.Keys)
             {
                 if (!nsCache.ContainsKey(target))
-                    nsCache[target] = ResolveNamespace(target, sessionId);
+                    nsCache[target] = ResolveNamespace(target, sessionId, connectionNamespaces);
             }
 
             // Pure source tables: appear as sources but never as targets
@@ -109,7 +188,7 @@ namespace ETL_SQL.Engine.Lineage
             foreach (var (target, targetEntries) in outputTables)
             {
                 var (targetNs, targetName) = nsCache[target];
-                var colLineageJson = BuildColumnLineageFacet(targetEntries, sessionId, nsCache);
+                var colLineageJson = BuildColumnLineageFacet(targetEntries, sessionId, nsCache, connectionNamespaces);
                 var tagsJson = BuildTagsFacet(targetEntries);
 
                 var facetParts = new List<string>();
@@ -136,7 +215,7 @@ namespace ETL_SQL.Engine.Lineage
             sb.Append($"\"nominalStartTime\":{JsonStr(now)},");
             sb.Append($"\"nominalEndTime\":{JsonStr(now)}");
             sb.Append("}}},");
-            sb.Append($"\"job\":{{\"namespace\":\"etl-sql\",\"name\":{JsonStr(jobName)}}},");
+            sb.Append($"\"job\":{{\"namespace\":{JsonStr(jobNamespace)},\"name\":{JsonStr(jobName)}}},");
             sb.Append($"\"inputs\":[{string.Join(",", inputs)}],");
             sb.Append($"\"outputs\":[{string.Join(",", outputs)}]");
             sb.Append('}');
@@ -146,7 +225,8 @@ namespace ETL_SQL.Engine.Lineage
         private static string? BuildColumnLineageFacet(
             List<LineageEntry> entries,
             string sessionId,
-            Dictionary<string, (string ns, string name)> nsCache)
+            Dictionary<string, (string ns, string name)> nsCache,
+            IReadOnlyDictionary<string, string>? connectionNamespaces)
         {
             var byCol = entries
                 .Where(e => e.TargetColumn != null)
@@ -165,7 +245,7 @@ namespace ETL_SQL.Engine.Lineage
                     foreach (var srcTable in entry.SourceTables)
                     {
                         if (!nsCache.TryGetValue(srcTable, out var srcNs))
-                            srcNs = ResolveNamespace(srcTable, sessionId);
+                            srcNs = ResolveNamespace(srcTable, sessionId, connectionNamespaces);
 
                         var srcCols = entry.SourceColumns.Any()
                             ? entry.SourceColumns
@@ -232,7 +312,10 @@ namespace ETL_SQL.Engine.Lineage
                 _ => ("INDIRECT", kind.ToString().ToUpperInvariant())
             };
 
-        internal static (string ns, string name) ResolveNamespace(string tableName, string sessionId)
+        internal static (string ns, string name) ResolveNamespace(
+            string tableName,
+            string sessionId,
+            IReadOnlyDictionary<string, string>? connectionNamespaces = null)
         {
             if (tableName.StartsWith('#') || tableName.StartsWith('@'))
                 return ($"etl-sql://session/{sessionId}", tableName);
@@ -248,8 +331,97 @@ namespace ETL_SQL.Engine.Lineage
             }
             if (tableName.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
                 return ("file://", tableName[7..]);
+
             // External table: connectionAlias.schema.table or connectionAlias.table
+            var dotIndex = tableName.IndexOf('.');
+            if (dotIndex > 0 && connectionNamespaces != null)
+            {
+                var alias = tableName.Substring(0, dotIndex);
+                if (connectionNamespaces.TryGetValue(alias, out var nsUri))
+                {
+                    return (nsUri, tableName.Substring(dotIndex + 1));
+                }
+            }
             return ("etl-sql://external", tableName);
+        }
+
+        public static string ResolveConnectionNamespace(string alias, IDataSource source)
+        {
+            var connectorType = source.ConnectorType?.ToUpperInvariant() ?? "";
+            var options = source.Options;
+
+            // Try to extract host, port, database from Options
+            string host = "localhost";
+            string? port = null;
+            string? database = null;
+
+            if (options != null)
+            {
+                if (options.TryGetValue("SERVER", out var sValue)) host = sValue;
+                else if (options.TryGetValue("HOST", out var hValue)) host = hValue;
+
+                if (options.TryGetValue("PORT", out var pValue)) port = pValue;
+
+                if (options.TryGetValue("DATABASE", out var dValue)) database = dValue;
+                else if (options.TryGetValue("DB", out var dbValue)) database = dbValue;
+            }
+
+            // Remove any trailing instance names from Server (e.g., localhost\SQLEXPRESS) or port numbers
+            var colonIdx = host.IndexOf(':');
+            if (colonIdx >= 0)
+            {
+                if (port == null) port = host[(colonIdx + 1)..];
+                host = host[..colonIdx];
+            }
+            var backslashIdx = host.IndexOf('\\');
+            if (backslashIdx >= 0)
+            {
+                host = host[..backslashIdx];
+            }
+
+            var portSuffix = !string.IsNullOrEmpty(port) ? $":{port}" : "";
+
+            switch (connectorType)
+            {
+                case "MSSQL":
+                case "SQLSERVER":
+                    return $"mssql://{host}{portSuffix}/{database ?? "master"}";
+                case "POSTGRES":
+                case "NPSQL":
+                    return $"postgresql://{host}{portSuffix ?? ":5432"}/{database ?? "postgres"}";
+                case "MYSQL":
+                case "MARIADB":
+                    return $"mysql://{host}{portSuffix ?? ":3306"}/{database ?? "mysql"}";
+                case "ORACLE":
+                    string? serviceName = null;
+                    options?.TryGetValue("SERVICE_NAME", out serviceName);
+                    return $"oracle://{host}{portSuffix ?? ":1521"}/{serviceName ?? database ?? "ORCL"}";
+                case "SNOWFLAKE":
+                    string? account = null;
+                    options?.TryGetValue("ACCOUNT", out account);
+                    return $"snowflake://{account ?? "unknown"}/{database ?? "unknown"}";
+                case "BIGQUERY":
+                    string? project = null;
+                    options?.TryGetValue("PROJECT_ID", out project);
+                    return $"bigquery://{project ?? "unknown"}/{database ?? "unknown"}";
+                case "FLATFILE":
+                case "CSV":
+                case "EXCEL":
+                case "JSON":
+                case "XML":
+                case "PARQUET":
+                case "AVRO":
+                case "DIRECTORY":
+                    return "file://";
+                default:
+                    // Fallback to connectorType://host/database or etl-sql://external
+                    if (!string.IsNullOrEmpty(connectorType))
+                    {
+                        var scheme = connectorType.ToLowerInvariant();
+                        return $"{scheme}://{host}{portSuffix}/{database ?? "default"}";
+                    }
+                    return "etl-sql://external";
+            }
         }
 
         private static string JsonStr(string? s)

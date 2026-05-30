@@ -373,6 +373,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .modal-sm { width: 340px; }
 .modal-md { width: 480px; }
 .modal-lg { width: 520px; }
+.modal-xl { width: min(920px, calc(100vw - 40px)); }
 .history-modal { width: min(920px, calc(100vw - 40px)); }
 .modal-workflow { width: min(640px, 92vw); padding: 0; }
 .modal-header { padding: 22px 24px 16px; border-bottom: 1px solid var(--portal-border-soft);
@@ -534,7 +535,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .report-grid { grid-template-columns: 1fr; }
   .orch-detail-panel { width: 100vw; min-width: 0; }
   .modal-overlay { align-items: stretch; padding: 10px; }
-  .modal-card, .modal-sm, .modal-md, .modal-lg, .modal-workflow { width: 100%; max-height: calc(100vh - 20px); }
+  .modal-card, .modal-sm, .modal-md, .modal-lg, .modal-xl, .modal-workflow { width: 100%; max-height: calc(100vh - 20px); }
   .modal-header { align-items: stretch; flex-direction: column; }
   .data-table th, .data-table td { white-space: nowrap; }
 }

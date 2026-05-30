@@ -48,6 +48,8 @@ namespace ETL_SQL.Engine
         // --- Features ---
         public bool TelemetryEnabled { get; set; } = true;
         public bool LineageEnabled { get; set; } = true;
+        public string? LineageNamespace { get; set; } = "etl-sql";
+        public bool LineageImportCatalog { get; set; }
         public bool TruncateString { get; set; } = false;
         public bool SkipError { get; set; } = false;
         public bool SpillEncryptionEnabled { get; set; } = true;

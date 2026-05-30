@@ -206,6 +206,8 @@ namespace ETL_SQL.Engine
         /// <summary>When true, string comparisons are case-sensitive. Defaults to false. Settable at runtime via SET CASE_SENSITIVE.</summary>
         public bool CaseSensitiveComparison { get => _options.CaseSensitiveComparison; set => _options.CaseSensitiveComparison = value; }
         public bool LineageEnabled { get => _options.LineageEnabled; set => _options.LineageEnabled = value; }
+        public string? LineageNamespace { get => _options.LineageNamespace; set => _options.LineageNamespace = value; }
+        public bool LineageImportCatalog { get => _options.LineageImportCatalog; set => _options.LineageImportCatalog = value; }
         public bool TruncateString { get => _options.TruncateString; set => _options.TruncateString = value; }
         public bool SkipError { get => _options.SkipError; set => _options.SkipError = value; }
 
@@ -588,6 +590,8 @@ namespace ETL_SQL.Engine
             IsPersistentSession = DefaultThresholds.PersistenceDefault(config);
             CaseSensitiveComparison = DefaultThresholds.CaseSensitiveComparison(config);
             LineageEnabled = DefaultThresholds.LineageEnabled(config);
+            LineageNamespace = config?.GetValue<string>("Lineage:Namespace") ?? "etl-sql";
+            LineageImportCatalog = config?.GetValue<bool>("Lineage:ImportCatalogMetadata") ?? false;
             Telemetry.TelemetryEnabled = DefaultThresholds.TelemetryEnabled(config);
             AllowPlaintextSecrets = DefaultThresholds.AllowPlaintextSecrets(config);
             NoSaveSensitive = DefaultThresholds.NoSaveSensitive(config);
@@ -601,22 +605,36 @@ namespace ETL_SQL.Engine
             if (config == null) return;
 
             // Phase 6: import database catalog metadata into lineage tags before export
-            if (config.GetValue<bool>("Lineage:ImportCatalogMetadata"))
+            if (LineageImportCatalog)
                 await ImportCatalogMetadataAsync(ct);
 
             var scriptName = LineageTracker.GlobalMetadata.TryGetValue("author", out var a) ? a : null;
             var sid = SessionId ?? "session";
+            var jobNamespace = LineageNamespace ?? "etl-sql";
+
+            var connectionNamespaces = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in Connections)
+            {
+                if (kv.Value != null)
+                {
+                    connectionNamespaces[kv.Key] = Engine.Lineage.OpenLineageExporter.ResolveConnectionNamespace(kv.Key, kv.Value);
+                }
+            }
 
             var olFile = config.GetValue<string>("Lineage:OpenLineageFile");
             if (!string.IsNullOrWhiteSpace(olFile))
             {
                 var resolved = ResolvePath(olFile);
-                await Engine.Lineage.OpenLineageExporter.ExportToFileAsync(LineageTracker, sid, scriptName, resolved, _logger, ct);
+                await Engine.Lineage.OpenLineageExporter.ExportToFileAsync(
+                    LineageTracker, sid, scriptName, resolved, jobNamespace, connectionNamespaces, _logger, ct);
             }
 
             var olEndpoint = config.GetValue<string>("Lineage:OpenLineageEndpoint");
             if (!string.IsNullOrWhiteSpace(olEndpoint))
-                await Engine.Lineage.OpenLineageExporter.ExportToHttpAsync(LineageTracker, sid, scriptName, olEndpoint, _logger, ct);
+            {
+                await Engine.Lineage.OpenLineageExporter.ExportToHttpAsync(
+                    LineageTracker, sid, scriptName, olEndpoint, jobNamespace, connectionNamespaces, _logger, ct);
+            }
         }
 
         private async Task ImportCatalogMetadataAsync(System.Threading.CancellationToken ct)

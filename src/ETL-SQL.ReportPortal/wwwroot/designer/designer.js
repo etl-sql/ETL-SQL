@@ -100,8 +100,8 @@ function _computeLayout(nodes, edges) {
         (byLayer[l] = byLayer[l] || []).push(id);
     }
 
-    const LAYER_H = 130;
-    const NODE_W  = 200;
+    const LAYER_H = 160;
+    const NODE_W  = 240;
     const pos = {};
     for (const [l, layerIds] of Object.entries(byLayer)) {
         const count = layerIds.length;
@@ -252,7 +252,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
                 nodes:          eNodes,
                 edges:          eEdges,
                 roam:           true,
-                zoom:           0.9,
+                zoom:           0.65,
                 center:         ['50%', '50%'],
                 edgeSymbol:     ['none', 'arrow'],
                 edgeSymbolSize: 8,

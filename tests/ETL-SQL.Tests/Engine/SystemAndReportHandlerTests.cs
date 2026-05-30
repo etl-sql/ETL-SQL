@@ -368,6 +368,23 @@ namespace ETL_SQL.Tests.Engine
             await Run("SET WINDOW_SPILL_THRESHOLD = 50000;");
         }
 
+        [Fact]
+        public async Task SetThreshold_LineageNamespace_NoError()
+        {
+            var eval = await RunAndGet("SET LINEAGE_NAMESPACE = 'my-custom-ns';");
+            Assert.Equal("my-custom-ns", eval.LineageNamespace);
+        }
+
+        [Fact]
+        public async Task SetThreshold_LineageImportCatalog_NoError()
+        {
+            var eval = await RunAndGet("SET LINEAGE_IMPORT_CATALOG = ON;");
+            Assert.True(eval.LineageImportCatalog);
+            
+            var eval2 = await RunAndGet("SET LINEAGE_IMPORT_CATALOG = OFF;");
+            Assert.False(eval2.LineageImportCatalog);
+        }
+
         // ── ShowSafeZones ─────────────────────────────────────────────────────
 
         [Fact]
