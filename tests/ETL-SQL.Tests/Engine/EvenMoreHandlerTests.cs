@@ -453,6 +453,14 @@ namespace ETL_SQL.Tests.Engine
                 e.Operation == "CREATE DATASET" &&
                 e.TargetTable == "dataset:&daily_sales" &&
                 e.SourceTables.Contains("#orders", StringComparer.OrdinalIgnoreCase));
+
+            // Column-level lineage is keyed to the dataset target (not "RESULTSET")
+            // so it persists and resolves by dataset name across scripts.
+            Assert.DoesNotContain(entries, e => e.TargetTable == "RESULTSET");
+            Assert.Contains(entries, e =>
+                e.TargetTable == "dataset:&daily_sales" &&
+                e.TargetColumn == "amount" &&
+                e.SourceColumns.Contains("amount", StringComparer.OrdinalIgnoreCase));
         }
 
         [Fact]

@@ -16,7 +16,12 @@ namespace ETL_SQL.Core.Data
         string Operation,
         IReadOnlyDictionary<string, string> Tags,
         string? SourceFile,
-        int Line
+        int Line,
+        IReadOnlyList<string>? SourceColumns = null,
+        string? TransformationKind = null,
+        string? TransformationExpression = null,
+        IReadOnlyList<string>? FunctionsApplied = null,
+        string? DerivedFromDescriptions = null
     );
 
     public interface ILineageCatalogStore

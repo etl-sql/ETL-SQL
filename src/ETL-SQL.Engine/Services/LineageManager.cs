@@ -98,14 +98,64 @@ namespace ETL_SQL.Engine.Services
 
         public void RecordCreateDatasetLineage(CreateDatasetStatement statement)
         {
+            var target = $"dataset:{statement.TempTableName}";
+
             _tracker.Record(
-                $"dataset:{statement.TempTableName}",
+                target,
                 statement.SourceQuery.GetSourceTables(),
                 "CREATE DATASET",
                 line: statement.Line,
                 column: statement.Column,
                 endLine: statement.EndLine,
                 endColumn: statement.EndColumn);
+
+            // Key the inner SELECT's column lineage to the dataset target (not the
+            // generic "RESULTSET") so a column's source + inherited description
+            // persists and can be resolved by dataset name from a separate script.
+            if (statement.SourceQuery is SelectStatement select)
+            {
+                var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (select.FromTable != null)
+                {
+                    aliases[select.FromTable.Alias ?? select.FromTable.TableName] = select.FromTable.TableName;
+                    if (select.FromTable.Metadata?.Any() == true)
+                        _tracker.Record(select.FromTable.TableName, new[] { select.FromTable.TableName }, "TABLE_TAGS", metadata: select.FromTable.Metadata, line: select.FromTable.Line, column: select.FromTable.Column);
+                }
+                foreach (var j in select.Joins)
+                {
+                    aliases[j.Table.Alias ?? j.Table.TableName] = j.Table.TableName;
+                    if (j.Table.Metadata?.Any() == true)
+                        _tracker.Record(j.Table.TableName, new[] { j.Table.TableName }, "TABLE_TAGS", metadata: j.Table.Metadata, line: j.Table.Line, column: j.Table.Column);
+                }
+
+                foreach (var col in select.Columns)
+                {
+                    string targetCol = col.Alias ?? (col.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"Expr{select.Columns.IndexOf(col)}");
+
+                    var resolvedSources = col.Expression.GetSourceTables()
+                        .Select(s => aliases.TryGetValue(s, out var real) ? real : s)
+                        .ToList();
+                    if (!resolvedSources.Any() && select.FromTable != null)
+                        resolvedSources = select.GetSourceTables().ToList();
+
+                    var sourceCols = col.Expression.GetSourceColumns().ToList();
+                    var inherited = _tracker.InheritMetadata(resolvedSources, sourceCols, out var derived);
+                    col.DerivedFromDescriptions = derived;
+                    foreach (var m in inherited)
+                        if (!col.Metadata.ContainsKey(m.Key)) col.Metadata[m.Key] = m.Value;
+
+                    _tracker.Record(
+                        target,
+                        resolvedSources,
+                        "CREATE DATASET",
+                        targetColumn: targetCol,
+                        sourceColumns: sourceCols,
+                        metadata: col.Metadata,
+                        derivedFromDescriptions: col.DerivedFromDescriptions,
+                        line: col.Line,
+                        column: col.Column);
+                }
+            }
         }
 
         public void RecordCreateVisualLineage(CreateVisualStatement statement)

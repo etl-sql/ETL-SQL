@@ -24,12 +24,14 @@ public class ReportsController : ControllerBase
     private readonly PortalDbContext db;
     private readonly AuditService audit;
     private readonly PortalConfig portalConfig;
+    private readonly ILineageCatalogStore lineageCatalog;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog)
     {
         this.db = db;
         this.audit = audit;
         this.portalConfig = portalConfig;
+        this.lineageCatalog = lineageCatalog;
     }
 
     private int CurrentUserId =>
@@ -599,6 +601,12 @@ public class ReportsController : ControllerBase
             return UnprocessableEntity(new { Error = $"Could not parse report script: {ex.Message}" });
         }
 
+        // Best-effort cross-script enrichment: resolve dataset references (built by
+        // a separate script) to their column lineage so the detail panel can trace a
+        // visual's field back through the dataset to its origin + description.
+        try { await BridgeDatasetLineageAsync(id, nodes, edges); }
+        catch { /* never let enrichment fail the structure render */ }
+
         return Ok(new DagDto(nodes, edges));
 
         static string? BuildMappingLabel(List<VisualMapping> mappings)
@@ -609,6 +617,136 @@ public class ReportsController : ControllerBase
             if (x is not null) parts.Add($"X: {x}");
             if (y is not null) parts.Add($"Y: {y}");
             return parts.Count > 0 ? string.Join(" · ", parts) : null;
+        }
+    }
+
+    private static string NormalizeName(string? s) => (s ?? string.Empty).TrimStart('&', '#');
+
+    // Resolve a registered dataset's column lineage by stitching two sources:
+    //  - parsing its stored SourceQuery (column transform + source columns), and
+    //  - the persisted lineage catalog from its own build run (inherited
+    //    description / tags such as pii — which the SQL text alone cannot supply).
+    private async Task<(List<string> Columns, Dictionary<string, object> Lineage)> ResolveDatasetColumnLineageAsync(Dataset ds)
+    {
+        var parsed = new Dictionary<string, LineageEntry>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(ds.SourceQuery))
+            {
+                var tokens = new Lexer(ds.SourceQuery).Tokenize();
+                var script = new CoreParser(tokens, ds.SourceQuery).Parse();
+                var tr = new LineageTracker(ETL_SQL.Common.NullLogger.Instance);
+                new LineageAnalyzer(tr).Analyze(script);
+                foreach (var e in tr.GetFullLineage())
+                    if (e.TargetColumn != null && !parsed.ContainsKey(e.TargetColumn))
+                        parsed[e.TargetColumn] = e;
+            }
+        }
+        catch { /* unparseable source query — fall back to persisted lineage only */ }
+
+        var norm = NormalizeName(ds.Name);
+        var persisted = new Dictionary<string, LineageHistoryEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var target in new[] { $"dataset:&{norm}", $"dataset:{norm}" })
+            foreach (var e in await lineageCatalog.GetHistoryForTableAsync(target, 500))
+                if (e.TargetColumn != null && !persisted.ContainsKey(e.TargetColumn))
+                    persisted[e.TargetColumn] = e;
+
+        var columns = new List<string>();
+        var lineage = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var col in parsed.Keys.Concat(persisted.Keys).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c))
+        {
+            parsed.TryGetValue(col, out var p);
+            persisted.TryGetValue(col, out var h);
+
+            var srcTables = (p?.SourceTables ?? (IReadOnlyList<string>?)h?.SourceTables) ?? new List<string>();
+            var srcCols   = (p?.SourceColumns ?? (IReadOnlyList<string>?)h?.SourceColumns) ?? new List<string>();
+            var sources = srcTables
+                .Select((t, k) => new { table = t, column = k < srcCols.Count ? srcCols[k] : null })
+                .ToList();
+
+            string? description = p?.DerivedFromDescriptions
+                ?? (h?.Tags != null && h.Tags.TryGetValue("d", out var hd) ? hd : null)
+                ?? h?.DerivedFromDescriptions
+                ?? (p?.Metadata != null && p.Metadata.TryGetValue("d", out var pd) ? pd : null);
+
+            var tags = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (h?.Tags != null)
+                foreach (var kv in h.Tags)
+                    if (!kv.Key.Equals("d", StringComparison.OrdinalIgnoreCase)) tags[kv.Key] = kv.Value;
+            if (p?.Metadata != null)
+                foreach (var kv in p.Metadata)
+                    if (!kv.Key.Equals("d", StringComparison.OrdinalIgnoreCase) && !tags.ContainsKey(kv.Key)) tags[kv.Key] = kv.Value;
+
+            columns.Add(col);
+            lineage[col] = new
+            {
+                sources,
+                transform   = p?.TransformationExpression ?? h?.TransformationExpression,
+                functions   = (object?)p?.FunctionsApplied ?? h?.FunctionsApplied,
+                kind        = (p != null && p.TransformationKind != TransformationKind.Unknown) ? p.TransformationKind.ToString() : h?.TransformationKind,
+                description,
+                tags        = tags.Count > 0 ? tags : null,
+            };
+        }
+
+        return (columns, lineage);
+    }
+
+    // Replace dataset-reference nodes' (and their SELECT * consumers') column
+    // lineage with the resolved cross-script lineage.
+    private async Task BridgeDatasetLineageAsync(int reportId, List<DagNodeDto> nodes, List<DagEdgeDto> edges)
+    {
+        var reportDatasets = await db.Datasets.Where(d => d.OwningReportId == reportId).ToListAsync();
+        if (reportDatasets.Count == 0) return;
+
+        var dsByNorm = reportDatasets
+            .GroupBy(d => NormalizeName(d.Name), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var resolved = new Dictionary<string, (List<string> Columns, Dictionary<string, object> Lineage)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in dsByNorm)
+        {
+            var r = await ResolveDatasetColumnLineageAsync(kvp.Value);
+            if (r.Columns.Count > 0) resolved[kvp.Key] = r;
+        }
+        if (resolved.Count == 0) return;
+
+        // 1. Enrich the dataset-reference nodes themselves.
+        var datasetRefCols = new Dictionary<string, (List<string> Columns, string Label)>();
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+            if (node.Type != "table" && node.Type != "dataset") continue;
+            if (!resolved.TryGetValue(NormalizeName(node.Label), out var r)) continue;
+            nodes[i] = node with { Type = "dataset", Meta = new { columns = r.Columns, columnLineage = r.Lineage } };
+            datasetRefCols[node.Id] = (r.Columns, node.Label);
+        }
+        if (datasetRefCols.Count == 0) return;
+
+        // 2. Propagate to temp tables that SELECT * from a single dataset ref
+        //    (e.g. SELECT * INTO #sales FROM &sales_snap) — pass-through columns
+        //    pointing back at the dataset so the chain stays connected.
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+            if (node.Type != "table" && node.Type != "dataset") continue;
+            if (node.Meta != null) continue;   // already has column lineage from the report script
+            var inbound = edges.Where(e => e.Target == node.Id && datasetRefCols.ContainsKey(e.Source)).ToList();
+            if (inbound.Count != 1) continue;  // only the unambiguous single-source case
+            var (cols, label) = datasetRefCols[inbound[0].Source];
+            var passthrough = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            foreach (var c in cols)
+                passthrough[c] = new
+                {
+                    sources = new[] { new { table = label, column = (string?)c } },
+                    transform = (string?)null,
+                    functions = (object?)null,
+                    kind = "PassThrough",
+                    description = (string?)null,
+                    tags = (object?)null,
+                };
+            nodes[i] = node with { Meta = new { columns = cols, columnLineage = passthrough } };
         }
     }
 

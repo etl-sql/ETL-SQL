@@ -319,6 +319,73 @@
     margin-left: auto;
 }
 
+/* Column-lineage chain (detail panel): a field's provenance, hop by hop. */
+.etlsql-dag-lin-field {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 5px;
+    margin-top: 8px;
+    padding-bottom: 2px;
+}
+
+.etlsql-dag-lin {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 5px;
+    padding: 2px 0;
+}
+
+.etlsql-dag-lin-arrow {
+    color: #64748b;
+    flex: 0 0 auto;
+}
+
+.etlsql-dag-lin-col {
+    color: var(--portal-text, #e2e8f0);
+    font-family: var(--portal-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.etlsql-dag-lin-expr {
+    color: #10b981;
+    font-family: var(--portal-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.76rem;
+}
+
+.etlsql-dag-lin-tbl {
+    margin-left: auto;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.etlsql-dag-lin-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 1px 0;
+}
+
+.etlsql-dag-lin-tag {
+    color: #fca5a5;
+    background: rgba(248, 113, 113, 0.12);
+    border: 1px solid rgba(248, 113, 113, 0.35);
+    border-radius: 4px;
+    padding: 0 5px;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.etlsql-dag-lin-desc {
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-style: italic;
+    padding: 1px 0 3px;
+    line-height: 1.35;
+}
+
 /* ── Phase 3: Script editor wrapper ────────────────────────────────────── */
 
 .etlsql-editor-container {

@@ -45,6 +45,8 @@
       <select id="fixtureSel">
         <option value="kitchen">Kitchen Sink (~106 nodes)</option>
         <option value="small">Small report (5 nodes)</option>
+        <option value="edw">EDW example (salesBar drill-down)</option>
+        <option value="xscript">Cross-script (dataset built separately)</option>
       </select>
     </label>
     <button id="reloadBtn" title="Re-import designer.js and re-render">↻ Reload</button>
@@ -54,7 +56,7 @@
   <div id="dag"></div>
 
   <script type="module">
-    import { buildKitchenSinkGraph, buildSmallGraph } from './fixture.js';
+    import { buildKitchenSinkGraph, buildSmallGraph, buildEdwExampleGraph, buildCrossScriptGraph } from './fixture.js';
 
     const $dag = document.getElementById('dag');
     const $sel = document.getElementById('fixtureSel');
@@ -65,7 +67,10 @@
       if (instance) { try { instance.dispose(); } catch {} instance = null; }
       $dag.innerHTML = '';
 
-      const graph = $sel.value === 'small' ? buildSmallGraph() : buildKitchenSinkGraph();
+      const graph = $sel.value === 'small' ? buildSmallGraph()
+        : $sel.value === 'edw' ? buildEdwExampleGraph()
+        : $sel.value === 'xscript' ? buildCrossScriptGraph()
+        : buildKitchenSinkGraph();
       $stat.textContent = `${graph.nodes.length} nodes · ${graph.edges.length} edges`;
 
       try {

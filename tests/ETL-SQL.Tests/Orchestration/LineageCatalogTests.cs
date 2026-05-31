@@ -67,6 +67,41 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task SaveAndQuery_PersistsColumnTransformAndDescription()
+        {
+            await _store.InitializeAsync();
+            var catalog = (ILineageCatalogStore)_store;
+
+            var entry = new LineageEntry("dataset:sales_snap", "SELECT")
+            {
+                TargetColumn             = "total",
+                SourceTables             = new List<string> { "Sales" },
+                SourceColumns            = new List<string> { "Amount" },
+                TransformationKind       = TransformationKind.Aggregation,
+                TransformationExpression = "SUM(Amount)",
+                FunctionsApplied         = new List<string> { "SUM" },
+                DerivedFromDescriptions  = "Amount: Sales amounts",
+                Metadata                 = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["pii"] = "true",
+                    ["d"]   = "Sales amounts",
+                },
+            };
+
+            await catalog.SaveLineageAsync(new[] { entry }, "BuildSnap", null, DateTime.UtcNow);
+
+            var hist = (await catalog.GetHistoryForTableAsync("dataset:sales_snap")).ToList();
+            var e = Assert.Single(hist);
+            Assert.Equal("total",                 e.TargetColumn);
+            Assert.Equal(new[] { "Amount" },      e.SourceColumns);
+            Assert.Equal("Aggregation",           e.TransformationKind);
+            Assert.Equal("SUM(Amount)",           e.TransformationExpression);
+            Assert.Equal(new[] { "SUM" },         e.FunctionsApplied);
+            Assert.Equal("Amount: Sales amounts", e.DerivedFromDescriptions);
+            Assert.Equal("true",                  e.Tags["pii"]);
+        }
+
+        [Fact]
         public async Task GetHistoryForTable_CaseInsensitive()
         {
             await _store.InitializeAsync();

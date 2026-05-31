@@ -245,3 +245,52 @@ export function buildEdwExampleGraph() {
   ];
   return { nodes, edges };
 }
+
+/**
+ * The CROSS-SCRIPT case: the dataset &sales_snap is built by a *separate* script,
+ * then the report does `SELECT * INTO #sales FROM &sales_snap`. This models what
+ * the /structure endpoint produces AFTER the dataset bridge runs — the dataset
+ * node carries lineage stitched from its SourceQuery (SUM(Amount)) + the persisted
+ * catalog (description + pii), and #sales pass-throughs point back at the dataset.
+ * Clicking salesBar's Y=total should trace across the boundary to EDW.Sales.Amount.
+ */
+export function buildCrossScriptGraph() {
+  const passthrough = (col, fromTable) => ({ sources: [{ table: fromTable, column: col }], transform: null, functions: null, kind: 'PassThrough', description: null, tags: null });
+  const nodes = [
+    { id: 'table:Sales', label: 'Sales', type: 'table', meta: { columns: ['Amount', 'Date', 'Vendor'], columnLineage: {} } },
+    {
+      id: 'table:&sales_snap', label: '&sales_snap', type: 'dataset',
+      meta: {
+        columns: ['Date', 'Vendor', 'total'],
+        columnLineage: {
+          total:  { sources: [{ table: 'Sales', column: 'Amount' }], transform: 'SUM(Amount)', functions: ['SUM'], kind: 'Aggregation', description: 'Sales amounts', tags: { pii: 'true' } },
+          Date:   passthrough('Date', 'Sales'),
+          Vendor: passthrough('Vendor', 'Sales'),
+        },
+      },
+    },
+    {
+      id: 'table:#sales', label: '#sales', type: 'table',
+      meta: {
+        columns: ['Date', 'Vendor', 'total'],
+        columnLineage: {
+          total:  passthrough('total', '&sales_snap'),
+          Date:   passthrough('Date', '&sales_snap'),
+          Vendor: passthrough('Vendor', '&sales_snap'),
+        },
+      },
+    },
+    {
+      id: 'vis:salesBar', label: 'BAR · salesBar', type: 'visual',
+      meta: { page: 'Page A', visualType: 'BAR', mappings: [{ role: 'XAXIS', column: 'Date' }, { role: 'YAXIS', column: 'total' }, { role: 'SERIES', column: 'Vendor' }] },
+    },
+    { id: 'page:Page A', label: 'Page A', type: 'page', meta: null },
+  ];
+  const edges = [
+    { source: 'table:Sales', target: 'table:&sales_snap', label: 'GROUP BY' },
+    { source: 'table:&sales_snap', target: 'table:#sales', label: 'SELECT *' },
+    { source: 'table:#sales', target: 'vis:salesBar', label: 'X: Date · Y: total' },
+    { source: 'page:Page A', target: 'vis:salesBar', label: null },
+  ];
+  return { nodes, edges };
+}

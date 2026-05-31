@@ -422,6 +422,58 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         panel.appendChild(ul);
     }
 
+    // Resolve a source table name (as recorded in lineage) to a graph node id.
+    function findTableNodeId(tableName) {
+        if (_nodeById[`ds:${tableName}`])    return `ds:${tableName}`;
+        if (_nodeById[`table:${tableName}`]) return `table:${tableName}`;
+        const hit = nodes.find(n => (n.type === 'table' || n.type === 'dataset') && n.label === tableName);
+        return hit ? hit.id : null;
+    }
+
+    // Walk a column back through its sources, rendering each hop (transform,
+    // origin table, inherited description / tags) indented by depth.
+    function appendColumnLineage(container, tableNodeId, column, depth, seen) {
+        seen = seen || new Set();
+        const key = `${tableNodeId}|${column}`;
+        if (seen.has(key) || depth > 12) return;
+        seen.add(key);
+
+        const tnode = _nodeById[tableNodeId];
+        const cl = tnode?.meta?.columnLineage?.[column];
+
+        const row = _el('div', 'etlsql-dag-lin');
+        row.style.paddingLeft = `${depth * 14}px`;
+        if (depth > 0) { const a = _el('span', 'etlsql-dag-lin-arrow'); a.textContent = '↖'; row.append(a); }
+        const colEl = _el('span', 'etlsql-dag-lin-col'); colEl.textContent = column; row.append(colEl);
+        if (cl?.transform) { const t = _el('span', 'etlsql-dag-lin-expr'); t.textContent = `= ${cl.transform}`; row.append(t); }
+        const tbl = _el('span', 'etlsql-dag-lin-tbl'); tbl.textContent = tnode?.label ?? tableNodeId; row.append(tbl);
+        container.append(row);
+
+        if (cl?.tags && Object.keys(cl.tags).length) {
+            const tagRow = _el('div', 'etlsql-dag-lin-meta'); tagRow.style.paddingLeft = `${depth * 14 + 16}px`;
+            for (const k of Object.keys(cl.tags)) { const tg = _el('span', 'etlsql-dag-lin-tag'); tg.textContent = `⚠ ${k}`; tagRow.append(tg); }
+            container.append(tagRow);
+        }
+        if (cl?.description) {
+            const d = _el('div', 'etlsql-dag-lin-desc'); d.style.paddingLeft = `${depth * 14 + 16}px`;
+            d.textContent = cl.description; container.append(d);
+        }
+
+        for (const s of (cl?.sources ?? [])) {
+            if (!s.column) continue;
+            const srcId = findTableNodeId(s.table);
+            if (srcId) {
+                appendColumnLineage(container, srcId, s.column, depth + 1, seen);
+            } else {
+                const leaf = _el('div', 'etlsql-dag-lin'); leaf.style.paddingLeft = `${(depth + 1) * 14}px`;
+                const a = _el('span', 'etlsql-dag-lin-arrow'); a.textContent = '↖'; leaf.append(a);
+                const c = _el('span', 'etlsql-dag-lin-col'); c.textContent = s.column; leaf.append(c);
+                const tb = _el('span', 'etlsql-dag-lin-tbl'); tb.textContent = s.table; leaf.append(tb);
+                container.append(leaf);
+            }
+        }
+    }
+
     // node: { id, label, type, meta }
     function showDetail(node) {
         panel.replaceChildren();
@@ -441,19 +493,39 @@ export function renderDag(container, { nodes, edges }, options = {}) {
 
         if (node.type === 'visual') {
             const maps = node.meta?.mappings ?? [];
-            renderPanelList('Fields',
-                maps.length ? maps.map(m => ({ k: _ROLE_LABEL[m.role] ?? String(m.role ?? '').toLowerCase(), v: m.column })) : null,
-                'No field mappings.');
+            const h = _el('div', 'etlsql-dag-panel-h'); h.textContent = 'Fields'; panel.append(h);
+            if (!maps.length) {
+                const e = _el('div', 'etlsql-dag-panel-empty'); e.textContent = 'No field mappings.'; panel.append(e);
+            } else {
+                // Source tables/datasets feeding this visual, to resolve mapping columns against.
+                const srcIds = (edges ?? [])
+                    .filter(e => e.target === node.id)
+                    .map(e => e.source)
+                    .filter(sid => { const t = _nodeById[sid]?.type; return t === 'table' || t === 'dataset'; });
+                const sourceFor = (col) =>
+                    srcIds.find(sid => _nodeById[sid]?.meta?.columnLineage?.[col]
+                                    || (_nodeById[sid]?.meta?.columns || []).includes(col)) || srcIds[0];
+
+                for (const m of maps) {
+                    const fieldRow = _el('div', 'etlsql-dag-lin-field');
+                    const k = _el('span', 'etlsql-dag-panel-k'); k.textContent = `${_ROLE_LABEL[m.role] ?? String(m.role ?? '').toLowerCase()}:`;
+                    const v = _el('span', 'etlsql-dag-panel-v'); v.textContent = m.column;
+                    fieldRow.append(k, v); panel.append(fieldRow);
+                    const srcId = sourceFor(m.column);
+                    if (srcId) appendColumnLineage(panel, srcId, m.column, 1);
+                }
+            }
         } else if (node.type === 'page') {
             const kids = (pageChildren[node.id] ?? []).map(vid => ({ v: _nodeById[vid]?.label ?? vid }));
             renderPanelList(`Visuals (${kids.length})`, kids, 'No visuals.');
         } else {
             const cols = node.meta?.columns ?? [];
-            const srcByCol = {};
-            for (const ce of (node.meta?.colEdges ?? [])) srcByCol[ce.tgtCol] = `${ce.srcTable}.${ce.srcCol}`;
-            renderPanelList(`Columns (${cols.length})`,
-                cols.length ? cols.map(c => ({ v: c, from: srcByCol[c] })) : null,
-                'No column metadata.');
+            const h = _el('div', 'etlsql-dag-panel-h'); h.textContent = `Columns (${cols.length})`; panel.append(h);
+            if (!cols.length) {
+                const e = _el('div', 'etlsql-dag-panel-empty'); e.textContent = 'No column metadata.'; panel.append(e);
+            } else {
+                for (const c of cols) appendColumnLineage(panel, node.id, c, 0);
+            }
         }
 
         panel.style.display = 'block';
