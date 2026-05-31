@@ -78,19 +78,19 @@
       </div>
 
       <!-- Tab strip -->
-      <div class="admin-tabs" aria-label="Administration sections">
-        <button class="admin-tab active" data-tab="users">Users</button>
-        <button class="admin-tab" data-tab="groups">Groups</button>
-        <button class="admin-tab" data-tab="folders">Folders &amp; ACL</button>
-        <button class="admin-tab" data-tab="reports">Reports</button>
-        <button class="admin-tab" data-tab="audit">Audit Log</button>
-        <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
-        <button class="admin-tab" data-tab="datasets">Shared Datasets</button>
-        <button class="admin-tab" data-tab="settings">Settings</button>
+      <div class="admin-tabs" role="tablist" aria-label="Administration sections">
+        <button class="admin-tab active" role="tab" aria-selected="true" id="tab-users" aria-controls="panel-users" data-tab="users">Users</button>
+        <button class="admin-tab" role="tab" aria-selected="false" id="tab-groups" aria-controls="panel-groups" data-tab="groups">Groups</button>
+        <button class="admin-tab" role="tab" aria-selected="false" id="tab-folders" aria-controls="panel-folders" data-tab="folders">Folders &amp; ACL</button>
+        <button class="admin-tab" role="tab" aria-selected="false" id="tab-reports" aria-controls="panel-reports" data-tab="reports">Reports</button>
+        <button class="admin-tab" role="tab" aria-selected="false" id="tab-audit" aria-controls="panel-audit" data-tab="audit">Audit Log</button>
+        <button class="admin-tab" role="tab" aria-selected="false" id="tab-subscriptions" aria-controls="panel-subscriptions" data-tab="subscriptions">Subscriptions</button>
+        <button class="admin-tab" role="tab" aria-selected="false" id="tab-datasets" aria-controls="panel-datasets" data-tab="datasets">Shared Datasets</button>
+        <button class="admin-tab" role="tab" aria-selected="false" id="tab-settings" aria-controls="panel-settings" data-tab="settings">Settings</button>
       </div>
 
       <!-- ── Users panel ─────────────────────────────────────────────── -->
-      <div class="admin-panel active" id="panel-users">
+      <div class="admin-panel active" id="panel-users" role="tabpanel" aria-labelledby="tab-users" tabindex="0">
         <div class="card">
           <div class="card-header">
             <div>
@@ -109,21 +109,21 @@
           <div class="card-header"><h3 id="nu-title">Create User</h3></div>
           <div class="form-row">
             <div class="form-group">
-              <label>Username</label>
+              <label for="nu-username">Username</label>
               <input id="nu-username" type="text">
             </div>
             <div class="form-group">
-              <label>Email</label>
+              <label for="nu-email">Email</label>
               <input id="nu-email" type="email">
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Temporary Password</label>
+              <label for="nu-password">Temporary Password</label>
               <input id="nu-password" type="password">
             </div>
             <div class="form-group">
-              <label>Role</label>
+              <label for="nu-role">Role</label>
               <select id="nu-role">
                 <option value="Viewer">Viewer</option>
                 <option value="Publisher">Publisher</option>
@@ -143,7 +143,7 @@
       </div>
 
       <!-- ── Groups panel ────────────────────────────────────────────── -->
-      <div class="admin-panel" id="panel-groups">
+      <div class="admin-panel" id="panel-groups" role="tabpanel" aria-labelledby="tab-groups" tabindex="0">
         <div class="card">
           <div class="card-header">
             <div>
@@ -161,13 +161,13 @@
           <div class="card-header"><h3 id="ng-title">Create Group</h3></div>
           <div class="form-row">
             <div class="form-group">
-              <label>Group Name</label>
+              <label for="ng-name">Group Name</label>
               <input id="ng-name" type="text">
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Description (optional)</label>
+              <label for="ng-desc">Description (optional)</label>
               <input id="ng-desc" type="text">
             </div>
           </div>
@@ -194,7 +194,7 @@
           <div id="addMemberForm" class="stacked-form" style="display:none">
             <div class="form-row">
               <div class="form-group">
-                <label>User</label>
+                <label for="addMemberSelect">User</label>
                 <select id="addMemberSelect"></select>
               </div>
             </div>
@@ -207,7 +207,7 @@
       </div>
 
       <!-- ── Folders & ACL panel ─────────────────────────────────────── -->
-      <div class="admin-panel" id="panel-folders">
+      <div class="admin-panel" id="panel-folders" role="tabpanel" aria-labelledby="tab-folders" tabindex="0">
         <div class="card">
           <div class="card-header">
             <div>
@@ -225,11 +225,11 @@
           <div class="card-header"><h3 id="nf-title">Create Folder</h3></div>
           <div class="form-row">
             <div class="form-group">
-              <label>Name</label>
+              <label for="nf-name">Name</label>
               <input id="nf-name" type="text">
             </div>
             <div class="form-group">
-              <label>Parent (optional)</label>
+              <label for="nf-parent">Parent (optional)</label>
               <select id="nf-parent"><option value="">— Root —</option></select>
             </div>
           </div>
@@ -256,11 +256,11 @@
           <div id="addAclForm" class="stacked-form" style="display:none">
             <div class="form-row">
               <div class="form-group">
-                <label>Group</label>
+                <label for="aclGroupSelect">Group</label>
                 <select id="aclGroupSelect"></select>
               </div>
               <div class="form-group">
-                <label>Permission</label>
+                <label for="aclPermSelect">Permission</label>
                 <select id="aclPermSelect">
                   <option value="Read">Read</option>
                   <option value="Execute">Execute</option>
@@ -277,7 +277,7 @@
       </div>
 
       <!-- ── Reports panel ───────────────────────────────────────────── -->
-      <div class="admin-panel" id="panel-reports">
+      <div class="admin-panel" id="panel-reports" role="tabpanel" aria-labelledby="tab-reports" tabindex="0">
         <div class="card">
           <div class="card-header">
             <div>
@@ -297,11 +297,11 @@
           <div class="card-header"><h3 id="pr-title">Publish New Report</h3></div>
           <div class="form-row">
             <div class="form-group">
-              <label>Report Name</label>
+              <label for="pr-name">Report Name</label>
               <input id="pr-name" type="text" placeholder="Daily Sales">
             </div>
             <div class="form-group">
-              <label>Script Path (relative to ScriptRoot)</label>
+              <label for="pr-path">Script Path (relative to ScriptRoot)</label>
               <div class="inline-control inline-control-gap">
                 <input id="pr-path" type="text" placeholder="sales/daily.rptsql">
                 <button class="btn btn-outline btn-sm" id="pr-browseBtn" type="button">Browse…</button>
@@ -310,12 +310,12 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Destination Folder</label>
+              <label for="pr-folder">Destination Folder</label>
               <select id="pr-folder"></select>
             </div>
           </div>
           <div class="form-group">
-            <label>Description</label>
+            <label for="pr-desc">Description</label>
             <textarea id="pr-desc" rows="2"></textarea>
           </div>
           <div id="pr-error" class="error-msg"></div>
@@ -330,7 +330,7 @@
       </div>
 
       <!-- ── Audit log panel ─────────────────────────────────────────── -->
-      <div class="admin-panel" id="panel-audit">
+      <div class="admin-panel" id="panel-audit" role="tabpanel" aria-labelledby="tab-audit" tabindex="0">
         <div class="card">
           <div class="card-header">
             <div>
@@ -350,7 +350,7 @@
       </div>
 
       <!-- ── Subscriptions panel ───────────────────────────────────────── -->
-      <div class="admin-panel" id="panel-subscriptions">
+      <div class="admin-panel" id="panel-subscriptions" role="tabpanel" aria-labelledby="tab-subscriptions" tabindex="0">
         <div class="card">
           <div class="card-header">
             <div>
@@ -366,7 +366,7 @@
       </div>
 
       <!-- ── Shared Datasets panel ──────────────────────────────────────── -->
-      <div class="admin-panel" id="panel-datasets">
+      <div class="admin-panel" id="panel-datasets" role="tabpanel" aria-labelledby="tab-datasets" tabindex="0">
         <div class="card">
           <div class="card-header">
             <div>
@@ -385,14 +385,14 @@
           <div class="card-header"><h3>Edit Dataset</h3></div>
           <div class="form-row">
             <div class="form-group">
-              <label>Access Level</label>
+              <label for="ds-accessLevel">Access Level</label>
               <select id="ds-accessLevel">
                 <option value="Public">Public</option>
                 <option value="Private">Private</option>
               </select>
             </div>
             <div class="form-group">
-              <label>TTL (e.g. 1h, 30m, 7d — blank = no expiry)</label>
+              <label for="ds-ttl">TTL (e.g. 1h, 30m, 7d — blank = no expiry)</label>
               <input id="ds-ttl" type="text" placeholder="e.g. 1h">
             </div>
           </div>
@@ -415,11 +415,11 @@
             <h4 class="section-kicker">Grant Permission</h4>
             <div class="form-row">
               <div class="form-group">
-                <label>Group</label>
+                <label for="ds-acl-group">Group</label>
                 <select id="ds-acl-group"></select>
               </div>
               <div class="form-group">
-                <label>Permission</label>
+                <label for="ds-acl-perm">Permission</label>
                 <select id="ds-acl-perm">
                   <option value="Viewer">Viewer</option>
                   <option value="Editor">Editor</option>
@@ -433,7 +433,7 @@
       </div>
 
       <!-- ── Settings panel ──────────────────────────────────────────────── -->
-      <div class="admin-panel" id="panel-settings">
+      <div class="admin-panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" tabindex="0">
         <div class="card">
           <div class="card-header">
             <div>
@@ -453,13 +453,13 @@
           </p>
           <div class="form-row">
             <div class="form-group" style="flex:2">
-              <label>Orchestrator API URL</label>
+              <label for="orch-url">Orchestrator API URL</label>
               <input id="orch-url" type="url" placeholder="http://orchestrator-host:5100">
             </div>
           </div>
           <div class="form-row">
             <div class="form-group" style="flex:2">
-              <label>API Key <span class="text-sm text-muted" id="orch-key-status"></span></label>
+              <label for="orch-key">API Key <span class="text-sm text-muted" id="orch-key-status"></span></label>
               <input id="orch-key" type="password" placeholder="Leave blank to keep current key">
             </div>
           </div>
@@ -487,17 +487,17 @@
           </p>
           <div class="form-row">
             <div class="form-group" style="flex:1">
-              <label>Portal Name</label>
+              <label for="brand-name">Portal Name</label>
               <input id="brand-name" type="text" maxlength="80" placeholder="ETL-SQL Portal">
             </div>
             <div class="form-group" style="flex:1">
-              <label>Logo URL</label>
+              <label for="brand-logo">Logo URL</label>
               <input id="brand-logo" type="url" maxlength="500" placeholder="/images/company-logo.png">
             </div>
           </div>
           <div class="form-row">
             <div class="form-group" style="flex:2">
-              <label>Footer Text</label>
+              <label for="brand-footer">Footer Text</label>
               <input id="brand-footer" type="text" maxlength="120" placeholder="Company analytics portal">
             </div>
           </div>
@@ -644,9 +644,13 @@ document.getElementById('logoutBtn').addEventListener('click', () => authApi.log
 const panels = { users: null, groups: null, folders: null, reports: null, audit: null, subscriptions: null, datasets: null, settings: null };
 document.querySelectorAll('.admin-tab').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.admin-tab').forEach(b => {
+      b.classList.remove('active');
+      b.setAttribute('aria-selected', 'false');
+    });
     document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
+    btn.setAttribute('aria-selected', 'true');
     const id = `panel-${btn.dataset.tab}`;
     document.getElementById(id).classList.add('active');
     if (!panels[btn.dataset.tab]) {
@@ -659,7 +663,84 @@ document.querySelectorAll('.admin-tab').forEach(btn => {
 const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, reports: loadReports, audit: loadAudit, subscriptions: loadSubscriptions, datasets: loadDatasets, settings: loadSettings };
 // Load the initial tab (users)
 panels.users = true;
+initModalA11y();
 loadUsers();
+
+function initModalA11y() {
+  let previouslyFocusedElement = null;
+
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      if (mutation.attributeName === 'style') {
+        const modal = mutation.target;
+        const isOpen = modal.style.display === 'flex' || modal.style.display === 'block';
+        
+        if (isOpen) {
+          previouslyFocusedElement = document.activeElement;
+          const focusableElements = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+          if (focusableElements.length > 0) {
+            // Find first visible focusable element
+            const focusables = Array.from(focusableElements).filter(el => !el.disabled && el.offsetParent !== null);
+            if (focusables.length > 0) {
+              focusables[0].focus();
+            }
+            
+            modal._trapFocus = function(e) {
+              if (e.key === 'Tab') {
+                const visibleFocusables = Array.from(modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(el => !el.disabled && el.offsetParent !== null);
+                if (visibleFocusables.length === 0) return;
+                const first = visibleFocusables[0];
+                const last = visibleFocusables[visibleFocusables.length - 1];
+                
+                if (e.shiftKey) {
+                  if (document.activeElement === first) {
+                    last.focus();
+                    e.preventDefault();
+                  }
+                } else {
+                  if (document.activeElement === last) {
+                    first.focus();
+                    e.preventDefault();
+                  }
+                }
+              }
+            };
+            modal.addEventListener('keydown', modal._trapFocus);
+          }
+          
+          modal._escapeClose = function(e) {
+            if (e.key === 'Escape') {
+              const closeBtn = modal.querySelector('#structureCloseBtn, #exportCancelBtn, #dependenciesCloseBtn, #historyCloseBtn, #sub-cancelBtn, #ep-cancelBtn, #sb-cancelBtn, #dsLineageCloseBtn, #dv-closeBtn, .btn-outline, button');
+              if (closeBtn) {
+                closeBtn.click();
+              } else {
+                modal.style.display = 'none';
+              }
+            }
+          };
+          document.addEventListener('keydown', modal._escapeClose);
+        } else {
+          if (modal._trapFocus) {
+            modal.removeEventListener('keydown', modal._trapFocus);
+            delete modal._trapFocus;
+          }
+          if (modal._escapeClose) {
+            document.removeEventListener('keydown', modal._escapeClose);
+            delete modal._escapeClose;
+          }
+          if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
+            previouslyFocusedElement.focus();
+            previouslyFocusedElement = null;
+          }
+        }
+      }
+    });
+  });
+
+  document.querySelectorAll('.modal-overlay').forEach(modal => {
+    observer.observe(modal, { attributes: true, attributeFilter: ['style'] });
+  });
+}
 
 // ── Users ──────────────────────────────────────────────────────────────────────
 let allUsers = [];

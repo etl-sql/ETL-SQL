@@ -7,21 +7,21 @@
   --portal-surface-raised: #ffffff;
   --portal-text: #172033;
   --portal-text-soft: #46556c;
-  --portal-muted: #7a8798;
+  --portal-muted: #5a6778;
   --portal-border: #d9e0ea;
   --portal-border-soft: #e8edf4;
   --portal-accent: #2563eb;
   --portal-accent-hover: #1d4ed8;
   --portal-accent-soft: #e8f0ff;
-  --portal-success: #16805a;
-  --portal-success-soft: #def7ec;
+  --portal-success: #117853;
+  --portal-success-soft: #e3faf0;
   --portal-warning: #a05a00;
   --portal-warning-soft: #fff4d6;
-  --portal-danger: #c24141;
+  --portal-danger: #b83535;
   --portal-danger-hover: #a73232;
-  --portal-danger-soft: #fde8e8;
+  --portal-danger-soft: #fef2f2;
   --portal-focus-ring: #1d4ed8;
-  --portal-focus: rgba(37, 99, 235, .18);
+  --portal-focus: rgba(37, 99, 235, .36);
   --portal-shadow-sm: 0 1px 2px rgba(15, 23, 42, .06);
   --portal-shadow-md: 0 14px 30px rgba(15, 23, 42, .12);
   --portal-radius: 8px;
@@ -221,6 +221,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .report-glyph::before { top: 6px; }
 .report-glyph::after { top: 11px; }
 .report-card h3 { font-size: 1.02em; margin: 0; color: var(--portal-text); line-height: 1.25; }
+.report-card-link { color: inherit; text-decoration: none; outline: none; }
+.report-card:hover .report-card-link, .catalog-report-row:hover .report-card-link { color: var(--portal-accent); text-decoration: underline; }
+.report-card-link:focus-visible { outline: 2px solid var(--portal-focus-ring); outline-offset: 2px; }
 .report-card p  { font-size: .84em; line-height: 1.4; color: var(--portal-muted); margin: 0; flex: 1; }
 .report-status-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 22px; }
 .report-card-meta { font-size: .76em; color: var(--portal-muted); display: grid; grid-template-columns: 1fr; gap: 3px; }

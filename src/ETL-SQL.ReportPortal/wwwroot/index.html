@@ -54,7 +54,7 @@
         <span>Folders</span>
         <span class="sidebar-hint">Report library</span>
       </div>
-      <div class="sidebar-tree" id="folderTree">
+      <div class="sidebar-tree" id="folderTree" role="tree" aria-label="Report folders">
         <div class="loading-state loading-state-compact">Loading folders…</div>
       </div>
     </aside>
@@ -163,7 +163,7 @@
         <p class="section-kicker">Details</p>
         <div class="form-row">
           <div class="form-group">
-            <label>Subscription Name <span class="text-muted text-sm">(optional)</span></label>
+            <label for="sub-name">Subscription Name <span class="text-muted text-sm">(optional)</span></label>
             <input id="sub-name" type="text" placeholder="e.g. Weekly Finance">
           </div>
         </div>
@@ -173,7 +173,7 @@
         <p class="section-kicker">Delivery</p>
         <div class="form-row">
           <div class="form-group">
-            <label>Schedule</label>
+            <label for="sub-schedule">Schedule</label>
             <select id="sub-schedule">
               <option value="Daily">Daily</option>
               <option value="Weekly">Weekly</option>
@@ -182,13 +182,13 @@
             </select>
           </div>
           <div class="form-group">
-            <label>Delivery Time <span class="text-muted text-sm">(HH:MM, optional)</span></label>
+            <label for="sub-attime">Delivery Time <span class="text-muted text-sm">(HH:MM, optional)</span></label>
             <input id="sub-attime" type="time">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Format</label>
+            <label for="sub-format">Format</label>
             <select id="sub-format">
               <option value="PDF">PDF</option>
               <option value="CSV">CSV</option>
@@ -197,13 +197,13 @@
             </select>
           </div>
           <div class="form-group" id="sub-smtp-group">
-            <label>SMTP Connection</label>
+            <label for="sub-smtp">SMTP Connection</label>
             <select id="sub-smtp"></select>
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Recipient Email <span class="text-muted text-sm">(uses your profile email if blank)</span></label>
+            <label for="sub-email">Recipient Email <span class="text-muted text-sm">(uses your profile email if blank)</span></label>
             <input id="sub-email" type="email" placeholder="user@example.com">
           </div>
         </div>
@@ -347,7 +347,84 @@ async function init() {
   wireSubscribeModal();
   wireEditParamsModal();
   await loadFolderTree();
+  initModalA11y();
   openReportHashView();
+}
+
+function initModalA11y() {
+  let previouslyFocusedElement = null;
+
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      if (mutation.attributeName === 'style') {
+        const modal = mutation.target;
+        const isOpen = modal.style.display === 'flex' || modal.style.display === 'block';
+        
+        if (isOpen) {
+          previouslyFocusedElement = document.activeElement;
+          const focusableElements = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+          if (focusableElements.length > 0) {
+            // Find first visible focusable element
+            const focusables = Array.from(focusableElements).filter(el => !el.disabled && el.offsetParent !== null);
+            if (focusables.length > 0) {
+              focusables[0].focus();
+            }
+            
+            modal._trapFocus = function(e) {
+              if (e.key === 'Tab') {
+                const visibleFocusables = Array.from(modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(el => !el.disabled && el.offsetParent !== null);
+                if (visibleFocusables.length === 0) return;
+                const first = visibleFocusables[0];
+                const last = visibleFocusables[visibleFocusables.length - 1];
+                
+                if (e.shiftKey) {
+                  if (document.activeElement === first) {
+                    last.focus();
+                    e.preventDefault();
+                  }
+                } else {
+                  if (document.activeElement === last) {
+                    first.focus();
+                    e.preventDefault();
+                  }
+                }
+              }
+            };
+            modal.addEventListener('keydown', modal._trapFocus);
+          }
+          
+          modal._escapeClose = function(e) {
+            if (e.key === 'Escape') {
+              const closeBtn = modal.querySelector('#structureCloseBtn, #exportCancelBtn, #dependenciesCloseBtn, #historyCloseBtn, #sub-cancelBtn, #ep-cancelBtn, .btn-outline, button');
+              if (closeBtn) {
+                closeBtn.click();
+              } else {
+                modal.style.display = 'none';
+              }
+            }
+          };
+          document.addEventListener('keydown', modal._escapeClose);
+        } else {
+          if (modal._trapFocus) {
+            modal.removeEventListener('keydown', modal._trapFocus);
+            delete modal._trapFocus;
+          }
+          if (modal._escapeClose) {
+            document.removeEventListener('keydown', modal._escapeClose);
+            delete modal._escapeClose;
+          }
+          if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
+            previouslyFocusedElement.focus();
+            previouslyFocusedElement = null;
+          }
+        }
+      }
+    });
+  });
+
+  document.querySelectorAll('.modal-overlay').forEach(modal => {
+    observer.observe(modal, { attributes: true, attributeFilter: ['style'] });
+  });
 }
 
 function setReportHash(hash) {
@@ -435,15 +512,28 @@ function renderFolderChildren($parent, nodes, depth) {
     const $item = document.createElement('div');
     $item.className = 'folder-item';
     $item.dataset.id = node.id;
+    $item.setAttribute('role', 'treeitem');
+    $item.setAttribute('tabindex', '0');
+    $item.setAttribute('aria-selected', 'false');
+    if (node.children.length) {
+      $item.setAttribute('aria-expanded', 'true');
+    }
     $item.style.marginLeft = `${depth * 10}px`;
     $item.innerHTML = `<span class="folder-icon ${node.children.length ? 'folder-icon-parent' : 'folder-icon-leaf'}" aria-hidden="true"></span>
                        <span class="folder-name">${esc(node.name)}</span>`;
     $item.addEventListener('click', () => selectFolder(node.id, node.name));
+    $item.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectFolder(node.id, node.name);
+      }
+    });
     $parent.appendChild($item);
 
     if (node.children.length) {
       const $sub = document.createElement('div');
       $sub.className = 'folder-children';
+      $sub.setAttribute('role', 'group');
       renderFolderChildren($sub, node.children, depth + 1);
       $parent.appendChild($sub);
     }
@@ -452,8 +542,11 @@ function renderFolderChildren($parent, nodes, depth) {
 
 function selectFolder(id, name) {
   setSidebarViewActive('library');
-  document.querySelectorAll('.folder-item').forEach(el =>
-    el.classList.toggle('active', el.dataset.id == id));
+  document.querySelectorAll('.folder-item').forEach(el => {
+    const isActive = el.dataset.id == id;
+    el.classList.toggle('active', isActive);
+    el.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
   currentFolderId   = id;
   currentFolderName = name;
   currentReportId   = null;
@@ -520,7 +613,7 @@ function renderReportList(reports, folderName) {
         <div class="report-card-body">
           <div class="report-card-title-row">
             <span class="report-glyph" aria-hidden="true"></span>
-            <h3>${esc(name)}</h3>
+            <h3><a href="#report-${r.id}" class="report-card-link" data-id="${r.id}">${esc(name)}</a></h3>
             <button class="favorite-btn ${r.isFavorite ? 'is-active' : ''}" data-favorite-id="${r.id}" title="${r.isFavorite ? 'Remove favorite' : 'Add favorite'}" type="button">${r.isFavorite ? '★' : '☆'}</button>
           </div>
           <p>${esc(description)}</p>
@@ -549,8 +642,13 @@ function renderReportList(reports, folderName) {
 
   wireLibraryToolbar();
   wireFavoriteButtons($main);
-  $main.querySelectorAll('.report-card').forEach(el =>
-    el.addEventListener('click', () => openReport(+el.dataset.id)));
+  $main.querySelectorAll('.report-card').forEach(el => {
+    el.addEventListener('click', e => {
+      if (e.target.closest('.favorite-btn')) return;
+      e.preventDefault();
+      openReport(+el.dataset.id);
+    });
+  });
 }
 
 function renderLibraryToolbar(folderName, reports, showControls, visibleCount = reports.length) {
@@ -649,7 +747,7 @@ function renderCatalogReportList(title, reports, emptyText) {
         <span class="report-glyph" aria-hidden="true"></span>
         <div class="catalog-report-main">
           <div class="report-card-title-row">
-            <h3>${esc(r.name || '')}</h3>
+            <h3><a href="#report-${r.id}" class="report-card-link" data-id="${r.id}">${esc(r.name || '')}</a></h3>
             <button class="favorite-btn ${r.isFavorite ? 'is-active' : ''}" data-favorite-id="${r.id}" title="${r.isFavorite ? 'Remove favorite' : 'Add favorite'}" type="button">${r.isFavorite ? '★' : '☆'}</button>
           </div>
           <p>${esc(r.description || r.path || 'No description provided.')}</p>
@@ -689,7 +787,9 @@ function renderCatalogReportList(title, reports, emptyText) {
     title === 'Favorites' ? showFavorites() : showRecentlyViewed());
   wireFavoriteButtons($main, () => title === 'Favorites' ? showFavorites() : showRecentlyViewed());
   $main.querySelectorAll('.catalog-report-row').forEach(el => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', e => {
+      if (e.target.closest('.favorite-btn')) return;
+      e.preventDefault();
       currentFolderId = +el.dataset.folderId;
       currentFolderName = el.dataset.folderPath || 'Reports';
       openReport(+el.dataset.id);

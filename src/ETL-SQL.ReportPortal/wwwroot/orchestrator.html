@@ -228,19 +228,19 @@
     <div class="modal-body">
       <div class="form-row">
         <div class="form-group" style="flex:1">
-          <label>Job Name <span style="color:var(--portal-danger)">*</span></label>
+          <label for="cj-name">Job Name <span style="color:var(--portal-danger)">*</span></label>
           <input id="cj-name" type="text" placeholder="e.g. daily_sales_etl" autocomplete="off">
         </div>
       </div>
       <div class="form-row">
         <div class="form-group" style="flex:1">
-          <label>Script File</label>
+          <label for="cj-script-select">Script File</label>
           <select id="cj-script-select">
             <option value="">— Select from server —</option>
           </select>
         </div>
         <div class="form-group" style="flex:1">
-          <label>Or enter server path manually</label>
+          <label for="cj-script-path">Or enter server path manually</label>
           <input id="cj-script-path" type="text" placeholder="relative/path/to/script.etlsql">
         </div>
       </div>
@@ -250,11 +250,11 @@
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Every <span style="color:var(--portal-danger)">*</span></label>
+          <label for="cj-interval">Every <span style="color:var(--portal-danger)">*</span></label>
           <input id="cj-interval" type="number" min="1" value="1" style="width:80px;">
         </div>
         <div class="form-group">
-          <label>Unit</label>
+          <label for="cj-unit">Unit</label>
           <select id="cj-unit">
             <option value="SECOND">Seconds</option>
             <option value="MINUTE">Minutes</option>
@@ -265,21 +265,21 @@
           </select>
         </div>
         <div class="form-group">
-          <label>At Time <small>(HH:MM, optional)</small></label>
+          <label for="cj-at-time">At Time <small>(HH:MM, optional)</small></label>
           <input id="cj-at-time" type="time">
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Max Retries</label>
+          <label for="cj-retries">Max Retries</label>
           <input id="cj-retries" type="number" min="0" value="0" style="width:80px;">
         </div>
         <div class="form-group">
-          <label>Retry Delay (s)</label>
+          <label for="cj-retry-delay">Retry Delay (s)</label>
           <input id="cj-retry-delay" type="number" min="1" value="30" style="width:80px;">
         </div>
         <div class="form-group" style="flex:1">
-          <label>Hash Policy</label>
+          <label for="cj-hash-policy">Hash Policy</label>
           <select id="cj-hash-policy">
             <option value="Warn">Warn — run and log if script changed</option>
             <option value="Block">Block — refuse to run if script changed</option>
@@ -1068,7 +1068,84 @@ function jobBool(job, key) {
 }
 
 // ── Init & polling loop ────────────────────────────────────────────────────────
+function initModalA11y() {
+  let previouslyFocusedElement = null;
+
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      if (mutation.attributeName === 'style') {
+        const modal = mutation.target;
+        const isOpen = modal.style.display === 'flex' || modal.style.display === 'block';
+        
+        if (isOpen) {
+          previouslyFocusedElement = document.activeElement;
+          const focusableElements = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+          if (focusableElements.length > 0) {
+            // Find first visible focusable element
+            const focusables = Array.from(focusableElements).filter(el => !el.disabled && el.offsetParent !== null);
+            if (focusables.length > 0) {
+              focusables[0].focus();
+            }
+            
+            modal._trapFocus = function(e) {
+              if (e.key === 'Tab') {
+                const visibleFocusables = Array.from(modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(el => !el.disabled && el.offsetParent !== null);
+                if (visibleFocusables.length === 0) return;
+                const first = visibleFocusables[0];
+                const last = visibleFocusables[visibleFocusables.length - 1];
+                
+                if (e.shiftKey) {
+                  if (document.activeElement === first) {
+                    last.focus();
+                    e.preventDefault();
+                  }
+                } else {
+                  if (document.activeElement === last) {
+                    first.focus();
+                    e.preventDefault();
+                  }
+                }
+              }
+            };
+            modal.addEventListener('keydown', modal._trapFocus);
+          }
+          
+          modal._escapeClose = function(e) {
+            if (e.key === 'Escape') {
+              const closeBtn = modal.querySelector('#closeCreateBtn, #cj-cancelBtn, .btn-outline, button');
+              if (closeBtn) {
+                closeBtn.click();
+              } else {
+                modal.style.display = 'none';
+              }
+            }
+          };
+          document.addEventListener('keydown', modal._escapeClose);
+        } else {
+          if (modal._trapFocus) {
+            modal.removeEventListener('keydown', modal._trapFocus);
+            delete modal._trapFocus;
+          }
+          if (modal._escapeClose) {
+            document.removeEventListener('keydown', modal._escapeClose);
+            delete modal._escapeClose;
+          }
+          if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
+            previouslyFocusedElement.focus();
+            previouslyFocusedElement = null;
+          }
+        }
+      }
+    });
+  });
+
+  document.querySelectorAll('.modal-overlay').forEach(modal => {
+    observer.observe(modal, { attributes: true, attributeFilter: ['style'] });
+  });
+}
+
 async function init() {
+  initModalA11y();
   await poll();
   await loadJobs();
   pollHandle = setInterval(async () => { await poll(); }, 10000);
