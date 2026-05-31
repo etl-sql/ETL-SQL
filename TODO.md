@@ -16,6 +16,7 @@
 - [x] `SYNC DIRECTORY DELETE_EXTRA` bypasses the file-operation guardrail spirit and under-counts destructive work → Fixed: `DELETE_EXTRA` now validates file types, increments file-operation counts for each file/directory delete, and checks recursive depth before recursive sync traversal.
 
 ### Engine / SQL Semantics
+- [x] `LEFT SEMI JOIN` / `LEFT ANTI JOIN` were executed as left outer joins → Fixed: `JoinEngine` now treats prefixed and bare semi/anti join forms with the same semi/anti semantics instead of letting `LEFT` route them through outer-join handling. Added `semi_anti_join_reconciliation` scenario coverage.
 - [ ] Recursive CTE numeric columns widen to decimal-style values when materialized → The `recursive_cte_hierarchy_rollup` scenario currently observes values like `EmployeeId = 1.0` and `Depth = 0.0` even though the anchor query uses integer literals/source columns. Decide whether this widening is acceptable recursion arithmetic behavior or preserve the anchor/source integer shape through recursive CTE materialization before making strong type-fidelity claims.
 
 ### Report Portal

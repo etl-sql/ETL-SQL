@@ -30,6 +30,7 @@ Status meanings:
 | DML audit capture | Green | Scenario proves UPDATE/DELETE `OUTPUT ... INTO` writes audit rows while base tables change correctly. | `tests/etl_scenarios/dml_output_audit_trail` |
 | Windowed latest-state publish | Green | Scenario proves `ROW_NUMBER`, `LAG`, and partition totals publish current state with deltas. | `tests/etl_scenarios/windowed_latest_state_publish` |
 | Set-operation reconciliation | Green | Scenario proves `EXCEPT`, `INTERSECT`, and `UNION ALL` materialize reconciliation outputs. | `tests/etl_scenarios/set_operations_reconcile_stage` |
+| Semi/anti join reconciliation | Green | Scenario proves `LEFT SEMI JOIN` and `LEFT ANTI JOIN` materialize matched, missing, and unexpected rows. | `tests/etl_scenarios/semi_anti_join_reconciliation` |
 | Pivot/unpivot reconciliation | Green | Scenario proves `PIVOT` and `UNPIVOT` round-trip quarterly facts into reconciled totals. | `tests/etl_scenarios/pivot_unpivot_quarterly_reconciliation` |
 | MERGE upsert workflows | Green | Scenario proves staged rows update matched targets and insert unmatched targets. | `tests/etl_scenarios/merge_upsert_staged_changes` |
 | Hash-based change detection | Green | Scenario proves `CHECKSUM`-based deltas update changed rows, preserve unchanged rows, and insert new rows. | `tests/etl_scenarios/hash_change_detection_merge` |

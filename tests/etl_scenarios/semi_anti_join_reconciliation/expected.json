@@ -1,0 +1,52 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT CustomerId, CustomerName FROM #MatchedExpected ORDER BY CustomerId;",
+      "rows": [
+        {
+          "CustomerId": "100",
+          "CustomerName": "Apex"
+        },
+        {
+          "CustomerId": "300",
+          "CustomerName": "Cobalt"
+        }
+      ]
+    },
+    {
+      "sql": "SELECT CustomerId, CustomerName FROM #MissingFromLoad ORDER BY CustomerId;",
+      "rows": [
+        {
+          "CustomerId": "200",
+          "CustomerName": "Beacon"
+        }
+      ]
+    },
+    {
+      "sql": "SELECT CustomerId, CustomerName FROM #UnexpectedLoaded ORDER BY CustomerId;",
+      "rows": [
+        {
+          "CustomerId": "400",
+          "CustomerName": "Drift"
+        }
+      ]
+    },
+    {
+      "sql": "SELECT Bucket, RowCount FROM #ReconciliationSummary ORDER BY Bucket;",
+      "rows": [
+        {
+          "Bucket": "matched",
+          "RowCount": "2"
+        },
+        {
+          "Bucket": "missing",
+          "RowCount": "1"
+        },
+        {
+          "Bucket": "unexpected",
+          "RowCount": "1"
+        }
+      ]
+    }
+  ]
+}
