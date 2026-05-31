@@ -1,0 +1,28 @@
+CREATE TABLE #Orders (
+    ID INT,
+    Amount DECIMAL,
+    Status VARCHAR(20)
+);
+
+CREATE TABLE #LoadAudit (
+    StepName VARCHAR(30),
+    Status VARCHAR(20)
+);
+
+INSERT INTO #Orders (ID, Amount, Status) VALUES (1, 25.50, 'committed');
+
+BEGIN TRANSACTION;
+BEGIN TRY
+    INSERT INTO #Orders (ID, Amount, Status) VALUES (2, -10.00, 'staged');
+
+    ASSERT (SELECT COUNT(*) FROM #Orders WHERE Amount < 0) = 0, 'Negative order amount';
+
+    COMMIT TRANSACTION;
+    INSERT INTO #LoadAudit (StepName, Status) VALUES ('quality_gate', 'committed');
+END TRY
+BEGIN CATCH
+    ROLLBACK TRANSACTION;
+    INSERT INTO #LoadAudit (StepName, Status) VALUES ('quality_gate', 'rolled_back');
+END CATCH;
+
+INSERT INTO #LoadAudit (StepName, Status) VALUES ('after_catch', 'continued');

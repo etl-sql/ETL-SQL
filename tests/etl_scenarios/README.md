@@ -62,6 +62,7 @@ Prefer these tests for cross-feature claims such as:
 - `WHAT_IF` behavior around destructive DML and staged `MERGE`;
 - loops that produce final tables, including `BREAK` / `CONTINUE` behavior;
 - `TRY...CATCH` error recovery behavior.
+- transaction rollback from failed quality gates inside `TRY...CATCH`;
 - fatal error behavior outside recovery blocks.
 
 Use SQL Logic Tests for SQL compatibility claims. Use this scenario harness for ETL-SQL orchestration claims.
