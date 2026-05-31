@@ -21,6 +21,7 @@ Status meanings:
 | Fatal error handling | Green | Scenario proves an uncaught error aborts the script with the expected sanitized message. | `tests/etl_scenarios/fatal_throw_aborts_script` |
 | Transaction rollback | Green | Scenario proves rollback reverts temp-table changes made inside a transaction. | `tests/etl_scenarios/transaction_rollback_reverts_temp_table_changes` |
 | Transaction quality gates | Green | Scenario proves an ASSERT failure inside TRY rolls back staged rows and allows controlled recovery. | `tests/etl_scenarios/transaction_quality_gate_catch_rollback` |
+| Schema expectation guards | Green | Scenario proves `EXPECT SCHEMA` validates required columns and `ON DRIFT WARN` allows controlled continuation. | `tests/etl_scenarios/schema_expectation_warn_continues` |
 | Staged ETL quality gates | Green | Scenario proves raw rows are filtered into a valid stage and aggregated publish table. | `tests/etl_scenarios/staged_etl_quality_gate` |
 | Staged data cleansing | Green | Scenario proves string normalization, regex validation, and safe casts filter messy source rows. | `tests/etl_scenarios/staged_data_cleansing_functions` |
 | JSON payload staging | Green | Scenario proves JSON scalar extraction, safe-cast filtering, and aggregate publish output. | `tests/etl_scenarios/json_payload_stage_publish` |

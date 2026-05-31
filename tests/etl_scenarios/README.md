@@ -70,6 +70,7 @@ Prefer these tests for cross-feature claims such as:
 - loops that produce final tables, including `BREAK` / `CONTINUE` behavior;
 - `TRY...CATCH` error recovery behavior.
 - transaction rollback from failed quality gates inside `TRY...CATCH`;
+- schema expectation checks with `ON DRIFT WARN`;
 - fatal error behavior outside recovery blocks.
 
 Use SQL Logic Tests for SQL compatibility claims. Use this scenario harness for ETL-SQL orchestration claims.

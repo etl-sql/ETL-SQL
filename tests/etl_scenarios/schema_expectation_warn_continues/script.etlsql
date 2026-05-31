@@ -1,0 +1,40 @@
+CREATE TABLE #InboundOrders (
+    OrderId INT,
+    CustomerId INT,
+    Amount DECIMAL,
+    SourceSystem VARCHAR(20)
+);
+
+CREATE TABLE #SchemaAudit (
+    StepName VARCHAR(40),
+    Status VARCHAR(20)
+);
+
+INSERT INTO #InboundOrders (OrderId, CustomerId, Amount, SourceSystem) VALUES (1, 100, 25.50, 'CRM');
+INSERT INTO #InboundOrders (OrderId, CustomerId, Amount, SourceSystem) VALUES (2, 200, 40.00, 'ERP');
+
+EXPECT SCHEMA #InboundOrders (
+    OrderId INT,
+    CustomerId INT,
+    Amount DECIMAL,
+    SourceSystem VARCHAR
+);
+
+INSERT INTO #SchemaAudit (StepName, Status) VALUES ('expected_schema', 'passed');
+
+EXPECT SCHEMA #InboundOrders (
+    OrderId INT,
+    CustomerId INT,
+    Amount DECIMAL,
+    SourceSystem VARCHAR,
+    MissingOptionalColumn VARCHAR
+) ON DRIFT WARN;
+
+INSERT INTO #SchemaAudit (StepName, Status) VALUES ('optional_drift', 'warned');
+
+SELECT
+    CustomerId,
+    SUM(Amount) AS TotalAmount
+INTO #OrderSummary
+FROM #InboundOrders
+GROUP BY CustomerId;

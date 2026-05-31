@@ -1,0 +1,18 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT StepName, Status FROM #SchemaAudit ORDER BY StepName;",
+      "rows": [
+        { "StepName": "expected_schema", "Status": "passed" },
+        { "StepName": "optional_drift", "Status": "warned" }
+      ]
+    },
+    {
+      "sql": "SELECT CustomerId, TotalAmount FROM #OrderSummary ORDER BY CustomerId;",
+      "rows": [
+        { "CustomerId": 100, "TotalAmount": "25.50" },
+        { "CustomerId": 200, "TotalAmount": "40.00" }
+      ]
+    }
+  ]
+}
