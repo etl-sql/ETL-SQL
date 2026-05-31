@@ -1,0 +1,48 @@
+CREATE TABLE #ExpectedCustomers (
+    CustomerId INT,
+    Segment VARCHAR(20)
+);
+
+CREATE TABLE #ActualCustomers (
+    CustomerId INT,
+    Segment VARCHAR(20)
+);
+
+INSERT INTO #ExpectedCustomers (CustomerId, Segment) VALUES (1, 'Gold');
+INSERT INTO #ExpectedCustomers (CustomerId, Segment) VALUES (2, 'Silver');
+INSERT INTO #ExpectedCustomers (CustomerId, Segment) VALUES (3, 'Bronze');
+
+INSERT INTO #ActualCustomers (CustomerId, Segment) VALUES (2, 'Silver');
+INSERT INTO #ActualCustomers (CustomerId, Segment) VALUES (3, 'Bronze');
+INSERT INTO #ActualCustomers (CustomerId, Segment) VALUES (4, 'Trial');
+
+SELECT CustomerId
+INTO #MissingCustomers
+FROM (
+    SELECT CustomerId FROM #ExpectedCustomers
+    EXCEPT
+    SELECT CustomerId FROM #ActualCustomers
+) AS missing;
+
+SELECT CustomerId
+INTO #UnexpectedCustomers
+FROM (
+    SELECT CustomerId FROM #ActualCustomers
+    EXCEPT
+    SELECT CustomerId FROM #ExpectedCustomers
+) AS unexpected;
+
+SELECT CustomerId
+INTO #MatchedCustomers
+FROM (
+    SELECT CustomerId FROM #ExpectedCustomers
+    INTERSECT
+    SELECT CustomerId FROM #ActualCustomers
+) AS matched;
+
+SELECT CustomerId, 'expected' AS SourceName
+INTO #AllCustomerSources
+FROM #ExpectedCustomers
+UNION ALL
+SELECT CustomerId, 'actual' AS SourceName
+FROM #ActualCustomers;

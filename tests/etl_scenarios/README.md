@@ -58,6 +58,7 @@ Prefer these tests for cross-feature claims such as:
 - staged data cleansing with string, regex, and safe-cast functions;
 - DML audit capture with `OUTPUT ... INTO`;
 - windowed latest-state publish flows;
+- set-operation reconciliation with `UNION ALL`, `EXCEPT`, and `INTERSECT`;
 - file connector read/write round trips;
 - modular orchestration with `RUN SCRIPT`;
 - staged `MERGE` upsert workflows;

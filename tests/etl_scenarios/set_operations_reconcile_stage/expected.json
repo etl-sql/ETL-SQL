@@ -1,0 +1,30 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT CustomerId FROM #MissingCustomers ORDER BY CustomerId;",
+      "rows": [
+        { "CustomerId": 1 }
+      ]
+    },
+    {
+      "sql": "SELECT CustomerId FROM #UnexpectedCustomers ORDER BY CustomerId;",
+      "rows": [
+        { "CustomerId": 4 }
+      ]
+    },
+    {
+      "sql": "SELECT CustomerId FROM #MatchedCustomers ORDER BY CustomerId;",
+      "rows": [
+        { "CustomerId": 2 },
+        { "CustomerId": 3 }
+      ]
+    },
+    {
+      "sql": "SELECT SourceName, COUNT(*) AS RowCount FROM #AllCustomerSources GROUP BY SourceName ORDER BY SourceName;",
+      "rows": [
+        { "SourceName": "actual", "RowCount": 3 },
+        { "SourceName": "expected", "RowCount": 3 }
+      ]
+    }
+  ]
+}
