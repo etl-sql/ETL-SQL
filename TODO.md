@@ -17,7 +17,7 @@
 
 ### Engine / SQL Semantics
 - [x] `LEFT SEMI JOIN` / `LEFT ANTI JOIN` were executed as left outer joins → Fixed: `JoinEngine` now treats prefixed and bare semi/anti join forms with the same semi/anti semantics instead of letting `LEFT` route them through outer-join handling. Added `semi_anti_join_reconciliation` scenario coverage.
-- [ ] Recursive CTE numeric columns widen to decimal-style values when materialized → The `recursive_cte_hierarchy_rollup` scenario currently observes values like `EmployeeId = 1.0` and `Depth = 0.0` even though the anchor query uses integer literals/source columns. Decide whether this widening is acceptable recursion arithmetic behavior or preserve the anchor/source integer shape through recursive CTE materialization before making strong type-fidelity claims.
+- [x] Recursive CTE numeric columns widen to decimal-style values when materialized → Fixed: recursive CTE schema inference now treats integral decimal values as `INT`, preserving integer-shaped anchor/source columns through recursive materialization. Tightened `recursive_cte_hierarchy_rollup` back to integer-shaped expectations.
 
 ### Report Portal
 - [x] Structure DAG jumbled on large maps → Fixed: `render()` in `designer.js` now computes a fit-to-view zoom from the actual node bounding box (`min(containerW/dataW, containerH/dataH, 1.0)`, floor 0.15) so all nodes are visible on first open regardless of graph size. `roam: true` still lets users pan/zoom further.

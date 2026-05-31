@@ -4,33 +4,33 @@
       "sql": "SELECT EmployeeId, EmployeeName, Depth, Path FROM #OrgTree ORDER BY EmployeeId;",
       "rows": [
         {
-          "EmployeeId": "1.0",
+          "EmployeeId": "1",
           "EmployeeName": "Avery",
-          "Depth": "0.0",
+          "Depth": "0",
           "Path": "Avery"
         },
         {
-          "EmployeeId": "2.0",
+          "EmployeeId": "2",
           "EmployeeName": "Blake",
-          "Depth": "1.0",
+          "Depth": "1",
           "Path": "Avery > Blake"
         },
         {
-          "EmployeeId": "3.0",
+          "EmployeeId": "3",
           "EmployeeName": "Casey",
-          "Depth": "1.0",
+          "Depth": "1",
           "Path": "Avery > Casey"
         },
         {
-          "EmployeeId": "4.0",
+          "EmployeeId": "4",
           "EmployeeName": "Devon",
-          "Depth": "2.0",
+          "Depth": "2",
           "Path": "Avery > Blake > Devon"
         },
         {
-          "EmployeeId": "5.0",
+          "EmployeeId": "5",
           "EmployeeName": "Emery",
-          "Depth": "2.0",
+          "Depth": "2",
           "Path": "Avery > Casey > Emery"
         }
       ]
@@ -41,17 +41,17 @@
         {
           "Department": "Engineering",
           "EmployeeCount": "2",
-          "MaxDepth": "2.0"
+          "MaxDepth": "2"
         },
         {
           "Department": "Executive",
           "EmployeeCount": "1",
-          "MaxDepth": "0.0"
+          "MaxDepth": "0"
         },
         {
           "Department": "Sales",
           "EmployeeCount": "2",
-          "MaxDepth": "2.0"
+          "MaxDepth": "2"
         }
       ]
     }

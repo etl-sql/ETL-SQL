@@ -81,7 +81,7 @@ namespace ETL_SQL.Engine.Services
                     {
                         var val = firstRow[colName];
                         string type = "STRING";
-                        if (val is int || val is long) type = "INT";
+                        if (val is int || val is long || IsIntegralDecimal(val)) type = "INT";
                         else if (val is decimal || val is double || val is float) type = "DECIMAL";
                         else if (val is DateTime) type = "DATETIME";
                         else if (val is bool) type = "BOOLEAN";
@@ -175,6 +175,9 @@ namespace ETL_SQL.Engine.Services
                 values[i] = r[columnNames[i]];
             return new CompoundKey(values);
         }
+
+        private static bool IsIntegralDecimal(object? value) =>
+            value is decimal d && d == Math.Truncate(d);
 
         private bool IsRecursive(CteDefinition cte, out Statement? anchor, out Statement? recursive, out bool isDistinct)
         {
