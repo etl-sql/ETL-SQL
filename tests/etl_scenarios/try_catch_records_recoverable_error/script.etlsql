@@ -1,0 +1,10 @@
+CREATE TABLE #ErrorAudit (StepName VARCHAR(30), Status VARCHAR(20));
+
+BEGIN TRY
+    THROW 'recoverable quality gate failure';
+END TRY
+BEGIN CATCH
+    INSERT INTO #ErrorAudit (StepName, Status) VALUES ('quality_gate', 'caught');
+END CATCH;
+
+INSERT INTO #ErrorAudit (StepName, Status) VALUES ('after_catch', 'continued');

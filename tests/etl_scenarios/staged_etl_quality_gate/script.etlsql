@@ -1,0 +1,27 @@
+CREATE TABLE #RawOrders (
+    OrderId INT,
+    CustomerId INT,
+    Amount DECIMAL,
+    SourceSystem VARCHAR(20)
+);
+
+INSERT INTO #RawOrders (OrderId, CustomerId, Amount, SourceSystem) VALUES (1, 100, 25.50, 'CRM');
+INSERT INTO #RawOrders (OrderId, CustomerId, Amount, SourceSystem) VALUES (2, 100, -5.00, 'CRM');
+INSERT INTO #RawOrders (OrderId, CustomerId, Amount, SourceSystem) VALUES (3, 200, 40.00, 'ERP');
+
+SELECT
+    OrderId,
+    CustomerId,
+    Amount,
+    SourceSystem
+INTO #ValidOrders
+FROM #RawOrders
+WHERE Amount > 0;
+
+SELECT
+    CustomerId,
+    COUNT(*) AS OrderCount,
+    SUM(Amount) AS TotalAmount
+INTO #CustomerSpend
+FROM #ValidOrders
+GROUP BY CustomerId;

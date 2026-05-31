@@ -14,6 +14,9 @@ Status meanings:
 | Zero-trust file and credential guardrails | Green | Smoke/fast security tests pass; samples do not require unsafe paths or secrets. | `.\scripts\test-smoke.ps1 -Lane security`; fast lane |
 | WHAT_IF dry-run behavior | Green | DML is suppressed in focused tests and scenario tests. | `StmtWhatIfTests`; `tests/etl_scenarios/what_if_suppresses_destructive_dml` |
 | ETL control flow loops | Green | At least one scenario proves loop output, plus focused statement tests. | `tests/etl_scenarios/loop_control_flow_materializes_expected_rows` |
+| FOREACH list iteration | Green | Scenario proves iteration output and aggregate totals. | `tests/etl_scenarios/foreach_list_aggregation` |
+| TRY/CATCH recovery | Green | Scenario proves a recoverable failure is caught and execution continues. | `tests/etl_scenarios/try_catch_records_recoverable_error` |
+| Staged ETL quality gates | Green | Scenario proves raw rows are filtered into a valid stage and aggregated publish table. | `tests/etl_scenarios/staged_etl_quality_gate` |
 | Static lineage with inherited tags | Green | Scenario proves source metadata survives a SELECT INTO transformation. | `tests/etl_scenarios/lineage_tags_survive_select_into` |
 | SQL logic compatibility | Yellow | SLT corpus passes on the release branch. | `.\scripts\test-lane.ps1 -Lane slt` |
 | Connector integration boundaries | Yellow | Docker-backed integration lane passes on release candidate hardware. | `.\scripts\Test-PreRelease.ps1 -IncludeDockerIntegration` |

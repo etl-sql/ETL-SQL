@@ -1,0 +1,10 @@
+CREATE TABLE #ForeachTotals (Name VARCHAR(20), Score INT);
+
+DECLARE @names LIST = ['Ada', 'Grace', 'Linus'];
+DECLARE @score INT = 10;
+
+FOREACH @name IN @names
+BEGIN
+    INSERT INTO #ForeachTotals (Name, Score) VALUES (@name, @score);
+    SET @score = @score + 5;
+END;

@@ -1,0 +1,18 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT Name, Score FROM #ForeachTotals ORDER BY Score;",
+      "rows": [
+        { "Name": "Ada", "Score": 10 },
+        { "Name": "Grace", "Score": 15 },
+        { "Name": "Linus", "Score": 20 }
+      ]
+    },
+    {
+      "sql": "SELECT COUNT(*) AS RowCount, SUM(Score) AS TotalScore FROM #ForeachTotals;",
+      "rows": [
+        { "RowCount": 3, "TotalScore": 45 }
+      ]
+    }
+  ]
+}

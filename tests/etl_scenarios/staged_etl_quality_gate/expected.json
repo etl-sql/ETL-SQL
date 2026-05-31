@@ -1,0 +1,57 @@
+{
+  "seedLineage": [
+    {
+      "table": "#RawOrders",
+      "column": "CustomerId",
+      "metadata": {
+        "source_system": "crm_erp",
+        "business_key": "customer"
+      }
+    },
+    {
+      "table": "#RawOrders",
+      "column": "Amount",
+      "metadata": {
+        "classification": "financial"
+      }
+    }
+  ],
+  "staticLineage": [
+    {
+      "targetTable": "#ValidOrders",
+      "targetColumn": "CustomerId",
+      "operation": "SELECT",
+      "sourceTables": [ "#RawOrders" ],
+      "sourceColumns": [ "CustomerId" ],
+      "metadata": {
+        "source_system": "crm_erp",
+        "business_key": "customer"
+      }
+    },
+    {
+      "targetTable": "#CustomerSpend",
+      "targetColumn": "TotalAmount",
+      "operation": "SELECT",
+      "sourceTables": [ "#ValidOrders" ],
+      "sourceColumns": [ "Amount" ],
+      "metadata": {
+        "classification": "financial"
+      }
+    }
+  ],
+  "runtimeQueries": [
+    {
+      "sql": "SELECT COUNT(*) AS ValidCount, SUM(Amount) AS ValidAmount FROM #ValidOrders;",
+      "rows": [
+        { "ValidCount": 2, "ValidAmount": "65.50" }
+      ]
+    },
+    {
+      "sql": "SELECT CustomerId, OrderCount, TotalAmount FROM #CustomerSpend ORDER BY CustomerId;",
+      "rows": [
+        { "CustomerId": 100, "OrderCount": 1, "TotalAmount": "25.50" },
+        { "CustomerId": 200, "OrderCount": 1, "TotalAmount": "40.00" }
+      ]
+    }
+  ]
+}
