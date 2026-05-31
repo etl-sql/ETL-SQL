@@ -257,6 +257,14 @@ if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
 initTheme();
 
+function transitionDOM(updateCallback) {
+  if (document.startViewTransition) {
+    document.startViewTransition(updateCallback);
+  } else {
+    updateCallback();
+  }
+}
+
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 let currentFolderId   = null;
 let currentReportId   = null;
@@ -475,12 +483,14 @@ function showReportLibraryHome() {
   currentFolderId = null;
   currentFolderName = '';
   currentReportId = null;
-  document.getElementById('mainContent').innerHTML = `
-    <div class="empty-state empty-state-panel">
-      <div class="empty-state-icon empty-state-icon-folder" aria-hidden="true"></div>
-      <h2>Select a folder</h2>
-      <p>Choose a report folder from the library to view available reports.</p>
-    </div>`;
+  transitionDOM(() => {
+    document.getElementById('mainContent').innerHTML = `
+      <div class="empty-state empty-state-panel">
+        <div class="empty-state-icon empty-state-icon-folder" aria-hidden="true"></div>
+        <h2>Select a folder</h2>
+        <p>Choose a report folder from the library to view available reports.</p>
+      </div>`;
+  });
 }
 
 // ── Folder tree ────────────────────────────────────────────────────────────────
@@ -587,14 +597,16 @@ function renderReportList(reports, folderName) {
   const filteredReports = sortReports(filterReports(reports));
 
   if (!reports.length) {
-    $main.innerHTML = `
-      ${renderLibraryToolbar(folderName, reports, false)}
-      <div class="empty-state empty-state-panel">
-        <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
-        <h2>No reports here yet</h2>
-        <p>This folder is ready. Publish a report into it from Admin or the ETL-SQL publish workflow.</p>
-      </div>`;
-    wireLibraryToolbar();
+    transitionDOM(() => {
+      $main.innerHTML = `
+        ${renderLibraryToolbar(folderName, reports, false)}
+        <div class="empty-state empty-state-panel">
+          <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
+          <h2>No reports here yet</h2>
+          <p>This folder is ready. Publish a report into it from Admin or the ETL-SQL publish workflow.</p>
+        </div>`;
+      wireLibraryToolbar();
+    });
     return;
   }
 
@@ -610,8 +622,15 @@ function renderReportList(reports, folderName) {
 
     return `
       <div class="report-card" data-id="${r.id}">
-        <div class="report-preview">
-          <iframe title="${escAttr(name)} preview" srcdoc="${previewHtml}" loading="lazy"></iframe>
+        <div class="report-preview" data-srcdoc="${previewHtml}">
+          <div class="report-preview-placeholder">
+            <div class="mock-header"></div>
+            <div class="mock-grid">
+              <div class="mock-widget">📊</div>
+              <div class="mock-widget">📈</div>
+            </div>
+            <div class="mock-footer"></div>
+          </div>
         </div>
         <div class="report-card-body">
           <div class="report-card-title-row">
@@ -633,23 +652,39 @@ function renderReportList(reports, folderName) {
       </div>`;
   }).join('');
 
-  $main.innerHTML = `
-    ${renderLibraryToolbar(folderName, reports, true, filteredReports.length)}
-    ${filteredReports.length
-      ? `<div class="report-grid">${cards}</div>`
-      : `<div class="empty-state empty-state-panel">
-          <div class="empty-state-icon empty-state-icon-search" aria-hidden="true"></div>
-          <h2>No matching reports</h2>
-          <p>Clear the search box or try a broader report name or description.</p>
-        </div>`}`;
+  transitionDOM(() => {
+    $main.innerHTML = `
+      ${renderLibraryToolbar(folderName, reports, true, filteredReports.length)}
+      ${filteredReports.length
+        ? `<div class="report-grid">${cards}</div>`
+        : `<div class="empty-state empty-state-panel">
+            <div class="empty-state-icon empty-state-icon-search" aria-hidden="true"></div>
+            <h2>No matching reports</h2>
+            <p>Clear the search box or try a broader report name or description.</p>
+          </div>`}`;
 
-  wireLibraryToolbar();
-  wireFavoriteButtons($main);
-  $main.querySelectorAll('.report-card').forEach(el => {
-    el.addEventListener('click', e => {
-      if (e.target.closest('.favorite-btn')) return;
-      e.preventDefault();
-      openReport(+el.dataset.id);
+    wireLibraryToolbar();
+    wireFavoriteButtons($main);
+    $main.querySelectorAll('.report-card').forEach(el => {
+      el.addEventListener('click', e => {
+        if (e.target.closest('.favorite-btn')) return;
+        e.preventDefault();
+        openReport(+el.dataset.id);
+      });
+
+      const previewEl = el.querySelector('.report-preview');
+      if (previewEl) {
+        previewEl.addEventListener('mouseenter', () => {
+          if (previewEl.querySelector('iframe')) return;
+          const srcdoc = previewEl.dataset.srcdoc;
+          const iframe = document.createElement('iframe');
+          iframe.title = `${el.querySelector('h3').textContent} preview`;
+          iframe.srcdoc = srcdoc;
+          iframe.loading = "lazy";
+          previewEl.innerHTML = '';
+          previewEl.appendChild(iframe);
+        }, { once: true });
+      }
     });
   });
 }
@@ -768,34 +803,36 @@ function renderCatalogReportList(title, reports, emptyText) {
       </div>`;
   }).join('');
 
-  $main.innerHTML = `
-    <div class="library-toolbar">
-      <div class="library-title">
-        <span class="library-kicker">Catalog</span>
-        <h2>${esc(title)}</h2>
+  transitionDOM(() => {
+    $main.innerHTML = `
+      <div class="library-toolbar">
+        <div class="library-title">
+          <span class="library-kicker">Catalog</span>
+          <h2>${esc(title)}</h2>
+        </div>
+        <span class="badge badge-refresh">${reports.length} report${reports.length === 1 ? '' : 's'}</span>
+        <div class="library-toolbar-spacer"></div>
+        <button class="btn btn-outline" id="refreshCatalogBtn" type="button">Refresh</button>
       </div>
-      <span class="badge badge-refresh">${reports.length} report${reports.length === 1 ? '' : 's'}</span>
-      <div class="library-toolbar-spacer"></div>
-      <button class="btn btn-outline" id="refreshCatalogBtn" type="button">Refresh</button>
-    </div>
-    ${reports.length
-      ? `<div class="catalog-report-list">${rows}</div>`
-      : `<div class="empty-state empty-state-panel">
-          <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
-          <h2>No ${esc(title.toLowerCase())} reports</h2>
-          <p>${esc(emptyText)}</p>
-        </div>`}`;
+      ${reports.length
+        ? `<div class="catalog-report-list">${rows}</div>`
+        : `<div class="empty-state empty-state-panel">
+            <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
+            <h2>No ${esc(title.toLowerCase())} reports</h2>
+            <p>${esc(emptyText)}</p>
+          </div>`}`;
 
-  document.getElementById('refreshCatalogBtn')?.addEventListener('click', () =>
-    title === 'Favorites' ? showFavorites() : showRecentlyViewed());
-  wireFavoriteButtons($main, () => title === 'Favorites' ? showFavorites() : showRecentlyViewed());
-  $main.querySelectorAll('.catalog-report-row').forEach(el => {
-    el.addEventListener('click', e => {
-      if (e.target.closest('.favorite-btn')) return;
-      e.preventDefault();
-      currentFolderId = +el.dataset.folderId;
-      currentFolderName = el.dataset.folderPath || 'Reports';
-      openReport(+el.dataset.id);
+    document.getElementById('refreshCatalogBtn')?.addEventListener('click', () =>
+      title === 'Favorites' ? showFavorites() : showRecentlyViewed());
+    wireFavoriteButtons($main, () => title === 'Favorites' ? showFavorites() : showRecentlyViewed());
+    $main.querySelectorAll('.catalog-report-row').forEach(el => {
+      el.addEventListener('click', e => {
+        if (e.target.closest('.favorite-btn')) return;
+        e.preventDefault();
+        currentFolderId = +el.dataset.folderId;
+        currentFolderName = el.dataset.folderPath || 'Reports';
+        openReport(+el.dataset.id);
+      });
     });
   });
 }

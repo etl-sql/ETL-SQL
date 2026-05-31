@@ -68,6 +68,8 @@ export function initTheme() {
           iframe.contentDocument.body.classList.remove('theme-dark');
         }
       }
+
+      document.dispatchEvent(new CustomEvent('portal-theme-change', { detail: { theme: nextTheme, isDark } }));
     });
   }
 

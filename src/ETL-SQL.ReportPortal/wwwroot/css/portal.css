@@ -759,3 +759,51 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   font-family: monospace; font-size: .78em; line-height: 1.5;
   max-height: 120px; overflow: auto; white-space: pre;
 }
+
+/* Report Preview Placeholder and Mock styling */
+.report-preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  gap: 10px;
+  opacity: 0.7;
+  transition: opacity 0.2s ease, background-color 0.2s ease;
+  user-select: none;
+  background: var(--portal-surface-subtle);
+}
+.report-card:hover .report-preview-placeholder {
+  opacity: 0.95;
+  background: var(--portal-bg-soft);
+}
+.mock-header {
+  height: 10px;
+  background: var(--portal-border);
+  border-radius: var(--portal-radius-sm);
+  width: 45%;
+}
+.mock-grid {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+.mock-widget {
+  flex: 1;
+  background: var(--portal-surface);
+  border: 1px dashed var(--portal-border);
+  border-radius: var(--portal-radius-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  color: var(--portal-muted);
+  box-shadow: var(--portal-shadow-sm);
+}
+.mock-footer {
+  height: 8px;
+  background: var(--portal-border-soft);
+  border-radius: var(--portal-radius-sm);
+  width: 75%;
+}
+

@@ -380,6 +380,16 @@ let dagInstance  = null;
 let dagJobName   = null;
 let scriptEditor = null;
 let scriptOriginalValue = '';
+let lastSparklineEntries = [];
+
+document.addEventListener('portal-theme-change', () => {
+  if (ganttChart && allJobs && allJobs.length > 0) {
+    renderGantt(allJobs);
+  }
+  if (sparklineChart && lastSparklineEntries && lastSparklineEntries.length > 0) {
+    renderSparkline(lastSparklineEntries);
+  }
+});
 
 // ── Polling ────────────────────────────────────────────────────────────────────
 async function poll() {
@@ -694,16 +704,28 @@ function renderGantt(jobs) {
   const jobNames = jobs.map(j => jobValue(j, 'Name'));
   const barData  = [];
 
+  const style = getComputedStyle(document.body);
+  const accentColor = style.getPropertyValue('--portal-accent').trim() || '#2563eb';
+  const mutedColor = style.getPropertyValue('--portal-muted').trim() || '#7a8798';
+  const textColor = style.getPropertyValue('--portal-text').trim() || '#172033';
+  const borderSoftColor = style.getPropertyValue('--portal-border-soft').trim() || '#e8edf4';
+  const borderColor = style.getPropertyValue('--portal-border').trim() || '#d9e0ea';
+  const fontFam = style.getPropertyValue('--portal-font').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
   jobs.forEach((job, idx) => {
     const start = jobValue(job, 'NextRun') ? new Date(jobValue(job, 'NextRun')).getTime() : null;
     if (!start || start < startOfDay || start > endOfDay) return;
 
     const end   = start + MIN_BAR_MS;
-    const color = jobBool(job, 'IsEnabled') ? '#2563eb' : '#7a8798';
+    const color = jobBool(job, 'IsEnabled') ? accentColor : mutedColor;
     barData.push([idx, start, end, jobValue(job, 'Name'), color]);
   });
 
   const option = {
+    textStyle: {
+      fontFamily: fontFam,
+      color: textColor
+    },
     tooltip: {
       formatter: params => {
         const [, s, , name] = params.data;
@@ -717,9 +739,20 @@ function renderGantt(jobs) {
       type: 'time',
       min: startOfDay,
       max: endOfDay,
-      axisLabel: { formatter: v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+      axisLabel: {
+        color: textColor,
+        formatter: v => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      },
+      axisLine: { lineStyle: { color: borderColor } },
+      splitLine: { lineStyle: { color: borderSoftColor } }
     },
-    yAxis: { type: 'category', data: jobNames, axisLabel: { fontSize: 12 } },
+    yAxis: {
+      type: 'category',
+      data: jobNames,
+      axisLabel: { fontSize: 12, color: textColor },
+      axisLine: { lineStyle: { color: borderColor } },
+      splitLine: { lineStyle: { color: borderSoftColor } }
+    },
     series: [{
       type: 'custom',
       renderItem(params, api) {
@@ -814,6 +847,7 @@ function renderHistoryTable(entries) {
 }
 
 function renderSparkline(entries) {
+  lastSparklineEntries = entries;
   const finished = entries.filter(h => jobValue(h, 'EndTime') && jobValue(h, 'StartTime') && jobValue(h, 'Status') !== 'RUNNING').slice(0, 30).reverse();
   if (!sparklineChart) {
     sparklineChart = echarts.init(document.getElementById('sparklineChart'));
@@ -824,14 +858,31 @@ function renderSparkline(entries) {
   }
   document.getElementById('sparklineSection').style.display = '';
   const data = finished.map(h => +((new Date(jobValue(h, 'EndTime')) - new Date(jobValue(h, 'StartTime'))) / 1000).toFixed(1));
+  
+  const style = getComputedStyle(document.body);
+  const accentColor = style.getPropertyValue('--portal-accent').trim() || '#2563eb';
+  const textColor = style.getPropertyValue('--portal-text').trim() || '#172033';
+  const borderSoftColor = style.getPropertyValue('--portal-border-soft').trim() || '#e8edf4';
+  const borderColor = style.getPropertyValue('--portal-border').trim() || '#d9e0ea';
+  const fontFam = style.getPropertyValue('--portal-font').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
   sparklineChart.setOption({
+    textStyle: {
+      fontFamily: fontFam,
+      color: textColor
+    },
     grid: { left: 40, right: 10, top: 5, bottom: 20 },
     xAxis: { type: 'category', show: false },
-    yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+    yAxis: {
+      type: 'value',
+      axisLabel: { fontSize: 10, color: textColor },
+      axisLine: { lineStyle: { color: borderColor } },
+      splitLine: { lineStyle: { color: borderSoftColor } }
+    },
     series: [{
       type: 'line', data, smooth: true,
       areaStyle: { opacity: 0.15 },
-      itemStyle: { color: '#2563eb' },
+      itemStyle: { color: accentColor },
       lineStyle: { width: 1.5 },
       symbol: 'none'
     }],
