@@ -185,9 +185,9 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     let   focusedNode    = null;   // node id whose lineage is isolated, or null
     let   focusSet       = null;   // Set of node ids kept lit while focused
     let   hasInitializedView = false;
-    let   curCenterX     = 0;
-    let   curCenterY     = 0;
-    let   curInitialZoom = 1;
+    let   viewDimensionsValid = false;
+    let   currentZoom    = 1;
+    let   currentCenter  = [0, 0];
     let   lastGraph      = null;   // most recent { allNodes, allEdges, pos } for search/minimap
     let   searchMatches  = [];     // node ids matching the current search term
     let   searchIdx      = -1;     // index into searchMatches of the current jump target
@@ -349,6 +349,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     container.innerHTML = '';
     container.style.display = 'flex';
     container.style.flexDirection = 'column';
+    container.classList.add('etlsql-dag-container');
 
     const toolbar = document.createElement('div');
     toolbar.className = 'etlsql-dag-toolbar';
@@ -410,9 +411,8 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     btnIn.title = 'Zoom In';
     btnIn.setAttribute('aria-label', 'Zoom In');
     btnIn.addEventListener('click', () => {
-        const option = chart.getOption();
-        const currentZoom = option.series[0].zoom || 1;
-        chart.setOption({ series: [{ zoom: currentZoom * 1.25 }] });
+        currentZoom *= 1.25;
+        render();
     });
 
     const btnOut = document.createElement('button');
@@ -422,9 +422,8 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     btnOut.title = 'Zoom Out';
     btnOut.setAttribute('aria-label', 'Zoom Out');
     btnOut.addEventListener('click', () => {
-        const option = chart.getOption();
-        const currentZoom = option.series[0].zoom || 1;
-        chart.setOption({ series: [{ zoom: Math.max(currentZoom / 1.25, 0.1) }] });
+        currentZoom = Math.max(currentZoom / 1.25, 0.1);
+        render();
     });
 
     const btnReset = document.createElement('button');
@@ -434,11 +433,47 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     btnReset.title = 'Reset View';
     btnReset.setAttribute('aria-label', 'Reset View');
     btnReset.addEventListener('click', () => {
-        chart.setOption({ series: [{ center: [curCenterX, curCenterY], zoom: curInitialZoom }] });
+        let centerX = 0, centerY = 0;
+        const positions = Object.values(lastGraph?.pos || {});
+        if (positions.length > 1) {
+            const xs = positions.map(p => p.x);
+            const ys = positions.map(p => p.y);
+            centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+            centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+        }
+
+        let initialZoom = 1;
+        const containerW = chart.getWidth();
+        const containerH = chart.getHeight();
+        if (positions.length > 1 && containerW > 0 && containerH > 0) {
+            const xs = positions.map(p => p.x);
+            const ys = positions.map(p => p.y);
+            const graphW = Math.max(...xs) - Math.min(...xs) + 240;
+            const graphH = Math.max(...ys) - Math.min(...ys) + 160;
+            const fitZoom = Math.min(containerW / graphW, containerH / graphH);
+            initialZoom = Math.max(fitZoom, 0.65);
+        }
+
+        currentZoom = initialZoom;
+        currentCenter = [centerX, centerY];
+        render();
     });
 
     zoomControls.append(btnIn, btnOut, btnReset);
     body.appendChild(zoomControls);
+
+    chart.on('graphRoam', () => {
+        const option = chart.getOption();
+        if (option && option.series && option.series[0]) {
+            if (option.series[0].zoom !== undefined) {
+                currentZoom = option.series[0].zoom;
+            }
+            if (option.series[0].center !== undefined) {
+                currentCenter = option.series[0].center;
+            }
+        }
+        drawMinimap();
+    });
 
     // ── Detail panel (columns for tables, field mappings for charts) ─────────
     const _ROLE_LABEL = {
@@ -613,7 +648,9 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         const p = lastGraph.pos[id];
         if (!p) return;
         const curZoom = chart.getOption().series?.[0]?.zoom || 1;
-        chart.setOption({ series: [{ center: [p.x, p.y], zoom: Math.max(curZoom, 1.5) }] });
+        currentZoom = Math.max(curZoom, 1.5);
+        currentCenter = [p.x, p.y];
+        render();
         const di = lastGraph.allNodes.findIndex(n => n.id === id);
         if (di >= 0) {
             chart.dispatchAction({ type: 'downplay', seriesIndex: 0 });
@@ -621,7 +658,6 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             clearTimeout(_hlTimer);
             _hlTimer = setTimeout(() => chart.dispatchAction({ type: 'downplay', seriesIndex: 0 }), 1800);
         }
-        drawMinimap();
     }
 
     searchInput.addEventListener('input', () => { recomputeMatches(); searchIdx = -1; nextMatch(); });
@@ -688,13 +724,12 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         const r = miniCanvas.getBoundingClientRect();
         const mx = (e.clientX - r.left) * (MINI_W / r.width);
         const my = (e.clientY - r.top) * (MINI_H / r.height);
-        const dataX = (mx - _miniTx.offX) / _miniTx.scale;
-        const dataY = (my - _miniTx.offY) / _miniTx.scale;
-        chart.setOption({ series: [{ center: [dataX, dataY] }] });
-        drawMinimap();
+        currentCenter = [
+            (mx - _miniTx.offX) / _miniTx.scale,
+            (my - _miniTx.offY) / _miniTx.scale
+        ];
+        render();
     });
-
-    chart.on('graphroam', drawMinimap);
 
     // ── Type filter chips ──────────────────────────────────────────────────
     const _TYPE_LABEL = {
@@ -814,11 +849,16 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             const graphH = Math.max(...ys) - Math.min(...ys) + 160; // 160 is LAYER_H
             const fitZoom = Math.min(containerW / graphW, containerH / graphH);
             initialZoom = Math.max(fitZoom, 0.65);
+            viewDimensionsValid = true;
         }
 
-        curCenterX = centerX;
-        curCenterY = centerY;
-        curInitialZoom = initialZoom;
+        if (!hasInitializedView || !viewDimensionsValid) {
+            currentZoom = initialZoom;
+            currentCenter = [centerX, centerY];
+            if (viewDimensionsValid) {
+                hasInitializedView = true;
+            }
+        }
 
         const seriesOpt = {
             type:           'graph',
@@ -831,13 +871,9 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             lineStyle:      { curveness: 0.15 },
             label:          { position: 'inside', color: '#fff' },
             emphasis:       { focus: 'adjacency' },
+            zoom:           currentZoom,
+            center:         currentCenter,
         };
-
-        if (!hasInitializedView) {
-            seriesOpt.zoom = initialZoom;
-            seriesOpt.center = [centerX, centerY];
-            hasInitializedView = true;
-        }
 
         chart.setOption({
             // notMerge replace below would otherwise replay the full entrance
@@ -894,7 +930,13 @@ export function renderDag(container, { nodes, edges }, options = {}) {
 
     return {
         dispose: () => { if (clickTimer) clearTimeout(clickTimer); clearTimeout(_hlTimer); chart.dispose(); },
-        resize:  () => { chart.resize(); drawMinimap(); },
+        resize:  () => {
+            chart.resize();
+            drawMinimap();
+            if (!hasInitializedView) {
+                render();
+            }
+        },
     };
 }
 
