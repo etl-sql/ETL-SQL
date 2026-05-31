@@ -19,6 +19,7 @@ Status meanings:
 | Fatal error handling | Green | Scenario proves an uncaught error aborts the script with the expected sanitized message. | `tests/etl_scenarios/fatal_throw_aborts_script` |
 | Transaction rollback | Green | Scenario proves rollback reverts temp-table changes made inside a transaction. | `tests/etl_scenarios/transaction_rollback_reverts_temp_table_changes` |
 | Staged ETL quality gates | Green | Scenario proves raw rows are filtered into a valid stage and aggregated publish table. | `tests/etl_scenarios/staged_etl_quality_gate` |
+| Flat-file connector round trip | Green | Scenario proves file ingest, stage filtering, file export, and read-back verification. | `tests/etl_scenarios/file_connector_round_trip` |
 | Static lineage with inherited tags | Green | Scenario proves source metadata survives a SELECT INTO transformation. | `tests/etl_scenarios/lineage_tags_survive_select_into` |
 | SQL logic compatibility | Yellow | SLT corpus passes on the release branch. | `.\scripts\test-lane.ps1 -Lane slt` |
 | Connector integration boundaries | Yellow | Docker-backed integration lane passes on release candidate hardware. | `.\scripts\Test-PreRelease.ps1 -IncludeDockerIntegration` |

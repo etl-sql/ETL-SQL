@@ -1,0 +1,23 @@
+{
+  "setupFiles": [
+    {
+      "path": "orders.csv",
+      "content": "OrderId,CustomerId,Amount\n1,100,25.50\n2,100,-5.00\n3,200,40.00\n"
+    }
+  ],
+  "runtimeQueries": [
+    {
+      "sql": "SELECT OrderId, CustomerId, Amount FROM #FileRoundTrip ORDER BY OrderId;",
+      "rows": [
+        { "OrderId": "1", "CustomerId": "100", "Amount": "25.50" },
+        { "OrderId": "3", "CustomerId": "200", "Amount": "40.00" }
+      ]
+    },
+    {
+      "sql": "SELECT COUNT(*) AS RowCount FROM #FileRoundTrip;",
+      "rows": [
+        { "RowCount": 2 }
+      ]
+    }
+  ]
+}

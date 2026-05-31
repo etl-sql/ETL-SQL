@@ -11,6 +11,12 @@ Supported `expected.json` sections:
 
 ```json
 {
+  "setupFiles": [
+    {
+      "path": "input.csv",
+      "content": "id,name\n1,Ada\n"
+    }
+  ],
   "seedLineage": [
     {
       "table": "#Source",
@@ -42,11 +48,14 @@ Supported `expected.json` sections:
 }
 ```
 
+Use `{ScenarioTempDir}` in `script.etlsql` or `runtimeQueries[].sql` when a scenario needs temporary files. The harness creates a fresh temp directory for each scenario, writes `setupFiles` into it, replaces the token with a forward-slash path, and removes the directory after the test.
+
 Use `failure` only for scenarios where the script is expected to abort. Runtime and lineage expectations are skipped for failure scenarios.
 
 Prefer these tests for cross-feature claims such as:
 
 - staged ingest-transform-publish flows;
+- file connector read/write round trips;
 - lineage and tag propagation;
 - `WHAT_IF` behavior around destructive DML;
 - loops that produce final tables;
