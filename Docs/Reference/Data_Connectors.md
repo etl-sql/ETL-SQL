@@ -1084,7 +1084,7 @@ Connects to an Active Directory or LDAP server to perform user, group, and compu
 | :--- | :--- | :---: |
 | `HOST` | Server host name or IP address (e.g. `ldap.corp.com`) | Yes (structured) |
 | `PORT` | Directory port (Default: `389` for LDAP, `636` for LDAPS) | No |
-| `USE_SSL` / `LDAPS` | Enable SSL encryption / LDAPS connection (`TRUE`/`FALSE`) | No |
+| `USE_SSL` | Enable SSL encryption / LDAPS connection (`TRUE`/`FALSE`) | No |
 | `AUTH_MODE` | Authentication mode: `INTEGRATED`, `SIMPLE` (Basic auth over SSL), `NEGOTIATE` (negotiate credentials) (Default: `INTEGRATED`) | No |
 | `USER` | Login username / Bind Distinguished Name (DN) | No |
 | `PASSWORD` | Login password (use `ENC:` prefix) | No |

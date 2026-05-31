@@ -269,6 +269,8 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Contains("AWS_S3", connector.Aliases);
             Assert.NotEmpty(connector.GetHelp());
             Assert.NotEmpty(connector.GetSupportedOptions());
+            Assert.DoesNotContain("ACCESSKEY", connector.GetSupportedOptions().Keys);
+            Assert.DoesNotContain("SECRETKEY", connector.GetSupportedOptions().Keys);
         }
 
         [Fact]

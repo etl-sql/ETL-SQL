@@ -84,8 +84,7 @@ namespace ETL_SQL.Connectors
             {
                 _port = port;
             }
-            _useSsl = _options.GetValueOrDefault("USE_SSL", _useSsl.ToString()).Equals("TRUE", StringComparison.OrdinalIgnoreCase) || 
-                      _options.GetValueOrDefault("LDAPS", "FALSE").Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+            _useSsl = _options.GetValueOrDefault("USE_SSL", _useSsl.ToString()).Equals("TRUE", StringComparison.OrdinalIgnoreCase);
             
             _authMode = _options.GetValueOrDefault("AUTH_MODE", "INTEGRATED").ToUpperInvariant();
             _user = _options.GetValueOrDefault("USER", "");
@@ -165,7 +164,6 @@ namespace ETL_SQL.Connectors
             { "HOST", Array.Empty<string>() },
             { "PORT", Array.Empty<string>() },
             { "USE_SSL", new[] { "TRUE", "FALSE" } },
-            { "LDAPS", new[] { "TRUE", "FALSE" } },
             { "AUTH_MODE", new[] { "SIMPLE", "INTEGRATED" } },
             { "USER", Array.Empty<string>() },
             { "PASSWORD", Array.Empty<string>() },
@@ -187,7 +185,7 @@ namespace ETL_SQL.Connectors
             "Options:\n" +
             "  HOST: Server hostname or domain controller (e.g. 'corp.company.com').\n" +
             "  PORT: LDAP port (default: 389, LDAPS: 636).\n" +
-            "  USE_SSL / LDAPS: Set to TRUE to enable secure LDAPS connection.\n" +
+            "  USE_SSL: Set to TRUE to enable secure LDAPS connection.\n" +
             "  AUTH_MODE: SIMPLE (username/password bind) or INTEGRATED (uses process environment identity).\n" +
             "  USER: AD Username (e.g., 'DOMAIN\\svc-account' or full UPN/DN).\n" +
             "  PASSWORD: AD Password (use ENC: prefix for safety).\n" +

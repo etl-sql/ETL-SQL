@@ -139,10 +139,22 @@ export function buildKitchenSinkGraph() {
   // 1. data layer nodes + producer edges + column lineage
   for (const [label, type, srcs, lbl] of TABLES) {
     const columns = colsFor(label, 5);
-    const colEdges = (srcs ?? []).length
-      ? columns.slice(0, 3).map((c, i) => ({ tgtCol: c, srcTable: srcs[i % srcs.length], srcCol: c }))
-      : [];
-    nodes.push({ id: id(label, type), label, type, meta: { columns, colEdges } });
+    const columnLineage = {};
+    if ((srcs ?? []).length) {
+      const agg = lbl === 'GROUP BY';
+      columns.slice(0, 3).forEach((c, i) => {
+        const srcTable = srcs[i % srcs.length];
+        columnLineage[c] = {
+          sources: [{ table: srcTable, column: c }],
+          transform: agg ? `SUM(${c})` : null,
+          functions: agg ? ['SUM'] : null,
+          kind: agg ? 'Aggregation' : 'PassThrough',
+          description: null,
+          tags: null,
+        };
+      });
+    }
+    nodes.push({ id: id(label, type), label, type, meta: { columns, columnLineage } });
     for (const s of (srcs ?? [])) edges.push({ source: id(s, 'table'), target: id(label, type), label: lbl });
   }
   // fix dataset source ids (sources are tables, target may be a dataset — source id is table:*)
@@ -168,11 +180,11 @@ export function buildKitchenSinkGraph() {
 /** A small single-page report, for before/after comparison. */
 export function buildSmallGraph() {
   const nodes = [
-    { id: 'table:RawSales', label: 'RawSales', type: 'table', meta: { columns: ['Region', 'Revenue', 'Qty'], colEdges: [] } },
-    { id: 'ds:SalesDS', label: 'SalesDS', type: 'dataset', meta: { columns: ['Region', 'Revenue'], colEdges: [{ tgtCol: 'Revenue', srcTable: 'RawSales', srcCol: 'Revenue' }] } },
+    { id: 'table:RawSales', label: 'RawSales', type: 'table', meta: { columns: ['Region', 'Revenue', 'Qty'], columnLineage: {} } },
+    { id: 'ds:SalesDS', label: 'SalesDS', type: 'dataset', meta: { columns: ['Region', 'Revenue'], columnLineage: { Revenue: { sources: [{ table: 'RawSales', column: 'Revenue' }], transform: 'SUM(Revenue)', functions: ['SUM'], kind: 'Aggregation' } } } },
     { id: 'page:Main', label: 'Main', type: 'page', meta: null },
-    { id: 'vis:Bar', label: 'BAR · RevByRegion', type: 'visual', meta: { page: 'Main', visualType: 'BAR', mappings: [{ role: 'XAXIS', column: 'Region' }, { role: 'YAXIS', column: 'SUM(Revenue)' }] } },
-    { id: 'vis:Card', label: 'CARD · TotalRev', type: 'visual', meta: { page: 'Main', visualType: 'CARD', mappings: [{ role: 'VALUES', column: 'SUM(Revenue)' }] } },
+    { id: 'vis:Bar', label: 'BAR · RevByRegion', type: 'visual', meta: { page: 'Main', visualType: 'BAR', mappings: [{ role: 'XAXIS', column: 'Region' }, { role: 'YAXIS', column: 'Revenue' }] } },
+    { id: 'vis:Card', label: 'CARD · TotalRev', type: 'visual', meta: { page: 'Main', visualType: 'CARD', mappings: [{ role: 'VALUES', column: 'Revenue' }] } },
   ];
   const edges = [
     { source: 'table:RawSales', target: 'ds:SalesDS', label: 'GROUP BY' },
@@ -180,6 +192,56 @@ export function buildSmallGraph() {
     { source: 'page:Main', target: 'vis:Card', label: null },
     { source: 'ds:SalesDS', target: 'vis:Bar', label: 'x: Region · y: Revenue' },
     { source: 'ds:SalesDS', target: 'vis:Card', label: 'value: Revenue' },
+  ];
+  return { nodes, edges };
+}
+
+/**
+ * The exact EDW example from the design discussion:
+ *   INSERT INTO #sales SELECT Date, Vendor, SUM(Amount) AS total FROM edw.Sales;
+ *   CREATE VISUAL salesBar AS BAR (SOURCE=#sales, MAPPINGS(X=Date, Y=total, SERIES=Vendor));
+ * Amount carries a flattened description + pii tag, inherited onto #sales.total.
+ * Clicking salesBar should trace Y=total back to EDW.Sales.Amount with the description.
+ */
+export function buildEdwExampleGraph() {
+  const desc = 'Imported from ERP; Import table: SalesVolumn; Column: sales_amt DECIMAL(12,2); pii';
+  const nodes = [
+    {
+      id: 'table:Sales', label: 'Sales', type: 'table',
+      meta: { columns: ['Amount', 'Date', 'Vendor'], columnLineage: {} },
+    },
+    {
+      id: 'table:#sales', label: '#sales', type: 'table',
+      meta: {
+        columns: ['Date', 'Vendor', 'total'],
+        columnLineage: {
+          total: {
+            sources: [{ table: 'Sales', column: 'Amount' }],
+            transform: 'SUM(Amount)', functions: ['SUM'], kind: 'Aggregation',
+            description: desc, tags: { pii: '' },
+          },
+          Date:   { sources: [{ table: 'Sales', column: 'Date' }],   transform: null, kind: 'PassThrough' },
+          Vendor: { sources: [{ table: 'Sales', column: 'Vendor' }], transform: null, kind: 'PassThrough' },
+        },
+      },
+    },
+    {
+      id: 'vis:salesBar', label: 'BAR · salesBar', type: 'visual',
+      meta: {
+        page: 'Page A', visualType: 'BAR',
+        mappings: [
+          { role: 'XAXIS', column: 'Date' },
+          { role: 'YAXIS', column: 'total' },
+          { role: 'SERIES', column: 'Vendor' },
+        ],
+      },
+    },
+    { id: 'page:Page A', label: 'Page A', type: 'page', meta: null },
+  ];
+  const edges = [
+    { source: 'table:Sales', target: 'table:#sales', label: 'GROUP BY' },
+    { source: 'table:#sales', target: 'vis:salesBar', label: 'X: Date · Y: total' },
+    { source: 'page:Page A', target: 'vis:salesBar', label: null },
   ];
   return { nodes, edges };
 }

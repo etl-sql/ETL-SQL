@@ -16,7 +16,7 @@ Syntax:
   );
 
 Options:
-  BOOTSTRAP_SERVERS / SERVERS  — comma-separated list of broker hosts (required)
+  BOOTSTRAP_SERVERS            — comma-separated list of broker hosts (required)
   TOPIC                       — default topic name (required)
   GROUP_ID                    — consumer group identifier (default: 'etl-sql-group')
   AUTO_OFFSET_RESET           — initial offset start: 'Earliest' or 'Latest' (default: 'Latest')

@@ -81,7 +81,7 @@ namespace ETL_SQL.Connectors
                 else if (_authMode == "AD_WINDOWS")
                 {
                     string user = _options.GetValueOrDefault("USER", "");
-                    string pass = _options.GetValueOrDefault("PASSWORD", "");
+                    string pass = DecryptIfNeeded(_options.GetValueOrDefault("PASSWORD", ""));
                     string domain = _options.GetValueOrDefault("DOMAIN", "");
                     
                     clientHandler.Credentials = new NetworkCredential(user, pass, domain);
@@ -210,7 +210,7 @@ namespace ETL_SQL.Connectors
 
             string tenantId = _options.GetValueOrDefault("TENANT_ID", "");
             string clientId = _options.GetValueOrDefault("CLIENT_ID", "");
-            string clientSecret = _options.GetValueOrDefault("CLIENT_SECRET", "");
+            string clientSecret = DecryptIfNeeded(_options.GetValueOrDefault("CLIENT_SECRET", ""));
             if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
             {
                 throw new ExecutionException("ENTRA_ID authentication requires TENANT_ID, CLIENT_ID, and CLIENT_SECRET.");
@@ -239,8 +239,7 @@ namespace ETL_SQL.Connectors
             var res = await tokenClient.SendAsync(req);
             if (!res.IsSuccessStatusCode)
             {
-                var errContent = await res.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Failed to acquire OAuth token from Entra ID. Status: {res.StatusCode}, Details: {errContent}");
+                throw new ExecutionException($"Failed to acquire OAuth token from Entra ID. Status: {res.StatusCode}");
             }
 
             var json = await res.Content.ReadAsStringAsync();
@@ -286,7 +285,6 @@ namespace ETL_SQL.Connectors
             
             // SharePoint list files REST call
             string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{Uri.EscapeDataString(folderUrl)}')/Files";
-            System.Console.WriteLine($"[TEST-PRINT] ListFiles requestUrl={requestUrl}");
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
@@ -365,8 +363,7 @@ namespace ETL_SQL.Connectors
             var response = await _httpClient.PostAsync(requestUrl, content);
             if (!response.IsSuccessStatusCode)
             {
-                var error = await response.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Failed to upload file to SharePoint: {response.StatusCode}. Details: {error}");
+                throw new ExecutionException($"Failed to upload file to SharePoint: {response.StatusCode}");
             }
         }
 
@@ -381,7 +378,6 @@ namespace ETL_SQL.Connectors
 
             string relativeUrl = GetServerRelativeUrl(remotePath);
             string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{Uri.EscapeDataString(relativeUrl)}')/$value";
-            System.Console.WriteLine($"[TEST-PRINT] requestUrl={requestUrl}");
             var response = await _httpClient.GetAsync(requestUrl);
             if (!response.IsSuccessStatusCode)
             {
@@ -588,8 +584,7 @@ namespace ETL_SQL.Connectors
                     var response = await _httpClient.PostAsync(requestUrl, content);
                     if (!response.IsSuccessStatusCode)
                     {
-                        var err = await response.Content.ReadAsStringAsync();
-                        throw new ExecutionException($"Failed to write item to SharePoint list: {response.StatusCode}. Details: {err}");
+                        throw new ExecutionException($"Failed to write item to SharePoint list: {response.StatusCode}");
                     }
                 }
             }
@@ -609,6 +604,13 @@ namespace ETL_SQL.Connectors
         {
             _httpClient.Dispose();
             return ValueTask.CompletedTask;
+        }
+
+        private string DecryptIfNeeded(string value)
+        {
+            return value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase) && _context != null
+                ? _context.DecryptValue(value) ?? ""
+                : value;
         }
     }
 }

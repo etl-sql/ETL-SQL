@@ -40,6 +40,7 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Contains("AD", connector.Aliases);
             Assert.Contains("LDAP", connector.Aliases);
             Assert.NotEmpty(connector.GetHelp());
+            Assert.DoesNotContain("LDAPS", connector.GetSupportedOptions().Keys);
         }
 
         [Theory]
@@ -130,7 +131,6 @@ namespace ETL_SQL.Tests.Connectors
 
             protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             {
-                System.Console.WriteLine($"[MOCK-HANDLER-PRINT] requestUri={request.RequestUri}");
                 return Task.FromResult(Handler(request));
             }
         }

@@ -51,7 +51,7 @@ namespace ETL_SQL.Connectors.Kafka
         public string GetHelp() =>
             "Kafka Connector: Publishes to or consumes from Apache Kafka topics.\n" +
             "Options:\n" +
-            "  BOOTSTRAP_SERVERS / SERVERS: Broker hosts list (e.g. localhost:9092)\n" +
+            "  BOOTSTRAP_SERVERS: Broker hosts list (e.g. localhost:9092)\n" +
             "  TOPIC: Topic name (required)\n" +
             "  GROUP_ID: Consumer group ID (default: etl-sql-group)\n" +
             "  AUTO_OFFSET_RESET: Offset start ('Earliest' or 'Latest')\n" +
@@ -65,7 +65,6 @@ namespace ETL_SQL.Connectors.Kafka
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
             { "BOOTSTRAP_SERVERS", Array.Empty<string>() },
-            { "SERVERS", Array.Empty<string>() },
             { "TOPIC", Array.Empty<string>() },
             { "GROUP_ID", Array.Empty<string>() },
             { "AUTO_OFFSET_RESET", new[] { "Earliest", "Latest" } },
@@ -123,7 +122,7 @@ namespace ETL_SQL.Connectors.Kafka
 
         public string BuildConnectionString(Dictionary<string, string> properties)
         {
-            return properties.GetValueOrDefault("BOOTSTRAP_SERVERS", properties.GetValueOrDefault("SERVERS", ""));
+            return properties.GetValueOrDefault("BOOTSTRAP_SERVERS", "");
         }
 
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null)

@@ -60,12 +60,6 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
 
-            if (File.Exists(dest))
-            {
-                if (overwrite) File.Delete(dest);
-                else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}", null, stmt.Line, stmt.Column);
-            }
-
             // Resolve list of source files
             var files = new List<string>();
             if (srcVal is string srcStr)
@@ -119,9 +113,13 @@ namespace ETL_SQL.Engine.Handlers
 
             if (files.Count == 0)
             {
-                if (context.IsVerbose) context.Log("[MergeFiles] No source files found to merge.");
-                using (File.Create(dest)) { }
-                return;
+                throw new ExecutionException("MERGE FILES found no source files to merge. Destination was left unchanged.", null, stmt.Line, stmt.Column);
+            }
+
+            if (File.Exists(dest))
+            {
+                if (overwrite) File.Delete(dest);
+                else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}", null, stmt.Line, stmt.Column);
             }
 
             if (context.IsVerbose)

@@ -76,6 +76,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             string extension = Path.GetExtension(source);
+            ValidateSafePrefix(prefix, stmt);
 
             if (context.IsVerbose)
                 context.Log($"[SplitFile] Splitting '{source}' into '{destDir}' using prefix '{prefix}' ({limitType} limit: {limitValue})");
@@ -96,7 +97,7 @@ namespace ETL_SQL.Engine.Handlers
 
                         if (writer == null)
                         {
-                            currentDestFile = Path.Combine(destDir, $"{prefix}{fileIndex}{extension}");
+                            currentDestFile = ResolvePartPath(context, destDir, prefix, fileIndex, extension, stmt);
                             if (File.Exists(currentDestFile))
                             {
                                 if (overwrite) File.Delete(currentDestFile);
@@ -141,6 +142,34 @@ namespace ETL_SQL.Engine.Handlers
 
             if (context.IsVerbose)
                 context.Log($"[SplitFile] Split operation completed successfully.");
+        }
+
+        private static void ValidateSafePrefix(string prefix, SplitFileStatement stmt)
+        {
+            if (string.IsNullOrWhiteSpace(prefix))
+                throw new ExecutionException("SPLIT FILE PREFIX must not be empty.", null, stmt.Line, stmt.Column);
+
+            if (Path.IsPathRooted(prefix)
+                || prefix.Contains(Path.DirectorySeparatorChar)
+                || prefix.Contains(Path.AltDirectorySeparatorChar)
+                || prefix.Contains("..", StringComparison.Ordinal)
+                || prefix.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                throw new ExecutionException("SPLIT FILE PREFIX must be a filename-safe stem and must not contain path separators or parent-directory segments.", null, stmt.Line, stmt.Column);
+            }
+        }
+
+        private static string ResolvePartPath(IExecutionContext context, string destDir, string prefix, int fileIndex, string extension, SplitFileStatement stmt)
+        {
+            var partPath = Path.GetFullPath(Path.Combine(destDir, $"{prefix}{fileIndex}{extension}"));
+            var destRoot = Path.GetFullPath(destDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!partPath.StartsWith(destRoot, StringComparison.OrdinalIgnoreCase))
+                throw new ExecutionException("Generated split file path escaped the destination directory.", null, stmt.Line, stmt.Column);
+
+            context.SecurityService.ValidatePath(partPath);
+            context.SecurityService.ValidateWriteAccess(partPath);
+            context.SecurityService.ValidateFileType(partPath);
+            return partPath;
         }
 
         private long ParseSizeLimit(string sizeStr)

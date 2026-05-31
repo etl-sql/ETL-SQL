@@ -5,7 +5,7 @@ Syntax:
   CREATE CONNECTION <name> AS ACTIVE_DIRECTORY(
     HOST           = 'ldap.corp.com',
     PORT           = 389,
-    USE_SSL        = FALSE, -- Or LDAPS
+    USE_SSL        = FALSE,
     AUTH_MODE      = 'NEGOTIATE', -- NEGOTIATE, SIMPLE, INTEGRATED
     USER           = 'username',
     PASSWORD       = '<password>',

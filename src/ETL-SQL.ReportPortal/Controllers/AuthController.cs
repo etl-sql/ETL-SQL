@@ -226,6 +226,13 @@ public class AuthController(
         if (token is null)
             return Unauthorized(new { error = "Invalid or expired refresh token" });
 
+        if (token.User is null || !token.User.IsActive)
+        {
+            token.RevokedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            return Unauthorized(new { error = "User account is disabled" });
+        }
+
         // Rotate: revoke old, issue new
         token.RevokedAt = DateTime.UtcNow;
         var newRaw = tokenService.GenerateRefreshToken();

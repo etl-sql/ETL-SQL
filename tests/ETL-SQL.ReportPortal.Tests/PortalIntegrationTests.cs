@@ -88,6 +88,15 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var created = await createRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var userId  = created!["id"]!.GetValue<int>();
 
+        var activeLoginRes = await _client.PostAsJsonAsync("/api/auth/login", new
+        {
+            username,
+            password = "Active@Test1!"
+        });
+        Assert.Equal(HttpStatusCode.OK, activeLoginRes.StatusCode);
+        var activeLogin = await activeLoginRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var refreshToken = activeLogin!["refreshToken"]!.GetValue<string>();
+
         // Deactivate the user via admin PUT.
         var deactivateRes = await AuthPut(adminToken, $"/api/admin/users/{userId}",
             new { isActive = false });
@@ -100,6 +109,12 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
             password = "Active@Test1!"
         });
         Assert.Equal(HttpStatusCode.Unauthorized, loginRes.StatusCode);
+
+        var refreshRes = await _client.PostAsJsonAsync("/api/auth/refresh", new
+        {
+            refreshToken
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, refreshRes.StatusCode);
     }
 
     [Fact]

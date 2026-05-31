@@ -3,7 +3,7 @@ Connects to MongoDB document databases using the official MongoDB.Driver. Suppor
 
 Syntax:
   CREATE CONNECTION <name> AS MONGODB(
-    URI            = 'mongodb://localhost:27017',
+    CONNECTION_STRING = 'mongodb://localhost:27017',
     DATABASE       = 'dbname',
     COLLECTION     = 'collection_name',
     TIMEOUT_SECONDS = 30
@@ -13,14 +13,14 @@ Aliases:
   MONGO
 
 Options:
-  URI / CONNECTION_STRING — Connection URI (e.g., mongodb://localhost:27017 or mongodb+srv://...) (required unless host/port specified)
-  DATABASE / DB          — target database name (required)
-  COLLECTION / TABLE     — target collection name
+  CONNECTION_STRING      — Connection URI (e.g., mongodb://localhost:27017 or mongodb+srv://...) (required unless host/port specified)
+  DATABASE               — target database name (required)
+  COLLECTION             — target collection name
   TIMEOUT_SECONDS        — connection and query timeout limit in seconds (default: 30)
-  HOST / SERVER          — hostname for the MongoDB instance (alternative to URI)
+  HOST                   — hostname for the MongoDB instance (alternative to CONNECTION_STRING)
   PORT                   — port for the MongoDB instance (default: 27017)
-  USER / UID             — database username (alternative to URI authentication)
-  PASSWORD / PWD         — database password (alternative to URI authentication)
+  USER                   — database username (alternative to CONNECTION_STRING authentication)
+  PASSWORD               — database password (alternative to CONNECTION_STRING authentication)
 
 ### Nested Document and Array Flattening
 MongoDB allows rich, hierarchical structures. When queried, this connector flattens nested BSON documents and BSON arrays to valid JSON strings in the output table, allowing standard ETL-SQL string/JSON functions to be run downstream.
@@ -30,7 +30,7 @@ MongoDB allows rich, hierarchical structures. When queried, this connector flatt
 ```sql
 -- Connect using connection URI
 CREATE CONNECTION MongoProd AS MONGODB(
-  URI        = 'mongodb://admin:secret@mongo.corp.local:27017',
+  CONNECTION_STRING = 'mongodb://admin:secret@mongo.corp.local:27017',
   DATABASE   = 'analytics',
   COLLECTION = 'user_events'
 );
@@ -43,7 +43,7 @@ SELECT id, event_type, metadata, timestamp
 
 -- Write data back to a MongoDB collection
 CREATE CONNECTION MongoDest AS MONGODB(
-  URI        = 'mongodb://localhost:27017',
+  CONNECTION_STRING = 'mongodb://localhost:27017',
   DATABASE   = 'archive'
 );
 

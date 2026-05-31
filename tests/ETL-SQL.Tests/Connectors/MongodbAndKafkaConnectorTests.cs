@@ -42,6 +42,10 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Contains("MONGO", connector.Aliases);
             Assert.NotEmpty(connector.GetHelp());
             Assert.NotEmpty(connector.GetSupportedOptions());
+            Assert.DoesNotContain("URI", connector.GetSupportedOptions().Keys);
+            Assert.DoesNotContain("DB", connector.GetSupportedOptions().Keys);
+            Assert.DoesNotContain("SERVER", connector.GetSupportedOptions().Keys);
+            Assert.DoesNotContain("UID", connector.GetSupportedOptions().Keys);
         }
 
         [Fact]
@@ -187,6 +191,7 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Empty(connector.Aliases);
             Assert.NotEmpty(connector.GetHelp());
             Assert.NotEmpty(connector.GetSupportedOptions());
+            Assert.DoesNotContain("SERVERS", connector.GetSupportedOptions().Keys);
         }
 
         [Fact]

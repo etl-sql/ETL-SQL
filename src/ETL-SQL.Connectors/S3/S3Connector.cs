@@ -56,8 +56,8 @@ namespace ETL_SQL.Connectors.S3
 
             _bucketName = _options.GetValueOrDefault("BUCKET", _bucketName);
             _endpoint = _options.GetValueOrDefault("ENDPOINT", "");
-            _accessKey = _options.GetValueOrDefault("ACCESS_KEY", _options.GetValueOrDefault("ACCESSKEY", ""));
-            _secretKey = _options.GetValueOrDefault("SECRET_KEY", _options.GetValueOrDefault("SECRETKEY", ""));
+            _accessKey = _options.GetValueOrDefault("ACCESS_KEY", "");
+            _secretKey = _options.GetValueOrDefault("SECRET_KEY", "");
             _region = _options.GetValueOrDefault("REGION", "us-east-1");
             
             var forcePathStr = _options.GetValueOrDefault("FORCE_PATH_STYLE", "FALSE");

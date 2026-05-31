@@ -1,10 +1,25 @@
 # ETL-SQL Development TODO List
 
 ## Bugs
+### Security / Zero-Trust
+- [x] Split file prefix can escape the validated destination directory → Fixed: `SplitFileStatementHandler` now rejects empty/rooted/path-traversal prefixes, validates each generated part path with `ValidatePath`/`ValidateWriteAccess`/`ValidateFileType`, and verifies every part remains under the resolved destination directory. Added `TestSplitFileRejectsUnsafePrefix`.
+- [x] LDAP portal auth still contains diagnostic console/file logging that leaks directory details and bypasses configured logging → Fixed: removed `[LDAP-DIAG]` console writes and all hard-coded `ldap_debug.txt` writes; LDAP diagnostics now use structured `ILogger` with sanitized message text.
+- [x] SharePoint connector prints request URLs and may expose site/library/file paths in logs → Fixed: removed `System.Console.WriteLine("[TEST-PRINT] ...")` calls from SharePoint file listing/download paths and removed the mock handler print in connector tests.
+- [x] Portal refresh tokens remain valid after a user is disabled → Fixed: `AuthController.Refresh` now rejects and revokes refresh tokens for inactive users, and admin deactivation revokes outstanding refresh tokens. Extended the deactivated-user portal regression test to cover refresh.
+
+### Connectors
+- [x] SharePoint connector documentation says `PASSWORD`/`CLIENT_SECRET` can use `ENC:`, but the implementation does not decrypt them → Fixed: SharePoint `AD_WINDOWS` password and Entra `CLIENT_SECRET` now decrypt `ENC:` values through the execution context, and SharePoint provider response bodies are no longer reflected in credential-sensitive errors.
+- [x] New connector option aliases violate the no-alias connector standard → Fixed: removed S3 `ACCESSKEY`/`SECRETKEY`, Active Directory `LDAPS`, Kafka `SERVERS`, and MongoDB `URI`/`SERVER`/`UID`/`DB` option fallbacks; updated help/docs/snippets and added metadata assertions.
+
+### File Operations
+- [x] `MERGE FILES` can destroy an existing destination when the source pattern matches nothing → Fixed: source files are now resolved before destination replacement; zero matches throw and leave the destination unchanged. Added `TestMergeFilesNoMatchesPreservesDestination`.
+- [x] `SYNC DIRECTORY DELETE_EXTRA` bypasses the file-operation guardrail spirit and under-counts destructive work → Fixed: `DELETE_EXTRA` now validates file types, increments file-operation counts for each file/directory delete, and checks recursive depth before recursive sync traversal.
+
 ### Report Portal
 - [x] Structure DAG jumbled on large maps → Fixed: `render()` in `designer.js` now computes a fit-to-view zoom from the actual node bounding box (`min(containerW/dataW, containerH/dataH, 1.0)`, floor 0.15) so all nodes are visible on first open regardless of graph size. `roam: true` still lets users pan/zoom further.
 - [x] Dependencies transformation column shows only category name → Fixed: `formatTransformationKind(kind, expr, fns)` now shows the actual function names for Aggregation/FunctionCall (e.g. "SUM", "COUNT", "UPPER()"), extracts the target type for Cast (e.g. "→ INT"), and keeps the full expression as a hover tooltip.
 - [ ] Structure DAG emits no page→visual edges when visuals are declared before pages → In `GetStructure` (`ReportsController.cs`), `currentPage` is assigned by statement iteration order, so a report that declares every `CREATE VISUAL` before any `CREATE PAGE` (e.g. `samples/10_Kitchen_Sinks/report_kitchen_sink.rptsql`) leaves all visuals with `page = null` and produces zero page→visual edges — pages render as orphan nodes. Page membership should come from each page's layout (which visuals it references), not declaration order.
+- [x] Report designer generates invalid dataset syntax → Fixed: `DesignerController.StateToScript` now emits `CREATE DATASET &name` and `SOURCE = &name` for report datasets. Added `DesignerControllerTests.Generate_UsesReportDatasetIdentifiers`.
 
 ## Tooling / Dev Experience
 - [ ] Expand the no-Docker preview harness (`tools/dag-preview/`) into a general portal/VS Code component sandbox → Today it serves the repo root over loopback and renders `renderDag` against synthetic fixtures by importing the canonical `designer.js` directly (no sync, no portal build, no catalog DB). Generalize it to host other browser-side surfaces in isolation — the report designer (`createDesigner`), the lite script editor (`createScriptEditor`), the lineage/dependencies modals, and eventually VS Code webview components — each driven by fixture data so they can be developed and visually checked without spinning up Docker or the full portal. Likely shape: a harness index page that lists available "stories" (component + fixture), one fixture module per surface.

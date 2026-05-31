@@ -21,7 +21,6 @@ namespace ETL_SQL.ReportPortal.Services
 
         public async Task<LdapUserResult?> AuthenticateAsync(string username, string password)
         {
-            Console.WriteLine($"[LDAP-DIAG] AuthenticateAsync start for '{username}'");
             if (!_config.Identity.Ldap.Enabled)
                 return null;
 
@@ -81,6 +80,7 @@ namespace ETL_SQL.ReportPortal.Services
                         var parts = ldapConfig.Domain.Split('.');
                         baseDn = string.Join(",", Array.ConvertAll(parts, p => $"DC={p}"));
                     }
+                    _logger.LogDebug("LDAP: Searching for user '{Username}' under configured base DN.", username);
 
                     var request = new SearchRequest(
                         baseDn,
@@ -124,27 +124,23 @@ namespace ETL_SQL.ReportPortal.Services
                                     SearchScope.Subtree,
                                     "cn"
                                 );
-                                try { System.IO.File.AppendAllText("C:\\Users\\chuck\\scratch\\ETL-SQL\\ldap_debug.txt", $"Group Query Filter: {groupRequest.Filter}\nBase DN: {baseDn}\n"); } catch {}
                                 var groupResponse = (SearchResponse)await Task.Run(() => serviceConn.SendRequest(groupRequest));
-                                try { System.IO.File.AppendAllText("C:\\Users\\chuck\\scratch\\ETL-SQL\\ldap_debug.txt", $"Found Group Count: {groupResponse.Entries.Count}\n"); } catch {}
+                                _logger.LogDebug("LDAP: Found {GroupCount} groups for user '{Username}'.", groupResponse.Entries.Count, username);
                                 foreach (SearchResultEntry grp in groupResponse.Entries)
                                 {
-                                    try { System.IO.File.AppendAllText("C:\\Users\\chuck\\scratch\\ETL-SQL\\ldap_debug.txt", $"Found Group DN: {grp.DistinguishedName}\n"); } catch {}
                                     serviceGroups.Add(grp.DistinguishedName);
                                 }
                             }
                             catch (Exception ex)
                             {
-                                try { System.IO.File.AppendAllText("C:\\Users\\chuck\\scratch\\ETL-SQL\\ldap_debug.txt", $"Group Query Error: {ex}\n"); } catch {}
-                                _logger.LogDebug(ex, "Failed to perform group membership query fallback using Service User.");
+                                _logger.LogDebug("LDAP: Group membership query fallback failed for user '{Username}': {Error}", username, ex.Message);
                             }
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[LDAP-DIAG] Service user lookup failed: {ex}");
-                    _logger.LogWarning(ex, "LDAP Service User lookup failed for user '{Username}'.", username);
+                    _logger.LogWarning("LDAP Service User lookup failed for user '{Username}': {Error}", username, ex.Message);
                 }
                 finally
                 {
@@ -153,14 +149,12 @@ namespace ETL_SQL.ReportPortal.Services
 
                 if (userEntry == null)
                 {
-                    Console.WriteLine($"[LDAP-DIAG] User entry is null after service lookup.");
                     _logger.LogWarning("LDAP: User '{Username}' not found during Service User lookup.", username);
                     return null;
                 }
 
                 // Attempt to bind with the discovered user DN and their password
-                Console.WriteLine($"[LDAP-DIAG] User DN found: '{userEntry.DistinguishedName}'. Starting user credentials bind...");
-                try { System.IO.File.WriteAllText("C:\\Users\\chuck\\scratch\\ETL-SQL\\ldap_debug.txt", $"User DN: {userEntry.DistinguishedName}\n"); } catch {}
+                _logger.LogDebug("LDAP: Service lookup found user '{Username}'. Starting credential bind.", username);
                 LdapConnection? userConn = null;
                 try
                 {
@@ -213,8 +207,7 @@ namespace ETL_SQL.ReportPortal.Services
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[LDAP-DIAG] User credentials bind failed: {ex}");
-                    _logger.LogWarning(ex, "LDAP authentication credentials bind failed for user DN '{DistinguishedName}'.", userEntry.DistinguishedName);
+                    _logger.LogWarning("LDAP authentication credentials bind failed for user '{Username}': {Error}", username, ex.Message);
                     return null;
                 }
                 finally
@@ -224,7 +217,7 @@ namespace ETL_SQL.ReportPortal.Services
             }
 
             // 2. Direct Bind Fallback (Active Directory style or direct DN input style)
-            Console.WriteLine($"[LDAP-DIAG] Falling back to direct bind.");
+            _logger.LogDebug("LDAP: Falling back to direct bind for user '{Username}'.", username);
             string bindUsername = username;
             if (!string.IsNullOrEmpty(ldapConfig.Domain))
             {
@@ -343,7 +336,7 @@ namespace ETL_SQL.ReportPortal.Services
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogDebug(ex, "Failed to perform group membership query fallback.");
+                        _logger.LogDebug("LDAP: Group membership query fallback failed for user '{Username}': {Error}", username, ex.Message);
                     }
                 }
 
@@ -351,8 +344,7 @@ namespace ETL_SQL.ReportPortal.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[LDAP-DIAG] Direct bind failed: {ex}");
-                _logger.LogWarning(ex, "LDAP direct authentication failed for user '{Username}' due to connection, bind, or search error.", username);
+                _logger.LogWarning("LDAP direct authentication failed for user '{Username}': {Error}", username, ex.Message);
                 return null;
             }
             finally

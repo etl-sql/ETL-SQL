@@ -103,6 +103,7 @@ public class AdminController(
         var user = await userManager.FindByIdAsync(id.ToString());
         if (user is null) return NotFound();
 
+        var wasActive = user.IsActive;
         if (req.Email    is not null) user.Email    = req.Email;
         if (req.FirstName is not null) user.FirstName = req.FirstName;
         if (req.LastName  is not null) user.LastName  = req.LastName;
@@ -116,6 +117,12 @@ public class AdminController(
         }
 
         await userManager.UpdateAsync(user);
+        if (wasActive && req.IsActive == false)
+        {
+            var tokens = await db.RefreshTokens.Where(t => t.UserId == id && t.RevokedAt == null).ToListAsync();
+            foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
         await audit.LogAsync(CurrentUserId, "UPDATE_USER", "User", id.ToString());
         return NoContent();
     }

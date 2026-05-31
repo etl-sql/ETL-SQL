@@ -565,13 +565,33 @@ public class ReportsController : ControllerBase
                     .OrderBy(c => c)
                     .ToList();
 
-                var colEdges = nodeEntries
-                    .Where(e => e.SourceTables.Count > 0 && e.SourceColumns.Count > 0)
-                    .Select(e => new { tgtCol = e.TargetColumn, srcTable = e.SourceTables[0], srcCol = e.SourceColumns[0] })
-                    .Distinct()
-                    .ToList<object>();
+                // Rich per-column lineage: source columns, the transform that
+                // produced them, and any inherited description / tags (e.g. pii).
+                // Lets the detail panel walk a column back to its origin and show
+                // "total = SUM(Amount) ← EDW.Sales.Amount · <description>".
+                var columnLineage = nodeEntries
+                    .GroupBy(e => e.TargetColumn!, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g =>
+                    {
+                        var e = g.FirstOrDefault(x => x.SourceTables.Count > 0) ?? g.First();
+                        var sources = e.SourceTables
+                            .Select((t, k) => new { table = t, column = k < e.SourceColumns.Count ? e.SourceColumns[k] : null })
+                            .ToList();
+                        var tags = e.Metadata
+                            .Where(kv => !kv.Key.Equals("d", StringComparison.OrdinalIgnoreCase))
+                            .ToDictionary(kv => kv.Key, kv => kv.Value);
+                        return (object)new
+                        {
+                            sources,
+                            transform   = e.TransformationExpression,
+                            functions   = e.FunctionsApplied,
+                            kind        = e.TransformationKind == TransformationKind.Unknown ? null : e.TransformationKind.ToString(),
+                            description = e.DerivedFromDescriptions ?? e.Description,
+                            tags        = tags.Count > 0 ? tags : null,
+                        };
+                    }, StringComparer.OrdinalIgnoreCase);
 
-                nodes[i] = node with { Meta = new { columns, colEdges } };
+                nodes[i] = node with { Meta = new { columns, columnLineage } };
             }
         }
         catch (Exception ex)

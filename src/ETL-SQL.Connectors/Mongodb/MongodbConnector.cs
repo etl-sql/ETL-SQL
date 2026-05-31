@@ -53,29 +53,24 @@ namespace ETL_SQL.Connectors.Mongodb
         public string GetHelp() =>
             "MongoDB Connector: Connects to MongoDB document databases.\n" +
             "Options:\n" +
-            "  URI / CONNECTION_STRING: Connection URI (e.g. mongodb://localhost:27017)\n" +
-            "  DATABASE / DB: Target database name (required)\n" +
-            "  COLLECTION / TABLE: Collection context\n" +
+            "  CONNECTION_STRING: Connection URI (e.g. mongodb://localhost:27017)\n" +
+            "  DATABASE: Target database name (required)\n" +
+            "  COLLECTION: Collection context\n" +
             "  TIMEOUT_SECONDS: Timeout limit in seconds (default: 30)\n" +
-            "  HOST / SERVER: Server hostname\n" +
+            "  HOST: Server hostname\n" +
             "  PORT: Server port\n" +
-            "  USER / UID: User identifier\n" +
-            "  PASSWORD / PWD: Connection password\n";
+            "  USER: User identifier\n" +
+            "  PASSWORD: Connection password\n";
 
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
             { "CONNECTION_STRING", Array.Empty<string>() },
-            { "URI", Array.Empty<string>() },
             { "DATABASE", Array.Empty<string>() },
-            { "DB", Array.Empty<string>() },
             { "COLLECTION", Array.Empty<string>() },
-            { "TABLE", Array.Empty<string>() },
             { "TIMEOUT_SECONDS", Array.Empty<string>() },
             { "HOST", Array.Empty<string>() },
-            { "SERVER", Array.Empty<string>() },
             { "PORT", Array.Empty<string>() },
             { "USER", Array.Empty<string>() },
-            { "UID", Array.Empty<string>() },
             { "PASSWORD", Array.Empty<string>() }
         };
 
@@ -89,10 +84,7 @@ namespace ETL_SQL.Connectors.Mongodb
             if (options != null)
             {
                 options.TryGetValue("DATABASE", out db);
-                if (string.IsNullOrEmpty(db)) options.TryGetValue("DB", out db);
-
                 options.TryGetValue("COLLECTION", out collection);
-                if (string.IsNullOrEmpty(collection)) options.TryGetValue("TABLE", out collection);
             }
 
             if (string.IsNullOrEmpty(db))
@@ -125,17 +117,17 @@ namespace ETL_SQL.Connectors.Mongodb
 
         public string BuildConnectionString(Dictionary<string, string> properties)
         {
-            string connectionString = properties.GetValueOrDefault("CONNECTION_STRING", properties.GetValueOrDefault("URI", ""));
+            string connectionString = properties.GetValueOrDefault("CONNECTION_STRING", "");
             if (!string.IsNullOrEmpty(connectionString))
             {
                 return connectionString;
             }
 
-            string host = properties.GetValueOrDefault("HOST", properties.GetValueOrDefault("SERVER", "localhost"));
+            string host = properties.GetValueOrDefault("HOST", "localhost");
             string portStr = properties.GetValueOrDefault("PORT", "27017");
-            string user = properties.GetValueOrDefault("USER", properties.GetValueOrDefault("UID", ""));
+            string user = properties.GetValueOrDefault("USER", "");
             string password = properties.GetValueOrDefault("PASSWORD", "");
-            string database = properties.GetValueOrDefault("DATABASE", properties.GetValueOrDefault("DB", ""));
+            string database = properties.GetValueOrDefault("DATABASE", "");
 
             var builder = new System.Text.StringBuilder("mongodb://");
             if (!string.IsNullOrEmpty(user) && !string.IsNullOrEmpty(password))

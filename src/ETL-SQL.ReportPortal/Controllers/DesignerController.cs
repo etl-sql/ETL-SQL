@@ -180,9 +180,9 @@ public class DesignerController : ControllerBase
 
         foreach (var ds in state.Datasets ?? [])
         {
-            var name  = SanitizeName(ds.Name);
+            var name  = NormalizeDatasetName(ds.Name);
             var query = string.IsNullOrWhiteSpace(ds.Query) ? "SELECT 1 AS Placeholder" : ds.Query.Trim().TrimEnd(';');
-            sb.AppendLine($"CREATE DATASET #{name} AS (");
+            sb.AppendLine($"CREATE DATASET {name} AS (");
             sb.AppendLine($"  {query}");
             sb.AppendLine($");");
             sb.AppendLine();
@@ -245,7 +245,7 @@ public class DesignerController : ControllerBase
             sb.AppendLine($"    TITLE = '{EscapeStr(v.Title)}',");
 
         if (!string.IsNullOrWhiteSpace(v.Dataset))
-            sb.AppendLine($"    SOURCE = #{SanitizeName(v.Dataset)},");
+            sb.AppendLine($"    SOURCE = {NormalizeDatasetName(v.Dataset)},");
 
         var mappings = (v.Mappings ?? [])
             .Where(m => !string.IsNullOrWhiteSpace(m.Value))
@@ -289,6 +289,14 @@ public class DesignerController : ControllerBase
         var safe = Regex.Replace(name.Trim(), @"[^a-zA-Z0-9_]", "_");
         if (!char.IsLetter(safe[0])) safe = "v_" + safe;
         return safe;
+    }
+
+    private static string NormalizeDatasetName(string name)
+    {
+        var trimmed = (name ?? "").Trim();
+        if (trimmed.StartsWith("&", StringComparison.Ordinal) || trimmed.StartsWith("#", StringComparison.Ordinal))
+            trimmed = trimmed[1..];
+        return "&" + SanitizeName(trimmed);
     }
 
     private static string SanitizeSlotName(string name) => SanitizeName(name);

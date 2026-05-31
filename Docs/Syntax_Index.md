@@ -165,7 +165,7 @@ Connectors define how to communicate with external data sources.
 | `ODBC` | SQL | [ODBC.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ODBC.md) | DSN, DRIVER, SERVER, DATABASE, UID, PASSWORD, ... |
 | `SNOWFLAKE` | SQL | [SNOWFLAKE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SNOWFLAKE.md) | HOST, DATABASE, SCHEMA, WAREHOUSE, USERNAME, PASSWORD, PRIVATE_KEY_FILE, ... |
 | `BIGQUERY` | SQL | [BIGQUERY.md](../src/ETL-SQL.Core/Resources/Help/Connectors/BIGQUERY.md) | PROJECT_ID, DATASET_ID, KEY_FILE, ... |
-| `MONGODB` | NoSQL Document | [MONGODB.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MONGODB.md) | URI, DATABASE, COLLECTION, HOST, PORT, USER, PASSWORD, TIMEOUT_SECONDS |
+| `MONGODB` | NoSQL Document | [MONGODB.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MONGODB.md) | CONNECTION_STRING, DATABASE, COLLECTION, HOST, PORT, USER, PASSWORD, TIMEOUT_SECONDS |
 | `FLATFILE` | File | [FLATFILE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/FLATFILE.md) | PATH, FORMAT, DELIMITER, HEADER, ENCODING, ... |
 | `EXCEL` | File | [EXCEL.md](../src/ETL-SQL.Core/Resources/Help/Connectors/EXCEL.md) | PATH, SHEET, RANGE, HEADER, ... |
 | `JSON` | File | [JSON.md](../src/ETL-SQL.Core/Resources/Help/Connectors/JSON.md) | PATH, ROOT_PATH, ENCODING, ... |

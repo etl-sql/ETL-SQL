@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -85,6 +86,12 @@ namespace ETL_SQL.Engine.Handlers
             var sourceFiles = Directory.GetFiles(source, "*", recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
             var destFiles = Directory.GetFiles(dest, "*", recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
 
+            if (recursive)
+            {
+                ValidateRecursiveDepth(context, source, sourceFiles);
+                ValidateRecursiveDepth(context, dest, destFiles);
+            }
+
             var sourceFileMap = sourceFiles.ToDictionary(
                 f => Path.GetRelativePath(source, f),
                 f => f,
@@ -149,6 +156,8 @@ namespace ETL_SQL.Engine.Handlers
                     if (!sourceFileMap.ContainsKey(relativePath))
                     {
                         context.SecurityService.ValidateWriteAccess(destFile);
+                        context.SecurityService.ValidateFileType(destFile);
+                        context.IncrementOperationCount(OperationType.FileSystem, destFile, 1);
                         File.Delete(destFile);
                         
                         if (context.IsVerbose)
@@ -158,18 +167,31 @@ namespace ETL_SQL.Engine.Handlers
 
                 if (recursive)
                 {
-                    DeleteEmptySubdirectories(dest);
+                    DeleteEmptySubdirectories(context, dest);
                 }
             }
         }
 
-        private void DeleteEmptySubdirectories(string directory)
+        private static void ValidateRecursiveDepth(IExecutionContext context, string root, IEnumerable<string> files)
+        {
+            foreach (var file in files)
+            {
+                var relative = Path.GetRelativePath(root, file);
+                var depth = relative.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries).Length - 1;
+                if (depth > context.MaxRecursiveDepth && !context.AllowDeepRecursion)
+                    throw new SecurityException($"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {context.MaxRecursiveDepth}. Use 'SET ALLOW_RECURSIVE_LAYERS = n;' override if allowed.");
+            }
+        }
+
+        private static void DeleteEmptySubdirectories(IExecutionContext context, string directory)
         {
             foreach (var d in Directory.GetDirectories(directory))
             {
-                DeleteEmptySubdirectories(d);
+                DeleteEmptySubdirectories(context, d);
                 if (Directory.GetFiles(d).Length == 0 && Directory.GetDirectories(d).Length == 0)
                 {
+                    context.SecurityService.ValidateWriteAccess(d);
+                    context.IncrementOperationCount(OperationType.FileSystem, d, 1);
                     Directory.Delete(d, false);
                 }
             }

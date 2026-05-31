@@ -275,6 +275,36 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
+        public async Task TestSplitFileRejectsUnsafePrefix()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            string src = "split_unsafe_src.txt";
+            string destDir = "split_unsafe_dest";
+            string escaped = "escape_1.txt";
+            if (File.Exists(src)) File.Delete(src);
+            if (File.Exists(escaped)) File.Delete(escaped);
+            if (Directory.Exists(destDir)) Directory.Delete(destDir, true);
+
+            try
+            {
+                await File.WriteAllLinesAsync(src, new[] { "line1", "line2" });
+
+                await Assert.ThrowsAsync<ExecutionException>(async () =>
+                {
+                    await ExecuteAsync($"SPLIT FILE '{src}' TO '{destDir}' WITH (LIMIT_TYPE = 'ROWS', LIMIT_VALUE = 1, PREFIX = '..\\escape_', OVERWRITE = ON);", evaluator);
+                });
+
+                Assert.False(File.Exists(escaped));
+            }
+            finally
+            {
+                if (File.Exists(src)) File.Delete(src);
+                if (File.Exists(escaped)) File.Delete(escaped);
+                if (Directory.Exists(destDir)) Directory.Delete(destDir, true);
+            }
+        }
+
+        [Fact]
         public async Task TestMergeFiles()
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
@@ -306,6 +336,30 @@ namespace ETL_SQL.Tests.Statements.Statements
             {
                 if (File.Exists(src1)) File.Delete(src1);
                 if (File.Exists(src2)) File.Delete(src2);
+                if (File.Exists(dst)) File.Delete(dst);
+            }
+        }
+
+        [Fact]
+        public async Task TestMergeFilesNoMatchesPreservesDestination()
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            string dst = "merge_preserve_dst.csv";
+            if (File.Exists(dst)) File.Delete(dst);
+
+            try
+            {
+                await File.WriteAllTextAsync(dst, "keep me");
+
+                await Assert.ThrowsAsync<ExecutionException>(async () =>
+                {
+                    await ExecuteAsync($"MERGE FILES 'merge_no_match_*.csv' TO '{dst}' WITH (HEADER = ON, OVERWRITE = ON);", evaluator);
+                });
+
+                Assert.Equal("keep me", await File.ReadAllTextAsync(dst));
+            }
+            finally
+            {
                 if (File.Exists(dst)) File.Delete(dst);
             }
         }
