@@ -244,6 +244,20 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     function render() {
         const graph = buildGraph();
         const { eNodes, eEdges } = toECharts(graph);
+
+        // Fit zoom: scale so all nodes are visible on first render regardless of graph size
+        let fitZoom = 0.65;
+        const positions = Object.values(graph.pos);
+        if (positions.length > 1) {
+            const xs = positions.map(p => p.x);
+            const ys = positions.map(p => p.y);
+            const dataW = Math.max(...xs) - Math.min(...xs) + 280;
+            const dataH = Math.max(...ys) - Math.min(...ys) + 120;
+            const cw = container.clientWidth  || 900;
+            const ch = container.clientHeight || 600;
+            fitZoom = Math.max(Math.min(cw / dataW, ch / dataH, 1.0), 0.15);
+        }
+
         chart.setOption({
             tooltip: { show: true, confine: true },
             series: [{
@@ -252,7 +266,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
                 nodes:          eNodes,
                 edges:          eEdges,
                 roam:           true,
-                zoom:           0.65,
+                zoom:           fitZoom,
                 center:         ['50%', '50%'],
                 edgeSymbol:     ['none', 'arrow'],
                 edgeSymbolSize: 8,

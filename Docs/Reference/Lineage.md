@@ -347,10 +347,25 @@ OpenLineage `.jsonl` files are importable into Marquez, DataHub, Apache Airflow 
 Configure automatic export on every script run in `appsettings.json`:
 ```json
 "Lineage": {
+  "Namespace": "etl-sql",
   "OpenLineageFile": "logs/lineage.jsonl",
-  "OpenLineageEndpoint": "http://localhost:5000/api/v1/lineage"
+  "OpenLineageEndpoint": "http://localhost:5000/api/v1/lineage",
+  "ImportCatalogMetadata": false
 }
 ```
+
+### Scripting Overrides
+
+You can dynamically adjust the namespace or catalog settings during a session:
+
+* **LINEAGE_NAMESPACE**: Override the namespace of the job for OpenLineage tracking.
+  ```sql
+  SET LINEAGE_NAMESPACE = 'marketing-pipeline';
+  ```
+* **LINEAGE_IMPORT_CATALOG**: Enable or disable dynamic extraction of schema metadata (comments, primary keys, nullability) from backend database catalog tables prior to exporting lineage data.
+  ```sql
+  SET LINEAGE_IMPORT_CATALOG = ON;
+  ```
 
 ---
 

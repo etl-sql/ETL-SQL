@@ -1468,7 +1468,7 @@ function renderDependencies(data, downstream = []) {
     const targetCell = esc(e.target);
     const roleCell   = e.targetColumn ? formatLineageRole(e.targetColumn) : '';
     const opCell     = esc(e.operation);
-    const xformCell  = formatTransformationKind(e.transformationKind, e.transformationExpression);
+    const xformCell  = formatTransformationKind(e.transformationKind, e.transformationExpression, e.functionsApplied);
     const srcCell    = formatSourcesWithColumns(e.sources, e.sourceColumns);
     const tagsCell   = formatTagBadges(e.tags, e.derivedFromDescriptions);
     return `<tr><td>${targetCell}</td><td>${roleCell}</td><td>${opCell}</td><td>${xformCell}</td><td>${srcCell}</td><td>${tagsCell}</td></tr>`;
@@ -1509,11 +1509,31 @@ const _XFORM_CLASSES = {
   Literal:         'badge-neutral',
 };
 
-function formatTransformationKind(kind, expr) {
+function formatTransformationKind(kind, expr, fns) {
   if (!kind || kind === 'PassThrough' || kind === 'Unknown') return '';
   const cls = _XFORM_CLASSES[kind] || 'badge-neutral';
   const title = expr ? ` title="${esc(expr)}"` : '';
-  return `<span class="badge ${cls}" style="font-size:.72em; cursor:default"${title}>${esc(kind)}</span>`;
+
+  let label = kind;
+  const fnList = Array.isArray(fns) ? fns : [];
+
+  if ((kind === 'Aggregation' || kind === 'FunctionCall') && fnList.length) {
+    // Show actual function names (e.g. "SUM", "COUNT", "UPPER()") instead of category
+    const names = fnList.slice(0, 3);
+    label = kind === 'FunctionCall'
+      ? (names.length === 1 ? `${names[0]}()` : names.join(' / '))
+      : names.join(' / ');
+  } else if (kind === 'Cast' && expr) {
+    // Extract the target type from CAST(x AS TYPE) or CONVERT(TYPE, x)
+    const asMatch  = expr.match(/\bAS\s+(\w+)/i);
+    const convMatch = expr.match(/^CONVERT\s*\(\s*(\w+)/i);
+    const target = asMatch?.[1] || convMatch?.[1];
+    if (target) label = `→ ${target}`;
+  } else if (kind === 'StringOperation' && fnList.length) {
+    label = fnList.slice(0, 2).join(' / ');
+  }
+
+  return `<span class="badge ${cls}" style="font-size:.72em; cursor:default"${title}>${esc(label)}</span>`;
 }
 
 function formatSourcesWithColumns(sources, sourceCols) {

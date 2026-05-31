@@ -1,4 +1,4 @@
-﻿# ETL-SQL Administrator's Guide
+# ETL-SQL Administrator's Guide
 
 This guide is for operators who install, configure, back up, and monitor ETL-SQL in production or shared test environments. For day-to-day portal administration, see [ReportPortal_Administrators_Guide.md](ReportPortal_Administrators_Guide.md). For command-line job operations, see [Orchestrators_Guide.md](Orchestrators_Guide.md).
 
@@ -246,6 +246,25 @@ Scripts can override some engine behavior, but administrators can set defaults i
   "TelemetryEnabled": true
 }
 ```
+
+### Lineage and OpenLineage Configuration
+
+Lineage tracking and automatic exports to OpenLineage endpoints or files can be configured in the `Lineage` block:
+
+```json
+"Lineage": {
+  "Namespace": "etl-sql",
+  "OpenLineageFile": "logs/lineage/openlineage.jsonl",
+  "OpenLineageEndpoint": "http://localhost:5000/api/v1/lineage",
+  "ImportCatalogMetadata": false
+}
+```
+
+* **Namespace**: The default namespace name representing the running job (defaults to `"etl-sql"`). Can be overridden ad-hoc in scripts using `SET LINEAGE_NAMESPACE = '...'`.
+* **OpenLineageFile**: Optional file path to append OpenLineage events to.
+* **OpenLineageEndpoint**: Optional HTTP endpoint to post OpenLineage events to.
+* **ImportCatalogMetadata**: Imports database comments, nullability, and primary key status dynamically from SQL Server, PostgreSQL, and MySQL catalog providers prior to exporting. Can be overridden ad-hoc in scripts using `SET LINEAGE_IMPORT_CATALOG = ON/OFF`.
+
 
 ### User Snippet Templates
 

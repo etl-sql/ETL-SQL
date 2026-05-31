@@ -585,6 +585,8 @@ Options configured via `SET <Option> = <Value>` or `SET <Option> ON|OFF`.
 | `NO_SAVE_CONNECTION` | Security | OFF | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
 | `CONNECTION_ENCRYPTION` | Security | OFF | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
 | `LINEAGE` | Data | ON | [LINEAGE.md](../src/ETL-SQL.Core/Resources/Help/Operations/LINEAGE.md) |
+| `LINEAGE_NAMESPACE` | Lineage | `'etl-sql'` | [LINEAGE.md](../src/ETL-SQL.Core/Resources/Help/Operations/LINEAGE.md) |
+| `LINEAGE_IMPORT_CATALOG` | Lineage | OFF | [LINEAGE.md](../src/ETL-SQL.Core/Resources/Help/Operations/LINEAGE.md) |
 | `TELEMETRY` | Metrics | ON | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
 | `BATCHSIZE` | Performance | 10,000 | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
 | `JOIN_SPILL_THRESHOLD` | Performance | 100,000 | [Options/INDEX.md](../src/ETL-SQL.Core/Resources/Help/Options/INDEX.md) |
@@ -1274,6 +1276,8 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `FOREACH_PAGE_SIZE` | Settings & Engine Configuration | Canonical language token |
 | `INTERACTIVE_MODE` | Settings & Engine Configuration | Canonical language token |
 | `JOIN_SPILL_THRESHOLD` | Settings & Engine Configuration | Canonical language token |
+| `LINEAGE_IMPORT_CATALOG` | Settings & Engine Configuration | Canonical language token |
+| `LINEAGE_NAMESPACE` | Settings & Engine Configuration | Canonical language token |
 | `LINT` | Settings & Engine Configuration | Canonical language token |
 | `MAX_FILE_OPERATIONS` | Settings & Engine Configuration | Canonical language token |
 | `MAX_GENERATE_ROWS` | Settings & Engine Configuration | Canonical language token |
@@ -1672,6 +1676,8 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `LIMIT_TYPE` | General | Canonical language token |
 | `LIMIT_VALUE` | General | Canonical language token |
 | `LINEAGE` | General | Canonical language token |
+| `LINEAGE_IMPORT_CATALOG` | General | Canonical language token |
+| `LINEAGE_NAMESPACE` | General | Canonical language token |
 | `LINEAGE_TAGS` | General | Canonical language token |
 | `LOAD` | General | Canonical language token |
 | `LOCAL` | General | Canonical language token |
