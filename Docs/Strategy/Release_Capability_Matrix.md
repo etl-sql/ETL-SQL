@@ -28,6 +28,7 @@ Status meanings:
 | Windowed latest-state publish | Green | Scenario proves `ROW_NUMBER`, `LAG`, and partition totals publish current state with deltas. | `tests/etl_scenarios/windowed_latest_state_publish` |
 | Set-operation reconciliation | Green | Scenario proves `EXCEPT`, `INTERSECT`, and `UNION ALL` materialize reconciliation outputs. | `tests/etl_scenarios/set_operations_reconcile_stage` |
 | MERGE upsert workflows | Green | Scenario proves staged rows update matched targets and insert unmatched targets. | `tests/etl_scenarios/merge_upsert_staged_changes` |
+| Hash-based change detection | Green | Scenario proves `CHECKSUM`-based deltas update changed rows, preserve unchanged rows, and insert new rows. | `tests/etl_scenarios/hash_change_detection_merge` |
 | Flat-file connector round trip | Green | Scenario proves file ingest, stage filtering, file export, and read-back verification. | `tests/etl_scenarios/file_connector_round_trip` |
 | Modular RUN SCRIPT orchestration | Green | Scenario proves parent scripts can run child scripts that share temp-table state across pipeline stages. | `tests/etl_scenarios/run_script_modular_pipeline` |
 | Static lineage with inherited tags | Green | Scenario proves source metadata survives a SELECT INTO transformation. | `tests/etl_scenarios/lineage_tags_survive_select_into` |

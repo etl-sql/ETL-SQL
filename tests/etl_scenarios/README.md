@@ -63,6 +63,7 @@ Prefer these tests for cross-feature claims such as:
 - file connector read/write round trips;
 - modular orchestration with `RUN SCRIPT`;
 - staged `MERGE` upsert workflows;
+- hash-based change detection before `MERGE`;
 - query-row `FOR @row IN (...)` iteration;
 - lineage, source-table, and tag propagation through multi-step publish flows;
 - `WHAT_IF` behavior around destructive DML and staged `MERGE`;
