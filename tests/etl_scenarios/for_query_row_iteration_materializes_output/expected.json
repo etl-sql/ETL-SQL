@@ -1,0 +1,11 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT Item, DoubledAmount FROM #ProcessedRows ORDER BY Item;",
+      "rows": [
+        { "Item": "alpha", "DoubledAmount": 4 },
+        { "Item": "beta", "DoubledAmount": 10 }
+      ]
+    }
+  ]
+}

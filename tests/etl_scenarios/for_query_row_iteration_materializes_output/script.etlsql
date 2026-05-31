@@ -1,0 +1,18 @@
+CREATE TABLE #InputRows (
+    Item VARCHAR(20),
+    Amount INT
+);
+
+CREATE TABLE #ProcessedRows (
+    Item VARCHAR(20),
+    DoubledAmount INT
+);
+
+INSERT INTO #InputRows (Item, Amount) VALUES ('alpha', 2);
+INSERT INTO #InputRows (Item, Amount) VALUES ('skip', -1);
+INSERT INTO #InputRows (Item, Amount) VALUES ('beta', 5);
+
+FOR @row IN (SELECT Item, Amount FROM #InputRows WHERE Amount > 0 ORDER BY Item)
+BEGIN
+    INSERT INTO #ProcessedRows (Item, DoubledAmount) VALUES (@row.Item, @row.Amount * 2);
+END;

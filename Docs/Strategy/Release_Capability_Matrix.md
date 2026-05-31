@@ -16,6 +16,7 @@ Status meanings:
 | ETL control flow loops | Green | At least one scenario proves loop output, plus focused statement tests. | `tests/etl_scenarios/loop_control_flow_materializes_expected_rows` |
 | Loop BREAK/CONTINUE control flow | Green | Scenario proves skipped iterations and early loop exit materialize the expected rows. | `tests/etl_scenarios/while_break_continue_filters_rows` |
 | FOREACH list iteration | Green | Scenario proves iteration output and aggregate totals. | `tests/etl_scenarios/foreach_list_aggregation` |
+| Query row iteration | Green | Scenario proves `FOR @row IN (SELECT...)` filters rows and materializes derived output. | `tests/etl_scenarios/for_query_row_iteration_materializes_output` |
 | TRY/CATCH recovery | Green | Scenario proves a recoverable failure is caught and execution continues. | `tests/etl_scenarios/try_catch_records_recoverable_error` |
 | Fatal error handling | Green | Scenario proves an uncaught error aborts the script with the expected sanitized message. | `tests/etl_scenarios/fatal_throw_aborts_script` |
 | Transaction rollback | Green | Scenario proves rollback reverts temp-table changes made inside a transaction. | `tests/etl_scenarios/transaction_rollback_reverts_temp_table_changes` |
