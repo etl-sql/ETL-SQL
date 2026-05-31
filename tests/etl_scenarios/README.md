@@ -35,9 +35,14 @@ Supported `expected.json` sections:
         { "C": 1 }
       ]
     }
-  ]
+  ],
+  "failure": {
+    "messageContains": "expected error text"
+  }
 }
 ```
+
+Use `failure` only for scenarios where the script is expected to abort. Runtime and lineage expectations are skipped for failure scenarios.
 
 Prefer these tests for cross-feature claims such as:
 
@@ -46,5 +51,6 @@ Prefer these tests for cross-feature claims such as:
 - `WHAT_IF` behavior around destructive DML;
 - loops that produce final tables;
 - `TRY...CATCH` error recovery behavior.
+- fatal error behavior outside recovery blocks.
 
 Use SQL Logic Tests for SQL compatibility claims. Use this scenario harness for ETL-SQL orchestration claims.

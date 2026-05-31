@@ -1,0 +1,10 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT ID, Label FROM #TransactionAudit ORDER BY ID;",
+      "rows": [
+        { "ID": 1, "Label": "before" }
+      ]
+    }
+  ]
+}

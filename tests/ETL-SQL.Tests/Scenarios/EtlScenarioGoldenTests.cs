@@ -9,6 +9,7 @@ using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Tests.Core;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,6 +42,12 @@ namespace ETL_SQL.Tests.Scenarios
             var script = TestHelpers.Parse(scriptText);
             Assert.Empty(script.Diagnostics.Select(d => d.Message));
 
+            if (expected.Failure != null)
+            {
+                await AssertExpectedFailure(script, expected.Failure);
+                return;
+            }
+
             if (expected.StaticLineage.Count > 0)
             {
                 AssertStaticLineage(script, expected);
@@ -49,6 +56,17 @@ namespace ETL_SQL.Tests.Scenarios
             if (expected.RuntimeQueries.Count > 0)
             {
                 await AssertRuntimeQueries(script, expected);
+            }
+        }
+
+        private static async Task AssertExpectedFailure(Script script, FailureExpectation expected)
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var exception = await Assert.ThrowsAsync<ExecutionException>(() => evaluator.Evaluate(script));
+
+            if (!string.IsNullOrWhiteSpace(expected.MessageContains))
+            {
+                Assert.Contains(expected.MessageContains, exception.Message, StringComparison.OrdinalIgnoreCase);
             }
         }
 
@@ -164,9 +182,15 @@ namespace ETL_SQL.Tests.Scenarios
 
         private sealed class ScenarioExpectation
         {
+            public FailureExpectation? Failure { get; set; }
             public List<SeedLineageExpectation> SeedLineage { get; set; } = new();
             public List<LineageExpectation> StaticLineage { get; set; } = new();
             public List<RuntimeQueryExpectation> RuntimeQueries { get; set; } = new();
+        }
+
+        private sealed class FailureExpectation
+        {
+            public string? MessageContains { get; set; }
         }
 
         private sealed class SeedLineageExpectation

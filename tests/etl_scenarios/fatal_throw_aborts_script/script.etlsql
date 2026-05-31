@@ -1,0 +1,4 @@
+CREATE TABLE #FatalAudit (StepName VARCHAR(30));
+INSERT INTO #FatalAudit (StepName) VALUES ('before_throw');
+THROW 'fatal scenario failure';
+INSERT INTO #FatalAudit (StepName) VALUES ('after_throw');

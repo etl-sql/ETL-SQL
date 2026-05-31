@@ -1,0 +1,5 @@
+{
+  "failure": {
+    "messageContains": "fatal scenario failure"
+  }
+}
