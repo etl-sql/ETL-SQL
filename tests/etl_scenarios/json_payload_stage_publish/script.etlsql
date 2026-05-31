@@ -1,0 +1,26 @@
+CREATE TABLE #RawPayloads (
+    PayloadId INT,
+    Payload VARCHAR(400)
+);
+
+INSERT INTO #RawPayloads (PayloadId, Payload) VALUES (1, '{"order":{"id":"A100","region":"North","total":"25.50"}}');
+INSERT INTO #RawPayloads (PayloadId, Payload) VALUES (2, '{"order":{"id":"A101","region":"South","total":"N/A"}}');
+INSERT INTO #RawPayloads (PayloadId, Payload) VALUES (3, '{"order":{"id":"A102","region":"North","total":"40.00"}}');
+
+SELECT
+    PayloadId,
+    JSON_VALUE(Payload, '$.order.id') AS OrderId,
+    JSON_VALUE(Payload, '$.order.region') AS Region,
+    TRY_CAST(JSON_VALUE(Payload, '$.order.total') AS DECIMAL) AS TotalAmount
+INTO #ParsedOrders
+FROM #RawPayloads
+WHERE JSON_EXISTS(Payload, '$.order.id')
+  AND TRY_CAST(JSON_VALUE(Payload, '$.order.total') AS DECIMAL) IS NOT NULL;
+
+SELECT
+    Region,
+    COUNT(*) AS OrderCount,
+    SUM(TotalAmount) AS RegionTotal
+INTO #JsonOrderSummary
+FROM #ParsedOrders
+GROUP BY Region;
