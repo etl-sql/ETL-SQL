@@ -32,6 +32,62 @@
   --portal-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+body.theme-dark {
+  --portal-bg: #0b0f19;
+  --portal-bg-soft: #111827;
+  --portal-surface: #1f2937;
+  --portal-surface-subtle: #111827;
+  --portal-surface-raised: #1f2937;
+  --portal-text: #f9fafb;
+  --portal-text-soft: #d1d5db;
+  --portal-muted: #9ca3af;
+  --portal-border: #374151;
+  --portal-border-soft: #1f2937;
+  --portal-accent: #3b82f6;
+  --portal-accent-hover: #60a5fa;
+  --portal-accent-soft: rgba(59, 130, 246, 0.15);
+  --portal-success: #34d399;
+  --portal-success-soft: rgba(52, 211, 153, 0.15);
+  --portal-warning: #fbbf24;
+  --portal-warning-soft: rgba(251, 191, 36, 0.15);
+  --portal-danger: #f87171;
+  --portal-danger-hover: #fca5a5;
+  --portal-danger-soft: rgba(248, 113, 113, 0.15);
+  --portal-focus-ring: #60a5fa;
+  --portal-focus: rgba(96, 165, 250, .36);
+  --portal-shadow-sm: 0 1px 2px rgba(0, 0, 0, .3);
+  --portal-shadow-md: 0 14px 30px rgba(0, 0, 0, .5);
+  --portal-topbar: #030712;
+  --portal-topbar-muted: #9ca3af;
+  --portal-topbar-active: rgba(255, 255, 255, .08);
+}
+
+body.theme-dark .login-wrap {
+  background: linear-gradient(180deg, #0b0f19 0%, #111827 100%);
+}
+
+.mobile-menu-btn {
+  display: none;
+}
+
+.theme-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--portal-topbar-muted);
+  font-size: 1.15em;
+  cursor: pointer;
+  padding: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color .15s;
+  margin: 0 4px;
+}
+
+.theme-toggle-btn:hover {
+  color: #fff;
+}
+
 /* ── Reset & base ──────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; font-family: var(--portal-font);
@@ -519,10 +575,28 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 @media (max-width: 768px) {
   .app-shell { grid-template-rows: auto 1fr; }
-  .topbar { min-height: 52px; flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
-  .topbar-brand { flex: 1 1 100%; }
-  .topbar-user { max-width: 150px; }
-  .sidebar { display: none; }
+  .topbar { min-height: 52px; flex-wrap: nowrap; gap: 8px; padding: 10px 12px; align-items: center; }
+  .topbar-brand { flex: initial; }
+  .topbar-user { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-menu-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: none; color: #fff; font-size: 1.3em;
+    cursor: pointer; padding: 4px 8px; margin-right: 4px;
+  }
+  .sidebar {
+    display: flex !important;
+    position: fixed;
+    top: 52px;
+    left: 0;
+    bottom: 0;
+    z-index: 500;
+    transform: translateX(-100%);
+    transition: transform .2s ease-in-out;
+    box-shadow: 4px 0 15px rgba(0,0,0,0.15);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
   .main-content { padding: 16px; }
   .card { padding: 16px; }
   .card-header, .viewer-commandbar, .admin-page-header { align-items: stretch; flex-direction: column; }

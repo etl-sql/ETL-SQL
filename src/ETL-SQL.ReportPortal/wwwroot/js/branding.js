@@ -42,3 +42,48 @@ function firstValue(obj, key) {
   const lower = key.charAt(0).toLowerCase() + key.slice(1);
   return obj[key] || obj[lower] || '';
 }
+
+export function initTheme() {
+  const currentTheme = localStorage.getItem('portal-theme') || 'light';
+  if (currentTheme === 'dark') {
+    document.body.classList.add('theme-dark');
+  } else {
+    document.body.classList.remove('theme-dark');
+  }
+
+  // Bind the theme toggle button if it exists
+  const toggleBtn = document.getElementById('themeToggleBtn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const isDark = document.body.classList.toggle('theme-dark');
+      const nextTheme = isDark ? 'dark' : 'light';
+      localStorage.setItem('portal-theme', nextTheme);
+      
+      // If we are on index.html with a report loaded in iframe, notify it!
+      const iframe = document.querySelector('.report-viewer iframe');
+      if (iframe && iframe.contentDocument) {
+        if (isDark) {
+          iframe.contentDocument.body.classList.add('theme-dark');
+        } else {
+          iframe.contentDocument.body.classList.remove('theme-dark');
+        }
+      }
+    });
+  }
+
+  // Bind the mobile menu toggle button if it exists
+  const menuBtn = document.getElementById('mobileMenuBtn');
+  const sidebar = document.getElementById('sidebar');
+  if (menuBtn && sidebar) {
+    menuBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      sidebar.classList.toggle('open');
+    });
+    // Click outside mobile menu closes it
+    document.addEventListener('click', e => {
+      if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== menuBtn) {
+        sidebar.classList.remove('open');
+      }
+    });
+  }
+}

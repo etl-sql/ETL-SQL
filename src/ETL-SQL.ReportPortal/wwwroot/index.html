@@ -11,6 +11,7 @@
 
   <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
   <header class="topbar">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle navigation menu">☰</button>
     <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
     <nav class="topbar-nav">
       <a href="/index.html" class="active" id="navReports">Reports</a>
@@ -21,6 +22,7 @@
     </nav>
     <span class="topbar-spacer"></span>
     <span class="topbar-user" id="topbarUser"></span>
+    <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" type="button">🌓</button>
     <button class="topbar-btn" id="logoutBtn">Sign Out</button>
   </header>
 
@@ -248,11 +250,12 @@
 <script src="/js/echarts.min.js"></script>
 <script type="module">
 import { auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
-import { applyPortalBranding } from '/js/branding.js';
+import { applyPortalBranding, initTheme } from '/js/branding.js';
 import { renderDag } from '/designer/designer.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
+initTheme();
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 let currentFolderId   = null;
@@ -1355,6 +1358,7 @@ function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
   const token = auth.getToken() || '';
   const initialPageJs = initialPage
     ? `window.__INITIAL_PAGE__ = ${JSON.stringify(initialPage)};` : '';
+  const isDark = document.body.classList.contains('theme-dark') ? 'true' : 'false';
   return `<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
@@ -1375,10 +1379,15 @@ function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
     return _f(input, init);
   };
 <\/script>
-</head><body style="margin:0">
+</head><body style="margin:0" class="${isDark === 'true' ? 'theme-dark' : ''}">
 <div id="root"></div>
 <script src="/js/echarts.min.js"><\/script>
 <script src="/js/report-runtime.js?v=${Date.now()}"><\/script>
+<script>
+  if (${isDark} || (window.parent && window.parent.document.body.classList.contains('theme-dark'))) {
+    document.body.classList.add('theme-dark');
+  }
+<\/script>
 </body></html>`;
 }
 

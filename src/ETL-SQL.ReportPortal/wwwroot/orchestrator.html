@@ -89,6 +89,7 @@
     </nav>
     <span class="topbar-spacer"></span>
     <span class="topbar-user" id="topbarUser"></span>
+    <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" type="button">🌓</button>
     <button class="topbar-btn" id="logoutBtn">Sign Out</button>
   </header>
 
@@ -298,12 +299,13 @@
 <script src="/js/echarts.min.js"></script>
 <script type="module">
 import { auth, authApi } from '/js/api.js';
-import { applyPortalBranding } from '/js/branding.js';
+import { applyPortalBranding, initTheme } from '/js/branding.js';
 import { renderDag, createScriptEditor } from '/designer/designer.js';
 
 // ── Auth guard ─────────────────────────────────────────────────────────────────
 if (!auth.isLoggedIn()) window.location.href = '/login.html';
 applyPortalBranding();
+initTheme();
 
 let isAdmin = false;
 try {
