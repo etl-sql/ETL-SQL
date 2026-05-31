@@ -555,10 +555,13 @@ public class ReportsController : ControllerBase
                 if (node.Type != "table" && node.Type != "dataset") continue;
 
                 var nodeEntries = allLineage
-                    .Where(e => e.TargetColumn != null &&
+                    .Where(e => e.TargetColumn != null && e.TargetColumn != "*" &&
                                 e.TargetTable.Equals(node.Label, StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
+                // A bare SELECT * yields only a "*" column with no real lineage —
+                // leave the node empty so the dataset bridge can fill it with the
+                // upstream dataset's actual columns (pass-through).
                 if (nodeEntries.Count == 0) continue;
 
                 var columns = nodeEntries
