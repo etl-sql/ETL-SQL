@@ -43,8 +43,8 @@
     flex-wrap: wrap !important;
     gap: 10px !important;
     padding: 8px 10px !important;
-    border-bottom: 1px solid var(--portal-border, #1e293b) !important;
-    background: var(--portal-surface, #0f172a) !important;
+    border-bottom: 1px solid var(--portal-border, #d9e0ea) !important;
+    background: var(--portal-surface, #ffffff) !important;
 }
 
 .etlsql-dag-chips {
@@ -61,25 +61,27 @@
     align-items: center !important;
     gap: 6px !important;
     padding: 4px 10px !important;
-    border: 1px solid var(--portal-border, #334155) !important;
+    border: 1px solid var(--portal-border-soft, #e8edf4) !important;
     border-radius: 999px !important;
-    background: var(--portal-surface-subtle, #1e293b) !important;
-    color: var(--portal-text, #e2e8f0) !important;
+    background: var(--portal-surface-subtle, #f8fafc) !important;
+    color: var(--portal-text-soft, #46556c) !important;
     font: inherit !important;
-    font-size: 0.76rem !important;
-    line-height: 1.2 !important;
+    font-size: 0.74rem !important;
+    font-weight: 600 !important;
     cursor: pointer !important;
     user-select: none !important;
-    transition: opacity 0.12s ease, border-color 0.12s ease !important;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
 }
 
 .etlsql-dag-chip:hover {
-    border-color: var(--portal-accent, #64748b);
+    border-color: var(--portal-accent, #2563eb) !important;
+    color: var(--portal-accent, #2563eb) !important;
+    background: var(--portal-accent-soft, #e8f0ff) !important;
 }
 
 .etlsql-dag-chip-dot {
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     flex: 0 0 auto;
 }
@@ -91,7 +93,7 @@
 }
 
 .etlsql-dag-chip.is-off .etlsql-dag-chip-dot {
-    background: var(--portal-muted, #64748b) !important;
+    background: var(--portal-muted, #5a6778) !important;
 }
 
 /* Action buttons (collapse/expand pages) sit between the chips and the badge. */
@@ -102,200 +104,209 @@
 }
 
 .etlsql-dag-btn {
-    padding: 4px 10px;
-    border: 1px solid var(--portal-border, #334155);
-    border-radius: 6px;
-    background: var(--portal-surface-subtle, #1e293b);
-    color: var(--portal-text, #e2e8f0);
-    font: inherit;
-    font-size: 0.76rem;
-    line-height: 1.2;
-    cursor: pointer;
-    white-space: nowrap;
+    padding: 4px 10px !important;
+    border: 1px solid var(--portal-border, #d9e0ea) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    background: var(--portal-surface, #ffffff) !important;
+    color: var(--portal-text-soft, #46556c) !important;
+    font: inherit !important;
+    font-size: 0.76rem !important;
+    font-weight: 500 !important;
+    line-height: 1.2 !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
 }
 
 .etlsql-dag-btn:hover {
-    border-color: var(--portal-accent, #64748b);
+    border-color: var(--portal-accent, #2563eb) !important;
+    color: var(--portal-accent, #2563eb) !important;
+    background: var(--portal-surface-subtle, #f8fafc) !important;
 }
 
 /* Focus-mode badge — shown in the toolbar while a node's lineage is isolated. */
 .etlsql-dag-focusbadge {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 50%;
-    padding: 5px 10px;
-    border: 1px solid var(--portal-border, #334155);
-    border-radius: 999px;
-    background: var(--portal-surface-subtle, #111827);
-    color: var(--portal-muted, #94a3b8);
-    font-size: 0.78rem;
-    line-height: 1.2;
-    cursor: pointer;
-    user-select: none;
+    margin-left: auto !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    max-width: 50% !important;
+    padding: 4px 10px !important;
+    border: 1px solid var(--portal-border, #d9e0ea) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    background: var(--portal-surface-subtle, #f8fafc) !important;
+    color: var(--portal-text-soft, #46556c) !important;
+    font-size: 0.78rem !important;
+    line-height: 1.2 !important;
+    cursor: pointer !important;
+    user-select: none !important;
+    transition: border-color 0.15s ease, color 0.15s ease !important;
 }
 
 .etlsql-dag-focusbadge strong {
-    color: var(--portal-text, #e2e8f0);
+    color: var(--portal-text, #172033) !important;
     max-width: 260px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-weight: 600 !important;
 }
 
 .etlsql-dag-focusbadge-x {
-    color: #f87171;
+    color: var(--portal-danger, #b83535) !important;
     font-weight: 600;
     white-space: nowrap;
 }
 
 /* Solo badge — same shape as the focus badge, purple accent (page drill-in). */
 .etlsql-dag-solobadge {
-    border-color: #8b5cf6;
+    border-color: var(--portal-accent, #2563eb) !important;
+    background: var(--portal-accent-soft, #e8f0ff) !important;
 }
 
 .etlsql-dag-solobadge strong {
-    color: #c4b5fd;
+    color: var(--portal-accent, #2563eb) !important;
 }
 
 .etlsql-dag-focusbadge:hover {
-    border-color: #f87171;
+    border-color: var(--portal-danger, #b83535) !important;
+    color: var(--portal-danger, #b83535) !important;
 }
 
 /* Search box in the toolbar. */
 .etlsql-dag-search {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex: 0 0 auto;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex: 0 0 auto !important;
 }
 
 .etlsql-dag-search input {
-    width: 130px;
-    padding: 4px 8px;
-    border: 1px solid var(--portal-border, #334155);
-    border-radius: 6px;
-    background: var(--portal-surface-subtle, #1e293b);
-    color: var(--portal-text, #e2e8f0);
-    font: inherit;
-    font-size: 0.76rem;
+    width: 140px !important;
+    padding: 4px 8px !important;
+    border: 1px solid var(--portal-border, #d9e0ea) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    background: var(--portal-surface, #ffffff) !important;
+    color: var(--portal-text, #172033) !important;
+    font: inherit !important;
+    font-size: 0.76rem !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
 }
 
 .etlsql-dag-search input:focus {
-    outline: none;
-    border-color: var(--portal-accent, #3b82f6);
+    outline: none !important;
+    border-color: var(--portal-accent, #2563eb) !important;
+    box-shadow: 0 0 0 3px var(--portal-focus, rgba(37, 99, 235, 0.18)) !important;
 }
 
 .etlsql-dag-search-count {
     min-width: 28px;
-    color: var(--portal-muted, #94a3b8);
+    color: var(--portal-muted, #5a6778);
     font-size: 0.72rem;
     white-space: nowrap;
 }
 
 .etlsql-dag-search-count.is-empty {
-    color: #f87171;
+    color: var(--portal-danger, #b83535);
 }
 
 /* Minimap Wrapper */
 .etlsql-dag-minimap-wrapper {
-    position: absolute;
-    right: 56px;
-    bottom: 12px;
-    z-index: 4;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
-    transition: all 0.2s ease;
+    position: absolute !important;
+    right: 56px !important;
+    bottom: 12px !important;
+    z-index: 4 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    gap: 4px !important;
+    transition: all 0.2s ease !important;
 }
 
 /* Minimap Toggle Button */
 .etlsql-dag-minimap-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--portal-border, #374151);
-    border-radius: 6px;
-    background: var(--portal-surface-subtle, #1e293b);
-    color: var(--portal-text, #e2e8f0);
-    cursor: pointer;
-    font-size: 1rem;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-    transition: background-color 0.15s, border-color 0.15s;
-    user-select: none;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    border: 1px solid var(--portal-border, #d9e0ea) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    background: var(--portal-surface, #ffffff) !important;
+    color: var(--portal-text-soft, #46556c) !important;
+    cursor: pointer !important;
+    font-size: 1rem !important;
+    box-shadow: var(--portal-shadow-sm, 0 2px 8px rgba(0,0,0,0.1)) !important;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+    user-select: none !important;
 }
 
 .etlsql-dag-minimap-toggle:hover {
-    background: var(--portal-bg, #f3f5f8);
-    border-color: var(--portal-border, #d9e0ea);
-    color: var(--portal-text, #172033);
+    background: var(--portal-surface-subtle, #f8fafc) !important;
+    border-color: var(--portal-border, #d9e0ea) !important;
+    color: var(--portal-accent, #2563eb) !important;
 }
 
 /* Minimap Canvas inside wrapper */
 .etlsql-dag-minimap {
-    border: 1px solid var(--portal-border, #374151);
-    border-radius: 6px;
-    background: rgba(15, 23, 42, 0.9);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-    cursor: pointer;
-    transition: opacity 0.2s ease, transform 0.2s ease;
-    opacity: 1;
-    transform: scale(1);
-    transform-origin: bottom right;
+    border: 1px solid var(--portal-border, #d9e0ea) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    background: rgba(15, 23, 42, 0.9) !important;
+    box-shadow: var(--portal-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15)) !important;
+    cursor: pointer !important;
+    transition: opacity 0.2s ease, transform 0.2s ease !important;
+    opacity: 1 !important;
+    transform: scale(1) !important;
+    transform-origin: bottom right !important;
 }
 
 /* Minimized State */
 .etlsql-dag-minimap-wrapper.is-minimized .etlsql-dag-minimap {
-    opacity: 0;
-    transform: scale(0);
-    pointer-events: none;
-    position: absolute;
-    bottom: 32px;
-    right: 0;
+    opacity: 0 !important;
+    transform: scale(0) !important;
+    pointer-events: none !important;
+    position: absolute !important;
+    bottom: 32px !important;
+    right: 0 !important;
 }
 
 /* Floating Zoom Controls */
 .etlsql-dag-zoom-controls {
-    position: absolute;
-    right: 12px;
-    bottom: 12px;
-    z-index: 5;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    background: var(--portal-surface-subtle, #1e293b);
-    border: 1px solid var(--portal-border, #334155);
-    border-radius: 6px;
-    padding: 4px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    position: absolute !important;
+    right: 12px !important;
+    bottom: 12px !important;
+    z-index: 5 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    background: var(--portal-surface, #ffffff) !important;
+    border: 1px solid var(--portal-border, #d9e0ea) !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    padding: 4px !important;
+    box-shadow: var(--portal-shadow-sm, 0 2px 8px rgba(0,0,0,0.1)) !important;
 }
 
 .etlsql-dag-zoom-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    background: transparent;
-    color: var(--portal-text, #e2e8f0);
-    font-size: 1.1em;
-    font-weight: 600;
-    cursor: pointer;
-    user-select: none;
-    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
-    line-height: 1;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    border: 1px solid transparent !important;
+    border-radius: var(--portal-radius-sm, 5px) !important;
+    background: transparent !important;
+    color: var(--portal-text-soft, #46556c) !important;
+    font-size: 1.1em !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    user-select: none !important;
+    transition: background-color 0.15s ease, color 0.15s ease !important;
+    line-height: 1 !important;
 }
 
 .etlsql-dag-zoom-btn:hover {
-    background: var(--portal-bg, #f3f5f8);
-    border-color: var(--portal-border, #d9e0ea);
-    color: var(--portal-text, #172033);
+    background: var(--portal-surface-subtle, #f8fafc) !important;
+    color: var(--portal-accent, #2563eb) !important;
 }
 
 /* Body row: canvas fills, detail panel docks on the right. */
