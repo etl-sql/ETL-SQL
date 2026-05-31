@@ -25,6 +25,7 @@ Status meanings:
 | Staged ETL quality gates | Green | Scenario proves raw rows are filtered into a valid stage and aggregated publish table. | `tests/etl_scenarios/staged_etl_quality_gate` |
 | Staged data cleansing | Green | Scenario proves string normalization, regex validation, and safe casts filter messy source rows. | `tests/etl_scenarios/staged_data_cleansing_functions` |
 | JSON payload staging | Green | Scenario proves JSON scalar extraction, safe-cast filtering, and aggregate publish output. | `tests/etl_scenarios/json_payload_stage_publish` |
+| CTE join enrichment publish | Green | Scenario proves chained CTEs, LEFT JOIN reference enrichment, CASE classification, and fallback values publish aggregate output. | `tests/etl_scenarios/cte_join_enrichment_publish` |
 | DML audit capture | Green | Scenario proves UPDATE/DELETE `OUTPUT ... INTO` writes audit rows while base tables change correctly. | `tests/etl_scenarios/dml_output_audit_trail` |
 | Windowed latest-state publish | Green | Scenario proves `ROW_NUMBER`, `LAG`, and partition totals publish current state with deltas. | `tests/etl_scenarios/windowed_latest_state_publish` |
 | Set-operation reconciliation | Green | Scenario proves `EXCEPT`, `INTERSECT`, and `UNION ALL` materialize reconciliation outputs. | `tests/etl_scenarios/set_operations_reconcile_stage` |

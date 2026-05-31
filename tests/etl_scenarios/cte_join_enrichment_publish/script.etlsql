@@ -1,0 +1,53 @@
+CREATE TABLE #Orders (
+    OrderId INT,
+    CustomerId INT,
+    Amount DECIMAL,
+    Status VARCHAR(20)
+);
+
+CREATE TABLE #Customers (
+    CustomerId INT,
+    Region VARCHAR(20),
+    Segment VARCHAR(20)
+);
+
+INSERT INTO #Orders (OrderId, CustomerId, Amount, Status) VALUES (1, 100, 125.50, 'Complete');
+INSERT INTO #Orders (OrderId, CustomerId, Amount, Status) VALUES (2, 100, 50.00, 'Pending');
+INSERT INTO #Orders (OrderId, CustomerId, Amount, Status) VALUES (3, 200, 275.00, 'Complete');
+INSERT INTO #Orders (OrderId, CustomerId, Amount, Status) VALUES (4, 300, 90.00, 'Complete');
+
+INSERT INTO #Customers (CustomerId, Region, Segment) VALUES (100, 'North', 'Retail');
+INSERT INTO #Customers (CustomerId, Region, Segment) VALUES (200, 'South', 'Enterprise');
+
+WITH CompleteOrders AS (
+    SELECT
+        OrderId,
+        CustomerId,
+        Amount
+    FROM #Orders
+    WHERE Status = 'Complete'
+),
+EnrichedOrders AS (
+    SELECT
+        o.OrderId,
+        o.CustomerId,
+        COALESCE(c.Region, 'Unassigned') AS Region,
+        COALESCE(c.Segment, 'Unknown') AS Segment,
+        o.Amount,
+        CASE
+            WHEN c.CustomerId IS NULL THEN 'NeedsReferenceData'
+            WHEN o.Amount >= 200 THEN 'HighValue'
+            ELSE 'Standard'
+        END AS ReviewClass
+    FROM CompleteOrders o
+    LEFT JOIN #Customers c ON o.CustomerId = c.CustomerId
+)
+SELECT
+    Region,
+    Segment,
+    ReviewClass,
+    COUNT(*) AS OrderCount,
+    SUM(Amount) AS TotalAmount
+INTO #EnrichedPublish
+FROM EnrichedOrders
+GROUP BY Region, Segment, ReviewClass;

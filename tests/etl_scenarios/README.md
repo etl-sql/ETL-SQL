@@ -57,6 +57,7 @@ Prefer these tests for cross-feature claims such as:
 - staged ingest-transform-publish flows;
 - staged data cleansing with string, regex, and safe-cast functions;
 - semi-structured JSON payload extraction and publish flows;
+- CTE-based reference enrichment with joins, fallback values, and classifications;
 - DML audit capture with `OUTPUT ... INTO`;
 - windowed latest-state publish flows;
 - set-operation reconciliation with `UNION ALL`, `EXCEPT`, and `INTERSECT`;
