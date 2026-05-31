@@ -20,6 +20,12 @@
     .\scripts\Test-PreRelease.ps1 -IncludeDockerIntegration -IncludeStandardScale
 
 .EXAMPLE
+    .\scripts\Test-PreRelease.ps1 -Quick -IncludeSlt
+
+.EXAMPLE
+    .\scripts\Test-PreRelease.ps1 -Explain -IncludeSlt -IncludeDockerIntegration
+
+.EXAMPLE
     .\scripts\Test-PreRelease.ps1 -BuildInstallers -Platforms win-x64
 #>
 [CmdletBinding()]
@@ -32,8 +38,11 @@ param(
     [switch]$SkipNode,
     [switch]$SkipScale,
     [switch]$IncludeDockerIntegration,
+    [switch]$IncludeSlt,
     [switch]$IncludeStandardScale,
     [switch]$BuildInstallers,
+    [switch]$Quick,
+    [switch]$Explain,
 
     [string[]]$Platforms = @("win-x64"),
 
@@ -51,6 +60,12 @@ $RunDir = Join-Path $ValidationRoot $RunId
 $ReportJsonPath = Join-Path $RunDir "pre-release-report.json"
 $ReportMarkdownPath = Join-Path $RunDir "pre-release-report.md"
 
+$EffectiveSkipNode = $SkipNode -or $Quick
+$EffectiveSkipScale = $SkipScale -or $Quick
+$EffectiveIncludeDockerIntegration = $IncludeDockerIntegration -and -not $Quick
+$EffectiveIncludeStandardScale = $IncludeStandardScale -and -not $Quick
+$EffectiveBuildInstallers = $BuildInstallers -and -not $Quick
+
 function Get-PowerShellExecutable {
     $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
     if ($pwsh) {
@@ -66,6 +81,68 @@ function Get-PowerShellExecutable {
 }
 
 $PowerShellExe = Get-PowerShellExecutable
+
+function Get-PlannedPreReleasePhases {
+    $phases = New-Object System.Collections.Generic.List[object]
+
+    $phases.Add([ordered]@{ Phase = "Asset drift check"; Command = "node .\scripts\sync-assets.js -Check"; Reason = "Shared report runtime files must match generated host copies." })
+    $phases.Add([ordered]@{ Phase = "Dotnet restore"; Command = "dotnet restore ETL-SQL.slnx"; Reason = "Package graph resolves before build and tests." })
+    $phases.Add([ordered]@{ Phase = "NuGet dependency audit"; Command = "dotnet list package --outdated/--deprecated/--vulnerable"; Reason = "Release should not ship known vulnerable or deprecated packages." })
+    $phases.Add([ordered]@{ Phase = "Dotnet build"; Command = "dotnet build ETL-SQL.slnx --configuration $Configuration --no-restore"; Reason = "All projects compile in the release configuration." })
+    $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
+    $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Default local correctness lane across engine, language server, and portal." })
+    $phases.Add([ordered]@{ Phase = "Sample scripts"; Command = ".\scripts\Test-AllSamples.ps1"; Reason = "Published samples remain runnable." })
+
+    if ($IncludeSlt) {
+        $phases.Add([ordered]@{ Phase = "SLT lane"; Command = ".\scripts\test-lane.ps1 -Lane slt"; Reason = "SQL logic corpus checks parser/evaluator compatibility." })
+    }
+
+    if (-not $EffectiveSkipNode) {
+        $phases.Add([ordered]@{ Phase = "VS Code npm ci"; Command = "npm ci"; Reason = "Extension dependencies install from lockfile." })
+        $phases.Add([ordered]@{ Phase = "VS Code npm audit"; Command = "npm outdated / npm audit"; Reason = "Extension dependency risk is visible before release." })
+        $phases.Add([ordered]@{ Phase = "VS Code compile"; Command = "npm run compile"; Reason = "TypeScript extension compiles." })
+        $phases.Add([ordered]@{ Phase = "VS Code unit tests"; Command = "npm run test:unit"; Reason = "Extension unit tests pass." })
+    }
+
+    if (-not $EffectiveSkipScale) {
+        $phases.Add([ordered]@{ Phase = "Scale certification smoke"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke"; Reason = "Small certification workload still meets baseline." })
+        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (smoke)"; Command = ".\scripts\Compare-CertBaseline.ps1"; Reason = "Smoke certification metrics have not regressed." })
+    }
+
+    if ($EffectiveIncludeDockerIntegration) {
+        $phases.Add([ordered]@{ Phase = "Docker integration lane"; Command = ".\scripts\test-lane.ps1 -Lane integration"; Reason = "External connector boundaries pass against local containers." })
+    }
+
+    if ($EffectiveIncludeStandardScale) {
+        $phases.Add([ordered]@{ Phase = "Scale certification standard"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Standard"; Reason = "Release-size certification workload still meets baseline." })
+        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (standard)"; Command = ".\scripts\Compare-CertBaseline.ps1"; Reason = "Standard certification metrics have not regressed." })
+    }
+
+    if ($EffectiveBuildInstallers) {
+        $phases.Add([ordered]@{ Phase = "Release publish artifacts"; Command = ".\scripts\publish_release.ps1"; Reason = "Release binaries can be published for target platforms." })
+        if ($Platforms -contains "win-x64") {
+            $phases.Add([ordered]@{ Phase = "Windows MSI"; Command = ".\scripts\build_msi.ps1"; Reason = "Windows installer can be built." })
+        }
+    }
+
+    return $phases
+}
+
+function Show-PreReleasePlan {
+    Write-Host "Pre-release validation plan" -ForegroundColor Cyan
+    Write-Host ("Configuration: {0}" -f $Configuration)
+    Write-Host ("Quick: {0}; IncludeSlt: {1}; Docker: {2}; StandardScale: {3}; BuildInstallers: {4}" -f `
+        [bool]$Quick, [bool]$IncludeSlt, [bool]$EffectiveIncludeDockerIntegration, [bool]$EffectiveIncludeStandardScale, [bool]$EffectiveBuildInstallers)
+    Write-Host ""
+
+    $index = 1
+    foreach ($phase in Get-PlannedPreReleasePhases) {
+        Write-Host ("{0,2}. {1}" -f $index, $phase.Phase) -ForegroundColor White
+        Write-Host ("    {0}" -f $phase.Command) -ForegroundColor DarkGray
+        Write-Host ("    {0}" -f $phase.Reason)
+        $index++
+    }
+}
 
 function New-Sha256 {
     param([string]$Text)
@@ -610,6 +687,11 @@ function Write-Reports {
     $lines | Set-Content -Path $ReportMarkdownPath -Encoding UTF8
 }
 
+if ($Explain) {
+    Show-PreReleasePlan
+    exit 0
+}
+
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 
 $startedAt = Get-Date
@@ -716,7 +798,14 @@ try {
         { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-AllSamples.ps1" } `
         $previousPhaseMap $fingerprint $results
 
-    if (-not $SkipNode) {
+    if ($IncludeSlt) {
+        Invoke-LoggedPhase "SLT lane" `
+            ".\scripts\test-lane.ps1 -Lane slt -Configuration $Configuration -NoRestore -NoBuild" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "slt" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
+            $previousPhaseMap $fingerprint $results
+    }
+
+    if (-not $EffectiveSkipNode) {
         Invoke-LoggedPhase "VS Code npm ci" `
             "npm ci (src\etl-sql-vscode)" `
             { Push-Location "src\etl-sql-vscode"; try { & npm ci } finally { Pop-Location } } `
@@ -775,7 +864,7 @@ try {
             $previousPhaseMap $fingerprint $results
     }
 
-    if (-not $SkipScale) {
+    if (-not $EffectiveSkipScale) {
         Invoke-LoggedPhase "Scale certification smoke" `
             ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke" `
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Smoke" } `
@@ -787,14 +876,14 @@ try {
             $previousPhaseMap $fingerprint $results
     }
 
-    if ($IncludeDockerIntegration) {
+    if ($EffectiveIncludeDockerIntegration) {
         Invoke-LoggedPhase "Docker integration lane" `
             ".\scripts\test-lane.ps1 -Lane integration -Configuration $Configuration -NoRestore -NoBuild" `
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "integration" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
             $previousPhaseMap $fingerprint $results
     }
 
-    if ($IncludeStandardScale) {
+    if ($EffectiveIncludeStandardScale) {
         Invoke-LoggedPhase "Scale certification standard" `
             ".\scripts\Test-ScaleCertification.ps1 -Tier Standard" `
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Standard" } `
@@ -806,7 +895,7 @@ try {
             $previousPhaseMap $fingerprint $results
     }
 
-    if ($BuildInstallers) {
+    if ($EffectiveBuildInstallers) {
         $platformText = $Platforms -join ","
         Invoke-LoggedPhase "Release publish artifacts" `
             ".\scripts\publish_release.ps1 -Platforms $platformText" `

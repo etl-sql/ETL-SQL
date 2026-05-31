@@ -1,0 +1,42 @@
+{
+  "seedLineage": [
+    {
+      "table": "#StagedCustomer",
+      "column": "CustomerId",
+      "metadata": {
+        "source_system": "crm"
+      }
+    },
+    {
+      "table": "#StagedCustomer",
+      "column": "Email",
+      "metadata": {
+        "pii": "true",
+        "source_system": "crm"
+      }
+    }
+  ],
+  "staticLineage": [
+    {
+      "targetTable": "#PublishedCustomer",
+      "targetColumn": "CustomerId",
+      "operation": "SELECT",
+      "sourceTables": [ "#StagedCustomer" ],
+      "sourceColumns": [ "CustomerId" ],
+      "metadata": {
+        "source_system": "crm"
+      }
+    },
+    {
+      "targetTable": "#PublishedCustomer",
+      "targetColumn": "EmailNormalized",
+      "operation": "SELECT",
+      "sourceTables": [ "#StagedCustomer" ],
+      "sourceColumns": [ "Email" ],
+      "metadata": {
+        "pii": "true",
+        "source_system": "crm"
+      }
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+CREATE TABLE #ScenarioWhatIf (ID INT, Status VARCHAR(20));
+INSERT INTO #ScenarioWhatIf (ID, Status) VALUES (1, 'new');
+INSERT INTO #ScenarioWhatIf (ID, Status) VALUES (2, 'new');
+
+SET WHAT_IF ON;
+UPDATE #ScenarioWhatIf SET Status = 'changed' WHERE ID = 1;
+DELETE FROM #ScenarioWhatIf WHERE ID = 2;
+SET WHAT_IF OFF;

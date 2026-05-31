@@ -1,0 +1,17 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT COUNT(*) AS RowCount, SUM(ID) AS IdSum FROM #ScenarioWhatIf;",
+      "rows": [
+        { "RowCount": 2, "IdSum": 3 }
+      ]
+    },
+    {
+      "sql": "SELECT ID, Status FROM #ScenarioWhatIf ORDER BY ID;",
+      "rows": [
+        { "ID": 1, "Status": "new" },
+        { "ID": 2, "Status": "new" }
+      ]
+    }
+  ]
+}

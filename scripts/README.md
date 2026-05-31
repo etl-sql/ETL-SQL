@@ -10,7 +10,7 @@ This directory contains build, test, utility, and release packaging scripts for 
 | :--- | :--- | :---: | :--- |
 | **[`build-debug.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/build-debug.ps1)** / **[`build-debug.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/build-debug.sh)** | PowerShell / Bash | Cross-platform | Builds the .NET solution, VS Code UI (Vite), extension TypeScript compiler, and runs extension unit tests. |
 | **[`test-smoke.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-smoke.ps1)** / **[`test-smoke.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-smoke.sh)** | PowerShell / Bash | Cross-platform | Executes targeted minimal smoke tests divided into specific categories (Core, Security, Reporting, Portal). |
-| **[`test-lane.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-lane.ps1)** / **[`test-lane.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-lane.sh)** | PowerShell / Bash | Cross-platform | The test suite gateway to run individual test lanes (smoke, fast, engine, portal, integration, perf, full, benchmarks, slt) with optional coverage mapping. |
+| **[`test-lane.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-lane.ps1)** / **[`test-lane.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-lane.sh)** | PowerShell / Bash | Cross-platform | The test suite gateway to run individual test lanes (smoke, fast, engine, portal, integration, perf, release, full, benchmarks, slt) with optional coverage mapping. |
 | **[`Test-SltCorpus.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-SltCorpus.ps1)** / **[`Test-SltCorpus.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-SltCorpus.sh)** | PowerShell / Bash | Cross-platform | Runs the SqlLogicTests corpus suite and pipes console logs + TRX file output to a timestamped folder in `slt_results/`. |
 | **[`Parse-SltResults.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Parse-SltResults.ps1)** | PowerShell | Windows / macOS / Linux | Parses TRX files from an SLT run to output a clean color-coded summary of passes, skips, and failed stack traces. |
 | **[`Test-AllSamples.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-AllSamples.ps1)** / **[`test-all-samples.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-all-samples.sh)** | PowerShell / Bash | Cross-platform | Discovers and executes all samples (`*.etlsql` and `*.rptsql`) in the `samples/` folder to validate engine runtime backward compatibility. |
@@ -73,7 +73,7 @@ Runs groups of tests mapped to standard pipeline stages:
   ./scripts/test-lane.sh --lane fast
   ```
 
-*Supported lanes are: `smoke`, `fast`, `engine`, `portal`, `integration`, `perf`, `full`, `benchmarks`, `slt`.*
+*Supported PowerShell lanes are: `smoke`, `fast`, `engine`, `portal`, `integration`, `perf`, `release`, `full`, `benchmarks`, `slt`.*
 
 ### 2.4 Running Local Pre-Release Validation
 Run this before pushing release tags or building release installers. It is designed to catch failures locally before spending GitHub-hosted runner time.
@@ -92,6 +92,9 @@ Useful options:
 ```powershell
 # PowerShell
 .\scripts\Test-PreRelease.ps1 -Resume
+.\scripts\Test-PreRelease.ps1 -Explain -IncludeSlt
+.\scripts\Test-PreRelease.ps1 -Quick -IncludeSlt
+.\scripts\Test-PreRelease.ps1 -IncludeSlt
 .\scripts\Test-PreRelease.ps1 -IncludeDockerIntegration
 .\scripts\Test-PreRelease.ps1 -IncludeStandardScale
 .\scripts\Test-PreRelease.ps1 -BuildInstallers -Platforms win-x64
@@ -106,6 +109,8 @@ Useful options:
 ```
 
 Reports and logs are written to `release-validation/`. Use `-Resume` / `--resume` after fixing a failed phase; the script only reuses completed phases when the source fingerprint still matches, unless `-ForceResume` / `--force-resume` is supplied.
+
+`-Explain` prints the exact PowerShell phase list without running it. `-Quick` skips Node, scale, Docker, and installer phases. `-IncludeSlt` adds the SQL Logic Test lane to the local release gate.
 
 ### 2.5 Running SQLite Logic Tests (SLT) Corpus
 Runs the SQLite Logic test suite, generating timestamped output folders with standard teed console logs and TRX test results files:

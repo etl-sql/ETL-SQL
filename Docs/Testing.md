@@ -35,10 +35,26 @@ Use `scripts/test-lane.ps1` when you want a named suite rather than only smoke t
 .\scripts\test-lane.ps1 -Lane portal
 .\scripts\test-lane.ps1 -Lane integration
 .\scripts\test-lane.ps1 -Lane perf
+.\scripts\test-lane.ps1 -Lane release
 .\scripts\test-lane.ps1 -Lane full
 .\scripts\test-lane.ps1 -Lane benchmarks
 .\scripts\test-lane.ps1 -Lane slt        # deployment-only
 ```
+
+Lane intent:
+
+| Lane | Scope |
+| :--- | :--- |
+| `smoke` | Hand-picked core/security/reporting/portal smoke tests |
+| `fast` | Engine, Language Server, and Report Portal tests excluding explicit integration/performance/scale categories |
+| `engine` | `ETL-SQL.Tests` only, with the fast filter |
+| `portal` | Report Portal tests only |
+| `integration` | External-boundary tests tagged `Category=Integration` |
+| `perf` | Performance tests tagged `Category=Performance` |
+| `release` | Smoke + fast + SLT, without benchmarks or installer packaging |
+| `full` | Normal xUnit projects, excluding deployment-only SLT and benchmark executable |
+| `benchmarks` | BenchmarkDotNet executable |
+| `slt` | SQL Logic Test corpus with `ETL_SQL_RUN_SLT=1` set by the lane script |
 
 ## Local Pre-Release Validation
 
@@ -50,6 +66,15 @@ Use `scripts/Test-PreRelease.ps1` (Windows) or `scripts/test-pre-release.sh` (Li
 
 # Resume after fixing a failed phase
 .\scripts\Test-PreRelease.ps1 -Resume
+
+# Show the exact phase list without running it
+.\scripts\Test-PreRelease.ps1 -Explain -IncludeSlt
+
+# Quicker confidence run: skips Node, scale, Docker, and installer phases
+.\scripts\Test-PreRelease.ps1 -Quick -IncludeSlt
+
+# Include SQL Logic Tests in the release gate
+.\scripts\Test-PreRelease.ps1 -IncludeSlt
 
 # Include Docker-backed connector coverage
 .\scripts\Test-PreRelease.ps1 -IncludeDockerIntegration
@@ -74,6 +99,17 @@ Use `scripts/Test-PreRelease.ps1` (Windows) or `scripts/test-pre-release.sh` (Li
 The script writes timestamped JSON/Markdown reports and phase logs under `release-validation/`, which is ignored by Git. The `latest/state.json` file lets `--resume` skip phases that already passed for the same source fingerprint. If code changes after a failed run, rerun from the beginning unless you intentionally use `--force-resume`.
 
 `fast` is the default local correctness lane. `full` runs the normal xUnit test projects and skips the benchmark executable and deployment-only SLT corpus so `dotnet test` output stays meaningful.
+
+For release claim tracking, see [Release_Capability_Matrix.md](Strategy/Release_Capability_Matrix.md). Keep release notes aligned with the strongest automated evidence in that matrix.
+
+## ETL Scenario Golden Tests
+
+Scenario tests live under `tests/etl_scenarios/<scenario-name>/` and are executed by `EtlScenarioGoldenTests` in `tests\ETL-SQL.Tests`. Each scenario has:
+
+- `script.etlsql`: the script under test.
+- `expected.json`: expected runtime query output and/or static lineage expectations.
+
+Use scenario tests for cross-feature release claims that are easy to miss with isolated unit tests: lineage plus inherited tags, `WHAT_IF` plus destructive DML, loops that produce final output, staged ETL flows, and error-handling workflows. Use SLT for SQL compatibility claims; use scenarios for ETL-SQL orchestration claims.
 
 ### Category tag reference
 

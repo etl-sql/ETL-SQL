@@ -1,0 +1,6 @@
+SELECT
+    CustomerId,
+    LOWER(Email) AS EmailNormalized,
+    SourceSystem
+INTO #PublishedCustomer
+FROM #StagedCustomer;

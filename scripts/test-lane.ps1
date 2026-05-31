@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("smoke", "fast", "engine", "portal", "integration", "perf", "full", "benchmarks", "slt")]
+    [ValidateSet("smoke", "fast", "engine", "portal", "integration", "perf", "release", "full", "benchmarks", "slt")]
     [string]$Lane = "fast",
 
     [string]$Configuration = "Debug",
@@ -63,6 +63,7 @@ switch ($Lane) {
     "fast" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $fastFilter
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
+        Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"
     }
     "engine" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $fastFilter
@@ -72,7 +73,6 @@ switch ($Lane) {
     }
     "integration" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=Integration"
-        Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"
     }
     "perf" {
         Invoke-DotNetTest "tests\ETL-SQL.PerfTests\ETL-SQL.PerfTests.csproj" "Category=Performance"
@@ -82,6 +82,16 @@ switch ($Lane) {
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
         Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"
         Invoke-DotNetTest "tests\ETL-SQL.PerfTests\ETL-SQL.PerfTests.csproj"
+    }
+    "release" {
+        & $PSCommandPath -Lane "smoke" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$false
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+        & $PSCommandPath -Lane "fast" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$CollectCoverage -ResultsDirectory $ResultsDirectory
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+        & $PSCommandPath -Lane "slt" -Configuration $Configuration -NoRestore:$NoRestore -NoBuild:$NoBuild -CollectCoverage:$false
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
     "slt" {
         $previousRunSlt = $env:ETL_SQL_RUN_SLT

@@ -1,0 +1,8 @@
+CREATE TABLE #LoopAudit (Step INT, Label VARCHAR(20));
+
+DECLARE @i INT = 0;
+WHILE @i < 3
+BEGIN
+    INSERT INTO #LoopAudit (Step, Label) VALUES (@i, 'loop');
+    SET @i = @i + 1;
+END;

@@ -1,0 +1,12 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT Step, Label FROM #LoopAudit ORDER BY Step;",
+      "rows": [
+        { "Step": 0, "Label": "loop" },
+        { "Step": 1, "Label": "loop" },
+        { "Step": 2, "Label": "loop" }
+      ]
+    }
+  ]
+}
