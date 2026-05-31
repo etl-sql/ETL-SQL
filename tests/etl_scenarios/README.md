@@ -55,6 +55,7 @@ Use `failure` only for scenarios where the script is expected to abort. Runtime 
 Prefer these tests for cross-feature claims such as:
 
 - staged ingest-transform-publish flows;
+- DML audit capture with `OUTPUT ... INTO`;
 - file connector read/write round trips;
 - modular orchestration with `RUN SCRIPT`;
 - staged `MERGE` upsert workflows;

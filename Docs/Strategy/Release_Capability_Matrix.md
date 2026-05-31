@@ -22,6 +22,7 @@ Status meanings:
 | Transaction rollback | Green | Scenario proves rollback reverts temp-table changes made inside a transaction. | `tests/etl_scenarios/transaction_rollback_reverts_temp_table_changes` |
 | Transaction quality gates | Green | Scenario proves an ASSERT failure inside TRY rolls back staged rows and allows controlled recovery. | `tests/etl_scenarios/transaction_quality_gate_catch_rollback` |
 | Staged ETL quality gates | Green | Scenario proves raw rows are filtered into a valid stage and aggregated publish table. | `tests/etl_scenarios/staged_etl_quality_gate` |
+| DML audit capture | Green | Scenario proves UPDATE/DELETE `OUTPUT ... INTO` writes audit rows while base tables change correctly. | `tests/etl_scenarios/dml_output_audit_trail` |
 | MERGE upsert workflows | Green | Scenario proves staged rows update matched targets and insert unmatched targets. | `tests/etl_scenarios/merge_upsert_staged_changes` |
 | Flat-file connector round trip | Green | Scenario proves file ingest, stage filtering, file export, and read-back verification. | `tests/etl_scenarios/file_connector_round_trip` |
 | Modular RUN SCRIPT orchestration | Green | Scenario proves parent scripts can run child scripts that share temp-table state across pipeline stages. | `tests/etl_scenarios/run_script_modular_pipeline` |

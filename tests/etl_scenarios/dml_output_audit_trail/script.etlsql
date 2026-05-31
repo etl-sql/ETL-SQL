@@ -1,0 +1,29 @@
+CREATE TABLE #Accounts (
+    ID INT,
+    Status VARCHAR(20),
+    RiskScore INT
+);
+
+CREATE TABLE #StatusAudit (
+    ID INT,
+    OldStatus VARCHAR(20),
+    NewStatus VARCHAR(20)
+);
+
+CREATE TABLE #DeleteAudit (
+    ID INT,
+    DeletedStatus VARCHAR(20)
+);
+
+INSERT INTO #Accounts (ID, Status, RiskScore) VALUES (1, 'Active', 10);
+INSERT INTO #Accounts (ID, Status, RiskScore) VALUES (2, 'Active', 90);
+INSERT INTO #Accounts (ID, Status, RiskScore) VALUES (3, 'Closed', 0);
+
+UPDATE #Accounts
+SET Status = 'Suspended'
+OUTPUT DELETED.ID AS ID, DELETED.Status AS OldStatus, INSERTED.Status AS NewStatus INTO #StatusAudit
+WHERE RiskScore >= 80;
+
+DELETE FROM #Accounts
+OUTPUT DELETED.ID AS ID, DELETED.Status AS DeletedStatus INTO #DeleteAudit
+WHERE Status = 'Closed';
