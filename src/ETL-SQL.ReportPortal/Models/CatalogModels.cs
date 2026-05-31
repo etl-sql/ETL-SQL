@@ -33,6 +33,11 @@ public record CatalogLineageHistoryDto(
     IReadOnlyDictionary<string, string> Tags,
     string? SourceFile,
     int Line,
+    IReadOnlyList<string> SourceColumns,
+    string? TransformationKind,
+    string? TransformationExpression,
+    IReadOnlyList<string>? FunctionsApplied,
+    string? DerivedFromDescriptions,
     int? ReportId,
     string? ReportName,
     string? FolderPath);

@@ -887,7 +887,11 @@ function renderLineageDag(rows) {
 
 function renderLineageRow(row) {
   const target = row.targetColumn ? `${row.targetTable}.${row.targetColumn}` : row.targetTable;
-  const sources = (row.sourceTables || []).join(', ') || 'None recorded';
+  const srcCols = row.sourceColumns || [];
+  const sources = (row.sourceTables || [])
+    .map((t, i) => srcCols[i] ? `${t}.${srcCols[i]}` : t)
+    .join(', ') || 'None recorded';
+  const xform = formatTransformationKind(row.transformationKind, row.transformationExpression, row.functionsApplied);
   const report = row.reportId
     ? `<button class="btn btn-outline btn-sm" type="button" data-open-report="${row.reportId}">${esc(row.reportName || `Report ${row.reportId}`)}</button>`
     : '<span class="lineage-muted">No report link</span>';
@@ -901,8 +905,10 @@ function renderLineageRow(row) {
         <div class="lineage-title">
           <code>${esc(target)}</code>
           <span class="badge">${esc(row.operation || 'UNKNOWN')}</span>
+          ${xform}
         </div>
         <div class="lineage-detail">Sources: ${esc(sources)}</div>
+        ${row.derivedFromDescriptions ? `<div class="lineage-detail">Description: ${esc(row.derivedFromDescriptions)}</div>` : ''}
         <div class="lineage-detail">Job: ${esc(row.jobName || 'Ad hoc')}${row.sourceFile ? ` · File: ${esc(row.sourceFile)}` : ''}</div>
         ${formatTags(row.tags) ? `<div class="lineage-tags">${esc(formatTags(row.tags))}</div>` : ''}
       </div>
@@ -923,9 +929,11 @@ function lineageDateEnd(value) {
 
 function exportLineageCsv() {
   if (!lineageState.rows.length) return;
-  const headers = ['RunAt', 'JobName', 'Report', 'Folder', 'Target', 'Operation', 'Sources', 'Tags', 'SourceFile', 'Line'];
+  const headers = ['RunAt', 'JobName', 'Report', 'Folder', 'Target', 'Operation', 'Transform', 'Sources', 'Description', 'Tags', 'SourceFile', 'Line'];
   const rows = lineageState.rows.map(row => {
     const target = row.targetColumn ? `${row.targetTable}.${row.targetColumn}` : row.targetTable;
+    const srcCols = row.sourceColumns || [];
+    const sources = (row.sourceTables || []).map((t, i) => srcCols[i] ? `${t}.${srcCols[i]}` : t).join('; ');
     return [
       row.runAt || '',
       row.jobName || '',
@@ -933,7 +941,9 @@ function exportLineageCsv() {
       row.folderPath || '',
       target,
       row.operation || '',
-      (row.sourceTables || []).join('; '),
+      row.transformationExpression || row.transformationKind || '',
+      sources,
+      row.derivedFromDescriptions || '',
       formatTags(row.tags),
       row.sourceFile || '',
       row.line ?? ''

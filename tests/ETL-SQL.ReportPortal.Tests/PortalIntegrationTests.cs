@@ -362,11 +362,16 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
             var catalog = scope.ServiceProvider.GetRequiredService<ILineageCatalogStore>();
             var stageEntry = new LineageEntry(stageName, "SELECT")
             {
-                TargetColumn = "OrderId",
-                SourceTables = new List<string> { $"sales.Orders_{suffix}" },
-                Metadata = new Dictionary<string, string> { ["pii"] = "true", ["owner"] = "SalesOps" },
-                SourceFile = scriptPath,
-                Line = 3
+                TargetColumn             = "OrderId",
+                SourceTables             = new List<string> { $"sales.Orders_{suffix}" },
+                SourceColumns            = new List<string> { "order_id" },
+                TransformationKind       = TransformationKind.Cast,
+                TransformationExpression = "CAST(order_id AS INT)",
+                FunctionsApplied         = new List<string> { "CAST" },
+                DerivedFromDescriptions  = "order_id: ERP order key",
+                Metadata                 = new Dictionary<string, string> { ["pii"] = "true", ["owner"] = "SalesOps" },
+                SourceFile               = scriptPath,
+                Line                     = 3
             };
             var visualEntry = new LineageEntry(visualTarget, "CREATE VISUAL")
             {
@@ -415,6 +420,11 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var columnRows = await columnRes.Content.ReadFromJsonAsync<JsonArray>(_json);
         var columnHit = Assert.Single(columnRows!);
         Assert.Equal("OrderId", columnHit!["targetColumn"]!.GetValue<string>());
+        // Rich persisted fields surface through the catalog lineage DTO.
+        Assert.Equal("CAST(order_id AS INT)", columnHit["transformationExpression"]!.GetValue<string>());
+        Assert.Equal("Cast",                  columnHit["transformationKind"]!.GetValue<string>());
+        Assert.Equal("order_id: ERP order key", columnHit["derivedFromDescriptions"]!.GetValue<string>());
+        Assert.Contains(columnHit["sourceColumns"]!.AsArray(), n => n!.GetValue<string>() == "order_id");
 
         var tagRes = await AuthGet(token, "/api/catalog/lineage/tag?key=pii&value=true");
         Assert.Equal(HttpStatusCode.OK, tagRes.StatusCode);
