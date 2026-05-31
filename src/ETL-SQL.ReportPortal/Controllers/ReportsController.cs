@@ -456,8 +456,8 @@ public class ReportsController : ControllerBase
                     foreach (var src in info.Sources) WalkAncestors(src);
             }
 
-            string? currentPage = null;
             var visuals = script.Statements.OfType<CreateVisualStatement>().ToList();
+            var visualPages = BuildVisualPageMap(script);
 
             foreach (var vis in visuals)
             {
@@ -503,28 +503,33 @@ public class ReportsController : ControllerBase
             {
                 if (stmt is CreatePageStatement page)
                 {
-                    currentPage = page.Name;
                     var pageId = $"page:{page.Name}";
                     if (addedNodes.Add(pageId))
                         nodes.Add(new DagNodeDto(pageId, page.Name, "page", null));
+
+                    foreach (var visualName in page.SlotMap.Values)
+                    {
+                        if (!visualPages.ContainsKey(visualName)) continue;
+                        var visId = $"vis:{visualName}";
+                        edges.Add(new DagEdgeDto(pageId, visId, null));
+                    }
                 }
                 else if (stmt is CreateVisualStatement vis)
                 {
                     var visId = $"vis:{vis.Name}";
                     var label = $"{vis.VisualType} · {vis.Name}";
+                    visualPages.TryGetValue(vis.Name, out var pages);
                     if (addedNodes.Add(visId))
                         nodes.Add(new DagNodeDto(visId, label, "visual",
                             new
                             {
-                                page = currentPage,
+                                page = pages?.FirstOrDefault(),
+                                pages = pages ?? [],
                                 visualType = vis.VisualType.ToString(),
                                 mappings = vis.Mappings
                                     .Select(m => new { role = m.Role, column = m.Column, display = m.DisplayName })
                                     .ToList(),
                             }));
-
-                    if (currentPage is not null)
-                        edges.Add(new DagEdgeDto($"page:{currentPage}", visId, null));
 
                     var axisLabel = BuildMappingLabel(vis.Mappings);
 
@@ -620,6 +625,32 @@ public class ReportsController : ControllerBase
             if (x is not null) parts.Add($"X: {x}");
             if (y is not null) parts.Add($"Y: {y}");
             return parts.Count > 0 ? string.Join(" · ", parts) : null;
+        }
+
+        static Dictionary<string, List<string>> BuildVisualPageMap(Script script)
+        {
+            var visualNames = script.Statements
+                .OfType<CreateVisualStatement>()
+                .Select(v => v.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var map = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var page in script.Statements.OfType<CreatePageStatement>())
+            {
+                foreach (var target in page.SlotMap.Values)
+                {
+                    if (!visualNames.Contains(target)) continue;
+                    if (!map.TryGetValue(target, out var pages))
+                    {
+                        pages = [];
+                        map[target] = pages;
+                    }
+                    if (!pages.Contains(page.Name, StringComparer.OrdinalIgnoreCase))
+                        pages.Add(page.Name);
+                }
+            }
+
+            return map;
         }
     }
 

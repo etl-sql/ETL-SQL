@@ -871,6 +871,54 @@ CREATE VISUAL Total AS CARD (
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
+    public async Task Structure_UsesPageLayoutForVisualEdges_WhenVisualsDeclaredBeforePages()
+    {
+        var token  = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = $"Layout {suffix}", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"layout_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, @"
+CREATE VISUAL SalesCard AS CARD (
+    SOURCE = (SELECT 42 AS Total),
+    MAPPINGS (VALUE = Total)
+);
+
+CREATE PAGE Main AS DASHBOARD(
+    STRUCTURE = 'A',
+    MAP ('A' = SalesCard)
+);
+");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = $"Layout Report {suffix}",
+            description = "visual before page",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var reportId = (await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var res = await AuthGet(token, $"/api/reports/{reportId}/structure");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var dag   = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var nodes = dag!["nodes"]!.AsArray();
+        var edges = dag["edges"]!.AsArray();
+
+        var visual = Assert.Single(nodes, n => n!["id"]!.GetValue<string>() == "vis:SalesCard");
+        Assert.Equal("Main", visual!["meta"]!["page"]!.GetValue<string>());
+        Assert.Contains(visual["meta"]!["pages"]!.AsArray(), p => p!.GetValue<string>() == "Main");
+        Assert.Contains(edges, e =>
+            e!["source"]!.GetValue<string>() == "page:Main" &&
+            e["target"]!.GetValue<string>() == "vis:SalesCard");
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task Structure_ReportColumnTags_OverrideDescriptionButPreserveDatasetHistory()
     {
         var token  = await GetAdminTokenAsync();
