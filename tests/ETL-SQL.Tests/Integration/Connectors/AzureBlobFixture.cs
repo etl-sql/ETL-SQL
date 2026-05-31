@@ -65,6 +65,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task InitializeAsync()
         {
             _container = new ContainerBuilder("mcr.microsoft.com/azure-storage/azurite:latest")
+                .WithName("etl-sql-azurite")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
                 .WithPortBinding(10000, true)
                 .WithCommand("azurite-blob", "--blobHost", "0.0.0.0", "--skipApiVersionCheck")
                 .WithWaitStrategy(Wait.ForUnixContainer()

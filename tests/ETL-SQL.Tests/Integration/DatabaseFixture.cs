@@ -19,10 +19,18 @@ namespace ETL_SQL.Tests.Integration
 
         public DatabaseFixture()
         {
-            _postgres = new PostgreSqlBuilder("postgres:15-alpine").Build();
-            _sqlServer = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest").Build();
+            _postgres = new PostgreSqlBuilder("postgres:15-alpine")
+                .WithName("etl-sql-postgres")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
+                .Build();
+            _sqlServer = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest")
+                .WithName("etl-sql-mssql")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
+                .Build();
             _oracle = new OracleBuilder("gvenzl/oracle-free:latest")
                 .WithPassword("Oracle123")
+                .WithName("etl-sql-oracle")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
                 .Build();
         }
 
@@ -67,7 +75,10 @@ namespace ETL_SQL.Tests.Integration
 
         public MySqlFixture()
         {
-            _mysql = new MySqlBuilder("mysql:8.0").Build();
+            _mysql = new MySqlBuilder("mysql:8.0")
+                .WithName("etl-sql-mysql")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
+                .Build();
         }
 
         public async Task InitializeAsync()

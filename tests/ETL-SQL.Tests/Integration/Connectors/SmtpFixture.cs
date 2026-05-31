@@ -24,6 +24,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task InitializeAsync()
         {
             _container = new ContainerBuilder("axllent/mailpit:latest")
+                .WithName("etl-sql-smtp")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
                 .WithPortBinding(1025, true)   // SMTP
                 .WithPortBinding(8025, true)   // HTTP API
                 .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r =>

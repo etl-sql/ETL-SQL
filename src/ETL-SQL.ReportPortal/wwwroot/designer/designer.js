@@ -100,19 +100,56 @@ function _computeLayout(nodes, edges) {
         (byLayer[l] = byLayer[l] || []).push(id);
     }
 
-    const LAYER_H = 160;
-    const NODE_W  = 240;
+    const LAYER_H    = 160;
+    const SUB_ROW_H  = 100;
+    const NODE_W     = 240;
+    const MAX_PER_ROW = 10;
+
     const pos = {};
-    for (const [l, layerIds] of Object.entries(byLayer)) {
-        const count = layerIds.length;
+    let yBase = 0;
+    const sortedLayers = Object.keys(byLayer).map(Number).sort((a, b) => a - b);
+    for (const l of sortedLayers) {
+        const layerIds = byLayer[l];
+        const count    = layerIds.length;
+        const numRows  = Math.ceil(count / MAX_PER_ROW);
         layerIds.forEach((id, i) => {
+            const row        = Math.floor(i / MAX_PER_ROW);
+            const colInRow   = i % MAX_PER_ROW;
+            const rowCount   = Math.min(MAX_PER_ROW, count - row * MAX_PER_ROW);
             pos[id] = {
-                x: (i - (count - 1) / 2) * NODE_W,
-                y: +l * LAYER_H,
+                x: (colInRow - (rowCount - 1) / 2) * NODE_W,
+                y: yBase + row * SUB_ROW_H,
             };
         });
+        yBase += (numRows - 1) * SUB_ROW_H + LAYER_H;
     }
     return pos;
+}
+
+/**
+ * Union of a node's ancestors and descendants over directed edges — the lineage
+ * path that flows through it. Drives focus mode: everything else is dimmed.
+ * Returns a Set of node ids to keep lit (always includes `rootId`).
+ */
+function _lineageReach(rootId, allEdges, allNodes) {
+    const down = {}, up = {};
+    for (const e of allEdges) {
+        (down[e.source] ??= []).push(e.target);
+        (up[e.target]   ??= []).push(e.source);
+    }
+    const keep = new Set([rootId]);
+    const walk = (adj) => {
+        const stack = [rootId];
+        while (stack.length) {
+            const id = stack.pop();
+            for (const nxt of (adj[id] ?? [])) if (!keep.has(nxt)) { keep.add(nxt); stack.push(nxt); }
+        }
+    };
+    walk(down);  // descendants
+    walk(up);    // ancestors
+    // Keep expanded column children whose parent node is in focus.
+    for (const n of allNodes) if (n.meta?.parent && keep.has(n.meta.parent)) keep.add(n.id);
+    return keep;
 }
 
 /**
@@ -142,49 +179,95 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         return { dispose: () => {}, resize: () => {} };
     }
 
-    const expandedNodes = new Set();
+    const hiddenTypes    = new Set();   // node types toggled off via the filter chips
+    const collapsedPages = new Set();   // page ids folded into nodes (Collapse-pages button)
+    let   soloedPage     = null;   // page id drilled into — only its slice is shown
+    let   focusedNode    = null;   // node id whose lineage is isolated, or null
+    let   focusSet       = null;   // Set of node ids kept lit while focused
+    let   lastGraph      = null;   // most recent { allNodes, allEdges, pos } for search/minimap
+    let   searchMatches  = [];     // node ids matching the current search term
+    let   searchIdx      = -1;     // index into searchMatches of the current jump target
+
+    // Page→visual membership, derived once from the base edges.
+    const _nodeById    = Object.fromEntries(nodes.map(n => [n.id, n]));
+    const pageOfVisual = {};   // visualId -> pageId
+    const pageChildren = {};   // pageId   -> [visualId, ...]
+    for (const e of (edges ?? [])) {
+        const s = _nodeById[e.source], t = _nodeById[e.target];
+        if (s?.type === 'page' && t?.type === 'visual') {
+            pageOfVisual[e.target] = e.source;
+            (pageChildren[e.source] ??= []).push(e.target);
+        }
+    }
+    const childCount = id => (pageChildren[id]?.length ?? 0);
+
+    // Solo a page: keep the page, its visuals, and every visual's upstream data
+    // lineage — and nothing else. Reuses the focus-mode reachability walk.
+    function soloKeep(pageId) {
+        const keep = new Set([pageId]);
+        for (const v of (pageChildren[pageId] ?? [])) {
+            keep.add(v);
+            for (const id of _lineageReach(v, edges ?? [], nodes)) keep.add(id);
+        }
+        return keep;
+    }
 
     function buildGraph() {
-        const allNodes = [...nodes];
-        const allEdges = [...(edges ?? [])];
+        // 1. Type filters — hiding a type re-fits the rest to fill the canvas.
+        let baseNodes = nodes.filter(n => !hiddenTypes.has(n.type));
 
-        // Inject column sub-nodes for expanded table/dataset nodes
-        const pos = _computeLayout(nodes, edges);
-        const COL_SPREAD = 160;
-        const COL_OFFSET_Y = 90;
-
-        for (const n of nodes) {
-            if (!expandedNodes.has(n.id)) continue;
-            const cols = n.meta?.columns;
-            if (!cols?.length) continue;
-
-            const parentPos = pos[n.id] ?? { x: 0, y: 0 };
-            const count = cols.length;
-            cols.forEach((col, i) => {
-                const colId = `${n.id}__col__${col}`;
-                allNodes.push({
-                    id: colId, label: col, type: 'column',
-                    meta: { parent: n.id, column: col },
-                });
-                pos[colId] = {
-                    x: parentPos.x + (i - (count - 1) / 2) * (COL_SPREAD / Math.max(count, 4)),
-                    y: parentPos.y + COL_OFFSET_Y,
-                };
-            });
-
-            // Column-to-column edges from colEdges metadata
-            for (const ce of (n.meta?.colEdges ?? [])) {
-                const srcNodeId = Object.keys(pos).find(id => {
-                    const nd = allNodes.find(x => x.id === id);
-                    return nd && (nd.label === ce.srcTable || nd.id === `ds:${ce.srcTable}` || nd.id === `table:${ce.srcTable}`);
-                });
-                if (!srcNodeId || !expandedNodes.has(srcNodeId)) continue;
-                const srcColId = `${srcNodeId}__col__${ce.srcCol}`;
-                const tgtColId = `${n.id}__col__${ce.tgtCol}`;
-                if (allNodes.find(x => x.id === srcColId) && allNodes.find(x => x.id === tgtColId))
-                    allEdges.push({ source: srcColId, target: tgtColId, label: null });
-            }
+        // 2. Solo — drill into one page: keep only its slice, hide everything else.
+        if (soloedPage) {
+            const keep = soloKeep(soloedPage);
+            baseNodes = baseNodes.filter(n => keep.has(n.id));
         }
+
+        // 3. Collapse pages — fold each collapsed page's visuals into the page
+        //    node; their data-source edges roll up to the page so lineage stays
+        //    visible even when the report half is folded away. The soloed page is
+        //    never folded (you're drilling into it, so its visuals must show).
+        const collapsedVisuals = new Set();
+        if (collapsedPages.size) {
+            for (const vid in pageOfVisual) {
+                const pid = pageOfVisual[vid];
+                if (collapsedPages.has(pid) && pid !== soloedPage) collapsedVisuals.add(vid);
+            }
+            baseNodes = baseNodes.filter(n => !collapsedVisuals.has(n.id));
+        }
+
+        // Annotate page nodes with their child count (and a collapsed label).
+        baseNodes = baseNodes.map(n => {
+            if (n.type !== 'page') return n;
+            const kids = childCount(n.id);
+            const collapsed = collapsedPages.has(n.id) && n.id !== soloedPage;
+            return { ...n, label: collapsed && kids ? `${n.label} (${kids})` : n.label, _kids: kids, _collapsed: collapsed, _soloed: n.id === soloedPage };
+        });
+
+        const visibleIds = new Set(baseNodes.map(n => n.id));
+
+        // 3. Edges — roll collapsed-visual targets up to their page, drop the rest.
+        const allEdges = [];
+        const seenEdge = new Set();
+        for (const e of (edges ?? [])) {
+            let source = e.source, target = e.target, label = e.label;
+            if (collapsedVisuals.has(source)) continue;            // visuals have no outgoing lineage
+            if (collapsedVisuals.has(target)) {
+                const pid = pageOfVisual[target];
+                if (!pid || source === pid) continue;              // the page→visual edge itself
+                target = pid; label = null;                        // source → page (aggregated)
+            }
+            if (!visibleIds.has(source) || !visibleIds.has(target)) continue;
+            const key = JSON.stringify([source, target]);
+            if (seenEdge.has(key)) continue;
+            seenEdge.add(key);
+            allEdges.push({ source, target, label });
+        }
+
+        const allNodes = [...baseNodes];
+        const pos = _computeLayout(baseNodes, allEdges);
+
+        // Column-level detail is shown in the side panel on double-click, not as
+        // in-graph nodes (keeps the graph legible at scale).
 
         return { allNodes, allEdges, pos };
     }
@@ -200,65 +283,415 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             label:      {
                 show: true, formatter: '{b}', fontSize: n.type === 'column' ? 9 : 11,
                 overflow: 'truncate', width: n.type === 'column' ? 80 : 140,
+                color: (focusSet && !focusSet.has(n.id)) ? 'rgba(148,163,184,0.25)' : '#fff',
             },
-            itemStyle: {
-                color: _nodeColor(n.type),
-                borderColor: n.meta?.columns?.length && !expandedNodes.has(n.id)
-                    ? '#10b981' : 'transparent',
-                borderWidth: 2,
-            },
+            itemStyle: (() => {
+                const dim    = focusSet && !focusSet.has(n.id);
+                const isRoot = n.id === focusedNode;
+                return {
+                    color:       _nodeColor(n.type),
+                    opacity:     dim ? 0.12 : 1,
+                    borderColor: isRoot ? '#fff'
+                        : (n._collapsed || n._soloed ? '#c4b5fd'
+                        : ((n.meta?.columns?.length || n.meta?.mappings?.length) ? '#10b981' : 'transparent')),
+                    borderWidth: isRoot ? 3 : 2,
+                };
+            })(),
             emphasis:  { itemStyle: { borderColor: '#fff', borderWidth: 2 } },
             tooltip:   {
                 formatter: () => {
-                    if (n.type === 'column') return `<strong>${_h(n.label)}</strong><br/><span style="color:#94a3b8">column of</span> ${_h(n.meta?.parent)}`;
-                    const cols = n.meta?.columns;
-                    const hint = cols?.length
-                        ? `<br/><span style="color:#10b981">${expandedNodes.has(n.id) ? '▲ click to collapse' : '▼ click to expand columns'}</span>`
+                    const nCols = n.meta?.columns?.length;
+                    const nMaps = n.meta?.mappings?.length;
+                    const detailHint = (nCols || nMaps)
+                        ? `<br/><span style="color:#10b981">▤ double-click for ${nCols ? `${nCols} column${nCols === 1 ? '' : 's'}` : `${nMaps} field${nMaps === 1 ? '' : 's'}`}</span>`
                         : '';
+                    const pageHint = (n.type === 'page' && n._kids)
+                        ? `<br/><span style="color:#c4b5fd">${n._soloed ? '◳ double-click to show all' : `▣ double-click to solo this page (${n._kids} visual${n._kids === 1 ? '' : 's'})`}</span>`
+                        : '';
+                    const focusHint = `<br/><span style="color:#64748b">${n.id === focusedNode ? 'click to clear focus' : 'click to isolate lineage'}</span>`;
                     const meta = n.meta ? Object.entries(n.meta)
-                        .filter(([k]) => k !== 'columns' && k !== 'colEdges')
+                        .filter(([k, v]) => !['columns', 'colEdges', 'mappings'].includes(k) && (typeof v !== 'object'))
                         .map(([k, v]) => `<br/><span style="color:#94a3b8">${_h(k)}:</span> ${_h(v)}`)
                         .join('') : '';
-                    return `<strong>${_h(n.label)}</strong><br/><span style="color:#94a3b8">type:</span> ${_h(n.type)}${meta}${hint}`;
+                    return `<strong>${_h(n.label)}</strong><br/><span style="color:#94a3b8">type:</span> ${_h(n.type)}${meta}${detailHint}${pageHint}${focusHint}`;
                 },
             },
             _meta: n.meta,
+            _type: n.type,
         }));
 
-        const eEdges = allEdges.map(e => ({
-            source:    e.source,
-            target:    e.target,
-            label:     e.label ? { show: true, formatter: e.label, fontSize: 10, color: '#94a3b8' } : { show: false },
-            lineStyle: {
-                color: e.source?.includes('__col__') || e.target?.includes('__col__') ? '#cbd5e1' : '#94a3b8',
-                width: e.source?.includes('__col__') ? 1 : 1.5,
-                type:  e.source?.includes('__col__') ? 'dashed' : 'solid',
-            },
-        }));
+        const eEdges = allEdges.map(e => {
+            const dim = focusSet && !(focusSet.has(e.source) && focusSet.has(e.target));
+            return {
+                source:    e.source,
+                target:    e.target,
+                label:     (e.label && !dim) ? { show: true, formatter: e.label, fontSize: 10, color: '#94a3b8' } : { show: false },
+                lineStyle: {
+                    opacity: dim ? 0.06 : 0.9,
+                    color: e.source?.includes('__col__') || e.target?.includes('__col__') ? '#cbd5e1' : '#94a3b8',
+                    width: e.source?.includes('__col__') ? 1 : 1.5,
+                    type:  e.source?.includes('__col__') ? 'dashed' : 'solid',
+                },
+            };
+        });
 
         return { eNodes, eEdges };
     }
 
-    const chart = ec.init(container, null, { renderer: 'canvas' });
+    // Lay the container out as a column: a chrome toolbar on top, the ECharts
+    // canvas filling the rest. The canvas gets its own measurable div; chrome
+    // (filter chips, focus badge) lives in the toolbar.
+    container.style.position = container.style.position || 'relative';
+    container.innerHTML = '';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'etlsql-dag-toolbar';
+
+    const chips = document.createElement('div');
+    chips.className = 'etlsql-dag-chips';
+    toolbar.appendChild(chips);
+
+    // Search box — find a node by label, Enter cycles matches.
+    const search = document.createElement('div');
+    search.className = 'etlsql-dag-search';
+    const searchInput = document.createElement('input');
+    searchInput.type = 'search';
+    searchInput.placeholder = 'Find node…';
+    searchInput.setAttribute('aria-label', 'Find node');
+    const searchCount = document.createElement('span');
+    searchCount.className = 'etlsql-dag-search-count';
+    search.append(searchInput, searchCount);
+    toolbar.appendChild(search);
+
+    const soloBadge = document.createElement('div');
+    soloBadge.className = 'etlsql-dag-focusbadge etlsql-dag-solobadge';
+    soloBadge.style.display = 'none';
+    soloBadge.addEventListener('click', () => { soloedPage = null; render(); });
+    toolbar.appendChild(soloBadge);
+
+    const badge = document.createElement('div');
+    badge.className = 'etlsql-dag-focusbadge';
+    badge.style.display = 'none';
+    badge.addEventListener('click', () => { focusedNode = null; render(); });
+    toolbar.appendChild(badge);
+
+    container.appendChild(toolbar);
+
+    // Body = canvas (fills) + a collapsible detail panel on the right.
+    const body = document.createElement('div');
+    body.className = 'etlsql-dag-body';
+    container.appendChild(body);
+
+    const chartDiv = document.createElement('div');
+    chartDiv.className = 'etlsql-dag-canvas';
+    body.appendChild(chartDiv);
+
+    const panel = document.createElement('div');
+    panel.className = 'etlsql-dag-panel';
+    panel.style.display = 'none';
+    body.appendChild(panel);
+
+    const chart = ec.init(chartDiv, null, { renderer: 'canvas' });
+
+    // ── Detail panel (columns for tables, field mappings for charts) ─────────
+    const _ROLE_LABEL = {
+        XAXIS: 'x-axis', YAXIS: 'y-axis', VALUES: 'values', SERIES: 'series',
+        CATEGORY: 'category', FILTER: 'filter', COLUMN: 'column', SIZE: 'size',
+        COLOR: 'color', LABEL: 'label',
+    };
+    const _el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
+
+    function closePanel() { panel.style.display = 'none'; chart.resize(); drawMinimap(); }
+
+    function renderPanelList(title, items, emptyText) {
+        const h = _el('div', 'etlsql-dag-panel-h');
+        h.textContent = title;
+        panel.appendChild(h);
+        if (!items || !items.length) {
+            const e = _el('div', 'etlsql-dag-panel-empty');
+            e.textContent = emptyText;
+            panel.appendChild(e);
+            return;
+        }
+        const ul = _el('ul', 'etlsql-dag-panel-list');
+        for (const it of items) {
+            const li = _el('li', 'etlsql-dag-panel-li');
+            if (it.k) { const k = _el('span', 'etlsql-dag-panel-k'); k.textContent = `${it.k}:`; li.append(k); }
+            const v = _el('span', 'etlsql-dag-panel-v'); v.textContent = it.v; li.append(v);
+            if (it.from) { const f = _el('span', 'etlsql-dag-panel-from'); f.textContent = `← ${it.from}`; li.append(f); }
+            ul.appendChild(li);
+        }
+        panel.appendChild(ul);
+    }
+
+    // node: { id, label, type, meta }
+    function showDetail(node) {
+        panel.replaceChildren();
+
+        const head = _el('div', 'etlsql-dag-panel-head');
+        const dot = _el('span', 'etlsql-dag-panel-dot'); dot.style.background = _nodeColor(node.type);
+        const title = _el('strong', 'etlsql-dag-panel-title'); title.textContent = node.label;
+        const close = _el('button', 'etlsql-dag-panel-x'); close.type = 'button'; close.textContent = '✕'; close.title = 'Close';
+        close.addEventListener('click', closePanel);
+        head.append(dot, title, close);
+        panel.appendChild(head);
+
+        const sub = _el('div', 'etlsql-dag-panel-sub');
+        sub.textContent = [node.type, node.meta?.visualType, node.meta?.page && `page: ${node.meta.page}`]
+            .filter(Boolean).join(' · ');
+        panel.appendChild(sub);
+
+        if (node.type === 'visual') {
+            const maps = node.meta?.mappings ?? [];
+            renderPanelList('Fields',
+                maps.length ? maps.map(m => ({ k: _ROLE_LABEL[m.role] ?? String(m.role ?? '').toLowerCase(), v: m.column })) : null,
+                'No field mappings.');
+        } else if (node.type === 'page') {
+            const kids = (pageChildren[node.id] ?? []).map(vid => ({ v: _nodeById[vid]?.label ?? vid }));
+            renderPanelList(`Visuals (${kids.length})`, kids, 'No visuals.');
+        } else {
+            const cols = node.meta?.columns ?? [];
+            const srcByCol = {};
+            for (const ce of (node.meta?.colEdges ?? [])) srcByCol[ce.tgtCol] = `${ce.srcTable}.${ce.srcCol}`;
+            renderPanelList(`Columns (${cols.length})`,
+                cols.length ? cols.map(c => ({ v: c, from: srcByCol[c] })) : null,
+                'No column metadata.');
+        }
+
+        panel.style.display = 'block';
+        chart.resize();
+        drawMinimap();
+    }
+
+    // ── Search ───────────────────────────────────────────────────────────────
+    let _hlTimer = null;
+
+    function recomputeMatches() {
+        const t = searchInput.value.trim().toLowerCase();
+        searchMatches = (t && lastGraph)
+            ? lastGraph.allNodes.filter(n => String(n.label ?? '').toLowerCase().includes(t)).map(n => n.id)
+            : [];
+        if (searchIdx >= searchMatches.length) searchIdx = searchMatches.length - 1;
+        updateSearchCount();
+    }
+
+    function updateSearchCount() {
+        if (!searchInput.value.trim()) { searchCount.textContent = ''; searchCount.classList.remove('is-empty'); return; }
+        searchCount.textContent = searchMatches.length ? `${searchIdx + 1}/${searchMatches.length}` : 'none';
+        searchCount.classList.toggle('is-empty', searchMatches.length === 0);
+    }
+
+    function nextMatch() {
+        if (!searchMatches.length) return;
+        searchIdx = (searchIdx + 1) % searchMatches.length;
+        updateSearchCount();
+        goToNode(searchMatches[searchIdx]);
+    }
+
+    // Center the main view on a node and flash-highlight it.
+    function goToNode(id) {
+        if (!lastGraph) return;
+        const p = lastGraph.pos[id];
+        if (!p) return;
+        const curZoom = chart.getOption().series?.[0]?.zoom || 1;
+        chart.setOption({ series: [{ center: [p.x, p.y], zoom: Math.max(curZoom, 1.5) }] });
+        const di = lastGraph.allNodes.findIndex(n => n.id === id);
+        if (di >= 0) {
+            chart.dispatchAction({ type: 'downplay', seriesIndex: 0 });
+            chart.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: di });
+            clearTimeout(_hlTimer);
+            _hlTimer = setTimeout(() => chart.dispatchAction({ type: 'downplay', seriesIndex: 0 }), 1800);
+        }
+        drawMinimap();
+    }
+
+    searchInput.addEventListener('input', () => { recomputeMatches(); searchIdx = -1; nextMatch(); });
+    searchInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter')       { e.preventDefault(); nextMatch(); }
+        else if (e.key === 'Escape') { searchInput.value = ''; recomputeMatches(); }
+    });
+
+    // ── Minimap ──────────────────────────────────────────────────────────────
+    const MINI_W = 190, MINI_H = 130, MINI_PAD = 8;
+    const miniCanvas = document.createElement('canvas');
+    miniCanvas.className = 'etlsql-dag-minimap';
+    miniCanvas.width = MINI_W;
+    miniCanvas.height = MINI_H;
+    miniCanvas.title = 'Overview — click to recentre';
+    chartDiv.appendChild(miniCanvas);
+    const miniCtx = miniCanvas.getContext('2d');
+    let _miniTx = null;   // { scale, minX, minY, offX, offY } for click→data mapping
+
+    function drawMinimap() {
+        miniCtx.clearRect(0, 0, MINI_W, MINI_H);
+        if (!lastGraph) { _miniTx = null; return; }
+        const pts = lastGraph.allNodes.map(n => lastGraph.pos[n.id]).filter(Boolean);
+        if (!pts.length) { _miniTx = null; return; }
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const p of pts) {
+            if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+            if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+        }
+        const dataW = Math.max(maxX - minX, 1), dataH = Math.max(maxY - minY, 1);
+        const scale = Math.min((MINI_W - 2 * MINI_PAD) / dataW, (MINI_H - 2 * MINI_PAD) / dataH);
+        const offX = (MINI_W - dataW * scale) / 2 - minX * scale;
+        const offY = (MINI_H - dataH * scale) / 2 - minY * scale;
+        _miniTx = { scale, offX, offY };
+        const d2m = (x, y) => [x * scale + offX, y * scale + offY];
+
+        for (const n of lastGraph.allNodes) {
+            const p = lastGraph.pos[n.id];
+            if (!p) continue;
+            const [mx, my] = d2m(p.x, p.y);
+            miniCtx.fillStyle = _nodeColor(n.type);
+            miniCtx.beginPath();
+            miniCtx.arc(mx, my, n.type === 'page' ? 2.6 : 1.8, 0, 6.2832);
+            miniCtx.fill();
+        }
+
+        // Current viewport rectangle, read straight from the chart's transform.
+        try {
+            const tl = chart.convertFromPixel({ seriesIndex: 0 }, [0, 0]);
+            const br = chart.convertFromPixel({ seriesIndex: 0 }, [chartDiv.clientWidth, chartDiv.clientHeight]);
+            if (tl && br) {
+                const [x0, y0] = d2m(tl[0], tl[1]);
+                const [x1, y1] = d2m(br[0], br[1]);
+                miniCtx.strokeStyle = 'rgba(226,232,240,0.85)';
+                miniCtx.lineWidth = 1;
+                miniCtx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+            }
+        } catch { /* convertFromPixel not ready yet — next roam/render fixes it */ }
+    }
+
+    miniCanvas.addEventListener('click', e => {
+        if (!_miniTx) return;
+        const r = miniCanvas.getBoundingClientRect();
+        const mx = (e.clientX - r.left) * (MINI_W / r.width);
+        const my = (e.clientY - r.top) * (MINI_H / r.height);
+        const dataX = (mx - _miniTx.offX) / _miniTx.scale;
+        const dataY = (my - _miniTx.offY) / _miniTx.scale;
+        chart.setOption({ series: [{ center: [dataX, dataY] }] });
+        drawMinimap();
+    });
+
+    chart.on('graphroam', drawMinimap);
+
+    // ── Type filter chips ──────────────────────────────────────────────────
+    const _TYPE_LABEL = {
+        page: 'Pages', visual: 'Visuals', dataset: 'Datasets', table: 'Tables',
+        column: 'Columns', io: 'I/O', statement: 'Statements', conditional: 'Branches',
+        loop: 'Loops', procedure: 'Procedures', connection: 'Connections',
+    };
+    const _TYPE_ORDER = ['page', 'visual', 'dataset', 'table', 'column', 'io', 'statement', 'conditional', 'loop', 'procedure', 'connection'];
+
+    const typeCounts = {};
+    for (const n of nodes) typeCounts[n.type] = (typeCounts[n.type] ?? 0) + 1;
+
+    const presentTypes = _TYPE_ORDER.filter(t => typeCounts[t] !== undefined)
+        .concat(Object.keys(typeCounts).filter(t => !_TYPE_ORDER.includes(t)));
+
+    function buildChips() {
+        chips.replaceChildren();
+        for (const t of presentTypes) {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'etlsql-dag-chip' + (hiddenTypes.has(t) ? ' is-off' : '');
+            chip.title = hiddenTypes.has(t) ? `Show ${_TYPE_LABEL[t] ?? t}` : `Hide ${_TYPE_LABEL[t] ?? t}`;
+            const dot = document.createElement('span');
+            dot.className = 'etlsql-dag-chip-dot';
+            dot.style.background = _nodeColor(t);
+            const text = document.createElement('span');
+            const count = typeCounts[t];
+            text.textContent = count ? `${_TYPE_LABEL[t] ?? t} ${count}` : (_TYPE_LABEL[t] ?? t);
+            chip.append(dot, text);
+            chip.addEventListener('click', () => {
+                if (hiddenTypes.has(t)) hiddenTypes.delete(t); else hiddenTypes.add(t);
+                buildChips();
+                render();
+            });
+            chips.appendChild(chip);
+        }
+    }
+    buildChips();
+
+    // ── Collapse / expand all pages ─────────────────────────────────────────
+    const pageIds = nodes.filter(n => n.type === 'page' && childCount(n.id) > 0).map(n => n.id);
+    if (pageIds.length) {
+        const actions = document.createElement('div');
+        actions.className = 'etlsql-dag-actions';
+        const mkBtn = (txt, fn) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'etlsql-dag-btn';
+            b.textContent = txt;
+            b.addEventListener('click', fn);
+            return b;
+        };
+        actions.append(
+            mkBtn('Collapse pages', () => { pageIds.forEach(id => collapsedPages.add(id)); render(); }),
+            mkBtn('Expand pages',   () => { collapsedPages.clear(); render(); }),
+        );
+        toolbar.insertBefore(actions, badge);
+    }
+
+    function updateFocusBadge() {
+        if (!focusedNode) { badge.style.display = 'none'; return; }
+        const n = nodes.find(x => x.id === focusedNode);
+        const label = document.createElement('strong');
+        label.textContent = n ? n.label : focusedNode;
+        const prefix = document.createElement('span');
+        prefix.textContent = 'Focused: ';
+        const clear = document.createElement('span');
+        clear.className = 'etlsql-dag-focusbadge-x';
+        clear.textContent = '✕ clear';
+        badge.replaceChildren(prefix, label, clear);
+        badge.style.display = 'flex';
+    }
+
+    function updateSoloBadge() {
+        if (!soloedPage) { soloBadge.style.display = 'none'; return; }
+        const n = nodes.find(x => x.id === soloedPage);
+        const prefix = document.createElement('span');
+        prefix.textContent = 'Soloed: ';
+        const label = document.createElement('strong');
+        label.textContent = n ? n.label : soloedPage;
+        const clear = document.createElement('span');
+        clear.className = 'etlsql-dag-focusbadge-x';
+        clear.textContent = '✕ show all';
+        soloBadge.replaceChildren(prefix, label, clear);
+        soloBadge.style.display = 'flex';
+    }
 
     function render() {
+        // Hiding the Pages type while soloed would orphan the slice — drop solo.
+        if (soloedPage && hiddenTypes.has('page')) soloedPage = null;
         const graph = buildGraph();
+        lastGraph = graph;
+        // A type filter may have hidden the focused node — drop focus if so.
+        if (focusedNode && !graph.allNodes.some(n => n.id === focusedNode)) focusedNode = null;
+        focusSet = focusedNode ? _lineageReach(focusedNode, graph.allEdges, graph.allNodes) : null;
         const { eNodes, eEdges } = toECharts(graph);
 
-        // Fit zoom: scale so all nodes are visible on first render regardless of graph size
-        let fitZoom = 0.65;
+        // Center on the data bounding-box midpoint; zoom=1 lets ECharts auto-fit.
+        // ECharts graph series treats `center` as the DATA coordinate shown at the
+        // canvas centre, and `zoom` as a multiplier on its own internal fit scale.
+        let centerX = 0, centerY = 0;
         const positions = Object.values(graph.pos);
         if (positions.length > 1) {
             const xs = positions.map(p => p.x);
             const ys = positions.map(p => p.y);
-            const dataW = Math.max(...xs) - Math.min(...xs) + 280;
-            const dataH = Math.max(...ys) - Math.min(...ys) + 120;
-            const cw = container.clientWidth  || 900;
-            const ch = container.clientHeight || 600;
-            fitZoom = Math.max(Math.min(cw / dataW, ch / dataH, 1.0), 0.15);
+            centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+            centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
         }
 
         chart.setOption({
+            // notMerge replace below would otherwise replay the full entrance
+            // animation of every node on each collapse/filter/focus re-render,
+            // making the prior layout appear to linger. Snap instead.
+            animation: false,
             tooltip: { show: true, confine: true },
             series: [{
                 type:           'graph',
@@ -266,8 +699,8 @@ export function renderDag(container, { nodes, edges }, options = {}) {
                 nodes:          eNodes,
                 edges:          eEdges,
                 roam:           true,
-                zoom:           fitZoom,
-                center:         ['50%', '50%'],
+                zoom:           1,
+                center:         [centerX, centerY],
                 edgeSymbol:     ['none', 'arrow'],
                 edgeSymbolSize: 8,
                 lineStyle:      { curveness: 0.15 },
@@ -275,27 +708,54 @@ export function renderDag(container, { nodes, edges }, options = {}) {
                 emphasis:       { focus: 'adjacency' },
             }],
         }, true);
+
+        updateFocusBadge();
+        updateSoloBadge();
+        recomputeMatches();
+        drawMinimap();
     }
 
     render();
 
+    // Single click isolates a node's lineage (focus mode); double click solos a
+    // page or opens the detail panel. A short timer lets a double click cancel
+    // the pending single, so the two gestures don't fight.
+    let clickTimer = null;
     chart.on('click', params => {
         if (params.dataType !== 'node') return;
+        const id   = params.data.id;
         const meta = params.data._meta;
-        // Expand/collapse nodes that have column data
-        if (meta?.columns?.length) {
-            const nodeId = params.data.id;
-            if (expandedNodes.has(nodeId)) expandedNodes.delete(nodeId);
-            else expandedNodes.add(nodeId);
+        if (clickTimer) clearTimeout(clickTimer);
+        clickTimer = setTimeout(() => {
+            clickTimer = null;
+            focusedNode = (focusedNode === id) ? null : id;
             render();
+            if (options.onNodeClick) options.onNodeClick(id, meta);
+        }, 220);
+    });
+
+    chart.on('dblclick', params => {
+        if (params.dataType !== 'node') return;
+        if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+        const id   = params.data.id;
+        // Pages solo (drill in); tables/datasets/charts open the detail panel.
+        if (params.data._type === 'page') {
+            soloedPage = (soloedPage === id) ? null : id;
+            focusedNode = null;   // solo supersedes a dim-focus
+            render();
+        } else {
+            showDetail({ id, label: params.data.name, type: params.data._type, meta: params.data._meta });
         }
-        if (options.onNodeClick)
-            options.onNodeClick(params.data.id, meta);
+    });
+
+    // Click on empty canvas clears focus.
+    chart.getZr().on('click', e => {
+        if (!e.target && focusedNode) { focusedNode = null; render(); }
     });
 
     return {
-        dispose: () => chart.dispose(),
-        resize:  () => chart.resize(),
+        dispose: () => { if (clickTimer) clearTimeout(clickTimer); clearTimeout(_hlTimer); chart.dispose(); },
+        resize:  () => { chart.resize(); drawMinimap(); },
     };
 }
 

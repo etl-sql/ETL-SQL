@@ -19,6 +19,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task InitializeAsync()
         {
             _container = new ContainerBuilder("ghcr.io/nnnkkk7/snowflake-emulator:latest")
+                .WithName("etl-sql-snowflake")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
                 .WithPortBinding(8080, true)
                 .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(8080))
                 .Build();

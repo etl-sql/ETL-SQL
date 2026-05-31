@@ -24,6 +24,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task InitializeAsync()
         {
             var builder = new ContainerBuilder("delfer/alpine-ftp-server:latest")
+                .WithName("etl-sql-ftp")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
                 .WithEnvironment("USERS", $"{TestUser}|{TestPassword}")
                 .WithEnvironment("ADDRESS", Host)
                 .WithEnvironment("MIN_PORT", PassiveMinPort.ToString())

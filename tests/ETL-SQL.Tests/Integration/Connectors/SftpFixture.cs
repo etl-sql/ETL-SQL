@@ -47,6 +47,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
             // permissions, causing sshd StrictModes to reject authorized_keys.
             // We inject the key via ExecAsync after startup instead.
             _container = new ContainerBuilder("atmoz/sftp:latest")
+                .WithName("etl-sql-sftp")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
                 .WithCommand($"{TestUser}:{TestPassword}:::{RemoteUploadDir}")
                 .WithPortBinding(22, true)
                 .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Server listening on"))

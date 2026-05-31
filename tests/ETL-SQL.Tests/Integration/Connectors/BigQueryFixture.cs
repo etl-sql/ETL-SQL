@@ -30,6 +30,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task InitializeAsync()
         {
             _container = new ContainerBuilder("ghcr.io/goccy/bigquery-emulator:latest")
+                .WithName("etl-sql-bigquery")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
                 .WithCommand($"--project={TestProject}", $"--dataset={TestDataset}")
                 .WithPortBinding(EmulatorPort, true)
                 .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("listening"))

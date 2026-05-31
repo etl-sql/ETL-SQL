@@ -32,6 +32,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task InitializeAsync()
         {
             _container = new ContainerBuilder("minio/minio:latest")
+                .WithName("etl-sql-minio")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
                 .WithPortBinding(9000, true)
                 .WithCommand("server", "/data")
                 .WithEnvironment("MINIO_ROOT_USER", AccessKey)

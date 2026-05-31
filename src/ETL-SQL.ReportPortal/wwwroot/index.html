@@ -1517,20 +1517,27 @@ function formatTransformationKind(kind, expr, fns) {
   let label = kind;
   const fnList = Array.isArray(fns) ? fns : [];
 
-  if ((kind === 'Aggregation' || kind === 'FunctionCall') && fnList.length) {
-    // Show actual function names (e.g. "SUM", "COUNT", "UPPER()") instead of category
+  // Helper: pull the leading function name from an expression string e.g. "SUM(Revenue)" → "SUM"
+  function leadingFn(s) { const m = s?.match(/^(\w+)\s*\(/); return m?.[1] ?? null; }
+
+  if ((kind === 'Aggregation' || kind === 'FunctionCall' || kind === 'StringOperation' || kind === 'WindowFunction') && fnList.length) {
     const names = fnList.slice(0, 3);
-    label = kind === 'FunctionCall'
-      ? (names.length === 1 ? `${names[0]}()` : names.join(' / '))
-      : names.join(' / ');
+    const suffix = kind === 'FunctionCall' || kind === 'StringOperation' ? '()' : '';
+    label = names.length === 1 ? `${names[0]}${suffix}` : names.join(' / ');
+    if (kind === 'WindowFunction') label += ' OVER';
+  } else if ((kind === 'Aggregation' || kind === 'FunctionCall' || kind === 'StringOperation' || kind === 'WindowFunction') && expr) {
+    // functionsApplied was null — extract directly from the expression text
+    const fn = leadingFn(expr);
+    if (fn) {
+      const suffix = kind === 'FunctionCall' || kind === 'StringOperation' ? '()' : '';
+      label = `${fn}${suffix}`;
+      if (kind === 'WindowFunction') label += ' OVER';
+    }
   } else if (kind === 'Cast' && expr) {
-    // Extract the target type from CAST(x AS TYPE) or CONVERT(TYPE, x)
-    const asMatch  = expr.match(/\bAS\s+(\w+)/i);
+    const asMatch   = expr.match(/\bAS\s+(\w+)/i);
     const convMatch = expr.match(/^CONVERT\s*\(\s*(\w+)/i);
     const target = asMatch?.[1] || convMatch?.[1];
     if (target) label = `→ ${target}`;
-  } else if (kind === 'StringOperation' && fnList.length) {
-    label = fnList.slice(0, 2).join(' / ');
   }
 
   return `<span class="badge ${cls}" style="font-size:.72em; cursor:default"${title}>${esc(label)}</span>`;

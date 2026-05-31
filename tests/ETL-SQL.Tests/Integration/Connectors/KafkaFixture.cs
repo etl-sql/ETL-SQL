@@ -17,6 +17,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task InitializeAsync()
         {
             _container = new ContainerBuilder("redpandadata/redpanda:latest")
+                .WithName("etl-sql-kafka")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
                 .WithPortBinding(9092, 9092)
                 .WithCommand("redpanda", "start", "--mode", "dev-container")
                 .WithWaitStrategy(Wait.ForUnixContainer()

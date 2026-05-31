@@ -512,7 +512,14 @@ public class ReportsController : ControllerBase
                     var label = $"{vis.VisualType} · {vis.Name}";
                     if (addedNodes.Add(visId))
                         nodes.Add(new DagNodeDto(visId, label, "visual",
-                            new { page = currentPage, visualType = vis.VisualType.ToString() }));
+                            new
+                            {
+                                page = currentPage,
+                                visualType = vis.VisualType.ToString(),
+                                mappings = vis.Mappings
+                                    .Select(m => new { role = m.Role, column = m.Column, display = m.DisplayName })
+                                    .ToList(),
+                            }));
 
                     if (currentPage is not null)
                         edges.Add(new DagEdgeDto($"page:{currentPage}", visId, null));

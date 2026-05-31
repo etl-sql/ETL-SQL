@@ -119,6 +119,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 .CreateAsync();
 
             _container = new ContainerBuilder(ImageName)
+                .WithName("etl-sql-orchestrator")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
                 .WithImagePullPolicy(PullPolicy.Never)
                 .WithPortBinding(ServicePort, true)
                 .WithEnvironment("ASPNETCORE_URLS", $"http://+:{ServicePort}")
@@ -164,6 +166,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 .CreateAsync();
 
             _container = new ContainerBuilder(ImageName)
+                .WithName("etl-sql-portal")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
                 .WithImagePullPolicy(PullPolicy.Never)
                 .WithPortBinding(PortalPort, true)
                 .WithEnvironment("ASPNETCORE_URLS", $"http://+:{PortalPort}")

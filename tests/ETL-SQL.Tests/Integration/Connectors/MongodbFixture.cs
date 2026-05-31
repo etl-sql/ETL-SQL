@@ -17,6 +17,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task InitializeAsync()
         {
             _container = new ContainerBuilder("mongo:6.0")
+                .WithName("etl-sql-mongodb")
+                .WithLabel("test-suite", "ETL-SQL.Integration")
                 .WithPortBinding(27017, true)
                 .WithWaitStrategy(Wait.ForUnixContainer()
                     .UntilInternalTcpPortIsAvailable(27017))
