@@ -12,7 +12,7 @@ Status meanings:
 | :--- | :---: | :--- | :--- |
 | Core parser and evaluator correctness | Green | Fast lane passes; SLT lane passes for SQL compatibility claims. | `.\scripts\test-lane.ps1 -Lane fast`; optional `-Lane slt` |
 | Zero-trust file and credential guardrails | Green | Smoke/fast security tests pass; samples do not require unsafe paths or secrets. | `.\scripts\test-smoke.ps1 -Lane security`; fast lane |
-| WHAT_IF dry-run behavior | Green | DML is suppressed in focused tests and scenario tests. | `StmtWhatIfTests`; `tests/etl_scenarios/what_if_suppresses_destructive_dml` |
+| WHAT_IF dry-run behavior | Green | DML and staged MERGE are suppressed in focused tests and scenario tests. | `StmtWhatIfTests`; `tests/etl_scenarios/what_if_suppresses_destructive_dml`; `tests/etl_scenarios/what_if_suppresses_merge_upsert` |
 | ETL control flow loops | Green | At least one scenario proves loop output, plus focused statement tests. | `tests/etl_scenarios/loop_control_flow_materializes_expected_rows` |
 | Loop BREAK/CONTINUE control flow | Green | Scenario proves skipped iterations and early loop exit materialize the expected rows. | `tests/etl_scenarios/while_break_continue_filters_rows` |
 | FOREACH list iteration | Green | Scenario proves iteration output and aggregate totals. | `tests/etl_scenarios/foreach_list_aggregation` |

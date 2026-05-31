@@ -59,7 +59,7 @@ Prefer these tests for cross-feature claims such as:
 - modular orchestration with `RUN SCRIPT`;
 - staged `MERGE` upsert workflows;
 - lineage, source-table, and tag propagation through multi-step publish flows;
-- `WHAT_IF` behavior around destructive DML;
+- `WHAT_IF` behavior around destructive DML and staged `MERGE`;
 - loops that produce final tables, including `BREAK` / `CONTINUE` behavior;
 - `TRY...CATCH` error recovery behavior.
 - fatal error behavior outside recovery blocks.

@@ -128,6 +128,10 @@ namespace ETL_SQL.Engine.Handlers
 
             var targetRows = new List<Row>();
             await foreach (var batch in target.ReadBatches(context.BatchSize)) targetRows.AddRange(batch.Rows);
+            if (context.IsWhatIf)
+            {
+                targetRows = targetRows.Select(row => row.Clone()).ToList();
+            }
 
             var tAlias = stmt.TargetTable.Alias ?? "T";
             var sAlias = stmt.SourceTable.Alias ?? "S";
@@ -250,7 +254,7 @@ namespace ETL_SQL.Engine.Handlers
 
             context.Telemetry.RowsProcessed += processedCount;
 
-            if (stmt.Output != null && outputRows.Count > 0)
+            if (!context.IsWhatIf && stmt.Output != null && outputRows.Count > 0)
             {
                 await OutputClauseHelper.ProcessAsync(stmt.Output, context, outputRows.Select(r => (r.Deleted, r.Inserted, (string?)r.Action)));
             }

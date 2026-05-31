@@ -1,0 +1,19 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT ID, Name, Val, Status FROM #DryRunSnapshot ORDER BY ID;",
+      "rows": [
+        { "ID": 1, "Name": "Alice", "Val": 10, "Status": "old" },
+        { "ID": 2, "Name": "Bob", "Val": 20, "Status": "keep" }
+      ]
+    },
+    {
+      "sql": "SELECT ID, Name, Val, Status FROM #WhatIfMergeTarget ORDER BY ID;",
+      "rows": [
+        { "ID": 1, "Name": "Alice", "Val": 100, "Status": "updated" },
+        { "ID": 2, "Name": "Bob", "Val": 20, "Status": "keep" },
+        { "ID": 3, "Name": "Charlie", "Val": 30, "Status": "new" }
+      ]
+    }
+  ]
+}
