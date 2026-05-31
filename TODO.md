@@ -15,6 +15,9 @@
 - [x] `MERGE FILES` can destroy an existing destination when the source pattern matches nothing → Fixed: source files are now resolved before destination replacement; zero matches throw and leave the destination unchanged. Added `TestMergeFilesNoMatchesPreservesDestination`.
 - [x] `SYNC DIRECTORY DELETE_EXTRA` bypasses the file-operation guardrail spirit and under-counts destructive work → Fixed: `DELETE_EXTRA` now validates file types, increments file-operation counts for each file/directory delete, and checks recursive depth before recursive sync traversal.
 
+### Engine / SQL Semantics
+- [ ] Recursive CTE numeric columns widen to decimal-style values when materialized → The `recursive_cte_hierarchy_rollup` scenario currently observes values like `EmployeeId = 1.0` and `Depth = 0.0` even though the anchor query uses integer literals/source columns. Decide whether this widening is acceptable recursion arithmetic behavior or preserve the anchor/source integer shape through recursive CTE materialization before making strong type-fidelity claims.
+
 ### Report Portal
 - [x] Structure DAG jumbled on large maps → Fixed: `render()` in `designer.js` now computes a fit-to-view zoom from the actual node bounding box (`min(containerW/dataW, containerH/dataH, 1.0)`, floor 0.15) so all nodes are visible on first open regardless of graph size. `roam: true` still lets users pan/zoom further.
 - [x] Dependencies transformation column shows only category name → Fixed: `formatTransformationKind(kind, expr, fns)` now shows the actual function names for Aggregation/FunctionCall (e.g. "SUM", "COUNT", "UPPER()"), extracts the target type for Cast (e.g. "→ INT"), and keeps the full expression as a hover tooltip.

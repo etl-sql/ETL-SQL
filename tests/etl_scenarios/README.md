@@ -58,6 +58,7 @@ Prefer these tests for cross-feature claims such as:
 - staged data cleansing with string, regex, and safe-cast functions;
 - semi-structured JSON payload extraction and publish flows;
 - CTE-based reference enrichment with joins, fallback values, and classifications;
+- recursive CTE hierarchy traversal and rollups;
 - DML audit capture with `OUTPUT ... INTO`;
 - windowed latest-state publish flows;
 - set-operation reconciliation with `UNION ALL`, `EXCEPT`, and `INTERSECT`;
