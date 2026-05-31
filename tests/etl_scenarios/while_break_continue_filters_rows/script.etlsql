@@ -1,0 +1,15 @@
+CREATE TABLE #LoopDecisions (
+    Step INT,
+    Label VARCHAR(20)
+);
+
+DECLARE @i INT = 0;
+WHILE @i < 10
+BEGIN
+    SET @i = @i + 1;
+
+    IF @i = 3 CONTINUE;
+    IF @i = 7 BREAK;
+
+    INSERT INTO #LoopDecisions (Step, Label) VALUES (@i, 'kept');
+END;

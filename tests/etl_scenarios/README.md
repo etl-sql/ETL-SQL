@@ -60,7 +60,7 @@ Prefer these tests for cross-feature claims such as:
 - staged `MERGE` upsert workflows;
 - lineage and tag propagation;
 - `WHAT_IF` behavior around destructive DML;
-- loops that produce final tables;
+- loops that produce final tables, including `BREAK` / `CONTINUE` behavior;
 - `TRY...CATCH` error recovery behavior.
 - fatal error behavior outside recovery blocks.
 
