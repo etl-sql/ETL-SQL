@@ -1,0 +1,27 @@
+CREATE TABLE #CustomerTarget (
+    ID INT,
+    Name VARCHAR(40),
+    Val INT,
+    Status VARCHAR(20)
+);
+
+INSERT INTO #CustomerTarget (ID, Name, Val, Status) VALUES (1, 'Alice', 10, 'old');
+INSERT INTO #CustomerTarget (ID, Name, Val, Status) VALUES (2, 'Bob', 20, 'unchanged');
+
+CREATE TABLE #CustomerStage (
+    ID INT,
+    Name VARCHAR(40),
+    Val INT,
+    Status VARCHAR(20)
+);
+
+INSERT INTO #CustomerStage (ID, Name, Val, Status) VALUES (1, 'Alice', 100, 'updated');
+INSERT INTO #CustomerStage (ID, Name, Val, Status) VALUES (3, 'Charlie', 30, 'new');
+
+MERGE INTO #CustomerTarget AS T
+USING #CustomerStage AS S
+ON T.ID = S.ID
+WHEN MATCHED THEN
+    UPDATE SET Name = S.Name, Val = S.Val, Status = S.Status
+WHEN NOT MATCHED THEN
+    INSERT (ID, Name, Val, Status) VALUES (S.ID, S.Name, S.Val, S.Status);

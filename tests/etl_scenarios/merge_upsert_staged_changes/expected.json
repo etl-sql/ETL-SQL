@@ -1,0 +1,12 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT ID, Name, Val, Status FROM #CustomerTarget ORDER BY ID;",
+      "rows": [
+        { "ID": 1, "Name": "Alice", "Val": 100, "Status": "updated" },
+        { "ID": 2, "Name": "Bob", "Val": 20, "Status": "unchanged" },
+        { "ID": 3, "Name": "Charlie", "Val": 30, "Status": "new" }
+      ]
+    }
+  ]
+}
