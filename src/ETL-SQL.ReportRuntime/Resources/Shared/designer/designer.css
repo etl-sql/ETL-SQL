@@ -195,14 +195,54 @@
 /* Minimap — overview thumbnail docked bottom-right of the canvas. */
 .etlsql-dag-minimap {
     position: absolute;
-    right: 10px;
-    bottom: 10px;
+    right: 56px;
+    bottom: 12px;
     z-index: 4;
     border: 1px solid var(--portal-border, #334155);
     border-radius: 6px;
     background: rgba(15, 23, 42, 0.82);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     cursor: pointer;
+}
+
+/* Floating Zoom Controls */
+.etlsql-dag-zoom-controls {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--portal-surface-2, #1e293b);
+    border: 1px solid var(--portal-border, #334155);
+    border-radius: 6px;
+    padding: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.etlsql-dag-zoom-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--portal-text, #e2e8f0);
+    font-size: 1.1em;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+    line-height: 1;
+}
+
+.etlsql-dag-zoom-btn:hover {
+    background: var(--portal-bg, #f3f5f8);
+    border-color: var(--portal-border, #d9e0ea);
+    color: var(--portal-text, #172033);
 }
 
 /* Body row: canvas fills, detail panel docks on the right. */

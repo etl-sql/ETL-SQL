@@ -180,6 +180,10 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     let   soloedPage     = null;   // page id drilled into — only its slice is shown
     let   focusedNode    = null;   // node id whose lineage is isolated, or null
     let   focusSet       = null;   // Set of node ids kept lit while focused
+    let   hasInitializedView = false;
+    let   curCenterX     = 0;
+    let   curCenterY     = 0;
+    let   curInitialZoom = 1;
     let   lastGraph      = null;   // most recent { allNodes, allEdges, pos } for search/minimap
     let   searchMatches  = [];     // node ids matching the current search term
     let   searchIdx      = -1;     // index into searchMatches of the current jump target
@@ -390,6 +394,47 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     body.appendChild(panel);
 
     const chart = ec.init(chartDiv, null, { renderer: 'canvas' });
+
+    // Floating Zoom Controls (+, -, Reset)
+    const zoomControls = document.createElement('div');
+    zoomControls.className = 'etlsql-dag-zoom-controls';
+
+    const btnIn = document.createElement('button');
+    btnIn.type = 'button';
+    btnIn.className = 'etlsql-dag-zoom-btn';
+    btnIn.innerHTML = '&#43;'; // +
+    btnIn.title = 'Zoom In';
+    btnIn.setAttribute('aria-label', 'Zoom In');
+    btnIn.addEventListener('click', () => {
+        const option = chart.getOption();
+        const currentZoom = option.series[0].zoom || 1;
+        chart.setOption({ series: [{ zoom: currentZoom * 1.25 }] });
+    });
+
+    const btnOut = document.createElement('button');
+    btnOut.type = 'button';
+    btnOut.className = 'etlsql-dag-zoom-btn';
+    btnOut.innerHTML = '&minus;'; // −
+    btnOut.title = 'Zoom Out';
+    btnOut.setAttribute('aria-label', 'Zoom Out');
+    btnOut.addEventListener('click', () => {
+        const option = chart.getOption();
+        const currentZoom = option.series[0].zoom || 1;
+        chart.setOption({ series: [{ zoom: Math.max(currentZoom / 1.25, 0.1) }] });
+    });
+
+    const btnReset = document.createElement('button');
+    btnReset.type = 'button';
+    btnReset.className = 'etlsql-dag-zoom-btn';
+    btnReset.innerHTML = '&#8634;'; // ⟲
+    btnReset.title = 'Reset View';
+    btnReset.setAttribute('aria-label', 'Reset View');
+    btnReset.addEventListener('click', () => {
+        chart.setOption({ series: [{ center: [curCenterX, curCenterY], zoom: curInitialZoom }] });
+    });
+
+    zoomControls.append(btnIn, btnOut, btnReset);
+    body.appendChild(zoomControls);
 
     // ── Detail panel (columns for tables, field mappings for charts) ─────────
     const _ROLE_LABEL = {
@@ -755,26 +800,48 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
         }
 
+        let initialZoom = 1;
+        const containerW = chart.getWidth();
+        const containerH = chart.getHeight();
+        if (positions.length > 1 && containerW > 0 && containerH > 0) {
+            const xs = positions.map(p => p.x);
+            const ys = positions.map(p => p.y);
+            const graphW = Math.max(...xs) - Math.min(...xs) + 240; // 240 is NODE_W
+            const graphH = Math.max(...ys) - Math.min(...ys) + 160; // 160 is LAYER_H
+            const fitZoom = Math.min(containerW / graphW, containerH / graphH);
+            initialZoom = Math.max(fitZoom, 0.65);
+        }
+
+        curCenterX = centerX;
+        curCenterY = centerY;
+        curInitialZoom = initialZoom;
+
+        const seriesOpt = {
+            type:           'graph',
+            layout:         'none',
+            nodes:          eNodes,
+            edges:          eEdges,
+            roam:           true,
+            edgeSymbol:     ['none', 'arrow'],
+            edgeSymbolSize: 8,
+            lineStyle:      { curveness: 0.15 },
+            label:          { position: 'inside', color: '#fff' },
+            emphasis:       { focus: 'adjacency' },
+        };
+
+        if (!hasInitializedView) {
+            seriesOpt.zoom = initialZoom;
+            seriesOpt.center = [centerX, centerY];
+            hasInitializedView = true;
+        }
+
         chart.setOption({
             // notMerge replace below would otherwise replay the full entrance
             // animation of every node on each collapse/filter/focus re-render,
             // making the prior layout appear to linger. Snap instead.
             animation: false,
             tooltip: { show: true, confine: true },
-            series: [{
-                type:           'graph',
-                layout:         'none',
-                nodes:          eNodes,
-                edges:          eEdges,
-                roam:           true,
-                zoom:           1,
-                center:         [centerX, centerY],
-                edgeSymbol:     ['none', 'arrow'],
-                edgeSymbolSize: 8,
-                lineStyle:      { curveness: 0.15 },
-                label:          { position: 'inside', color: '#fff' },
-                emphasis:       { focus: 'adjacency' },
-            }],
+            series: [seriesOpt],
         }, true);
 
         updateFocusBadge();
