@@ -56,6 +56,7 @@ Prefer these tests for cross-feature claims such as:
 
 - staged ingest-transform-publish flows;
 - file connector read/write round trips;
+- modular orchestration with `RUN SCRIPT`;
 - lineage and tag propagation;
 - `WHAT_IF` behavior around destructive DML;
 - loops that produce final tables;
