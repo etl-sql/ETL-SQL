@@ -87,18 +87,19 @@ namespace ETL_SQL.Tests.Analysis
         [Fact]
         public void DbTagPrefix_IsDbUnderscore()
         {
-            // Catalog tags must carry the @db_ prefix to be distinguishable from user tags
+            // Structural catalog tags carry the db_ prefix; the column comment is
+            // recorded as the lineage description ("d") so it inherits downstream.
             var col = new CatalogColumn("email", "VARCHAR", false, false, "Contact email", new Dictionary<string, string>());
             var tags = BuildDbTags(col);
-            Assert.All(tags.Keys, k => Assert.StartsWith("db_", k));
+            Assert.All(tags.Keys.Where(k => k != "d"), k => Assert.StartsWith("db_", k));
         }
 
         [Fact]
-        public void DbTagPrefix_Description_MappedCorrectly()
+        public void DbColumnComment_MappedToLineageDescription()
         {
             var col = new CatalogColumn("email", "VARCHAR", false, false, "Contact email", new Dictionary<string, string>());
             var tags = BuildDbTags(col);
-            Assert.Equal("Contact email", tags["db_description"]);
+            Assert.Equal("Contact email", tags["d"]);
         }
 
         [Fact]
@@ -119,7 +120,7 @@ namespace ETL_SQL.Tests.Analysis
                 ["db_is_pk"]    = col.IsPrimaryKey ? "true" : "false",
             };
             if (!string.IsNullOrEmpty(col.Description))
-                meta["db_description"] = col.Description;
+                meta["d"] = col.Description;   // column comment → lineage description
             return meta;
         }
 

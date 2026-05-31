@@ -637,85 +637,106 @@ namespace ETL_SQL.Engine
             }
         }
 
+        // Tables whose DB catalog metadata has already been imported this session.
+        private HashSet<string>? _catalogImported;
+
+        /// <summary>
+        /// When DB catalog import is enabled (off by default — see
+        /// <c>Lineage:ImportCatalogMetadata</c> / <c>SET LINEAGE_IMPORT_CATALOG = ON</c>),
+        /// import the given source tables' column metadata — including comments,
+        /// recorded as the lineage description — before dependent lineage is
+        /// recorded, so a database column comment inherits onto derived columns.
+        /// Best-effort and idempotent per table per session.
+        /// </summary>
+        public async Task EnsureCatalogMetadataImportedAsync(IEnumerable<string> sourceTables, System.Threading.CancellationToken ct = default)
+        {
+            if (!LineageImportCatalog || sourceTables == null) return;
+            foreach (var src in sourceTables)
+                await ImportCatalogForTableAsync(src, ct);
+        }
+
         private async Task ImportCatalogMetadataAsync(System.Threading.CancellationToken ct)
         {
-            var allEntries = LineageTracker.GetFullLineage().ToList();
-            var imported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var entry in allEntries)
-            {
+            foreach (var entry in LineageTracker.GetFullLineage().ToList())
                 foreach (var src in entry.SourceTables)
+                    await ImportCatalogForTableAsync(src, ct);
+        }
+
+        private async Task ImportCatalogForTableAsync(string src, System.Threading.CancellationToken ct)
+        {
+            _catalogImported ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Skip temp tables, report/dataset nodes, variables, already-processed
+            if (string.IsNullOrEmpty(src) || src.StartsWith('#') || src.StartsWith('@') ||
+                src.StartsWith("report:", StringComparison.OrdinalIgnoreCase) ||
+                src.StartsWith("dataset:", StringComparison.OrdinalIgnoreCase) ||
+                !_catalogImported.Add(src))
+                return;
+
+            // Parse: connectionAlias.schema.table  or  connectionAlias.table
+            var parts = src.Split('.', 3);
+            if (parts.Length < 2) return;
+
+            var connAlias = parts[0];
+            string schema, table;
+            if (parts.Length == 3) { schema = parts[1]; table = parts[2]; }
+            else { schema = "dbo"; table = parts[1]; }
+
+            if (!_connections.TryGetValue(connAlias, out var ds)) return;
+            var provider = ds.GetCatalogProvider();
+            if (provider == null) return;
+
+            try
+            {
+                var columns = await provider.GetColumnMetadataAsync(schema, table, ct);
+                var rels = await provider.GetRelationshipsAsync(schema, table, ct);
+
+                foreach (var col in columns)
                 {
-                    // Skip temp tables, report nodes, variables, already-processed
-                    if (src.StartsWith('#') || src.StartsWith('@') ||
-                        src.StartsWith("report:", StringComparison.OrdinalIgnoreCase) ||
-                        src.StartsWith("dataset:", StringComparison.OrdinalIgnoreCase) ||
-                        !imported.Add(src))
-                        continue;
+                    var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["db_type"]     = col.DataType,
+                        ["db_nullable"] = col.IsNullable ? "true" : "false",
+                        ["db_is_pk"]    = col.IsPrimaryKey ? "true" : "false",
+                    };
+                    // Record the DB column comment as the lineage description ("d")
+                    // so it inherits onto derived columns and surfaces as the
+                    // description, not merely a tag.
+                    if (!string.IsNullOrEmpty(col.Description))
+                        meta["d"] = col.Description!;
+                    foreach (var kv in col.ExtraProperties)
+                        meta[$"db_{kv.Key}"] = kv.Value;
 
-                    // Parse: connectionAlias.schema.table  or  connectionAlias.table
-                    var parts = src.Split('.', 3);
-                    if (parts.Length < 2) continue;
+                    LineageTracker.Record(src, Array.Empty<string>(), "DB_CATALOG",
+                        targetColumn: col.ColumnName, metadata: meta);
+                }
 
-                    var connAlias = parts[0];
-                    string schema, table;
-                    if (parts.Length == 3) { schema = parts[1]; table = parts[2]; }
-                    else { schema = "dbo"; table = parts[1]; }
+                // FK relationships → @db_referenced_by tag on the referenced table's column
+                foreach (var rel in rels)
+                {
+                    var refMeta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["db_referenced_by"] = $"{src}.{rel.ForeignKeyColumn}"
+                    };
+                    LineageTracker.Record(rel.ReferencedTable, Array.Empty<string>(), "DB_CATALOG",
+                        targetColumn: rel.ReferencedColumn, metadata: refMeta);
+                }
 
-                    if (!_connections.TryGetValue(connAlias, out var ds)) continue;
-                    var provider = ds.GetCatalogProvider();
-                    if (provider == null) continue;
-
+                // Attempt view/procedure definition expansion (best-effort, inside outer try)
+                if (provider is IViewDefinitionProvider vdp)
+                {
                     try
                     {
-                        var columns = await provider.GetColumnMetadataAsync(schema, table, ct);
-                        var rels = await provider.GetRelationshipsAsync(schema, table, ct);
-
-                        foreach (var col in columns)
-                        {
-                            var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                            {
-                                ["db_type"]     = col.DataType,
-                                ["db_nullable"] = col.IsNullable ? "true" : "false",
-                                ["db_is_pk"]    = col.IsPrimaryKey ? "true" : "false",
-                            };
-                            if (!string.IsNullOrEmpty(col.Description))
-                                meta["db_description"] = col.Description;
-                            foreach (var kv in col.ExtraProperties)
-                                meta[$"db_{kv.Key}"] = kv.Value;
-
-                            LineageTracker.Record(src, Array.Empty<string>(), "DB_CATALOG",
-                                targetColumn: col.ColumnName, metadata: meta);
-                        }
-
-                        // FK relationships → @db_referenced_by tag on the referenced table's column
-                        foreach (var rel in rels)
-                        {
-                            var refMeta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                            {
-                                ["db_referenced_by"] = $"{src}.{rel.ForeignKeyColumn}"
-                            };
-                            LineageTracker.Record(rel.ReferencedTable, Array.Empty<string>(), "DB_CATALOG",
-                                targetColumn: rel.ReferencedColumn, metadata: refMeta);
-                        }
-
-                        // Attempt view/procedure definition expansion (best-effort, inside outer try)
-                        if (provider is IViewDefinitionProvider vdp)
-                        {
-                            try
-                            {
-                                var def = await vdp.GetViewDefinitionAsync(schema, table, ct);
-                                if (!string.IsNullOrWhiteSpace(def))
-                                    await ExpandViewLineageAsync(src, def, ct);
-                            }
-                            catch { /* unparseable DDL or unsupported object — silently skip */ }
-                        }
+                        var def = await vdp.GetViewDefinitionAsync(schema, table, ct);
+                        if (!string.IsNullOrWhiteSpace(def))
+                            await ExpandViewLineageAsync(src, def, ct);
                     }
-                    catch (Exception ex)
-                    {
-                        _logger.Warning("Catalog import failed for {Table}: {Message}", src, ex.Message);
-                    }
+                    catch { /* unparseable DDL or unsupported object — silently skip */ }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning("Catalog import failed for {Table}: {Message}", src, ex.Message);
             }
         }
 

@@ -70,6 +70,30 @@ namespace ETL_SQL.Tests.Analysis.Lineage
         }
 
         [Fact]
+        public void Analyze_InheritsDbColumnDescriptionOntoDerivedColumn()
+        {
+            // Arrange — simulate the DB catalog import recording a source column's
+            // native comment as the lineage description ("d") + a pii tag.
+            var tracker = new LineageTracker(NullLogger.Instance);
+            tracker.Record("edw.Sales", System.Array.Empty<string>(), "DB_CATALOG",
+                targetColumn: "Amount",
+                metadata: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["d"]   = "Sales amounts",
+                    ["pii"] = "true",
+                });
+
+            // Act — derive total = SUM(Amount) from that source, using the same tracker.
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("CREATE DATASET &snap AS (SELECT SUM(Amount) AS total FROM edw.Sales);"));
+
+            // Assert — the DB comment + pii flowed onto the derived column.
+            var total = Assert.Single(tracker.GetFullLineage(), e => e.TargetColumn == "total");
+            Assert.Contains("Sales amounts", total.DerivedFromDescriptions ?? total.Metadata.GetValueOrDefault("d") ?? "");
+            Assert.Equal("true", total.Metadata.GetValueOrDefault("pii"));
+        }
+
+        [Fact]
         public void Analyze_JoinWithAliases_ResolvesSourceTables()
         {
             // Arrange

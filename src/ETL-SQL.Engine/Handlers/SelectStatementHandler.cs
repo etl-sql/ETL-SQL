@@ -69,7 +69,9 @@ namespace ETL_SQL.Engine.Handlers
                 if (targetCols.Count > 0) batches = context.AlignColumns(batches, targetCols);
                 if (forClause != null) batches = context.EvaluateForClause(batches, forClause);
                 
-                // Record Lineage
+                // Record Lineage (importing DB catalog metadata first, when enabled,
+                // so source column comments inherit onto the derived columns).
+                await context.EnsureCatalogMetadataImportedAsync(statement.GetSourceTables());
                 new LineageManager(context.LineageTracker).RecordSelectIntoLineage(statement, intoTable, context);
 
                 var boundBatches = context.InterceptProgress(batches);

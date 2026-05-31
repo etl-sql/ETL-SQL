@@ -1114,6 +1114,16 @@ FROM LINEAGE(#TaggedUsers)
 WHERE TargetColumn = 'Email';
 ```
 
+> **Pulling descriptions from the database (optional — off by default).** Instead of tagging every column by hand, ETL-SQL can read native column comments from **SQL Server, PostgreSQL, and MySQL** and use them as the column's lineage description — which then **inherits onto derived columns** automatically (a `SUM(Amount) AS total` carries `Amount`'s comment forward, and it shows in the report portal's structure view).
+>
+> It is **off by default** because it issues catalog queries against each source table the first time it's read (extra latency + needs catalog read permission). Turn it on per script:
+>
+> ```sql
+> SET LINEAGE_IMPORT_CATALOG = ON;   -- ... = OFF; to disable again
+> ```
+>
+> …or globally with `"Lineage": { "ImportCatalogMetadata": true }` in `appsettings.json` (see the Administrator's Guide). An inline `/* @d: ... */` tag always overrides an imported database comment.
+
 ---
 
 ### 11.1 Cross-Run Lineage History
