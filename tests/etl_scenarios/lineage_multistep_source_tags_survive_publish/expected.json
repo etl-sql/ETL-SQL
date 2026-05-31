@@ -1,0 +1,93 @@
+{
+  "seedLineage": [
+    {
+      "table": "crm.Customers",
+      "column": "CustomerId",
+      "metadata": {
+        "source_system": "crm",
+        "data_source": "crm.Customers",
+        "business_key": "customer"
+      }
+    },
+    {
+      "table": "crm.Customers",
+      "column": "Email",
+      "metadata": {
+        "source_system": "crm",
+        "data_source": "crm.Customers",
+        "pii": "true"
+      }
+    },
+    {
+      "table": "crm.Customers",
+      "column": "Region",
+      "metadata": {
+        "source_system": "crm",
+        "data_source": "crm.Customers",
+        "classification": "geo"
+      }
+    }
+  ],
+  "staticLineage": [
+    {
+      "targetTable": "#CustomerStage",
+      "targetColumn": "CustomerId",
+      "operation": "SELECT",
+      "sourceTables": [ "crm.Customers" ],
+      "sourceColumns": [ "CustomerId" ],
+      "metadata": {
+        "source_system": "crm",
+        "data_source": "crm.Customers",
+        "business_key": "customer"
+      }
+    },
+    {
+      "targetTable": "#CustomerStage",
+      "targetColumn": "EmailNormalized",
+      "operation": "SELECT",
+      "sourceTables": [ "crm.Customers" ],
+      "sourceColumns": [ "Email" ],
+      "metadata": {
+        "source_system": "crm",
+        "data_source": "crm.Customers",
+        "pii": "true"
+      }
+    },
+    {
+      "targetTable": "#PublishedCustomer",
+      "targetColumn": "CustomerId",
+      "operation": "SELECT",
+      "sourceTables": [ "#CustomerStage" ],
+      "sourceColumns": [ "CustomerId" ],
+      "metadata": {
+        "source_system": "crm",
+        "data_source": "crm.Customers",
+        "business_key": "customer"
+      }
+    },
+    {
+      "targetTable": "#PublishedCustomer",
+      "targetColumn": "EmailNormalized",
+      "operation": "SELECT",
+      "sourceTables": [ "#CustomerStage" ],
+      "sourceColumns": [ "EmailNormalized" ],
+      "metadata": {
+        "source_system": "crm",
+        "data_source": "crm.Customers",
+        "pii": "true"
+      }
+    },
+    {
+      "targetTable": "#PublishedCustomer",
+      "targetColumn": "Region",
+      "operation": "SELECT",
+      "sourceTables": [ "#CustomerStage" ],
+      "sourceColumns": [ "Region" ],
+      "metadata": {
+        "source_system": "crm",
+        "data_source": "crm.Customers",
+        "classification": "geo"
+      }
+    }
+  ]
+}

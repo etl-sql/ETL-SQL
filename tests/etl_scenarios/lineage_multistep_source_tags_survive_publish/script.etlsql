@@ -1,0 +1,13 @@
+SELECT
+    CustomerId,
+    LOWER(Email) AS EmailNormalized,
+    Region
+INTO #CustomerStage
+FROM crm.Customers;
+
+SELECT
+    CustomerId,
+    EmailNormalized,
+    Region
+INTO #PublishedCustomer
+FROM #CustomerStage;

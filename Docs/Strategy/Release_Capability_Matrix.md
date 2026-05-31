@@ -24,6 +24,7 @@ Status meanings:
 | Flat-file connector round trip | Green | Scenario proves file ingest, stage filtering, file export, and read-back verification. | `tests/etl_scenarios/file_connector_round_trip` |
 | Modular RUN SCRIPT orchestration | Green | Scenario proves parent scripts can run child scripts that share temp-table state across pipeline stages. | `tests/etl_scenarios/run_script_modular_pipeline` |
 | Static lineage with inherited tags | Green | Scenario proves source metadata survives a SELECT INTO transformation. | `tests/etl_scenarios/lineage_tags_survive_select_into` |
+| Multi-step lineage source metadata | Green | Scenario proves external source-table metadata survives stage-to-publish lineage. | `tests/etl_scenarios/lineage_multistep_source_tags_survive_publish` |
 | SQL logic compatibility | Yellow | SLT corpus passes on the release branch. | `.\scripts\test-lane.ps1 -Lane slt` |
 | Connector integration boundaries | Yellow | Docker-backed integration lane passes on release candidate hardware. | `.\scripts\Test-PreRelease.ps1 -IncludeDockerIntegration` |
 | Report Portal behavior | Green | Portal tests are part of the fast lane and dedicated portal lane. | `.\scripts\test-lane.ps1 -Lane fast`; `-Lane portal` |
