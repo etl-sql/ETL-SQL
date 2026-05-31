@@ -1,0 +1,38 @@
+CREATE TABLE #QuarterlySales (
+    Region VARCHAR(20),
+    QuarterName VARCHAR(2),
+    Amount DECIMAL
+);
+
+INSERT INTO #QuarterlySales (Region, QuarterName, Amount) VALUES ('North', 'Q1', 100.00);
+INSERT INTO #QuarterlySales (Region, QuarterName, Amount) VALUES ('North', 'Q2', 150.00);
+INSERT INTO #QuarterlySales (Region, QuarterName, Amount) VALUES ('South', 'Q1', 80.00);
+INSERT INTO #QuarterlySales (Region, QuarterName, Amount) VALUES ('South', 'Q2', 120.00);
+
+SELECT
+    Region,
+    Q1,
+    Q2
+INTO #QuarterlyPivot
+FROM #QuarterlySales
+PIVOT (
+    SUM(Amount)
+    FOR QuarterName IN ('Q1', 'Q2')
+) AS pvt;
+
+SELECT
+    Region,
+    QuarterName,
+    Amount
+INTO #QuarterlyUnpivot
+FROM #QuarterlyPivot
+UNPIVOT (
+    Amount FOR QuarterName IN (Q1, Q2)
+) AS unpvt;
+
+SELECT
+    Region,
+    SUM(Amount) AS TotalAmount
+INTO #QuarterlyReconciled
+FROM #QuarterlyUnpivot
+GROUP BY Region;

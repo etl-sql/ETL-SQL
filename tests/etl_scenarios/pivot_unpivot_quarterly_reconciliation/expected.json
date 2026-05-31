@@ -1,0 +1,27 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT Region, Q1, Q2 FROM #QuarterlyPivot ORDER BY Region;",
+      "rows": [
+        { "Region": "North", "Q1": "100.00", "Q2": "150.00" },
+        { "Region": "South", "Q1": "80.00", "Q2": "120.00" }
+      ]
+    },
+    {
+      "sql": "SELECT Region, QuarterName, Amount FROM #QuarterlyUnpivot ORDER BY Region, QuarterName;",
+      "rows": [
+        { "Region": "North", "QuarterName": "Q1", "Amount": "100.00" },
+        { "Region": "North", "QuarterName": "Q2", "Amount": "150.00" },
+        { "Region": "South", "QuarterName": "Q1", "Amount": "80.00" },
+        { "Region": "South", "QuarterName": "Q2", "Amount": "120.00" }
+      ]
+    },
+    {
+      "sql": "SELECT Region, TotalAmount FROM #QuarterlyReconciled ORDER BY Region;",
+      "rows": [
+        { "Region": "North", "TotalAmount": "250.00" },
+        { "Region": "South", "TotalAmount": "200.00" }
+      ]
+    }
+  ]
+}

@@ -60,6 +60,7 @@ Prefer these tests for cross-feature claims such as:
 - DML audit capture with `OUTPUT ... INTO`;
 - windowed latest-state publish flows;
 - set-operation reconciliation with `UNION ALL`, `EXCEPT`, and `INTERSECT`;
+- `PIVOT` / `UNPIVOT` reconciliation flows;
 - file connector read/write round trips;
 - modular orchestration with `RUN SCRIPT`;
 - staged `MERGE` upsert workflows;
