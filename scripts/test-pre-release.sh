@@ -5,6 +5,8 @@
 # Usage:
 #   ./scripts/test-pre-release.sh
 #   ./scripts/test-pre-release.sh --resume
+#   ./scripts/test-pre-release.sh --quick --include-slt
+#   ./scripts/test-pre-release.sh --explain --include-slt --include-docker-integration
 #   ./scripts/test-pre-release.sh --include-docker-integration --include-standard-scale
 #   ./scripts/test-pre-release.sh --build-installers --platforms linux-x64,osx-arm64
 
@@ -19,8 +21,11 @@ FORCE_RESUME=false
 SKIP_NODE=false
 SKIP_SCALE=false
 INCLUDE_DOCKER=false
+INCLUDE_SLT=false
 INCLUDE_STANDARD_SCALE=false
 BUILD_INSTALLERS=false
+QUICK=false
+EXPLAIN=false
 PLATFORMS="linux-x64"
 OUT_DIR="release-validation"
 
@@ -32,8 +37,11 @@ while [[ $# -gt 0 ]]; do
         --skip-node)                 SKIP_NODE=true;      shift ;;
         --skip-scale)                SKIP_SCALE=true;     shift ;;
         --include-docker-integration) INCLUDE_DOCKER=true; shift ;;
+        --include-slt)               INCLUDE_SLT=true;    shift ;;
         --include-standard-scale)    INCLUDE_STANDARD_SCALE=true; shift ;;
         --build-installers)          BUILD_INSTALLERS=true; shift ;;
+        --quick)                     QUICK=true;          shift ;;
+        --explain)                   EXPLAIN=true;        shift ;;
         --platforms)                 PLATFORMS="$2";      shift 2 ;;
         --out-dir)                   OUT_DIR="$2";        shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
@@ -53,7 +61,19 @@ RUN_DIR="$VALIDATION_ROOT/$RUN_ID"
 REPORT_JSON="$RUN_DIR/pre-release-report.json"
 REPORT_MD="$RUN_DIR/pre-release-report.md"
 
-mkdir -p "$RUN_DIR"
+EFFECTIVE_SKIP_NODE="$SKIP_NODE"
+EFFECTIVE_SKIP_SCALE="$SKIP_SCALE"
+EFFECTIVE_INCLUDE_DOCKER="$INCLUDE_DOCKER"
+EFFECTIVE_INCLUDE_STANDARD_SCALE="$INCLUDE_STANDARD_SCALE"
+EFFECTIVE_BUILD_INSTALLERS="$BUILD_INSTALLERS"
+
+if [[ "$QUICK" == true ]]; then
+    EFFECTIVE_SKIP_NODE=true
+    EFFECTIVE_SKIP_SCALE=true
+    EFFECTIVE_INCLUDE_DOCKER=false
+    EFFECTIVE_INCLUDE_STANDARD_SCALE=false
+    EFFECTIVE_BUILD_INSTALLERS=false
+fi
 
 # ---------------------------------------------------------------------------
 # Colors
@@ -65,6 +85,66 @@ YELLOW=$'\033[1;33m'
 GRAY=$'\033[0;90m'
 BOLD=$'\033[1m'
 RESET=$'\033[0m'
+
+print_plan_phase() {
+    local index="$1"
+    local name="$2"
+    local command="$3"
+    local reason="$4"
+
+    printf "%2s. %s\n" "$index" "$name"
+    printf "    %s\n" "$command"
+    printf "    %s\n" "$reason"
+}
+
+show_pre_release_plan() {
+    echo "${CYAN}${BOLD}Pre-release validation plan${RESET}"
+    echo "Configuration: $CONFIGURATION"
+    echo "Quick: $QUICK; IncludeSlt: $INCLUDE_SLT; Docker: $EFFECTIVE_INCLUDE_DOCKER; StandardScale: $EFFECTIVE_INCLUDE_STANDARD_SCALE; BuildInstallers: $EFFECTIVE_BUILD_INSTALLERS"
+    echo
+
+    local i=1
+    print_plan_phase "$i" "Asset drift check" "node ./scripts/sync-assets.js -Check" "Shared report runtime files must match generated host copies."; i=$((i + 1))
+    print_plan_phase "$i" "Dotnet restore" "dotnet restore ETL-SQL.slnx" "Package graph resolves before build and tests."; i=$((i + 1))
+    print_plan_phase "$i" "Dotnet build" "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" "All projects compile in the release configuration."; i=$((i + 1))
+    print_plan_phase "$i" "Smoke lane" "./scripts/test-lane.sh --lane smoke" "Critical startup, security, report, and portal checks."; i=$((i + 1))
+    print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Default local correctness lane across engine, language server, and portal."; i=$((i + 1))
+    print_plan_phase "$i" "Sample scripts" "./scripts/test-all-samples.sh" "Published samples remain runnable."; i=$((i + 1))
+
+    if [[ "$INCLUDE_SLT" == true ]]; then
+        print_plan_phase "$i" "SLT lane" "./scripts/test-lane.sh --lane slt" "SQL logic corpus checks parser/evaluator compatibility."; i=$((i + 1))
+    fi
+
+    if [[ "$EFFECTIVE_SKIP_NODE" != true ]]; then
+        print_plan_phase "$i" "VS Code npm ci" "npm ci" "Extension dependencies install from lockfile."; i=$((i + 1))
+        print_plan_phase "$i" "VS Code npm audit" "npm outdated / npm audit" "Extension dependency risk is visible before release."; i=$((i + 1))
+        print_plan_phase "$i" "VS Code compile" "npm run compile" "TypeScript extension compiles."; i=$((i + 1))
+        print_plan_phase "$i" "VS Code unit tests" "npm run test:unit" "Extension unit tests pass."; i=$((i + 1))
+    fi
+
+    if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
+        print_plan_phase "$i" "Scale certification smoke" "./scripts/test-scale-certification.sh --tier Smoke" "Small certification workload still meets baseline."; i=$((i + 1))
+    fi
+
+    if [[ "$EFFECTIVE_INCLUDE_DOCKER" == true ]]; then
+        print_plan_phase "$i" "Docker integration lane" "./scripts/test-lane.sh --lane integration" "External connector boundaries pass against local containers."; i=$((i + 1))
+    fi
+
+    if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
+        print_plan_phase "$i" "Scale certification standard" "./scripts/test-scale-certification.sh --tier Standard" "Release-size certification workload still meets baseline."; i=$((i + 1))
+    fi
+
+    if [[ "$EFFECTIVE_BUILD_INSTALLERS" == true ]]; then
+        print_plan_phase "$i" "Release publish artifacts" "./scripts/publish_release.sh --platforms $PLATFORMS" "Release binaries can be published for target platforms."; i=$((i + 1))
+    fi
+}
+
+if [[ "$EXPLAIN" == true ]]; then
+    show_pre_release_plan
+    exit 0
+fi
+
+mkdir -p "$RUN_DIR"
 
 # ---------------------------------------------------------------------------
 # JSON string escaping (no external tools required)
@@ -445,7 +525,17 @@ run_phase "Fast lane" \
     "./scripts/test-lane.sh --lane fast --configuration $CONFIGURATION --no-restore --no-build" \
     bash "./scripts/test-lane.sh" "--lane" "fast" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
 
-if [[ "$SKIP_NODE" != true ]]; then
+run_phase "Sample scripts" \
+    "./scripts/test-all-samples.sh" \
+    bash "./scripts/test-all-samples.sh"
+
+if [[ "$INCLUDE_SLT" == true ]]; then
+    run_phase "SLT lane" \
+        "./scripts/test-lane.sh --lane slt --configuration $CONFIGURATION --no-restore --no-build" \
+        bash "./scripts/test-lane.sh" "--lane" "slt" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
+fi
+
+if [[ "$EFFECTIVE_SKIP_NODE" != true ]]; then
     run_phase "VS Code npm ci" \
         "npm ci (src/etl-sql-vscode)" \
         bash -c "cd '$REPO_ROOT/src/etl-sql-vscode' && npm ci"
@@ -463,25 +553,25 @@ if [[ "$SKIP_NODE" != true ]]; then
         bash -c "cd '$REPO_ROOT/src/etl-sql-vscode' && npm run test:unit"
 fi
 
-if [[ "$SKIP_SCALE" != true ]]; then
+if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
     run_phase "Scale certification smoke" \
         "./scripts/test-scale-certification.sh --tier Smoke" \
         bash "./scripts/test-scale-certification.sh" "--tier" "Smoke"
 fi
 
-if [[ "$INCLUDE_DOCKER" == true ]]; then
+if [[ "$EFFECTIVE_INCLUDE_DOCKER" == true ]]; then
     run_phase "Docker integration lane" \
         "./scripts/test-lane.sh --lane integration --configuration $CONFIGURATION --no-restore --no-build" \
         bash "./scripts/test-lane.sh" "--lane" "integration" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
 fi
 
-if [[ "$INCLUDE_STANDARD_SCALE" == true ]]; then
+if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
     run_phase "Scale certification standard" \
         "./scripts/test-scale-certification.sh --tier Standard" \
         bash "./scripts/test-scale-certification.sh" "--tier" "Standard"
 fi
 
-if [[ "$BUILD_INSTALLERS" == true ]]; then
+if [[ "$EFFECTIVE_BUILD_INSTALLERS" == true ]]; then
     run_phase "Release publish artifacts" \
         "./scripts/publish_release.sh --platforms $PLATFORMS" \
         bash "./scripts/publish_release.sh" "--platforms" "$PLATFORMS"

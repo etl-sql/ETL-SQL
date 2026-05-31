@@ -73,7 +73,7 @@ Runs groups of tests mapped to standard pipeline stages:
   ./scripts/test-lane.sh --lane fast
   ```
 
-*Supported PowerShell lanes are: `smoke`, `fast`, `engine`, `portal`, `integration`, `perf`, `release`, `full`, `benchmarks`, `slt`.*
+*Supported lanes are: `smoke`, `fast`, `engine`, `portal`, `integration`, `perf`, `release`, `full`, `benchmarks`, `slt`.*
 
 ### 2.4 Running Local Pre-Release Validation
 Run this before pushing release tags or building release installers. It is designed to catch failures locally before spending GitHub-hosted runner time.
@@ -103,6 +103,9 @@ Useful options:
 ```bash
 # Bash
 ./scripts/test-pre-release.sh --resume
+./scripts/test-pre-release.sh --explain --include-slt
+./scripts/test-pre-release.sh --quick --include-slt
+./scripts/test-pre-release.sh --include-slt
 ./scripts/test-pre-release.sh --include-docker-integration
 ./scripts/test-pre-release.sh --include-standard-scale
 ./scripts/test-pre-release.sh --build-installers --platforms linux-x64
@@ -110,7 +113,7 @@ Useful options:
 
 Reports and logs are written to `release-validation/`. Use `-Resume` / `--resume` after fixing a failed phase; the script only reuses completed phases when the source fingerprint still matches, unless `-ForceResume` / `--force-resume` is supplied.
 
-`-Explain` prints the exact PowerShell phase list without running it. `-Quick` skips Node, scale, Docker, and installer phases. `-IncludeSlt` adds the SQL Logic Test lane to the local release gate.
+`-Explain` / `--explain` prints the phase list without running it. `-Quick` / `--quick` skips Node, scale, Docker, and installer phases. `-IncludeSlt` / `--include-slt` adds the SQL Logic Test lane to the local release gate.
 
 ### 2.5 Running SQLite Logic Tests (SLT) Corpus
 Runs the SQLite Logic test suite, generating timestamped output folders with standard teed console logs and TRX test results files:

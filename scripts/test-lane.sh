@@ -82,6 +82,7 @@ case "$LANE" in
     fast)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$FAST_FILTER"
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
+        invoke_dotnet_test "tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" ""
         ;;
     engine)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$FAST_FILTER"
@@ -91,7 +92,6 @@ case "$LANE" in
         ;;
     integration)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "Category=Integration"
-        invoke_dotnet_test "tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" ""
         ;;
     perf)
         invoke_dotnet_test "tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj" "Category=Performance"
@@ -101,6 +101,25 @@ case "$LANE" in
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
         invoke_dotnet_test "tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" ""
         invoke_dotnet_test "tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj" ""
+        ;;
+    release)
+        smoke_args=(--lane smoke --configuration "$CONFIGURATION")
+        if [ "$NO_RESTORE" = true ]; then smoke_args+=(--no-restore); fi
+        if [ "$NO_BUILD" = true ]; then smoke_args+=(--no-build); fi
+        bash "$SCRIPT_DIR/test-lane.sh" "${smoke_args[@]}"
+
+        fast_args=(--lane fast --configuration "$CONFIGURATION")
+        if [ "$NO_RESTORE" = true ]; then fast_args+=(--no-restore); fi
+        if [ "$NO_BUILD" = true ]; then fast_args+=(--no-build); fi
+        if [ "$COLLECT_COVERAGE" = true ]; then
+            fast_args+=(--collect-coverage --results-directory "$RESULTS_DIRECTORY")
+        fi
+        bash "$SCRIPT_DIR/test-lane.sh" "${fast_args[@]}"
+
+        slt_args=(--lane slt --configuration "$CONFIGURATION")
+        if [ "$NO_RESTORE" = true ]; then slt_args+=(--no-restore); fi
+        if [ "$NO_BUILD" = true ]; then slt_args+=(--no-build); fi
+        bash "$SCRIPT_DIR/test-lane.sh" "${slt_args[@]}"
         ;;
     slt)
         PREVIOUS_RUN_SLT="$ETL_SQL_RUN_SLT"

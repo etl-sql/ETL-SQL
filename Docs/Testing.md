@@ -90,6 +90,9 @@ Use `scripts/Test-PreRelease.ps1` (Windows) or `scripts/test-pre-release.sh` (Li
 # Bash — same phases, same flag semantics
 ./scripts/test-pre-release.sh
 ./scripts/test-pre-release.sh --resume
+./scripts/test-pre-release.sh --explain --include-slt
+./scripts/test-pre-release.sh --quick --include-slt
+./scripts/test-pre-release.sh --include-slt
 ./scripts/test-pre-release.sh --include-docker-integration
 ./scripts/test-pre-release.sh --include-standard-scale
 ./scripts/test-pre-release.sh --build-installers --platforms linux-x64
