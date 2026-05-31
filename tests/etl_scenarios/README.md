@@ -57,6 +57,7 @@ Prefer these tests for cross-feature claims such as:
 - staged ingest-transform-publish flows;
 - staged data cleansing with string, regex, and safe-cast functions;
 - DML audit capture with `OUTPUT ... INTO`;
+- windowed latest-state publish flows;
 - file connector read/write round trips;
 - modular orchestration with `RUN SCRIPT`;
 - staged `MERGE` upsert workflows;

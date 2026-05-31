@@ -24,6 +24,7 @@ Status meanings:
 | Staged ETL quality gates | Green | Scenario proves raw rows are filtered into a valid stage and aggregated publish table. | `tests/etl_scenarios/staged_etl_quality_gate` |
 | Staged data cleansing | Green | Scenario proves string normalization, regex validation, and safe casts filter messy source rows. | `tests/etl_scenarios/staged_data_cleansing_functions` |
 | DML audit capture | Green | Scenario proves UPDATE/DELETE `OUTPUT ... INTO` writes audit rows while base tables change correctly. | `tests/etl_scenarios/dml_output_audit_trail` |
+| Windowed latest-state publish | Green | Scenario proves `ROW_NUMBER`, `LAG`, and partition totals publish current state with deltas. | `tests/etl_scenarios/windowed_latest_state_publish` |
 | MERGE upsert workflows | Green | Scenario proves staged rows update matched targets and insert unmatched targets. | `tests/etl_scenarios/merge_upsert_staged_changes` |
 | Flat-file connector round trip | Green | Scenario proves file ingest, stage filtering, file export, and read-back verification. | `tests/etl_scenarios/file_connector_round_trip` |
 | Modular RUN SCRIPT orchestration | Green | Scenario proves parent scripts can run child scripts that share temp-table state across pipeline stages. | `tests/etl_scenarios/run_script_modular_pipeline` |

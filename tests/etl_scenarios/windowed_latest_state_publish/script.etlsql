@@ -1,0 +1,35 @@
+CREATE TABLE #CustomerEvents (
+    CustomerId INT,
+    EventSeq INT,
+    Status VARCHAR(20),
+    Score INT
+);
+
+INSERT INTO #CustomerEvents (CustomerId, EventSeq, Status, Score) VALUES (100, 1, 'new', 10);
+INSERT INTO #CustomerEvents (CustomerId, EventSeq, Status, Score) VALUES (100, 2, 'active', 15);
+INSERT INTO #CustomerEvents (CustomerId, EventSeq, Status, Score) VALUES (200, 1, 'new', 20);
+INSERT INTO #CustomerEvents (CustomerId, EventSeq, Status, Score) VALUES (200, 2, 'review', 18);
+INSERT INTO #CustomerEvents (CustomerId, EventSeq, Status, Score) VALUES (200, 3, 'active', 25);
+
+SELECT
+    CustomerId,
+    EventSeq,
+    Status,
+    Score,
+    ROW_NUMBER() OVER(PARTITION BY CustomerId ORDER BY EventSeq DESC) AS RecencyRank,
+    LAG(Score, 1, 0) OVER(PARTITION BY CustomerId ORDER BY EventSeq) AS PreviousScore,
+    Score - LAG(Score, 1, 0) OVER(PARTITION BY CustomerId ORDER BY EventSeq) AS ScoreDelta,
+    SUM(Score) OVER(PARTITION BY CustomerId) AS CustomerScoreTotal
+INTO #CustomerEventWindow
+FROM #CustomerEvents;
+
+SELECT
+    CustomerId,
+    Status,
+    Score,
+    PreviousScore,
+    ScoreDelta,
+    CustomerScoreTotal
+INTO #CurrentCustomerState
+FROM #CustomerEventWindow
+WHERE RecencyRank = 1;
