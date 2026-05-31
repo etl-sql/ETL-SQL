@@ -67,7 +67,7 @@
     padding: 4px 10px !important;
     border: 1px solid var(--portal-border, #334155) !important;
     border-radius: 999px !important;
-    background: var(--portal-surface-2, #1e293b) !important;
+    background: var(--portal-surface-subtle, #1e293b) !important;
     color: var(--portal-text, #e2e8f0) !important;
     font: inherit !important;
     font-size: 0.76rem !important;
@@ -109,7 +109,7 @@
     padding: 4px 10px;
     border: 1px solid var(--portal-border, #334155);
     border-radius: 6px;
-    background: var(--portal-surface-2, #1e293b);
+    background: var(--portal-surface-subtle, #1e293b);
     color: var(--portal-text, #e2e8f0);
     font: inherit;
     font-size: 0.76rem;
@@ -132,7 +132,7 @@
     padding: 5px 10px;
     border: 1px solid var(--portal-border, #334155);
     border-radius: 999px;
-    background: var(--portal-surface-2, #111827);
+    background: var(--portal-surface-subtle, #111827);
     color: var(--portal-muted, #94a3b8);
     font-size: 0.78rem;
     line-height: 1.2;
@@ -180,7 +180,7 @@
     padding: 4px 8px;
     border: 1px solid var(--portal-border, #334155);
     border-radius: 6px;
-    background: var(--portal-surface-2, #1e293b);
+    background: var(--portal-surface-subtle, #1e293b);
     color: var(--portal-text, #e2e8f0);
     font: inherit;
     font-size: 0.76rem;
@@ -224,7 +224,7 @@
     height: 28px;
     border: 1px solid var(--portal-border, #374151);
     border-radius: 6px;
-    background: var(--portal-surface-2, #1e293b);
+    background: var(--portal-surface-subtle, #1e293b);
     color: var(--portal-text, #e2e8f0);
     cursor: pointer;
     font-size: 1rem;
@@ -271,7 +271,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    background: var(--portal-surface-2, #1e293b);
+    background: var(--portal-surface-subtle, #1e293b);
     border: 1px solid var(--portal-border, #334155);
     border-radius: 6px;
     padding: 4px;
