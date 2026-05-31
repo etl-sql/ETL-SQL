@@ -664,12 +664,34 @@ export function renderDag(container, { nodes, edges }, options = {}) {
 
     // ── Minimap ──────────────────────────────────────────────────────────────
     const MINI_W = 190, MINI_H = 130, MINI_PAD = 8;
+    const minimapWrapper = document.createElement('div');
+    minimapWrapper.className = 'etlsql-dag-minimap-wrapper is-minimized';
+
+    const minimapToggle = document.createElement('button');
+    minimapToggle.type = 'button';
+    minimapToggle.className = 'etlsql-dag-minimap-toggle';
+    minimapToggle.innerHTML = '🗺️';
+    minimapToggle.title = 'Toggle Minimap';
+    minimapToggle.setAttribute('aria-label', 'Toggle Minimap');
+    minimapWrapper.appendChild(minimapToggle);
+
     const miniCanvas = document.createElement('canvas');
     miniCanvas.className = 'etlsql-dag-minimap';
     miniCanvas.width = MINI_W;
     miniCanvas.height = MINI_H;
     miniCanvas.title = 'Overview — click to recentre';
-    chartDiv.appendChild(miniCanvas);
+    minimapWrapper.appendChild(miniCanvas);
+
+    chartDiv.appendChild(minimapWrapper);
+
+    minimapToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        minimapWrapper.classList.toggle('is-minimized');
+        if (!minimapWrapper.classList.contains('is-minimized')) {
+            drawMinimap();
+        }
+    });
+
     const miniCtx = miniCanvas.getContext('2d');
     let _miniTx = null;   // { scale, minX, minY, offX, offY } for click→data mapping
 
