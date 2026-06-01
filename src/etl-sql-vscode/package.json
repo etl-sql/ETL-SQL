@@ -135,8 +135,8 @@
       "properties": {
         "etlsql.executable.path": {
           "type": "string",
-          "default": "ETL-SQL.exe",
-          "description": "Path to the ETL-SQL CLI executable (ETL-SQL.exe) for running scripts."
+          "default": "",
+          "description": "Optional path or command for the ETL-SQL CLI executable. Leave empty to use the bundled executable, then PATH/build fallbacks."
         },
         "etlsql.server.path": {
           "type": "string",
@@ -145,8 +145,8 @@
         },
         "etlsql.report.executable.path": {
           "type": "string",
-          "default": "ETL-SQL-Report.exe",
-          "description": "Path to the ETL-SQL Report CLI executable (ETL-SQL-Report.exe) for building reports."
+          "default": "",
+          "description": "Optional path or command for the ETL-SQL Report CLI executable. Leave empty to use the bundled executable, then build fallback."
         },
         "etlsql.report.autoOpenPreview": {
           "type": "boolean",

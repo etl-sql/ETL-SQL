@@ -118,8 +118,8 @@ export class ReplManager {
     }
     private async _start(exePath: string, args: string[], launchOptions?: ReplLaunchOptions): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-            const absoluteExePath = path.resolve(exePath);
-            const startMsg = `Starting ETL-SQL REPL: "${absoluteExePath}" ui repl ${this._redactArgs(args).join(' ')}`;
+            const launchCommand = this._resolveLaunchCommand(exePath);
+            const startMsg = `Starting ETL-SQL REPL: "${launchCommand}" ui repl ${this._redactArgs(args).join(' ')}`;
             this._outputChannel?.appendLine(startMsg);
 
             // Snapshot the generation at spawn time. If stop() is called before
@@ -127,7 +127,7 @@ export class ReplManager {
             // knows not to touch commands that belong to the newer session.
             const myGeneration = this._generation;
 
-            const child = cp.spawn(absoluteExePath, ["ui", "repl", ...args], {
+            const child = cp.spawn(launchCommand, ["ui", "repl", ...args], {
                 env: { ...process.env, ...launchOptions?.env, "FORCE_COLOR": "0" }
             });
             this._process = child;
@@ -271,6 +271,14 @@ export class ReplManager {
         this._outputChannel?.appendLine(`[REPL] STDIN write: ${loggedPayload}`);
         const ok = this._process?.stdin?.write(payload + "\r\n", 'utf8');
         this._outputChannel?.appendLine(`[REPL] STDIN ok: ${ok}`);
+    }
+
+    private _resolveLaunchCommand(exePath: string): string {
+        if (path.isAbsolute(exePath) || exePath.includes('/') || exePath.includes('\\')) {
+            return path.resolve(exePath);
+        }
+
+        return exePath;
     }
 
     private _handleMessage(msg: EngineMessage) {

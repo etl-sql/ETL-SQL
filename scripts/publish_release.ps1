@@ -7,9 +7,10 @@ param(
 )
 
 $Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.9.0" }
-$ReleaseRoot = Join-Path $PSScriptRoot "..\release"
-$SampleSource = Join-Path $PSScriptRoot "..\samples"
-$DocsSource = Join-Path $PSScriptRoot "..\Docs"
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+$ReleaseRoot = Join-Path $RepoRoot "release"
+$SampleSource = Join-Path $RepoRoot "samples"
+$DocsSource = Join-Path $RepoRoot "Docs"
 
 function Join-PathSegments {
     param([string[]]$Segments)
@@ -130,7 +131,7 @@ foreach ($Platform in $Platforms) {
     # 4. Copy Docs
     Copy-Item (Join-Path $DocsSource "QUICKSTART.txt") $DocFolder
     Copy-Item (Join-Path $DocsSource "ReportPortal_Administrators_Guide.md") (Join-Path $DocFolder "ReportPortal_Guide.txt")
-    Copy-Item (Join-Path $PSScriptRoot "..\CHANGELOG.md") (Join-Path $DocFolder "CHANGELOG.txt") # Rename to txt for portability
+    Copy-Item (Join-Path $RepoRoot "CHANGELOG.md") (Join-Path $DocFolder "CHANGELOG.txt") # Rename to txt for portability
     
     # 5. Copy Curated Samples (Top 15)
     $SampleList = @(

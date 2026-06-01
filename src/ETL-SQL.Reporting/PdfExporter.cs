@@ -365,7 +365,7 @@ namespace ETL_SQL.Reporting
             }
         }
 
-        private static string FormatCell(string? raw) => ReportCellFormatter.FormatCell(raw);
+        private static string FormatCell(string? raw) => ReportCellFormatter.FormatCellForPdf(raw);
 
         private static void RenderCard(Section section, VisualManifest v)
         {

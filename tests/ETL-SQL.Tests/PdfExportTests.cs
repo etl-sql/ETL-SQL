@@ -80,5 +80,26 @@ namespace ETL_SQL.Tests
             Assert.True(bytes.Length > 100);
             Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, bytes[..4]);
         }
+
+        [Fact]
+        public void MarkdownRenderer_PreservesLongTableCellValues()
+        {
+            var longValue = "Customer note with enough detail to exceed the PDF table cell safety limit";
+            var manifest = new ReportManifest
+            {
+                Title = "Markdown",
+                Source = "markdown.rptsql",
+                Visuals = new List<VisualManifest>
+                {
+                    new() { Name = "Rows", VisualType = "TABLE",
+                            Columns = new List<string> { "note" },
+                            Rows = new List<List<string?>> { new() { longValue } } },
+                }
+            };
+
+            var markdown = new MarkdownRenderer().Render(manifest);
+
+            Assert.Contains(longValue, markdown);
+        }
     }
 }
