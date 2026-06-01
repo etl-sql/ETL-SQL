@@ -3,8 +3,8 @@ using System;
 namespace ETL_SQL.Common
 {
     /// <summary>
-    /// A lightweight standalone implementation of ILogger that writes to the console.
-    /// Used as a fallback or for simple "Global" logging before DI is fully initialized.
+    /// A lightweight standalone implementation of ILogger used as a fallback or for
+    /// simple "Global" logging before DI is fully initialized.
     /// </summary>
     public class EngineLogger : ILogger
     {
@@ -46,21 +46,6 @@ namespace ETL_SQL.Common
             string formattedMessage = $"[{level}] [{_category}]{sid} {message}";
             if (ex != null) formattedMessage += $"{Environment.NewLine}Exception: {ex.Message}";
             
-            if (SuppressConsole)
-            {
-                if (IsJsonMode)
-                {
-                    var msg = new { type = "message", level = level.ToLower(), text = message };
-                    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(msg));
-                }
-                OnMessage?.Invoke(formattedMessage, SessionId, color);
-                return;
-            }
-
-            if (color != ConsoleColor.White) Console.ForegroundColor = color;
-            Console.WriteLine(formattedMessage);
-            if (color != ConsoleColor.White) Console.ResetColor();
-
             OnMessage?.Invoke(formattedMessage, SessionId, color);
         }
     }

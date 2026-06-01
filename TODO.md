@@ -26,7 +26,7 @@
 - [ ] **ReportsController service bloat**: `src/ETL-SQL.ReportPortal/Controllers/ReportsController.cs` has 1,772 lines. It conflates controller/routing logic with folder ACL/permission management, SQL execution tracking, page construction, caching/synchronization, metadata catalogs, and lineage extraction queries. Recommend decomposing these operations into dedicated domain services (e.g., `FolderPermissionService`, `ReportService`, `LineageQueryService`).
 
 ### Logging
-- [ ] **Trace output in shared libraries**: Standardize all logging to use the `ILogger` interface injected via DI or obtained from `IExecutionContext`. Ensure no raw `Console.WriteLine` calls remain in class libraries (e.g., check `ResultFormatter.cs`, `EngineLogger.cs`).
+- [x] **Trace output in shared libraries**: Standardize all logging to use the `ILogger` interface injected via DI or obtained from `IExecutionContext`. Ensure no raw `Console.WriteLine` calls remain in class libraries (e.g., check `ResultFormatter.cs`, `EngineLogger.cs`). `EngineLogger` is callback-only; `ResultFormatter` uses the console abstraction for intentional result output.
 - [ ] **Warmup & connection telemetry gaps**: Telemetry for connector initialization or session warmup failures is caught silently to prioritize happy-path UX. Recording warning logs/telemetry to a diagnostic sink is critical for troubleshooting deployment issues.
 
 ### Security
@@ -37,10 +37,10 @@
 - [x] **Sync-over-async blocking threads**:
   - `src/ETL-SQL.ReportPortal/Controllers/ExecutionController.cs:L319` makes a synchronous `.Wait()` call on `audit.LogAsync(...).Wait()`. This blocks ASP.NET Core request threads, creating a high risk of thread pool starvation and deadlocks.
   - `src/ETL-SQL.Core/Data/DataModel.cs:L495` calls `AddRowAsync(row).GetAwaiter().GetResult()` inside the obsolete synchronous `AddRow` wrapper.
-- [ ] **Synchronous blocking calls in SftpConnector**:
+- [x] **Synchronous blocking calls in SftpConnector**:
   - `src/ETL-SQL.Connectors/SftpConnector.cs` invokes synchronous SSH.NET methods like `Client.Connect()`, `Client.ListDirectory()`, `Client.Exists()`, and `Client.DeleteFile()` directly within async execution paths (such as `EnsureConnected()` inside `ListFilesCoreAsync`) without wrapping them in `Task.Run` or leveraging async equivalents. This stalls the async enumeration threads during network-bound calls.
 
 ### Cross-Platform & Environment Gotchas (Mac/Linux)
 - [x] **Missing ClearScript V8 native packages for macOS / ARM64**: In `Directory.Packages.props`, only the `win-x64` and `linux-x64` native runtime dependencies of `Microsoft.ClearScript.V8` are included. Running server-side ECharts rendering on macOS (Intel/Apple Silicon) or ARM-based Linux containers will crash with native library loading failures. Need to add `Microsoft.ClearScript.V8.Native.osx-x64`, `Microsoft.ClearScript.V8.Native.osx-arm64`, and `Microsoft.ClearScript.V8.Native.linux-arm64` to complete cross-platform runtime support.
-- [ ] **Path separator normalization issues**: In case-sensitive Unix systems, paths resolved across different connectors (e.g. Sftp, FlatFile, Excel) must ensure proper backslash-to-slash character translation and case consistency. Remote SFTP paths now normalize backslashes to `/`; local file connectors continue to use `IExecutionContext.ResolvePath()` for OS-native path handling.
+- [x] **Path separator normalization issues**: In case-sensitive Unix systems, paths resolved across different connectors (e.g. Sftp, FlatFile, Excel) must ensure proper backslash-to-slash character translation and case consistency. Remote SFTP paths now normalize backslashes to `/`; local file connectors continue to use `IExecutionContext.ResolvePath()` for OS-native path handling.
 
