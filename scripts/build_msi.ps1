@@ -77,16 +77,18 @@ Assert-InstallerInputFiles -InputDir $BuildDir
 
 # 2. Compile WiX Manifest
 $CandleExe = Get-Command candle.exe -ErrorAction SilentlyContinue
+$LightExe = Get-Command light.exe -ErrorAction SilentlyContinue
 if (-not $CandleExe) {
     # Check common WiX 3.x install path on CI runners
     $WixPath = 'C:\Program Files (x86)\WiX Toolset v3.11\bin'
     if (Test-Path (Join-Path $WixPath 'candle.exe')) {
         $env:PATH = "$WixPath;$env:PATH"
         $CandleExe = Get-Command candle.exe -ErrorAction SilentlyContinue
+        $LightExe = Get-Command light.exe -ErrorAction SilentlyContinue
     }
 }
 
-if ($CandleExe) {
+if ($CandleExe -and $LightExe) {
     Write-Host "Compiling WiX manifest (using $($CandleExe.Source))..." -ForegroundColor Gray
     Push-Location $InstallerDir
     try {
@@ -94,7 +96,7 @@ if ($CandleExe) {
         $wxsPath = Resolve-Path "Installer.wxs"
         Write-Host "  ProductVersion: $WixVersion" -ForegroundColor Gray
 
-        candle.exe $wxsPath.Path -dProductVersion="$WixVersion" -o Installer.wixobj -arch x64
+        & $CandleExe.Source $wxsPath.Path "-dProductVersion=$WixVersion" -o Installer.wixobj -arch x64
         if ($LASTEXITCODE -ne 0) {
             Write-Error "candle.exe failed (exit code $LASTEXITCODE)"
             exit $LASTEXITCODE
@@ -102,7 +104,7 @@ if ($CandleExe) {
 
         # 3. Link MSI
         Write-Host "Linking MSI package..." -ForegroundColor Gray
-        light.exe Installer.wixobj -o "ETL-SQL-Enterprise-v$Version.msi" -ext WixUIExtension
+        & $LightExe.Source Installer.wixobj -o "ETL-SQL-Enterprise-v$Version.msi" -ext WixUIExtension
         if ($LASTEXITCODE -ne 0) {
             Write-Error "light.exe failed (exit code $LASTEXITCODE)"
             exit $LASTEXITCODE
@@ -113,7 +115,7 @@ if ($CandleExe) {
         Pop-Location
     }
 } else {
-    Write-Host "[WARNING] WiX Toolset (candle.exe) not found — skipping MSI packaging." -ForegroundColor Yellow
+    Write-Host "[WARNING] WiX Toolset (candle.exe/light.exe) not found — skipping MSI packaging." -ForegroundColor Yellow
     Write-Host "  Install WiX 3.11 and re-run, or add a 'choco install wixtoolset' step in CI." -ForegroundColor Gray
     exit 1
 }
