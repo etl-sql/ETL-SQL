@@ -162,9 +162,10 @@ function _lineageReach(rootId, allEdges, allNodes) {
  * @param {Object}      [options]
  * @param {string}      [options.theme='portal']   'portal' | 'vscode' — affects colour palette
  * @param {Function}    [options.onNodeClick]       Called with (nodeId, nodeMeta) on click
- * @returns {{ dispose: Function, resize: Function }}
+ * @returns {{ dispose: Function, resize: Function, showDetail: Function }}
  *   dispose() — destroys the ECharts instance and removes DOM listeners
  *   resize()  — re-fits the chart to the current container size (call on panel resize)
+ *   showDetail(id) — opens a node detail panel programmatically (used by tests/sandbox)
  */
 export function renderDag(container, { nodes, edges }, options = {}) {
     const ec = window.echarts;
@@ -370,13 +371,15 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     search.append(searchInput, searchCount);
     toolbar.appendChild(search);
 
-    const soloBadge = document.createElement('div');
+    const soloBadge = document.createElement('button');
+    soloBadge.type = 'button';
     soloBadge.className = 'etlsql-dag-focusbadge etlsql-dag-solobadge';
     soloBadge.style.display = 'none';
     soloBadge.addEventListener('click', () => { soloedPage = null; render(); });
     toolbar.appendChild(soloBadge);
 
-    const badge = document.createElement('div');
+    const badge = document.createElement('button');
+    badge.type = 'button';
     badge.className = 'etlsql-dag-focusbadge';
     badge.style.display = 'none';
     badge.addEventListener('click', () => { focusedNode = null; render(); });
@@ -734,9 +737,15 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             if (tl && br) {
                 const [x0, y0] = d2m(tl[0], tl[1]);
                 const [x1, y1] = d2m(br[0], br[1]);
-                miniCtx.strokeStyle = 'rgba(226,232,240,0.85)';
-                miniCtx.lineWidth = 1;
-                miniCtx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+                miniCtx.strokeStyle = 'rgba(37,99,235,0.7)';
+                miniCtx.lineWidth = 1.5;
+                const vx = Math.min(x0, x1);
+                const vy = Math.min(y0, y1);
+                const vw = Math.abs(x1 - x0);
+                const vh = Math.abs(y1 - y0);
+                miniCtx.fillStyle = 'rgba(37,99,235,0.06)';
+                miniCtx.fillRect(vx, vy, vw, vh);
+                miniCtx.strokeRect(vx, vy, vw, vh);
             }
         } catch { /* convertFromPixel not ready yet — next roam/render fixes it */ }
     }
@@ -958,6 +967,10 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             if (!hasInitializedView) {
                 render();
             }
+        },
+        showDetail: (id) => {
+            const node = nodes.find(n => n.id === id);
+            if (node) showDetail(node);
         },
     };
 }
