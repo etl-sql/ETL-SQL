@@ -26,13 +26,13 @@ Result on 2026-06-01: 27 passed, 0 failed, 0 skipped.
 
 Result on 2026-06-01: engine performance tests 44 passed; dedicated perf project 5 passed.
 
-The integration-folder audit is in progress. As of 2026-06-01, metadata-only connector tests, UI/editor tests, local file/format tests, and local engine/security tests have been moved back into fast-covered folders. `Get-TestLaneInventory.ps1` now reports 112 remaining test methods that are excluded from `fast`/`engine` by name but not selected by a targeted lane.
+The integration-folder audit is complete as of 2026-06-01. Metadata-only connector tests, UI/editor tests, local file/format tests, and local engine/orchestration/security tests have been moved back into fast-covered folders. `Get-TestLaneInventory.ps1` now reports 0 test methods that are excluded from `fast`/`engine` by name but not selected by a targeted lane.
 
 ```powershell
 .\scripts\test-lane.ps1 -Lane fast -NoRestore
 ```
 
-Result on 2026-06-01: engine test project 2,897 passed; language server 71 passed; report portal 70 passed; lineage UI smoke passed.
+Result on 2026-06-01: engine test project 3,015 passed; language server 71 passed; report portal 70 passed; lineage UI smoke passed.
 
 ## Remaining Testing-Foundation Work
 
