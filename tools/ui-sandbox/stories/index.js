@@ -3,5 +3,6 @@ import dag from './dag.story.js';
 import scriptEditor from './script-editor.story.js';
 import designer from './designer.story.js';
 import lineageUi from './lineage-ui.story.js';
+import vscodeWebviews from './vscode-webviews.story.js';
 
-export const stories = [dag, scriptEditor, designer, lineageUi];
+export const stories = [dag, scriptEditor, designer, lineageUi, vscodeWebviews];

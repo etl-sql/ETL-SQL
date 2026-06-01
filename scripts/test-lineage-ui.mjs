@@ -266,6 +266,19 @@ try {
     await lineageUiTemp.cleanup();
   }
 
+  const vscodeStoryTemp = await importTempModule(path.resolve('tools/ui-sandbox/stories/vscode-webviews.story.js'), 'etl-sql-vscode-webviews-story');
+  try {
+    const { default: story } = await import(vscodeStoryTemp.href);
+    const fixtureIds = (story.fixtures || []).map(f => f.id).join(',');
+    for (const expectedText of ['results', 'preview', 'designer']) {
+      if (!fixtureIds.includes(expectedText)) {
+        throw new Error(`VS Code webview story missing fixture: ${expectedText}`);
+      }
+    }
+  } finally {
+    await vscodeStoryTemp.cleanup();
+  }
+
   console.log('lineage-ui smoke passed');
 } finally {
   await fs.rm(tempModule, { force: true });
