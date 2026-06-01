@@ -79,3 +79,24 @@
 - [x] [TuiEditor.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/TuiEditor.md): Document 15 missing UI classes including `ReplUi.cs` and TUI report preview support.
 - [x] [LanguageServer.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/LanguageServer.md): Document missing LSP handlers (`DesignerLspHandler.cs`, `DocumentSymbolProvider.cs`, `UpdateNotebookContextHandler.cs`).
 - [x] Cross-references: Connect/cross-reference Reporting, Portal, UI, and Orchestrator architecture files to eliminate documentation siloing.
+
+## VS Code Extension Audit (June 2026 Fresh Eyes Review)
+### Single Responsibility Principle (SRP)
+- [ ] **extension.ts bloat**: Refactor `extension.ts` to separate concern groups. It spans over 1,000 lines handling command registration, workspace events, process warmth, configuration checks, and Unix permission adjustments. These should be split into modules (e.g. `permissions.ts`, `terminalCommandBuilder.ts`, `cleanupService.ts`).
+- [ ] **WelcomeView path resolution coupling**: Decouple `WelcomeView.ts` from direct knowledge of local/online files. The path resolver logic should be moved into a shared helper module.
+
+### Logging
+- [ ] **Webview logger interfaces**: Webviews (e.g. `ResultsPanel`, `ReportPreviewPanel`) write directly to browser console (`console.error`, `console.warn`). They should post messages back to the extension host to write to the unified `ETL-SQL` output channel for consolidated developer diagnostics.
+- [ ] **Silent warmup failures**: Warmup process failures in `extension.ts` (`warmupRepl`) are caught and silenced. While intentional for happy-path user experience, recording warning telemetry in the output channel would greatly simplify troubleshooting of environment-related launch issues.
+
+### Security
+- [ ] **Cryptographic nonces in Webviews**: `resultsPanel.ts` and `sidebarProvider.ts` use `Math.random()` to generate nonces. While not highly sensitive, they should align with the standard in `reportPreviewPanel.ts` and `reportDesignerPanel.ts` which use `crypto.randomBytes(16).toString('base64url')` to prevent potential predictable-generator collisions.
+- [ ] **Unprotected globalState store**: Storing connections in globalState (`etlsql.connections`) is currently unused but left in code. If global connection storage is reintroduced, it must use the VS Code `SecretStorage` API to protect credential values rather than simple global state JSON strings.
+
+### Performance
+- [ ] **Webview HTML loading cache**: Both `resultsPanel.ts` and `sidebarProvider.ts` synchronously read `index.html` from disk (`fs.readFileSync(...)`) on every webview resolution. Caching this string in memory after the first read will improve panel loading and UI render responsiveness.
+- [ ] **Warmup concurrency lock**: Warmup and execute requests do not share a state lock. If a user quickly presses execute while warmup is starting, it may result in duplicate process spawn attempts.
+
+### Linting
+- [ ] **Clean remaining ESLint warnings**: 9 warnings exist in the workspace (inactive variable/exception parameters in `connectionsProvider.ts`, `sidebarProvider.ts`, and test files). These should be fixed to maintain a strictly zero-warning lint build.
+
