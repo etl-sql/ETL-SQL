@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ConnectionsProvider } from './connectionsProvider';
+import * as logger from './logger';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'etlsql-sidebar';
@@ -79,6 +80,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 case 'getTempTables':
                     await this._handleGetTempTables(message);
                     break;
+                case 'log': {
+                    const typedMsg = message as { level?: string; message?: string };
+                    logger.logWebview('Sidebar', typedMsg.message || '', (typedMsg.level as 'info' | 'warn' | 'error') || 'info');
+                    break;
+                }
             }
         });
 
@@ -179,13 +185,55 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             }
             let html = SidebarProvider._rawHtmlCache;
 
-            // Inject VIEW_TYPE global so React knows to render SidebarExplorer
-            const inject = `<script nonce="${nonce}">window.VIEW_TYPE = 'sidebar';</script>`;
+            // Inject log interceptor and VIEW_TYPE global so React knows to render SidebarExplorer
+            const logInterceptor = `
+<script nonce="${nonce}">
+    (function() {
+        if (typeof acquireVsCodeApi === 'function') {
+            const vscode = acquireVsCodeApi();
+            window.acquireVsCodeApi = function() { return vscode; };
+            const originalWarn = console.warn;
+            console.warn = function(...args) {
+                originalWarn.apply(console, args);
+                vscode.postMessage({
+                    type: 'log',
+                    level: 'warn',
+                    message: args.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ')
+                });
+            };
+            const originalError = console.error;
+            console.error = function(...args) {
+                originalError.apply(console, args);
+                vscode.postMessage({
+                    type: 'log',
+                    level: 'error',
+                    message: args.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ')
+                });
+            };
+            window.addEventListener('error', function(e) {
+                vscode.postMessage({
+                    type: 'log',
+                    level: 'error',
+                    message: \`Unhandled runtime error: \${e.message} at \${e.filename}:\${e.lineno}:\${e.colno}\`
+                });
+            });
+            window.addEventListener('unhandledrejection', function(e) {
+                vscode.postMessage({
+                    type: 'log',
+                    level: 'error',
+                    message: \`Unhandled promise rejection: \${e.reason}\`
+                });
+            });
+        }
+    })();
+</script>
+`;
+            const inject = `${logInterceptor}<script nonce="${nonce}">window.VIEW_TYPE = 'sidebar';</script>`;
             html = html.replace(/<head>/, `<head>${inject}`);
 
             // Standard webview asset path resolution (similar to ResultsPanel)
             html = html.replace(/<script type="module"/g, `<script type="module" nonce="${nonce}"`);
-            const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} https://fonts.gstatic.com; script-src 'nonce-${nonce}' 'unsafe-inline'; img-src ${webview.cspSource} data:;">`;
+            const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} https://fonts.gstatic.com; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">`;
             html = html.replace(/<head>/, `<head>${csp}`);
 
             return html;

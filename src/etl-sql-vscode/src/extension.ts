@@ -19,6 +19,7 @@ import * as crypto from 'crypto';
 import { ETLNotebookSerializer } from './notebookSerializer';
 import { ETLNotebookController } from './notebookController';
 import { WelcomeView } from './WelcomeView';
+import * as logger from './logger';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -56,6 +57,7 @@ function syncNotebookContext(document: vscode.TextDocument) {
 
 export async function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel("ETL-SQL");
+    logger.setOutputChannel(outputChannel);
     outputChannel.appendLine("ETL-SQL extension activated.");
     
     // Clean up temporary script files asynchronously on startup
@@ -137,8 +139,11 @@ export async function activate(context: vscode.ExtensionContext) {
     // Register Results Panel (Bottom Panel)
     ResultsPanel.register(context);
     ResultsPanel.setOnMessageReceived((msg: unknown) => {
-        if ((msg as { type: string }).type === 'cancel') {
+        const typedMsg = msg as { type: string; level?: string; message?: string };
+        if (typedMsg.type === 'cancel') {
             ReplManager.getInstance().cancel();
+        } else if (typedMsg.type === 'log') {
+            logger.logWebview('Results', typedMsg.message || '', (typedMsg.level as 'info' | 'warn' | 'error') || 'info');
         }
     });
 

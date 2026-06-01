@@ -14,6 +14,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as nodeCrypto from 'crypto';
+import * as logger from './logger';
 
 export class ReportPreviewPanel {
     public static readonly viewType = 'etlsql.reportPreview';
@@ -85,6 +86,11 @@ export class ReportPreviewPanel {
                     case 'drillReport':
                         this._handleDrillReport(message.targetReport, message.parameters);
                         break;
+                    case 'log': {
+                        const typedMsg = message as { level?: string; message?: string };
+                        logger.logWebview('Preview', typedMsg.message || '', (typedMsg.level as 'info' | 'warn' | 'error') || 'info');
+                        break;
+                    }
                 }
             },
             null,
@@ -400,6 +406,46 @@ export class ReportPreviewPanel {
     }
     <div id="root"></div>
     <script nonce="${nonce}">
+        // Bridge: postMessage ↔ extension host output channel
+        (function() {
+            if (typeof acquireVsCodeApi === 'function') {
+                const vscode = acquireVsCodeApi();
+                window.acquireVsCodeApi = function() { return vscode; };
+                const originalWarn = console.warn;
+                console.warn = function(...args) {
+                    originalWarn.apply(console, args);
+                    vscode.postMessage({
+                        type: 'log',
+                        level: 'warn',
+                        message: args.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ')
+                    });
+                };
+                const originalError = console.error;
+                console.error = function(...args) {
+                    originalError.apply(console, args);
+                    vscode.postMessage({
+                        type: 'log',
+                        level: 'error',
+                        message: args.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ')
+                    });
+                };
+                window.addEventListener('error', function(e) {
+                    vscode.postMessage({
+                        type: 'log',
+                        level: 'error',
+                        message: \`Unhandled runtime error: \${e.message} at \${e.filename}:\${e.lineno}:\${e.colno}\`
+                    });
+                });
+                window.addEventListener('unhandledrejection', function(e) {
+                    vscode.postMessage({
+                        type: 'log',
+                        level: 'error',
+                        message: \`Unhandled promise rejection: \${e.reason}\`
+                    });
+                });
+            }
+        })();
+
         // Injected manifest for the shared runtime
         window.__MANIFEST__ = ${manifestJson};
     </script>

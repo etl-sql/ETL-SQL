@@ -6,7 +6,7 @@
 - [x] **WelcomeView path resolution coupling**: Decouple `WelcomeView.ts` from direct knowledge of local/online files. The path resolver logic should be moved into a shared helper module.
 
 ### Logging
-- [ ] **Webview logger interfaces**: Webviews (e.g. `ResultsPanel`, `ReportPreviewPanel`) write directly to browser console (`console.error`, `console.warn`). They should post messages back to the extension host to write to the unified `ETL-SQL` output channel for consolidated developer diagnostics.
+- [x] **Webview logger interfaces**: Webviews (e.g. `ResultsPanel`, `ReportPreviewPanel`) write directly to browser console (`console.error`, `console.warn`). They should post messages back to the extension host to write to the unified `ETL-SQL` output channel for consolidated developer diagnostics.
 - [x] **Silent warmup failures**: Warmup process failures in `extension.ts` (`warmupRepl`) are caught and silenced. While intentional for happy-path user experience, recording warning telemetry in the output channel would greatly simplify troubleshooting of environment-related launch issues.
 
 ### Security

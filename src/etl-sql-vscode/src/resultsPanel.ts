@@ -95,7 +95,49 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
             let html = ResultsPanel._rawHtmlCache;
 
             // Inject nonce and CSP to maintain "Zero-Trust" standards
-            const inject = `<script nonce="${nonce}">window.VIEW_TYPE = 'results';</script>`;
+            const logInterceptor = `
+<script nonce="${nonce}">
+    (function() {
+        if (typeof acquireVsCodeApi === 'function') {
+            const vscode = acquireVsCodeApi();
+            window.acquireVsCodeApi = function() { return vscode; };
+            const originalWarn = console.warn;
+            console.warn = function(...args) {
+                originalWarn.apply(console, args);
+                vscode.postMessage({
+                    type: 'log',
+                    level: 'warn',
+                    message: args.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ')
+                });
+            };
+            const originalError = console.error;
+            console.error = function(...args) {
+                originalError.apply(console, args);
+                vscode.postMessage({
+                    type: 'log',
+                    level: 'error',
+                    message: args.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ')
+                });
+            };
+            window.addEventListener('error', function(e) {
+                vscode.postMessage({
+                    type: 'log',
+                    level: 'error',
+                    message: \`Unhandled runtime error: \${e.message} at \${e.filename}:\${e.lineno}:\${e.colno}\`
+                });
+            });
+            window.addEventListener('unhandledrejection', function(e) {
+                vscode.postMessage({
+                    type: 'log',
+                    level: 'error',
+                    message: \`Unhandled promise rejection: \${e.reason}\`
+                });
+            });
+        }
+    })();
+</script>
+`;
+            const inject = `${logInterceptor}<script nonce="${nonce}">window.VIEW_TYPE = 'results';</script>`;
             html = html.replace(/<head>/, `<head>${inject}`);
             // 1. Tag the script with the nonce
             html = html.replace(/<script type="module"/g, `<script type="module" nonce="${nonce}"`);
