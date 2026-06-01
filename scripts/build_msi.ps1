@@ -1,5 +1,5 @@
 # ETL-SQL Windows Installer Build Script
-# Requires WiX Toolset v3.x installed and in PATH.
+# Requires WiX Toolset v3.x installed and in PATH or under Program Files.
 
 $ErrorActionPreference = "Stop"
 $Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.9.0" }
@@ -56,17 +56,31 @@ function Resolve-WixToolset {
     $light = Get-Command light.exe -ErrorAction SilentlyContinue
 
     if (-not ($candle -and $light)) {
-        $wixPath = 'C:\Program Files (x86)\WiX Toolset v3.11\bin'
-        if ((Test-Path (Join-Path $wixPath 'candle.exe')) -and (Test-Path (Join-Path $wixPath 'light.exe'))) {
-            $env:PATH = "$wixPath;$env:PATH"
+        $programRoots = @(
+            ${env:ProgramFiles(x86)},
+            $env:ProgramFiles
+        ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+
+        $wixBin = $programRoots |
+            ForEach-Object { Get-ChildItem -LiteralPath $_ -Directory -Filter 'WiX Toolset v3*' -ErrorAction SilentlyContinue } |
+            Sort-Object Name -Descending |
+            ForEach-Object { Join-Path $_.FullName 'bin' } |
+            Where-Object {
+                (Test-Path -LiteralPath (Join-Path $_ 'candle.exe')) -and
+                (Test-Path -LiteralPath (Join-Path $_ 'light.exe'))
+            } |
+            Select-Object -First 1
+
+        if ($wixBin) {
+            $env:PATH = "$wixBin;$env:PATH"
             $candle = Get-Command candle.exe -ErrorAction SilentlyContinue
             $light = Get-Command light.exe -ErrorAction SilentlyContinue
         }
     }
 
     if (-not ($candle -and $light)) {
-        Write-Host "[ERROR] WiX Toolset v3.11 (candle.exe/light.exe) was not found." -ForegroundColor Red
-        Write-Host "  Install WiX 3.11 and re-run, or add this CI step before build_msi.ps1:" -ForegroundColor Gray
+        Write-Host "[ERROR] WiX Toolset v3.x (candle.exe/light.exe) was not found." -ForegroundColor Red
+        Write-Host "  Install WiX 3.x and re-run, or add this CI step before build_msi.ps1:" -ForegroundColor Gray
         Write-Host "  choco install wixtoolset -y --no-progress --skip-if-installed" -ForegroundColor Gray
         return $null
     }
