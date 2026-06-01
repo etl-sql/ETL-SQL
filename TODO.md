@@ -37,7 +37,7 @@
 - [x] **Sync-over-async blocking threads**:
   - `src/ETL-SQL.ReportPortal/Controllers/ExecutionController.cs:L319` makes a synchronous `.Wait()` call on `audit.LogAsync(...).Wait()`. This blocks ASP.NET Core request threads, creating a high risk of thread pool starvation and deadlocks.
   - `src/ETL-SQL.Core/Data/DataModel.cs:L495` calls `AddRowAsync(row).GetAwaiter().GetResult()` inside the obsolete synchronous `AddRow` wrapper.
-- [ ] **Synchronous blocking calls in SftpConnector**:
+- [x] **Synchronous blocking calls in SftpConnector**:
   - `src/ETL-SQL.Connectors/SftpConnector.cs` invokes synchronous SSH.NET methods like `Client.Connect()`, `Client.ListDirectory()`, `Client.Exists()`, and `Client.DeleteFile()` directly within async execution paths (such as `EnsureConnected()` inside `ListFilesCoreAsync`) without wrapping them in `Task.Run` or leveraging async equivalents. This stalls the async enumeration threads during network-bound calls.
 
 ### Cross-Platform & Environment Gotchas (Mac/Linux)

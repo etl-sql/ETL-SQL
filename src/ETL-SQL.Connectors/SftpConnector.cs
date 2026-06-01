@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Renci.SshNet;
 using Renci.SshNet.Common;
@@ -23,6 +24,7 @@ namespace ETL_SQL.Connectors
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private readonly Func<string, string, string?, string?, string?, SftpClient>? _clientFactory;
+        private readonly SemaphoreSlim _clientLock = new(1, 1);
 
         public string Name => "SFTP";
         public IReadOnlyList<string> Aliases => new[] { "SSH" };
@@ -125,11 +127,39 @@ namespace ETL_SQL.Connectors
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
 
-        private void EnsureConnected()
+        private SftpClient EnsureConnected()
         {
             if (!Client.IsConnected)
             {
                 Client.Connect();
+            }
+
+            return Client;
+        }
+
+        private async Task RunClientOperationAsync(Action<SftpClient> operation)
+        {
+            await _clientLock.WaitAsync();
+            try
+            {
+                await Task.Run(() => operation(EnsureConnected()));
+            }
+            finally
+            {
+                _clientLock.Release();
+            }
+        }
+
+        private async Task<T> RunClientOperationAsync<T>(Func<SftpClient, T> operation)
+        {
+            await _clientLock.WaitAsync();
+            try
+            {
+                return await Task.Run(() => operation(EnsureConnected()));
+            }
+            finally
+            {
+                _clientLock.Release();
             }
         }
 
@@ -138,30 +168,42 @@ namespace ETL_SQL.Connectors
 
         private async IAsyncEnumerable<FileMetaData> ListFilesCoreAsync(string path)
         {
-            await Task.CompletedTask;
-            EnsureConnected();
-            foreach (var i in Client.ListDirectory(path))
-                yield return new FileMetaData
-                {
-                    Name = i.Name,
-                    FullPath = i.FullName,
-                    Size = i.Attributes.Size,
-                    LastModified = i.LastWriteTime,
-                    IsDirectory = i.IsDirectory
-                };
+            var files = await RunClientOperationAsync(client =>
+                client.ListDirectory(path)
+                    .Select(i => new FileMetaData
+                    {
+                        Name = i.Name,
+                        FullPath = i.FullName,
+                        Size = i.Attributes.Size,
+                        LastModified = i.LastWriteTime,
+                        IsDirectory = i.IsDirectory
+                    })
+                    .ToList());
+
+            foreach (var file in files)
+                yield return file;
         }
+
+        private bool RemoteFileExists(SftpClient client, string remotePath) =>
+            client.Exists(remotePath) && !client.Get(remotePath).IsDirectory;
+
+        private bool RemoteDirectoryExists(SftpClient client, string remotePath) =>
+            client.Exists(remotePath) && client.Get(remotePath).IsDirectory;
 
         public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
         {
             try
             {
-                EnsureConnected();
-                if (!overwrite && await Task.Run(() => Client.Exists(remotePath)))
+                await RunClientOperationAsync(client =>
                 {
-                    throw new ExecutionException($"Remote file already exists: {remotePath}");
-                }
-                using var fileStream = File.OpenRead(localPath);
-                await Task.Run(() => Client.UploadFile(fileStream, remotePath));
+                    if (!overwrite && client.Exists(remotePath))
+                    {
+                        throw new ExecutionException($"Remote file already exists: {remotePath}");
+                    }
+
+                    using var fileStream = File.OpenRead(localPath);
+                    client.UploadFile(fileStream, remotePath);
+                });
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -173,13 +215,16 @@ namespace ETL_SQL.Connectors
         {
             try
             {
-                EnsureConnected();
                 if (!overwrite && File.Exists(localPath))
                 {
                     throw new ExecutionException($"Local file already exists: {localPath}");
                 }
-                using var fileStream = File.Open(localPath, overwrite ? FileMode.Create : FileMode.CreateNew);
-                await Task.Run(() => Client.DownloadFile(remotePath, fileStream));
+
+                await RunClientOperationAsync(client =>
+                {
+                    using var fileStream = File.Open(localPath, overwrite ? FileMode.Create : FileMode.CreateNew);
+                    client.DownloadFile(remotePath, fileStream);
+                });
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -191,8 +236,7 @@ namespace ETL_SQL.Connectors
         {
             try
             {
-                EnsureConnected();
-                await Task.Run(() => Client.DeleteFile(remotePath));
+                await RunClientOperationAsync(client => client.DeleteFile(remotePath));
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -204,8 +248,7 @@ namespace ETL_SQL.Connectors
         {
             try
             {
-                EnsureConnected();
-                return await Task.Run(() => Client.Exists(remotePath) && !Client.Get(remotePath).IsDirectory);
+                return await RunClientOperationAsync(client => RemoteFileExists(client, remotePath));
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -217,8 +260,7 @@ namespace ETL_SQL.Connectors
         {
             try
             {
-                EnsureConnected();
-                return await Task.Run(() => Client.Exists(remotePath) && Client.Get(remotePath).IsDirectory);
+                return await RunClientOperationAsync(client => RemoteDirectoryExists(client, remotePath));
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -230,12 +272,15 @@ namespace ETL_SQL.Connectors
         {
             try
             {
-                EnsureConnected();
-                if (overwrite && await Task.Run(() => Client.Exists(remoteDest)))
+                await RunClientOperationAsync(client =>
                 {
-                    await Task.Run(() => Client.DeleteFile(remoteDest));
-                }
-                await Task.Run(() => Client.RenameFile(remoteSource, remoteDest));
+                    if (overwrite && client.Exists(remoteDest))
+                    {
+                        client.DeleteFile(remoteDest);
+                    }
+
+                    client.RenameFile(remoteSource, remoteDest);
+                });
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -247,8 +292,7 @@ namespace ETL_SQL.Connectors
         {
             try
             {
-                EnsureConnected();
-                await Task.Run(() => Client.CreateDirectory(remotePath));
+                await RunClientOperationAsync(client => client.CreateDirectory(remotePath));
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -260,8 +304,7 @@ namespace ETL_SQL.Connectors
         {
             try
             {
-                EnsureConnected();
-                await Task.Run(() => Client.DeleteDirectory(remotePath));
+                await RunClientOperationAsync(client => client.DeleteDirectory(remotePath));
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -300,12 +343,21 @@ namespace ETL_SQL.Connectors
         {
             if (_client != null)
             {
-                if (_client.IsConnected)
+                await _clientLock.WaitAsync();
+                try
                 {
-                    _client.Disconnect();
+                    if (_client.IsConnected)
+                    {
+                        _client.Disconnect();
+                    }
+                    _client.Dispose();
                 }
-                _client.Dispose();
+                finally
+                {
+                    _clientLock.Release();
+                }
             }
+            _clientLock.Dispose();
             await Task.CompletedTask;
         }
 
