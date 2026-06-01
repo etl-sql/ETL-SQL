@@ -64,10 +64,10 @@
 - [ ] Add license header to generated assets under src/ETL‑SQL.ReportRuntime/Resources/Shared.
 
 ### Architecture Documentation Gaps (June 2026 Audit)
-- [ ] [Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md): Add the 8 missing connectors (SQLite, MySQL, MongoDB, Kafka, SharePoint, S3, ActiveDirectory, Orchestrator) to the inventory table.
-- [ ] [Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md): Document `IPortalAdminConnection` and `ISpillable` on `InMemoryDataSource`.
+- [x] [Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md): Add the 8 missing connectors (SQLite, MySQL, MongoDB, Kafka, SharePoint, S3, ActiveDirectory, Orchestrator) to the inventory table.
+- [x] [Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md): Document `IPortalAdminConnection` and `ISpillable` on `InMemoryDataSource`.
 - [x] [Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md) & [Lineage.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Lineage.md): Verified C# namespaces (they are correct as `ETL_SQL.Data`, not `ETL_SQL.Core.Data`).
-- [ ] [Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md) & [Engine.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Engine.md): Update `IConnector` and `IDataSource` signature listings to match C# source (include `IExecutionContext` parameters and missing default methods like `GetConfig()`).
+- [x] [Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md) & [Engine.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Engine.md): Update `IConnector` and `IDataSource` signature listings to match C# source (include `IExecutionContext` parameters and missing default methods like `GetConfig()`).
 - [x] [Lineage.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Lineage.md): Align `TransformationKind` enum values with [TransformationKind.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/TransformationKind.cs) (update from 5 to 12 values).
 - [ ] [Engine.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Engine.md): Update lint rules documentation to reflect the current 39 rules (currently docs show 18 rules).
 - [x] [ExpressionEvaluation.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/ExpressionEvaluation.md): Re-order sections 14 and 15, and resolve internal NULL comparison contradictions (§6 vs §15).

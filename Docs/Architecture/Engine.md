@@ -339,20 +339,25 @@ Connectors are registered at startup and queried for metadata. They are stateles
 |---|---|
 | `string Name` | Canonical name (`MSSQL`, `FLATFILE`, …) |
 | `IReadOnlyList<string> Aliases` | Alternative names accepted in scripts |
-| `Task<string> GetVersionAsync(connStr)` | Remote engine version |
+| `Task<string> GetVersionAsync(context, connStr)` | Remote engine version |
 | `HashSet<string> GetSupportedFunctions()` | Functions the connector's dialect supports |
 | `HashSet<string> GetSupportedKeywords()` | SQL keywords the connector's dialect supports |
 | `HashSet<string> GetExcludedKeywords()` | Baseline ETL-SQL keywords NOT supported (e.g. `TOP` for Postgres) |
 | `Dictionary<string, string[]> GetSupportedOptions()` | Named connection options |
 | `Dictionary<string, string[]> GetOptionValues()` | Predefined values for options |
 | `string GetHelp()` | Human-readable usage hint |
-| `IDataSource CreateDataSource(connStr, options)` | Factory — creates a live data source |
-| `IDataSource CreateDataSource(connStr, options, schema)` | Factory with template schema |
-| `Task<IEnumerable<string>> GetTablesAsync(connStr)` | Schema introspection |
-| `Task<IEnumerable<string>> GetViewsAsync(connStr)` | Schema introspection |
-| `Task<IEnumerable<string>> GetColumnsAsync(connStr, table)` | Schema introspection |
-| `Task<IEnumerable<string>> GetProceduresAsync(connStr)` | Schema introspection |
+| `IDataSource CreateDataSource(context, connStr, options)` | Factory — creates a live data source |
+| `IDataSource CreateDataSource(context, connStr, options, schema)` | Factory with template schema |
+| `Task<IEnumerable<string>> GetTablesAsync(context, connStr)` | Schema introspection |
+| `Task<IEnumerable<string>> GetViewsAsync(context, connStr)` | Schema introspection |
+| `Task<IEnumerable<string>> GetColumnsAsync(context, connStr, table)` | Schema introspection |
+| `Task<IEnumerable<string>> GetProceduresAsync(context, connStr)` | Schema introspection |
 | `string BuildConnectionString(properties)` | Construct a connection string from a property bag |
+| `string? GetHost(connStr, options)` | Returns target host for network-based connectors to support egress validation |
+| `bool IsFileBased` | True if the connector is file-based (CSV, Parquet, SQLite) and requires path resolution |
+| `int CommandTimeoutSeconds` | Default command timeout in seconds (OLTP: 30, Warehouse: 1800) |
+| `bool IsDataWarehouse` | True if targeting an analytical data warehouse |
+| `ICatalogMetadataProvider? GetCatalogProvider(connStr)` | Returns a metadata provider for schema/lineage enrichment |
 
 ### IDataSource — runtime interface
 
@@ -361,7 +366,7 @@ Every live data source implements this. Returned by `IConnector.CreateDataSource
 | Member | Purpose |
 |---|---|
 | `IAsyncEnumerable<DataTable> ReadBatches(batchSize)` | Stream data out in batches |
-| `Task WriteBatches(IAsyncEnumerable<DataTable>)` | Stream data in |
+| `Task WriteBatches(IAsyncEnumerable<DataTable>, append)` | Stream data in |
 | `Task TruncateAsync()` | Remove all rows |
 | `Task<IEnumerable<string>> GetColumnsAsync()` | Column names for this source |
 | `object? Snapshot()` | Capture state for transaction rollback |
@@ -372,6 +377,8 @@ Every live data source implements this. Returned by `IConnector.CreateDataSource
 | `string ConnectorType` | Connector name (e.g. `MSSQL`, `INMEMORY`) |
 | `Task<IEnumerable<string>> GetTablesAsync()` | Tables in a multi-table source |
 | `Task<bool> ExistsAsync(columns, values)` | Row existence check for MERGE |
+| `IReadOnlyDictionary<string, string> GetConfig()` | Returns creation options with credentials and ENC: values masked |
+| `ICatalogMetadataProvider? GetCatalogProvider()` | Returns a catalog provider for database comments / metadata |
 
 ### IDatabaseSource : IDataSource — SQL-capable sources
 
