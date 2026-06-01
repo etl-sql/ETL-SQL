@@ -69,7 +69,7 @@ When code **writes** `@var` via `SET`, the manager finds the first scope contain
 | `PushScope(vars, metadata)` | Adds a new scope layer on top of the stack |
 | `PopScope()` | Removes the top scope layer (always call in a `finally` block) |
 | `GetVariablesWithMetadata(predicate)` | Returns all variables from all scopes matching the predicate |
-| `Fork()` | Shallow-copies the entire scope state for `PARALLEL` execution |
+| `Fork()` | Copies globals and stack frames for `PARALLEL` execution |
 | `Merge(spawned)` | Syncs global variables back from a forked scope |
 
 ### `VariableMetadata` Flags
@@ -214,14 +214,14 @@ Functions are dispatched **before** the built-in `FunctionRegistry` in `Evaluate
 `PARALLEL` blocks execute statements concurrently. Each branch gets a **forked** `VariableScopeManager`:
 
 ```csharp
-var fork = _scopeManager.Fork();  // shallow copy of globals + stack
+var fork = _scopeManager.Fork();  // copies globals and stack frames
 // each branch runs with its own fork
 // after all branches complete:
 foreach (var fork in completedForks)
     _scopeManager.Merge(fork);  // sync global variables back
 ```
 
-`Fork()` deep-copies the variable dictionaries so branches don't interfere. `Merge()` writes the forked global state back to the parent, with the last-writer-wins semantic for any variable written by multiple branches.
+`Fork()` copies the variable dictionaries (globals and stack frames) so branches don't interfere. `Merge()` writes the forked global state back to the parent, with the last-writer-wins semantic for any variable written by multiple branches.
 
 ---
 

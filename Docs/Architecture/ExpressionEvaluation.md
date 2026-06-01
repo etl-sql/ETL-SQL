@@ -149,7 +149,7 @@ The engine implements SQL three-valued logic throughout:
 - `null OR false` → `null`
 - `null OR true` → `true`
 
-**Comparisons (`=`, `<>`, etc.):** If either operand is `null`/`DBNull`, the comparison returns `false` (not `null`). Use `IS NULL` / `IS NOT NULL` to test nullability explicitly.
+**Comparisons (`=`, `<>`, etc.):** If either operand is `null`/`DBNull`, the comparison returns `null` per SQL three-valued logic. Use `IS NULL` / `IS NOT NULL` to test nullability explicitly.
 
 **`IS NULL` / `IS NOT NULL`:** Returns `bool`, never null.
 
@@ -291,6 +291,21 @@ For interval arithmetic (`DATEADD`, `DATEDIFF`) use the built-in functions rathe
 
 ---
 
+## 14. Adding a New Built-in Function
+
+1. Open `ETL-SQL.Engine/Functions/StandardFunctions.cs`
+2. Add a registration in the constructor or the appropriate category section:
+   ```csharp
+   registry.RegisterWithHelp(
+       "MY_FUNC",
+       async (args, ctx) => { /* implementation */ return result; },
+       "MY_FUNC(arg1, arg2): Description for signature help.");
+   ```
+3. Add the function name to the language server's `SignatureHelpProvider` hard-coded dictionary if it takes parameters (so editors show hints)
+4. Add a test in `ETL-SQL.Tests` using the standard `FunctionTests` pattern
+
+---
+
 ## 15. Known Behaviors and Engine Quirks
 
 These behaviors were discovered during SLT corpus authoring and are tested by the SLT suite. They match SQL standard semantics but may surprise readers expecting C#/Java arithmetic defaults.
@@ -359,17 +374,3 @@ SET CASE_SENSITIVE = OFF;  -- restore default
 
 See the Administrators Guide §8.1 for the full interaction with connectors and `ORDER BY` collation.
 
----
-
-## 14. Adding a New Built-in Function
-
-1. Open `ETL-SQL.Engine/Functions/StandardFunctions.cs`
-2. Add a registration in the constructor or the appropriate category section:
-   ```csharp
-   registry.RegisterWithHelp(
-       "MY_FUNC",
-       async (args, ctx) => { /* implementation */ return result; },
-       "MY_FUNC(arg1, arg2): Description for signature help.");
-   ```
-3. Add the function name to the language server's `SignatureHelpProvider` hard-coded dictionary if it takes parameters (so editors show hints)
-4. Add a test in `ETL-SQL.Tests` using the standard `FunctionTests` pattern

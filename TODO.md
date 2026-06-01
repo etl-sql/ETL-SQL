@@ -52,3 +52,29 @@
 - [ ] Keep `Test-PreRelease.ps1 -Explain`, `Docs/Testing.md`, `Docs/Strategy/Test_Strategy.md`, and `scripts/README.md` synchronized whenever phases or lanes change.
 - [ ] Add new ETL scenario golden tests only for uncovered release claims; current scenario suite has 27 passing workflows covering staged ETL, `WHAT_IF`, lineage/tags/source columns, loops, `TRY...CATCH`, transactions, DML audit, merge, hash-change detection, set ops, recursive CTE, pivot/unpivot, semi/anti joins, file round trip, JSON extraction, and modular scripts.
 - [ ] Expand custom SLT files only when SQL semantics change or `Docs/Standards/SLT_Coverage.md` marks a release-relevant area Low/Medium and under-tested.
+
+## Documentation Gaps (from gap analysis)
+- [ ] Roadmap language in reference docs – remove/replace occurrences of “roadmap”, “backlog”, “planned”, “future”.
+- [ ] Strategy folder status flags – add **Status:** header to each strategy file.
+- [ ] DocSanity test coverage – extend test or update docs to remove “backlog”, “planned”.
+- [ ] Standard Library missing function signatures – add signatures, return types, examples for BITCOUNT, BIT_SHIFTLEFT, BIT_SHIFTRIGHT.
+- [ ] Connector option naming consistency – rename `Password` option to `PASSWORD` in Data_Connectors.md.
+- [ ] CI workflow badge – replace Azure DevOps badge with GitHub Actions badge.
+- [ ] Add unit test for BIT_COUNT function in Tests.
+- [ ] Add license header to generated assets under src/ETL‑SQL.ReportRuntime/Resources/Shared.
+
+### Architecture Documentation Gaps (June 2026 Audit)
+- [ ] [Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md): Add the 8 missing connectors (SQLite, MySQL, MongoDB, Kafka, SharePoint, S3, ActiveDirectory, Orchestrator) to the inventory table.
+- [ ] [Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md): Document `IPortalAdminConnection` and `ISpillable` on `InMemoryDataSource`.
+- [x] [Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md) & [Lineage.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Lineage.md): Verified C# namespaces (they are correct as `ETL_SQL.Data`, not `ETL_SQL.Core.Data`).
+- [ ] [Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md) & [Engine.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Engine.md): Update `IConnector` and `IDataSource` signature listings to match C# source (include `IExecutionContext` parameters and missing default methods like `GetConfig()`).
+- [x] [Lineage.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Lineage.md): Align `TransformationKind` enum values with [TransformationKind.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/TransformationKind.cs) (update from 5 to 12 values).
+- [ ] [Engine.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Engine.md): Update lint rules documentation to reflect the current 39 rules (currently docs show 18 rules).
+- [x] [ExpressionEvaluation.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/ExpressionEvaluation.md): Re-order sections 14 and 15, and resolve internal NULL comparison contradictions (§6 vs §15).
+- [x] [ParserLexer.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/ParserLexer.md): Correct description about `StatementParser.cs` being split into partials (it is monolithic).
+- [x] [VariableScoping.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/VariableScoping.md): Clarify `Fork()` deep vs. shallow copy semantics.
+- [x] [PortalUI.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/PortalUI.md): Replace references to `sync-assets.ps1` with `sync-assets.js` to match AGENTS.md.
+- [ ] [VSCodeExtension.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/VSCodeExtension.md): Document missing webview and command controllers (e.g. `reportDesignerPanel.ts`, `sidebarProvider.ts`, `WelcomeView.ts`, notebook support).
+- [ ] [TuiEditor.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/TuiEditor.md): Document 15 missing UI classes including `ReplUi.cs` and TUI report preview support.
+- [ ] [LanguageServer.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/LanguageServer.md): Document missing LSP handlers (`DesignerLspHandler.cs`, `DocumentSymbolProvider.cs`, `UpdateNotebookContextHandler.cs`).
+- [ ] Cross-references: Connect/cross-reference Reporting, Portal, UI, and Orchestrator architecture files to eliminate documentation siloing.

@@ -56,7 +56,7 @@ Build output names:
 The shared kernel. Nothing depends on this except what it pulls in from NuGet.
 
 - **Parser** (`ETL_SQL.Core.Parser`) — tokenizer, parser, and full AST definition. Every statement type (`SelectStatement`, `CreateConnectionStatement`, etc.) lives here.
-- **Interfaces** — `IConnector`, `IConnectorRegistry`, `IDataSource`, `IDatabaseSource`, `IStatementHandler`, `IExecutionContext`, `IScriptExecutor`, `IJobHistoryStore`, `ILintRule`, `ILintContext`.
+- **Interfaces** — `IConnector`, `IConnectorRegistry`, `IDataSource`, `IDatabaseSource`, `IStatementHandler`, `IExecutionContext`, `IScriptExecutor`, `IJobHistoryStore`.
 - **Data model** — `Row`, `DataTable`, `ColumnDefinition`, `JobDefinition`, `JobHistoryEntry`, `SessionState`.
 - **Analysis contracts used by runtime** — shared parser diagnostics, metadata abstractions, and AST/data contracts consumed by the `ETL-SQL.Analysis` project.
 - **Common utilities** — `ILogger` facade (ETL_SQL.Common), `ExecutionException`, `ExecutionTree`, `LineageTracker`.
