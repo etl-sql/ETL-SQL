@@ -329,6 +329,10 @@ When changing report runtime JavaScript, CSS, themes, or shared browser dependen
 
 Do not "fix" drift by editing generated host copies. The check step compares host copies to the canonical shared source and will fail if they diverge.
 
+### Prototyping browser-side UI (no Docker)
+
+Before changing a browser-side report/portal component, prototype and visually verify it in the **UI sandbox** at `tools/ui-sandbox/` (`pwsh -File tools\ui-sandbox\serve.ps1`) — do **not** spin up Docker or the full portal just to eyeball a JS/CSS change. It is a no-build "stories" harness that imports the canonical/source files directly (cache-busted on **↻ Reload**), so an edit shows immediately with no sync, no portal build, and no catalog DB. It hosts the `designer.js` exports (`renderDag`, `createScriptEditor`, `createDesigner`) and extracted portal UI modules (e.g. `src/ETL-SQL.ReportPortal/wwwroot/js/lineage-ui.js`); each surface is a story under `tools/ui-sandbox/stories/` driven by fixture data, with an injectable mock fetch (`mockApi.js`) for API-backed components. Add or extend a story when you change a surface. The sandbox is dev-only and does **not** replace the sync step above.
+
 ---
 
 ## 11. Source Boundary Rules for Agents
