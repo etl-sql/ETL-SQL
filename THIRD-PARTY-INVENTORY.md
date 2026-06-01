@@ -35,6 +35,9 @@ About screens. It is not legal advice.
 | Microsoft.AspNetCore.Authentication.JwtBearer | 10.0.8 | runtime | MIT | expression | https://asp.net/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
 | Microsoft.AspNetCore.Identity.EntityFrameworkCore | 10.0.8 | runtime | MIT | expression | https://asp.net/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
 | Microsoft.AspNetCore.Mvc.Testing | 10.0.8 | test | MIT | expression | https://asp.net/ | tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj |
+| Microsoft.ClearScript.V8 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
+| Microsoft.ClearScript.V8.Native.linux-x64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
+| Microsoft.ClearScript.V8.Native.win-x64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
 | Microsoft.Data.SqlClient | 7.0.1 | runtime | MIT | expression | https://aka.ms/sqlclientproject | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Microsoft.Data.Sqlite | 10.0.8 | runtime | MIT | expression | https://docs.microsoft.com/dotnet/standard/data/sqlite/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
 | Microsoft.EntityFrameworkCore.Design | 10.0.8 | runtime | MIT | expression | https://docs.microsoft.com/ef/core/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
@@ -74,6 +77,7 @@ About screens. It is not legal advice.
 | Serilog.Sinks.Console | 6.1.1 | runtime | Apache-2.0 | expression | https://github.com/serilog/serilog-sinks-console | src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj |
 | Serilog.Sinks.File | 7.0.0 | runtime, test | Apache-2.0 | expression | https://github.com/serilog/serilog-sinks-file | src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | Serilog.Sinks.XUnit | 3.0.19 | test | MIT | expression | https://github.com/trbenning/serilog-sinks-xunit | tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
+| SkiaSharp.NativeAssets.Linux | 3.119.2 | runtime | MIT | expression | https://go.microsoft.com/fwlink/?linkid=868515 | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
 | Snappier | 1.3.1 | runtime | BSD-3-Clause | expression | https://brantburnett.github.io/Snappier/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Snowflake.Data | 5.6.0 | runtime | Apache-2.0 | expression | https://github.com/snowflakedb/snowflake-connector-net | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Spectre.Console | 0.55.2 | runtime, test | MIT | expression | https://github.com/spectreconsole/spectre.console | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Engine/ETL-SQL.Engine.csproj; src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |

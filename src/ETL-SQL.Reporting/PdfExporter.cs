@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -65,10 +66,70 @@ namespace ETL_SQL.Reporting
                 if (_fontsInitialized)
                     return;
 
-                if (OperatingSystem.IsWindows())
-                    GlobalFontSettings.UseWindowsFontsUnderWindows = true;
+                // PDFsharp resolves fonts by name. On Linux containers the Windows
+                // font names it expects ("Arial", plus the "Courier New" predefined
+                // error font) don't exist, so register a resolver that maps every
+                // requested face to an available OS sans-serif TrueType file. This
+                // makes PDF export work with no Microsoft fonts installed.
+                GlobalFontSettings.FontResolver ??= new ReportFontResolver();
 
                 _fontsInitialized = true;
+            }
+        }
+
+        /// <summary>
+        /// Maps every requested family/face to an available sans-serif TrueType file
+        /// (DejaVu Sans on Linux, Arial on Windows) so PDF export needs no MS fonts.
+        /// </summary>
+        private sealed class ReportFontResolver : IFontResolver
+        {
+            private const string Regular = "report-sans";
+            private const string Bold    = "report-sans-bold";
+
+            private static readonly string[] RegularCandidates =
+            {
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                @"C:\Windows\Fonts\arial.ttf",
+                "/Library/Fonts/Arial.ttf",
+                "/System/Library/Fonts/Supplemental/Arial.ttf",
+            };
+
+            private static readonly string[] BoldCandidates =
+            {
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                @"C:\Windows\Fonts\arialbd.ttf",
+                "/Library/Fonts/Arial Bold.ttf",
+                "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+            };
+
+            private static readonly Dictionary<string, byte[]> _fontCache = new();
+            private static readonly object _cacheLock = new();
+
+            public FontResolverInfo ResolveTypeface(string familyName, bool isBold, bool isItalic)
+                => new FontResolverInfo(isBold ? Bold : Regular);
+
+            public byte[] GetFont(string faceName)
+            {
+                lock (_cacheLock)
+                {
+                    if (_fontCache.TryGetValue(faceName, out var cached))
+                        return cached;
+
+                    var candidates = faceName == Bold ? BoldCandidates : RegularCandidates;
+                    foreach (var path in candidates)
+                    {
+                        if (File.Exists(path))
+                        {
+                            var bytes = File.ReadAllBytes(path);
+                            _fontCache[faceName] = bytes;
+                            return bytes;
+                        }
+                    }
+
+                    throw new InvalidOperationException(
+                        "No usable TrueType font found for PDF export. Install a base font " +
+                        "(e.g. 'fonts-dejavu-core' on Linux).");
+                }
             }
         }
 
@@ -112,7 +173,7 @@ namespace ETL_SQL.Reporting
 
             // ── Visuals ───────────────────────────────────────────────────────
             foreach (var visual in GetVisualsInOrder(manifest))
-                RenderVisual(section, visual, tempFiles);
+                RenderVisual(section, visual, manifest, tempFiles);
 
             return document;
         }
@@ -139,7 +200,7 @@ namespace ETL_SQL.Reporting
             return result;
         }
 
-        private void RenderVisual(Section section, VisualManifest v, List<string> tempFiles)
+        private void RenderVisual(Section section, VisualManifest v, ReportManifest manifest, List<string> tempFiles)
         {
             var heading = section.AddParagraph(v.Name);
             heading.Format.SpaceBefore = Unit.FromPoint(16);
@@ -156,24 +217,59 @@ namespace ETL_SQL.Reporting
 
             switch (v.VisualType.ToUpperInvariant())
             {
-                case "TABLE":  RenderTable(section, v);             break;
-                case "CARD":   RenderCard(section, v);              break;
-                case "TEXT":   RenderText(section, v);              break;
+                case "TABLE":  RenderTable(section, v);  break;
+                case "CARD":   RenderCard(section, v);   break;
+                case "TEXT":   RenderText(section, v);   break;
+
+                // Filter/input controls: render the selection that was in effect at
+                // export time, so the reader knows how the report was filtered.
                 case "SLICER":
-                    var sp = section.AddParagraph("[Slicer — interactive only]");
-                    sp.Format.SpaceBefore = Unit.FromPoint(4);
-                    sp.Format.Font.Color  = _greyDark1;
-                    sp.Format.Font.Italic = true;
+                case "MULTISELECT":
+                case "DATEPICKER":
+                case "RELDATEPICKER":
+                case "SLIDER":
+                case "SEARCH":
+                case "NUMBERBOX":
+                case "CHECKBOX":
+                case "DROPDOWN":
+                    RenderFilter(section, v, manifest);
                     break;
+
                 default:
                     RenderChart(section, v, tempFiles);
                     break;
             }
         }
 
+        private static void RenderFilter(Section section, VisualManifest v, ReportManifest manifest)
+        {
+            // Parameter name: a SET_PARAMETER action, else an options key.
+            var paramName = v.Actions
+                .FirstOrDefault(a => string.Equals(a.Type, "SET_PARAMETER", StringComparison.OrdinalIgnoreCase))
+                ?.ParameterName;
+            if (string.IsNullOrEmpty(paramName))
+                paramName = v.Options.GetValueOrDefault("PARAMETER")
+                         ?? v.Options.GetValueOrDefault("parameter")
+                         ?? v.Options.GetValueOrDefault("data-parameter");
+
+            string? value = null;
+            if (!string.IsNullOrEmpty(paramName))
+                manifest.Parameters.TryGetValue(paramName, out value);
+
+            var display = string.IsNullOrWhiteSpace(value) ? "(all)" : value!;
+
+            var p = section.AddParagraph();
+            p.Format.SpaceBefore = Unit.FromPoint(4);
+            var kicker = p.AddFormattedText($"{v.VisualType.ToLowerInvariant()} filter — selected: ", TextFormat.Italic);
+            kicker.Color = _greyDark1;
+            p.AddFormattedText(display, TextFormat.Bold);
+        }
+
         private void RenderChart(Section section, VisualManifest v, List<string> tempFiles)
         {
-            var svgStr = _svg.Render(v);
+            // Prefer real ECharts (SSR) so every chart type matches the on-screen report;
+            // fall back to the static SVG renderer when there's no chart option or SSR fails.
+            var svgStr = EChartsSsrRenderer.Shared.RenderSvg(v) ?? _svg.Render(v);
             if (svgStr != null)
             {
                 var png = SvgToPng(svgStr);
@@ -213,12 +309,28 @@ namespace ETL_SQL.Reporting
 
             section.AddParagraph(); // visual gap before table
 
-            int    cap      = Math.Min(v.Rows.Count, 500);
-            double colWidth = ContentWidthPt / v.Columns.Count;
-            var    table    = section.AddTable();
+            int cap = Math.Min(v.Rows.Count, 500);
 
-            foreach (var _ in v.Columns)
-                table.AddColumn(Unit.FromPoint(colWidth));
+            // Size columns proportionally to their content so wide text columns get
+            // more room and short ones (ids, codes) don't force everything to wrap.
+            // Weights are clamped so a single very-long column can't starve the rest.
+            var weights = new double[v.Columns.Count];
+            int sample  = Math.Min(cap, 50);
+            for (int ci = 0; ci < v.Columns.Count; ci++)
+            {
+                int maxLen = (v.Columns[ci] ?? "").Length;
+                for (int i = 0; i < sample; i++)
+                {
+                    var row = v.Rows[i];
+                    if (ci < row.Count) maxLen = Math.Max(maxLen, FormatCell(row[ci]).Length);
+                }
+                weights[ci] = Math.Clamp(maxLen, 4, 40);
+            }
+            double totalWeight = weights.Sum();
+
+            var table = section.AddTable();
+            for (int ci = 0; ci < v.Columns.Count; ci++)
+                table.AddColumn(Unit.FromPoint(ContentWidthPt * weights[ci] / totalWeight));
 
             var header = table.AddRow();
             header.Shading.Color = _greyLight3;
@@ -237,7 +349,7 @@ namespace ETL_SQL.Reporting
                 dRow.Borders.Bottom.Color = _greyLight2;
                 for (int ci = 0; ci < v.Columns.Count; ci++)
                 {
-                    var text = ci < row.Count ? row[ci] ?? "" : "";
+                    var text = FormatCell(ci < row.Count ? row[ci] : "");
                     dRow.Cells[ci].AddParagraph(text).Format.Font.Size = Unit.FromPoint(9);
                 }
             }
@@ -252,6 +364,8 @@ namespace ETL_SQL.Reporting
                 p.Format.Font.Color  = _greyDark1;
             }
         }
+
+        private static string FormatCell(string? raw) => ReportCellFormatter.FormatCell(raw);
 
         private static void RenderCard(Section section, VisualManifest v)
         {
@@ -289,7 +403,7 @@ namespace ETL_SQL.Reporting
             }
         }
 
-        private static byte[] SvgToPng(string svgContent)
+        internal static byte[] SvgToPng(string svgContent)
         {
             using var svg    = new SKSvg();
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(svgContent));

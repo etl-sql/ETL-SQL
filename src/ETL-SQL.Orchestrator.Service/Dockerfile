@@ -29,10 +29,11 @@ RUN dotnet publish "ETL-SQL.Orchestrator.Service.csproj" -c Release -o /app/publ
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-# SkiaSharp (PDF chart rendering via Svg.Skia) needs fontconfig at runtime for
-# scheduled report/PDF exports; the aspnet base image doesn't include it.
+# SkiaSharp (PDF chart rendering via Svg.Skia) needs fontconfig + a font at runtime
+# for scheduled report/PDF exports. (The native libSkiaSharp.so itself comes from
+# the SkiaSharp.NativeAssets.Linux package.)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libfontconfig1 \
+    && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=publish /app/publish .

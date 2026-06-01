@@ -61,6 +61,7 @@ projects. License values are taken from local package metadata when available.
 | MailKit | MIT | SMTP/email support. |
 | Microsoft.AspNetCore.Authentication.JwtBearer | MIT | Portal authentication. |
 | Microsoft.AspNetCore.Identity.EntityFrameworkCore | MIT | Portal identity storage. |
+| Microsoft.ClearScript.V8 (+ V8.Native.win-x64, .linux-x64) | MIT (bundles the V8 engine, BSD-3-Clause) | Hosts ECharts server-side (SSR) for export chart rendering (PDF/Markdown). |
 | Microsoft.Data.SqlClient | MIT | SQL Server connector support. |
 | Microsoft.Data.Sqlite | MIT | SQLite and local storage support. |
 | Microsoft.EntityFrameworkCore.Design | MIT | EF Core migrations/design-time tooling. |
@@ -75,6 +76,7 @@ projects. License values are taken from local package metadata when available.
 | PgpCore | MIT | PGP encryption/decryption support. |
 | Polly | BSD-3-Clause | Resilience policies. |
 | PDFsharp-MigraDoc | MIT | PDF export. |
+| SkiaSharp.NativeAssets.Linux | MIT | Native SkiaSharp library for Linux containers (PDF chart rendering). |
 | Svg.Skia | MIT | SVG rasterization for PDF chart rendering. |
 | Serilog and Serilog.* | Apache-2.0 | Structured logging. |
 | Snappier | BSD-3-Clause | Snappy compression support. |

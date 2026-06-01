@@ -25,8 +25,9 @@ namespace ETL_SQL.Reporting
         public string? Render(VisualManifest v) =>
             v.VisualType.ToUpperInvariant() switch
             {
-                "BAR"    => RenderBar(v, false),
-                "HBAR"   => RenderBar(v, true),
+                "BAR"          => RenderBar(v, false),
+                "HBAR"         => RenderBar(v, true),
+                "HORIZONTALBAR" => RenderBar(v, true),
                 "LINE"   => RenderLine(v),
                 "PIE"    => RenderPie(v, false),
                 "DONUT"  => RenderPie(v, true),
