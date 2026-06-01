@@ -13,7 +13,7 @@ using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Core.Common;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.Connectors
 {
     [Trait("Connector", "JSON")]
     [Trait("CertificationClass", "LocalRealIntegration")]

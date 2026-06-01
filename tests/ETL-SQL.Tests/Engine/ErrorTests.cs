@@ -10,7 +10,7 @@ using ETL_SQL.Data;
 using Spectre.Console;
 using ETL_SQL.Core.Common.Exceptions;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.Engine
 {
     public class ErrorTests
     {

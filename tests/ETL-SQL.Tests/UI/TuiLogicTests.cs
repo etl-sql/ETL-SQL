@@ -10,7 +10,7 @@ using ETL_SQL.TUI.UI;
 using ETL_SQL.Data;
 using ETL_SQL.TUI;
 
-namespace ETL_SQL.Tests.Integration.UI
+namespace ETL_SQL.Tests.UI
 {
     public class TuiLogicTests
     {

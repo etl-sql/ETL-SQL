@@ -10,7 +10,7 @@ using ETL_SQL.Connectors.MockDb;
 using System.Linq;
 using System.IO;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.UI
 {
     public class ConsoleEditorTests
     {

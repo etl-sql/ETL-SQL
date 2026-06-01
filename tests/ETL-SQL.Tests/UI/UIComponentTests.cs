@@ -12,7 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.UI
 {
     public class UIComponentTests
     {

@@ -2,7 +2,7 @@ using Xunit;
 using System.Collections.Generic;
 using ETL_SQL.Connectors;
 
-namespace ETL_SQL.Tests.Integration.Connectors
+namespace ETL_SQL.Tests.Connectors
 {
     [Trait("Connector", "MULTIPLE")]
     [Trait("CertificationClass", "MetadataOnly")]

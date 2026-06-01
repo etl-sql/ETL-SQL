@@ -12,7 +12,7 @@ using CoreSuggestionContext = ETL_SQL.Core.Services.SuggestionContext;
 using TuiSuggestionContext = ETL_SQL.TUI.UI.SuggestionContext;
 using CoreMetadataManager = ETL_SQL.Core.Services.MetadataManager;
 
-namespace ETL_SQL.Tests.Integration.UI
+namespace ETL_SQL.Tests.UI
 {
     public class AutocompleteDocumentationTests
     {

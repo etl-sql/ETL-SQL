@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Data;
 using Spectre.Console;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.Connectors
 {
     [Trait("Connector", "FILE")]
     [Trait("CertificationClass", "LocalRealIntegration")]

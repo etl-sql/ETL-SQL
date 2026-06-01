@@ -10,7 +10,7 @@ using ETL_SQL.App;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.Statements
 {
     public class FileSystemTests
     {

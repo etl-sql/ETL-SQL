@@ -11,7 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System;
 using ETL_SQL.App;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.Connectors
 {
     [Trait("Connector", "JSON_XML")]
     [Trait("CertificationClass", "LocalRealIntegration")]

@@ -14,7 +14,7 @@ using ETL_SQL.TUI.UI;
 using Spectre.Console;
 using ETL_SQL.Core.Common;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.UI
 {
     public class SuggestTests
     {

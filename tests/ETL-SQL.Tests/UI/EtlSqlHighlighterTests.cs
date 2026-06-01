@@ -2,7 +2,7 @@ using System.Linq;
 using Xunit;
 using ETL_SQL.TUI.UI;
 
-namespace ETL_SQL.Tests.Integration.UI
+namespace ETL_SQL.Tests.UI
 {
     /// <summary>
     /// Pure tokenization logic — no terminal UI initialization required.

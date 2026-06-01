@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using System.Linq;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.Security
 {
     public class SecurityTests
     {

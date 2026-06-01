@@ -7,7 +7,7 @@ using ETL_SQL.Services;
 using Moq;
 using Xunit;
 
-namespace ETL_SQL.Tests.Integration.Connectors
+namespace ETL_SQL.Tests.Connectors
 {
     [Trait("Connector", "SNOWFLAKE")]
     [Trait("CertificationClass", "MetadataOnly")]

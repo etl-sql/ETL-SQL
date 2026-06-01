@@ -12,7 +12,7 @@ using ETL_SQL.Connectors.MockDb;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Core.Common;
 
-namespace ETL_SQL.Tests.Integration.UI
+namespace ETL_SQL.Tests.UI
 {
     public class TuiAutocompleteVariationsTests
     {

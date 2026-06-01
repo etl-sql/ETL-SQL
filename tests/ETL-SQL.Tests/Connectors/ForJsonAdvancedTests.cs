@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using System.Linq;
 using System;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.Connectors
 {
     [Trait("Connector", "JSON")]
     [Trait("CertificationClass", "LocalRealIntegration")]

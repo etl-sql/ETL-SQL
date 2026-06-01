@@ -12,7 +12,7 @@ using ETL_SQL.Connectors.Xml;
 using Spectre.Console;
 using ETL_SQL.Common;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.Connectors
 {
     [Trait("Connector", "XML")]
     [Trait("CertificationClass", "LocalRealIntegration")]

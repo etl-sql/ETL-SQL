@@ -1,6 +1,6 @@
 using ETL_SQL.TUI.UI;
 
-namespace ETL_SQL.Tests.Integration.UI;
+namespace ETL_SQL.Tests.UI;
 
 public class AutocompleteControllerTests
 {

@@ -13,7 +13,7 @@ using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Common;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.UI
 {
     public class SuggestionProviderRegistryFixture
     {

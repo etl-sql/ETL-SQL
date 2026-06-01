@@ -6,7 +6,7 @@ using Google.Cloud.BigQuery.V2;
 using Xunit;
 using ETL_SQL.Connectors.BigQuery;
 
-namespace ETL_SQL.Tests.Integration.Connectors
+namespace ETL_SQL.Tests.Connectors
 {
     [Trait("Connector", "BIGQUERY")]
     [Trait("CertificationClass", "MetadataOnly")]

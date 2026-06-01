@@ -11,7 +11,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Common;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.Connectors
 {
     [Trait("Connector", "FLATFILE")]
     [Trait("CertificationClass", "LocalRealIntegration")]
