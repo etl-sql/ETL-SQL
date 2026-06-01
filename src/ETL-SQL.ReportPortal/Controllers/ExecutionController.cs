@@ -316,7 +316,7 @@ public class ExecutionController(
             catch (Exception ex)
             {
                 // Fire and forget
-                audit.LogAsync(CurrentUserId, "PERSIST_LINEAGE_FAILED", "Report", id.ToString(), ex.Message).Wait();
+                await audit.LogAsync(CurrentUserId, "PERSIST_LINEAGE_FAILED", "Report", id.ToString(), ex.Message);
             }
         }
     }

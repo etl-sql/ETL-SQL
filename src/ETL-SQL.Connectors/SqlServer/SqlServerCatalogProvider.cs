@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
+using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.SqlServer
@@ -50,23 +51,30 @@ LEFT JOIN sys.extended_properties ep
 WHERE s.name = @schema AND o.name = @table
 ORDER BY c.column_id;";
 
-            await using var conn = new SqlConnection(_connectionString);
-            await conn.OpenAsync(ct);
-            await using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@schema", schema);
-            cmd.Parameters.AddWithValue("@table", tableName);
-            await using var rdr = await cmd.ExecuteReaderAsync(ct);
-            while (await rdr.ReadAsync(ct))
+            try
             {
-                results.Add(new CatalogColumn(
-                    ColumnName: rdr.GetString(0),
-                    DataType: rdr.GetString(1),
-                    IsNullable: rdr.GetBoolean(2),
-                    IsPrimaryKey: rdr.GetBoolean(3),
-                    Description: rdr.IsDBNull(4) ? null : rdr.GetString(4),
-                    ExtraProperties: new Dictionary<string, string>()));
+                await using var conn = new SqlConnection(_connectionString);
+                await conn.OpenAsync(ct);
+                await using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@schema", schema);
+                cmd.Parameters.AddWithValue("@table", tableName);
+                await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                while (await rdr.ReadAsync(ct))
+                {
+                    results.Add(new CatalogColumn(
+                        ColumnName: rdr.GetString(0),
+                        DataType: rdr.GetString(1),
+                        IsNullable: rdr.GetBoolean(2),
+                        IsPrimaryKey: rdr.GetBoolean(3),
+                        Description: rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                        ExtraProperties: new Dictionary<string, string>()));
+                }
+                return results;
             }
-            return results;
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SQL Server catalog", ex);
+            }
         }
 
         public async Task<IReadOnlyList<CatalogRelationship>> GetRelationshipsAsync(
@@ -88,20 +96,27 @@ JOIN sys.schemas rs ON rs.schema_id = rt.schema_id
 JOIN sys.columns rc_col ON rc_col.object_id = fkcc.referenced_object_id AND rc_col.column_id = fkcc.referenced_column_id
 WHERE fs.name = @schema AND ft.name = @table;";
 
-            await using var conn = new SqlConnection(_connectionString);
-            await conn.OpenAsync(ct);
-            await using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@schema", schema);
-            cmd.Parameters.AddWithValue("@table", tableName);
-            await using var rdr = await cmd.ExecuteReaderAsync(ct);
-            while (await rdr.ReadAsync(ct))
+            try
             {
-                results.Add(new CatalogRelationship(
-                    ForeignKeyColumn: rdr.GetString(0),
-                    ReferencedTable: rdr.GetString(1),
-                    ReferencedColumn: rdr.GetString(2)));
+                await using var conn = new SqlConnection(_connectionString);
+                await conn.OpenAsync(ct);
+                await using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@schema", schema);
+                cmd.Parameters.AddWithValue("@table", tableName);
+                await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                while (await rdr.ReadAsync(ct))
+                {
+                    results.Add(new CatalogRelationship(
+                        ForeignKeyColumn: rdr.GetString(0),
+                        ReferencedTable: rdr.GetString(1),
+                        ReferencedColumn: rdr.GetString(2)));
+                }
+                return results;
             }
-            return results;
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SQL Server catalog", ex);
+            }
         }
 
         public async Task<string?> GetViewDefinitionAsync(string schema, string objectName, CancellationToken ct = default)
@@ -114,13 +129,23 @@ JOIN sys.schemas s ON s.schema_id = o.schema_id
 WHERE o.type IN ('V', 'P', 'TF', 'IF')
   AND s.name = @schema AND o.name = @name;";
 
-            await using var conn = new SqlConnection(_connectionString);
-            await conn.OpenAsync(ct);
-            await using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@schema", schema);
-            cmd.Parameters.AddWithValue("@name", objectName);
-            var result = await cmd.ExecuteScalarAsync(ct);
-            return result is string def && !string.IsNullOrWhiteSpace(def) ? def : null;
+            try
+            {
+                await using var conn = new SqlConnection(_connectionString);
+                await conn.OpenAsync(ct);
+                await using var cmd = new SqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@schema", schema);
+                cmd.Parameters.AddWithValue("@name", objectName);
+                var result = await cmd.ExecuteScalarAsync(ct);
+                return result is string def && !string.IsNullOrWhiteSpace(def) ? def : null;
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SQL Server catalog", ex);
+            }
         }
+
+        private static bool ShouldWrapProviderException(Exception ex) =>
+            ex is SqlException or InvalidOperationException;
     }
 }

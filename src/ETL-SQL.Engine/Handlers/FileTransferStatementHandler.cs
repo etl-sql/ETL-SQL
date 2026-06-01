@@ -95,6 +95,8 @@ namespace ETL_SQL.Engine.Handlers
                 else
                 {
                     _logger.WriteLine($"SENDING: {localPath} -> {stmt.ConnectionName}:{remotePath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
+
+                    context.SecurityService.ValidateFileType(localPath);
                     
                     if (context.IsWhatIf)
                     {
@@ -172,8 +174,9 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     _logger.WriteLine($"RECEIVING: {stmt.ConnectionName}:{remotePath} -> {localPath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
                     
-                    // Security Hardening: Block writing to script files
+                    // Security Hardening: Block writing to script files and dangerous local file types.
                     context.SecurityService.ValidateWriteAccess(localPath);
+                    context.SecurityService.ValidateFileType(localPath);
 
                     if (context.IsWhatIf)
                     {
