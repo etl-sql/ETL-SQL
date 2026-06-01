@@ -252,6 +252,7 @@
 <script type="module">
 import { auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
 import { applyPortalBranding, initTheme } from '/js/branding.js';
+import { lineageRowsToCsv, renderDependencies, renderLineageRow } from '/js/lineage-ui.js';
 import { renderDag } from '/designer/designer.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
@@ -980,7 +981,7 @@ function renderLineageResults(rows) {
 
   $results.innerHTML = `
     <div class="lineage-result-list">
-      ${rows.map(renderLineageRow).join('')}
+      ${rows.map(row => renderLineageRow(row, { timeAgo, formatBuiltAt })).join('')}
     </div>`;
 
   $results.querySelectorAll('[data-open-report]').forEach(btn => {
@@ -1026,40 +1027,6 @@ function renderLineageDag(rows) {
   lineageDagInstance = renderDag(container, { nodes, edges });
 }
 
-function renderLineageRow(row) {
-  const target = row.targetColumn ? `${row.targetTable}.${row.targetColumn}` : row.targetTable;
-  const srcCols = row.sourceColumns || [];
-  const sources = (row.sourceTables || [])
-    .map((t, i) => srcCols[i] ? `${t}.${srcCols[i]}` : t)
-    .join(', ') || 'None recorded';
-  const xform = formatTransformationKind(row.transformationKind, row.transformationExpression, row.functionsApplied);
-  const report = row.reportId
-    ? `<button class="btn btn-outline btn-sm" type="button" data-open-report="${row.reportId}">${esc(row.reportName || `Report ${row.reportId}`)}</button>`
-    : '<span class="lineage-muted">No report link</span>';
-  return `
-    <div class="lineage-result-row">
-      <div class="lineage-run">
-        <strong>${esc(timeAgo(row.runAt))}</strong>
-        <span>${esc(formatBuiltAt(row.runAt))}</span>
-      </div>
-      <div class="lineage-main">
-        <div class="lineage-title">
-          <code>${esc(target)}</code>
-          <span class="badge">${esc(row.operation || 'UNKNOWN')}</span>
-          ${xform}
-        </div>
-        <div class="lineage-detail">Sources: ${esc(sources)}</div>
-        ${row.derivedFromDescriptions ? `<div class="lineage-detail">Description: ${esc(row.derivedFromDescriptions)}</div>` : ''}
-        <div class="lineage-detail">Job: ${esc(row.jobName || 'Ad hoc')}${row.sourceFile ? ` · File: ${esc(row.sourceFile)}` : ''}</div>
-        ${formatTags(row.tags) ? `<div class="lineage-tags">${esc(formatTags(row.tags))}</div>` : ''}
-      </div>
-      <div class="lineage-report">
-        ${report}
-        ${row.folderPath ? `<span>${esc(row.folderPath)}</span>` : ''}
-      </div>
-    </div>`;
-}
-
 function lineageDateStart(value) {
   return value ? `${value}T00:00:00Z` : null;
 }
@@ -1070,27 +1037,7 @@ function lineageDateEnd(value) {
 
 function exportLineageCsv() {
   if (!lineageState.rows.length) return;
-  const headers = ['RunAt', 'JobName', 'Report', 'Folder', 'Target', 'Operation', 'Transform', 'Sources', 'Description', 'Tags', 'SourceFile', 'Line'];
-  const rows = lineageState.rows.map(row => {
-    const target = row.targetColumn ? `${row.targetTable}.${row.targetColumn}` : row.targetTable;
-    const srcCols = row.sourceColumns || [];
-    const sources = (row.sourceTables || []).map((t, i) => srcCols[i] ? `${t}.${srcCols[i]}` : t).join('; ');
-    return [
-      row.runAt || '',
-      row.jobName || '',
-      row.reportName || '',
-      row.folderPath || '',
-      target,
-      row.operation || '',
-      row.transformationExpression || row.transformationKind || '',
-      sources,
-      row.derivedFromDescriptions || '',
-      formatTags(row.tags),
-      row.sourceFile || '',
-      row.line ?? ''
-    ];
-  });
-  const csv = [headers, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+  const csv = lineageRowsToCsv(lineageState.rows);
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1100,11 +1047,6 @@ function exportLineageCsv() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-}
-
-function csvCell(value) {
-  const text = String(value ?? '');
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 function loadLineageViews() {
@@ -1601,171 +1543,10 @@ async function showDependencies(id) {
         downstream = [...seen.values()].sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
       } catch { /* catalog may be empty — silently skip */ }
     }
-    $body.innerHTML = renderDependencies(data, downstream);
+    $body.innerHTML = renderDependencies(data, downstream, { formatBuiltAt });
   } catch (err) {
     $body.innerHTML = `<div class="empty-state">Failed to load dependencies: ${esc(err.message)}</div>`;
   }
-}
-
-function renderDependencies(data, downstream = []) {
-  const snapshot = data.snapshot
-    ? `<span>Snapshot ${esc(formatBuiltAt(data.snapshot.builtAt))}</span>`
-    : '<span>No snapshot yet</span>';
-  const manifestRows = (data.manifestDatasets || []).map(d => `
-    <tr><td>${esc(d.tempTableName)}</td><td>${esc(d.rowCount ?? 0)}</td><td>${esc(d.refreshInterval || 'Manual')}</td><td>${esc(d.ttl || 'None')}</td></tr>`).join('');
-  const registryRows = (data.registeredDatasets || []).map(d => `
-    <tr><td>${esc(d.name)}</td><td>${esc(d.folderPath)}</td><td>${esc(d.accessLevel)}</td><td>${esc(d.rowCount ?? 0)}</td><td>${esc((d.sources || []).map(s => s.name).join(', ') || 'Not available')}</td></tr>`).join('');
-  const jobRows = (data.refreshJobs || []).map(j => `
-    <tr><td>${esc(j.orchestratorJobName)}</td><td>${esc(j.refreshInterval || 'Manual')}</td><td>${esc(j.lastRefreshedAt ? formatBuiltAt(j.lastRefreshedAt) : 'Never')}</td></tr>`).join('');
-  const sourceRows = (data.sources || []).map(s => `
-    <tr><td>${esc(s.connection || 'Engine')}</td><td>${esc(s.objectName || s.name)}</td><td>${esc(s.kind)}</td></tr>`).join('');
-
-  const meaningful = (data.lineageEntries || []).filter(e => e.target !== 'RESULTSET');
-  const lineageRows = meaningful.map(e => {
-    const targetCell = esc(e.target);
-    const roleCell   = e.targetColumn ? formatLineageRole(e.targetColumn) : '';
-    const opCell     = esc(e.operation);
-    const xformCell  = formatTransformationKind(e.transformationKind, e.transformationExpression, e.functionsApplied);
-    const srcCell    = formatSourcesWithColumns(e.sources, e.sourceColumns);
-    const tagsCell   = formatTagBadges(e.tags, e.derivedFromDescriptions);
-    return `<tr><td>${targetCell}</td><td>${roleCell}</td><td>${opCell}</td><td>${xformCell}</td><td>${srcCell}</td><td>${tagsCell}</td></tr>`;
-  }).join('');
-
-  return `
-    <div class="dependency-summary">
-      <span>${esc(data.report?.folderPath || '')} / ${esc(data.report?.name || 'Report')}</span>
-      ${snapshot}
-    </div>
-    ${renderDependencyTable('Manifest Datasets', ['Dataset', 'Rows', 'Refresh', 'TTL'], manifestRows)}
-    ${renderDependencyTable('Registered Datasets', ['Dataset', 'Folder', 'Access', 'Rows', 'Sources'], registryRows)}
-    ${renderDependencyTable('Refresh Jobs', ['Job', 'Interval', 'Last Refresh'], jobRows)}
-    ${renderDependencyTable('Sources', ['Connection', 'Object', 'Kind'], sourceRows)}
-    ${renderDependencyTable('Lineage and Tags', ['Target', 'Role / Column', 'Operation', 'Transformation', 'Sources → Columns', 'Tags'], lineageRows || null)}
-    ${renderDownstreamImpact(downstream)}`;
-}
-
-const _VISUAL_ROLES = new Set(['XAXIS','YAXIS','COLOR','SIZE','LABEL','VALUE','CATEGORY','TOOLTIP','DETAIL','SERIES','AGGREGATE','FILTER','DRILLTHROUGH','BUBBLESIZE','LATITUDE','LONGITUDE']);
-
-function formatLineageRole(col) {
-  if (!col) return '';
-  if (_VISUAL_ROLES.has(col.toUpperCase()))
-    return `<span class="badge badge-refresh" style="font-size:.72em">${esc(col)}</span>`;
-  return `<code style="font-size:.8em">${esc(col)}</code>`;
-}
-
-const _XFORM_CLASSES = {
-  Aggregation:     'badge-warning',
-  FunctionCall:    'badge-refresh',
-  Cast:            'badge-neutral',
-  WindowFunction:  'badge-stale',
-  Arithmetic:      'badge-neutral',
-  CaseExpression:  'badge-stale',
-  StringOperation: 'badge-neutral',
-  Subquery:        'badge-neutral',
-  Conditional:     'badge-stale',
-  Literal:         'badge-neutral',
-};
-
-function formatTransformationKind(kind, expr, fns) {
-  if (!kind || kind === 'PassThrough' || kind === 'Unknown') return '';
-  const cls = _XFORM_CLASSES[kind] || 'badge-neutral';
-  const title = expr ? ` title="${esc(expr)}"` : '';
-
-  let label = kind;
-  const fnList = Array.isArray(fns) ? fns : [];
-
-  // Helper: pull the leading function name from an expression string e.g. "SUM(Revenue)" → "SUM"
-  function leadingFn(s) { const m = s?.match(/^(\w+)\s*\(/); return m?.[1] ?? null; }
-
-  if ((kind === 'Aggregation' || kind === 'FunctionCall' || kind === 'StringOperation' || kind === 'WindowFunction') && fnList.length) {
-    const names = fnList.slice(0, 3);
-    const suffix = kind === 'FunctionCall' || kind === 'StringOperation' ? '()' : '';
-    label = names.length === 1 ? `${names[0]}${suffix}` : names.join(' / ');
-    if (kind === 'WindowFunction') label += ' OVER';
-  } else if ((kind === 'Aggregation' || kind === 'FunctionCall' || kind === 'StringOperation' || kind === 'WindowFunction') && expr) {
-    // functionsApplied was null — extract directly from the expression text
-    const fn = leadingFn(expr);
-    if (fn) {
-      const suffix = kind === 'FunctionCall' || kind === 'StringOperation' ? '()' : '';
-      label = `${fn}${suffix}`;
-      if (kind === 'WindowFunction') label += ' OVER';
-    }
-  } else if (kind === 'Cast' && expr) {
-    const asMatch   = expr.match(/\bAS\s+(\w+)/i);
-    const convMatch = expr.match(/^CONVERT\s*\(\s*(\w+)/i);
-    const target = asMatch?.[1] || convMatch?.[1];
-    if (target) label = `→ ${target}`;
-  }
-
-  return `<span class="badge ${cls}" style="font-size:.72em; cursor:default"${title}>${esc(label)}</span>`;
-}
-
-function formatSourcesWithColumns(sources, sourceCols) {
-  const srcs = sources || [];
-  const cols = sourceCols || [];
-  if (!srcs.length) return '<span style="color:var(--portal-muted)">—</span>';
-  return srcs.map((s, i) => {
-    const col = cols[i];
-    return col ? `<code style="font-size:.8em">${esc(s)}.${esc(col)}</code>` : esc(s);
-  }).join('<br>');
-}
-
-const _SECURITY_TAGS = { pii: 'badge-error', phi: 'badge-error', pci: 'badge-error', sensitive: 'badge-warning' };
-const _CLASS_TAGS    = { confidential: 'badge-warning', restricted: 'badge-error', internal: 'badge-neutral', public: 'badge-ok' };
-const _INFO_TAGS     = new Set(['owner','domain','steward','contact','quality','freshness','sla','nullable','encrypted_at_rest']);
-
-function formatTagBadges(tags, derivedFromDescriptions) {
-  if ((!tags || typeof tags !== 'object') && !derivedFromDescriptions) return '';
-  const parts = [];
-
-  const desc = (tags && tags['d']) || derivedFromDescriptions;
-  if (desc) parts.push(`<span style="display:block;font-size:.78em;color:var(--portal-text-soft);margin-bottom:3px;font-style:italic">${esc(desc)}</span>`);
-
-  for (const [k, v] of Object.entries(tags || {})) {
-    if (k === 'd') continue;
-    const key = k.toLowerCase();
-    if (_SECURITY_TAGS[key] && (v === 'true' || v === '1'))
-      parts.push(`<span class="badge ${_SECURITY_TAGS[key]}" style="font-size:.72em">${esc(k.toUpperCase())}</span>`);
-    else if (key === 'classification' && _CLASS_TAGS[v?.toLowerCase()])
-      parts.push(`<span class="badge ${_CLASS_TAGS[v.toLowerCase()]}" style="font-size:.72em">${esc(v)}</span>`);
-    else if (_INFO_TAGS.has(key))
-      parts.push(`<span class="chip badge-neutral" style="font-size:.72em;padding:1px 6px;border-radius:8px;background:var(--portal-surface-subtle);color:var(--portal-muted)">${esc(k)}: ${esc(v)}</span>`);
-    else
-      parts.push(`<span style="font-size:.78em;color:var(--portal-muted)">${esc(k)}: ${esc(v)}</span>`);
-  }
-  return parts.join(' ');
-}
-
-function renderDependencyTable(title, headers, rows) {
-  return `
-    <div class="dependency-section">
-      <h4>${esc(title)}</h4>
-      ${rows ? `<div class="table-scroll"><table class="dependency-table">
-        <thead><tr>${headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>` : '<p class="text-muted">No data available.</p>'}
-    </div>`;
-}
-
-function renderDownstreamImpact(downstream) {
-  const items = (downstream || []).filter(d => d.reportName);
-  const title = 'Downstream Impact';
-  if (!items.length) {
-    return `<div class="dependency-section"><h4>${esc(title)}</h4><p class="text-muted">No downstream consumers found in lineage catalog.</p></div>`;
-  }
-  const chips = items.map(d => {
-    const path = d.folderPath ? `${esc(d.folderPath)} / ` : '';
-    const runs = `${d.runCount} run${d.runCount !== 1 ? 's' : ''}`;
-    const last = esc(formatBuiltAt(d.lastSeen));
-    const inner = `<span class="viewer-meta-pill" title="${path}${esc(d.reportName)} · ${runs} · last ${last}">${path}${esc(d.reportName)}</span>`;
-    const rid = Number(d.reportId);
-    return Number.isInteger(rid) && rid > 0
-      ? `<a href="#" data-downstream-report-id="${rid}" style="text-decoration:none">${inner}</a>`
-      : inner;
-  }).join(' ');
-  return `<div class="dependency-section"><h4>${esc(title)}</h4>
-    <p class="text-sm text-muted" style="margin:0 0 8px">Source tables in this report are consumed by ${items.length} other report${items.length !== 1 ? 's' : ''}:</p>
-    <div class="viewer-meta" style="flex-wrap:wrap;gap:6px">${chips}</div></div>`;
 }
 
 document.getElementById('dependenciesCloseBtn').addEventListener('click', () => {

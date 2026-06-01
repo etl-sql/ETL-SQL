@@ -1,4 +1,4 @@
-# DAG preview static server (dev-only).
+# UI sandbox static server (dev-only).
 #
 # ES module imports don't work over file://, so this serves the repo root over
 # loopback HTTP. Run it, then open the URL it prints. Ctrl+C to stop.
@@ -34,13 +34,13 @@ try {
     $listener.Start()
 }
 catch {
-    Write-Host "Could not bind http://localhost:$Port/ — $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Could not bind http://localhost:$Port/ - $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "Try a different port:  pwsh -File tools\ui-sandbox\serve.ps1 -Port 8100" -ForegroundColor Yellow
     exit 1
 }
 
 Write-Host "=======================================================" -ForegroundColor Cyan
-Write-Host " DAG preview server" -ForegroundColor Cyan
+Write-Host " UI sandbox server" -ForegroundColor Cyan
 Write-Host " Root : $RepoRoot" -ForegroundColor Gray
 Write-Host " Open : $entryUrl" -ForegroundColor Green
 Write-Host " Stop : Ctrl+C" -ForegroundColor Gray

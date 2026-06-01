@@ -105,6 +105,15 @@ const sourcePath = path.resolve('src/ETL-SQL.ReportRuntime/Resources/Shared/desi
 const tempModule = path.join(os.tmpdir(), `etl-sql-designer-${Date.now()}.mjs`);
 await fs.writeFile(tempModule, await fs.readFile(sourcePath, 'utf8'), 'utf8');
 
+async function importTempModule(sourceFile, prefix) {
+  const temp = path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}.mjs`);
+  await fs.writeFile(temp, await fs.readFile(sourceFile, 'utf8'), 'utf8');
+  return {
+    href: pathToFileURL(temp).href,
+    cleanup: () => fs.rm(temp, { force: true }),
+  };
+}
+
 try {
   const { renderDag } = await import(pathToFileURL(tempModule).href);
   const root = new Element('div');
@@ -191,6 +200,72 @@ try {
   }
 
   dag.dispose();
+
+  const lineageUiTemp = await importTempModule(path.resolve('src/ETL-SQL.ReportPortal/wwwroot/js/lineage-ui.js'), 'etl-sql-lineage-ui');
+  try {
+    const { lineageRowsToCsv, renderDependencies, renderLineageRow } = await import(lineageUiTemp.href);
+    const row = {
+      runAt: '2026-05-30T14:15:00Z',
+      jobName: 'nightly_sales_refresh',
+      reportId: 42,
+      reportName: 'Executive Sales',
+      folderPath: '/Finance',
+      targetTable: 'mart.SalesSummary',
+      targetColumn: 'total_revenue',
+      operation: 'SELECT',
+      transformationKind: 'Aggregation',
+      transformationExpression: 'SUM(Amount)',
+      functionsApplied: ['SUM'],
+      sourceTables: ['edw.Sales'],
+      sourceColumns: ['Amount'],
+      derivedFromDescriptions: 'Sales amount from catalog',
+      tags: { pii: 'true', classification: 'confidential', owner: 'finance' },
+      sourceFile: 'samples/integration/sales.rptsql',
+      line: 18,
+    };
+    const rowHtml = renderLineageRow(row, { timeAgo: () => 'just now', formatBuiltAt: () => 'May 30, 2026' });
+    for (const expectedText of ['mart.SalesSummary.total_revenue', 'SUM', 'edw.Sales.Amount', 'Sales amount from catalog', 'pii: true', 'classification: confidential', 'Executive Sales']) {
+      if (!rowHtml.includes(expectedText)) {
+        throw new Error(`Lineage row missing: ${expectedText}\nRendered HTML:\n${rowHtml}`);
+      }
+    }
+
+    const dependenciesHtml = renderDependencies({
+      report: { name: 'Executive Sales', folderPath: '/Finance' },
+      snapshot: { builtAt: '2026-05-30T14:15:00Z' },
+      manifestDatasets: [{ tempTableName: '#sales', rowCount: 1280, refreshInterval: 'Manual', ttl: 'None' }],
+      registeredDatasets: [{ name: '&sales_snap', folderPath: '/Shared', accessLevel: 'Read', rowCount: 1280, sources: [{ name: 'edw.Sales' }] }],
+      refreshJobs: [{ orchestratorJobName: 'nightly_sales_refresh', refreshInterval: 'Daily', lastRefreshedAt: '2026-05-30T14:15:00Z' }],
+      sources: [{ connection: 'warehouse', objectName: 'edw.Sales', kind: 'TABLE' }],
+      lineageEntries: [{
+        target: 'mart.SalesSummary',
+        targetColumn: 'YAXIS',
+        operation: 'SELECT',
+        transformationKind: 'Aggregation',
+        transformationExpression: 'SUM(Amount)',
+        functionsApplied: ['SUM'],
+        sources: ['edw.Sales'],
+        sourceColumns: ['Amount'],
+        derivedFromDescriptions: 'Sales amount from catalog',
+        tags: { pii: 'true', classification: 'confidential', owner: 'finance' },
+      }],
+    }, [{ reportId: 73, reportName: 'Revenue QA', folderPath: '/Audit', runCount: 3, lastSeen: '2026-05-31T09:00:00Z' }], { formatBuiltAt: () => 'May 30, 2026' });
+    for (const expectedText of ['Lineage and Tags', 'YAXIS', 'edw.Sales.Amount', 'Sales amount from catalog', 'PII', 'confidential', 'Revenue QA']) {
+      if (!dependenciesHtml.includes(expectedText)) {
+        throw new Error(`Dependencies view missing: ${expectedText}\nRendered HTML:\n${dependenciesHtml}`);
+      }
+    }
+
+    const csv = lineageRowsToCsv([row]);
+    for (const expectedText of ['RunAt,JobName,Report', 'mart.SalesSummary.total_revenue', 'SUM(Amount)', 'edw.Sales.Amount', 'Sales amount from catalog', 'pii: true; classification: confidential; owner: finance']) {
+      if (!csv.includes(expectedText)) {
+        throw new Error(`Lineage CSV missing: ${expectedText}\nCSV:\n${csv}`);
+      }
+    }
+  } finally {
+    await lineageUiTemp.cleanup();
+  }
+
   console.log('lineage-ui smoke passed');
 } finally {
   await fs.rm(tempModule, { force: true });
