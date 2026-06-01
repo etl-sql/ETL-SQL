@@ -3,11 +3,11 @@
 ## VS Code Extension Audit (June 2026 Fresh Eyes Review)
 ### Single Responsibility Principle (SRP)
 - [ ] **extension.ts bloat**: Refactor `extension.ts` to separate concern groups. It spans over 1,000 lines handling command registration, workspace events, process warmth, configuration checks, and Unix permission adjustments. These should be split into modules (e.g. `permissions.ts`, `terminalCommandBuilder.ts`, `cleanupService.ts`).
-- [ ] **WelcomeView path resolution coupling**: Decouple `WelcomeView.ts` from direct knowledge of local/online files. The path resolver logic should be moved into a shared helper module.
+- [x] **WelcomeView path resolution coupling**: Decouple `WelcomeView.ts` from direct knowledge of local/online files. The path resolver logic should be moved into a shared helper module.
 
 ### Logging
 - [ ] **Webview logger interfaces**: Webviews (e.g. `ResultsPanel`, `ReportPreviewPanel`) write directly to browser console (`console.error`, `console.warn`). They should post messages back to the extension host to write to the unified `ETL-SQL` output channel for consolidated developer diagnostics.
-- [ ] **Silent warmup failures**: Warmup process failures in `extension.ts` (`warmupRepl`) are caught and silenced. While intentional for happy-path user experience, recording warning telemetry in the output channel would greatly simplify troubleshooting of environment-related launch issues.
+- [x] **Silent warmup failures**: Warmup process failures in `extension.ts` (`warmupRepl`) are caught and silenced. While intentional for happy-path user experience, recording warning telemetry in the output channel would greatly simplify troubleshooting of environment-related launch issues.
 
 ### Security
 - [x] **Cryptographic nonces in Webviews**: `resultsPanel.ts` and `sidebarProvider.ts` use `Math.random()` to generate nonces. While not highly sensitive, they should align with the standard in `reportPreviewPanel.ts` and `reportDesignerPanel.ts` which use `crypto.randomBytes(16).toString('base64url')` to prevent potential predictable-generator collisions.

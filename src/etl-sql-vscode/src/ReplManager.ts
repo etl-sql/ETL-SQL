@@ -346,8 +346,9 @@ export class ReplManager {
         }
         const promise = this._start(exePath, args, launchOptions);
         this._startPromise = promise;
-        promise.catch(() => {
+        promise.catch((err) => {
             // Warmup failures are silent; execute() will retry when the user runs.
+            this._outputChannel?.appendLine(`[REPL] Warmup failed (swallowed, will retry on execute): ${err?.message || err}`);
             this._process = undefined;
             this._isReady = false;
             this._currentSessionId = undefined;
