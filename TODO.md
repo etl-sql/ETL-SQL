@@ -55,14 +55,14 @@
 - [ ] Expand custom SLT files only when SQL semantics change or `Docs/Standards/SLT_Coverage.md` marks a release-relevant area Low/Medium and under-tested.
 
 ## Documentation Gaps (from gap analysis)
-- [ ] Roadmap language in reference docs – remove/replace occurrences of “roadmap”, “backlog”, “planned”, “future”.
-- [ ] Strategy folder status flags – add **Status:** header to each strategy file.
-- [ ] DocSanity test coverage – extend test or update docs to remove “backlog”, “planned”.
-- [ ] Standard Library missing function signatures – add signatures, return types, examples for BITCOUNT, BIT_SHIFTLEFT, BIT_SHIFTRIGHT.
-- [ ] Connector option naming consistency – rename `Password` option to `PASSWORD` in Data_Connectors.md.
-- [ ] CI workflow badge – replace Azure DevOps badge with GitHub Actions badge.
-- [ ] Add unit test for BIT_COUNT function in Tests.
-- [ ] Add license header to generated assets under src/ETL‑SQL.ReportRuntime/Resources/Shared.
+- [x] Roadmap language in reference docs – remove/replace occurrences of “roadmap”, “backlog”, “planned”, “future”.
+- [x] Strategy folder status flags – add **Status:** header to each strategy file.
+- [x] DocSanity test coverage – extend test or update docs to remove “backlog”, “planned”.
+- [x] Standard Library missing function signatures – add signatures, return types, examples for BITCOUNT, BIT_SHIFTLEFT, BIT_SHIFTRIGHT.
+- [x] Connector option naming consistency – rename `Password` option to `PASSWORD` in Data_Connectors.md.
+- [x] CI workflow badge – replace Azure DevOps badge with GitHub Actions badge.
+- [x] Add unit test for BIT_COUNT function in Tests.
+- [x] Add license header to generated assets under src/ETL‑SQL.ReportRuntime/Resources/Shared.
 
 ### Architecture Documentation Gaps (June 2026 Audit)
 - [x] [Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md): Add the 8 missing connectors (SQLite, MySQL, MongoDB, Kafka, SharePoint, S3, ActiveDirectory, Orchestrator) to the inventory table.

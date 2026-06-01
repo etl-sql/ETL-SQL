@@ -1,4 +1,9 @@
 /*
+ * Copyright (c) 2026 Charles Clemens
+ * Licensed under the PolyForm Noncommercial License 1.0.0
+ * Commercial use of this software requires a separate license.
+ * Contact etlsqlsoftware@gmail.com for commercial inquiries.
+ *
  * ETL-SQL Designer — shared component styles
  *
  * Tokens follow the portal's --portal-* scheme so the designer inherits
@@ -817,6 +822,16 @@
 }
 
 .etlsql-dsgn-props-section { margin-bottom: 16px; }
+
+/* Inputs/selects fill their grid cell and shrink with the panel. Without
+   min-width:0 the input's intrinsic width keeps the 1fr tracks from shrinking,
+   forcing horizontal overflow that hides fields off the right edge (e.g. the
+   Grid Position "H" input). Keeps everything visible without a scrollbar. */
+.etlsql-designer-props .form-control {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
 
 .etlsql-dsgn-props-hdr {
     font-size: 0.75rem;

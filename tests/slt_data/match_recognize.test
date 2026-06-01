@@ -34,3 +34,88 @@ AAPL
 1
 3
 5
+
+# ALL ROWS PER MATCH should copy matched source rows and emit classifier metadata.
+query TIIT
+SELECT symbol, tstamp, MATCH_NUMBER, CLASSIFIER
+FROM stock_ticker
+MATCH_RECOGNIZE (
+  PARTITION BY symbol
+  ORDER BY tstamp
+  ALL ROWS PER MATCH
+  PATTERN (A DOWN+ UP+)
+  DEFINE
+    DOWN AS DOWN.price < PREV(DOWN.price),
+    UP AS UP.price > PREV(UP.price)
+) AS T
+ORDER BY symbol, tstamp;
+----
+AAPL
+1
+1
+A
+AAPL
+2
+1
+DOWN
+AAPL
+3
+1
+DOWN
+AAPL
+4
+1
+UP
+AAPL
+5
+1
+UP
+
+statement ok
+CREATE TABLE alerts(account_id STRING, event_ts INT, score INT);
+
+statement ok
+INSERT INTO alerts VALUES
+  ('acct1', 1, 10),
+  ('acct1', 2, 85),
+  ('acct1', 3, 90),
+  ('acct1', 4, 15),
+  ('acct1', 5, 95),
+  ('acct2', 1, 20),
+  ('acct2', 2, 25);
+
+# Multiple ALL ROWS matches in one partition should advance match numbers and avoid false positives in other partitions.
+query TIIT
+SELECT account_id, event_ts, MATCH_NUMBER, CLASSIFIER
+FROM alerts
+MATCH_RECOGNIZE (
+  PARTITION BY account_id
+  ORDER BY event_ts
+  ALL ROWS PER MATCH
+  PATTERN (A B+)
+  DEFINE
+    A AS A.score < 50,
+    B AS B.score >= 80
+) AS T
+ORDER BY account_id, event_ts;
+----
+acct1
+1
+1
+A
+acct1
+2
+1
+B
+acct1
+3
+1
+B
+acct1
+4
+2
+A
+acct1
+5
+2
+B

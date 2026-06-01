@@ -106,6 +106,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" id="exportCsvBtn">CSV</button>
+      <button class="btn btn-outline" id="exportXlsxBtn">Excel</button>
       <button class="btn btn-outline" id="exportPdfBtn">PDF</button>
       <button class="btn btn-outline" id="exportCancelBtn">Cancel</button>
     </div>
@@ -253,6 +254,7 @@
 import { auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
 import { applyPortalBranding, initTheme } from '/js/branding.js';
 import { lineageRowsToCsv, renderDependencies, renderLineageRow } from '/js/lineage-ui.js';
+import { createLineageCatalog } from '/js/lineage-catalog.js';
 import { renderDag } from '/designer/designer.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
@@ -839,277 +841,19 @@ function renderCatalogReportList(title, reports, emptyText) {
   });
 }
 
-const LINEAGE_VIEW_KEY = 'etlsql_lineage_views';
-const lineageState = { kind: 'table', query: '', column: '', tagValue: '', from: '', to: '', limit: 100, rows: [], savedViews: [], selectedView: '', view: 'table' };
-let lineageDagInstance = null;
-
+// The catalog-wide "Lineage" sidebar view lives in js/lineage-catalog.js so it can
+// be unit-tested and previewed in the UI sandbox. This wrapper binds it to the portal.
+let lineageCatalog = null;
 function showLineageCatalog() {
-  setSidebarViewActive('lineage');
-  clearFolderSelection();
-  lineageState.savedViews = loadLineageViews();
-  const $main = document.getElementById('mainContent');
-  const valueLabel = lineageState.kind === 'tag' ? 'Tag key' : lineageState.kind === 'source-file' ? 'Source file' : 'Name';
-  const savedOptions = lineageState.savedViews
-    .map(v => `<option value="${escAttr(v.name)}"${v.name === lineageState.selectedView ? ' selected' : ''}>${esc(v.name)}</option>`)
-    .join('');
-  $main.innerHTML = `
-    <div class="library-toolbar lineage-toolbar">
-      <div class="library-title">
-        <span class="library-kicker">Catalog</span>
-        <h2>Lineage</h2>
-        <span class="folder-count">Cross-run history with report context</span>
-      </div>
-      <form id="lineageSearchForm" class="lineage-query" autocomplete="off">
-        <select id="lineageKind" class="library-sort" aria-label="Lineage query type">
-          <option value="table"${lineageState.kind === 'table' ? ' selected' : ''}>Target table</option>
-          <option value="source"${lineageState.kind === 'source' ? ' selected' : ''}>Source table</option>
-          <option value="source-file"${lineageState.kind === 'source-file' ? ' selected' : ''}>Source file</option>
-          <option value="tag"${lineageState.kind === 'tag' ? ' selected' : ''}>Tag</option>
-          <option value="job"${lineageState.kind === 'job' ? ' selected' : ''}>Job</option>
-        </select>
-        <label class="library-search lineage-search">
-          <span class="search-icon" aria-hidden="true"></span>
-          <input id="lineageQuery" type="search" placeholder="${escAttr(valueLabel)}" value="${escAttr(lineageState.query)}">
-        </label>
-        <input id="lineageColumn" class="lineage-input lineage-column" type="search" placeholder="Column" value="${escAttr(lineageState.column)}" ${lineageState.kind === 'table' ? '' : 'hidden'}>
-        <input id="lineageTagValue" class="lineage-input" type="search" placeholder="Tag value" value="${escAttr(lineageState.tagValue)}" ${lineageState.kind === 'tag' ? '' : 'hidden'}>
-        <input id="lineageFrom" class="lineage-date" type="date" value="${escAttr(lineageState.from)}" aria-label="From date">
-        <input id="lineageTo" class="lineage-date" type="date" value="${escAttr(lineageState.to)}" aria-label="To date">
-        <button class="btn btn-primary" type="submit">Search</button>
-        <button class="btn btn-outline" id="lineageExportBtn" type="button" ${lineageState.rows.length ? '' : 'disabled'}>Export CSV</button>
-        <button class="btn btn-outline" id="lineageViewToggle" type="button">${lineageState.view === 'graph' ? 'Table' : 'Graph'}</button>
-        <select id="lineageSavedView" class="library-sort lineage-saved" aria-label="Saved lineage view">
-          <option value="">Saved views</option>
-          ${savedOptions}
-        </select>
-        <button class="btn btn-outline" id="lineageSaveViewBtn" type="button">Save View</button>
-        <button class="btn btn-outline" id="lineageDeleteViewBtn" type="button" ${lineageState.selectedView ? '' : 'disabled'}>Delete</button>
-      </form>
-    </div>
-    <div id="lineageResults">${renderLineageEmpty()}</div>`;
-
-  const $form = document.getElementById('lineageSearchForm');
-  document.getElementById('lineageKind').addEventListener('change', e => {
-    lineageState.kind = e.target.value;
-    lineageState.column = '';
-    lineageState.tagValue = '';
-    lineageState.rows = [];
-    showLineageCatalog();
-  });
-  $form.addEventListener('submit', async e => {
-    e.preventDefault();
-    lineageState.kind = document.getElementById('lineageKind').value;
-    lineageState.query = document.getElementById('lineageQuery').value.trim();
-    lineageState.column = document.getElementById('lineageColumn').value.trim();
-    lineageState.tagValue = document.getElementById('lineageTagValue').value.trim();
-    lineageState.from = document.getElementById('lineageFrom').value;
-    lineageState.to = document.getElementById('lineageTo').value;
-    await loadLineageResults();
-  });
-  document.getElementById('lineageExportBtn').addEventListener('click', exportLineageCsv);
-  document.getElementById('lineageViewToggle').addEventListener('click', () => {
-    lineageState.view = lineageState.view === 'graph' ? 'table' : 'graph';
-    document.getElementById('lineageViewToggle').textContent = lineageState.view === 'graph' ? 'Table' : 'Graph';
-    if (lineageState.rows.length) renderLineageResults(lineageState.rows);
-  });
-  document.getElementById('lineageSavedView').addEventListener('change', applySelectedLineageView);
-  document.getElementById('lineageSaveViewBtn').addEventListener('click', saveCurrentLineageView);
-  document.getElementById('lineageDeleteViewBtn').addEventListener('click', deleteSelectedLineageView);
-
-  if (lineageState.query) loadLineageResults();
-}
-
-function renderLineageEmpty(message = 'Choose a catalog query and run Search.') {
-  return `<div class="empty-state empty-state-panel">
-    <div class="empty-state-icon empty-state-icon-lineage" aria-hidden="true"></div>
-    <h2>No lineage results</h2>
-    <p>${esc(message)}</p>
-  </div>`;
-}
-
-async function loadLineageResults() {
-  const $results = document.getElementById('lineageResults');
-  if (!lineageState.query) {
-    lineageState.rows = [];
-    $results.innerHTML = renderLineageEmpty('Enter a table, source, file, tag, or job name.');
-    return;
-  }
-  $results.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading lineage…</span></div>`;
-  try {
-    const args = {
-      limit: lineageState.limit,
-      from: lineageDateStart(lineageState.from),
-      to: lineageDateEnd(lineageState.to)
-    };
-    if (lineageState.kind === 'tag') {
-      args.key = lineageState.query;
-      if (lineageState.tagValue) args.value = lineageState.tagValue;
-    } else if (lineageState.kind === 'source-file') {
-      args.path = lineageState.query;
-    } else {
-      args.name = lineageState.query;
-      if (lineageState.kind === 'table' && lineageState.column) args.column = lineageState.column;
-    }
-
-    const rows = await catalogApi.lineage(lineageState.kind, args);
-    lineageState.rows = rows || [];
-    renderLineageResults(rows || []);
-    document.getElementById('lineageExportBtn')?.toggleAttribute('disabled', !lineageState.rows.length);
-  } catch (err) {
-    lineageState.rows = [];
-    $results.innerHTML = `<div class="empty-state empty-state-panel empty-state-error">
-      <div class="empty-state-icon empty-state-icon-alert" aria-hidden="true"></div>
-      <h2>Lineage query failed</h2>
-      <p>${esc(err.message)}</p>
-    </div>`;
-  }
-}
-
-function renderLineageResults(rows) {
-  const $results = document.getElementById('lineageResults');
-  if (lineageDagInstance) { lineageDagInstance.dispose(); lineageDagInstance = null; }
-  if (!rows.length) {
-    lineageState.rows = [];
-    $results.innerHTML = renderLineageEmpty('No matching lineage history was found.');
-    return;
-  }
-
-  if (lineageState.view === 'graph') {
-    renderLineageDag(rows);
-    return;
-  }
-
-  $results.innerHTML = `
-    <div class="lineage-result-list">
-      ${rows.map(row => renderLineageRow(row, { timeAgo, formatBuiltAt })).join('')}
-    </div>`;
-
-  $results.querySelectorAll('[data-open-report]').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      openReport(+btn.dataset.openReport);
+  if (!lineageCatalog) {
+    lineageCatalog = createLineageCatalog({
+      host: document.getElementById('mainContent'),
+      catalogApi, renderDag, renderLineageRow, lineageRowsToCsv,
+      openReport, timeAgo, formatBuiltAt,
+      prepare: () => { setSidebarViewActive('lineage'); clearFolderSelection(); },
     });
-  });
-}
-
-function renderLineageDag(rows) {
-  const $results = document.getElementById('lineageResults');
-  $results.innerHTML = '<div id="lineageDagContainer" style="height:480px;"></div>';
-  const container = document.getElementById('lineageDagContainer');
-
-  const targets = new Set(rows.map(r => r.targetTable).filter(Boolean));
-  const sources = new Set(rows.flatMap(r => r.sourceTables || []).filter(Boolean));
-  const allTables = new Set([...targets, ...sources]);
-
-  const nodeMap = {};
-  [...allTables].forEach((name, i) => {
-    const isTarget = targets.has(name);
-    const isSource = sources.has(name);
-    const type = isTarget && isSource ? 'dataset' : isTarget ? 'io' : 'table';
-    nodeMap[name] = { id: `t${i}`, label: name, type };
-  });
-
-  const nodes = Object.values(nodeMap);
-  const seenEdges = new Set();
-  const edges = [];
-  for (const row of rows) {
-    if (!row.targetTable || !nodeMap[row.targetTable]) continue;
-    for (const src of (row.sourceTables || [])) {
-      if (!src || !nodeMap[src]) continue;
-      const key = `${src}->${row.targetTable}`;
-      if (!seenEdges.has(key)) {
-        seenEdges.add(key);
-        edges.push({ source: nodeMap[src].id, target: nodeMap[row.targetTable].id, label: row.operation || null });
-      }
-    }
   }
-
-  lineageDagInstance = renderDag(container, { nodes, edges });
-}
-
-function lineageDateStart(value) {
-  return value ? `${value}T00:00:00Z` : null;
-}
-
-function lineageDateEnd(value) {
-  return value ? `${value}T23:59:59Z` : null;
-}
-
-function exportLineageCsv() {
-  if (!lineageState.rows.length) return;
-  const csv = lineageRowsToCsv(lineageState.rows);
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `lineage-${lineageState.kind}-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function loadLineageViews() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(LINEAGE_VIEW_KEY) || '[]');
-    return Array.isArray(parsed)
-      ? parsed.filter(v => v && typeof v.name === 'string').sort((a, b) => a.name.localeCompare(b.name))
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function persistLineageViews(views) {
-  localStorage.setItem(LINEAGE_VIEW_KEY, JSON.stringify(views));
-}
-
-function currentLineageView(name) {
-  return {
-    name,
-    kind: lineageState.kind,
-    query: lineageState.query,
-    column: lineageState.column,
-    tagValue: lineageState.tagValue,
-    from: lineageState.from,
-    to: lineageState.to
-  };
-}
-
-function saveCurrentLineageView() {
-  const name = prompt('Saved view name', lineageState.query || lineageState.kind);
-  if (!name || !name.trim()) return;
-  lineageState.savedViews = loadLineageViews().filter(v => v.name !== name.trim());
-  lineageState.selectedView = name.trim();
-  lineageState.savedViews.push(currentLineageView(name.trim()));
-  persistLineageViews(lineageState.savedViews);
-  showLineageCatalog();
-}
-
-function applySelectedLineageView() {
-  const selectedName = document.getElementById('lineageSavedView').value;
-  document.getElementById('lineageDeleteViewBtn').toggleAttribute('disabled', !selectedName);
-  if (!selectedName) return;
-  const view = loadLineageViews().find(v => v.name === selectedName);
-  if (!view) return;
-  lineageState.selectedView = selectedName;
-  lineageState.kind = view.kind || 'table';
-  lineageState.query = view.query || '';
-  lineageState.column = view.column || '';
-  lineageState.tagValue = view.tagValue || '';
-  lineageState.from = view.from || '';
-  lineageState.to = view.to || '';
-  lineageState.rows = [];
-  showLineageCatalog();
-}
-
-function deleteSelectedLineageView() {
-  const selectedName = document.getElementById('lineageSavedView').value;
-  if (!selectedName) return;
-  lineageState.savedViews = loadLineageViews().filter(v => v.name !== selectedName);
-  lineageState.selectedView = '';
-  persistLineageViews(lineageState.savedViews);
-  showLineageCatalog();
+  lineageCatalog.render();
 }
 
 function wireFavoriteButtons(root, onChanged = null) {
@@ -1505,14 +1249,14 @@ document.getElementById('structureCloseBtn').addEventListener('click', () => {
 function showExport(id) {
   const $modal = document.getElementById('exportModal');
   $modal.style.display = 'flex';
-  document.getElementById('exportCsvBtn').onclick = () => {
-    window.open(reportsApi.exportUrl(id, 'csv'));
+  const doExport = async (format) => {
     $modal.style.display = 'none';
+    try { await reportsApi.exportFile(id, format); }
+    catch (err) { alert(err.message || 'Export failed.'); }
   };
-  document.getElementById('exportPdfBtn').onclick = () => {
-    window.open(reportsApi.exportUrl(id, 'pdf'));
-    $modal.style.display = 'none';
-  };
+  document.getElementById('exportCsvBtn').onclick  = () => doExport('csv');
+  document.getElementById('exportXlsxBtn').onclick = () => doExport('xlsx');
+  document.getElementById('exportPdfBtn').onclick  = () => doExport('pdf');
   document.getElementById('exportCancelBtn').onclick = () => { $modal.style.display = 'none'; };
 }
 

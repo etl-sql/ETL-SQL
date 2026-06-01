@@ -2259,7 +2259,7 @@ KILL JOB <HistoryId>;
 ### 19.4 Analysis
 
 #### EXPLAIN
-Shows the query execution plan without running the query. Returns a table with the planned operations, estimated costs, and execution mode.
+Shows the query execution plan without running the query. Returns a table with the execution operations, estimated costs, and execution mode.
 
 ```sql
 EXPLAIN SELECT o.OrderId, c.Name

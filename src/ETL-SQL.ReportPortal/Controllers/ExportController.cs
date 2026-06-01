@@ -94,6 +94,31 @@ public class ExportController(
                     filename);
     }
 
+    // ── 4.1b GET /api/reports/{id}/export/xlsx?visual=<name> ──────────────────
+    [HttpGet("xlsx")]
+    public async Task<IActionResult> ExportXlsx(int id, [FromQuery] string? visual)
+    {
+        if (!await CanReadAsync(id)) return Forbid();
+
+        var (manifest, err, forbidden) = await LoadManifestAsync(id);
+        if (forbidden) return Forbid();
+        if (manifest is null) return NotFound(new { error = err });
+
+        var visuals = new CsvRenderer().SelectExportVisuals(manifest, visual);
+        if (visuals.Count == 0)
+            return NotFound(new { error = "No exportable visuals found" });
+
+        var bytes = await new XlsxExporter().ExportAsync(manifest, visual);
+
+        var reportName = manifest.Title ?? System.IO.Path.GetFileNameWithoutExtension(manifest.Source);
+        var filename   = $"{SanitizeFilename(reportName)}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
+
+        await audit.LogAsync(CurrentUserId, "EXPORT_XLSX", "Report", id.ToString(), visual);
+        return File(bytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    filename);
+    }
+
     // ── 4.2  GET /api/reports/{id}/export/pdf ─────────────────────────────────
     [HttpGet("pdf")]
     public async Task<IActionResult> ExportPdf(int id)

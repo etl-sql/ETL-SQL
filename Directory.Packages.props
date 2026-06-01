@@ -79,6 +79,7 @@
     <PackageVersion Include="Serilog.Sinks.XUnit" Version="3.0.19" />
   </ItemGroup>
   <ItemGroup Label="UI / Reports">
+    <PackageVersion Include="MiniExcel" Version="1.44.1" />
     <PackageVersion Include="OmniSharp.Extensions.LanguageServer" Version="0.19.9" />
     <PackageVersion Include="PDFsharp-MigraDoc" Version="6.2.4" />
     <PackageVersion Include="Svg.Skia" Version="5.0.0" />

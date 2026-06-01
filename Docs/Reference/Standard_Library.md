@@ -308,15 +308,24 @@ SELECT ATAN2(1.0, 1.0) AS Angle45;   -- ~0.785 radians (π/4)
 
 ### 5.3 Bitwise Functions
 
-| Function | Signature | Returns |
+| Function | Signature | Returns / Return Type |
 | :--- | :--- | :--- |
-| `BITAND` | `BITAND(a, b)` | Bitwise AND of two integers |
-| `BITOR` | `BITOR(a, b)` | Bitwise OR of two integers |
-| `BITXOR` | `BITXOR(a, b)` | Bitwise XOR of two integers |
-| `BITNOT` | `BITNOT(a)` | Bitwise NOT of an integer |
-| `BITSHIFTLEFT` | `BITSHIFTLEFT(a, n)` | Bitwise left shift of `a` by `n` bits |
-| `BITSHIFTRIGHT` | `BITSHIFTRIGHT(a, n)` | Bitwise right shift of `a` by `n` bits |
-| `BIT_COUNT` | `BIT_COUNT(a)` | Popcount (count of set bits) of an integer |
+| `BITAND` | `BITAND(a, b)` | `BIGINT` — bitwise AND of two integers |
+| `BITOR` | `BITOR(a, b)` | `BIGINT` — bitwise OR of two integers |
+| `BITXOR` | `BITXOR(a, b)` | `BIGINT` — bitwise XOR of two integers |
+| `BITNOT` | `BITNOT(a)` | `BIGINT` — bitwise NOT of an integer |
+| `BITSHIFTLEFT` | `BITSHIFTLEFT(a, n)` | `BIGINT` — bitwise left shift of `a` by `n` bits |
+| `BITSHIFTRIGHT` | `BITSHIFTRIGHT(a, n)` | `BIGINT` — bitwise right shift of `a` by `n` bits |
+| `BIT_COUNT` | `BIT_COUNT(a)` | `BIGINT` — popcount (count of set bits) in the integer |
+
+*Example:*
+```sql
+-- Shift values and count active bits
+SELECT 
+    BITSHIFTLEFT(1, 4)  AS ShiftedLeft,  -- Returns 16 (1 << 4)
+    BITSHIFTRIGHT(32, 2) AS ShiftedRight, -- Returns 8 (32 >> 2)
+    BIT_COUNT(7)        AS SetBitsCount;  -- Returns 3 (binary 111)
+```
 
 ---
 

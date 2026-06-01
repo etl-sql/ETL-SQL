@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 Charles Clemens
+ * Licensed under the PolyForm Noncommercial License 1.0.0
+ * Commercial use of this software requires a separate license.
+ * Contact etlsqlsoftware@gmail.com for commercial inquiries.
+ *
  * ETL-SQL Designer — shared vanilla-JS component
  *
  * Three exported surface areas, implemented across phases:

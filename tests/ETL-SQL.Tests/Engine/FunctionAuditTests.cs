@@ -55,6 +55,34 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal(2m, Convert.ToDecimal(row["r7"]));
             Assert.Equal(64m, Convert.ToDecimal(row["r8"]));
         }
+        
+        [Fact]
+        public async Task TestBitCountFunction()
+        {
+            var sql = @"
+                SELECT 
+                    BIT_COUNT(0) AS r0,
+                    BIT_COUNT(1) AS r1,
+                    BIT_COUNT(2) AS r2,
+                    BIT_COUNT(7) AS r3,
+                    BIT_COUNT(255) AS r4,
+                    BIT_COUNT(256) AS r5,
+                    BIT_COUNT(9223372036854775807) AS r6; -- Int64.MaxValue
+            ";
+            var eval = await RunAndGetEval(sql);
+            var result = eval.LastResult;
+            Assert.NotNull(result);
+            Assert.Single(result.Rows);
+            var row = result.Rows[0];
+
+            Assert.Equal(0m, Convert.ToDecimal(row["r0"]));
+            Assert.Equal(1m, Convert.ToDecimal(row["r1"]));
+            Assert.Equal(1m, Convert.ToDecimal(row["r2"]));
+            Assert.Equal(3m, Convert.ToDecimal(row["r3"]));
+            Assert.Equal(8m, Convert.ToDecimal(row["r4"]));
+            Assert.Equal(1m, Convert.ToDecimal(row["r5"]));
+            Assert.Equal(63m, Convert.ToDecimal(row["r6"]));
+        }
 
         [Fact]
         public async Task TestTrigAndConstants()

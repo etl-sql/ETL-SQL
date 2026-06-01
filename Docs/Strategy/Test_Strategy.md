@@ -2,6 +2,8 @@
 
 ETL-SQL's test suite protects a broad product surface: parser and AST behavior, engine semantics, security rules, file and connector orchestration, reporting, the Report Portal, language tooling, and performance. The suite should make those signals explicit so local development and CI can run the right amount of validation for the moment.
 
+**Status:** Implemented (Test lanes, smoke tests, performance category tags, and no-Docker UI test sandbox are active in the test framework)
+
 ## Goals
 
 - Keep a fast path for everyday development.
