@@ -71,7 +71,7 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
         const stored = this.context.globalState.get<string>('etlsql.connections', '[]');
         try {
             this.connections = JSON.parse(stored);
-        } catch (e) {
+        } catch {
             this.connections = [];
         }
     }
@@ -136,7 +136,7 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
                     try {
                         const response = await (this.client as LanguageClient).sendRequest('etlsql/getTempTables', { uri: element.uri }) as { tables: string[] };
                         return response.tables.map((t: string) => new TableItem(t, 'TEMP', vscode.TreeItemCollapsibleState.Collapsed, element.uri));
-                    } catch (e) {
+                    } catch {
                         return [new TreeItem("Error loading temp tables", vscode.TreeItemCollapsibleState.None)];
                     }
                 }
@@ -157,7 +157,7 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
                     
                     const list = element.category === 'Views' ? (response.views || []) : (response.tables || []);
                     return list.map((t: string) => new TableItem(t, element.connectionName, vscode.TreeItemCollapsibleState.Collapsed, element.uri));
-                } catch (e: unknown) {
+                } catch {
                     return [new TreeItem("Error loading " + element.category.toLowerCase(), vscode.TreeItemCollapsibleState.None)];
                 }
             }

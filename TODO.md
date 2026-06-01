@@ -10,15 +10,15 @@
 - [ ] **Silent warmup failures**: Warmup process failures in `extension.ts` (`warmupRepl`) are caught and silenced. While intentional for happy-path user experience, recording warning telemetry in the output channel would greatly simplify troubleshooting of environment-related launch issues.
 
 ### Security
-- [ ] **Cryptographic nonces in Webviews**: `resultsPanel.ts` and `sidebarProvider.ts` use `Math.random()` to generate nonces. While not highly sensitive, they should align with the standard in `reportPreviewPanel.ts` and `reportDesignerPanel.ts` which use `crypto.randomBytes(16).toString('base64url')` to prevent potential predictable-generator collisions.
+- [x] **Cryptographic nonces in Webviews**: `resultsPanel.ts` and `sidebarProvider.ts` use `Math.random()` to generate nonces. While not highly sensitive, they should align with the standard in `reportPreviewPanel.ts` and `reportDesignerPanel.ts` which use `crypto.randomBytes(16).toString('base64url')` to prevent potential predictable-generator collisions.
 - [ ] **Unprotected globalState store**: Storing connections in globalState (`etlsql.connections`) is currently unused but left in code. If global connection storage is reintroduced, it must use the VS Code `SecretStorage` API to protect credential values rather than simple global state JSON strings.
 
 ### Performance
-- [ ] **Webview HTML loading cache**: Both `resultsPanel.ts` and `sidebarProvider.ts` synchronously read `index.html` from disk (`fs.readFileSync(...)`) on every webview resolution. Caching this string in memory after the first read will improve panel loading and UI render responsiveness.
-- [ ] **Warmup concurrency lock**: Warmup and execute requests do not share a state lock. If a user quickly presses execute while warmup is starting, it may result in duplicate process spawn attempts.
+- [x] **Webview HTML loading cache**: Both `resultsPanel.ts` and `sidebarProvider.ts` synchronously read `index.html` from disk (`fs.readFileSync(...)`) on every webview resolution. Caching this string in memory after the first read will improve panel loading and UI render responsiveness.
+- [x] **Warmup concurrency lock**: Warmup and execute requests do not share a state lock. If a user quickly presses execute while warmup is starting, it may result in duplicate process spawn attempts.
 
 ### Linting
-- [ ] **Clean remaining ESLint warnings**: 9 warnings exist in the workspace (inactive variable/exception parameters in `connectionsProvider.ts`, `sidebarProvider.ts`, and test files). These should be fixed to maintain a strictly zero-warning lint build.
+- [x] **Clean remaining ESLint warnings**: 9 warnings exist in the workspace (inactive variable/exception parameters in `connectionsProvider.ts`, `sidebarProvider.ts`, and test files). These should be fixed to maintain a strictly zero-warning lint build.
 
 ## Full C# Engine & Connectors Audit (June 2026 Fresh Eyes Review)
 ### Single Responsibility Principle (SRP)

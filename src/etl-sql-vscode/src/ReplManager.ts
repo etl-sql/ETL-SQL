@@ -337,18 +337,24 @@ export class ReplManager {
     }
 
     public warmup(exePath: string, args: string[], launchOptions?: ReplLaunchOptions): void {
-        if (this._process) {
+        if (this._process || this._startPromise) {
             return;
         }
         const sessionIdx = args.indexOf('--session');
         if (sessionIdx !== -1 && sessionIdx + 1 < args.length) {
             this._currentSessionId = args[sessionIdx + 1];
         }
-        this._start(exePath, args, launchOptions).catch(() => {
+        const promise = this._start(exePath, args, launchOptions);
+        this._startPromise = promise;
+        promise.catch(() => {
             // Warmup failures are silent; execute() will retry when the user runs.
             this._process = undefined;
             this._isReady = false;
             this._currentSessionId = undefined;
+        }).finally(() => {
+            if (this._startPromise === promise) {
+                this._startPromise = undefined;
+            }
         });
     }
 

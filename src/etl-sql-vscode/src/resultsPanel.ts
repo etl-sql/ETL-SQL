@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 
 export class ResultsPanel implements vscode.WebviewViewProvider {
     public static readonly viewType = 'etlsql-results-view';
     public static currentPanel: ResultsPanel | undefined;
+    private static _rawHtmlCache?: string;
 
     private _view?: vscode.WebviewView;
     private _extensionUri: vscode.Uri;
@@ -87,7 +89,10 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
         try {
             // Path to the built React app (single-file mode via vite-plugin-singlefile)
             const indexPath = vscode.Uri.joinPath(this._extensionUri, 'ui', 'dist', 'index.html');
-            let html = fs.readFileSync(indexPath.fsPath, 'utf8');
+            if (!ResultsPanel._rawHtmlCache) {
+                ResultsPanel._rawHtmlCache = fs.readFileSync(indexPath.fsPath, 'utf8');
+            }
+            let html = ResultsPanel._rawHtmlCache;
 
             // Inject nonce and CSP to maintain "Zero-Trust" standards
             const inject = `<script nonce="${nonce}">window.VIEW_TYPE = 'results';</script>`;
@@ -113,10 +118,6 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
 }
 
 function getNonce() {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
+    return crypto.randomBytes(16).toString('base64url');
 }
+

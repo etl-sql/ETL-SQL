@@ -46,7 +46,7 @@ suite('Extension Integration Test Suite', () => {
         try {
             await vscode.commands.executeCommand('workbench.view.extension.etlsql-panel');
             // Successful execution of the command implies the view container exists
-        } catch (err) {
+        } catch {
             assert.fail('Results panel view container not found');
         }
     });
@@ -56,7 +56,7 @@ suite('Extension Integration Test Suite', () => {
         try {
             await vscode.commands.executeCommand('etlsql.runScript');
             // We expect this to call ResultsPanel.postMessage({ type: 'clear' }) internally
-        } catch (err) {
+        } catch {
             assert.fail('Failed to trigger runScript command');
         }
     });

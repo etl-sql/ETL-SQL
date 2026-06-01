@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ConnectionsProvider } from './connectionsProvider';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'etlsql-sidebar';
     public static currentProvider: SidebarProvider | undefined;
+    private static _rawHtmlCache?: string;
 
     private _view?: vscode.WebviewView;
     private _isReady: boolean = false;
@@ -99,7 +101,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 requestId: message.requestId,
                 tables: (response as { tables: string[] }).tables
             });
-        } catch (e) {
+        } catch {
             // ignore
         }
     }
@@ -119,7 +121,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 requestId: message.requestId,
                 columns: (response as { columns: string[] }).columns
             });
-        } catch (e) {
+        } catch {
             // ignore
         }
     }
@@ -135,7 +137,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 requestId: message.requestId,
                 tables: (response as { tables: string[] }).tables
             });
-        } catch (e) {
+        } catch {
             // ignore
         }
     }
@@ -172,7 +174,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         
         try {
             const indexPath = vscode.Uri.joinPath(this._extensionUri, 'ui', 'dist', 'index.html');
-            let html = fs.readFileSync(indexPath.fsPath, 'utf8');
+            if (!SidebarProvider._rawHtmlCache) {
+                SidebarProvider._rawHtmlCache = fs.readFileSync(indexPath.fsPath, 'utf8');
+            }
+            let html = SidebarProvider._rawHtmlCache;
 
             // Inject VIEW_TYPE global so React knows to render SidebarExplorer
             const inject = `<script nonce="${nonce}">window.VIEW_TYPE = 'sidebar';</script>`;
@@ -191,10 +196,5 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 }
 
 function getNonce() {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
+    return crypto.randomBytes(16).toString('base64url');
 }
