@@ -94,5 +94,27 @@ namespace ETL_SQL.Tests.Connectors
         {
             Assert.Equal(expected, SftpConnector.NormalizeRemotePath(input));
         }
+
+        [Fact]
+        public void CreateDataSource_WithTimeoutSeconds_PassesTimeoutToConstructor()
+        {
+            // Arrange
+            var connector = new SftpConnector();
+            var options = new Dictionary<string, string>
+            {
+                ["USER"] = "testuser",
+                ["TIMEOUT_SECONDS"] = "45"
+            };
+            string connectionString = "sftp.example.com";
+
+            // Act
+            var dataSource = connector.CreateDataSource(SystemExecutionContext.Instance, connectionString, options) as SftpConnector;
+
+            // Assert
+            Assert.NotNull(dataSource);
+            var timeoutField = typeof(SftpConnector).GetField("_timeoutSeconds", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var timeoutValue = (int)timeoutField.GetValue(dataSource);
+            Assert.Equal(45, timeoutValue);
+        }
     }
 }
