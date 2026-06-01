@@ -127,6 +127,12 @@ Reports and logs are written to `release-validation/`. Use `-Resume` / `--resume
 
 The full PowerShell plan with `-IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` is: asset drift check; restore; NuGet dependency audit; release build; smoke lane; fast lane; sample scripts; SLT lane; VS Code npm install/audit/compile/unit tests; smoke scale certification and baseline check; Docker integration lane; standard scale certification and baseline check; publish artifacts; Windows MSI.
 
+Windows MSI packaging requires WiX Toolset v3.11 (`candle.exe` and `light.exe`). On a clean Windows CI runner, install it before `build_msi.ps1`:
+
+```powershell
+choco install wixtoolset -y --no-progress --skip-if-installed
+```
+
 ### 2.5 Running SQLite Logic Tests (SLT) Corpus
 Runs the SQLite Logic test suite, generating timestamped output folders with standard teed console logs and TRX test results files:
 

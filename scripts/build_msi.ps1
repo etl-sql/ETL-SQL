@@ -51,7 +51,38 @@ function Assert-InstallerInputFiles {
     }
 }
 
+function Resolve-WixToolset {
+    $candle = Get-Command candle.exe -ErrorAction SilentlyContinue
+    $light = Get-Command light.exe -ErrorAction SilentlyContinue
+
+    if (-not ($candle -and $light)) {
+        $wixPath = 'C:\Program Files (x86)\WiX Toolset v3.11\bin'
+        if ((Test-Path (Join-Path $wixPath 'candle.exe')) -and (Test-Path (Join-Path $wixPath 'light.exe'))) {
+            $env:PATH = "$wixPath;$env:PATH"
+            $candle = Get-Command candle.exe -ErrorAction SilentlyContinue
+            $light = Get-Command light.exe -ErrorAction SilentlyContinue
+        }
+    }
+
+    if (-not ($candle -and $light)) {
+        Write-Host "[ERROR] WiX Toolset v3.11 (candle.exe/light.exe) was not found." -ForegroundColor Red
+        Write-Host "  Install WiX 3.11 and re-run, or add this CI step before build_msi.ps1:" -ForegroundColor Gray
+        Write-Host "  choco install wixtoolset -y --no-progress --skip-if-installed" -ForegroundColor Gray
+        return $null
+    }
+
+    return [pscustomobject]@{
+        Candle = $candle.Source
+        Light = $light.Source
+    }
+}
+
 Write-Host "--- ETL-SQL MSI Build Process (v$Version) ---" -ForegroundColor Cyan
+
+$WixToolset = Resolve-WixToolset
+if (-not $WixToolset) {
+    exit 1
+}
 
 # 1. Publish all components
 Write-Host "Publishing components to $BuildDir..." -ForegroundColor Gray
@@ -76,48 +107,30 @@ foreach ($Proj in $Projects) {
 Assert-InstallerInputFiles -InputDir $BuildDir
 
 # 2. Compile WiX Manifest
-$CandleExe = Get-Command candle.exe -ErrorAction SilentlyContinue
-$LightExe = Get-Command light.exe -ErrorAction SilentlyContinue
-if (-not $CandleExe) {
-    # Check common WiX 3.x install path on CI runners
-    $WixPath = 'C:\Program Files (x86)\WiX Toolset v3.11\bin'
-    if (Test-Path (Join-Path $WixPath 'candle.exe')) {
-        $env:PATH = "$WixPath;$env:PATH"
-        $CandleExe = Get-Command candle.exe -ErrorAction SilentlyContinue
-        $LightExe = Get-Command light.exe -ErrorAction SilentlyContinue
+Write-Host "Compiling WiX manifest (using $($WixToolset.Candle))..." -ForegroundColor Gray
+Push-Location $InstallerDir
+try {
+    $WixVersion = Get-WixProductVersion -InputVersion $Version
+    $wxsPath = Resolve-Path "Installer.wxs"
+    Write-Host "  ProductVersion: $WixVersion" -ForegroundColor Gray
+
+    & $WixToolset.Candle $wxsPath.Path "-dProductVersion=$WixVersion" -o Installer.wixobj -arch x64
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "candle.exe failed (exit code $LASTEXITCODE)"
+        exit $LASTEXITCODE
     }
-}
 
-if ($CandleExe -and $LightExe) {
-    Write-Host "Compiling WiX manifest (using $($CandleExe.Source))..." -ForegroundColor Gray
-    Push-Location $InstallerDir
-    try {
-        $WixVersion = Get-WixProductVersion -InputVersion $Version
-        $wxsPath = Resolve-Path "Installer.wxs"
-        Write-Host "  ProductVersion: $WixVersion" -ForegroundColor Gray
-
-        & $CandleExe.Source $wxsPath.Path "-dProductVersion=$WixVersion" -o Installer.wixobj -arch x64
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "candle.exe failed (exit code $LASTEXITCODE)"
-            exit $LASTEXITCODE
-        }
-
-        # 3. Link MSI
-        Write-Host "Linking MSI package..." -ForegroundColor Gray
-        & $LightExe.Source Installer.wixobj -o "ETL-SQL-Enterprise-v$Version.msi" -ext WixUIExtension
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "light.exe failed (exit code $LASTEXITCODE)"
-            exit $LASTEXITCODE
-        }
-
-        Write-Host "[SUCCESS] Installer created: ETL-SQL-Enterprise-v$Version.msi" -ForegroundColor Green
-    } finally {
-        Pop-Location
+    # 3. Link MSI
+    Write-Host "Linking MSI package..." -ForegroundColor Gray
+    & $WixToolset.Light Installer.wixobj -o "ETL-SQL-Enterprise-v$Version.msi" -ext WixUIExtension
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "light.exe failed (exit code $LASTEXITCODE)"
+        exit $LASTEXITCODE
     }
-} else {
-    Write-Host "[WARNING] WiX Toolset (candle.exe/light.exe) not found — skipping MSI packaging." -ForegroundColor Yellow
-    Write-Host "  Install WiX 3.11 and re-run, or add a 'choco install wixtoolset' step in CI." -ForegroundColor Gray
-    exit 1
+
+    Write-Host "[SUCCESS] Installer created: ETL-SQL-Enterprise-v$Version.msi" -ForegroundColor Green
+} finally {
+    Pop-Location
 }
 
 Write-Host "`nBuild process complete." -ForegroundColor Cyan

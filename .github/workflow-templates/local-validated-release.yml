@@ -56,6 +56,10 @@ jobs:
           git fetch --no-tags --prune --depth=1 origin "refs/tags/$env:TAG_NAME"
           git checkout --force FETCH_HEAD
 
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: choco install wixtoolset -y --no-progress --skip-if-installed
+
       - name: Build release assets
         shell: pwsh
         env:
@@ -64,6 +68,7 @@ jobs:
           $env:ETL_SQL_VERSION = $env:ETL_SQL_VERSION.TrimStart('v')
           .\scripts\publish_release.ps1 -Platforms win-x64
           .\scripts\build_msi.ps1
+          if ($LASTEXITCODE -ne 0) { throw "build_msi.ps1 failed with exit code $LASTEXITCODE" }
           $version = $env:ETL_SQL_VERSION
           Move-Item "src/ETL-SQL.Installer/ETL-SQL-Enterprise-v$version.msi" "release/ETL-SQL-v$version-x64-Setup.msi"
 
