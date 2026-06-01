@@ -42,5 +42,5 @@
 
 ### Cross-Platform & Environment Gotchas (Mac/Linux)
 - [x] **Missing ClearScript V8 native packages for macOS / ARM64**: In `Directory.Packages.props`, only the `win-x64` and `linux-x64` native runtime dependencies of `Microsoft.ClearScript.V8` are included. Running server-side ECharts rendering on macOS (Intel/Apple Silicon) or ARM-based Linux containers will crash with native library loading failures. Need to add `Microsoft.ClearScript.V8.Native.osx-x64`, `Microsoft.ClearScript.V8.Native.osx-arm64`, and `Microsoft.ClearScript.V8.Native.linux-arm64` to complete cross-platform runtime support.
-- [ ] **Path separator normalization issues**: In case-sensitive Unix systems, paths resolved across different connectors (e.g. Sftp, FlatFile, Excel) must ensure proper backslash-to-slash character translation and case consistency.
+- [x] **Path separator normalization issues**: In case-sensitive Unix systems, paths resolved across different connectors (e.g. Sftp, FlatFile, Excel) must ensure proper backslash-to-slash character translation and case consistency. Remote SFTP paths now normalize backslashes to `/`; local file connectors continue to use `IExecutionContext.ResolvePath()` for OS-native path handling.
 

@@ -85,5 +85,14 @@ namespace ETL_SQL.Tests.Connectors
             Assert.True(factoryCalled);
             Assert.Equal(pass, capturedPass);
         }
+
+        [Theory]
+        [InlineData(@"incoming\orders\today.csv", "incoming/orders/today.csv")]
+        [InlineData(@"/incoming\orders_today.csv", "/incoming/orders_today.csv")]
+        [InlineData("", "")]
+        public void NormalizeRemotePath_UsesUnixSeparators(string input, string expected)
+        {
+            Assert.Equal(expected, SftpConnector.NormalizeRemotePath(input));
+        }
     }
 }

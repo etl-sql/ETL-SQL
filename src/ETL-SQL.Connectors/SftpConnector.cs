@@ -168,6 +168,7 @@ namespace ETL_SQL.Connectors
 
         private async IAsyncEnumerable<FileMetaData> ListFilesCoreAsync(string path)
         {
+            path = NormalizeRemotePath(path);
             var files = await RunClientOperationAsync(client =>
                 client.ListDirectory(path)
                     .Select(i => new FileMetaData
@@ -184,16 +185,17 @@ namespace ETL_SQL.Connectors
                 yield return file;
         }
 
-        private bool RemoteFileExists(SftpClient client, string remotePath) =>
+        private bool RemoteFileExistsNormalized(SftpClient client, string remotePath) =>
             client.Exists(remotePath) && !client.Get(remotePath).IsDirectory;
 
-        private bool RemoteDirectoryExists(SftpClient client, string remotePath) =>
+        private bool RemoteDirectoryExistsNormalized(SftpClient client, string remotePath) =>
             client.Exists(remotePath) && client.Get(remotePath).IsDirectory;
 
         public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
         {
             try
             {
+                remotePath = NormalizeRemotePath(remotePath);
                 await RunClientOperationAsync(client =>
                 {
                     if (!overwrite && client.Exists(remotePath))
@@ -215,6 +217,7 @@ namespace ETL_SQL.Connectors
         {
             try
             {
+                remotePath = NormalizeRemotePath(remotePath);
                 if (!overwrite && File.Exists(localPath))
                 {
                     throw new ExecutionException($"Local file already exists: {localPath}");
@@ -236,6 +239,7 @@ namespace ETL_SQL.Connectors
         {
             try
             {
+                remotePath = NormalizeRemotePath(remotePath);
                 await RunClientOperationAsync(client => client.DeleteFile(remotePath));
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -248,7 +252,8 @@ namespace ETL_SQL.Connectors
         {
             try
             {
-                return await RunClientOperationAsync(client => RemoteFileExists(client, remotePath));
+                remotePath = NormalizeRemotePath(remotePath);
+                return await RunClientOperationAsync(client => RemoteFileExistsNormalized(client, remotePath));
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -260,7 +265,8 @@ namespace ETL_SQL.Connectors
         {
             try
             {
-                return await RunClientOperationAsync(client => RemoteDirectoryExists(client, remotePath));
+                remotePath = NormalizeRemotePath(remotePath);
+                return await RunClientOperationAsync(client => RemoteDirectoryExistsNormalized(client, remotePath));
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -272,6 +278,8 @@ namespace ETL_SQL.Connectors
         {
             try
             {
+                remoteSource = NormalizeRemotePath(remoteSource);
+                remoteDest = NormalizeRemotePath(remoteDest);
                 await RunClientOperationAsync(client =>
                 {
                     if (overwrite && client.Exists(remoteDest))
@@ -292,6 +300,7 @@ namespace ETL_SQL.Connectors
         {
             try
             {
+                remotePath = NormalizeRemotePath(remotePath);
                 await RunClientOperationAsync(client => client.CreateDirectory(remotePath));
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -304,6 +313,7 @@ namespace ETL_SQL.Connectors
         {
             try
             {
+                remotePath = NormalizeRemotePath(remotePath);
                 await RunClientOperationAsync(client => client.DeleteDirectory(remotePath));
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -366,6 +376,9 @@ namespace ETL_SQL.Connectors
             if (options != null && options.TryGetValue("HOST", out var host)) return host;
             return connectionString;
         }
+
+        internal static string NormalizeRemotePath(string path) =>
+            string.IsNullOrEmpty(path) ? path : path.Replace('\\', '/');
 
         private static bool ShouldWrapProviderException(Exception ex) =>
             ex is SshException or SftpPathNotFoundException or SftpPermissionDeniedException
