@@ -58,7 +58,7 @@ Hand-authored tests covering ETL-SQL-specific features and SQL areas not in the 
 | `groupby.test` | 5 | GROUP BY with aggregates; HAVING; ORDER BY on aggregate |
 | `join.test` | 24 | INNER/LEFT/CROSS JOIN; comma-join syntax; 3- and 5-table joins |
 | `json_xml.test` | 11 | ISJSON; JSON_VALUE/JSON_QUERY; XMLVALUE path expressions |
-| `match_recognize.test` | 3 | MATCH_RECOGNIZE; PARTITION BY; PATTERN/DEFINE; V-shape detection |
+| `match_recognize.test` | 7 | MATCH_RECOGNIZE; PARTITION BY; PATTERN/DEFINE; V-shape detection; ALL ROWS PER MATCH classifier output; repeated match numbering |
 | `mini_select1.test` | 33 | Complex CASE/arithmetic combos; hash-verified 60-value result sets |
 | `null_edge_cases.test` | 17 | NULL comparison (= vs IS NULL); NULL in arithmetic; NULLIF; three-valued logic; BETWEEN with NULL |
 | `nulls.test` | 10 | COUNT(*) vs COUNT(x); SUM over NULLs; IS NULL; COALESCE |
@@ -112,7 +112,7 @@ Hand-authored tests covering ETL-SQL-specific features and SQL areas not in the 
 | Date functions (DATEPART/DATEDIFF/DATEADD) | **Medium** | date_functions.test (6 records) |
 | JSON/XML functions | **Medium** | json_xml.test (7 records) |
 | ETL-SQL generators (GENERATE_SERIES, NGRAMS) | **Medium** | generators.test (5 records) |
-| MATCH_RECOGNIZE | **Low** | match_recognize.test (1 record) |
+| MATCH_RECOGNIZE | **Medium** | match_recognize.test (3 query records: one-row measures, classifier rows, repeated matches) |
 | VIEW CREATE/DROP | **Low** | createview.test (25 records), dropview.test |
 | INSERT / REPLACE INTO | **Medium** | select5, replace.test, insert.test (VALUES with NULL and expressions; INSERT SELECT with JOIN and aggregate) |
 | UPDATE | **Medium** | update.test + dml.test (arithmetic SET, CASE-in-SET, subquery-in-WHERE, multi-column, unconditional, no-op) |
