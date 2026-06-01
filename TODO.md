@@ -2,7 +2,7 @@
 
 ## VS Code Extension Audit (June 2026 Fresh Eyes Review)
 ### Single Responsibility Principle (SRP)
-- [ ] **extension.ts bloat**: Refactor `extension.ts` to separate concern groups. It spans over 1,000 lines handling command registration, workspace events, process warmth, configuration checks, and Unix permission adjustments. These should be split into modules (e.g. `permissions.ts`, `terminalCommandBuilder.ts`, `cleanupService.ts`).
+- [x] **extension.ts bloat**: Refactor `extension.ts` to separate concern groups. It spans over 1,000 lines handling command registration, workspace events, process warmth, configuration checks, and Unix permission adjustments. These should be split into modules (`permissions.ts`, `terminalCommandBuilder.ts`, `cleanupService.ts`).
 - [x] **WelcomeView path resolution coupling**: Decouple `WelcomeView.ts` from direct knowledge of local/online files. The path resolver logic should be moved into a shared helper module.
 
 ### Logging
@@ -37,10 +37,10 @@
 - [x] **Sync-over-async blocking threads**:
   - `src/ETL-SQL.ReportPortal/Controllers/ExecutionController.cs:L319` makes a synchronous `.Wait()` call on `audit.LogAsync(...).Wait()`. This blocks ASP.NET Core request threads, creating a high risk of thread pool starvation and deadlocks.
   - `src/ETL-SQL.Core/Data/DataModel.cs:L495` calls `AddRowAsync(row).GetAwaiter().GetResult()` inside the obsolete synchronous `AddRow` wrapper.
-- [x] **Synchronous blocking calls in SftpConnector**:
+- [ ] **Synchronous blocking calls in SftpConnector**:
   - `src/ETL-SQL.Connectors/SftpConnector.cs` invokes synchronous SSH.NET methods like `Client.Connect()`, `Client.ListDirectory()`, `Client.Exists()`, and `Client.DeleteFile()` directly within async execution paths (such as `EnsureConnected()` inside `ListFilesCoreAsync`) without wrapping them in `Task.Run` or leveraging async equivalents. This stalls the async enumeration threads during network-bound calls.
 
 ### Cross-Platform & Environment Gotchas (Mac/Linux)
 - [x] **Missing ClearScript V8 native packages for macOS / ARM64**: In `Directory.Packages.props`, only the `win-x64` and `linux-x64` native runtime dependencies of `Microsoft.ClearScript.V8` are included. Running server-side ECharts rendering on macOS (Intel/Apple Silicon) or ARM-based Linux containers will crash with native library loading failures. Need to add `Microsoft.ClearScript.V8.Native.osx-x64`, `Microsoft.ClearScript.V8.Native.osx-arm64`, and `Microsoft.ClearScript.V8.Native.linux-arm64` to complete cross-platform runtime support.
-- [x] **Path separator normalization issues**: In case-sensitive Unix systems, paths resolved across different connectors (e.g. Sftp, FlatFile, Excel) must ensure proper backslash-to-slash character translation and case consistency. Remote SFTP paths now normalize backslashes to `/`; local file connectors continue to use `IExecutionContext.ResolvePath()` for OS-native path handling.
+- [ ] **Path separator normalization issues**: In case-sensitive Unix systems, paths resolved across different connectors (e.g. Sftp, FlatFile, Excel) must ensure proper backslash-to-slash character translation and case consistency. Remote SFTP paths now normalize backslashes to `/`; local file connectors continue to use `IExecutionContext.ResolvePath()` for OS-native path handling.
 

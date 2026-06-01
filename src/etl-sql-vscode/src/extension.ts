@@ -20,6 +20,9 @@ import { ETLNotebookSerializer } from './notebookSerializer';
 import { ETLNotebookController } from './notebookController';
 import { WelcomeView } from './WelcomeView';
 import * as logger from './logger';
+import { ensureExecutable } from './permissions';
+import { getTerminalCommand } from './terminalCommandBuilder';
+import { cleanupTempFiles } from './cleanupService';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -950,80 +953,3 @@ async function exportNotebookToSql() {
     }
 }
 
-function ensureExecutable(filePath: string): void {
-    if (os.platform() !== 'win32' && fs.existsSync(filePath)) {
-        try {
-            const stats = fs.statSync(filePath);
-            if ((stats.mode & fs.constants.S_IXUSR) === 0) {
-                fs.chmodSync(filePath, stats.mode | fs.constants.S_IXUSR | fs.constants.S_IXGRP | fs.constants.S_IXOTH);
-                outputChannel?.appendLine(`[Permissions] Made executable: ${filePath}`);
-            }
-        } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : String(err);
-            outputChannel?.appendLine(`[Permissions] Failed to set execute bit on ${filePath}: ${message}`);
-        }
-    }
-}
-
-function getTerminalCommand(exe: string, args: string[]): string {
-    const shellPath = (vscode.env.shell || '').toLowerCase();
-    const isPowerShell = shellPath.includes('powershell') || shellPath.includes('pwsh');
-    
-    let exeStr = exe;
-    if (exeStr.includes(' ') && !exeStr.startsWith('"')) {
-        exeStr = `"${exeStr}"`;
-    }
-    
-    const argsStr = args.map(arg => {
-        if (arg.includes(' ') && !arg.startsWith('"') && !arg.startsWith("'")) {
-            return `"${arg}"`;
-        }
-        return arg;
-    }).join(' ');
-    
-    if (isPowerShell) {
-        return `& ${exeStr} ${argsStr}`;
-    }
-    return `${exeStr} ${argsStr}`;
-}
-
-async function cleanupTempFiles() {
-    try {
-        const tempDir = os.tmpdir();
-        const files = await fs.promises.readdir(tempDir);
-        const now = Date.now();
-        const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-
-        for (const file of files) {
-            if (file.startsWith('etlsql-preview-') || file.startsWith('etlsql-script-')) {
-                const filePath = path.join(tempDir, file);
-                try {
-                    const stats = await fs.promises.stat(filePath);
-                    if (now - stats.mtimeMs > maxAge) {
-                        await fs.promises.unlink(filePath);
-                    }
-                } catch {
-                    // Ignore
-                }
-            }
-        }
-
-        const etlsqlTempDir = path.join(tempDir, 'etlsql_temp');
-        if (fs.existsSync(etlsqlTempDir)) {
-            const tempFiles = await fs.promises.readdir(etlsqlTempDir);
-            for (const file of tempFiles) {
-                const filePath = path.join(etlsqlTempDir, file);
-                try {
-                    const stats = await fs.promises.stat(filePath);
-                    if (now - stats.mtimeMs > maxAge) {
-                        await fs.promises.unlink(filePath);
-                    }
-                } catch {
-                    // Ignore
-                }
-            }
-        }
-    } catch {
-        // Ignore
-    }
-}
