@@ -28,6 +28,13 @@ RUN dotnet publish "ETL-SQL.Orchestrator.Service.csproj" -c Release -o /app/publ
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
+
+# SkiaSharp (PDF chart rendering via Svg.Skia) needs fontconfig at runtime for
+# scheduled report/PDF exports; the aspnet base image doesn't include it.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libfontconfig1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=publish /app/publish .
 
 # Create logs and snapshots directories

@@ -1567,6 +1567,31 @@
         URL.revokeObjectURL(url);
     }
 
+    // Prefer a real .xlsx from the server (typed cells, one sheet, no "format
+    // mismatch" warning). Falls back to the lightweight client-side .xls when no
+    // export API is reachable (e.g. VS Code preview or a host without the endpoint).
+    async function exportExcelDownload(visual) {
+        const base = window.__API_BASE__;
+        if (base) {
+            try {
+                const res = await fetch(base + '/export/xlsx?visual=' + encodeURIComponent(visual.name || ''));
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url  = URL.createObjectURL(blob);
+                    const a    = document.createElement('a');
+                    a.href     = url;
+                    a.download = (visual.name || 'export') + '.xlsx';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    return;
+                }
+            } catch (e) { /* fall through to client-side export */ }
+        }
+        exportExcel(visual);
+    }
+
     function findVisualData(targetName) {
         const el = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`);
         return el ? el._visualData : null;
@@ -1655,6 +1680,12 @@
         exportItem.innerHTML = `<span>&#x2913;</span> Export to CSV`;
         exportItem.addEventListener('click', () => { exportCsv(visual); hideCtxMenu(); });
         menu.appendChild(exportItem);
+
+        const excelItem = document.createElement('div');
+        excelItem.className = 'ctx-item';
+        excelItem.innerHTML = `<span>&#x2913;</span> Export to Excel`;
+        excelItem.addEventListener('click', () => { exportExcelDownload(visual); hideCtxMenu(); });
+        menu.appendChild(excelItem);
 
         document.body.appendChild(menu);
         _ctxMenu = menu;
@@ -3880,7 +3911,7 @@
             const visual = targetName ? findVisualData(targetName) : null;
             if (!visual) { console.warn('EXPORT action: no target visual found:', targetName); return; }
             if (action.type === 'EXPORT_CSV') exportCsv(visual);
-            else exportExcel(visual);
+            else exportExcelDownload(visual);
         } else if (action.type === 'EXPORT_PDF') {
             window.print();
         } else if (action.type === 'NAVIGATE_PAGE') {

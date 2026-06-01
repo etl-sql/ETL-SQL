@@ -21,7 +21,7 @@ These are taken directly from the SQLite Logic Test suite. Each builds a table `
 | `select3.test` | 31 | 3,320 | Extended SELECT: correlated subqueries, multi-column CASE, complex arithmetic combos |
 | `select4.test` | 1,025 | 2,832 | Multi-table joins (join0–join499), cross-join combinations, join with aggregates |
 | `select5.test` | 704 | 732 | INSERT/SELECT patterns, type-specific result formatting, edge-case column expressions |
-| **Total** | **1,822** | **7,884** | |
+| **Total** | **1,822** | **8,884** | |
 
 ### Evidence files (`tests/slt_data/evidence/`)
 

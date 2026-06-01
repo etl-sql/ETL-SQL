@@ -32,6 +32,14 @@ RUN dotnet publish "ETL-SQL.ReportPortal.csproj" -c Release -o /app/publish /p:U
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
+
+# SkiaSharp (PDF chart rendering via Svg.Skia) P/Invokes libSkiaSharp, which needs
+# fontconfig at runtime. The aspnet base image doesn't include it, so PDF export
+# fails with "The type initializer for 'SkiaSharp.SKImageInfo' threw an exception".
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libfontconfig1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=publish /app/publish .
 
 # Create directories

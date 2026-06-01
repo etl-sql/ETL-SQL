@@ -172,6 +172,14 @@ public HashSet<string> GetExcludedKeywords() => new();  // Returns empty — lin
 
 **Violation indicator:** Connection pool exhaustion after DROP CONNECTION. File handles remaining open after a script completes.
 
+### Rule 11: Option Naming and Password Standard
+
+All `WITH()`-style option keys must be strictly UPPERCASE with underscores (e.g., `TIMEOUT_SECONDS`, `MIN_POOL_SIZE`, `CREDENTIAL_FILE`). PascalCase, camelCase, or mixed-case keys are forbidden.
+
+Additionally, `PASSWORD` is the only accepted option key for passwords in any connector. Never use `PWD` or any other alias. The connector's connection-string builder is responsible for mapping `PASSWORD` to the driver-native keyword when constructing the connection string.
+
+**Violation indicator:** Any option key in `GetSupportedOptions()` or constructor parsed options that contains lowercase letters, or is named `PWD`.
+
 ---
 
 ## Part II — Testing Standards
@@ -362,6 +370,8 @@ Use this checklist when reviewing any PR that adds or significantly modifies a c
 
 **Metadata**
 - [ ] `GetSupportedOptions()` lists all `WITH` clause keys including sensitive ones?
+- [ ] All option keys in `GetSupportedOptions()` are strictly UPPERCASE with underscores?
+- [ ] `PASSWORD` is used as the only password option key (no `PWD` or aliases)?
 - [ ] `GetOptionValues()` provides safe display values (no sensitive value defaults)?
 - [ ] `GetExcludedKeywords()` lists all baseline keywords the target dialect rejects?
 - [ ] `GetHelp()` documents authentication patterns and required vs. optional options?
