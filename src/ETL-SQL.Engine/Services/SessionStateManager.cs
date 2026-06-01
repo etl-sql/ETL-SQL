@@ -292,7 +292,15 @@ namespace ETL_SQL.Engine.Services
                         var dirTime = Directory.GetLastWriteTime(dir);
                         if (dirTime < cutoff)
                         {
-                            try { Directory.Delete(dir, true); reapCount++; } catch { }
+                            try
+                            {
+                                Directory.Delete(dir, true);
+                                reapCount++;
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Warning("Failed to reap abandoned session directory {SessionId}: {Message}", sessionId, ex.Message);
+                            }
                         }
                     }
                 }

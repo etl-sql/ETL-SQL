@@ -200,7 +200,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 catch (Exception ex)
                 {
-                    _logger.Debug("Preview data not available for {ConnectionName}: {Message}", connectionName, ex.Message);
+                    _logger.Warning("CREATE CONNECTION: preview data not available for {ConnectionName}: {Message}", connectionName, ex.Message);
                 }
             }
             preview.TotalRowsMatched = preview.Rows.Count;

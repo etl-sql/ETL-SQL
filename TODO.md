@@ -27,7 +27,7 @@
 
 ### Logging
 - [x] **Trace output in shared libraries**: Standardize all logging to use the `ILogger` interface injected via DI or obtained from `IExecutionContext`. Ensure no raw `Console.WriteLine` calls remain in class libraries (e.g., check `ResultFormatter.cs`, `EngineLogger.cs`). `EngineLogger` is callback-only; `ResultFormatter` uses the console abstraction for intentional result output.
-- [ ] **Warmup & connection telemetry gaps**: Telemetry for connector initialization or session warmup failures is caught silently to prioritize happy-path UX. Recording warning logs/telemetry to a diagnostic sink is critical for troubleshooting deployment issues.
+- [x] **Warmup & connection telemetry gaps**: Telemetry for connector initialization or session warmup failures is caught silently to prioritize happy-path UX. Recording warning logs/telemetry to a diagnostic sink is critical for troubleshooting deployment issues. Connection preview failures now emit warning logs, and abandoned session reaping failures are no longer silent.
 
 ### Security
 - [x] **File-type verification bypass in FileTransferStatementHandler**: While wildcard file transfers validate file extensions using `SecurityService.ValidateFileType(localFile)` to block prohibited types (like `.exe`, `.bat`), single-file `SEND` and `RECEIVE` (upload/download) operations only call `ValidateWriteAccess(localPath)` (for Receive) or check if the file exists (for Send) but bypass `ValidateFileType`. This creates a vulnerability where sensitive or executable files could be transferred directly.
