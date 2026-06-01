@@ -173,6 +173,13 @@ export class ReplManager {
                 }
             });
 
+            child.on('error', (err) => {
+                this._outputChannel?.appendLine(`[REPL] Error starting process: ${err.message}`);
+                if (!becameReady) {
+                    reject(err);
+                }
+            });
+
             child.on('close', (code) => {
                 this._outputChannel?.appendLine(`REPL process exited (code ${code}).`);
 

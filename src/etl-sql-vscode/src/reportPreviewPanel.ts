@@ -234,6 +234,10 @@ export class ReportPreviewPanel {
                 proc.stderr.on('data', d => {
                     stderr += d.toString();
                 });
+                proc.on('error', err => {
+                    vscode.window.showErrorMessage(`Export failed: ${err.message}`);
+                    reject(err);
+                });
                 proc.on('close', code => {
                     if (code === 0) {
                         vscode.window.showInformationMessage(`Report exported successfully to ${path.basename(uri.fsPath)}`);
@@ -292,6 +296,12 @@ export class ReportPreviewPanel {
         const proc = cp.spawn(exe, args, { shell: false, cwd: this._resolveExecutionCwd() });
         let stderr = '';
         proc.stderr.on('data', d => { stderr += d.toString(); });
+        proc.on('error', err => {
+            if (isTempScript && fs.existsSync(targetPath)) {
+                try { fs.unlinkSync(targetPath); } catch { /* ignore */ }
+            }
+            callback(`Failed to start ETL-SQL-Report: ${err.message}`, null);
+        });
         proc.on('close', code => {
             if (isTempScript && fs.existsSync(targetPath)) {
                 try { fs.unlinkSync(targetPath); } catch { /* ignore */ }
@@ -331,6 +341,7 @@ export class ReportPreviewPanel {
         for (const ext of possibleExtensions) {
             const bundledPath = path.join(this._extensionUri.fsPath, 'bin', `ETL-SQL-Report${ext}`);
             if (fs.existsSync(bundledPath)) {
+                this._ensureExecutable(bundledPath);
                 return { exe: bundledPath, baseArgs: [] };
             }
         }
@@ -412,6 +423,19 @@ export class ReportPreviewPanel {
 
     private _nonce(): string {
         return nodeCrypto.randomBytes(16).toString('base64url');
+    }
+
+    private _ensureExecutable(filePath: string): void {
+        if (os.platform() !== 'win32' && fs.existsSync(filePath)) {
+            try {
+                const stats = fs.statSync(filePath);
+                if ((stats.mode & fs.constants.S_IXUSR) === 0) {
+                    fs.chmodSync(filePath, stats.mode | fs.constants.S_IXUSR | fs.constants.S_IXGRP | fs.constants.S_IXOTH);
+                }
+            } catch {
+                // ignore
+            }
+        }
     }
 
     public dispose(): void {

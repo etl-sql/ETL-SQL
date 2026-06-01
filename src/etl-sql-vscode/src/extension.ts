@@ -58,6 +58,9 @@ export async function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel("ETL-SQL");
     outputChannel.appendLine("ETL-SQL extension activated.");
     
+    // Clean up temporary script files asynchronously on startup
+    void cleanupTempFiles();
+    
     const config = vscode.workspace.getConfiguration('etlsql');
     ReplManager.getInstance().setOutputChannel(outputChannel);
 
@@ -89,7 +92,7 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     // Register Notebook Controller
-    const controller = new ETLNotebookController();
+    const controller = new ETLNotebookController(context);
     context.subscriptions.push(controller);
 
     // Sync state changes to sidebar
@@ -155,6 +158,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const bundledServer = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL-LSP.exe' : 'ETL-SQL-LSP');
         if (await fileExists(bundledServer)) {
             serverPath = bundledServer;
+            ensureExecutable(serverPath);
             outputChannel.appendLine(`Using bundled Language Server: ${serverPath}`);
         }
     }
@@ -655,7 +659,7 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
             scriptPath = path.join(tempDir, `temp_${Date.now()}.etlsql`);
             await fs.promises.writeFile(scriptPath, scriptText, 'utf8');
         }
-        const command = `& "${exePath}" run "${scriptPath}"`;
+        const command = getTerminalCommand(exePath, ['run', scriptPath]);
         terminal.sendText(command);
     }
 }
@@ -686,6 +690,7 @@ async function getExecutablePath(context: vscode.ExtensionContext, config: vscod
     // 2. Try bundled path
     const bundledPath = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL.exe' : 'ETL-SQL');
     if (await fileExists(bundledPath)) {
+        ensureExecutable(bundledPath);
         return bundledPath;
     }
 
@@ -786,6 +791,7 @@ function getReportExecutablePath(context: vscode.ExtensionContext): { exe: strin
     const ext = os.platform() === 'win32' ? '.exe' : '';
     const bundledPath = path.join(context.extensionPath, 'bin', `ETL-SQL-Report${ext}`);
     if (fs.existsSync(bundledPath)) {
+        ensureExecutable(bundledPath);
         return { exe: bundledPath, baseArgs: [] };
     }
 
@@ -794,7 +800,7 @@ function getReportExecutablePath(context: vscode.ExtensionContext): { exe: strin
     if (workspaceFolder) {
         const cliProject = path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.ReportBuilder.CLI', 'ETL-SQL.ReportBuilder.CLI.csproj');
         if (fs.existsSync(cliProject)) {
-            return { exe: 'dotnet', baseArgs: ['run', '--project', `"${cliProject}"`, '--'] };
+            return { exe: 'dotnet', baseArgs: ['run', '--project', cliProject, '--'] };
         }
     }
 
@@ -848,7 +854,8 @@ async function launchReport(context: vscode.ExtensionContext, mode: 'file' | 'di
         args.push(`"${targetPath}"`);
     }
 
-    terminal.sendText(`& ${reportExe.exe} ${args.join(' ')}`);
+    const command = getTerminalCommand(reportExe.exe, args);
+    terminal.sendText(command);
 }
 
 async function handleExport(context: vscode.ExtensionContext, format: string, label: string, extensions: string[]) {
@@ -886,7 +893,7 @@ async function handleExport(context: vscode.ExtensionContext, format: string, la
             cancellable: false
         }, async () => {
             return new Promise<void>((resolve, reject) => {
-                cp.execFile(reportExe.exe, args, { shell: true }, (err, stdout, stderr) => {
+                cp.execFile(reportExe.exe, args, { shell: false }, (err, stdout, stderr) => {
                     if (err) {
                         vscode.window.showErrorMessage(`Export failed: ${stderr || err.message}`);
                         reject(err);
@@ -941,5 +948,83 @@ async function exportNotebookToSql() {
         vscode.window.showInformationMessage(`Exported to: ${uri.fsPath}`);
         const doc = await vscode.workspace.openTextDocument(uri);
         await vscode.window.showTextDocument(doc);
+    }
+}
+
+function ensureExecutable(filePath: string): void {
+    if (os.platform() !== 'win32' && fs.existsSync(filePath)) {
+        try {
+            const stats = fs.statSync(filePath);
+            if ((stats.mode & fs.constants.S_IXUSR) === 0) {
+                fs.chmodSync(filePath, stats.mode | fs.constants.S_IXUSR | fs.constants.S_IXGRP | fs.constants.S_IXOTH);
+                outputChannel?.appendLine(`[Permissions] Made executable: ${filePath}`);
+            }
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            outputChannel?.appendLine(`[Permissions] Failed to set execute bit on ${filePath}: ${message}`);
+        }
+    }
+}
+
+function getTerminalCommand(exe: string, args: string[]): string {
+    const shellPath = (vscode.env.shell || '').toLowerCase();
+    const isPowerShell = shellPath.includes('powershell') || shellPath.includes('pwsh');
+    
+    let exeStr = exe;
+    if (exeStr.includes(' ') && !exeStr.startsWith('"')) {
+        exeStr = `"${exeStr}"`;
+    }
+    
+    const argsStr = args.map(arg => {
+        if (arg.includes(' ') && !arg.startsWith('"') && !arg.startsWith("'")) {
+            return `"${arg}"`;
+        }
+        return arg;
+    }).join(' ');
+    
+    if (isPowerShell) {
+        return `& ${exeStr} ${argsStr}`;
+    }
+    return `${exeStr} ${argsStr}`;
+}
+
+async function cleanupTempFiles() {
+    try {
+        const tempDir = os.tmpdir();
+        const files = await fs.promises.readdir(tempDir);
+        const now = Date.now();
+        const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+
+        for (const file of files) {
+            if (file.startsWith('etlsql-preview-') || file.startsWith('etlsql-script-')) {
+                const filePath = path.join(tempDir, file);
+                try {
+                    const stats = await fs.promises.stat(filePath);
+                    if (now - stats.mtimeMs > maxAge) {
+                        await fs.promises.unlink(filePath);
+                    }
+                } catch {
+                    // Ignore
+                }
+            }
+        }
+
+        const etlsqlTempDir = path.join(tempDir, 'etlsql_temp');
+        if (fs.existsSync(etlsqlTempDir)) {
+            const tempFiles = await fs.promises.readdir(etlsqlTempDir);
+            for (const file of tempFiles) {
+                const filePath = path.join(etlsqlTempDir, file);
+                try {
+                    const stats = await fs.promises.stat(filePath);
+                    if (now - stats.mtimeMs > maxAge) {
+                        await fs.promises.unlink(filePath);
+                    }
+                } catch {
+                    // Ignore
+                }
+            }
+        }
+    } catch {
+        // Ignore
     }
 }
