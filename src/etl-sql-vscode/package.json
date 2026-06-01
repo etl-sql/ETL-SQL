@@ -185,11 +185,7 @@
         "command": "etlsql.showLineage",
         "title": "ETL-SQL: Show Visual Lineage"
       },
-      {
-        "command": "etlsql.removeConnection",
-        "title": "ETL-SQL: Remove Connection",
-        "icon": "$(trash)"
-      },
+
       {
         "command": "etlsql.refreshConnections",
         "title": "ETL-SQL: Refresh",
@@ -358,13 +354,8 @@
       ],
       "view/item/context": [
         {
-          "command": "etlsql.removeConnection",
-          "when": "view == etlsql-sidebar && viewItem == connection-global",
-          "group": "inline"
-        },
-        {
           "command": "etlsql.copyConnection",
-          "when": "view == etlsql-sidebar && (viewItem == connection-global || viewItem == connection-script)",
+          "when": "view == etlsql-sidebar && viewItem == connection-script",
           "group": "inline"
         }
       ],

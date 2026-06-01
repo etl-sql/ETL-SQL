@@ -11,7 +11,7 @@
 
 ### Security
 - [x] **Cryptographic nonces in Webviews**: `resultsPanel.ts` and `sidebarProvider.ts` use `Math.random()` to generate nonces. While not highly sensitive, they should align with the standard in `reportPreviewPanel.ts` and `reportDesignerPanel.ts` which use `crypto.randomBytes(16).toString('base64url')` to prevent potential predictable-generator collisions.
-- [ ] **Unprotected globalState store**: Storing connections in globalState (`etlsql.connections`) is currently unused but left in code. If global connection storage is reintroduced, it must use the VS Code `SecretStorage` API to protect credential values rather than simple global state JSON strings.
+- [x] **Unprotected globalState store**: Removed unused globalState connection store and dead remove/add connection logic completely to eliminate security exposure (no unencrypted credentials stored in globalState).
 
 ### Performance
 - [x] **Webview HTML loading cache**: Both `resultsPanel.ts` and `sidebarProvider.ts` synchronously read `index.html` from disk (`fs.readFileSync(...)`) on every webview resolution. Caching this string in memory after the first read will improve panel loading and UI render responsiveness.

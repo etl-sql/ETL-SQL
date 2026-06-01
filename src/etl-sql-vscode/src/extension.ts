@@ -286,12 +286,6 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('etlsql.removeConnection', (node: { label?: string }) => {
-        if (node && node.label) {
-            connectionsProvider.removeConnection(node.label);
-            syncConnectionsToLsp();
-        }
-    }));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.refreshConnections', () => {
         const activeEditor = vscode.window.activeTextEditor;
