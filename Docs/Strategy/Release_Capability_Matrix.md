@@ -42,7 +42,7 @@ Status meanings:
 | Connector integration boundaries | Green | Docker-backed integration lane passes on release candidate hardware. | `.\scripts\test-lane.ps1 -Lane integration -NoRestore` passed on 2026-06-01: 97 passed, 0 failed, 0 skipped. |
 | Report Portal behavior | Green | Portal tests are part of the fast lane and dedicated portal lane. | `.\scripts\test-lane.ps1 -Lane fast`; `-Lane portal` |
 | Published samples | Green | Sample runner passes in pre-release validation. | `.\scripts\Test-AllSamples.ps1`; pre-release script |
-| Scale certification | Yellow | Smoke certification passes locally; standard tier passes before public release claims about scale. | `.\scripts\Test-ScaleCertification.ps1 -Tier Smoke`; optional Standard |
+| Scale certification | Green | Smoke certification passes locally; standard tier passes before public release claims about scale. | `.\scripts\Test-ScaleCertification.ps1 -Tier Standard` passed on 2026-06-01: 13 scenarios passed at 10x row scale. |
 | Installers and packaged artifacts | Yellow | Installer build requested and validated for each platform being released. | `.\scripts\Test-PreRelease.ps1 -BuildInstallers` |
 
 ## Release Gate
