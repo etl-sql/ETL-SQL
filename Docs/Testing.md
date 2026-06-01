@@ -34,14 +34,14 @@ The integration-folder audit is complete as of 2026-06-01. Metadata-only connect
 
 Result on 2026-06-01: engine test project 3,015 passed; language server 71 passed; report portal 70 passed; lineage UI smoke passed.
 
-## Remaining Testing-Foundation Work
+## Testing-Foundation Maintenance
 
-Keep this list small and actionable. When adding a new release claim, add evidence in one of the existing layers instead of creating a fourth testing style.
+Keep this list small and actionable. The one-time lane/scenario/SLT cleanup is complete as of 2026-06-01. When adding a new release claim, add evidence in one of the existing layers instead of creating a fourth testing style.
 
 | Priority | Item | Why it matters | Preferred evidence |
 | :---: | :--- | :--- | :--- |
 | P0 | Keep `Test-PreRelease.ps1 -Explain`, this document, `Docs/Strategy/Test_Strategy.md`, and `scripts/README.md` aligned. | Release validation is only useful if the documented plan and actual script agree. | Script output checked against docs; update all three docs when phases change. |
-| P1 | Add ETL scenario tests only for uncovered release claims, not for every unit-testable branch. | Scenarios should protect workflows and product claims, not duplicate isolated handler tests. | New `tests\etl_scenarios\<name>\script.etlsql` + `expected.json`. |
+| P1 | Add ETL scenario tests only for uncovered release claims, not for every unit-testable branch. | Scenarios should protect workflows and product claims, not duplicate isolated handler tests. Current release matrix audit found no uncovered ETL orchestration claims. | New `tests\etl_scenarios\<name>\script.etlsql` + `expected.json`. |
 | P1 | Expand custom SLT only when SQL semantics change or a SQL feature has low/medium confidence in `Docs/Standards/SLT_Coverage.md`. | SLT is the best evidence for SQL correctness but should remain intentional because full runs are slow. | New/updated `tests\slt_data\*.test` plus `Test-SltCorpus.ps1` result. |
 | P2 | Keep the compact lane inventory report useful as the suite evolves. | Helps a solo maintainer see what `fast`, `smoke`, `integration`, `slt`, and `release` actually cover without reverse-engineering filters. | `.\scripts\Get-TestLaneInventory.ps1` output reviewed when lanes or test categories change. |
 
