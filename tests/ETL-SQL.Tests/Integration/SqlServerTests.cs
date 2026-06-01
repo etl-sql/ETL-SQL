@@ -3,7 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
 using Testcontainers.MsSql;
+using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Core;
 using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
@@ -90,6 +92,48 @@ namespace ETL_SQL.Tests.Integration
                 
                 var columns = (await db.GetColumnsAsync("typetest")).ToList();
                 Assert.Contains(columns, c => c.Equals("VarCharCol", StringComparison.OrdinalIgnoreCase));
+            }
+
+            await TestCatalogProviderColumnComments(connStr);
+        }
+
+        private static async Task TestCatalogProviderColumnComments(string connStr)
+        {
+            var tableName = "CatalogComment_" + Guid.NewGuid().ToString("N");
+
+            await using var conn = new SqlConnection(connStr);
+            await conn.OpenAsync();
+            try
+            {
+                await using (var create = new SqlCommand($@"
+CREATE TABLE dbo.{tableName} (
+    Id INT NOT NULL PRIMARY KEY,
+    Amount DECIMAL(18,2) NULL
+);", conn))
+                {
+                    await create.ExecuteNonQueryAsync();
+                }
+
+                await using (var comment = new SqlCommand($@"
+EXEC sys.sp_addextendedproperty
+    @name = N'MS_Description',
+    @value = N'Sales amount from SQL Server',
+    @level0type = N'SCHEMA', @level0name = N'dbo',
+    @level1type = N'TABLE',  @level1name = N'{tableName}',
+    @level2type = N'COLUMN', @level2name = N'Amount';", conn))
+                {
+                    await comment.ExecuteNonQueryAsync();
+                }
+
+                var provider = new SqlServerCatalogProvider(connStr);
+                var catalog = await provider.GetColumnMetadataAsync("dbo", tableName);
+                var amount = Assert.Single(catalog, c => c.ColumnName.Equals("Amount", StringComparison.OrdinalIgnoreCase));
+                Assert.Equal("Sales amount from SQL Server", amount.Description);
+            }
+            finally
+            {
+                await using var drop = new SqlCommand($"DROP TABLE IF EXISTS dbo.{tableName};", conn);
+                await drop.ExecuteNonQueryAsync();
             }
         }
     }

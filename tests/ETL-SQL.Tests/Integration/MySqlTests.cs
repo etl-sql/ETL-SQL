@@ -3,7 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using MySqlConnector;
 using Testcontainers.MySql;
+using ETL_SQL.Connectors.MySql;
 using ETL_SQL.Core;
 using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
@@ -95,6 +97,8 @@ namespace ETL_SQL.Tests.Integration
                 var columns = (await db.GetColumnsAsync("typetest")).ToList();
                 Assert.Contains(columns, c => c.Equals("varcharcol", StringComparison.OrdinalIgnoreCase));
             }
+
+            await TestCatalogProviderColumnComments(connStr);
         }
 
         private async Task TestTransactions(Evaluator eval, string connStr)
@@ -122,6 +126,36 @@ namespace ETL_SQL.Tests.Integration
             
             await eval.Evaluate(new Parser(new Lexer("SELECT * FROM db.typetest WHERE ID = 100;").Tokenize()).Parse());
             Assert.Single(eval.LastResult?.Rows);
+        }
+
+        private static async Task TestCatalogProviderColumnComments(string connStr)
+        {
+            var tableName = "catalog_comment_" + Guid.NewGuid().ToString("N");
+
+            await using var conn = new MySqlConnection(connStr);
+            await conn.OpenAsync();
+            var schema = conn.Database;
+            try
+            {
+                await using (var create = new MySqlCommand($@"
+CREATE TABLE `{tableName}` (
+    `id` INT NOT NULL PRIMARY KEY,
+    `amount` DECIMAL(18,2) NULL COMMENT 'Sales amount from MySQL'
+);", conn))
+                {
+                    await create.ExecuteNonQueryAsync();
+                }
+
+                var provider = new MySqlCatalogProvider(connStr);
+                var catalog = await provider.GetColumnMetadataAsync(schema, tableName);
+                var amount = Assert.Single(catalog, c => c.ColumnName.Equals("amount", StringComparison.OrdinalIgnoreCase));
+                Assert.Equal("Sales amount from MySQL", amount.Description);
+            }
+            finally
+            {
+                await using var drop = new MySqlCommand($"DROP TABLE IF EXISTS `{tableName}`;", conn);
+                await drop.ExecuteNonQueryAsync();
+            }
         }
     }
 }
