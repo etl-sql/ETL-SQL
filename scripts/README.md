@@ -125,6 +125,8 @@ Reports and logs are written to `release-validation/`. Use `-Resume` / `--resume
 
 `-Explain` / `--explain` prints the phase list without running it. `-Quick` / `--quick` skips Node, scale, Docker, and installer phases. `-IncludeSlt` / `--include-slt` adds the SQL Logic Test lane to the local release gate.
 
+The full PowerShell plan with `-IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` is: asset drift check; restore; NuGet dependency audit; release build; smoke lane; fast lane; sample scripts; SLT lane; VS Code npm install/audit/compile/unit tests; smoke scale certification and baseline check; Docker integration lane; standard scale certification and baseline check; publish artifacts; Windows MSI.
+
 ### 2.5 Running SQLite Logic Tests (SLT) Corpus
 Runs the SQLite Logic test suite, generating timestamped output folders with standard teed console logs and TRX test results files:
 

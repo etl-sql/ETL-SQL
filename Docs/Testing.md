@@ -40,8 +40,7 @@ Keep this list small and actionable. When adding a new release claim, add eviden
 
 | Priority | Item | Why it matters | Preferred evidence |
 | :---: | :--- | :--- | :--- |
-| P0 | Keep `test-lane` filters honest by auditing remaining untagged tests under `tests\ETL-SQL.Tests\Integration`. | Mis-tagged integration tests can make `fast` flaky or too slow, or hide coverage from the intended lane. `Hardening\Performance` is now tagged and included in `perf`. | `.\scripts\Get-TestLaneInventory.ps1` gap count plus focused PRs that tag true external-boundary tests or move correctness tests back into fast-covered folders. |
-| P0 | Run `Test-PreRelease.ps1 -Explain` and keep `Docs/Testing.md`, `Docs/Strategy/Test_Strategy.md`, and script behavior aligned. | Release validation is only useful if the documented plan and actual script agree. | Script output checked against docs; update both when phases change. |
+| P0 | Keep `Test-PreRelease.ps1 -Explain`, this document, `Docs/Strategy/Test_Strategy.md`, and `scripts/README.md` aligned. | Release validation is only useful if the documented plan and actual script agree. | Script output checked against docs; update all three docs when phases change. |
 | P1 | Add ETL scenario tests only for uncovered release claims, not for every unit-testable branch. | Scenarios should protect workflows and product claims, not duplicate isolated handler tests. | New `tests\etl_scenarios\<name>\script.etlsql` + `expected.json`. |
 | P1 | Expand custom SLT only when SQL semantics change or a SQL feature has low/medium confidence in `Docs/Standards/SLT_Coverage.md`. | SLT is the best evidence for SQL correctness but should remain intentional because full runs are slow. | New/updated `tests\slt_data\*.test` plus `Test-SltCorpus.ps1` result. |
 | P2 | Keep the compact lane inventory report useful as the suite evolves. | Helps a solo maintainer see what `fast`, `smoke`, `integration`, `slt`, and `release` actually cover without reverse-engineering filters. | `.\scripts\Get-TestLaneInventory.ps1` output reviewed when lanes or test categories change. |
@@ -153,6 +152,30 @@ Use `scripts/Test-PreRelease.ps1` (Windows) or `scripts/test-pre-release.sh` (Li
 ```
 
 The script writes timestamped JSON/Markdown reports and phase logs under `release-validation/`, which is ignored by Git. The `latest/state.json` file lets `--resume` skip phases that already passed for the same source fingerprint. If code changes after a failed run, rerun from the beginning unless you intentionally use `--force-resume`.
+
+`Test-PreRelease.ps1 -Explain -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` currently produces this full local release plan:
+
+| # | Phase | Enabled by |
+| ---: | :--- | :--- |
+| 1 | Asset drift check | Always |
+| 2 | Dotnet restore | Always |
+| 3 | NuGet dependency audit | Always |
+| 4 | Dotnet build | Always |
+| 5 | Smoke lane | Always |
+| 6 | Fast lane | Always |
+| 7 | Sample scripts | Always |
+| 8 | SLT lane | `-IncludeSlt` |
+| 9 | VS Code npm ci | Default; skipped by `-SkipNode` or `-Quick` |
+| 10 | VS Code npm audit | Default; skipped by `-SkipNode` or `-Quick` |
+| 11 | VS Code compile | Default; skipped by `-SkipNode` or `-Quick` |
+| 12 | VS Code unit tests | Default; skipped by `-SkipNode` or `-Quick` |
+| 13 | Scale certification smoke | Default; skipped by `-SkipScale` or `-Quick` |
+| 14 | Cert baseline regression check (smoke) | Default; skipped by `-SkipScale` or `-Quick` |
+| 15 | Docker integration lane | `-IncludeDockerIntegration`; disabled by `-Quick` |
+| 16 | Scale certification standard | `-IncludeStandardScale`; disabled by `-Quick` |
+| 17 | Cert baseline regression check (standard) | `-IncludeStandardScale`; disabled by `-Quick` |
+| 18 | Release publish artifacts | `-BuildInstallers`; disabled by `-Quick` |
+| 19 | Windows MSI | `-BuildInstallers -Platforms win-x64`; disabled by `-Quick` |
 
 `fast` is the default local correctness lane. `full` runs the normal xUnit test projects and skips the benchmark executable and deployment-only SLT corpus so `dotnet test` output stays meaningful.
 

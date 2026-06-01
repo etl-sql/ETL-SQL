@@ -70,7 +70,7 @@ Nightly or release CI should add:
 3. SLT lane (`--filter "Category=SLT"`) for full SQL correctness sweep — expect 15+ minutes.
 4. Benchmarks when investigating performance trends.
 
-Local release validation should use `.\scripts\Test-PreRelease.ps1 -IncludeSlt`. Add `-IncludeDockerIntegration`, `-IncludeStandardScale`, and `-BuildInstallers` only when the release includes connector, scale, or installer claims.
+Local release validation should use `.\scripts\Test-PreRelease.ps1 -IncludeSlt`. The always-on phases are asset drift check, restore, NuGet audit, release build, smoke lane, fast lane, sample scripts, VS Code Node phases, and smoke scale certification. Add `-IncludeDockerIntegration`, `-IncludeStandardScale`, and `-BuildInstallers` only when the release includes connector, scale, or installer claims; use `-Explain` to print the exact phase list before spending a long run.
 
 ## Release Capability Evidence
 
