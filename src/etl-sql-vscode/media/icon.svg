@@ -1,4 +1,5 @@
-<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-  <rect x="10" y="10" width="80" height="80" rx="10" fill="#007acc" />
-  <text x="50" y="65" font-family="Arial" font-size="40" fill="white" text-anchor="middle">ETL</text>
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <rect width="128" height="128" rx="16" fill="#007acc" />
+  <text x="64" y="58" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="auto">ETL</text>
+  <text x="64" y="94" font-family="Arial, sans-serif" font-size="30" font-weight="600" fill="rgba(255,255,255,0.82)" text-anchor="middle" dominant-baseline="auto">SQL</text>
 </svg>
