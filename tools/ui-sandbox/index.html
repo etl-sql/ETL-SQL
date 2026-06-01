@@ -3,94 +3,83 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DAG Preview — dev harness</title>
+  <title>ETL-SQL UI Sandbox</title>
 
   <!-- Vendored ECharts (same build the portal ships) → renderDag reads window.echarts -->
   <script src="/src/ETL-SQL.ReportPortal/wwwroot/js/echarts.min.js"></script>
 
-  <!-- The DAG's own stylesheet, canonical source (no sync needed) -->
+  <!-- Canonical component stylesheet (no sync needed) -->
   <link rel="stylesheet" href="/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.css" />
 
   <style>
-    :root { color-scheme: dark; }
     * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
     body {
-      margin: 0; font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      background: #0f172a; color: #e2e8f0;
+      display: flex;
+      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color: #e2e8f0; background: #0f172a;
     }
+
+    /* ── Sidebar ─────────────────────────────────────────── */
+    #sidebar {
+      flex: 0 0 230px; display: flex; flex-direction: column;
+      background: #111827; border-right: 1px solid #1e293b; padding: 14px 10px;
+    }
+    #sidebar h1 { font-size: 14px; margin: 0 6px 2px; }
+    #sidebar .hint { color: #64748b; font-size: 11px; margin: 0 6px 14px; }
+    #stories { display: flex; flex-direction: column; gap: 4px; }
+    .story-link {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+      text-align: left; padding: 8px 10px; border: 1px solid transparent; border-radius: 7px;
+      background: none; color: #cbd5e1; cursor: pointer; font: inherit;
+    }
+    .story-link:hover { background: #1e293b; }
+    .story-link.is-active { background: #1e293b; border-color: #334155; }
+    .story-link-title { font-size: 13px; font-weight: 600; }
+    .story-link-sub { font-size: 11px; color: #64748b; font-family: ui-monospace, monospace; }
+
+    /* ── Main ────────────────────────────────────────────── */
+    main { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
     header {
-      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-      padding: 12px 20px; border-bottom: 1px solid #1e293b; background: #111827;
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      padding: 10px 16px; border-bottom: 1px solid #1e293b; background: #0b1220;
     }
-    header h1 { font-size: 15px; margin: 0; font-weight: 600; }
-    header .hint { color: #94a3b8; font-size: 12px; }
-    header label { color: #cbd5e1; font-size: 13px; }
-    select, button {
+    header #storyTitle { font-size: 14px; font-weight: 600; margin: 0; }
+    select, #reloadBtn {
       background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
-      border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer;
+      border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer;
     }
-    .stat { color: #64748b; font-size: 12px; }
-    #dag {
-      height: calc(100vh - 58px); min-height: 480px; width: 100%;
-      background: #0b1220;
+    .stat { margin-left: auto; color: #64748b; font-size: 12px; }
+
+    /* The stage hosts each component in its own (portal) theme. */
+    #stage {
+      flex: 1 1 auto; min-height: 0; position: relative;
+      background: var(--portal-surface, #ffffff); color: var(--portal-text, #172033);
+      overflow: auto;
     }
-    .err { padding: 24px; color: #fca5a5; white-space: pre-wrap; font-family: monospace; }
+    /* CodeMirror needs an explicit fill when mounted bare into the stage. */
+    #stage .cm-editor, #stage .cm-scroller { height: 100%; }
+
+    .sandbox-err { padding: 20px; margin: 0; color: #b91c1c; white-space: pre-wrap; font-family: ui-monospace, monospace; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>DAG Preview</h1>
-    <span class="hint">dev-only harness · imports the canonical <code>designer.js</code> · no Docker</span>
-    <label>Fixture:
-      <select id="fixtureSel">
-        <option value="kitchen">Kitchen Sink (~106 nodes)</option>
-        <option value="small">Small report (5 nodes)</option>
-        <option value="edw">EDW example (salesBar drill-down)</option>
-        <option value="xscript">Cross-script (dataset built separately)</option>
-      </select>
-    </label>
-    <button id="reloadBtn" title="Re-import designer.js and re-render">↻ Reload</button>
-    <span class="stat" id="stat"></span>
-  </header>
+  <aside id="sidebar">
+    <h1>UI Sandbox</h1>
+    <p class="hint">imports canonical <code>designer.js</code> · no Docker</p>
+    <nav id="stories"></nav>
+  </aside>
 
-  <div id="dag"></div>
+  <main>
+    <header>
+      <h2 id="storyTitle"></h2>
+      <label>Fixture: <select id="fixtureSel"></select></label>
+      <button id="reloadBtn" title="Re-import the component fresh and re-mount">↻ Reload</button>
+      <span class="stat" id="stat"></span>
+    </header>
+    <div id="stage"></div>
+  </main>
 
-  <script type="module">
-    import { buildKitchenSinkGraph, buildSmallGraph, buildEdwExampleGraph, buildCrossScriptGraph } from './fixture.js';
-
-    const $dag = document.getElementById('dag');
-    const $sel = document.getElementById('fixtureSel');
-    const $stat = document.getElementById('stat');
-    let instance = null;
-
-    async function render() {
-      if (instance) { try { instance.dispose(); } catch {} instance = null; }
-      $dag.innerHTML = '';
-
-      const graph = $sel.value === 'small' ? buildSmallGraph()
-        : $sel.value === 'edw' ? buildEdwExampleGraph()
-        : $sel.value === 'xscript' ? buildCrossScriptGraph()
-        : buildKitchenSinkGraph();
-      $stat.textContent = `${graph.nodes.length} nodes · ${graph.edges.length} edges`;
-
-      try {
-        // Cache-bust so ↻ Reload always pulls the freshest designer.js while editing.
-        const mod = await import(`/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js?t=${Date.now()}`);
-        instance = mod.renderDag($dag, graph, { theme: 'portal' });
-      } catch (err) {
-        const pre = document.createElement('div');
-        pre.className = 'err';
-        pre.textContent = `Failed to load designer.js:\n${err.stack || err.message}`;
-        $dag.replaceChildren(pre);
-        console.error(err);
-      }
-    }
-
-    $sel.addEventListener('change', render);
-    document.getElementById('reloadBtn').addEventListener('click', render);
-    window.addEventListener('resize', () => instance?.resize?.());
-
-    render();
-  </script>
+  <script type="module" src="./sandbox.js"></script>
 </body>
 </html>

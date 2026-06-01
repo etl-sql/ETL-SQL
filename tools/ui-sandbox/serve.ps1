@@ -3,7 +3,7 @@
 # ES module imports don't work over file://, so this serves the repo root over
 # loopback HTTP. Run it, then open the URL it prints. Ctrl+C to stop.
 #
-#   pwsh -File tools\dag-preview\serve.ps1
+#   pwsh -File tools\ui-sandbox\serve.ps1
 #
 param(
     [int]$Port = 8099,
@@ -12,9 +12,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Repo root = two levels up from this script (tools\dag-preview\ -> repo root)
+# Repo root = two levels up from this script (tools\ui-sandbox\ -> repo root)
 $RepoRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
-$entryUrl = "http://localhost:$Port/tools/dag-preview/index.html"
+$entryUrl = "http://localhost:$Port/tools/ui-sandbox/index.html"
 
 $mime = @{
     '.html' = 'text/html; charset=utf-8'
@@ -35,7 +35,7 @@ try {
 }
 catch {
     Write-Host "Could not bind http://localhost:$Port/ — $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "Try a different port:  pwsh -File tools\dag-preview\serve.ps1 -Port 8100" -ForegroundColor Yellow
+    Write-Host "Try a different port:  pwsh -File tools\ui-sandbox\serve.ps1 -Port 8100" -ForegroundColor Yellow
     exit 1
 }
 
@@ -56,7 +56,7 @@ try {
         try {
             # Map URL path to a file under the repo root, blocking traversal.
             $rel = [System.Uri]::UnescapeDataString($req.Url.AbsolutePath.TrimStart('/'))
-            if ([string]::IsNullOrWhiteSpace($rel)) { $rel = 'tools/dag-preview/index.html' }
+            if ([string]::IsNullOrWhiteSpace($rel)) { $rel = 'tools/ui-sandbox/index.html' }
             $full = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $rel))
 
             if (-not $full.StartsWith($RepoRoot, [System.StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path $full -PathType Leaf)) {

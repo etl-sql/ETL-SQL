@@ -1,38 +1,49 @@
-# DAG preview harness (dev-only)
+# UI sandbox (dev-only)
 
-A no-Docker way to view the lineage/structure DAG (`renderDag` in the shared
-`designer.js`) against realistic, Kitchen-Sink-scale data.
+A no-Docker, no-build way to develop and visually check the portal/VS-Code
+browser-side components in isolation. It imports the **canonical** source
+directly, so editing it + hitting **↻ Reload** shows changes with no
+`sync-assets.ps1`, no portal build, and no catalog DB.
 
-It imports the **canonical** source directly:
-- `src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js`
-- `src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.css`
-- `src/ETL-SQL.ReportPortal/wwwroot/js/echarts.min.js` (vendored ECharts)
-
-So edits to `designer.js` show up on **↻ Reload** — no `sync-assets.ps1`, no
-portal build, no catalog DB.
+Storybook-style: a sidebar lists **stories** (one component) and a fixture picker
+drives each with sample data.
 
 ## Run
 
 ```powershell
-pwsh -File tools\dag-preview\serve.ps1
+pwsh -File tools\ui-sandbox\serve.ps1
 ```
 
-It serves the repo root over loopback and opens
-`http://localhost:8099/tools/dag-preview/index.html`. Ctrl+C to stop.
-Port in use? `-Port 8100`. Don't auto-open a browser? `-NoOpen`.
+Serves the repo root over loopback and opens
+`http://localhost:8099/tools/ui-sandbox/index.html`. Ctrl+C to stop.
+Port in use? `-Port 8100`. Don't auto-open? `-NoOpen`.
 
-## What's here
+## Stories
+
+| Story | Component | Notes |
+|---|---|---|
+| DAG / lineage | `renderDag()` | pure — `window.echarts` + fixture graphs |
+| Script editor | `createScriptEditor()` | CodeMirror, loaded on demand; no server |
+| Report designer | `createDesigner()` | seeded `designState` + a **mock fetch** (`mockApi.js`) for `parse`/`generate`; save is bypassed via `onSaveScript` |
+
+## Layout
 
 | File | Purpose |
 |---|---|
-| `index.html` | Harness page — picks a fixture, calls `renderDag`, cache-busts on reload |
-| `fixture.js` | Synthetic `{nodes, edges}` matching the `/api/reports/{id}/structure` shape |
-| `serve.ps1` | Tiny loopback static server (ES modules can't load over `file://`) |
+| `index.html` | shell — sidebar + fixture picker + stage |
+| `sandbox.js` | mounts the selected story/fixture, cache-busts on reload |
+| `util.js` | `DESIGNER_JS` path + `importFresh()` (cache-busting dynamic import) |
+| `mockApi.js` | injectable fetch returning canned `/api/designer/*` responses |
+| `fixture.js` | DAG graph fixtures (Kitchen Sink, EDW, cross-script…) |
+| `stories/*.story.js` | one module per surface: `{ id, title, fixtures, mount() }` |
+| `serve.ps1` | tiny loopback static server (ES modules can't load over `file://`) |
 
-The Kitchen Sink fixture (~106 nodes / ~150 edges) uses the real page and visual
-names from `samples/10_Kitchen_Sinks/report_kitchen_sink.rptsql` over a synthetic
-data layer. Unlike the real report (where every visual is declared before any
-page, so the endpoint emits no page→visual edges), this fixture wires visuals to
-pages so the collapsible-page behaviour is demonstrable.
+## Adding a story
+
+Write `stories/<name>.story.js` default-exporting `{ id, title, subtitle, fixtures: [{id,label}], async mount(stage, fixtureId, ctx) → instance }`, then list it in `stories/index.js`. `mount` returns an object with optional `dispose()`/`resize()`. Use `ctx.stat(text)` for the header status line.
+
+## Not yet here (see TODO)
+- The lineage/dependencies modals live **inline** in the portal `index.html`; hosting them as stories needs extracting their render functions into modules first.
+- VS Code webview components.
 
 > Not shipped. Excluded from the build; safe to delete.

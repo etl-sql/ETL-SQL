@@ -131,7 +131,9 @@
 /* Focus-mode badge — shown in the toolbar while a node's lineage is isolated. */
 .etlsql-dag-focusbadge {
     margin-left: auto !important;
-    display: flex !important;
+    /* NOT !important: the component toggles visibility via inline style.display,
+       which an !important rule here would override (badge could never hide). */
+    display: flex;
     align-items: center !important;
     gap: 6px !important;
     max-width: 50% !important;
@@ -255,7 +257,7 @@
 .etlsql-dag-minimap {
     border: 1px solid var(--portal-border, #d9e0ea) !important;
     border-radius: var(--portal-radius-sm, 5px) !important;
-    background: rgba(15, 23, 42, 0.9) !important;
+    background: var(--portal-surface, #ffffff) !important;
     box-shadow: var(--portal-shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15)) !important;
     cursor: pointer !important;
     transition: opacity 0.2s ease, transform 0.2s ease !important;
