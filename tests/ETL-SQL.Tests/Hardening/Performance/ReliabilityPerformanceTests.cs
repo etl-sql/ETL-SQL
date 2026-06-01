@@ -14,6 +14,7 @@ using ETL_SQL.Analysis.Linting;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
+    [Trait("Category", "Performance")]
     public class ReliabilityPerformanceTests
     {
         private static Evaluator NewEvaluator() =>

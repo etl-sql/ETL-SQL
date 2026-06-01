@@ -10,7 +10,7 @@ This directory contains build, test, utility, and release packaging scripts for 
 | :--- | :--- | :---: | :--- |
 | **[`build-debug.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/build-debug.ps1)** / **[`build-debug.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/build-debug.sh)** | PowerShell / Bash | Cross-platform | Builds the .NET solution, VS Code UI (Vite), extension TypeScript compiler, and runs extension unit tests. |
 | **[`test-smoke.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-smoke.ps1)** / **[`test-smoke.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-smoke.sh)** | PowerShell / Bash | Cross-platform | Executes targeted minimal smoke tests divided into specific categories (Core, Security, Reporting, Portal). |
-| **[`test-lane.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-lane.ps1)** / **[`test-lane.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-lane.sh)** | PowerShell / Bash | Cross-platform | The test suite gateway to run individual test lanes (smoke, fast, engine, portal, integration, perf, release, full, benchmarks, slt) with optional coverage mapping. The `fast`, `portal`, and `full` lanes also run the Node lineage UI smoke test. |
+| **[`test-lane.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-lane.ps1)** / **[`test-lane.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-lane.sh)** | PowerShell / Bash | Cross-platform | The test suite gateway to run individual test lanes (smoke, fast, engine, portal, integration, perf, release, full, benchmarks, slt) with optional coverage mapping. The `perf` lane runs tagged engine hardening tests plus the dedicated perf project; the `fast`, `portal`, and `full` lanes also run the Node lineage UI smoke test. |
 | **[`Get-TestLaneInventory.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Get-TestLaneInventory.ps1)** | PowerShell | Cross-platform | Generates a static Markdown or JSON inventory of discovered xUnit tests by lane, category trait, and project. |
 | **[`Test-SltCorpus.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-SltCorpus.ps1)** / **[`Test-SltCorpus.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-SltCorpus.sh)** | PowerShell / Bash | Cross-platform | Runs the SqlLogicTests corpus suite and pipes console logs + TRX file output to a timestamped folder in `slt_results/`. |
 | **[`Parse-SltResults.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Parse-SltResults.ps1)** | PowerShell | Windows / macOS / Linux | Parses TRX files from an SLT run to output a clean color-coded summary of passes, skips, and failed stack traces. |
@@ -83,7 +83,7 @@ To see what each lane currently contains without running tests:
 .\scripts\Get-TestLaneInventory.ps1 -Format Json -OutFile test-inventory.json
 ```
 
-The inventory is a static visibility report. Use `test-lane.ps1` for authoritative pass/fail execution.
+The inventory is a static visibility report and includes fast-lane exclusion gaps. Use `test-lane.ps1` for authoritative pass/fail execution.
 
 ### 2.4 Running Local Pre-Release Validation
 Run this before pushing release tags or building release installers. It is designed to catch failures locally before spending GitHub-hosted runner time.

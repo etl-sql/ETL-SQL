@@ -11,6 +11,7 @@ using ETL_SQL.Engine;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
+    [Trait("Category", "Performance")]
     public class WindowDeepSpillTests
     {
         private static async Task Execute(Evaluator eval, string sql)

@@ -20,13 +20,19 @@ dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter "FullyQualifiedNam
 
 Result on 2026-06-01: 27 passed, 0 failed, 0 skipped.
 
+```powershell
+.\scripts\test-lane.ps1 -Lane perf -NoRestore
+```
+
+Result on 2026-06-01: engine performance tests 44 passed; dedicated perf project 5 passed.
+
 ## Remaining Testing-Foundation Work
 
 Keep this list small and actionable. When adding a new release claim, add evidence in one of the existing layers instead of creating a fourth testing style.
 
 | Priority | Item | Why it matters | Preferred evidence |
 | :---: | :--- | :--- | :--- |
-| P0 | Keep `test-lane` filters honest by auditing remaining untagged tests under `tests\ETL-SQL.Tests\Integration` and `tests\ETL-SQL.Tests\Hardening\Performance`. | Mis-tagged integration/performance tests can make `fast` flaky or too slow, or hide coverage from the intended lane. | Category audit script or focused PR that tags/moves tests with a before/after lane count. |
+| P0 | Keep `test-lane` filters honest by auditing remaining untagged tests under `tests\ETL-SQL.Tests\Integration`. | Mis-tagged integration tests can make `fast` flaky or too slow, or hide coverage from the intended lane. `Hardening\Performance` is now tagged and included in `perf`. | `.\scripts\Get-TestLaneInventory.ps1` gap count plus focused PRs that tag true external-boundary tests or move correctness tests back into fast-covered folders. |
 | P0 | Run `Test-PreRelease.ps1 -Explain` and keep `Docs/Testing.md`, `Docs/Strategy/Test_Strategy.md`, and script behavior aligned. | Release validation is only useful if the documented plan and actual script agree. | Script output checked against docs; update both when phases change. |
 | P1 | Add ETL scenario tests only for uncovered release claims, not for every unit-testable branch. | Scenarios should protect workflows and product claims, not duplicate isolated handler tests. | New `tests\etl_scenarios\<name>\script.etlsql` + `expected.json`. |
 | P1 | Expand custom SLT only when SQL semantics change or a SQL feature has low/medium confidence in `Docs/Standards/SLT_Coverage.md`. | SLT is the best evidence for SQL correctness but should remain intentional because full runs are slow. | New/updated `tests\slt_data\*.test` plus `Test-SltCorpus.ps1` result. |
@@ -80,7 +86,7 @@ Lane intent:
 | `engine` | `ETL-SQL.Tests` only, with the fast filter |
 | `portal` | Report Portal tests only |
 | `integration` | External-boundary tests tagged `Category=Integration` |
-| `perf` | Performance tests tagged `Category=Performance` |
+| `perf` | Performance tests tagged `Category=Performance` in `tests\ETL-SQL.Tests` and `tests\ETL-SQL.PerfTests` |
 | `release` | Smoke + fast + SLT, without benchmarks or installer packaging |
 | `full` | Normal xUnit projects, excluding deployment-only SLT and benchmark executable |
 | `benchmarks` | BenchmarkDotNet executable |
@@ -93,7 +99,7 @@ To inspect lane organization without running the suite, generate a static invent
 .\scripts\Get-TestLaneInventory.ps1 -Format Json -OutFile test-inventory.json
 ```
 
-The inventory reports discovered xUnit test counts by lane, category trait, and project. It is a visibility tool, not a pass/fail gate; `test-lane.ps1` remains authoritative for execution.
+The inventory reports discovered xUnit test methods by lane, category trait, project, and fast-lane exclusion reason. It is a visibility tool, not a pass/fail gate; `test-lane.ps1` remains authoritative for execution.
 
 ## Local Pre-Release Validation
 

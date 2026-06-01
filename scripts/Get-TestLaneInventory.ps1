@@ -89,11 +89,13 @@ function Get-TestRecords {
                     $categories = @("(none)")
                 }
 
+                $fastExclusionReasons = @(Get-FastExclusionReasons -Project $project -File $relative -Categories $categories)
                 $records.Add([ordered]@{
                     project = $project
                     file = $relative
                     method = $methodName
                     categories = @($categories)
+                    fastExclusionReasons = @($fastExclusionReasons)
                     lanes = @(Get-LanesForTest -Project $project -File $relative -Categories $categories)
                 })
             }
@@ -118,6 +120,28 @@ function Test-IsIntegrationName {
     return $File -match "\\Integration\\|IntegrationTests?\.cs$|\\Integration\\w*Tests\.cs$"
 }
 
+function Get-FastExclusionReasons {
+    param(
+        [string]$Project,
+        [string]$File,
+        [string[]]$Categories
+    )
+
+    $reasons = New-Object System.Collections.Generic.List[string]
+    if ($Project -notlike "tests\ETL-SQL.Tests\*") {
+        return @()
+    }
+
+    foreach ($category in @("Integration", "Performance", "ScaleCertification")) {
+        if (Test-HasCategory $Categories $category) {
+            $reasons.Add("Category=$category")
+        }
+    }
+    if (Test-IsIntegrationName $File) { $reasons.Add("FullyQualifiedName~Integration") }
+    if (Test-IsPerformanceName $File) { $reasons.Add("FullyQualifiedName~Performance") }
+    return @($reasons | Select-Object -Unique)
+}
+
 function Test-IsPerformanceName {
     param([string]$File)
 
@@ -133,28 +157,31 @@ function Get-LanesForTest {
 
     $lanes = New-Object System.Collections.Generic.List[string]
     $isSlt = Test-HasCategory $Categories "SLT"
-    $isPerf = (Test-HasCategory $Categories "Performance") -or (Test-IsPerformanceName $File)
-    $isIntegration = (Test-HasCategory $Categories "Integration") -or (Test-IsIntegrationName $File)
+    $isPerf = Test-HasCategory $Categories "Performance"
+    $isIntegration = Test-HasCategory $Categories "Integration"
     $isSmoke = @($Categories | Where-Object { $_ -like "Smoke.*" }).Count -gt 0
+    $fastExclusionReasons = @(Get-FastExclusionReasons -Project $Project -File $File -Categories $Categories)
 
     if ($isSmoke) { $lanes.Add("smoke") }
     if ($isSlt) {
         $lanes.Add("slt")
         return $lanes
     }
-    if ($isPerf) { $lanes.Add("perf") }
     if ($isIntegration) { $lanes.Add("integration") }
+    if (($Project -like "tests\ETL-SQL.Tests\*" -or $Project -like "tests\ETL-SQL.PerfTests\*") -and $isPerf) {
+        $lanes.Add("perf")
+    }
 
     $isFastProject =
         $Project -like "tests\ETL-SQL.Tests\*" -or
         $Project -like "tests\ETL-SQL.LanguageServer.Tests\*" -or
         $Project -like "tests\ETL-SQL.ReportPortal.Tests\*"
 
-    if ($isFastProject -and -not $isIntegration -and -not $isPerf) {
+    if ($isFastProject -and $fastExclusionReasons.Count -eq 0) {
         $lanes.Add("fast")
     }
 
-    if ($Project -like "tests\ETL-SQL.Tests\*" -and -not $isIntegration -and -not $isPerf) {
+    if ($Project -like "tests\ETL-SQL.Tests\*" -and $fastExclusionReasons.Count -eq 0) {
         $lanes.Add("engine")
     }
 
@@ -203,12 +230,41 @@ foreach ($record in $records) {
 }
 $byLane = Group-Count -Items $laneRows.ToArray() -KeySelector { param($r) $r.lane }
 
+$fastExclusionRows = New-Object System.Collections.Generic.List[object]
+$targetedLaneGapRows = New-Object System.Collections.Generic.List[object]
+foreach ($record in $records) {
+    foreach ($reason in $record.fastExclusionReasons) {
+        $fastExclusionRows.Add([PSCustomObject]@{ reason = $reason; file = $record.file })
+    }
+
+    $hasTargetedLane =
+        ($record.lanes -contains "integration") -or
+        ($record.lanes -contains "perf") -or
+        ($record.lanes -contains "slt") -or
+        ($record.lanes -contains "smoke") -or
+        ($record.lanes -contains "portal") -or
+        ($record.categories -contains "ScaleCertification")
+
+    if ($record.fastExclusionReasons.Count -gt 0 -and -not $hasTargetedLane) {
+        $targetedLaneGapRows.Add([PSCustomObject]@{
+            file = $record.file
+            method = $record.method
+            reasons = $record.fastExclusionReasons
+            categories = $record.categories
+        })
+    }
+}
+$byFastExclusionReason = Group-Count -Items $fastExclusionRows.ToArray() -KeySelector { param($r) $r.reason }
+$targetedLaneGapFiles = @($targetedLaneGapRows | Group-Object file | Sort-Object @{ Expression = "Count"; Descending = $true }, Name)
+
 $inventory = [ordered]@{
     generatedAt = (Get-Date).ToString("o")
     totalTests = $records.Count
     byProject = $byProject
     byCategory = $byCategory
     byLane = $byLane
+    byFastExclusionReason = $byFastExclusionReason
+    targetedLaneGaps = $targetedLaneGapRows
     tests = $records
 }
 
@@ -221,7 +277,7 @@ else {
     $lines.Add("")
     $lines.Add(("Generated: {0}" -f (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")))
     $lines.Add("")
-    $lines.Add(("Total xUnit tests discovered: **{0}**" -f $records.Count))
+    $lines.Add(("Total xUnit test methods discovered: **{0}**" -f $records.Count))
     $lines.Add("")
     $lines.Add("## By Lane")
     $lines.Add("")
@@ -230,6 +286,27 @@ else {
     foreach ($lane in @("smoke", "fast", "engine", "portal", "integration", "perf", "slt", "full")) {
         $count = if ($byLane.Contains($lane)) { $byLane[$lane] } else { 0 }
         $lines.Add(("| `{0}` | {1} |" -f $lane, $count))
+    }
+    $lines.Add("")
+    $lines.Add("## Fast-Lane Exclusions")
+    $lines.Add("")
+    $lines.Add("| Reason | Tests |")
+    $lines.Add("| :--- | ---: |")
+    foreach ($entry in $byFastExclusionReason.GetEnumerator() | Sort-Object Name) {
+        $lines.Add(("| `{0}` | {1} |" -f $entry.Key, $entry.Value))
+    }
+    $lines.Add("")
+    $lines.Add(("Tests excluded from ``fast``/``engine`` but not assigned to a targeted lane: **{0}**" -f $targetedLaneGapRows.Count))
+    if ($targetedLaneGapRows.Count -gt 0) {
+        $lines.Add("")
+        $lines.Add("| File | Tests |")
+        $lines.Add("| :--- | ---: |")
+        foreach ($group in $targetedLaneGapFiles | Select-Object -First 20) {
+            $lines.Add(("| `{0}` | {1} |" -f $group.Name, $group.Count))
+        }
+        if ($targetedLaneGapFiles.Count -gt 20) {
+            $lines.Add(("| ...and {0} more files | |" -f ($targetedLaneGapFiles.Count - 20)))
+        }
     }
     $lines.Add("")
     $lines.Add("## By Category")
@@ -248,7 +325,7 @@ else {
         $lines.Add(("| `{0}` | {1} |" -f $entry.Key, $entry.Value))
     }
     $lines.Add("")
-    $lines.Add("> Static scan caveat: lane membership mirrors `scripts/test-lane.ps1` intent, including name-based Integration/Performance exclusions. Run the lane to get authoritative pass/fail results.")
+    $lines.Add("> Static scan caveat: lane membership mirrors `scripts/test-lane.ps1` filters, while the gap section highlights tests that name-based filters exclude from fast/engine but targeted lanes do not select. Run the lane to get authoritative pass/fail results.")
     $output = $lines -join [Environment]::NewLine
 }
 

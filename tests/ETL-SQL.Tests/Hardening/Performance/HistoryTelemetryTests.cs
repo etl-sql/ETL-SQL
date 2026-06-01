@@ -12,6 +12,7 @@ using ETL_SQL.Orchestrator.Storage;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
+    [Trait("Category", "Performance")]
     public class HistoryTelemetryTests
     {
         private readonly ITestOutputHelper _output;
