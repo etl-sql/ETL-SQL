@@ -6,6 +6,51 @@ $Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.9.0" }
 $BuildDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer\publish\win-x64\bin"
 $InstallerDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer"
 
+function Get-WixProductVersion {
+    param([Parameter(Mandatory = $true)][string]$InputVersion)
+
+    if ($InputVersion -notmatch '^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?') {
+        throw "ETL_SQL_VERSION '$InputVersion' must start with a semantic version like 1.2.3 or 1.2.3.4."
+    }
+
+    $major = [int]$Matches[1]
+    $minor = [int]$Matches[2]
+    $build = [int]$Matches[3]
+    $revision = if ($Matches[4]) { [int]$Matches[4] } else { 0 }
+
+    foreach ($part in @($major, $minor, $build, $revision)) {
+        if ($part -lt 0 -or $part -gt 65535) {
+            throw "WiX product version part '$part' is outside the supported 0-65535 range."
+        }
+    }
+
+    return "$major.$minor.$build.$revision"
+}
+
+function Assert-InstallerInputFiles {
+    param([Parameter(Mandatory = $true)][string]$InputDir)
+
+    $required = @(
+        "ETL-SQL.exe",
+        "ETL-SQL-LSP.exe",
+        "ETL-SQL-Report.exe",
+        "ETL-SQL-Service.exe",
+        "ETL-SQL-Portal.exe"
+    )
+
+    $missing = @()
+    foreach ($file in $required) {
+        $path = Join-Path $InputDir $file
+        if (-not (Test-Path -LiteralPath $path)) {
+            $missing += $file
+        }
+    }
+
+    if ($missing.Count -gt 0) {
+        throw "MSI input folder '$InputDir' is missing required files: $($missing -join ', ')"
+    }
+}
+
 Write-Host "--- ETL-SQL MSI Build Process (v$Version) ---" -ForegroundColor Cyan
 
 # 1. Publish all components
@@ -28,6 +73,8 @@ foreach ($Proj in $Projects) {
     }
 }
 
+Assert-InstallerInputFiles -InputDir $BuildDir
+
 # 2. Compile WiX Manifest
 $CandleExe = Get-Command candle.exe -ErrorAction SilentlyContinue
 if (-not $CandleExe) {
@@ -43,23 +90,11 @@ if ($CandleExe) {
     Write-Host "Compiling WiX manifest (using $($CandleExe.Source))..." -ForegroundColor Gray
     Push-Location $InstallerDir
     try {
-        # WiX requires four-part version: Major.Minor.Build.Revision
-        $WixVersion = "$Version.0"
+        $WixVersion = Get-WixProductVersion -InputVersion $Version
+        $wxsPath = Resolve-Path "Installer.wxs"
+        Write-Host "  ProductVersion: $WixVersion" -ForegroundColor Gray
 
-        # Substitute the version using PowerShell's String.Replace() before invoking candle.
-        # Passing -dProductVersion=$WixVersion directly to candle is unreliable: PowerShell's
-        # argument tokenizer can split on '=' and candle receives the literal variable name
-        # instead of the expanded value, causing CNDL0108 on GitHub-hosted runners.
-        $wxsPath     = Resolve-Path "Installer.wxs"
-        $wxsOriginal = [System.IO.File]::ReadAllText($wxsPath)
-        $wxsPatched  = $wxsOriginal.Replace('$(var.ProductVersion)', $WixVersion)
-        if ($wxsPatched -eq $wxsOriginal) {
-            Write-Warning "build_msi.ps1: '`$(var.ProductVersion)' not found in Installer.wxs — version injection skipped."
-        }
-        [System.IO.File]::WriteAllText($wxsPath, $wxsPatched, [System.Text.Encoding]::UTF8)
-        Write-Host "  Version substituted: `$(var.ProductVersion) -> $WixVersion" -ForegroundColor Gray
-
-        candle.exe Installer.wxs -o Installer.wixobj -arch x64
+        candle.exe $wxsPath.Path -dProductVersion="$WixVersion" -o Installer.wixobj -arch x64
         if ($LASTEXITCODE -ne 0) {
             Write-Error "candle.exe failed (exit code $LASTEXITCODE)"
             exit $LASTEXITCODE
