@@ -675,3 +675,12 @@ Invoked as `etl-sql-report <command>`.
 | **9H** | CREATE CONTAINER, CREATE NAVIGATION, SET REPORT TITLE/DESCRIPTION, COMBO visual type, STYLE clause, COLORS/LEGEND options |
 
 ---
+
+## 12. Related Subsystem Architecture
+
+For detailed information about adjacent subsystems, refer to the following architecture references:
+- **Report Portal:** [ReportPortal.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/ReportPortal.md) documents the ASP.NET Core web host service exposing catalogs, dashboards, and access control.
+- **Portal UI & Designer:** [PortalUI.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/PortalUI.md) describes the shared browser designer interface for parsing and generating Report-SQL scripts.
+- **Orchestrator:** [Orchestrator.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Orchestrator.md) covers background scheduling execution engines that run report ingestion pipelines.
+
+---

@@ -323,3 +323,12 @@ New API endpoints introduced by this initiative:
 | `POST` | `/api/designer/generate` | 4 | DesignState JSON → rptsql string |
 
 All existing portal APIs (`/api/catalog/lineage`, `/api/reports`, etc.) are consumed as-is.
+
+---
+
+## 9. Related Subsystem Architecture
+
+For detailed information about adjacent subsystems, refer to the following architecture references:
+- **Report Portal Host:** [ReportPortal.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/ReportPortal.md) details database entities, authorization schemas, and hosting APIs.
+- **Reporting Engine:** [Reporting.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Reporting.md) explains layout manifests, ECharts options compilation, and PDF export pipelines.
+- **Orchestrator:** [Orchestrator.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Orchestrator.md) governs DAG parsing for job step monitoring and execution.

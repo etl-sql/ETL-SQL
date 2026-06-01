@@ -337,7 +337,111 @@ Routes `ConsoleKeyInfo` events to the correct handler. Autocomplete overlay capt
 
 ---
 
-## 3. Execution Flow (F5)
+## 3. UI Abstraction & Sub-Panels
+
+### `IUIComponent`
+**File:** [IUIComponent.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/IUIComponent.cs)  
+**Interface:** [IUIComponent](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/IUIComponent.cs#L5)
+
+Defines the core rendering contract for TUI grid panels. Every display pane implements the single render method:
+```csharp
+void Render(IConsoleInterface console, int x, int y, int width, int height, int scrollRow = 0);
+```
+
+### `IConsoleInterface` & `PhysicalConsole`
+**File:** [IConsoleInterface.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/IConsoleInterface.cs)  
+**Interface:** [IConsoleInterface](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/IConsoleInterface.cs#L7)  
+**Class:** [PhysicalConsole](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/IConsoleInterface.cs#L25)
+
+- **IConsoleInterface:** An abstraction layers console operations (e.g. dimensions, cursor state, reading input, raw writing) to allow unit testing of drawing elements.
+- **PhysicalConsole:** The concrete implementation mapping rendering operations directly to Spectre.Console and `System.Console`.
+
+### `EditorPanel`
+**File:** [EditorPanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/EditorPanel.cs)  
+**Class:** [EditorPanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/EditorPanel.cs#L9)
+
+Renders the primary editor workspace area, writing line numbering gutters and syntax-colored script lines. It evaluates active selection bounds and applies inverted contrast markers (`RenderLineWithSelection`).
+
+### `MessagePanel`
+**File:** [MessagePanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MessagePanel.cs)  
+**Class:** [MessagePanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MessagePanel.cs#L7)
+
+Renders real-time script output messages. It styles system notifications based on diagnostic severity levels (Red for Error, Yellow for Warning, Green/Cyan for info).
+
+### `TreePanel`
+**File:** [TreePanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/TreePanel.cs)  
+**Class:** [TreePanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/TreePanel.cs#L12)
+
+Displays active script pipeline stages as a hierarchical execute tree. It queries the evaluator's telemetry nodes to visualize parallel branches.
+
+### `ReportPreviewPanel`
+**File:** [ReportPreviewPanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReportPreviewPanel.cs)  
+**Class:** [ReportPreviewPanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReportPreviewPanel.cs#L16)
+
+Provides a graphical terminal layout preview of generated reports (supporting Research Paper format rendering) by loading page structures via `TerminalRenderer`. It slices Spectre segments to support vertical scroll shifts using `_renderer.ReportScrollRow`.
+
+### `ResultViewer`
+**File:** [ResultViewer.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ResultViewer.cs)  
+**Class:** [ResultViewer](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ResultViewer.cs#L9)
+
+A fallback fullscreen table viewer utilizing Spectre grids. It is launched when evaluating outside of the full console editor layout, providing simple row-by-row navigation.
+
+### `MetadataManager`
+**File:** [MetadataManager.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MetadataManager.cs)  
+**Class:** [MetadataManager](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MetadataManager.cs#L13)
+
+Parses active scripts to extract schema declarations (`CREATE CONNECTION` and `CREATE TABLE #...`), seeding mock datasources or schemas locally to serve autocomplete catalog inspection.
+
+### Autocomplete Providers
+**File:** [SuggestionProviders.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs)
+
+Contains helper classes bridging autocomplete tokenization to core services:
+- **[SuggestionContext](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L31):** Holds script snippets, cursor positions, and current connection states.
+- **[LanguageServiceBridgeProvider](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L51):** Converts autocomplete requests to query the core [LanguageService](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Services/LanguageService.cs) definitions.
+- **[TuiMetadataManager](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L104):** Implements metadata querying against TUI active database sources.
+
+### `ExecuteTreeDemoRunner`
+**File:** [ExecuteTreeDemoRunner.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ExecuteTreeDemoRunner.cs)  
+**Class:** [ExecuteTreeDemoRunner](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ExecuteTreeDemoRunner.cs#L12)
+
+Simulates parallel branch executions on mock nodes, validating UI updates and progress indicator responsiveness.
+
+---
+
+## 4. UI Execution Modes (App Entry Points)
+
+### `TuiRunner`
+**File:** [TuiRunner.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/App/TuiRunner.cs)  
+**Class:** [TuiRunner](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/App/TuiRunner.cs#L13)
+
+Processes execution arguments on start, setting console encodings (UTF-8) and buffer size ratios, then routing to the correct TUI mode:
+1. `repl`: Launches [ReplUi](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReplUi.cs#L28) background processing loops.
+2. `simple`: Loads [SimpleUi](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SimpleUi.cs#L12) menu lists.
+3. `ide` / default: Boots the main interactive screen editor [ConsoleEditor](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ConsoleEditor.cs#L34).
+
+### `ReplUi`
+**File:** [ReplUi.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReplUi.cs)  
+**Class:** [ReplUi](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReplUi.cs#L28)
+
+Provides a persistent JSON-RPC background server over stdin/stdout. It allows integration with vscode or other client processes by streaming JSON messages:
+- **Inputs:** Receives command execution directives (`"run"`), cancellation request events (`"cancel"`), rollback commands (`"rollback"`), or export tasks (`"export"`).
+- **Outputs:** Streams diagnostic message events (`"message"`), execution states (`"progress"`), tabular query results (`"results"`), variable context listings (`"variables"`), and profiling performance numbers (`"performance"`).
+
+### `SimpleUi`
+**File:** [SimpleUi.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SimpleUi.cs)  
+**Class:** [SimpleUi](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SimpleUi.cs#L12)
+
+A simplified console dialog loop using Spectre prompts that allows loading local scripts, executing them, and printing final tables directly without initializing keyboard handlers.
+
+### `TuiDependencyInjectionSetup`
+**File:** [TuiDependencyInjectionSetup.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/App/TuiDependencyInjectionSetup.cs)  
+**Class:** [TuiDependencyInjectionSetup](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/App/TuiDependencyInjectionSetup.cs#L40)
+
+Configures the DI engine instance. It registers serilog file logging, function registry caches, system resource limits, database connectors, transaction context controllers, execution bundles, and statement execution handlers.
+
+---
+
+## 5. Execution Flow (F5)
 
 ```
 F5 pressed
@@ -367,7 +471,7 @@ InputHandler → ConsoleEditor.RunScript()
 
 ---
 
-## 4. File I/O
+## 6. File I/O
 
 `EditorFileHandler`:
 - `LoadAsync(path)` — reads file with encoding detection (UTF-8 BOM, UTF-16); splits into lines; reports encoding in status bar

@@ -261,7 +261,7 @@ The preview panel uses the **VS Code mode** of `report-runtime.js` — it pre-em
 
 ## 9. Connections Provider
 
-**File:** `src/connectionsProvider.ts`  
+**File:** [connectionsProvider.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/connectionsProvider.ts)  
 **View ID:** `etlsql-connections`  
 **Implementation:** `vscode.TreeDataProvider<TreeItem>`
 
@@ -299,7 +299,79 @@ Global connections are stored in `context.globalState` under key `etlsql.connect
 
 ---
 
-## 10. Language & File Associations
+## 10. Report Designer Panel
+
+**File:** [reportDesignerPanel.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/reportDesignerPanel.ts)  
+**Class:** [ReportDesignerPanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/reportDesignerPanel.ts#L15)  
+**View Type:** `etlsql.reportDesigner`
+
+The Report Designer Panel provides an offline graphical editor canvas for `.rptsql` files. It hosts the client-side report designer UI module via a `WebviewPanel`.
+
+- **LSP request bridging:** Instead of spawning a local HTTP web server, the panel intercepts designer API requests and routes them directly to the active Language Client via custom JSON-RPC request endpoints:
+  - `etlsql/designerParse`: parses the ETL-SQL script text into a visual layout State JSON.
+  - `etlsql/designerGenerate`: converts a visual layout State JSON back into ETL-SQL syntax.
+- **Disk persistence:** When the user triggers a save event within the webview, a message is posted to the extension host, which directly overwrites the target file on disk via the Node.js filesystem API (`fs.writeFileSync`).
+
+---
+
+## 11. Sidebar Provider
+
+**File:** [sidebarProvider.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/sidebarProvider.ts)  
+**Class:** [SidebarProvider](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/sidebarProvider.ts#L6)  
+**View ID:** `etlsql-sidebar`
+
+The `SidebarProvider` implements `vscode.WebviewViewProvider` to render an interactive webview panel inside the side explorer view.
+
+- **Vite Integration:** It loads the shared React UI bundle (`ui/dist/index.html`) with `window.VIEW_TYPE = 'sidebar'` injected to conditionally mount the sidebar component tree.
+- **Metadata Queries:** To fetch tables, columns, and temporary tables dynamically as the tree nodes expand, it executes custom JSON-RPC request calls to the Language Client (`etlsql/getTables`, `etlsql/getColumns`, `etlsql/getTempTables`).
+- **Interactive Insertion:** Users can click connections, tables, or columns in the sidebar to insert their names directly into the active text editor cursor position (`_insertTextAtActiveEditor`).
+
+---
+
+## 12. Welcome View
+
+**File:** [WelcomeView.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/WelcomeView.ts)  
+**Class:** [WelcomeView](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/WelcomeView.ts#L5)
+
+The `WelcomeView` controller manages a static HTML panel (`welcome.html`) offering quick start links.
+
+- **Actions handled:**
+  - `newScript` / `newReport`: opens a blank `etlsql` document in the editor.
+  - `newNotebook`: opens a new `.etlnb` document utilizing the ETL-SQL notebook kernel.
+  - Quick-links: maps UI button events to open documentation, cookbooks, samples, or licenses.
+
+---
+
+## 13. Notebook Support
+
+**Files:** [notebookController.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/notebookController.ts), [notebookSerializer.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/notebookSerializer.ts)  
+**Classes:** [ETLNotebookController](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/notebookController.ts#L7), [ETLNotebookSerializer](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/notebookSerializer.ts#L13)
+
+The extension provides a native notebook interface (`.etlnb`) for writing and running multi-cell ETL-SQL scripts.
+
+- **Notebook Serializer:** [ETLNotebookSerializer](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/notebookSerializer.ts#L13) parses and serializes notebook cells to and from a JSON structure.
+- **Execution Kernel:** [ETLNotebookController](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/notebookController.ts#L7) handles execution requests by sending scripts to a persistent background engine session.
+- **Rich Outputs:** It captures output stream events from the REPL engine session.
+  - Data grids are formatted and rendered as HTML tables.
+  - Lineage maps are embedded as collapsible Markdown sections enclosing Mermaid graphs.
+  - Error messages are piped into VS Code's standard notebook error objects.
+
+---
+
+## 14. Publish to Portal Command
+
+**File:** [portalPublishCommand.ts](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/portalPublishCommand.ts)  
+**Function:** [publishToPortal](file:///C:/Users/chuck/scratch/ETL-SQL/src/etl-sql-vscode/src/portalPublishCommand.ts#L111)
+
+The publish command allows direct publication of report scripts from the local workspace to the ETL-SQL Report Portal.
+
+- **Authentication:** Prompts for portal credentials, performs login at `/api/auth/login`, and caches the JWT access token in `ExtensionContext.globalState` for 55 minutes.
+- **Upload:** Uploads the raw script content to `/api/scripts/upload` to place it in the portal's storage area.
+- **Registration:** Fetches destination folder trees via `/api/folders`, lets the user pick a folder via `showQuickPick`, prompts for report parameters, and registers the report record via a `POST` request to `/api/reports`.
+
+---
+
+## 15. Language & File Associations
 
 Defined in `package.json`:
 
@@ -321,7 +393,7 @@ Both `.etlsql` and `.rptsql` use the same language ID (`etlsql`) and grammar, so
 
 ---
 
-## 11. Configuration Settings
+## 16. Configuration Settings
 
 | Setting | Default | Description |
 |---------|---------|-------------|
@@ -333,7 +405,7 @@ Both `.etlsql` and `.rptsql` use the same language ID (`etlsql`) and grammar, so
 
 ---
 
-## 12. Extension Points for Contributors
+## 17. Extension Points for Contributors
 
 **Adding a new command:**
 1. Register the command handler in `activate()` with `context.subscriptions.push(vscode.commands.registerCommand(...))`

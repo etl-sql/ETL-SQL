@@ -625,3 +625,12 @@ All Orchestrator configuration is bound from `appsettings.json` in the host appl
 *For the engine internals (Evaluator, Lexer, Parser, AST), see [Engine.md](Engine.md).*
 *For connector implementation details, see [Connectors.md](Connectors.md).*
 *For the language scheduling syntax (`CREATE JOB`, `RUN SCRIPT`, `PARALLEL`), see [Grammar.md](../Reference/Grammar.md).*
+
+---
+
+## 13. Related Subsystem Architecture
+
+For detailed information about adjacent subsystems, refer to the following architecture references:
+- **Report Portal:** [ReportPortal.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/ReportPortal.md) explains REST APIs, authentication policies, and portal-proxied scheduler endpoints.
+- **Reporting Engine:** [Reporting.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Reporting.md) covers visual manifest structures and report file generation layers.
+- **Portal UI & Designer:** [PortalUI.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/PortalUI.md) documents visual script editing, designer parsing, and DAG graph modeling.

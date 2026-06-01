@@ -396,3 +396,12 @@ All endpoints require a `Bearer` JWT token unless marked **Public**.
 | Method | Path | Auth | Description |
 | :--- | :--- | :--- | :--- |
 | GET | `/health` | Public | Health check (JSON) |
+
+---
+
+## 10. Related Subsystem Architecture
+
+For detailed information about adjacent subsystems, refer to the following architecture references:
+- **Reporting Engine:** [Reporting.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Reporting.md) documents the manifest builder, parameter mapping, and layout rendering details.
+- **Portal UI & Designer:** [PortalUI.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/PortalUI.md) describes the client-side design canvas, editor, and API structures.
+- **Orchestrator Scheduler:** [Orchestrator.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Orchestrator.md) details how the backend scheduler schedules and triggers catalog subscriptions.
