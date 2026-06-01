@@ -77,5 +77,5 @@
 - [x] [PortalUI.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/PortalUI.md): Replace references to `sync-assets.ps1` with `sync-assets.js` to match AGENTS.md.
 - [ ] [VSCodeExtension.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/VSCodeExtension.md): Document missing webview and command controllers (e.g. `reportDesignerPanel.ts`, `sidebarProvider.ts`, `WelcomeView.ts`, notebook support).
 - [ ] [TuiEditor.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/TuiEditor.md): Document 15 missing UI classes including `ReplUi.cs` and TUI report preview support.
-- [ ] [LanguageServer.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/LanguageServer.md): Document missing LSP handlers (`DesignerLspHandler.cs`, `DocumentSymbolProvider.cs`, `UpdateNotebookContextHandler.cs`).
+- [x] [LanguageServer.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/LanguageServer.md): Document missing LSP handlers (`DesignerLspHandler.cs`, `DocumentSymbolProvider.cs`, `UpdateNotebookContextHandler.cs`).
 - [ ] Cross-references: Connect/cross-reference Reporting, Portal, UI, and Orchestrator architecture files to eliminate documentation siloing.

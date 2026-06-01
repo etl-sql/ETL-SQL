@@ -25,6 +25,8 @@ Editor (VS Code / JetBrains)
 │  CompletionProvider HoverProvider  DefinitionProvider        │
 │  SignatureHelpProvider  FormattingProvider                   │
 │  CustomMethodsHandler   RefreshMetadataHandler               │
+│  DesignerLspHandler     DocumentSymbolProvider               │
+│  UpdateNotebookContextHandler                                │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -73,7 +75,10 @@ var server = await LanguageServer.From(options => options
     .WithHandler<SignatureHelpProvider>()
     .WithHandler<FormattingProvider>()
     .WithHandler<CustomMethodsHandler>()
-    .WithHandler<RefreshMetadataHandler>());
+    .WithHandler<RefreshMetadataHandler>()
+    .WithHandler<DesignerLspHandler>()
+    .WithHandler<DocumentSymbolProvider>()
+    .WithHandler<UpdateNotebookContextHandler>());
 ```
 
 All handlers share the same `IMetadataManager` and `DocumentStateStore` singletons via constructor injection.
@@ -203,6 +208,10 @@ Activates when the cursor is inside a function call `(` and returns parameter hi
 
 Delegates to `SqlFormatter.Format()` from `ETL_SQL.Core.Formatting`. Applies keyword casing, indentation, and clause alignment to the entire document.
 
+### 5.6 Document Symbols (`DocumentSymbolProvider`)
+
+Implements outline and breadcrumb navigation support for the editor. It traverses the parsed AST, extracts `SectionLabelStatement` definitions, and returns them as `DocumentSymbol` items representing checkpoints or labels in the outline.
+
 ---
 
 ## 6. Linting Integration
@@ -239,6 +248,7 @@ Beyond the standard LSP protocol, the server exposes custom requests and notific
 | `etlsql/setDebugMode` | `{ enabled: bool }` | Toggle verbose protocol logging |
 | `etlsql/refreshMetadata` | `{ uri: string }` | Clear metadata cache for document; re-trigger analysis |
 | `etlsql/setPortalDbPath` | `{ path: string \| null }` | Set path to portal.db; triggers a synchronous refresh of the `DatasetStore` cache. Send `null` or empty string to disable dataset awareness. |
+| `etlsql/updateNotebookContext` | `{ uri: string, prefix: string, notebookPath: string }` | Registers prefix declarations and notebook context for cell variable and lint resolution |
 
 ### Requests (Client → Server)
 
@@ -248,12 +258,22 @@ Beyond the standard LSP protocol, the server exposes custom requests and notific
 | `etlsql/getColumns` | `{ connectionName, tableName, uri }` | `ColumnInfo[]` |
 | `etlsql/getViews` | `{ connectionName, uri }` | `string[]` view names |
 | `etlsql/getTempTables` | `{ uri }` | `string[]` temp table names in document scope |
+| `etlsql/designerParse` | `{ script: string }` | `{ designStateJson: string }` representing layout AST data |
+| `etlsql/designerGenerate` | `{ designStateJson: string }` | `{ script: string }` representing generated Report-SQL |
 
 ### Notifications (Server → Client)
 
 | Method | Payload | Effect |
 |--------|---------|--------|
 | `etlsql/scriptConnections` | `{ uri, connections: Connection[] }` | Client updates the Connections sidebar with document-scoped connections |
+
+### 7.1 Offline Report Designer & Notebook Context Support
+
+#### `DesignerLspHandler`
+To support visual editing inside the VS Code webview designer without a live web portal, `DesignerLspHandler` registers `etlsql/designerParse` and `etlsql/designerGenerate`. These custom RPC requests parse Report-SQL scripts into CamelCase layout definitions or compile designer coordinates back into formatted `.rptsql` files.
+
+#### `UpdateNotebookContextHandler`
+Handles the client notification `etlsql/updateNotebookContext` to store cell prefixes (such as schema and connection definitions from prior cells) in the `DocumentStateStore`. This ensures variables and connections defined earlier are correctly resolved by completions and lint rules in the active cell.
 
 ---
 
