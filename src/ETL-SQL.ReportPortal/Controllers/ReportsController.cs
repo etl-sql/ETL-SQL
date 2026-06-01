@@ -612,6 +612,8 @@ public class ReportsController : ControllerBase
         // Best-effort cross-script enrichment: resolve dataset references (built by
         // a separate script) to their column lineage so the detail panel can trace a
         // visual's field back through the dataset to its origin + description.
+        try { await BridgeCatalogLineageAsync(nodes, edges); }
+        catch { /* never let enrichment fail the structure render */ }
         try { await BridgeDatasetLineageAsync(id, nodes, edges); }
         catch { /* never let enrichment fail the structure render */ }
 
@@ -780,6 +782,83 @@ public class ReportsController : ControllerBase
                     description = (string?)null,
                     tags = (object?)null,
                 };
+            nodes[i] = node with { Meta = new { columns = cols, columnLineage = passthrough } };
+        }
+    }
+
+    // Enrich raw source-table nodes from persisted runtime DB_CATALOG lineage.
+    // This avoids portal-time DB round-trips while still making SELECT * consumers
+    // inspectable after a report has run with catalog import enabled.
+    private async Task BridgeCatalogLineageAsync(List<DagNodeDto> nodes, List<DagEdgeDto> edges)
+    {
+        var resolved = new Dictionary<string, (List<string> Columns, Dictionary<string, object> Lineage, string Label)>(StringComparer.OrdinalIgnoreCase);
+
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+            if (node.Type != "table" || node.Meta != null) continue;
+
+            var history = (await lineageCatalog.GetHistoryForTableAsync(node.Label, 500))
+                .Where(e => e.Operation.Equals("DB_CATALOG", StringComparison.OrdinalIgnoreCase) &&
+                            !string.IsNullOrWhiteSpace(e.TargetColumn))
+                .GroupBy(e => e.TargetColumn!, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.OrderByDescending(e => e.RunAt).First())
+                .OrderBy(e => e.TargetColumn, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (history.Count == 0) continue;
+
+            var columns = history.Select(e => e.TargetColumn!).ToList();
+            var lineage = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            foreach (var e in history)
+            {
+                var tags = e.Tags
+                    .Where(kv => !kv.Key.Equals("d", StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+                var description = e.Tags.TryGetValue("d", out var d)
+                    ? d
+                    : e.DerivedFromDescriptions;
+
+                lineage[e.TargetColumn!] = new
+                {
+                    sources = Array.Empty<object>(),
+                    transform = (string?)null,
+                    functions = (object?)null,
+                    kind = "Catalog",
+                    description,
+                    tags = tags.Count > 0 ? tags : null,
+                };
+            }
+
+            nodes[i] = node with { Meta = new { columns, columnLineage = lineage } };
+            resolved[node.Id] = (columns, lineage, node.Label);
+        }
+
+        if (resolved.Count == 0) return;
+
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+            if (node.Type != "table" || node.Meta != null) continue;
+
+            var inbound = edges.Where(e => e.Target == node.Id && resolved.ContainsKey(e.Source)).ToList();
+            if (inbound.Count != 1) continue;
+
+            var (cols, _, label) = resolved[inbound[0].Source];
+            var passthrough = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            foreach (var c in cols)
+            {
+                passthrough[c] = new
+                {
+                    sources = new[] { new { table = label, column = (string?)c } },
+                    transform = (string?)null,
+                    functions = (object?)null,
+                    kind = "PassThrough",
+                    description = (string?)null,
+                    tags = (object?)null,
+                };
+            }
+
             nodes[i] = node with { Meta = new { columns = cols, columnLineage = passthrough } };
         }
     }

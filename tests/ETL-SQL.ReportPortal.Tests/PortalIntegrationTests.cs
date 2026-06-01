@@ -871,6 +871,71 @@ CREATE VISUAL Total AS CARD (
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
+    public async Task Structure_ExpandsRawSelectStarFromPersistedCatalogLineage()
+    {
+        var token  = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var source = $"edw.Sales_{suffix}";
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = $"RawStar {suffix}", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"rawstar_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath,
+            $"SELECT * INTO #sales FROM {source};\n" +
+            "CREATE VISUAL salesTable AS TABLE (\n" +
+            "    SOURCE = #sales,\n" +
+            "    MAPPINGS (Date = Date, Amount = Amount)\n" +
+            ");\n" +
+            "CREATE PAGE Main AS DASHBOARD( STRUCTURE = 'A', MAP ( 'A' = salesTable ) );\n");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = $"Raw Star Report {suffix}",
+            description = "raw select star lineage",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var reportId = (await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var catalog = scope.ServiceProvider.GetRequiredService<ILineageCatalogStore>();
+            await catalog.SaveLineageAsync(new[]
+            {
+                new LineageEntry(source, "DB_CATALOG")
+                {
+                    TargetColumn = "Date",
+                    Metadata = new Dictionary<string, string> { ["d"] = "Transaction date", ["db_type"] = "date" },
+                },
+                new LineageEntry(source, "DB_CATALOG")
+                {
+                    TargetColumn = "Amount",
+                    Metadata = new Dictionary<string, string> { ["d"] = "Sales amount", ["db_type"] = "decimal" },
+                }
+            }, $"report:{reportId}:catalog-import", scriptPath, DateTime.UtcNow);
+        }
+
+        var res = await AuthGet(token, $"/api/reports/{reportId}/structure");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var nodes = (await res.Content.ReadFromJsonAsync<JsonObject>(_json))!["nodes"]!.AsArray();
+
+        var sourceNode = Assert.Single(nodes, n => n!["label"]!.GetValue<string>() == source);
+        var sourceCols = sourceNode!["meta"]!["columnLineage"]!;
+        Assert.Equal("Sales amount", sourceCols["Amount"]!["description"]!.GetValue<string>());
+        Assert.Equal("decimal", sourceCols["Amount"]!["tags"]!["db_type"]!.GetValue<string>());
+
+        var sales = Assert.Single(nodes, n => n!["label"]!.GetValue<string>() == "#sales");
+        var salesCols = sales!["meta"]!["columnLineage"]!;
+        Assert.Contains(salesCols["Amount"]!["sources"]!.AsArray(), s =>
+            s!["table"]!.GetValue<string>() == source &&
+            s["column"]!.GetValue<string>() == "Amount");
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task Structure_UsesPageLayoutForVisualEdges_WhenVisualsDeclaredBeforePages()
     {
         var token  = await GetAdminTokenAsync();
