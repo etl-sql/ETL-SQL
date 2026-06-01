@@ -290,12 +290,11 @@ etlsql-connections (view root)
 |-------|---------------|--------|
 | LSP `etlsql/scriptConnections` notification | `updateScriptConnections(uri, conns)` | TextDocumentHandler after parse |
 | REPL `variables` message | `updateVariables(vars)` | ReplManager event |
-| User adds/removes connection | `saveConnections()` → `refresh()` | Command handlers |
 | `etlsql.refreshConnections` command | `refresh()` | User action |
 
-### Persistence
+### In-Memory Scope
 
-Global connections are stored in `context.globalState` under key `etlsql.connections`. The tree view loads them on activation via `loadConnections()` and saves any changes via `saveConnections()`.
+Connections are dynamically discovered within script documents and provided in-memory scoped to the active editor. The extension does not store connection strings or credentials persistently to enforce a Zero-Trust stance.
 
 ---
 
