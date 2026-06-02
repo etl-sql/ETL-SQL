@@ -266,7 +266,7 @@ namespace ETL_SQL.Reporting
                 manifest.Parameters.TryGetValue(paramName, out value);
 
             var display = string.IsNullOrWhiteSpace(value) ? "(all)" : value!;
-            sb.AppendLine($"*{EscapeCell(v.VisualType.ToLowerInvariant())} filter — selected:* **{EscapeCell(display)}**");
+            sb.AppendLine($"*{EscapeCell(v.VisualType.ToLowerInvariant())} filter — selected:* **{EscapeCell(display)}** *(interactive only — no static representation)*");
             sb.AppendLine();
         }
 
