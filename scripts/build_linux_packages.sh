@@ -32,9 +32,13 @@ if [ ! -f "$PUBLISHED_BIN_DIR/ETL-SQL" ]; then
 fi
 
 echo "Copying published linux-x64 binaries from $PUBLISHED_BIN_DIR..."
+# The single self-contained publish already contains every host executable
+# (CLI, TUI, LSP, Report, Player, Portal, Service). Install it once instead of
+# triplicating ~1.4 GB of identical runtime — three copies pushed the .deb past
+# GitHub's 2 GiB asset limit. The orchestrator and portal services launch their
+# hosts directly from bin/ (see the *.service ExecStart paths) while keeping
+# their own empty working directories below for runtime-writable state.
 cp -a "$PUBLISHED_BIN_DIR/." "$BUILD_ROOT/usr/lib/etl-sql/bin/"
-cp -a "$PUBLISHED_BIN_DIR/." "$BUILD_ROOT/usr/lib/etl-sql/orchestrator/"
-cp -a "$PUBLISHED_BIN_DIR/." "$BUILD_ROOT/usr/lib/etl-sql/portal/"
 
 ln -s /usr/lib/etl-sql/bin/ETL-SQL "$BUILD_ROOT/usr/bin/etl-sql"
 ln -s /usr/lib/etl-sql/bin/ETL-SQL-Report "$BUILD_ROOT/usr/bin/etl-sql-report"
