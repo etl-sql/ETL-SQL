@@ -16,8 +16,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 public class ExportController(
     PortalDbContext  db,
     PortalConfig     portalConfig,
-    AuditService     audit,
-    Microsoft.Extensions.Configuration.IConfiguration configuration) : ControllerBase
+    AuditService     audit) : ControllerBase
 {
     // ── Per-user PDF rate limit (tokens per minute) ────────────────────────────
     private static readonly ConcurrentDictionary<int, (int Count, DateTime WindowStart)> _pdfBucket = new();
@@ -149,22 +148,16 @@ public class ExportController(
         byte[] pdfBytes;
         try
         {
-            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (Request.Headers.TryGetValue("Authorization", out var authorization)
-                && !string.IsNullOrWhiteSpace(authorization.ToString()))
-            {
-                headers["Authorization"] = authorization.ToString();
-            }
-
-            var viewerUrl = $"{Request.Scheme}://{Request.Host}/#report-{id}";
+            // Render the already-loaded manifest entirely server-side (charts via ECharts SSR).
+            // We deliberately do NOT use the browser/high-fidelity path here: it would navigate a
+            // headless browser to the live portal and forward the caller's Authorization header via
+            // CDP Network.setExtraHTTPHeaders, which has no URL filter — leaking the viewer's bearer
+            // token to every sub-resource the report references (e.g. an attacker-controlled image
+            // URL embedded in report content). Static rendering needs no token and no host round-trip.
             var exporter = new ReportPdfExporter();
             pdfBytes = exporter.Export(manifest, new PdfExportOptions
             {
-                Mode = PdfExportMode.Auto,
-                Host = viewerUrl,
-                BrowserPath = configuration["Portal:PdfExport:BrowserPath"]
-                    ?? configuration["ReportPortal:PdfExport:BrowserPath"],
-                RequestHeaders = headers,
+                Mode = PdfExportMode.Static,
                 Warn = message => { }
             });
         }

@@ -16,6 +16,7 @@ namespace ETL_SQL.Connectors
     public class SftpConnector : IRemoteFileSystem, IDataSource, IConnector
     {
         private SftpClient? _client;
+        private int _disposed;
         private readonly string? _host;
         private readonly string? _username;
         private readonly string? _password;
@@ -167,6 +168,7 @@ namespace ETL_SQL.Connectors
 
         private async Task RunClientOperationAsync(Action<SftpClient> operation)
         {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             await _clientLock.WaitAsync();
             try
             {
@@ -180,6 +182,7 @@ namespace ETL_SQL.Connectors
 
         private async Task<T> RunClientOperationAsync<T>(Func<SftpClient, T> operation)
         {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             await _clientLock.WaitAsync();
             try
             {
@@ -379,6 +382,12 @@ namespace ETL_SQL.Connectors
 
         public async ValueTask DisposeAsync()
         {
+            // Idempotent: only the first caller runs teardown. Without this guard a second
+            // DisposeAsync (e.g. `await using` plus DI teardown) would re-enter the block below and
+            // call WaitAsync on the already-disposed _clientLock, throwing ObjectDisposedException.
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
+
             if (_client != null)
             {
                 await _clientLock.WaitAsync();
@@ -389,6 +398,7 @@ namespace ETL_SQL.Connectors
                         _client.Disconnect();
                     }
                     _client.Dispose();
+                    _client = null;
                 }
                 finally
                 {
@@ -396,7 +406,6 @@ namespace ETL_SQL.Connectors
                 }
             }
             _clientLock.Dispose();
-            await Task.CompletedTask;
         }
 
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null)

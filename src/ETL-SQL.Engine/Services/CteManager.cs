@@ -81,8 +81,12 @@ namespace ETL_SQL.Engine.Services
                     {
                         var val = firstRow[colName];
                         string type = "STRING";
-                        if (val is int || val is long || IsIntegralDecimal(val)) type = "INT";
-                        else if (val is decimal || val is double || val is float) type = "DECIMAL";
+                        // Intermediate iterations use DECIMAL for every numeric column. The schema is
+                        // locked from the first iteration but later iterations can produce fractional
+                        // values; typing INT here would Math.Truncate them mid-recursion (TypeConverter
+                        // "INT" cast) and corrupt the result. DECIMAL holds integers losslessly. The
+                        // final result is re-typed below once all values are known.
+                        if (val is int || val is long || val is decimal || val is double || val is float) type = "DECIMAL";
                         else if (val is DateTime) type = "DATETIME";
                         else if (val is bool) type = "BOOLEAN";
                         colDefs.Add(new ColumnDefinition(colName, type, true));
@@ -136,7 +140,11 @@ namespace ETL_SQL.Engine.Services
             finalMem.Validator = context as IDataValidator;
             finalMem.ExecutionContext = context;
             finalMem.MaxInMemoryBatches = context.MaxInMemoryBatches;
-            finalMem.SetSchema(colDefs);
+            // Now that the full result is known, narrow each DECIMAL column to INT only if every
+            // value across all iterations is integral. This keeps integer-valued recursive results
+            // (e.g. hierarchy depths) displaying as integers while preserving any genuinely
+            // fractional values as DECIMAL — without the mid-recursion truncation INT would cause.
+            finalMem.SetSchema(NarrowIntegralColumns(colDefs, finalResult));
             await finalMem.WriteBatches(new[] { finalResult }.ToAsyncEnumerable());
             if (context.LocalSources.TryGetValue(cte.Name, out var prevFinal)) await prevFinal.DisposeAsync();
             context.LocalSources[cte.Name] = finalMem;
@@ -176,8 +184,43 @@ namespace ETL_SQL.Engine.Services
             return new CompoundKey(values);
         }
 
-        private static bool IsIntegralDecimal(object? value) =>
-            value is decimal d && d == Math.Truncate(d);
+        private static bool IsIntegralValue(object? value) => value switch
+        {
+            int or long => true,
+            decimal d => d == Math.Truncate(d),
+            double db => db == Math.Truncate(db),
+            float f => f == Math.Truncate(f),
+            _ => false
+        };
+
+        /// <summary>
+        /// Returns a copy of <paramref name="colDefs"/> where each DECIMAL column whose every
+        /// non-null value in <paramref name="rows"/> is integral is narrowed to INT. Columns with
+        /// any fractional value stay DECIMAL so no data is lost.
+        /// </summary>
+        private static List<ColumnDefinition> NarrowIntegralColumns(List<ColumnDefinition> colDefs, DataTable rows)
+        {
+            var result = new List<ColumnDefinition>(colDefs.Count);
+            foreach (var col in colDefs)
+            {
+                if (col.DataType == "DECIMAL" && AllValuesIntegral(rows, col.ColumnName))
+                    result.Add(new ColumnDefinition(col.ColumnName, "INT", col.IsNullable));
+                else
+                    result.Add(col);
+            }
+            return result;
+        }
+
+        private static bool AllValuesIntegral(DataTable rows, string columnName)
+        {
+            foreach (var row in rows.Rows)
+            {
+                var val = row[columnName];
+                if (val is null) continue;
+                if (!IsIntegralValue(val)) return false;
+            }
+            return true;
+        }
 
         private bool IsRecursive(CteDefinition cte, out Statement? anchor, out Statement? recursive, out bool isDistinct)
         {

@@ -45,8 +45,29 @@ namespace ETL_SQL.Common
             var sid = SessionId != null ? $" [{SessionId}]" : "";
             string formattedMessage = $"[{level}] [{_category}]{sid} {message}";
             if (ex != null) formattedMessage += $"{Environment.NewLine}Exception: {ex.Message}";
-            
-            OnMessage?.Invoke(formattedMessage, SessionId, color);
+
+            // Prefer a wired-up subscriber (e.g. the DI logging sink) so output is not duplicated.
+            if (OnMessage != null)
+            {
+                OnMessage.Invoke(formattedMessage, SessionId, color);
+                return;
+            }
+
+            // No subscriber: fall back to the console so diagnostics — including errors raised
+            // during early startup, in tools, or in tests using the bare/Global logger — are not
+            // silently dropped. JSON mode still emits a structured frame for --json consumers.
+            if (IsJsonMode)
+            {
+                var msg = new { type = "message", level = level.ToLowerInvariant(), text = message };
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(msg));
+                return;
+            }
+
+            if (SuppressConsole) return;
+
+            if (color != ConsoleColor.White) Console.ForegroundColor = color;
+            Console.WriteLine(formattedMessage);
+            if (color != ConsoleColor.White) Console.ResetColor();
         }
     }
 }
