@@ -19,6 +19,7 @@
     const isWebMode = window.__IS_WEB__ || window.location.protocol.startsWith('http');
     const vscode    = (typeof acquireVsCodeApi === 'function') ? acquireVsCodeApi() : null;
     const isInteractive = isWebMode || vscode;
+    const safeRequestAnimationFrame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
     
     let baselineManifest = null;
     
@@ -145,8 +146,8 @@
 
     function markExportReady(manifest) {
         const generation = _exportReadyGeneration;
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
+        safeRequestAnimationFrame(() => {
+            safeRequestAnimationFrame(() => {
                 waitForImagesToSettle().then(() => {
                     if (generation !== _exportReadyGeneration) return;
                     const pageCount = manifest && manifest.pages ? manifest.pages.length : 0;
@@ -629,7 +630,7 @@
                 _lastActivePage = pageName;
 
                 // Defer resize to the next frame so the active class renders first.
-                if (target) requestAnimationFrame(() => resizeChartsIn(target));
+                if (target) safeRequestAnimationFrame(() => resizeChartsIn(target));
 
                 // Notify portal of user-driven tab change so it can push a history entry
                 if (window.parent && window.parent !== window) {
