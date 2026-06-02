@@ -18,7 +18,10 @@ using ETL_SQL.ReportPortal.Models;
 
 namespace ETL_SQL.ReportPortal.Tests
 {
-    [Trait("Category", "Portal")]
+    // Real Testcontainers/Docker LDAP integration — tagged Integration so the
+    // non-Docker fast/portal/full lanes (and CI on windows-latest, which has no
+    // Linux Docker daemon) skip it; it runs in the Docker-backed integration lane.
+    [Trait("Category", "Integration")]
     [Trait("CertificationClass", "DockerRealIntegration")]
     public class PortalLdapIntegrationTests : IClassFixture<PortalLdapIntegrationTests.OpenLdapPortalWebFactory>
     {

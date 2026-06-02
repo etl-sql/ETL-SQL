@@ -18,6 +18,10 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $fastFilter = "(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
+# Portal lanes run the whole Portal project (its WebApplicationFactory tests have
+# "Integration" in their names but need no Docker), so they can't use the name-based
+# fastFilter. Exclude only Docker-backed tests by category instead.
+$portalFilter = "(Category!=Integration)"
 
 function Invoke-DotNetTest {
     param(
@@ -70,18 +74,19 @@ switch ($Lane) {
     "fast" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $fastFilter
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
-        Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"
+        Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj" $portalFilter
         Invoke-LineageUiSmoke
     }
     "engine" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $fastFilter
     }
     "portal" {
-        Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"
+        Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj" $portalFilter
         Invoke-LineageUiSmoke
     }
     "integration" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=Integration"
+        Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj" "Category=Integration"
     }
     "perf" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=Performance"
@@ -90,7 +95,7 @@ switch ($Lane) {
     "full" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj"
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
-        Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"
+        Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj" $portalFilter
         Invoke-LineageUiSmoke
         Invoke-DotNetTest "tests\ETL-SQL.PerfTests\ETL-SQL.PerfTests.csproj"
     }
