@@ -183,9 +183,10 @@ namespace ETL_SQL.Reporting
 
                 case "TEXT":
                 {
-                    // TEXT content lives in DefaultValue (markdown); some reports use options["VALUE"].
-                    if (!v.Options.TryGetValue("VALUE", out var textContent) || string.IsNullOrWhiteSpace(textContent))
-                        textContent = v.DefaultValue;
+                    // Resolve via the shared resolver so PDF and Markdown agree on TEXT content
+                    // (CONTENT/VALUE/DefaultValue/mapping:content), rather than each renderer
+                    // checking a different subset of keys.
+                    var textContent = ReportVisualContent.ResolveTextContent(v);
                     v.Options.TryGetValue("ALIGN", out var align);
                     if (!string.IsNullOrWhiteSpace(textContent))
                     {
@@ -253,19 +254,7 @@ namespace ETL_SQL.Reporting
 
         private static void RenderFilter(StringBuilder sb, VisualManifest v, ReportManifest manifest)
         {
-            var paramName = v.Actions
-                .FirstOrDefault(a => string.Equals(a.Type, "SET_PARAMETER", StringComparison.OrdinalIgnoreCase))
-                ?.ParameterName;
-            if (string.IsNullOrEmpty(paramName))
-                paramName = v.Options.GetValueOrDefault("PARAMETER")
-                         ?? v.Options.GetValueOrDefault("parameter")
-                         ?? v.Options.GetValueOrDefault("data-parameter");
-
-            string? value = null;
-            if (!string.IsNullOrEmpty(paramName))
-                manifest.Parameters.TryGetValue(paramName, out value);
-
-            var display = string.IsNullOrWhiteSpace(value) ? "(all)" : value!;
+            var display = ReportVisualContent.ResolveFilterDisplay(v, manifest);
             sb.AppendLine($"*{EscapeCell(v.VisualType.ToLowerInvariant())} filter — selected:* **{EscapeCell(display)}** *(interactive only — no static representation)*");
             sb.AppendLine();
         }

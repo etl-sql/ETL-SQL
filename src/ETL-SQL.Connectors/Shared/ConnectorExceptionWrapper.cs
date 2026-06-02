@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Connectors.Shared
@@ -28,6 +29,26 @@ namespace ETL_SQL.Connectors.Shared
             if (ex is ExecutionException executionException) return executionException;
             // Sanitized message surfaces to users/logs; full provider detail is in the inner exception.
             return new ExecutionException($"{connectorName} connector error: {SanitizeMessage(ex.Message)}", ex);
+        }
+
+        /// <summary>
+        /// Runs an async provider operation, converting any matching provider exception into a
+        /// sanitized <see cref="ExecutionException"/> at the connector boundary. Centralizes the
+        /// catch-when(shouldWrap) -> Wrap pattern so providers don't each hand-roll it.
+        /// </summary>
+        public static async Task<T> RunAsync<T>(
+            string connectorName,
+            Func<Exception, bool> shouldWrap,
+            Func<Task<T>> operation)
+        {
+            try
+            {
+                return await operation();
+            }
+            catch (Exception ex) when (shouldWrap(ex))
+            {
+                throw Wrap(connectorName, ex);
+            }
         }
 
         public static async IAsyncEnumerable<T> WrapAsync<T>(

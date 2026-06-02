@@ -96,7 +96,8 @@ namespace ETL_SQL.Tests
                 }
             };
 
-            var bytes = await new XlsxExporter().ExportAsync(manifest, visualName: null);
+            var visuals = new CsvRenderer().SelectExportVisuals(manifest, visualName: null);
+            var bytes = await new XlsxExporter().ExportAsync(visuals);
             var ds = ReadWorkbook(bytes);
 
             Assert.Equal(2, ds.Tables.Count);

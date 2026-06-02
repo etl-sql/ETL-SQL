@@ -108,7 +108,7 @@ public class ExportController(
         if (visuals.Count == 0)
             return NotFound(new { error = "No exportable visuals found" });
 
-        var bytes = await new XlsxExporter().ExportAsync(manifest, visual);
+        var bytes = await new XlsxExporter().ExportAsync(visuals);
 
         var reportName = manifest.Title ?? System.IO.Path.GetFileNameWithoutExtension(manifest.Source);
         var filename   = $"{SanitizeFilename(reportName)}_{DateTime.UtcNow:yyyyMMdd}.xlsx";

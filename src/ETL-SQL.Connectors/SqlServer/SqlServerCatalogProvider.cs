@@ -15,6 +15,7 @@ namespace ETL_SQL.Connectors.SqlServer
     /// </summary>
     public sealed class SqlServerCatalogProvider : ICatalogMetadataProvider, IViewDefinitionProvider
     {
+        private const string CatalogName = "SQL Server catalog";
         private readonly string _connectionString;
 
         public SqlServerCatalogProvider(string connectionString)
@@ -22,11 +23,12 @@ namespace ETL_SQL.Connectors.SqlServer
             _connectionString = connectionString;
         }
 
-        public async Task<IReadOnlyList<CatalogColumn>> GetColumnMetadataAsync(
+        public Task<IReadOnlyList<CatalogColumn>> GetColumnMetadataAsync(
             string schema, string tableName, CancellationToken ct = default)
-        {
-            var results = new List<CatalogColumn>();
-            const string sql = @"
+            => ConnectorExceptionWrapper.RunAsync<IReadOnlyList<CatalogColumn>>(CatalogName, ShouldWrapProviderException, async () =>
+            {
+                var results = new List<CatalogColumn>();
+                const string sql = @"
 SELECT
     c.name                                          AS ColumnName,
     tp.name                                         AS DataType,
@@ -51,8 +53,6 @@ LEFT JOIN sys.extended_properties ep
 WHERE s.name = @schema AND o.name = @table
 ORDER BY c.column_id;";
 
-            try
-            {
                 await using var conn = new SqlConnection(_connectionString);
                 await conn.OpenAsync(ct);
                 await using var cmd = new SqlCommand(sql, conn);
@@ -70,18 +70,14 @@ ORDER BY c.column_id;";
                         ExtraProperties: new Dictionary<string, string>()));
                 }
                 return results;
-            }
-            catch (Exception ex) when (ShouldWrapProviderException(ex))
-            {
-                throw ConnectorExceptionWrapper.Wrap("SQL Server catalog", ex);
-            }
-        }
+            });
 
-        public async Task<IReadOnlyList<CatalogRelationship>> GetRelationshipsAsync(
+        public Task<IReadOnlyList<CatalogRelationship>> GetRelationshipsAsync(
             string schema, string tableName, CancellationToken ct = default)
-        {
-            var results = new List<CatalogRelationship>();
-            const string sql = @"
+            => ConnectorExceptionWrapper.RunAsync<IReadOnlyList<CatalogRelationship>>(CatalogName, ShouldWrapProviderException, async () =>
+            {
+                var results = new List<CatalogRelationship>();
+                const string sql = @"
 SELECT
     fkc_col.name        AS ForeignKeyColumn,
     rs.name + '.' + rt.name AS ReferencedTable,
@@ -96,8 +92,6 @@ JOIN sys.schemas rs ON rs.schema_id = rt.schema_id
 JOIN sys.columns rc_col ON rc_col.object_id = fkcc.referenced_object_id AND rc_col.column_id = fkcc.referenced_column_id
 WHERE fs.name = @schema AND ft.name = @table;";
 
-            try
-            {
                 await using var conn = new SqlConnection(_connectionString);
                 await conn.OpenAsync(ct);
                 await using var cmd = new SqlCommand(sql, conn);
@@ -112,16 +106,12 @@ WHERE fs.name = @schema AND ft.name = @table;";
                         ReferencedColumn: rdr.GetString(2)));
                 }
                 return results;
-            }
-            catch (Exception ex) when (ShouldWrapProviderException(ex))
-            {
-                throw ConnectorExceptionWrapper.Wrap("SQL Server catalog", ex);
-            }
-        }
+            });
 
-        public async Task<string?> GetViewDefinitionAsync(string schema, string objectName, CancellationToken ct = default)
-        {
-            const string sql = @"
+        public Task<string?> GetViewDefinitionAsync(string schema, string objectName, CancellationToken ct = default)
+            => ConnectorExceptionWrapper.RunAsync<string?>(CatalogName, ShouldWrapProviderException, async () =>
+            {
+                const string sql = @"
 SELECT m.definition
 FROM sys.sql_modules m
 JOIN sys.objects o ON m.object_id = o.object_id
@@ -129,8 +119,6 @@ JOIN sys.schemas s ON s.schema_id = o.schema_id
 WHERE o.type IN ('V', 'P', 'TF', 'IF')
   AND s.name = @schema AND o.name = @name;";
 
-            try
-            {
                 await using var conn = new SqlConnection(_connectionString);
                 await conn.OpenAsync(ct);
                 await using var cmd = new SqlCommand(sql, conn);
@@ -138,12 +126,7 @@ WHERE o.type IN ('V', 'P', 'TF', 'IF')
                 cmd.Parameters.AddWithValue("@name", objectName);
                 var result = await cmd.ExecuteScalarAsync(ct);
                 return result is string def && !string.IsNullOrWhiteSpace(def) ? def : null;
-            }
-            catch (Exception ex) when (ShouldWrapProviderException(ex))
-            {
-                throw ConnectorExceptionWrapper.Wrap("SQL Server catalog", ex);
-            }
-        }
+            });
 
         private static bool ShouldWrapProviderException(Exception ex) =>
             ex is SqlException or InvalidOperationException;

@@ -19,12 +19,10 @@ namespace ETL_SQL.Reporting
     /// </summary>
     public sealed class XlsxExporter
     {
-        private readonly CsvRenderer _selector = new();
-
-        public async Task<byte[]> ExportAsync(ReportManifest manifest, string? visualName, CancellationToken ct = default)
+        // Visuals are pre-selected by the caller (which also performs the empty check), so the
+        // export does not re-run SelectExportVisuals.
+        public async Task<byte[]> ExportAsync(IReadOnlyList<VisualManifest> visuals, CancellationToken ct = default)
         {
-            var visuals = _selector.SelectExportVisuals(manifest, visualName);
-
             var sheets = new List<XlsxWriter.Sheet>();
             foreach (var v in visuals)
             {
@@ -50,22 +48,10 @@ namespace ETL_SQL.Reporting
         // Excel headers (and our row dictionaries) need unique, non-empty column keys.
         private static List<string> Uniquify(IReadOnlyList<string> names)
         {
-            var seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var result = new List<string>(names.Count);
             foreach (var raw in names)
-            {
-                var name = string.IsNullOrEmpty(raw) ? "Column" : raw;
-                if (seen.TryGetValue(name, out var count))
-                {
-                    seen[name] = count + 1;
-                    name = $"{name} ({count + 1})";
-                }
-                else
-                {
-                    seen[name] = 1;
-                }
-                result.Add(name);
-            }
+                result.Add(NameDeduplicator.MakeUnique(string.IsNullOrEmpty(raw) ? "Column" : raw, used));
             return result;
         }
     }

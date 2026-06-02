@@ -14,6 +14,7 @@ namespace ETL_SQL.Connectors.MySql
     /// </summary>
     public sealed class MySqlCatalogProvider : ICatalogMetadataProvider, IViewDefinitionProvider
     {
+        private const string CatalogName = "MySql catalog";
         private readonly string _connectionString;
 
         public MySqlCatalogProvider(string connectionString)
@@ -21,11 +22,12 @@ namespace ETL_SQL.Connectors.MySql
             _connectionString = connectionString;
         }
 
-        public async Task<IReadOnlyList<CatalogColumn>> GetColumnMetadataAsync(
+        public Task<IReadOnlyList<CatalogColumn>> GetColumnMetadataAsync(
             string schema, string tableName, CancellationToken ct = default)
-        {
-            var results = new List<CatalogColumn>();
-            const string sql = @"
+            => ConnectorExceptionWrapper.RunAsync<IReadOnlyList<CatalogColumn>>(CatalogName, ShouldWrapProviderException, async () =>
+            {
+                var results = new List<CatalogColumn>();
+                const string sql = @"
 SELECT
     c.COLUMN_NAME,
     c.DATA_TYPE,
@@ -46,8 +48,6 @@ LEFT JOIN (
 WHERE c.TABLE_SCHEMA = @schema AND c.TABLE_NAME = @table
 ORDER BY c.ORDINAL_POSITION;";
 
-            try
-            {
                 await using var conn = new MySqlConnection(_connectionString);
                 await conn.OpenAsync(ct);
                 await using var cmd = new MySqlCommand(sql, conn);
@@ -65,29 +65,23 @@ ORDER BY c.ORDINAL_POSITION;";
                         ExtraProperties: new Dictionary<string, string>()));
                 }
                 return results;
-            }
-            catch (Exception ex) when (ShouldWrapProviderException(ex))
-            {
-                throw ConnectorExceptionWrapper.Wrap("MySql catalog", ex);
-            }
-        }
+            });
 
-        public async Task<IReadOnlyList<CatalogRelationship>> GetRelationshipsAsync(
+        public Task<IReadOnlyList<CatalogRelationship>> GetRelationshipsAsync(
             string schema, string tableName, CancellationToken ct = default)
-        {
-            var results = new List<CatalogRelationship>();
-            const string sql = @"
+            => ConnectorExceptionWrapper.RunAsync<IReadOnlyList<CatalogRelationship>>(CatalogName, ShouldWrapProviderException, async () =>
+            {
+                var results = new List<CatalogRelationship>();
+                const string sql = @"
 SELECT
     kcu.COLUMN_NAME                             AS fk_column,
     CONCAT(kcu.REFERENCED_TABLE_SCHEMA, '.', kcu.REFERENCED_TABLE_NAME)  AS referenced_table,
     kcu.REFERENCED_COLUMN_NAME                  AS referenced_column
 FROM information_schema.key_column_usage kcu
-WHERE kcu.TABLE_SCHEMA = @schema 
+WHERE kcu.TABLE_SCHEMA = @schema
   AND kcu.TABLE_NAME = @table
   AND kcu.REFERENCED_COLUMN_NAME IS NOT NULL;";
 
-            try
-            {
                 await using var conn = new MySqlConnection(_connectionString);
                 await conn.OpenAsync(ct);
                 await using var cmd = new MySqlCommand(sql, conn);
@@ -102,22 +96,16 @@ WHERE kcu.TABLE_SCHEMA = @schema
                         ReferencedColumn: rdr.GetString(2)));
                 }
                 return results;
-            }
-            catch (Exception ex) when (ShouldWrapProviderException(ex))
-            {
-                throw ConnectorExceptionWrapper.Wrap("MySql catalog", ex);
-            }
-        }
+            });
 
-        public async Task<string?> GetViewDefinitionAsync(string schema, string objectName, CancellationToken ct = default)
-        {
-            const string sql = @"
+        public Task<string?> GetViewDefinitionAsync(string schema, string objectName, CancellationToken ct = default)
+            => ConnectorExceptionWrapper.RunAsync<string?>(CatalogName, ShouldWrapProviderException, async () =>
+            {
+                const string sql = @"
 SELECT VIEW_DEFINITION
 FROM information_schema.VIEWS
 WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @name;";
 
-            try
-            {
                 await using var conn = new MySqlConnection(_connectionString);
                 await conn.OpenAsync(ct);
                 await using var cmd = new MySqlCommand(sql, conn);
@@ -125,12 +113,7 @@ WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @name;";
                 cmd.Parameters.AddWithValue("@name", objectName);
                 var result = await cmd.ExecuteScalarAsync(ct);
                 return result is string def && !string.IsNullOrWhiteSpace(def) ? def : null;
-            }
-            catch (Exception ex) when (ShouldWrapProviderException(ex))
-            {
-                throw ConnectorExceptionWrapper.Wrap("MySql catalog", ex);
-            }
-        }
+            });
 
         private static bool ShouldWrapProviderException(Exception ex) =>
             ex is MySqlException or InvalidOperationException;

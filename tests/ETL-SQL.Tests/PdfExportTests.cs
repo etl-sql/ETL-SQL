@@ -241,9 +241,11 @@ namespace ETL_SQL.Tests
 
         private static string? ResolvePdfTextContent(VisualManifest visual)
         {
-            var method = typeof(PdfExporter).GetMethod(
-                "ResolveTextContent",
-                BindingFlags.NonPublic | BindingFlags.Static);
+            // TEXT content resolution now lives in the shared ReportVisualContent (used by both the
+            // PDF and Markdown renderers); reach it by assembly type name since it is internal.
+            var type = typeof(PdfExporter).Assembly.GetType("ETL_SQL.Reporting.ReportVisualContent");
+            Assert.NotNull(type);
+            var method = type!.GetMethod("ResolveTextContent", BindingFlags.Public | BindingFlags.Static);
 
             Assert.NotNull(method);
             return (string?)method!.Invoke(null, new object[] { visual });

@@ -245,19 +245,7 @@ namespace ETL_SQL.Reporting
         private static void RenderFilter(Section section, VisualManifest v, ReportManifest manifest)
         {
             // Parameter name: a SET_PARAMETER action, else an options key.
-            var paramName = v.Actions
-                .FirstOrDefault(a => string.Equals(a.Type, "SET_PARAMETER", StringComparison.OrdinalIgnoreCase))
-                ?.ParameterName;
-            if (string.IsNullOrEmpty(paramName))
-                paramName = v.Options.GetValueOrDefault("PARAMETER")
-                         ?? v.Options.GetValueOrDefault("parameter")
-                         ?? v.Options.GetValueOrDefault("data-parameter");
-
-            string? value = null;
-            if (!string.IsNullOrEmpty(paramName))
-                manifest.Parameters.TryGetValue(paramName, out value);
-
-            var display = string.IsNullOrWhiteSpace(value) ? "(all)" : value!;
+            var display = ReportVisualContent.ResolveFilterDisplay(v, manifest);
 
             var p = section.AddParagraph();
             p.Format.SpaceBefore = Unit.FromPoint(4);
@@ -395,7 +383,7 @@ namespace ETL_SQL.Reporting
 
         private static void RenderText(Section section, VisualManifest v)
         {
-            var textContent = ResolveTextContent(v);
+            var textContent = ReportVisualContent.ResolveTextContent(v);
             if (string.IsNullOrWhiteSpace(textContent)) return;
 
             foreach (var (text, heading) in MarkdownToLines(textContent))
@@ -405,35 +393,6 @@ namespace ETL_SQL.Reporting
                 p.Format.Font.Size   = Unit.FromPoint(heading ? 12 : 10);
                 p.Format.Font.Bold   = heading;
             }
-        }
-
-        private static string? ResolveTextContent(VisualManifest v)
-        {
-            // Static TEXT uses CONTENT/DefaultValue. Older manifests may carry VALUE.
-            if (v.Options.TryGetValue("CONTENT", out var content) && !string.IsNullOrWhiteSpace(content))
-                return content;
-            if (v.Options.TryGetValue("content", out content) && !string.IsNullOrWhiteSpace(content))
-                return content;
-            if (v.Options.TryGetValue("VALUE", out content) && !string.IsNullOrWhiteSpace(content))
-                return content;
-            if (v.Options.TryGetValue("value", out content) && !string.IsNullOrWhiteSpace(content))
-                return content;
-            if (!string.IsNullOrWhiteSpace(v.DefaultValue))
-                return v.DefaultValue;
-
-            // Dynamic TEXT uses SOURCE + MAPPINGS (CONTENT = col). VisualBuilder stores
-            // mappings as option keys and the source data in Columns/Rows.
-            var contentColumn = v.Options.GetValueOrDefault("mapping:content")
-                ?? v.Options.GetValueOrDefault("MAPPING:CONTENT");
-            if (string.IsNullOrWhiteSpace(contentColumn) || v.Rows.Count == 0)
-                return null;
-
-            var contentIndex = v.Columns.FindIndex(c =>
-                string.Equals(c, contentColumn, StringComparison.OrdinalIgnoreCase));
-            if (contentIndex < 0 || contentIndex >= v.Rows[0].Count)
-                return null;
-
-            return v.Rows[0][contentIndex];
         }
 
         // Lightweight markdown → lines for PDF: headings become bold larger lines and

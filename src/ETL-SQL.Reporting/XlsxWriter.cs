@@ -150,14 +150,29 @@ namespace ETL_SQL.Reporting
         }
 
         private static string UniqueSheetName(string baseName, HashSet<string> used)
+            => NameDeduplicator.MakeUnique(baseName, used, maxLength: 31);
+    }
+
+    /// <summary>
+    /// Makes names unique within a set, appending <c>" (n)"</c> on collision and honoring an
+    /// optional max length (Excel sheet names cap at 31 chars). Shared by sheet-name and
+    /// column-name de-duplication so the algorithm lives in one place. Collision-safe: a generated
+    /// name that clashes with a later raw name is itself bumped, because the set tracks every
+    /// emitted name (not just a per-base counter).
+    /// </summary>
+    internal static class NameDeduplicator
+    {
+        public static string MakeUnique(string baseName, ISet<string> used, int maxLength = int.MaxValue)
         {
-            var name = baseName;
+            string Fit(string s) => s.Length > maxLength ? s.Substring(0, maxLength) : s;
+
+            var name = Fit(baseName);
             var i = 2;
             while (!used.Add(name))
             {
                 var suffix = $" ({i++})";
-                var trimmed = baseName.Length + suffix.Length > 31
-                    ? baseName.Substring(0, 31 - suffix.Length)
+                var trimmed = baseName.Length + suffix.Length > maxLength
+                    ? baseName.Substring(0, Math.Max(0, maxLength - suffix.Length))
                     : baseName;
                 name = trimmed + suffix;
             }
