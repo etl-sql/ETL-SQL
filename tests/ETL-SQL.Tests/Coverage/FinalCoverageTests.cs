@@ -7,6 +7,7 @@ using Xunit;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.App;
+using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Connectors.Postgres;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
@@ -520,6 +521,12 @@ namespace ETL_SQL.Tests.Coverage
         public async Task Dialect_MockDbConn_LimitUsed_Warning()
         {
             EnsureRegistry();
+            // MockDb is a test-only connector absent from the production registry, and
+            // EnsureRegistry only seeds Postgres. The rule reads the shared global
+            // ConnectorRegistry.Instance, so additively register MockDb on whatever
+            // registry is current — this makes the test independent of suite ordering
+            // (it previously passed only when an earlier test left MockDb registered).
+            ConnectorRegistry.Instance!.Register(new MockDbConnector());
             var rule = new DialectKeywordRule();
             // MOCKDB excludes LIMIT
             var results = await Lint(rule,
