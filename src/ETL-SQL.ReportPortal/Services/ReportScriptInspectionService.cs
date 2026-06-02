@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
@@ -10,11 +11,19 @@ using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.ReportPortal.Services;
 
-public class ReportScriptInspectionService(PortalConfig portalConfig)
+public class ReportScriptInspectionService(PortalConfig portalConfig, ILogger<ReportScriptInspectionService> logger)
 {
     public async Task<Dictionary<string, string>> ReadScriptMetadataAsync(string scriptPath)
     {
-        var scriptText = await System.IO.File.ReadAllTextAsync(scriptPath);
+        // Resolve within the configured script root like the sibling methods, so a caller passing
+        // a request-derived path cannot read arbitrary files (path traversal / arbitrary read).
+        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
+        {
+            logger.LogWarning("Rejected script metadata read outside the configured script root: {ScriptPath}", scriptPath);
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);
         var tokens = new Lexer(scriptText).Tokenize();
         var script = new CoreParser(tokens, scriptText).Parse();
         return new Dictionary<string, string>(script.Metadata, StringComparer.OrdinalIgnoreCase);
@@ -75,6 +84,9 @@ public class ReportScriptInspectionService(PortalConfig portalConfig)
         }
         catch (Exception ex)
         {
+            // Log the full detail server-side; return a generic message to the client so internal
+            // paths/offsets in the parser exception are not surfaced to the API consumer.
+            logger.LogWarning(ex, "Script validation failed for {ScriptPath}", resolvedScriptPath);
             return new ReportScriptValidationDto(
                 false,
                 resolvedScriptPath,
@@ -82,7 +94,7 @@ public class ReportScriptInspectionService(PortalConfig portalConfig)
                 System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath),
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
                 Array.Empty<ReportParameterDto>(),
-                [ex.Message]);
+                ["The script could not be parsed. See server logs for details."]);
         }
     }
 
@@ -109,8 +121,9 @@ public class ReportScriptInspectionService(PortalConfig portalConfig)
                     d.RowCount))
                 .ToList();
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            logger.LogWarning(ex, "Failed to parse report manifest at {ManifestPath}", resolvedManifestPath);
             return Array.Empty<ReportDependencyManifestDatasetDto>();
         }
     }
@@ -155,8 +168,9 @@ public class ReportScriptInspectionService(PortalConfig portalConfig)
                     e.DerivedFromDescriptions))
                 .ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "Lineage extraction failed for {ScriptPath}; returning no lineage", resolvedScriptPath);
             return Array.Empty<ReportDependencyLineageDto>();
         }
     }
@@ -186,8 +200,9 @@ public class ReportScriptInspectionService(PortalConfig portalConfig)
                 .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "Failed to parse source tables from script text; returning none");
             return Array.Empty<string>();
         }
     }

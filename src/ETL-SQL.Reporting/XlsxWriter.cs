@@ -102,12 +102,12 @@ namespace ETL_SQL.Reporting
                         sbyte or byte or short or ushort or int or uint or long or ulong or float or double or decimal => raw,
                         _ => decimal.TryParse(raw.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : null,
                     };
-                    if (num is null) return raw.ToString();   // not actually numeric -> keep text
+                    if (num is null) return NeutralizeFormula(raw.ToString());   // not actually numeric -> keep text
                     // Integers beyond Excel's ~15 significant digits (e.g. 18-digit IDs)
                     // lose precision / show as scientific notation -> keep them as text.
                     if (IsIntegral(num) &&
                         Math.Abs(Convert.ToDecimal(num, CultureInfo.InvariantCulture)) >= 1_000_000_000_000_000m)
-                        return raw.ToString();
+                        return NeutralizeFormula(raw.ToString());
                     return num;
 
                 case Kind.Date:
@@ -117,13 +117,22 @@ namespace ETL_SQL.Reporting
                         DateTimeOffset dto => dto.DateTime,
                         _ => DateTime.TryParse(raw.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
                             ? parsed
-                            : raw.ToString(),
+                            : NeutralizeFormula(raw.ToString()),
                     };
 
                 default:
-                    return raw.ToString();
+                    return NeutralizeFormula(raw.ToString());
             }
         }
+
+        // Excel interprets a cell beginning with =,+,-,@ (or a leading tab/CR) as a formula.
+        // Prefix a single quote so text cells render literally — blocks formula injection
+        // (e.g. =HYPERLINK/WEBSERVICE exfiltration) from stored report/dataset content. Only
+        // applies to text cells; typed number/date cells are emitted as CLR values, untouched.
+        private static string? NeutralizeFormula(string? s) =>
+            !string.IsNullOrEmpty(s) && s[0] is '=' or '+' or '-' or '@' or '\t' or '\r'
+                ? "'" + s
+                : s;
 
         private static bool IsIntegral(object? n) =>
             n is sbyte or byte or short or ushort or int or uint or long or ulong
