@@ -129,14 +129,59 @@ namespace ETL_SQL.Tests
         [Theory]
         [InlineData(PdfExportMode.Hosted)]
         [InlineData(PdfExportMode.Browser)]
-        public void ReportPdfExporter_ExplicitHighFidelityModesFailUntilImplemented(PdfExportMode mode)
+        public void ReportPdfExporter_ExplicitHighFidelityModesUseConfiguredExporter(PdfExportMode mode)
         {
             var manifest = new ReportManifest { Title = "Explicit PDF" };
+            var expected = new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D };
+            var exporter = new ReportPdfExporter(highFidelityExporter: new StubReportPdfExporter(expected));
 
-            var ex = Assert.Throws<System.InvalidOperationException>(() =>
-                new ReportPdfExporter().Export(manifest, new PdfExportOptions { Mode = mode }));
+            var bytes = exporter.Export(manifest, new PdfExportOptions { Mode = mode, Host = "http://localhost/report" });
 
-            Assert.Contains("not implemented yet", ex.Message);
+            Assert.Same(expected, bytes);
+        }
+
+        [Fact]
+        public void ReportPdfExporter_AutoTriesConfiguredHighFidelityExporter()
+        {
+            var manifest = new ReportManifest { Title = "Auto PDF" };
+            var expected = new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D };
+            var exporter = new ReportPdfExporter(highFidelityExporter: new StubReportPdfExporter(expected));
+
+            var bytes = exporter.Export(manifest, new PdfExportOptions
+            {
+                Mode = PdfExportMode.Auto,
+                Host = "http://localhost/report"
+            });
+
+            Assert.Same(expected, bytes);
+        }
+
+        [Fact]
+        public void ReportPdfExporter_AutoFallsBackWhenHighFidelityExporterFails()
+        {
+            string? warning = null;
+            var manifest = new ReportManifest
+            {
+                Title = "Auto PDF",
+                Visuals = new List<VisualManifest>
+                {
+                    new() { Name = "Summary", VisualType = "CARD",
+                            Columns = new List<string> { "metric" },
+                            Rows = new List<List<string?>> { new() { "42" } } },
+                }
+            };
+            var exporter = new ReportPdfExporter(highFidelityExporter: new ThrowingReportPdfExporter());
+
+            var bytes = exporter.Export(manifest, new PdfExportOptions
+            {
+                Mode = PdfExportMode.Auto,
+                Host = "http://localhost/report",
+                Warn = message => warning = message
+            });
+
+            Assert.True(bytes.Length > 100);
+            Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, bytes[..4]);
+            Assert.Contains("falling back to STATIC", warning);
         }
 
         [Fact]
@@ -202,6 +247,17 @@ namespace ETL_SQL.Tests
 
             Assert.NotNull(method);
             return (string?)method!.Invoke(null, new object[] { visual });
+        }
+
+        private sealed class StubReportPdfExporter(byte[] bytes) : IReportPdfExporter
+        {
+            public byte[] Export(ReportManifest manifest, PdfExportOptions? options = null) => bytes;
+        }
+
+        private sealed class ThrowingReportPdfExporter : IReportPdfExporter
+        {
+            public byte[] Export(ReportManifest manifest, PdfExportOptions? options = null) =>
+                throw new System.InvalidOperationException("boom");
         }
     }
 }

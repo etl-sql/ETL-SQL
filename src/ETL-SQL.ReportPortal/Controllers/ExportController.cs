@@ -16,7 +16,8 @@ namespace ETL_SQL.ReportPortal.Controllers;
 public class ExportController(
     PortalDbContext  db,
     PortalConfig     portalConfig,
-    AuditService     audit) : ControllerBase
+    AuditService     audit,
+    Microsoft.Extensions.Configuration.IConfiguration configuration) : ControllerBase
 {
     // ── Per-user PDF rate limit (tokens per minute) ────────────────────────────
     private static readonly ConcurrentDictionary<int, (int Count, DateTime WindowStart)> _pdfBucket = new();
@@ -148,8 +149,24 @@ public class ExportController(
         byte[] pdfBytes;
         try
         {
-            var exporter = new PdfExporter();
-            pdfBytes = exporter.Export(manifest);
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (Request.Headers.TryGetValue("Authorization", out var authorization)
+                && !string.IsNullOrWhiteSpace(authorization.ToString()))
+            {
+                headers["Authorization"] = authorization.ToString();
+            }
+
+            var viewerUrl = $"{Request.Scheme}://{Request.Host}/#report-{id}";
+            var exporter = new ReportPdfExporter();
+            pdfBytes = exporter.Export(manifest, new PdfExportOptions
+            {
+                Mode = PdfExportMode.Auto,
+                Host = viewerUrl,
+                BrowserPath = configuration["Portal:PdfExport:BrowserPath"]
+                    ?? configuration["ReportPortal:PdfExport:BrowserPath"],
+                RequestHeaders = headers,
+                Warn = message => { }
+            });
         }
         catch (Exception ex)
         {

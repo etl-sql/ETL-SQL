@@ -2604,7 +2604,7 @@ TO 'out/sales.md';
 | `HOST` | string | ReportPortal or `report serve` URL for hosted browser-backed export. |
 | `BROWSER_PATH` | string | Installed Chrome, Edge, or Chromium executable path for optional browser export. |
 
-`STATIC` uses the built-in PDFsharp/MigraDoc exporter and requires no browser. Explicit `HOSTED` and `BROWSER` modes require their corresponding exporter implementation/configuration. `AUTO` may fall back to `STATIC`.
+`STATIC` uses the built-in PDFsharp/MigraDoc exporter and requires no browser. Explicit `HOSTED` and `BROWSER` modes require a `HOST` URL and a discoverable or configured installed Chrome, Edge, or Chromium executable. `AUTO` may fall back to `STATIC`.
 
 ### A.10 `ALTER` / `DROP` / `CREATE OR ALTER`
 All report object types support these forms:

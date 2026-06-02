@@ -54,14 +54,14 @@ WITH (
 | HOST | report serve / ReportPortal URL for hosted export | none |
 | BROWSER_PATH | installed Chrome, Edge, or Chromium executable path | none |
 
-`STATIC` uses the built-in PDFsharp/MigraDoc exporter and requires no browser. `AUTO`, `HOSTED`, and `BROWSER` are reserved for high-fidelity browser-backed export; `AUTO` falls back to `STATIC` until a high-fidelity path is configured.
+`STATIC` uses the built-in PDFsharp/MigraDoc exporter and requires no browser. `HOSTED` and `BROWSER` use an installed Chrome, Edge, or Chromium browser with the shared report runtime. `AUTO` tries the configured browser-backed path when `HOST` is available and falls back to `STATIC` with a warning.
 
 ## Notes
 - For database destinations, the target table must exist unless the connection supports auto-create.
 - SFTP, S3, and API connection types are supported as destinations.
 - To control column order or filter rows before export, `SELECT ... INTO #subset` first.
 - `EXPORT SCRIPT` preserves published bundle relative paths but does not decrypt or reveal secrets; recovered scripts may require credentials to be re-entered.
-- Explicit `PDF_MODE = HOSTED` and `PDF_MODE = BROWSER` require the corresponding exporter implementation/configuration; use `PDF_MODE = AUTO` to allow fallback to `STATIC`.
+- Explicit `PDF_MODE = HOSTED` and `PDF_MODE = BROWSER` require a `HOST` URL and a discoverable or configured installed browser; use `PDF_MODE = AUTO` to allow fallback to `STATIC`.
 - See: CREATE CONNECTION, SELECT
 
 References:
