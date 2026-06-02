@@ -5,6 +5,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Parquet;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using Microsoft.EntityFrameworkCore;
@@ -61,11 +62,31 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
         await using var writer = new StreamWriter(output, Encoding.UTF8, leaveOpen: true);
 
         // Header
-        await writer.WriteLineAsync(string.Join(",", columns.Select(c => CsvQuote(c.Name))));
+        await writer.WriteLineAsync(string.Join(",", columns.Select(c => CsvQuote(NeutralizeCsvFormula(c.Name)))));
 
         // Data
         foreach (var row in filtered)
-            await writer.WriteLineAsync(string.Join(",", columns.Select(c => CsvQuote(row.GetValueOrDefault(c.Name)?.ToString()))));
+            await writer.WriteLineAsync(string.Join(",", columns.Select(c => CsvQuote(CsvCell(row.GetValueOrDefault(c.Name))))));
+    }
+
+    public async Task ExportXlsxAsync(
+        int id, string? sort, string? dir, string? search,
+        IEnumerable<DatasetColumnFilterDto> filters, Stream output, string sheetName = "Data")
+    {
+        var (rows, columns) = await LoadCachedAsync(id);
+        var filtered = Apply(rows, columns, search, filters);
+
+        if (!string.IsNullOrWhiteSpace(sort) && columns.Any(c => c.Name.Equals(sort, StringComparison.OrdinalIgnoreCase)))
+        {
+            bool desc = "desc".Equals(dir, StringComparison.OrdinalIgnoreCase);
+            filtered = desc
+                ? filtered.OrderByDescending(r => r.GetValueOrDefault(sort)).ToList()
+                : filtered.OrderBy(r => r.GetValueOrDefault(sort)).ToList();
+        }
+
+        // Columns carry their SQL type, so XlsxWriter emits typed number/date cells.
+        var cols = columns.Select(c => new XlsxWriter.Column(c.Name, c.Type)).ToList();
+        await XlsxWriter.WriteAsync(output, cols, filtered, sheetName);
     }
 
     public async Task<IEnumerable<DatasetColumnStatsDto>> GetStatsAsync(
@@ -295,6 +316,24 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
             return $"\"{s.Replace("\"", "\"\"")}\"";
         return s;
     }
+
+    // Render a cell for CSV, neutralizing formula injection on text values only (numbers/dates
+    // keep their natural representation — a negative number must not become text).
+    private static string CsvCell(object? v) =>
+        v switch
+        {
+            null      => "",
+            string s  => NeutralizeCsvFormula(s),
+            _         => v.ToString() ?? ""
+        };
+
+    // Excel/Sheets interpret a cell beginning with =,+,-,@ (or a leading tab/CR) as a formula.
+    // Prefix a single quote so spreadsheet apps render it as literal text — blocks CSV/formula
+    // injection (e.g. =HYPERLINK/WEBSERVICE exfiltration) from stored dataset content.
+    private static string NeutralizeCsvFormula(string s) =>
+        s.Length > 0 && s[0] is '=' or '+' or '-' or '@' or '\t' or '\r'
+            ? "'" + s
+            : s;
 
     private static List<DatasetColumnDto> ParseColumnSchema(string? json)
     {

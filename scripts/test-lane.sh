@@ -72,6 +72,10 @@ invoke_dotnet_test() {
     dotnet "${args[@]}"
 }
 
+invoke_lineage_ui_smoke() {
+    node "$REPO_ROOT/scripts/test-lineage-ui.mjs"
+}
+
 case "$LANE" in
     smoke)
         smoke_args=("--lane" "all" "--configuration" "$CONFIGURATION")
@@ -83,23 +87,27 @@ case "$LANE" in
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$FAST_FILTER"
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
         invoke_dotnet_test "tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" ""
+        invoke_lineage_ui_smoke
         ;;
     engine)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "$FAST_FILTER"
         ;;
     portal)
         invoke_dotnet_test "tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" ""
+        invoke_lineage_ui_smoke
         ;;
     integration)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "Category=Integration"
         ;;
     perf)
+        invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" "Category=Performance"
         invoke_dotnet_test "tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj" "Category=Performance"
         ;;
     full)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" ""
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
         invoke_dotnet_test "tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" ""
+        invoke_lineage_ui_smoke
         invoke_dotnet_test "tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj" ""
         ;;
     release)

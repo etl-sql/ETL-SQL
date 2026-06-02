@@ -445,31 +445,11 @@ namespace ETL_SQL.Data
 
         public async System.Threading.Tasks.Task AddRowAsync(Row row)
         {
-            if (row.Schema == null) row.SetSchema(Schema);
-            else if (row.Schema != Schema) row.SetSchema(Schema);
+            PrepareRowForAdd(row);
 
-            // Graphical Progress Hook
-            ETL_SQL.Core.Common.ExecutionNode.Current.Value?.IncrementRows();
-
-            // Enforce constraints (Unique, Primary Key, Check, Foreign Key)
             foreach (var constraint in Schema.Constraints)
             {
-                if (constraint.Type == ConstraintType.PrimaryKey || constraint.Type == ConstraintType.Unique)
-                {
-                    if (!_constraintCaches.TryGetValue(constraint, out var cache))
-                    {
-                        cache = new HashSet<object>(new RowEqualityComparer(constraint.Columns, Schema));
-                        _constraintCaches[constraint] = cache;
-                        foreach (var r in Rows) cache.Add(r);
-                    }
-
-                    if (!cache.Add(row))
-                    {
-                        var vals = string.Join(", ", constraint.Columns.Select(c => row[c]?.ToString() ?? "NULL"));
-                        throw new Core.Common.Exceptions.ExecutionException($"Unique constraint violation: {constraint.Name ?? "unnamed"} (values: {vals})");
-                    }
-                }
-                else if (constraint.Type == ConstraintType.Check && Validator != null && constraint.Expression != null)
+                if (constraint.Type == ConstraintType.Check && Validator != null && constraint.Expression != null)
                 {
                     if (!await Validator.ValidateCheckConstraint(constraint.Expression, row))
                     {
@@ -486,14 +466,65 @@ namespace ETL_SQL.Data
                 }
             }
 
+            ValidateSynchronousConstraints(row);
+            IncrementRowsAdded();
             Rows.Add(row);
         }
 
         [Obsolete("Use AddRowAsync to ensure all constraints (CHECK, FOREIGN KEY) are validated.")]
         public void AddRow(Row row)
         {
-            AddRowAsync(row).GetAwaiter().GetResult();
+            PrepareRowForAdd(row);
+
+            if (Schema.Constraints.Any(RequiresAsyncValidation))
+            {
+                throw new Core.Common.Exceptions.ExecutionException(
+                    "DataTable.AddRow cannot validate CHECK or FOREIGN KEY constraints synchronously. Use AddRowAsync.");
+            }
+
+            ValidateSynchronousConstraints(row);
+            IncrementRowsAdded();
+            Rows.Add(row);
         }
+
+        private void PrepareRowForAdd(Row row)
+        {
+            if (row.Schema == null) row.SetSchema(Schema);
+            else if (row.Schema != Schema) row.SetSchema(Schema);
+
+        }
+
+        private static void IncrementRowsAdded()
+        {
+            ETL_SQL.Core.Common.ExecutionNode.Current.Value?.IncrementRows();
+        }
+
+        private void ValidateSynchronousConstraints(Row row)
+        {
+            foreach (var constraint in Schema.Constraints)
+            {
+                if (constraint.Type != ConstraintType.PrimaryKey && constraint.Type != ConstraintType.Unique)
+                    continue;
+
+                if (!_constraintCaches.TryGetValue(constraint, out var cache))
+                {
+                    cache = new HashSet<object>(new RowEqualityComparer(constraint.Columns, Schema));
+                    _constraintCaches[constraint] = cache;
+                    foreach (var r in Rows) cache.Add(r);
+                }
+
+                if (!cache.Add(row))
+                {
+                    var vals = string.Join(", ", constraint.Columns.Select(c => row[c]?.ToString() ?? "NULL"));
+                    throw new Core.Common.Exceptions.ExecutionException($"Unique constraint violation: {constraint.Name ?? "unnamed"} (values: {vals})");
+                }
+            }
+        }
+
+        private bool RequiresAsyncValidation(TableConstraintInfo constraint) =>
+            Validator != null
+            && ((constraint.Type == ConstraintType.Check && constraint.Expression != null)
+                || (constraint.Type == ConstraintType.ForeignKey && constraint.ForeignKey != null));
 
         private class RowEqualityComparer : IEqualityComparer<object>
         {

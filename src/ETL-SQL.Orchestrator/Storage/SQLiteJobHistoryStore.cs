@@ -127,7 +127,11 @@ namespace ETL_SQL.Orchestrator.Storage
                     Operation TEXT NOT NULL,
                     Tags TEXT NOT NULL DEFAULT '{}',
                     SourceFile TEXT,
-                    Line INTEGER NOT NULL DEFAULT 0
+                    Line INTEGER NOT NULL DEFAULT 0,
+                    TransformationKind TEXT,
+                    TransformationExpression TEXT,
+                    FunctionsApplied TEXT NOT NULL DEFAULT '[]',
+                    DerivedFromDescriptions TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_lh_target ON LineageHistory(TargetTable COLLATE NOCASE);
                 CREATE INDEX IF NOT EXISTS idx_lh_runAt ON LineageHistory(RunAt);";
@@ -139,6 +143,7 @@ namespace ETL_SQL.Orchestrator.Storage
             // 8B-2: Schema migration — add resource tracking columns if missing
             await EnsureHistoryColumnsExist(connection);
             await EnsureJobColumnsExist(connection);
+            await EnsureLineageHistoryColumnsExist(connection);
         }
 
         private async Task EnsureJobColumnsExist(SqliteConnection connection)
@@ -217,6 +222,33 @@ namespace ETL_SQL.Orchestrator.Storage
                 cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN HashMatched INTEGER;";
                 await cmd.ExecuteNonQueryAsync();
             }
+        }
+
+        private async Task EnsureLineageHistoryColumnsExist(SqliteConnection connection)
+        {
+            var columns = new List<string>();
+            using (var cmd = connection.CreateCommand())
+            {
+                cmd.CommandText = "PRAGMA table_info(LineageHistory);";
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync()) columns.Add(reader.GetString(1));
+            }
+
+            async Task AddColumn(string name, string ddl)
+            {
+                if (columns.Contains(name)) return;
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = $"ALTER TABLE LineageHistory ADD COLUMN {ddl};";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            // SourceColumns predates this migration on new installs but may be
+            // missing on databases created before it was added to the schema.
+            await AddColumn("SourceColumns",            "SourceColumns TEXT NOT NULL DEFAULT '[]'");
+            await AddColumn("TransformationKind",       "TransformationKind TEXT");
+            await AddColumn("TransformationExpression", "TransformationExpression TEXT");
+            await AddColumn("FunctionsApplied",         "FunctionsApplied TEXT NOT NULL DEFAULT '[]'");
+            await AddColumn("DerivedFromDescriptions",  "DerivedFromDescriptions TEXT");
         }
 
         public async Task SaveJobAsync(JobDefinition job)
@@ -749,9 +781,11 @@ namespace ETL_SQL.Orchestrator.Storage
                     cmd.Transaction = transaction;
                     cmd.CommandText = @"
                         INSERT INTO LineageHistory
-                            (RunAt, JobName, ScriptPath, TargetTable, TargetColumn, SourceTables, SourceColumns, Operation, Tags, SourceFile, Line)
+                            (RunAt, JobName, ScriptPath, TargetTable, TargetColumn, SourceTables, SourceColumns, Operation, Tags, SourceFile, Line,
+                             TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions)
                         VALUES
-                            ($runAt, $job, $script, $target, $col, $sources, $srcCols, $op, $tags, $file, $line);";
+                            ($runAt, $job, $script, $target, $col, $sources, $srcCols, $op, $tags, $file, $line,
+                             $tkind, $texpr, $fns, $derived);";
                     cmd.Parameters.AddWithValue("$runAt",   runAtStr);
                     cmd.Parameters.AddWithValue("$job",     (object?)jobName    ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("$script",  (object?)scriptPath ?? DBNull.Value);
@@ -763,6 +797,10 @@ namespace ETL_SQL.Orchestrator.Storage
                     cmd.Parameters.AddWithValue("$tags",    JsonSerializer.Serialize(entry.Metadata));
                     cmd.Parameters.AddWithValue("$file",    (object?)entry.SourceFile ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("$line",    entry.Line);
+                    cmd.Parameters.AddWithValue("$tkind",   entry.TransformationKind == ETL_SQL.Core.TransformationKind.Unknown ? (object)DBNull.Value : entry.TransformationKind.ToString());
+                    cmd.Parameters.AddWithValue("$texpr",   (object?)entry.TransformationExpression ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$fns",     JsonSerializer.Serialize(entry.FunctionsApplied ?? (IReadOnlyList<string>)System.Array.Empty<string>()));
+                    cmd.Parameters.AddWithValue("$derived", (object?)entry.DerivedFromDescriptions ?? DBNull.Value);
                     await cmd.ExecuteNonQueryAsync();
                 }
                 await transaction.CommitAsync();
@@ -782,13 +820,51 @@ namespace ETL_SQL.Orchestrator.Storage
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line
+                       SourceTables, Operation, Tags, SourceFile, Line,
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
                 FROM LineageHistory
                 WHERE TargetTable = $table COLLATE NOCASE
                 ORDER BY RunAt DESC, Id DESC
                 LIMIT $limit;";
             cmd.Parameters.AddWithValue("$table", tableName);
             cmd.Parameters.AddWithValue("$limit", limit);
+            return await ReadLineageHistoryAsync(cmd);
+        }
+
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTablesAsync(
+            IReadOnlyCollection<string> tableNames, int limitPerTable = 100)
+        {
+            if (tableNames.Count == 0) return Array.Empty<LineageHistoryEntry>();
+
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+
+            // One round-trip for the whole set: a per-table ROW_NUMBER window applies the limit
+            // independently to each table (a plain LIMIT would cap the combined result instead).
+            var paramNames = new List<string>(tableNames.Count);
+            var i = 0;
+            foreach (var name in tableNames)
+            {
+                var p = "$t" + i++;
+                paramNames.Add(p);
+                cmd.Parameters.AddWithValue(p, name);
+            }
+            cmd.Parameters.AddWithValue("$limit", limitPerTable);
+            cmd.CommandText = $@"
+                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
+                       SourceTables, Operation, Tags, SourceFile, Line,
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
+                FROM (
+                    SELECT *, ROW_NUMBER() OVER (
+                        PARTITION BY TargetTable COLLATE NOCASE
+                        ORDER BY RunAt DESC, Id DESC) AS _rn
+                    FROM LineageHistory
+                    WHERE TargetTable COLLATE NOCASE IN ({string.Join(", ", paramNames)})
+                )
+                WHERE _rn <= $limit
+                ORDER BY RunAt DESC, Id DESC;";
             return await ReadLineageHistoryAsync(cmd);
         }
 
@@ -804,7 +880,8 @@ namespace ETL_SQL.Orchestrator.Storage
                 : $"%\"{tagKey}\":\"{tagValue}\"%";
             cmd.CommandText = @"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line
+                       SourceTables, Operation, Tags, SourceFile, Line,
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
                 FROM LineageHistory
                 WHERE Tags LIKE $pattern
                 ORDER BY RunAt DESC, Id DESC
@@ -822,7 +899,8 @@ namespace ETL_SQL.Orchestrator.Storage
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line
+                       SourceTables, Operation, Tags, SourceFile, Line,
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
                 FROM LineageHistory
                 WHERE JobName = $jobName COLLATE NOCASE
                 ORDER BY RunAt DESC, Id DESC
@@ -840,7 +918,8 @@ namespace ETL_SQL.Orchestrator.Storage
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line
+                       SourceTables, Operation, Tags, SourceFile, Line,
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
                 FROM LineageHistory
                 WHERE SourceTables LIKE $pattern
                 ORDER BY RunAt DESC, Id DESC
@@ -862,7 +941,8 @@ namespace ETL_SQL.Orchestrator.Storage
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line
+                       SourceTables, Operation, Tags, SourceFile, Line,
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
                 FROM LineageHistory
                 WHERE SourceFile = $sourceFile COLLATE NOCASE
                    OR ScriptPath = $sourceFile COLLATE NOCASE
@@ -881,6 +961,8 @@ namespace ETL_SQL.Orchestrator.Storage
             {
                 var sourceTables = JsonSerializer.Deserialize<List<string>>(reader.GetString(6)) ?? new List<string>();
                 var tags = JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(8)) ?? new Dictionary<string, string>();
+                var sourceColumns = reader.IsDBNull(11) ? new List<string>() : (JsonSerializer.Deserialize<List<string>>(reader.GetString(11)) ?? new List<string>());
+                var functions = reader.IsDBNull(14) ? new List<string>() : (JsonSerializer.Deserialize<List<string>>(reader.GetString(14)) ?? new List<string>());
                 results.Add(new LineageHistoryEntry(
                     reader.GetInt64(0),
                     DateTime.Parse(reader.GetString(1)),
@@ -892,7 +974,12 @@ namespace ETL_SQL.Orchestrator.Storage
                     reader.GetString(7),
                     tags,
                     reader.IsDBNull(9)  ? null : reader.GetString(9),
-                    reader.IsDBNull(10) ? 0    : reader.GetInt32(10)
+                    reader.IsDBNull(10) ? 0    : reader.GetInt32(10),
+                    sourceColumns,
+                    reader.IsDBNull(12) ? null : reader.GetString(12),
+                    reader.IsDBNull(13) ? null : reader.GetString(13),
+                    functions,
+                    reader.IsDBNull(15) ? null : reader.GetString(15)
                 ));
             }
             return results;

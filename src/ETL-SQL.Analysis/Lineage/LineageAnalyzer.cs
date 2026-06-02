@@ -10,7 +10,13 @@ namespace ETL_SQL.Analysis.Lineage
     public class LineageAnalyzer
     {
         public ILineageTracker Tracker { get; }
-        
+
+        // When set, the next analyzed SELECT records its column lineage against
+        // this target instead of the generic "RESULTSET" — used so a dataset's
+        // inner SELECT is keyed to the dataset name (and thus persists/queryable
+        // across scripts) rather than the ambiguous "RESULTSET".
+        private string? _selectTargetOverride;
+
         public LineageAnalyzer(ILineageTracker tracker)
         {
             Tracker = tracker;
@@ -100,7 +106,10 @@ namespace ETL_SQL.Analysis.Lineage
                     }
                 }
 
-                string target = (sel.IntoTable?.ConnectionName != null ? sel.IntoTable.ConnectionName + "." + sel.IntoTable.TableName : sel.IntoTable?.TableName) ?? "RESULTSET";
+                string target = _selectTargetOverride
+                    ?? (sel.IntoTable?.ConnectionName != null ? sel.IntoTable.ConnectionName + "." + sel.IntoTable.TableName : sel.IntoTable?.TableName)
+                    ?? "RESULTSET";
+                _selectTargetOverride = null;   // applies only to this immediate SELECT
                 
                 // Create table mapping for alias/unqualified resolution
                 var tableMapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -296,7 +305,11 @@ namespace ETL_SQL.Analysis.Lineage
                 string target = $"dataset:{dataset.TempTableName}";
                 var sources = dataset.SourceQuery.GetSourceTables().ToList();
                 Tracker.Record(target, sources, "CREATE DATASET", line: dataset.Line, column: dataset.Column, endLine: dataset.EndLine, endColumn: dataset.EndColumn);
+                // Key the inner SELECT's column lineage to the dataset target so it
+                // survives persistence and can be resolved by name from another script.
+                _selectTargetOverride = target;
                 AnalyzeStatement(dataset.SourceQuery);
+                _selectTargetOverride = null;
             }
             else if (stmt is CreateVisualStatement visual)
             {

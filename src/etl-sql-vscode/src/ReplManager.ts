@@ -118,8 +118,8 @@ export class ReplManager {
     }
     private async _start(exePath: string, args: string[], launchOptions?: ReplLaunchOptions): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-            const absoluteExePath = path.resolve(exePath);
-            const startMsg = `Starting ETL-SQL REPL: "${absoluteExePath}" ui repl ${this._redactArgs(args).join(' ')}`;
+            const launchCommand = this._resolveLaunchCommand(exePath);
+            const startMsg = `Starting ETL-SQL REPL: "${launchCommand}" ui repl ${this._redactArgs(args).join(' ')}`;
             this._outputChannel?.appendLine(startMsg);
 
             // Snapshot the generation at spawn time. If stop() is called before
@@ -127,7 +127,7 @@ export class ReplManager {
             // knows not to touch commands that belong to the newer session.
             const myGeneration = this._generation;
 
-            const child = cp.spawn(absoluteExePath, ["ui", "repl", ...args], {
+            const child = cp.spawn(launchCommand, ["ui", "repl", ...args], {
                 env: { ...process.env, ...launchOptions?.env, "FORCE_COLOR": "0" }
             });
             this._process = child;
@@ -170,6 +170,13 @@ export class ReplManager {
                 const text = data.toString().trimEnd();
                 if (text) {
                     this._outputChannel?.appendLine(text);
+                }
+            });
+
+            child.on('error', (err) => {
+                this._outputChannel?.appendLine(`[REPL] Error starting process: ${err.message}`);
+                if (!becameReady) {
+                    reject(err);
                 }
             });
 
@@ -266,6 +273,14 @@ export class ReplManager {
         this._outputChannel?.appendLine(`[REPL] STDIN ok: ${ok}`);
     }
 
+    private _resolveLaunchCommand(exePath: string): string {
+        if (path.isAbsolute(exePath) || exePath.includes('/') || exePath.includes('\\')) {
+            return path.resolve(exePath);
+        }
+
+        return exePath;
+    }
+
     private _handleMessage(msg: EngineMessage) {
         if (msg.type === 'pong') {
             this._outputChannel?.appendLine(`[REPL] Heartbeat: PONG received.`);
@@ -322,18 +337,25 @@ export class ReplManager {
     }
 
     public warmup(exePath: string, args: string[], launchOptions?: ReplLaunchOptions): void {
-        if (this._process) {
+        if (this._process || this._startPromise) {
             return;
         }
         const sessionIdx = args.indexOf('--session');
         if (sessionIdx !== -1 && sessionIdx + 1 < args.length) {
             this._currentSessionId = args[sessionIdx + 1];
         }
-        this._start(exePath, args, launchOptions).catch(() => {
+        const promise = this._start(exePath, args, launchOptions);
+        this._startPromise = promise;
+        promise.catch((err) => {
             // Warmup failures are silent; execute() will retry when the user runs.
+            this._outputChannel?.appendLine(`[REPL] Warmup failed (swallowed, will retry on execute): ${err?.message || err}`);
             this._process = undefined;
             this._isReady = false;
             this._currentSessionId = undefined;
+        }).finally(() => {
+            if (this._startPromise === promise) {
+                this._startPromise = undefined;
+            }
         });
     }
 

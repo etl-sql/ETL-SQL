@@ -152,6 +152,24 @@ See [Docs/Standards/Connectors_Standards.md](Docs/Standards/Connectors_Standards
 
 See [Docs/Standards/Presentation_Standards.md](Docs/Standards/Presentation_Standards.md) — the color system, layout rules, and error sanitization requirements.
 
+### Browser-side UI (portal / report runtime)
+
+The portal and report-runtime UI is plain ES-module JavaScript + CSS (no build step). Shared components live in `src/ETL-SQL.ReportRuntime/Resources/Shared/designer/`; portal-specific UI modules live under `src/ETL-SQL.ReportPortal/wwwroot/`.
+
+**Develop and test these without Docker or the full portal** using the UI sandbox:
+
+```powershell
+pwsh -File tools\ui-sandbox\serve.ps1
+```
+
+It serves a Storybook-style harness (opens at `http://localhost:8099/tools/ui-sandbox/index.html`) that imports the canonical/source files directly, so edits show on **↻ Reload** — no sync, no portal build, no catalog DB. Pick a component "story" and a fixture from the sidebar; components that call APIs are driven by a mock fetch so no server is needed. See [`tools/ui-sandbox/README.md`](tools/ui-sandbox/README.md) for the story list and how to add one.
+
+**Build & deploy notes:**
+
+- The sandbox is **dev-only** — it is not part of any build or shipped artifact (safe to delete).
+- After editing a **canonical** shared asset under `Resources/Shared/...`, run `scripts/sync-assets.ps1` so the host copies (`wwwroot`, VS Code `media`) match. CI fails if they drift — verify with `scripts/sync-assets.ps1 -Check`.
+- To run a change in the real portal, build/run the `ETL-SQL.ReportPortal` project as usual.
+
 ---
 
 ## 5. Writing Tests

@@ -1,0 +1,14 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT Step, Label FROM #LoopDecisions ORDER BY Step;",
+      "rows": [
+        { "Step": 1, "Label": "kept" },
+        { "Step": 2, "Label": "kept" },
+        { "Step": 4, "Label": "kept" },
+        { "Step": 5, "Label": "kept" },
+        { "Step": 6, "Label": "kept" }
+      ]
+    }
+  ]
+}

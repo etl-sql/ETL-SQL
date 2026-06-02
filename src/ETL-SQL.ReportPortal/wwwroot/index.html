@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ETL-SQL Report Portal</title>
   <link rel="stylesheet" href="/css/portal.css">
+  <link rel="stylesheet" href="/designer/designer.css">
 </head>
 <body>
 <div class="app-shell">
 
   <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
   <header class="topbar">
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle navigation menu">☰</button>
     <span class="topbar-brand"><span class="brand-mark">E</span> <span class="portal-brand-name">ETL-SQL Portal</span></span>
     <nav class="topbar-nav">
       <a href="/index.html" class="active" id="navReports">Reports</a>
@@ -21,6 +23,7 @@
     </nav>
     <span class="topbar-spacer"></span>
     <span class="topbar-user" id="topbarUser"></span>
+    <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" type="button">🌓</button>
     <button class="topbar-btn" id="logoutBtn">Sign Out</button>
   </header>
 
@@ -54,7 +57,7 @@
         <span>Folders</span>
         <span class="sidebar-hint">Report library</span>
       </div>
-      <div class="sidebar-tree" id="folderTree">
+      <div class="sidebar-tree" id="folderTree" role="tree" aria-label="Report folders">
         <div class="loading-state loading-state-compact">Loading folders…</div>
       </div>
     </aside>
@@ -103,6 +106,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" id="exportCsvBtn">CSV</button>
+      <button class="btn btn-outline" id="exportXlsxBtn">Excel</button>
       <button class="btn btn-outline" id="exportPdfBtn">PDF</button>
       <button class="btn btn-outline" id="exportCancelBtn">Cancel</button>
     </div>
@@ -163,7 +167,7 @@
         <p class="section-kicker">Details</p>
         <div class="form-row">
           <div class="form-group">
-            <label>Subscription Name <span class="text-muted text-sm">(optional)</span></label>
+            <label for="sub-name">Subscription Name <span class="text-muted text-sm">(optional)</span></label>
             <input id="sub-name" type="text" placeholder="e.g. Weekly Finance">
           </div>
         </div>
@@ -173,7 +177,7 @@
         <p class="section-kicker">Delivery</p>
         <div class="form-row">
           <div class="form-group">
-            <label>Schedule</label>
+            <label for="sub-schedule">Schedule</label>
             <select id="sub-schedule">
               <option value="Daily">Daily</option>
               <option value="Weekly">Weekly</option>
@@ -182,13 +186,13 @@
             </select>
           </div>
           <div class="form-group">
-            <label>Delivery Time <span class="text-muted text-sm">(HH:MM, optional)</span></label>
+            <label for="sub-attime">Delivery Time <span class="text-muted text-sm">(HH:MM, optional)</span></label>
             <input id="sub-attime" type="time">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Format</label>
+            <label for="sub-format">Format</label>
             <select id="sub-format">
               <option value="PDF">PDF</option>
               <option value="CSV">CSV</option>
@@ -197,13 +201,13 @@
             </select>
           </div>
           <div class="form-group" id="sub-smtp-group">
-            <label>SMTP Connection</label>
+            <label for="sub-smtp">SMTP Connection</label>
             <select id="sub-smtp"></select>
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Recipient Email <span class="text-muted text-sm">(uses your profile email if blank)</span></label>
+            <label for="sub-email">Recipient Email <span class="text-muted text-sm">(uses your profile email if blank)</span></label>
             <input id="sub-email" type="email" placeholder="user@example.com">
           </div>
         </div>
@@ -248,11 +252,22 @@
 <script src="/js/echarts.min.js"></script>
 <script type="module">
 import { auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
-import { applyPortalBranding } from '/js/branding.js';
+import { applyPortalBranding, initTheme } from '/js/branding.js';
+import { lineageRowsToCsv, renderDependencies, renderLineageRow } from '/js/lineage-ui.js';
+import { createLineageCatalog } from '/js/lineage-catalog.js';
 import { renderDag } from '/designer/designer.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
+initTheme();
+
+function transitionDOM(updateCallback) {
+  if (document.startViewTransition) {
+    document.startViewTransition(updateCallback);
+  } else {
+    updateCallback();
+  }
+}
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
 let currentFolderId   = null;
@@ -347,7 +362,84 @@ async function init() {
   wireSubscribeModal();
   wireEditParamsModal();
   await loadFolderTree();
+  initModalA11y();
   openReportHashView();
+}
+
+function initModalA11y() {
+  let previouslyFocusedElement = null;
+
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      if (mutation.attributeName === 'style') {
+        const modal = mutation.target;
+        const isOpen = modal.style.display === 'flex' || modal.style.display === 'block';
+        
+        if (isOpen) {
+          previouslyFocusedElement = document.activeElement;
+          const focusableElements = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+          if (focusableElements.length > 0) {
+            // Find first visible focusable element
+            const focusables = Array.from(focusableElements).filter(el => !el.disabled && el.offsetParent !== null);
+            if (focusables.length > 0) {
+              focusables[0].focus();
+            }
+            
+            modal._trapFocus = function(e) {
+              if (e.key === 'Tab') {
+                const visibleFocusables = Array.from(modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(el => !el.disabled && el.offsetParent !== null);
+                if (visibleFocusables.length === 0) return;
+                const first = visibleFocusables[0];
+                const last = visibleFocusables[visibleFocusables.length - 1];
+                
+                if (e.shiftKey) {
+                  if (document.activeElement === first) {
+                    last.focus();
+                    e.preventDefault();
+                  }
+                } else {
+                  if (document.activeElement === last) {
+                    first.focus();
+                    e.preventDefault();
+                  }
+                }
+              }
+            };
+            modal.addEventListener('keydown', modal._trapFocus);
+          }
+          
+          modal._escapeClose = function(e) {
+            if (e.key === 'Escape') {
+              const closeBtn = modal.querySelector('#structureCloseBtn, #exportCancelBtn, #dependenciesCloseBtn, #historyCloseBtn, #sub-cancelBtn, #ep-cancelBtn, .btn-outline, button');
+              if (closeBtn) {
+                closeBtn.click();
+              } else {
+                modal.style.display = 'none';
+              }
+            }
+          };
+          document.addEventListener('keydown', modal._escapeClose);
+        } else {
+          if (modal._trapFocus) {
+            modal.removeEventListener('keydown', modal._trapFocus);
+            delete modal._trapFocus;
+          }
+          if (modal._escapeClose) {
+            document.removeEventListener('keydown', modal._escapeClose);
+            delete modal._escapeClose;
+          }
+          if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
+            previouslyFocusedElement.focus();
+            previouslyFocusedElement = null;
+          }
+        }
+      }
+    });
+  });
+
+  document.querySelectorAll('.modal-overlay').forEach(modal => {
+    observer.observe(modal, { attributes: true, attributeFilter: ['style'] });
+  });
 }
 
 function setReportHash(hash) {
@@ -395,12 +487,14 @@ function showReportLibraryHome() {
   currentFolderId = null;
   currentFolderName = '';
   currentReportId = null;
-  document.getElementById('mainContent').innerHTML = `
-    <div class="empty-state empty-state-panel">
-      <div class="empty-state-icon empty-state-icon-folder" aria-hidden="true"></div>
-      <h2>Select a folder</h2>
-      <p>Choose a report folder from the library to view available reports.</p>
-    </div>`;
+  transitionDOM(() => {
+    document.getElementById('mainContent').innerHTML = `
+      <div class="empty-state empty-state-panel">
+        <div class="empty-state-icon empty-state-icon-folder" aria-hidden="true"></div>
+        <h2>Select a folder</h2>
+        <p>Choose a report folder from the library to view available reports.</p>
+      </div>`;
+  });
 }
 
 // ── Folder tree ────────────────────────────────────────────────────────────────
@@ -435,15 +529,28 @@ function renderFolderChildren($parent, nodes, depth) {
     const $item = document.createElement('div');
     $item.className = 'folder-item';
     $item.dataset.id = node.id;
+    $item.setAttribute('role', 'treeitem');
+    $item.setAttribute('tabindex', '0');
+    $item.setAttribute('aria-selected', 'false');
+    if (node.children.length) {
+      $item.setAttribute('aria-expanded', 'true');
+    }
     $item.style.marginLeft = `${depth * 10}px`;
     $item.innerHTML = `<span class="folder-icon ${node.children.length ? 'folder-icon-parent' : 'folder-icon-leaf'}" aria-hidden="true"></span>
                        <span class="folder-name">${esc(node.name)}</span>`;
     $item.addEventListener('click', () => selectFolder(node.id, node.name));
+    $item.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectFolder(node.id, node.name);
+      }
+    });
     $parent.appendChild($item);
 
     if (node.children.length) {
       const $sub = document.createElement('div');
       $sub.className = 'folder-children';
+      $sub.setAttribute('role', 'group');
       renderFolderChildren($sub, node.children, depth + 1);
       $parent.appendChild($sub);
     }
@@ -452,8 +559,11 @@ function renderFolderChildren($parent, nodes, depth) {
 
 function selectFolder(id, name) {
   setSidebarViewActive('library');
-  document.querySelectorAll('.folder-item').forEach(el =>
-    el.classList.toggle('active', el.dataset.id == id));
+  document.querySelectorAll('.folder-item').forEach(el => {
+    const isActive = el.dataset.id == id;
+    el.classList.toggle('active', isActive);
+    el.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
   currentFolderId   = id;
   currentFolderName = name;
   currentReportId   = null;
@@ -491,14 +601,16 @@ function renderReportList(reports, folderName) {
   const filteredReports = sortReports(filterReports(reports));
 
   if (!reports.length) {
-    $main.innerHTML = `
-      ${renderLibraryToolbar(folderName, reports, false)}
-      <div class="empty-state empty-state-panel">
-        <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
-        <h2>No reports here yet</h2>
-        <p>This folder is ready. Publish a report into it from Admin or the ETL-SQL publish workflow.</p>
-      </div>`;
-    wireLibraryToolbar();
+    transitionDOM(() => {
+      $main.innerHTML = `
+        ${renderLibraryToolbar(folderName, reports, false)}
+        <div class="empty-state empty-state-panel">
+          <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
+          <h2>No reports here yet</h2>
+          <p>This folder is ready. Publish a report into it from Admin or the ETL-SQL publish workflow.</p>
+        </div>`;
+      wireLibraryToolbar();
+    });
     return;
   }
 
@@ -514,13 +626,20 @@ function renderReportList(reports, folderName) {
 
     return `
       <div class="report-card" data-id="${r.id}">
-        <div class="report-preview">
-          <iframe title="${escAttr(name)} preview" srcdoc="${previewHtml}" loading="lazy"></iframe>
+        <div class="report-preview" data-srcdoc="${previewHtml}">
+          <div class="report-preview-placeholder">
+            <div class="mock-header"></div>
+            <div class="mock-grid">
+              <div class="mock-widget">📊</div>
+              <div class="mock-widget">📈</div>
+            </div>
+            <div class="mock-footer"></div>
+          </div>
         </div>
         <div class="report-card-body">
           <div class="report-card-title-row">
             <span class="report-glyph" aria-hidden="true"></span>
-            <h3>${esc(name)}</h3>
+            <h3><a href="#report-${r.id}" class="report-card-link" data-id="${r.id}">${esc(name)}</a></h3>
             <button class="favorite-btn ${r.isFavorite ? 'is-active' : ''}" data-favorite-id="${r.id}" title="${r.isFavorite ? 'Remove favorite' : 'Add favorite'}" type="button">${r.isFavorite ? '★' : '☆'}</button>
           </div>
           <p>${esc(description)}</p>
@@ -537,20 +656,41 @@ function renderReportList(reports, folderName) {
       </div>`;
   }).join('');
 
-  $main.innerHTML = `
-    ${renderLibraryToolbar(folderName, reports, true, filteredReports.length)}
-    ${filteredReports.length
-      ? `<div class="report-grid">${cards}</div>`
-      : `<div class="empty-state empty-state-panel">
-          <div class="empty-state-icon empty-state-icon-search" aria-hidden="true"></div>
-          <h2>No matching reports</h2>
-          <p>Clear the search box or try a broader report name or description.</p>
-        </div>`}`;
+  transitionDOM(() => {
+    $main.innerHTML = `
+      ${renderLibraryToolbar(folderName, reports, true, filteredReports.length)}
+      ${filteredReports.length
+        ? `<div class="report-grid">${cards}</div>`
+        : `<div class="empty-state empty-state-panel">
+            <div class="empty-state-icon empty-state-icon-search" aria-hidden="true"></div>
+            <h2>No matching reports</h2>
+            <p>Clear the search box or try a broader report name or description.</p>
+          </div>`}`;
 
-  wireLibraryToolbar();
-  wireFavoriteButtons($main);
-  $main.querySelectorAll('.report-card').forEach(el =>
-    el.addEventListener('click', () => openReport(+el.dataset.id)));
+    wireLibraryToolbar();
+    wireFavoriteButtons($main);
+    $main.querySelectorAll('.report-card').forEach(el => {
+      el.addEventListener('click', e => {
+        if (e.target.closest('.favorite-btn')) return;
+        e.preventDefault();
+        openReport(+el.dataset.id);
+      });
+
+      const previewEl = el.querySelector('.report-preview');
+      if (previewEl) {
+        previewEl.addEventListener('mouseenter', () => {
+          if (previewEl.querySelector('iframe')) return;
+          const srcdoc = previewEl.dataset.srcdoc;
+          const iframe = document.createElement('iframe');
+          iframe.title = `${el.querySelector('h3').textContent} preview`;
+          iframe.srcdoc = srcdoc;
+          iframe.loading = "lazy";
+          previewEl.innerHTML = '';
+          previewEl.appendChild(iframe);
+        }, { once: true });
+      }
+    });
+  });
 }
 
 function renderLibraryToolbar(folderName, reports, showControls, visibleCount = reports.length) {
@@ -649,7 +789,7 @@ function renderCatalogReportList(title, reports, emptyText) {
         <span class="report-glyph" aria-hidden="true"></span>
         <div class="catalog-report-main">
           <div class="report-card-title-row">
-            <h3>${esc(r.name || '')}</h3>
+            <h3><a href="#report-${r.id}" class="report-card-link" data-id="${r.id}">${esc(r.name || '')}</a></h3>
             <button class="favorite-btn ${r.isFavorite ? 'is-active' : ''}" data-favorite-id="${r.id}" title="${r.isFavorite ? 'Remove favorite' : 'Add favorite'}" type="button">${r.isFavorite ? '★' : '☆'}</button>
           </div>
           <p>${esc(r.description || r.path || 'No description provided.')}</p>
@@ -667,356 +807,53 @@ function renderCatalogReportList(title, reports, emptyText) {
       </div>`;
   }).join('');
 
-  $main.innerHTML = `
-    <div class="library-toolbar">
-      <div class="library-title">
-        <span class="library-kicker">Catalog</span>
-        <h2>${esc(title)}</h2>
-      </div>
-      <span class="badge badge-refresh">${reports.length} report${reports.length === 1 ? '' : 's'}</span>
-      <div class="library-toolbar-spacer"></div>
-      <button class="btn btn-outline" id="refreshCatalogBtn" type="button">Refresh</button>
-    </div>
-    ${reports.length
-      ? `<div class="catalog-report-list">${rows}</div>`
-      : `<div class="empty-state empty-state-panel">
-          <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
-          <h2>No ${esc(title.toLowerCase())} reports</h2>
-          <p>${esc(emptyText)}</p>
-        </div>`}`;
-
-  document.getElementById('refreshCatalogBtn')?.addEventListener('click', () =>
-    title === 'Favorites' ? showFavorites() : showRecentlyViewed());
-  wireFavoriteButtons($main, () => title === 'Favorites' ? showFavorites() : showRecentlyViewed());
-  $main.querySelectorAll('.catalog-report-row').forEach(el => {
-    el.addEventListener('click', () => {
-      currentFolderId = +el.dataset.folderId;
-      currentFolderName = el.dataset.folderPath || 'Reports';
-      openReport(+el.dataset.id);
-    });
-  });
-}
-
-const LINEAGE_VIEW_KEY = 'etlsql_lineage_views';
-const lineageState = { kind: 'table', query: '', column: '', tagValue: '', from: '', to: '', limit: 100, rows: [], savedViews: [], selectedView: '', view: 'table' };
-let lineageDagInstance = null;
-
-function showLineageCatalog() {
-  setSidebarViewActive('lineage');
-  clearFolderSelection();
-  lineageState.savedViews = loadLineageViews();
-  const $main = document.getElementById('mainContent');
-  const valueLabel = lineageState.kind === 'tag' ? 'Tag key' : lineageState.kind === 'source-file' ? 'Source file' : 'Name';
-  const savedOptions = lineageState.savedViews
-    .map(v => `<option value="${escAttr(v.name)}"${v.name === lineageState.selectedView ? ' selected' : ''}>${esc(v.name)}</option>`)
-    .join('');
-  $main.innerHTML = `
-    <div class="library-toolbar lineage-toolbar">
-      <div class="library-title">
-        <span class="library-kicker">Catalog</span>
-        <h2>Lineage</h2>
-        <span class="folder-count">Cross-run history with report context</span>
-      </div>
-      <form id="lineageSearchForm" class="lineage-query" autocomplete="off">
-        <select id="lineageKind" class="library-sort" aria-label="Lineage query type">
-          <option value="table"${lineageState.kind === 'table' ? ' selected' : ''}>Target table</option>
-          <option value="source"${lineageState.kind === 'source' ? ' selected' : ''}>Source table</option>
-          <option value="source-file"${lineageState.kind === 'source-file' ? ' selected' : ''}>Source file</option>
-          <option value="tag"${lineageState.kind === 'tag' ? ' selected' : ''}>Tag</option>
-          <option value="job"${lineageState.kind === 'job' ? ' selected' : ''}>Job</option>
-        </select>
-        <label class="library-search lineage-search">
-          <span class="search-icon" aria-hidden="true"></span>
-          <input id="lineageQuery" type="search" placeholder="${escAttr(valueLabel)}" value="${escAttr(lineageState.query)}">
-        </label>
-        <input id="lineageColumn" class="lineage-input lineage-column" type="search" placeholder="Column" value="${escAttr(lineageState.column)}" ${lineageState.kind === 'table' ? '' : 'hidden'}>
-        <input id="lineageTagValue" class="lineage-input" type="search" placeholder="Tag value" value="${escAttr(lineageState.tagValue)}" ${lineageState.kind === 'tag' ? '' : 'hidden'}>
-        <input id="lineageFrom" class="lineage-date" type="date" value="${escAttr(lineageState.from)}" aria-label="From date">
-        <input id="lineageTo" class="lineage-date" type="date" value="${escAttr(lineageState.to)}" aria-label="To date">
-        <button class="btn btn-primary" type="submit">Search</button>
-        <button class="btn btn-outline" id="lineageExportBtn" type="button" ${lineageState.rows.length ? '' : 'disabled'}>Export CSV</button>
-        <button class="btn btn-outline" id="lineageViewToggle" type="button">${lineageState.view === 'graph' ? 'Table' : 'Graph'}</button>
-        <select id="lineageSavedView" class="library-sort lineage-saved" aria-label="Saved lineage view">
-          <option value="">Saved views</option>
-          ${savedOptions}
-        </select>
-        <button class="btn btn-outline" id="lineageSaveViewBtn" type="button">Save View</button>
-        <button class="btn btn-outline" id="lineageDeleteViewBtn" type="button" ${lineageState.selectedView ? '' : 'disabled'}>Delete</button>
-      </form>
-    </div>
-    <div id="lineageResults">${renderLineageEmpty()}</div>`;
-
-  const $form = document.getElementById('lineageSearchForm');
-  document.getElementById('lineageKind').addEventListener('change', e => {
-    lineageState.kind = e.target.value;
-    lineageState.column = '';
-    lineageState.tagValue = '';
-    lineageState.rows = [];
-    showLineageCatalog();
-  });
-  $form.addEventListener('submit', async e => {
-    e.preventDefault();
-    lineageState.kind = document.getElementById('lineageKind').value;
-    lineageState.query = document.getElementById('lineageQuery').value.trim();
-    lineageState.column = document.getElementById('lineageColumn').value.trim();
-    lineageState.tagValue = document.getElementById('lineageTagValue').value.trim();
-    lineageState.from = document.getElementById('lineageFrom').value;
-    lineageState.to = document.getElementById('lineageTo').value;
-    await loadLineageResults();
-  });
-  document.getElementById('lineageExportBtn').addEventListener('click', exportLineageCsv);
-  document.getElementById('lineageViewToggle').addEventListener('click', () => {
-    lineageState.view = lineageState.view === 'graph' ? 'table' : 'graph';
-    document.getElementById('lineageViewToggle').textContent = lineageState.view === 'graph' ? 'Table' : 'Graph';
-    if (lineageState.rows.length) renderLineageResults(lineageState.rows);
-  });
-  document.getElementById('lineageSavedView').addEventListener('change', applySelectedLineageView);
-  document.getElementById('lineageSaveViewBtn').addEventListener('click', saveCurrentLineageView);
-  document.getElementById('lineageDeleteViewBtn').addEventListener('click', deleteSelectedLineageView);
-
-  if (lineageState.query) loadLineageResults();
-}
-
-function renderLineageEmpty(message = 'Choose a catalog query and run Search.') {
-  return `<div class="empty-state empty-state-panel">
-    <div class="empty-state-icon empty-state-icon-lineage" aria-hidden="true"></div>
-    <h2>No lineage results</h2>
-    <p>${esc(message)}</p>
-  </div>`;
-}
-
-async function loadLineageResults() {
-  const $results = document.getElementById('lineageResults');
-  if (!lineageState.query) {
-    lineageState.rows = [];
-    $results.innerHTML = renderLineageEmpty('Enter a table, source, file, tag, or job name.');
-    return;
-  }
-  $results.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading lineage…</span></div>`;
-  try {
-    const args = {
-      limit: lineageState.limit,
-      from: lineageDateStart(lineageState.from),
-      to: lineageDateEnd(lineageState.to)
-    };
-    if (lineageState.kind === 'tag') {
-      args.key = lineageState.query;
-      if (lineageState.tagValue) args.value = lineageState.tagValue;
-    } else if (lineageState.kind === 'source-file') {
-      args.path = lineageState.query;
-    } else {
-      args.name = lineageState.query;
-      if (lineageState.kind === 'table' && lineageState.column) args.column = lineageState.column;
-    }
-
-    const rows = await catalogApi.lineage(lineageState.kind, args);
-    lineageState.rows = rows || [];
-    renderLineageResults(rows || []);
-    document.getElementById('lineageExportBtn')?.toggleAttribute('disabled', !lineageState.rows.length);
-  } catch (err) {
-    lineageState.rows = [];
-    $results.innerHTML = `<div class="empty-state empty-state-panel empty-state-error">
-      <div class="empty-state-icon empty-state-icon-alert" aria-hidden="true"></div>
-      <h2>Lineage query failed</h2>
-      <p>${esc(err.message)}</p>
-    </div>`;
-  }
-}
-
-function renderLineageResults(rows) {
-  const $results = document.getElementById('lineageResults');
-  if (lineageDagInstance) { lineageDagInstance.dispose(); lineageDagInstance = null; }
-  if (!rows.length) {
-    lineageState.rows = [];
-    $results.innerHTML = renderLineageEmpty('No matching lineage history was found.');
-    return;
-  }
-
-  if (lineageState.view === 'graph') {
-    renderLineageDag(rows);
-    return;
-  }
-
-  $results.innerHTML = `
-    <div class="lineage-result-list">
-      ${rows.map(renderLineageRow).join('')}
-    </div>`;
-
-  $results.querySelectorAll('[data-open-report]').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      openReport(+btn.dataset.openReport);
-    });
-  });
-}
-
-function renderLineageDag(rows) {
-  const $results = document.getElementById('lineageResults');
-  $results.innerHTML = '<div id="lineageDagContainer" style="height:480px;"></div>';
-  const container = document.getElementById('lineageDagContainer');
-
-  const targets = new Set(rows.map(r => r.targetTable).filter(Boolean));
-  const sources = new Set(rows.flatMap(r => r.sourceTables || []).filter(Boolean));
-  const allTables = new Set([...targets, ...sources]);
-
-  const nodeMap = {};
-  [...allTables].forEach((name, i) => {
-    const isTarget = targets.has(name);
-    const isSource = sources.has(name);
-    const type = isTarget && isSource ? 'dataset' : isTarget ? 'io' : 'table';
-    nodeMap[name] = { id: `t${i}`, label: name, type };
-  });
-
-  const nodes = Object.values(nodeMap);
-  const seenEdges = new Set();
-  const edges = [];
-  for (const row of rows) {
-    if (!row.targetTable || !nodeMap[row.targetTable]) continue;
-    for (const src of (row.sourceTables || [])) {
-      if (!src || !nodeMap[src]) continue;
-      const key = `${src}->${row.targetTable}`;
-      if (!seenEdges.has(key)) {
-        seenEdges.add(key);
-        edges.push({ source: nodeMap[src].id, target: nodeMap[row.targetTable].id, label: row.operation || null });
-      }
-    }
-  }
-
-  lineageDagInstance = renderDag(container, { nodes, edges });
-}
-
-function renderLineageRow(row) {
-  const target = row.targetColumn ? `${row.targetTable}.${row.targetColumn}` : row.targetTable;
-  const sources = (row.sourceTables || []).join(', ') || 'None recorded';
-  const report = row.reportId
-    ? `<button class="btn btn-outline btn-sm" type="button" data-open-report="${row.reportId}">${esc(row.reportName || `Report ${row.reportId}`)}</button>`
-    : '<span class="lineage-muted">No report link</span>';
-  return `
-    <div class="lineage-result-row">
-      <div class="lineage-run">
-        <strong>${esc(timeAgo(row.runAt))}</strong>
-        <span>${esc(formatBuiltAt(row.runAt))}</span>
-      </div>
-      <div class="lineage-main">
-        <div class="lineage-title">
-          <code>${esc(target)}</code>
-          <span class="badge">${esc(row.operation || 'UNKNOWN')}</span>
+  transitionDOM(() => {
+    $main.innerHTML = `
+      <div class="library-toolbar">
+        <div class="library-title">
+          <span class="library-kicker">Catalog</span>
+          <h2>${esc(title)}</h2>
         </div>
-        <div class="lineage-detail">Sources: ${esc(sources)}</div>
-        <div class="lineage-detail">Job: ${esc(row.jobName || 'Ad hoc')}${row.sourceFile ? ` · File: ${esc(row.sourceFile)}` : ''}</div>
-        ${formatTags(row.tags) ? `<div class="lineage-tags">${esc(formatTags(row.tags))}</div>` : ''}
+        <span class="badge badge-refresh">${reports.length} report${reports.length === 1 ? '' : 's'}</span>
+        <div class="library-toolbar-spacer"></div>
+        <button class="btn btn-outline" id="refreshCatalogBtn" type="button">Refresh</button>
       </div>
-      <div class="lineage-report">
-        ${report}
-        ${row.folderPath ? `<span>${esc(row.folderPath)}</span>` : ''}
-      </div>
-    </div>`;
-}
+      ${reports.length
+        ? `<div class="catalog-report-list">${rows}</div>`
+        : `<div class="empty-state empty-state-panel">
+            <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
+            <h2>No ${esc(title.toLowerCase())} reports</h2>
+            <p>${esc(emptyText)}</p>
+          </div>`}`;
 
-function lineageDateStart(value) {
-  return value ? `${value}T00:00:00Z` : null;
-}
-
-function lineageDateEnd(value) {
-  return value ? `${value}T23:59:59Z` : null;
-}
-
-function exportLineageCsv() {
-  if (!lineageState.rows.length) return;
-  const headers = ['RunAt', 'JobName', 'Report', 'Folder', 'Target', 'Operation', 'Sources', 'Tags', 'SourceFile', 'Line'];
-  const rows = lineageState.rows.map(row => {
-    const target = row.targetColumn ? `${row.targetTable}.${row.targetColumn}` : row.targetTable;
-    return [
-      row.runAt || '',
-      row.jobName || '',
-      row.reportName || '',
-      row.folderPath || '',
-      target,
-      row.operation || '',
-      (row.sourceTables || []).join('; '),
-      formatTags(row.tags),
-      row.sourceFile || '',
-      row.line ?? ''
-    ];
+    document.getElementById('refreshCatalogBtn')?.addEventListener('click', () =>
+      title === 'Favorites' ? showFavorites() : showRecentlyViewed());
+    wireFavoriteButtons($main, () => title === 'Favorites' ? showFavorites() : showRecentlyViewed());
+    $main.querySelectorAll('.catalog-report-row').forEach(el => {
+      el.addEventListener('click', e => {
+        if (e.target.closest('.favorite-btn')) return;
+        e.preventDefault();
+        currentFolderId = +el.dataset.folderId;
+        currentFolderName = el.dataset.folderPath || 'Reports';
+        openReport(+el.dataset.id);
+      });
+    });
   });
-  const csv = [headers, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `lineage-${lineageState.kind}-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
-function csvCell(value) {
-  const text = String(value ?? '');
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-function loadLineageViews() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(LINEAGE_VIEW_KEY) || '[]');
-    return Array.isArray(parsed)
-      ? parsed.filter(v => v && typeof v.name === 'string').sort((a, b) => a.name.localeCompare(b.name))
-      : [];
-  } catch {
-    return [];
+// The catalog-wide "Lineage" sidebar view lives in js/lineage-catalog.js so it can
+// be unit-tested and previewed in the UI sandbox. This wrapper binds it to the portal.
+let lineageCatalog = null;
+function showLineageCatalog() {
+  if (!lineageCatalog) {
+    lineageCatalog = createLineageCatalog({
+      host: document.getElementById('mainContent'),
+      catalogApi, renderDag, renderLineageRow, lineageRowsToCsv,
+      openReport, timeAgo, formatBuiltAt,
+      prepare: () => { setSidebarViewActive('lineage'); clearFolderSelection(); },
+    });
   }
-}
-
-function persistLineageViews(views) {
-  localStorage.setItem(LINEAGE_VIEW_KEY, JSON.stringify(views));
-}
-
-function currentLineageView(name) {
-  return {
-    name,
-    kind: lineageState.kind,
-    query: lineageState.query,
-    column: lineageState.column,
-    tagValue: lineageState.tagValue,
-    from: lineageState.from,
-    to: lineageState.to
-  };
-}
-
-function saveCurrentLineageView() {
-  const name = prompt('Saved view name', lineageState.query || lineageState.kind);
-  if (!name || !name.trim()) return;
-  lineageState.savedViews = loadLineageViews().filter(v => v.name !== name.trim());
-  lineageState.selectedView = name.trim();
-  lineageState.savedViews.push(currentLineageView(name.trim()));
-  persistLineageViews(lineageState.savedViews);
-  showLineageCatalog();
-}
-
-function applySelectedLineageView() {
-  const selectedName = document.getElementById('lineageSavedView').value;
-  document.getElementById('lineageDeleteViewBtn').toggleAttribute('disabled', !selectedName);
-  if (!selectedName) return;
-  const view = loadLineageViews().find(v => v.name === selectedName);
-  if (!view) return;
-  lineageState.selectedView = selectedName;
-  lineageState.kind = view.kind || 'table';
-  lineageState.query = view.query || '';
-  lineageState.column = view.column || '';
-  lineageState.tagValue = view.tagValue || '';
-  lineageState.from = view.from || '';
-  lineageState.to = view.to || '';
-  lineageState.rows = [];
-  showLineageCatalog();
-}
-
-function deleteSelectedLineageView() {
-  const selectedName = document.getElementById('lineageSavedView').value;
-  if (!selectedName) return;
-  lineageState.savedViews = loadLineageViews().filter(v => v.name !== selectedName);
-  lineageState.selectedView = '';
-  persistLineageViews(lineageState.savedViews);
-  showLineageCatalog();
+  lineageCatalog.render();
 }
 
 function wireFavoriteButtons(root, onChanged = null) {
@@ -1245,6 +1082,7 @@ function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
   const token = auth.getToken() || '';
   const initialPageJs = initialPage
     ? `window.__INITIAL_PAGE__ = ${JSON.stringify(initialPage)};` : '';
+  const isDark = document.body.classList.contains('theme-dark') ? 'true' : 'false';
   return `<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
@@ -1265,10 +1103,15 @@ function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
     return _f(input, init);
   };
 <\/script>
-</head><body style="margin:0">
+</head><body style="margin:0" class="${isDark === 'true' ? 'theme-dark' : ''}">
 <div id="root"></div>
 <script src="/js/echarts.min.js"><\/script>
 <script src="/js/report-runtime.js?v=${Date.now()}"><\/script>
+<script>
+  if (${isDark} || (window.parent && window.parent.document.body.classList.contains('theme-dark'))) {
+    document.body.classList.add('theme-dark');
+  }
+<\/script>
 </body></html>`;
 }
 
@@ -1406,14 +1249,14 @@ document.getElementById('structureCloseBtn').addEventListener('click', () => {
 function showExport(id) {
   const $modal = document.getElementById('exportModal');
   $modal.style.display = 'flex';
-  document.getElementById('exportCsvBtn').onclick = () => {
-    window.open(reportsApi.exportUrl(id, 'csv'));
+  const doExport = async (format) => {
     $modal.style.display = 'none';
+    try { await reportsApi.exportFile(id, format); }
+    catch (err) { alert(err.message || 'Export failed.'); }
   };
-  document.getElementById('exportPdfBtn').onclick = () => {
-    window.open(reportsApi.exportUrl(id, 'pdf'));
-    $modal.style.display = 'none';
-  };
+  document.getElementById('exportCsvBtn').onclick  = () => doExport('csv');
+  document.getElementById('exportXlsxBtn').onclick = () => doExport('xlsx');
+  document.getElementById('exportPdfBtn').onclick  = () => doExport('pdf');
   document.getElementById('exportCancelBtn').onclick = () => { $modal.style.display = 'none'; };
 }
 
@@ -1444,171 +1287,10 @@ async function showDependencies(id) {
         downstream = [...seen.values()].sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
       } catch { /* catalog may be empty — silently skip */ }
     }
-    $body.innerHTML = renderDependencies(data, downstream);
+    $body.innerHTML = renderDependencies(data, downstream, { formatBuiltAt });
   } catch (err) {
     $body.innerHTML = `<div class="empty-state">Failed to load dependencies: ${esc(err.message)}</div>`;
   }
-}
-
-function renderDependencies(data, downstream = []) {
-  const snapshot = data.snapshot
-    ? `<span>Snapshot ${esc(formatBuiltAt(data.snapshot.builtAt))}</span>`
-    : '<span>No snapshot yet</span>';
-  const manifestRows = (data.manifestDatasets || []).map(d => `
-    <tr><td>${esc(d.tempTableName)}</td><td>${esc(d.rowCount ?? 0)}</td><td>${esc(d.refreshInterval || 'Manual')}</td><td>${esc(d.ttl || 'None')}</td></tr>`).join('');
-  const registryRows = (data.registeredDatasets || []).map(d => `
-    <tr><td>${esc(d.name)}</td><td>${esc(d.folderPath)}</td><td>${esc(d.accessLevel)}</td><td>${esc(d.rowCount ?? 0)}</td><td>${esc((d.sources || []).map(s => s.name).join(', ') || 'Not available')}</td></tr>`).join('');
-  const jobRows = (data.refreshJobs || []).map(j => `
-    <tr><td>${esc(j.orchestratorJobName)}</td><td>${esc(j.refreshInterval || 'Manual')}</td><td>${esc(j.lastRefreshedAt ? formatBuiltAt(j.lastRefreshedAt) : 'Never')}</td></tr>`).join('');
-  const sourceRows = (data.sources || []).map(s => `
-    <tr><td>${esc(s.connection || 'Engine')}</td><td>${esc(s.objectName || s.name)}</td><td>${esc(s.kind)}</td></tr>`).join('');
-
-  const meaningful = (data.lineageEntries || []).filter(e => e.target !== 'RESULTSET');
-  const lineageRows = meaningful.map(e => {
-    const targetCell = esc(e.target);
-    const roleCell   = e.targetColumn ? formatLineageRole(e.targetColumn) : '';
-    const opCell     = esc(e.operation);
-    const xformCell  = formatTransformationKind(e.transformationKind, e.transformationExpression, e.functionsApplied);
-    const srcCell    = formatSourcesWithColumns(e.sources, e.sourceColumns);
-    const tagsCell   = formatTagBadges(e.tags, e.derivedFromDescriptions);
-    return `<tr><td>${targetCell}</td><td>${roleCell}</td><td>${opCell}</td><td>${xformCell}</td><td>${srcCell}</td><td>${tagsCell}</td></tr>`;
-  }).join('');
-
-  return `
-    <div class="dependency-summary">
-      <span>${esc(data.report?.folderPath || '')} / ${esc(data.report?.name || 'Report')}</span>
-      ${snapshot}
-    </div>
-    ${renderDependencyTable('Manifest Datasets', ['Dataset', 'Rows', 'Refresh', 'TTL'], manifestRows)}
-    ${renderDependencyTable('Registered Datasets', ['Dataset', 'Folder', 'Access', 'Rows', 'Sources'], registryRows)}
-    ${renderDependencyTable('Refresh Jobs', ['Job', 'Interval', 'Last Refresh'], jobRows)}
-    ${renderDependencyTable('Sources', ['Connection', 'Object', 'Kind'], sourceRows)}
-    ${renderDependencyTable('Lineage and Tags', ['Target', 'Role / Column', 'Operation', 'Transformation', 'Sources → Columns', 'Tags'], lineageRows || null)}
-    ${renderDownstreamImpact(downstream)}`;
-}
-
-const _VISUAL_ROLES = new Set(['XAXIS','YAXIS','COLOR','SIZE','LABEL','VALUE','CATEGORY','TOOLTIP','DETAIL','SERIES','AGGREGATE','FILTER','DRILLTHROUGH','BUBBLESIZE','LATITUDE','LONGITUDE']);
-
-function formatLineageRole(col) {
-  if (!col) return '';
-  if (_VISUAL_ROLES.has(col.toUpperCase()))
-    return `<span class="badge badge-refresh" style="font-size:.72em">${esc(col)}</span>`;
-  return `<code style="font-size:.8em">${esc(col)}</code>`;
-}
-
-const _XFORM_CLASSES = {
-  Aggregation:     'badge-warning',
-  FunctionCall:    'badge-refresh',
-  Cast:            'badge-neutral',
-  WindowFunction:  'badge-stale',
-  Arithmetic:      'badge-neutral',
-  CaseExpression:  'badge-stale',
-  StringOperation: 'badge-neutral',
-  Subquery:        'badge-neutral',
-  Conditional:     'badge-stale',
-  Literal:         'badge-neutral',
-};
-
-function formatTransformationKind(kind, expr, fns) {
-  if (!kind || kind === 'PassThrough' || kind === 'Unknown') return '';
-  const cls = _XFORM_CLASSES[kind] || 'badge-neutral';
-  const title = expr ? ` title="${esc(expr)}"` : '';
-
-  let label = kind;
-  const fnList = Array.isArray(fns) ? fns : [];
-
-  // Helper: pull the leading function name from an expression string e.g. "SUM(Revenue)" → "SUM"
-  function leadingFn(s) { const m = s?.match(/^(\w+)\s*\(/); return m?.[1] ?? null; }
-
-  if ((kind === 'Aggregation' || kind === 'FunctionCall' || kind === 'StringOperation' || kind === 'WindowFunction') && fnList.length) {
-    const names = fnList.slice(0, 3);
-    const suffix = kind === 'FunctionCall' || kind === 'StringOperation' ? '()' : '';
-    label = names.length === 1 ? `${names[0]}${suffix}` : names.join(' / ');
-    if (kind === 'WindowFunction') label += ' OVER';
-  } else if ((kind === 'Aggregation' || kind === 'FunctionCall' || kind === 'StringOperation' || kind === 'WindowFunction') && expr) {
-    // functionsApplied was null — extract directly from the expression text
-    const fn = leadingFn(expr);
-    if (fn) {
-      const suffix = kind === 'FunctionCall' || kind === 'StringOperation' ? '()' : '';
-      label = `${fn}${suffix}`;
-      if (kind === 'WindowFunction') label += ' OVER';
-    }
-  } else if (kind === 'Cast' && expr) {
-    const asMatch   = expr.match(/\bAS\s+(\w+)/i);
-    const convMatch = expr.match(/^CONVERT\s*\(\s*(\w+)/i);
-    const target = asMatch?.[1] || convMatch?.[1];
-    if (target) label = `→ ${target}`;
-  }
-
-  return `<span class="badge ${cls}" style="font-size:.72em; cursor:default"${title}>${esc(label)}</span>`;
-}
-
-function formatSourcesWithColumns(sources, sourceCols) {
-  const srcs = sources || [];
-  const cols = sourceCols || [];
-  if (!srcs.length) return '<span style="color:var(--portal-muted)">—</span>';
-  return srcs.map((s, i) => {
-    const col = cols[i];
-    return col ? `<code style="font-size:.8em">${esc(s)}.${esc(col)}</code>` : esc(s);
-  }).join('<br>');
-}
-
-const _SECURITY_TAGS = { pii: 'badge-error', phi: 'badge-error', pci: 'badge-error', sensitive: 'badge-warning' };
-const _CLASS_TAGS    = { confidential: 'badge-warning', restricted: 'badge-error', internal: 'badge-neutral', public: 'badge-ok' };
-const _INFO_TAGS     = new Set(['owner','domain','steward','contact','quality','freshness','sla','nullable','encrypted_at_rest']);
-
-function formatTagBadges(tags, derivedFromDescriptions) {
-  if ((!tags || typeof tags !== 'object') && !derivedFromDescriptions) return '';
-  const parts = [];
-
-  const desc = (tags && tags['d']) || derivedFromDescriptions;
-  if (desc) parts.push(`<span style="display:block;font-size:.78em;color:var(--portal-text-soft);margin-bottom:3px;font-style:italic">${esc(desc)}</span>`);
-
-  for (const [k, v] of Object.entries(tags || {})) {
-    if (k === 'd') continue;
-    const key = k.toLowerCase();
-    if (_SECURITY_TAGS[key] && (v === 'true' || v === '1'))
-      parts.push(`<span class="badge ${_SECURITY_TAGS[key]}" style="font-size:.72em">${esc(k.toUpperCase())}</span>`);
-    else if (key === 'classification' && _CLASS_TAGS[v?.toLowerCase()])
-      parts.push(`<span class="badge ${_CLASS_TAGS[v.toLowerCase()]}" style="font-size:.72em">${esc(v)}</span>`);
-    else if (_INFO_TAGS.has(key))
-      parts.push(`<span class="chip badge-neutral" style="font-size:.72em;padding:1px 6px;border-radius:8px;background:var(--portal-surface-subtle);color:var(--portal-muted)">${esc(k)}: ${esc(v)}</span>`);
-    else
-      parts.push(`<span style="font-size:.78em;color:var(--portal-muted)">${esc(k)}: ${esc(v)}</span>`);
-  }
-  return parts.join(' ');
-}
-
-function renderDependencyTable(title, headers, rows) {
-  return `
-    <div class="dependency-section">
-      <h4>${esc(title)}</h4>
-      ${rows ? `<div class="table-scroll"><table class="dependency-table">
-        <thead><tr>${headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>` : '<p class="text-muted">No data available.</p>'}
-    </div>`;
-}
-
-function renderDownstreamImpact(downstream) {
-  const items = (downstream || []).filter(d => d.reportName);
-  const title = 'Downstream Impact';
-  if (!items.length) {
-    return `<div class="dependency-section"><h4>${esc(title)}</h4><p class="text-muted">No downstream consumers found in lineage catalog.</p></div>`;
-  }
-  const chips = items.map(d => {
-    const path = d.folderPath ? `${esc(d.folderPath)} / ` : '';
-    const runs = `${d.runCount} run${d.runCount !== 1 ? 's' : ''}`;
-    const last = esc(formatBuiltAt(d.lastSeen));
-    const inner = `<span class="viewer-meta-pill" title="${path}${esc(d.reportName)} · ${runs} · last ${last}">${path}${esc(d.reportName)}</span>`;
-    const rid = Number(d.reportId);
-    return Number.isInteger(rid) && rid > 0
-      ? `<a href="#" data-downstream-report-id="${rid}" style="text-decoration:none">${inner}</a>`
-      : inner;
-  }).join(' ');
-  return `<div class="dependency-section"><h4>${esc(title)}</h4>
-    <p class="text-sm text-muted" style="margin:0 0 8px">Source tables in this report are consumed by ${items.length} other report${items.length !== 1 ? 's' : ''}:</p>
-    <div class="viewer-meta" style="flex-wrap:wrap;gap:6px">${chips}</div></div>`;
 }
 
 document.getElementById('dependenciesCloseBtn').addEventListener('click', () => {

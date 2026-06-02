@@ -56,7 +56,7 @@ Build output names:
 The shared kernel. Nothing depends on this except what it pulls in from NuGet.
 
 - **Parser** (`ETL_SQL.Core.Parser`) — tokenizer, parser, and full AST definition. Every statement type (`SelectStatement`, `CreateConnectionStatement`, etc.) lives here.
-- **Interfaces** — `IConnector`, `IConnectorRegistry`, `IDataSource`, `IDatabaseSource`, `IStatementHandler`, `IExecutionContext`, `IScriptExecutor`, `IJobHistoryStore`, `ILintRule`, `ILintContext`.
+- **Interfaces** — `IConnector`, `IConnectorRegistry`, `IDataSource`, `IDatabaseSource`, `IStatementHandler`, `IExecutionContext`, `IScriptExecutor`, `IJobHistoryStore`.
 - **Data model** — `Row`, `DataTable`, `ColumnDefinition`, `JobDefinition`, `JobHistoryEntry`, `SessionState`.
 - **Analysis contracts used by runtime** — shared parser diagnostics, metadata abstractions, and AST/data contracts consumed by the `ETL-SQL.Analysis` project.
 - **Common utilities** — `ILogger` facade (ETL_SQL.Common), `ExecutionException`, `ExecutionTree`, `LineageTracker`.
@@ -339,20 +339,25 @@ Connectors are registered at startup and queried for metadata. They are stateles
 |---|---|
 | `string Name` | Canonical name (`MSSQL`, `FLATFILE`, …) |
 | `IReadOnlyList<string> Aliases` | Alternative names accepted in scripts |
-| `Task<string> GetVersionAsync(connStr)` | Remote engine version |
+| `Task<string> GetVersionAsync(context, connStr)` | Remote engine version |
 | `HashSet<string> GetSupportedFunctions()` | Functions the connector's dialect supports |
 | `HashSet<string> GetSupportedKeywords()` | SQL keywords the connector's dialect supports |
 | `HashSet<string> GetExcludedKeywords()` | Baseline ETL-SQL keywords NOT supported (e.g. `TOP` for Postgres) |
 | `Dictionary<string, string[]> GetSupportedOptions()` | Named connection options |
 | `Dictionary<string, string[]> GetOptionValues()` | Predefined values for options |
 | `string GetHelp()` | Human-readable usage hint |
-| `IDataSource CreateDataSource(connStr, options)` | Factory — creates a live data source |
-| `IDataSource CreateDataSource(connStr, options, schema)` | Factory with template schema |
-| `Task<IEnumerable<string>> GetTablesAsync(connStr)` | Schema introspection |
-| `Task<IEnumerable<string>> GetViewsAsync(connStr)` | Schema introspection |
-| `Task<IEnumerable<string>> GetColumnsAsync(connStr, table)` | Schema introspection |
-| `Task<IEnumerable<string>> GetProceduresAsync(connStr)` | Schema introspection |
+| `IDataSource CreateDataSource(context, connStr, options)` | Factory — creates a live data source |
+| `IDataSource CreateDataSource(context, connStr, options, schema)` | Factory with template schema |
+| `Task<IEnumerable<string>> GetTablesAsync(context, connStr)` | Schema introspection |
+| `Task<IEnumerable<string>> GetViewsAsync(context, connStr)` | Schema introspection |
+| `Task<IEnumerable<string>> GetColumnsAsync(context, connStr, table)` | Schema introspection |
+| `Task<IEnumerable<string>> GetProceduresAsync(context, connStr)` | Schema introspection |
 | `string BuildConnectionString(properties)` | Construct a connection string from a property bag |
+| `string? GetHost(connStr, options)` | Returns target host for network-based connectors to support egress validation |
+| `bool IsFileBased` | True if the connector is file-based (CSV, Parquet, SQLite) and requires path resolution |
+| `int CommandTimeoutSeconds` | Default command timeout in seconds (OLTP: 30, Warehouse: 1800) |
+| `bool IsDataWarehouse` | True if targeting an analytical data warehouse |
+| `ICatalogMetadataProvider? GetCatalogProvider(connStr)` | Returns a metadata provider for schema/lineage enrichment |
 
 ### IDataSource — runtime interface
 
@@ -361,7 +366,7 @@ Every live data source implements this. Returned by `IConnector.CreateDataSource
 | Member | Purpose |
 |---|---|
 | `IAsyncEnumerable<DataTable> ReadBatches(batchSize)` | Stream data out in batches |
-| `Task WriteBatches(IAsyncEnumerable<DataTable>)` | Stream data in |
+| `Task WriteBatches(IAsyncEnumerable<DataTable>, append)` | Stream data in |
 | `Task TruncateAsync()` | Remove all rows |
 | `Task<IEnumerable<string>> GetColumnsAsync()` | Column names for this source |
 | `object? Snapshot()` | Capture state for transaction rollback |
@@ -372,6 +377,8 @@ Every live data source implements this. Returned by `IConnector.CreateDataSource
 | `string ConnectorType` | Connector name (e.g. `MSSQL`, `INMEMORY`) |
 | `Task<IEnumerable<string>> GetTablesAsync()` | Tables in a multi-table source |
 | `Task<bool> ExistsAsync(columns, values)` | Row existence check for MERGE |
+| `IReadOnlyDictionary<string, string> GetConfig()` | Returns creation options with credentials and ENC: values masked |
+| `ICatalogMetadataProvider? GetCatalogProvider()` | Returns a catalog provider for database comments / metadata |
 
 ### IDatabaseSource : IDataSource — SQL-capable sources
 
@@ -396,28 +403,49 @@ SQL connectors additionally implement this interface, which unlocks pushdown.
 
 `LinterFactory.CreateWithAllRules()` uses reflection to find all non-abstract `ILintRule` implementations in the `ETL-SQL.Analysis` assembly and instantiates them with `Activator.CreateInstance`. This means adding a new rule requires only creating a class in `ETL-SQL.Analysis/Linting/Rules/` — no registration needed.
 
-Currently 18 rules:
+Currently 39 rules:
 
 | Rule | What it flags |
 |---|---|
-| `AvoidSelectStarRule` | `SELECT *` |
-| `SafeDeleteUpdateRule` | `DELETE` or `UPDATE` without a `WHERE` clause |
-| `UndeclaredVariableRule` | Variables used before `DECLARE` |
-| `UnusedConnectionRule` | `CREATE CONNECTION` never referenced in the script |
-| `ConnectionForwardReferenceRule` | Connection used before its `CREATE CONNECTION` |
-| `DatabaseQualificationRule` | Tables referenced without a connection qualifier |
-| `DialectKeywordRule` | Keywords not supported by the target dialect |
-| `BeginEndBalanceRule` | Unbalanced `BEGIN` / `END` blocks |
-| `ConnectionAuthConflictRule` | Conflicting authentication options |
-| `ConnectionEncryptionRule` | Connections without encryption on supported providers |
-| `SchemaValidationRule` | Columns in SELECT/INSERT that don't exist in the declared schema |
-| `LayerOrderRule` | Report-SQL elements defined out of dependency order |
-| `DatasetEncryptWithoutKeyRule` | `CREATE DATASET … ENCRYPT` without a key |
-| `DatasetRefreshIntervalRule` | Refresh interval below the safe minimum |
-| `PageVisualReferencedRule` | `CREATE PAGE` references a visual that does not exist |
-| `VisualSourceExistsRule` | `CREATE VISUAL` references a dataset that does not exist |
-| `VisualMappingColumnExistsRule` | Column mappings reference columns not in the dataset |
-| `InsertColumnCountMismatchRule` | `INSERT INTO` column list has fewer columns than the `SELECT` provides (silent null injection) |
+| `AbsolutePathRule` | Relative file system paths in I/O operations (encourages absolute paths) |
+| `AggregateWithoutGroupByRule` | Aggregate functions in SELECT columns without a matching GROUP BY clause |
+| `AvoidSelectStarRule` | Use of `SELECT *` without explicit column lists (encourages explicit columns) |
+| `BeginEndBalanceRule` | Unbalanced `BEGIN` / `END` blocks in control flow |
+| `BulkInsertOptionsRule` | Conflicting or invalid options on a `BULK INSERT` statement |
+| `ConnectionAuthConflictRule` | Conflicting options (e.g. USER/PASSWORD and TRUSTED_CONNECTION) on connections |
+| `ConnectionEncryptionRule` | Database connections declared without enabling encryption on supported database providers |
+| `ConnectionForwardReferenceRule` | Attempting to use a connection before its `CREATE CONNECTION` statement |
+| `CreateDirectoryInReportRule` | Declaring a directory operation (create/delete) inside a Report-SQL script |
+| `CredentialLeakRule` | Plaintext passwords, connection strings, or sensitive keys in scripts |
+| `DashboardKeywordConflictRule` | Naming conflicts between visual/report variables and baseline keywords |
+| `DatabaseQualificationRule` | Database table references without the required connection qualifier prefix |
+| `DatasetEncryptWithoutKeyRule` | Declaring a dataset with `ENCRYPT = PASSWORD` but omitting the password value |
+| `DatasetEncryptionModeRule` | Conflicting or invalid encryption settings in dataset creation |
+| `DatasetRefreshIntervalRule` | Refresh intervals configured below the minimum safe threshold |
+| `DeprecatedConnectionSyntaxRule` | Legacy connection syntax formats (e.g., using `WITH` clause at connection level) |
+| `DialectKeywordRule` | Database-specific keywords or syntax elements not supported by the target connection |
+| `FileSystemSecurityRule` | Operations attempting to read/write from restricted system paths or outside workspace root |
+| `FlatFileDelimiterConflictRule` | Incompatible flat file properties (e.g., specifying both CSV and custom delimiters) |
+| `ForLoopImplicitStartRule` | Implicit or unbounded start/end expressions in FOR loops |
+| `FullyMaterializingDmlRule` | Destructive operations (DELETE/UPDATE) that lack safety filters or transactional guards |
+| `InsertColumnCountMismatchRule` | Mismatched column counts between destination lists and query select lists in `INSERT INTO` |
+| `LayerOrderRule` | Incorrect structural ordering in Report-SQL scripts (e.g., creating visuals after page bindings) |
+| `PageVisualReferencedRule` | A page referring to a visual component that does not exist in the script |
+| `PivotColumnValidationRule` | Invalid or mismatching column lists in PIVOT and UNPIVOT transformations |
+| `PushdownValidationRule` | Basic syntactic parsing errors inside native SQL blocks (`EXECUTE ... BEGIN ... END`) |
+| `ReportKeywordLintRule` | Visual or report elements declared within standard non-Report-SQL scripts |
+| `SafeDeleteUpdateRule` | `DELETE` or `UPDATE` statements running without a `WHERE` filter or WHAT_IF option enabled |
+| `SchemaValidationRule` | References to columns/tables that do not match the parsed/declared schemas |
+| `SpillSecurityRule` | Temporary SpillStore configurations with disabled encryption or unsafe paths |
+| `UndeclaredVariableRule` | Attempting to read/write a variable before its `DECLARE` statement |
+| `UnknownTagLintRule` | Inline tag comments (`/* @tag: ... */`) using unrecognized keys or tags |
+| `UnusedConnectionRule` | Stale connection definitions that are never referenced in script queries or commands |
+| `UseBeforeCreateRule` | Statements referencing a connection or dataset before its creation statement |
+| `UseDatasetRedundantRule` | Unnecessary or duplicate `USE DATASET` statements in the script |
+| `VisualMappingColumnExistsRule` | Visual component mappings referring to fields not produced by the underlying dataset |
+| `VisualMappingCompletenessRule` | Layout configurations missing required dimensional or coordinate properties |
+| `VisualSourceExistsRule` | Visual components referencing source datasets that do not exist |
+| `VisualSourceRequiredRule` | Visual components declared without a mapped source dataset or query reference |
 
 ### Analysis flow
 

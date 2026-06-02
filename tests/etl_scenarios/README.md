@@ -11,6 +11,12 @@ Supported `expected.json` sections:
 
 ```json
 {
+  "setupFiles": [
+    {
+      "path": "input.csv",
+      "content": "id,name\n1,Ada\n"
+    }
+  ],
   "seedLineage": [
     {
       "table": "#Source",
@@ -42,15 +48,33 @@ Supported `expected.json` sections:
 }
 ```
 
+Use `{ScenarioTempDir}` in `script.etlsql` or `runtimeQueries[].sql` when a scenario needs temporary files. The harness creates a fresh temp directory for each scenario, writes `setupFiles` into it, replaces the token with a forward-slash path, and removes the directory after the test.
+
 Use `failure` only for scenarios where the script is expected to abort. Runtime and lineage expectations are skipped for failure scenarios.
 
 Prefer these tests for cross-feature claims such as:
 
 - staged ingest-transform-publish flows;
-- lineage and tag propagation;
-- `WHAT_IF` behavior around destructive DML;
-- loops that produce final tables;
+- staged data cleansing with string, regex, and safe-cast functions;
+- semi-structured JSON payload extraction and publish flows;
+- CTE-based reference enrichment with joins, fallback values, and classifications;
+- recursive CTE hierarchy traversal and rollups;
+- DML audit capture with `OUTPUT ... INTO`;
+- windowed latest-state publish flows;
+- set-operation reconciliation with `UNION ALL`, `EXCEPT`, and `INTERSECT`;
+- semi/anti join reconciliation flows;
+- `PIVOT` / `UNPIVOT` reconciliation flows;
+- file connector read/write round trips;
+- modular orchestration with `RUN SCRIPT`;
+- staged `MERGE` upsert workflows;
+- hash-based change detection before `MERGE`;
+- query-row `FOR @row IN (...)` iteration;
+- lineage, source-table, and tag propagation through multi-step publish flows;
+- `WHAT_IF` behavior around destructive DML and staged `MERGE`;
+- loops that produce final tables, including `BREAK` / `CONTINUE` behavior;
 - `TRY...CATCH` error recovery behavior.
+- transaction rollback from failed quality gates inside `TRY...CATCH`;
+- schema expectation checks with `ON DRIFT WARN`;
 - fatal error behavior outside recovery blocks.
 
 Use SQL Logic Tests for SQL compatibility claims. Use this scenario harness for ETL-SQL orchestration claims.

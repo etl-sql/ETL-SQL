@@ -354,25 +354,97 @@ namespace ETL_SQL.Core.Parser
 
         public ForeignKeyReference ParseForeignKeyReference() => DataParser.ParseForeignKeyReference();
 
-        // ── EXPORT REPORT 'path' FORMAT PDF|CSV|MARKDOWN TO 'output' ──────────
+        // ── EXPORT REPORT 'path' FORMAT PDF|CSV|MARKDOWN TO 'output' [WITH (...)]
         private Statement ParseExportReport(Token t)
         {
             _parser.Consume(TokenType.REPORT, "Expected REPORT after EXPORT");
             var reportPath = _parser.ParseExpression();
             _parser.Consume(TokenType.FORMAT, "Expected FORMAT");
 
-            string format;
-            if      (_parser.Match(TokenType.PDF))      format = "PDF";
-            else if (_parser.Match(TokenType.CSV))       format = "CSV";
-            else if (_parser.Match(TokenType.MARKDOWN))  format = "MARKDOWN";
-            else throw new ETL_SQL.Core.Common.Exceptions.SyntaxException(
-                    $"Expected PDF, CSV, or MARKDOWN after FORMAT, got '{_parser.Current.Value}'",
-                    _parser.Current.Line, _parser.Current.Column);
+            var format = ConsumeExportReportFormat();
 
             _parser.Consume(TokenType.TO, "Expected TO");
             var outputPath = _parser.ParseExpression();
-             return new ExportReportStatement(reportPath, format, outputPath)
+
+            string? pdfMode = null;
+            Expression? host = null;
+            Expression? browserPath = null;
+            if (_parser.Match(TokenType.WITH))
+            {
+                if (!string.Equals(format, "PDF", StringComparison.OrdinalIgnoreCase))
+                    throw new ETL_SQL.Core.Common.Exceptions.SyntaxException(
+                        "EXPORT REPORT WITH (...) PDF options are only valid when FORMAT PDF is used.",
+                        _parser.Previous.Line, _parser.Previous.Column);
+
+                _parser.Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+                {
+                    var optionName = ConsumeExportReportOptionName();
+                    _parser.Consume(TokenType.EQUALS, $"Expected '=' after {optionName}");
+
+                    switch (optionName.ToUpperInvariant())
+                    {
+                        case "PDF_MODE":
+                            pdfMode = ConsumePdfMode();
+                            break;
+                        case "HOST":
+                            host = _parser.ParseExpression();
+                            break;
+                        case "BROWSER_PATH":
+                            browserPath = _parser.ParseExpression();
+                            break;
+                        default:
+                            throw new ETL_SQL.Core.Common.Exceptions.SyntaxException(
+                                $"Unsupported EXPORT REPORT option '{optionName}'. Expected PDF_MODE, HOST, or BROWSER_PATH.",
+                                _parser.Previous.Line, _parser.Previous.Column);
+                    }
+
+                    if (!_parser.Match(TokenType.COMMA))
+                        break;
+                }
+                _parser.Consume(TokenType.RPAREN, "Expected ')' after EXPORT REPORT WITH options");
+            }
+
+             return new ExportReportStatement(reportPath, format, outputPath, pdfMode, host, browserPath)
                 { Line = t.Line, Column = t.Column };
+        }
+
+        private string ConsumeExportReportOptionName()
+        {
+            if (_parser.Current.Type == TokenType.IDENTIFIER
+                || _parser.Current.Type == TokenType.VALUE
+                || _parser.Current.Type == TokenType.PATH)
+            {
+                return _parser.Advance().Value;
+            }
+
+            throw new ETL_SQL.Core.Common.Exceptions.SyntaxException(
+                $"Expected EXPORT REPORT option name, got '{_parser.Current.Value}'",
+                _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private string ConsumeExportReportFormat()
+        {
+            var token = _parser.Advance();
+            var format = token.Value.ToUpperInvariant();
+            if (format is "PDF" or "CSV" or "MARKDOWN")
+                return format;
+
+            throw new ETL_SQL.Core.Common.Exceptions.SyntaxException(
+                $"Expected PDF, CSV, or MARKDOWN after FORMAT, got '{token.Value}'",
+                token.Line, token.Column);
+        }
+
+        private string ConsumePdfMode()
+        {
+            var token = _parser.Advance();
+            var mode = token.Value.Trim('\'', '"').ToUpperInvariant();
+            if (mode is "STATIC" or "AUTO" or "HOSTED" or "BROWSER")
+                return mode;
+
+            throw new ETL_SQL.Core.Common.Exceptions.SyntaxException(
+                $"Expected PDF_MODE STATIC, AUTO, HOSTED, or BROWSER, got '{token.Value}'",
+                token.Line, token.Column);
         }
 
         private Statement ParseExportScript(Token t)

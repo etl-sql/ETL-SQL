@@ -86,6 +86,28 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public async Task TestWhatIfMergeUpdateSuppression()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+            await ev.Evaluate(Parse("CREATE TABLE #Src (ID INT, Val INT); INSERT INTO #Src VALUES (1, 100);"));
+            await ev.Evaluate(Parse("CREATE TABLE #Tgt (ID INT, Val INT); INSERT INTO #Tgt VALUES (1, 10);"));
+
+            await ev.Evaluate(Parse("SET WHAT_IF ON;"));
+
+            string mergeSql = @"
+                MERGE INTO #Tgt AS T
+                USING #Src AS S ON T.ID = S.ID
+                WHEN MATCHED THEN
+                    UPDATE SET Val = S.Val;";
+
+            await ev.Evaluate(Parse(mergeSql));
+
+            var res = await ev.ExecuteQuery(Parse("SELECT Val FROM #Tgt;").Statements[0]).FirstAsync();
+            Assert.Equal(10m, res.Rows[0]["Val"]);
+        }
+
+        [Fact]
         public async Task TestWhatIfForkPropagation()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

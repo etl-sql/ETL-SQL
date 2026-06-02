@@ -37,7 +37,7 @@ For the user-facing syntax reference, see [Docs/Report_SQL_Guide.md](../Report_S
 │  ManifestBuilder   — queries visuals, materializes rows       │
 │  EChartsRenderer   — produces ECharts option JSON             │
 │  SvgChartRenderer  — server-side SVG for PDF export           │
-│  PdfExporter       — QuestPDF-based PDF generation            │
+│  PdfExporter       — static PDF generation                    │
 │  MarkdownRenderer  — produces GFM output                      │
 │  SnapshotStore     — persists / loads .snapshot.json          │
 └──────────┬────────────────────────────────────────────────────┘
@@ -481,25 +481,34 @@ Server-side SVG generation used by `PdfExporter`. Produces static SVG markup for
 - `Render(VisualManifest vm, int width, int height) → string`
 - Returns SVG XML; the PDF exporter embeds it via QuestPDF's `SvgImage` element
 
-### 6.3 `PdfExporter`
+### 6.3 PDF Export
 
-Uses [QuestPDF](https://www.questpdf.com/) (Community License) to produce PDF output.
+`ReportPdfExporter` selects a PDF export mode:
+
+| Mode | Status | Behavior |
+|---|---|---|
+| `STATIC` | Default | Uses `PdfExporter` with PDFsharp/MigraDoc; no browser is required. |
+| `AUTO` | Selector mode | Uses a configured high-fidelity path when available, otherwise falls back to `STATIC` with a warning. |
+| `HOSTED` | Planned | Uses ReportPortal or `report serve` to render all report pages through the browser runtime. |
+| `BROWSER` | Planned | Uses an installed Chrome, Edge, or Chromium executable; no browser is bundled. |
+
+Explicit `HOSTED` and `BROWSER` modes fail clearly when unavailable. Only `AUTO` is allowed to fall back.
+
+### 6.3.1 `PdfExporter`
+
+Uses PDFsharp/MigraDoc to produce portable static PDF output.
 
 ```csharp
-public byte[] Export(ReportManifest manifest)
-{
-    QuestPDF.Settings.License = LicenseType.Community;
-    return Document.Create(container => { ... }).GeneratePdf();
-}
+public byte[] Export(ReportManifest manifest) => ...
 ```
 
 Layout:
-- One QuestPDF page per `VisualManifest`
+- One static document containing visuals in report page order
 - Chart types → SVG at 500×292 pt via `SvgChartRenderer`, embedded as `SvgImage`
-- TABLE → native QuestPDF table, capped at 500 rows
+- TABLE → native PDF table, capped for readability
 - CARD → label + large-text value
-- TEXT → `VALUE` option rendered as paragraph
-- SLICER / filter types → placeholder paragraph
+- TEXT → `CONTENT`, `DefaultValue`, or mapped `CONTENT` column rendered as paragraphs
+- SLICER / filter types → exported parameter selection summary
 
 ### 6.4 `MarkdownRenderer`
 
@@ -673,5 +682,14 @@ Invoked as `etl-sql-report <command>`.
 | **9F** | Multi-report hosting (`DashboardServiceFactory`, `reports.json`, catalog page, per-report API prefix) |
 | **9G** | PDF export (`SvgChartRenderer`, `PdfExporter` via QuestPDF), `--format pdf` CLI flag |
 | **9H** | CREATE CONTAINER, CREATE NAVIGATION, SET REPORT TITLE/DESCRIPTION, COMBO visual type, STYLE clause, COLORS/LEGEND options |
+
+---
+
+## 12. Related Subsystem Architecture
+
+For detailed information about adjacent subsystems, refer to the following architecture references:
+- **Report Portal:** [ReportPortal.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/ReportPortal.md) documents the ASP.NET Core web host service exposing catalogs, dashboards, and access control.
+- **Portal UI & Designer:** [PortalUI.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/PortalUI.md) describes the shared browser designer interface for parsing and generating Report-SQL scripts.
+- **Orchestrator:** [Orchestrator.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Orchestrator.md) covers background scheduling execution engines that run report ingestion pipelines.
 
 ---

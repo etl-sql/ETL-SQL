@@ -1,0 +1,30 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT Region, Segment, ReviewClass, OrderCount, TotalAmount FROM #EnrichedPublish ORDER BY Region, Segment, ReviewClass;",
+      "rows": [
+        {
+          "Region": "North",
+          "Segment": "Retail",
+          "ReviewClass": "Standard",
+          "OrderCount": "1",
+          "TotalAmount": "125.50"
+        },
+        {
+          "Region": "South",
+          "Segment": "Enterprise",
+          "ReviewClass": "HighValue",
+          "OrderCount": "1",
+          "TotalAmount": "275.00"
+        },
+        {
+          "Region": "Unassigned",
+          "Segment": "Unknown",
+          "ReviewClass": "NeedsReferenceData",
+          "OrderCount": "1",
+          "TotalAmount": "90.00"
+        }
+      ]
+    }
+  ]
+}

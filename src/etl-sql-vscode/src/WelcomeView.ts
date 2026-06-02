@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { resolveProductUri } from './pathResolver';
 
 export class WelcomeView {
     public static currentPanel: WelcomeView | undefined;
@@ -52,16 +53,16 @@ export class WelcomeView {
                         await this._createNewFile('.etlnb');
                         return;
                     case 'openDocs':
-                        vscode.commands.executeCommand('vscode.open', vscode.Uri.file(path.join(this._extensionUri.fsPath, '../../Docs/User_Manual.md')));
+                        vscode.commands.executeCommand('vscode.open', resolveProductUri(this._extensionUri, '../../Docs/User_Manual.md'));
                         return;
                     case 'openCookbook':
-                        vscode.commands.executeCommand('vscode.open', vscode.Uri.file(path.join(this._extensionUri.fsPath, '../../Docs/Cookbook.md')));
+                        vscode.commands.executeCommand('vscode.open', resolveProductUri(this._extensionUri, '../../Docs/Cookbook.md'));
                         return;
                     case 'openSamples':
-                        vscode.commands.executeCommand('vscode.open', vscode.Uri.file(path.join(this._extensionUri.fsPath, '../../samples')));
+                        vscode.commands.executeCommand('vscode.open', resolveProductUri(this._extensionUri, '../../samples'));
                         return;
                     case 'openNotices':
-                        vscode.commands.executeCommand('vscode.open', vscode.Uri.file(path.join(this._extensionUri.fsPath, '../../THIRD-PARTY-NOTICES.md')));
+                        vscode.commands.executeCommand('vscode.open', resolveProductUri(this._extensionUri, '../../THIRD-PARTY-NOTICES.md'));
                         return;
                 }
             },

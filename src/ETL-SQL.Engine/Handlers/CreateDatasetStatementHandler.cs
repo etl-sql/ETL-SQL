@@ -64,6 +64,7 @@ namespace ETL_SQL.Engine.Handlers
                         stmt.TempTableName, existing!.LastRefresh);
                     await LoadFromParquet(existing.ParquetFilePath, stmt.TempTableName, stmt, context);
                     RegisterReportContext(stmt, context);
+                    await context.EnsureCatalogMetadataImportedAsync(stmt.SourceQuery.GetSourceTables());
                     new LineageManager(context.LineageTracker).RecordCreateDatasetLineage(stmt);
                     return;
                 }
@@ -79,6 +80,7 @@ namespace ETL_SQL.Engine.Handlers
 
             // ── 6. Register AST in report context (for ManifestBuilder) ───────────
             RegisterReportContext(stmt, context);
+            await context.EnsureCatalogMetadataImportedAsync(stmt.SourceQuery.GetSourceTables());
             new LineageManager(context.LineageTracker).RecordCreateDatasetLineage(stmt);
 
             var intervalNote = string.IsNullOrWhiteSpace(stmt.RefreshInterval) ? ""

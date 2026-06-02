@@ -2,6 +2,49 @@
 
 For the overall lane model and cleanup guidance, see [Test_Strategy.md](Strategy/Test_Strategy.md).
 
+## Current Release-Confidence Status
+
+The testing foundation now has three complementary layers:
+
+| Layer | What it proves | Current status |
+| :--- | :--- | :--- |
+| Unit / functional xUnit tests | Parser, evaluator, handlers, functions, security rules, reporting, portal APIs, language tooling | Broad coverage. Use `fast` as the default confidence lane. |
+| ETL scenario golden tests | Cross-feature ETL-SQL workflows that are easy to miss with isolated tests | 27 scenarios currently cover staged ETL, cleansing, JSON extraction, file round trip, lineage tags/source columns, `WHAT_IF`, loops, `TRY...CATCH`, transactions, DML audit, merge, hash-change detection, set ops, recursive CTE, pivot/unpivot, semi/anti joins, and modular scripts. |
+| SQL Logic Tests | SQL compatibility semantics: SELECT, joins, NULLs, aggregates, DML, set ops, windows, type coercion | Full SLT corpus is explicit/deployment-only. Custom ETL-SQL SLT files cover function and DML areas that SQLite SLT does not. |
+
+Recent focused checks:
+
+```powershell
+dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter "FullyQualifiedName~EtlScenarioGoldenTests" --no-restore
+```
+
+Result on 2026-06-01: 27 passed, 0 failed, 0 skipped.
+
+```powershell
+.\scripts\test-lane.ps1 -Lane perf -NoRestore
+```
+
+Result on 2026-06-01: engine performance tests 44 passed; dedicated perf project 5 passed.
+
+The integration-folder audit is complete as of 2026-06-01. Metadata-only connector tests, UI/editor tests, local file/format tests, and local engine/orchestration/security tests have been moved back into fast-covered folders. `Get-TestLaneInventory.ps1` now reports 0 test methods that are excluded from `fast`/`engine` by name but not selected by a targeted lane.
+
+```powershell
+.\scripts\test-lane.ps1 -Lane fast -NoRestore
+```
+
+Result on 2026-06-01: engine test project 3,015 passed; language server 71 passed; report portal 70 passed; lineage UI smoke passed.
+
+## Testing-Foundation Maintenance
+
+Keep this list small and actionable. The one-time lane/scenario/SLT cleanup is complete as of 2026-06-01. When adding a new release claim, add evidence in one of the existing layers instead of creating a fourth testing style.
+
+| Priority | Item | Why it matters | Preferred evidence |
+| :---: | :--- | :--- | :--- |
+| P0 | Keep `Test-PreRelease.ps1 -Explain`, this document, `Docs/Strategy/Test_Strategy.md`, and `scripts/README.md` aligned. | Release validation is only useful if the documented plan and actual script agree. | Script output checked against docs; update all three docs when phases change. |
+| P1 | Add ETL scenario tests only for uncovered release claims, not for every unit-testable branch. | Scenarios should protect workflows and product claims, not duplicate isolated handler tests. Current release matrix audit found no uncovered ETL orchestration claims. | New `tests\etl_scenarios\<name>\script.etlsql` + `expected.json`. |
+| P1 | Expand custom SLT only when SQL semantics change or a SQL feature has low/medium confidence in `Docs/Standards/SLT_Coverage.md`. | SLT is the best evidence for SQL correctness but should remain intentional because full runs are slow. | New/updated `tests\slt_data\*.test` plus `Test-SltCorpus.ps1` result. |
+| P2 | Keep the compact lane inventory report useful as the suite evolves. | Helps a solo maintainer see what `fast`, `smoke`, `integration`, `slt`, and `release` actually cover without reverse-engineering filters. | `.\scripts\Get-TestLaneInventory.ps1` output reviewed when lanes or test categories change. |
+
 ## Smoke Lanes
 
 Use `scripts/test-smoke.ps1` for fast confidence checks before running the full suite.
@@ -50,11 +93,20 @@ Lane intent:
 | `engine` | `ETL-SQL.Tests` only, with the fast filter |
 | `portal` | Report Portal tests only |
 | `integration` | External-boundary tests tagged `Category=Integration` |
-| `perf` | Performance tests tagged `Category=Performance` |
+| `perf` | Performance tests tagged `Category=Performance` in `tests\ETL-SQL.Tests` and `tests\ETL-SQL.PerfTests` |
 | `release` | Smoke + fast + SLT, without benchmarks or installer packaging |
 | `full` | Normal xUnit projects, excluding deployment-only SLT and benchmark executable |
 | `benchmarks` | BenchmarkDotNet executable |
 | `slt` | SQL Logic Test corpus with `ETL_SQL_RUN_SLT=1` set by the lane script |
+
+To inspect lane organization without running the suite, generate a static inventory:
+
+```powershell
+.\scripts\Get-TestLaneInventory.ps1
+.\scripts\Get-TestLaneInventory.ps1 -Format Json -OutFile test-inventory.json
+```
+
+The inventory reports discovered xUnit test methods by lane, category trait, project, and fast-lane exclusion reason. It is a visibility tool, not a pass/fail gate; `test-lane.ps1` remains authoritative for execution.
 
 ## Local Pre-Release Validation
 
@@ -86,6 +138,12 @@ Use `scripts/Test-PreRelease.ps1` (Windows) or `scripts/test-pre-release.sh` (Li
 .\scripts\Test-PreRelease.ps1 -BuildInstallers -Platforms win-x64
 ```
 
+Windows MSI packaging requires WiX Toolset v3.x (`candle.exe` and `light.exe`). Install it locally, or add this step before `build_msi.ps1` on a clean Windows CI runner:
+
+```powershell
+choco install wixtoolset -y --no-progress --skip-if-installed
+```
+
 ```bash
 # Bash — same phases, same flag semantics
 ./scripts/test-pre-release.sh
@@ -100,6 +158,30 @@ Use `scripts/Test-PreRelease.ps1` (Windows) or `scripts/test-pre-release.sh` (Li
 ```
 
 The script writes timestamped JSON/Markdown reports and phase logs under `release-validation/`, which is ignored by Git. The `latest/state.json` file lets `--resume` skip phases that already passed for the same source fingerprint. If code changes after a failed run, rerun from the beginning unless you intentionally use `--force-resume`.
+
+`Test-PreRelease.ps1 -Explain -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` currently produces this full local release plan:
+
+| # | Phase | Enabled by |
+| ---: | :--- | :--- |
+| 1 | Asset drift check | Always |
+| 2 | Dotnet restore | Always |
+| 3 | NuGet dependency audit | Always |
+| 4 | Dotnet build | Always |
+| 5 | Smoke lane | Always |
+| 6 | Fast lane | Always |
+| 7 | Sample scripts | Always |
+| 8 | SLT lane | `-IncludeSlt` |
+| 9 | VS Code npm ci | Default; skipped by `-SkipNode` or `-Quick` |
+| 10 | VS Code npm audit | Default; skipped by `-SkipNode` or `-Quick` |
+| 11 | VS Code compile | Default; skipped by `-SkipNode` or `-Quick` |
+| 12 | VS Code unit tests | Default; skipped by `-SkipNode` or `-Quick` |
+| 13 | Scale certification smoke | Default; skipped by `-SkipScale` or `-Quick` |
+| 14 | Cert baseline regression check (smoke) | Default; skipped by `-SkipScale` or `-Quick` |
+| 15 | Docker integration lane | `-IncludeDockerIntegration`; disabled by `-Quick` |
+| 16 | Scale certification standard | `-IncludeStandardScale`; disabled by `-Quick` |
+| 17 | Cert baseline regression check (standard) | `-IncludeStandardScale`; disabled by `-Quick` |
+| 18 | Release publish artifacts | `-BuildInstallers`; disabled by `-Quick` |
+| 19 | Windows MSI | `-BuildInstallers -Platforms win-x64`; disabled by `-Quick` |
 
 `fast` is the default local correctness lane. `full` runs the normal xUnit test projects and skips the benchmark executable and deployment-only SLT corpus so `dotnet test` output stays meaningful.
 
@@ -140,6 +222,18 @@ dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter "FullyQualifiedNam
 ```
 
 The `SftpFixture` starts an `atmoz/sftp` container once per collection. Tests cover password auth, private-key auth, upload/download round-trips, list, delete, overwrite semantics, large-file checksum, `ReadBatches`, credential masking, and host allowlist enforcement. Container startup typically takes 3–8 seconds.
+
+## Browser-side UI (sandbox, manual)
+
+The portal and report-runtime JavaScript components — `renderDag` (structure/lineage DAG), the report designer (`createDesigner`), the script editor (`createScriptEditor`), and the extracted lineage/dependencies render module (`src/ETL-SQL.ReportPortal/wwwroot/js/lineage-ui.js`) — have **no automated browser test lane yet**. Verify them **manually** in the no-Docker UI sandbox:
+
+```powershell
+pwsh -File tools\ui-sandbox\serve.ps1
+```
+
+It serves a Storybook-style harness that imports the canonical/source files directly and drives each component with fixture data (and a mock `fetch` for API-backed surfaces) — no Docker, no portal build, no catalog DB. Pick a story + fixture from the sidebar; edits show on **↻ Reload**. See [`tools/ui-sandbox/README.md`](../tools/ui-sandbox/README.md) for the story list and how to add one.
+
+The **data contracts** these components consume *are* covered by automated tests — e.g. the structure/lineage DTOs and the cross-script dataset bridge are asserted in `PortalIntegrationTests` (Portal lane, no Docker). The sandbox covers the **rendering** those tests don't. Automated browser coverage (Playwright) is tracked in `TODO.md`.
 
 ## Code Coverage
 

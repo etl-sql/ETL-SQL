@@ -90,7 +90,7 @@ namespace ETL_SQL.Engine
                     return dict;
                 }).ToList()
             };
-            Console.WriteLine(JsonSerializer.Serialize(data, options));
+            AnsiConsole.Console.WriteLine(JsonSerializer.Serialize(data, options));
         }
 
         /// <summary>

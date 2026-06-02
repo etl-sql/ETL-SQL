@@ -3,6 +3,8 @@
 > [!IMPORTANT]
 > **Historical feature plan.** Relative date parameters and subscription parameter behavior are now documented in current reference/user docs. Use this file for rationale and implementation history only; use `Docs/Reference/RelativeDate_Parameters.md`, `Docs/Report_SQL_Guide.md`, and `Docs/ReportPortal_Administrators_Guide.md` for current behavior.
 
+**Status:** Implemented (Relative date parameters, multi-value lists, and parameterized subscriptions are fully functional in the engine and portal)
+
 ## Problem Statement
 
 Subscriptions today are static — they deliver the same report snapshot on every run. A report writer who wants a "Yesterday's Sales" subscription must hardcode a date or write a new script for every variation. There is no way to tell a subscription "run with `@start = yesterday`" without modifying the script itself.

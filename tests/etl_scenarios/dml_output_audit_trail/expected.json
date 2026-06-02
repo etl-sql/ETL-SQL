@@ -1,0 +1,23 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT ID, Status, RiskScore FROM #Accounts ORDER BY ID;",
+      "rows": [
+        { "ID": 1, "Status": "Active", "RiskScore": 10 },
+        { "ID": 2, "Status": "Suspended", "RiskScore": 90 }
+      ]
+    },
+    {
+      "sql": "SELECT ID, OldStatus, NewStatus FROM #StatusAudit ORDER BY ID;",
+      "rows": [
+        { "ID": 2, "OldStatus": "Active", "NewStatus": "Suspended" }
+      ]
+    },
+    {
+      "sql": "SELECT ID, DeletedStatus FROM #DeleteAudit ORDER BY ID;",
+      "rows": [
+        { "ID": 3, "DeletedStatus": "Closed" }
+      ]
+    }
+  ]
+}

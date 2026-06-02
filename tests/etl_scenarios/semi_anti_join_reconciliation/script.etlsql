@@ -1,0 +1,54 @@
+CREATE TABLE #ExpectedCustomers (
+    CustomerId INT,
+    CustomerName VARCHAR(30)
+);
+
+CREATE TABLE #LoadedCustomers (
+    CustomerId INT,
+    CustomerName VARCHAR(30)
+);
+
+INSERT INTO #ExpectedCustomers (CustomerId, CustomerName) VALUES (100, 'Apex');
+INSERT INTO #ExpectedCustomers (CustomerId, CustomerName) VALUES (200, 'Beacon');
+INSERT INTO #ExpectedCustomers (CustomerId, CustomerName) VALUES (300, 'Cobalt');
+
+INSERT INTO #LoadedCustomers (CustomerId, CustomerName) VALUES (100, 'Apex');
+INSERT INTO #LoadedCustomers (CustomerId, CustomerName) VALUES (300, 'Cobalt');
+INSERT INTO #LoadedCustomers (CustomerId, CustomerName) VALUES (400, 'Drift');
+
+SELECT
+    e.CustomerId,
+    e.CustomerName
+INTO #MatchedExpected
+FROM #ExpectedCustomers e
+LEFT SEMI JOIN #LoadedCustomers l ON e.CustomerId = l.CustomerId;
+
+SELECT
+    e.CustomerId,
+    e.CustomerName
+INTO #MissingFromLoad
+FROM #ExpectedCustomers e
+LEFT ANTI JOIN #LoadedCustomers l ON e.CustomerId = l.CustomerId;
+
+SELECT
+    l.CustomerId,
+    l.CustomerName
+INTO #UnexpectedLoaded
+FROM #LoadedCustomers l
+LEFT ANTI JOIN #ExpectedCustomers e ON l.CustomerId = e.CustomerId;
+
+SELECT
+    'matched' AS Bucket,
+    COUNT(*) AS RowCount
+INTO #ReconciliationSummary
+FROM #MatchedExpected
+UNION ALL
+SELECT
+    'missing' AS Bucket,
+    COUNT(*) AS RowCount
+FROM #MissingFromLoad
+UNION ALL
+SELECT
+    'unexpected' AS Bucket,
+    COUNT(*) AS RowCount
+FROM #UnexpectedLoaded;

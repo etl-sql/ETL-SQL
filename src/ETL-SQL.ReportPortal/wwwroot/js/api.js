@@ -159,6 +159,26 @@ export const reportsApi = {
 
     exportUrl: (id, format) => `/api/reports/${id}/export/${format}`,
 
+    // Authenticated download: window.open() can't send the Bearer header (the JWT
+    // lives in sessionStorage), so fetch with auth and save the blob instead.
+    async exportFile(id, format) {
+        const res = await apiFetch(`/api/reports/${id}/export/${format}`);
+        if (!res.ok) {
+            const e = await res.json().catch(() => ({}));
+            throw new Error(e.error || `Export failed (${res.status})`);
+        }
+        const cd = res.headers.get('Content-Disposition') || '';
+        const m  = /filename\*?=(?:UTF-8'')?["']?([^"';]+)/i.exec(cd);
+        const ext = format === 'pdf' ? 'pdf' : format === 'xlsx' ? 'xlsx' : 'csv';
+        const filename = m ? decodeURIComponent(m[1]) : `report.${ext}`;
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+    },
+
     getParameters: (id) => apiJson(`/api/reports/${id}/parameters`),
     validateScript: (scriptPath) => apiJson('/api/reports/validate', { method: 'POST', body: { scriptPath } }),
     listAvailableScripts: () => apiJson('/api/reports/available-scripts')
@@ -211,6 +231,21 @@ export const datasetsApi = {
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement('a');
         a.href = url; a.download = filename || 'dataset.csv';
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+    },
+    async exportXlsx(id, filename, { sort = null, dir = null, search = null, filters = null } = {}) {
+        const p = new URLSearchParams({ format: 'xlsx' });
+        if (sort)    p.set('sort', sort);
+        if (dir)     p.set('dir', dir);
+        if (search)  p.set('search', search);
+        if (filters && filters.length) p.set('filters', JSON.stringify(filters));
+        const res = await apiFetch(`/api/datasets/${id}/data/export?${p}`);
+        if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url; a.download = filename || 'dataset.xlsx';
         document.body.appendChild(a); a.click();
         document.body.removeChild(a); URL.revokeObjectURL(url);
     },

@@ -1,0 +1,21 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT CustomerId, Status, Score, PreviousScore, ScoreDelta, CustomerScoreTotal FROM #CurrentCustomerState ORDER BY CustomerId;",
+      "rows": [
+        { "CustomerId": 100, "Status": "active", "Score": 15, "PreviousScore": 10, "ScoreDelta": 5, "CustomerScoreTotal": 25 },
+        { "CustomerId": 200, "Status": "active", "Score": 25, "PreviousScore": 18, "ScoreDelta": 7, "CustomerScoreTotal": 63 }
+      ]
+    },
+    {
+      "sql": "SELECT CustomerId, EventSeq, RecencyRank, PreviousScore, ScoreDelta FROM #CustomerEventWindow ORDER BY CustomerId, EventSeq;",
+      "rows": [
+        { "CustomerId": 100, "EventSeq": 1, "RecencyRank": 2, "PreviousScore": 0, "ScoreDelta": 10 },
+        { "CustomerId": 100, "EventSeq": 2, "RecencyRank": 1, "PreviousScore": 10, "ScoreDelta": 5 },
+        { "CustomerId": 200, "EventSeq": 1, "RecencyRank": 3, "PreviousScore": 0, "ScoreDelta": 20 },
+        { "CustomerId": 200, "EventSeq": 2, "RecencyRank": 2, "PreviousScore": 20, "ScoreDelta": -2 },
+        { "CustomerId": 200, "EventSeq": 3, "RecencyRank": 1, "PreviousScore": 18, "ScoreDelta": 7 }
+      ]
+    }
+  ]
+}

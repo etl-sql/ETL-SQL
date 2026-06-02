@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Npgsql;
+using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Postgres
@@ -14,6 +15,7 @@ namespace ETL_SQL.Connectors.Postgres
     /// </summary>
     public sealed class PostgresCatalogProvider : ICatalogMetadataProvider, IViewDefinitionProvider
     {
+        private const string CatalogName = "PostgreSQL catalog";
         private readonly string _connectionString;
 
         public PostgresCatalogProvider(string connectionString)
@@ -21,11 +23,12 @@ namespace ETL_SQL.Connectors.Postgres
             _connectionString = connectionString;
         }
 
-        public async Task<IReadOnlyList<CatalogColumn>> GetColumnMetadataAsync(
+        public Task<IReadOnlyList<CatalogColumn>> GetColumnMetadataAsync(
             string schema, string tableName, CancellationToken ct = default)
-        {
-            var results = new List<CatalogColumn>();
-            const string sql = @"
+            => ConnectorExceptionWrapper.RunAsync<IReadOnlyList<CatalogColumn>>(CatalogName, ShouldWrapProviderException, async () =>
+            {
+                var results = new List<CatalogColumn>();
+                const string sql = @"
 SELECT
     c.column_name,
     c.data_type,
@@ -48,30 +51,31 @@ LEFT JOIN (
 WHERE c.table_schema = @schema AND c.table_name = @table
 ORDER BY c.ordinal_position;";
 
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync(ct);
-            await using var cmd = new NpgsqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@schema", schema);
-            cmd.Parameters.AddWithValue("@table", tableName);
-            await using var rdr = await cmd.ExecuteReaderAsync(ct);
-            while (await rdr.ReadAsync(ct))
-            {
-                results.Add(new CatalogColumn(
-                    ColumnName: rdr.GetString(0),
-                    DataType: rdr.GetString(1),
-                    IsNullable: rdr.GetBoolean(2),
-                    IsPrimaryKey: rdr.GetBoolean(3),
-                    Description: rdr.IsDBNull(4) ? null : rdr.GetString(4),
-                    ExtraProperties: new Dictionary<string, string>()));
-            }
-            return results;
-        }
+                await using var conn = new NpgsqlConnection(_connectionString);
+                await conn.OpenAsync(ct);
+                await using var cmd = new NpgsqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@schema", schema);
+                cmd.Parameters.AddWithValue("@table", tableName);
+                await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                while (await rdr.ReadAsync(ct))
+                {
+                    results.Add(new CatalogColumn(
+                        ColumnName: rdr.GetString(0),
+                        DataType: rdr.GetString(1),
+                        IsNullable: rdr.GetBoolean(2),
+                        IsPrimaryKey: rdr.GetBoolean(3),
+                        Description: rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                        ExtraProperties: new Dictionary<string, string>()));
+                }
+                return results;
+            });
 
-        public async Task<IReadOnlyList<CatalogRelationship>> GetRelationshipsAsync(
+        public Task<IReadOnlyList<CatalogRelationship>> GetRelationshipsAsync(
             string schema, string tableName, CancellationToken ct = default)
-        {
-            var results = new List<CatalogRelationship>();
-            const string sql = @"
+            => ConnectorExceptionWrapper.RunAsync<IReadOnlyList<CatalogRelationship>>(CatalogName, ShouldWrapProviderException, async () =>
+            {
+                var results = new List<CatalogRelationship>();
+                const string sql = @"
 SELECT
     kcu.column_name                             AS fk_column,
     ccu.table_schema || '.' || ccu.table_name  AS referenced_table,
@@ -87,38 +91,42 @@ JOIN information_schema.constraint_column_usage ccu
 WHERE tc.constraint_type = 'FOREIGN KEY'
   AND tc.table_schema = @schema AND tc.table_name = @table;";
 
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync(ct);
-            await using var cmd = new NpgsqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@schema", schema);
-            cmd.Parameters.AddWithValue("@table", tableName);
-            await using var rdr = await cmd.ExecuteReaderAsync(ct);
-            while (await rdr.ReadAsync(ct))
-            {
-                results.Add(new CatalogRelationship(
-                    ForeignKeyColumn: rdr.GetString(0),
-                    ReferencedTable: rdr.GetString(1),
-                    ReferencedColumn: rdr.GetString(2)));
-            }
-            return results;
-        }
+                await using var conn = new NpgsqlConnection(_connectionString);
+                await conn.OpenAsync(ct);
+                await using var cmd = new NpgsqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@schema", schema);
+                cmd.Parameters.AddWithValue("@table", tableName);
+                await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                while (await rdr.ReadAsync(ct))
+                {
+                    results.Add(new CatalogRelationship(
+                        ForeignKeyColumn: rdr.GetString(0),
+                        ReferencedTable: rdr.GetString(1),
+                        ReferencedColumn: rdr.GetString(2)));
+                }
+                return results;
+            });
 
-        public async Task<string?> GetViewDefinitionAsync(string schema, string objectName, CancellationToken ct = default)
-        {
-            const string sql = @"
+        public Task<string?> GetViewDefinitionAsync(string schema, string objectName, CancellationToken ct = default)
+            => ConnectorExceptionWrapper.RunAsync<string?>(CatalogName, ShouldWrapProviderException, async () =>
+            {
+                const string sql = @"
 SELECT pg_get_viewdef(c.oid, true)
 FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relkind IN ('v', 'm')
   AND n.nspname = @schema AND c.relname = @name;";
 
-            await using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync(ct);
-            await using var cmd = new NpgsqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@schema", schema);
-            cmd.Parameters.AddWithValue("@name", objectName);
-            var result = await cmd.ExecuteScalarAsync(ct);
-            return result is string def && !string.IsNullOrWhiteSpace(def) ? def : null;
-        }
+                await using var conn = new NpgsqlConnection(_connectionString);
+                await conn.OpenAsync(ct);
+                await using var cmd = new NpgsqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@schema", schema);
+                cmd.Parameters.AddWithValue("@name", objectName);
+                var result = await cmd.ExecuteScalarAsync(ct);
+                return result is string def && !string.IsNullOrWhiteSpace(def) ? def : null;
+            });
+
+        private static bool ShouldWrapProviderException(Exception ex) =>
+            ex is NpgsqlException or InvalidOperationException;
     }
 }

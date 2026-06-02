@@ -35,7 +35,7 @@ Every DML and transformation operation that the engine executes is recorded in t
 | `Operation` | Operation label (see table above) |
 | `Metadata` | Tag dictionary (`@owner`, `@d`, `@tags`, custom keys) |
 | `DerivedFromDescriptions` | Inherited `@d` descriptions from source columns |
-| `TransformationKind` | `Direct`, `Computed`, `Aggregated`, `Filtered`, or `Unknown` |
+| `TransformationKind` | `Unknown`, `PassThrough`, `Cast`, `FunctionCall`, `CaseExpression`, `Arithmetic`, `StringOperation`, `Aggregation`, `WindowFunction`, `Conditional`, `Literal`, or `Subquery` |
 | `TransformationExpression` | Raw SQL expression for computed columns |
 | `FunctionsApplied` | List of SQL functions used in the expression |
 | `SourceFile` | Script file name |

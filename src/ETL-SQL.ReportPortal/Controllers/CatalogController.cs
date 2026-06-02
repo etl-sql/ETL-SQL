@@ -267,6 +267,11 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
                     e.Tags,
                     e.SourceFile,
                     e.Line,
+                    e.SourceColumns ?? [],
+                    e.TransformationKind,
+                    e.TransformationExpression,
+                    e.FunctionsApplied,
+                    e.DerivedFromDescriptions,
                     report?.Id,
                     report?.Name,
                     report?.Folder.Path);

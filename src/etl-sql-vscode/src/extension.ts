@@ -19,6 +19,10 @@ import * as crypto from 'crypto';
 import { ETLNotebookSerializer } from './notebookSerializer';
 import { ETLNotebookController } from './notebookController';
 import { WelcomeView } from './WelcomeView';
+import * as logger from './logger';
+import { ensureExecutable } from './permissions';
+import { getTerminalCommand } from './terminalCommandBuilder';
+import { cleanupTempFiles } from './cleanupService';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -56,7 +60,11 @@ function syncNotebookContext(document: vscode.TextDocument) {
 
 export async function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel("ETL-SQL");
+    logger.setOutputChannel(outputChannel);
     outputChannel.appendLine("ETL-SQL extension activated.");
+    
+    // Clean up temporary script files asynchronously on startup
+    void cleanupTempFiles();
     
     const config = vscode.workspace.getConfiguration('etlsql');
     ReplManager.getInstance().setOutputChannel(outputChannel);
@@ -89,7 +97,7 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     // Register Notebook Controller
-    const controller = new ETLNotebookController();
+    const controller = new ETLNotebookController(context);
     context.subscriptions.push(controller);
 
     // Sync state changes to sidebar
@@ -134,8 +142,11 @@ export async function activate(context: vscode.ExtensionContext) {
     // Register Results Panel (Bottom Panel)
     ResultsPanel.register(context);
     ResultsPanel.setOnMessageReceived((msg: unknown) => {
-        if ((msg as { type: string }).type === 'cancel') {
+        const typedMsg = msg as { type: string; level?: string; message?: string };
+        if (typedMsg.type === 'cancel') {
             ReplManager.getInstance().cancel();
+        } else if (typedMsg.type === 'log') {
+            logger.logWebview('Results', typedMsg.message || '', (typedMsg.level as 'info' | 'warn' | 'error') || 'info');
         }
     });
 
@@ -155,6 +166,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const bundledServer = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL-LSP.exe' : 'ETL-SQL-LSP');
         if (await fileExists(bundledServer)) {
             serverPath = bundledServer;
+            ensureExecutable(serverPath);
             outputChannel.appendLine(`Using bundled Language Server: ${serverPath}`);
         }
     }
@@ -277,12 +289,6 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('etlsql.removeConnection', (node: { label?: string }) => {
-        if (node && node.label) {
-            connectionsProvider.removeConnection(node.label);
-            syncConnectionsToLsp();
-        }
-    }));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.refreshConnections', () => {
         const activeEditor = vscode.window.activeTextEditor;
@@ -655,7 +661,7 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
             scriptPath = path.join(tempDir, `temp_${Date.now()}.etlsql`);
             await fs.promises.writeFile(scriptPath, scriptText, 'utf8');
         }
-        const command = `& "${exePath}" run "${scriptPath}"`;
+        const command = getTerminalCommand(exePath, ['run', scriptPath]);
         terminal.sendText(command);
     }
 }
@@ -686,6 +692,7 @@ async function getExecutablePath(context: vscode.ExtensionContext, config: vscod
     // 2. Try bundled path
     const bundledPath = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL.exe' : 'ETL-SQL');
     if (await fileExists(bundledPath)) {
+        ensureExecutable(bundledPath);
         return bundledPath;
     }
 
@@ -786,6 +793,7 @@ function getReportExecutablePath(context: vscode.ExtensionContext): { exe: strin
     const ext = os.platform() === 'win32' ? '.exe' : '';
     const bundledPath = path.join(context.extensionPath, 'bin', `ETL-SQL-Report${ext}`);
     if (fs.existsSync(bundledPath)) {
+        ensureExecutable(bundledPath);
         return { exe: bundledPath, baseArgs: [] };
     }
 
@@ -794,7 +802,7 @@ function getReportExecutablePath(context: vscode.ExtensionContext): { exe: strin
     if (workspaceFolder) {
         const cliProject = path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.ReportBuilder.CLI', 'ETL-SQL.ReportBuilder.CLI.csproj');
         if (fs.existsSync(cliProject)) {
-            return { exe: 'dotnet', baseArgs: ['run', '--project', `"${cliProject}"`, '--'] };
+            return { exe: 'dotnet', baseArgs: ['run', '--project', cliProject, '--'] };
         }
     }
 
@@ -848,7 +856,8 @@ async function launchReport(context: vscode.ExtensionContext, mode: 'file' | 'di
         args.push(`"${targetPath}"`);
     }
 
-    terminal.sendText(`& ${reportExe.exe} ${args.join(' ')}`);
+    const command = getTerminalCommand(reportExe.exe, args);
+    terminal.sendText(command);
 }
 
 async function handleExport(context: vscode.ExtensionContext, format: string, label: string, extensions: string[]) {
@@ -886,7 +895,7 @@ async function handleExport(context: vscode.ExtensionContext, format: string, la
             cancellable: false
         }, async () => {
             return new Promise<void>((resolve, reject) => {
-                cp.execFile(reportExe.exe, args, { shell: true }, (err, stdout, stderr) => {
+                cp.execFile(reportExe.exe, args, { shell: false }, (err, stdout, stderr) => {
                     if (err) {
                         vscode.window.showErrorMessage(`Export failed: ${stderr || err.message}`);
                         reject(err);
@@ -943,3 +952,4 @@ async function exportNotebookToSql() {
         await vscode.window.showTextDocument(doc);
     }
 }
+

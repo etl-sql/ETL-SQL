@@ -49,7 +49,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Environment.SetEnvironmentVariable("BIGQUERY_EMULATOR_HOST", null);
 
             if (_container != null)
-                await _container.StopAsync();
+                await _container.DisposeAsync();
         }
     }
 

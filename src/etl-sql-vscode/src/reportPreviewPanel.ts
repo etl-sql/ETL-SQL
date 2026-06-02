@@ -14,6 +14,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as nodeCrypto from 'crypto';
+import * as logger from './logger';
 
 export class ReportPreviewPanel {
     public static readonly viewType = 'etlsql.reportPreview';
@@ -85,6 +86,11 @@ export class ReportPreviewPanel {
                     case 'drillReport':
                         this._handleDrillReport(message.targetReport, message.parameters);
                         break;
+                    case 'log': {
+                        const typedMsg = message as { level?: string; message?: string };
+                        logger.logWebview('Preview', typedMsg.message || '', (typedMsg.level as 'info' | 'warn' | 'error') || 'info');
+                        break;
+                    }
                 }
             },
             null,
@@ -234,6 +240,10 @@ export class ReportPreviewPanel {
                 proc.stderr.on('data', d => {
                     stderr += d.toString();
                 });
+                proc.on('error', err => {
+                    vscode.window.showErrorMessage(`Export failed: ${err.message}`);
+                    reject(err);
+                });
                 proc.on('close', code => {
                     if (code === 0) {
                         vscode.window.showInformationMessage(`Report exported successfully to ${path.basename(uri.fsPath)}`);
@@ -292,6 +302,12 @@ export class ReportPreviewPanel {
         const proc = cp.spawn(exe, args, { shell: false, cwd: this._resolveExecutionCwd() });
         let stderr = '';
         proc.stderr.on('data', d => { stderr += d.toString(); });
+        proc.on('error', err => {
+            if (isTempScript && fs.existsSync(targetPath)) {
+                try { fs.unlinkSync(targetPath); } catch { /* ignore */ }
+            }
+            callback(`Failed to start ETL-SQL-Report: ${err.message}`, null);
+        });
         proc.on('close', code => {
             if (isTempScript && fs.existsSync(targetPath)) {
                 try { fs.unlinkSync(targetPath); } catch { /* ignore */ }
@@ -331,6 +347,7 @@ export class ReportPreviewPanel {
         for (const ext of possibleExtensions) {
             const bundledPath = path.join(this._extensionUri.fsPath, 'bin', `ETL-SQL-Report${ext}`);
             if (fs.existsSync(bundledPath)) {
+                this._ensureExecutable(bundledPath);
                 return { exe: bundledPath, baseArgs: [] };
             }
         }
@@ -389,6 +406,46 @@ export class ReportPreviewPanel {
     }
     <div id="root"></div>
     <script nonce="${nonce}">
+        // Bridge: postMessage ↔ extension host output channel
+        (function() {
+            if (typeof acquireVsCodeApi === 'function') {
+                const vscode = acquireVsCodeApi();
+                window.acquireVsCodeApi = function() { return vscode; };
+                const originalWarn = console.warn;
+                console.warn = function(...args) {
+                    originalWarn.apply(console, args);
+                    vscode.postMessage({
+                        type: 'log',
+                        level: 'warn',
+                        message: args.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ')
+                    });
+                };
+                const originalError = console.error;
+                console.error = function(...args) {
+                    originalError.apply(console, args);
+                    vscode.postMessage({
+                        type: 'log',
+                        level: 'error',
+                        message: args.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ')
+                    });
+                };
+                window.addEventListener('error', function(e) {
+                    vscode.postMessage({
+                        type: 'log',
+                        level: 'error',
+                        message: \`Unhandled runtime error: \${e.message} at \${e.filename}:\${e.lineno}:\${e.colno}\`
+                    });
+                });
+                window.addEventListener('unhandledrejection', function(e) {
+                    vscode.postMessage({
+                        type: 'log',
+                        level: 'error',
+                        message: \`Unhandled promise rejection: \${e.reason}\`
+                    });
+                });
+            }
+        })();
+
         // Injected manifest for the shared runtime
         window.__MANIFEST__ = ${manifestJson};
     </script>
@@ -412,6 +469,19 @@ export class ReportPreviewPanel {
 
     private _nonce(): string {
         return nodeCrypto.randomBytes(16).toString('base64url');
+    }
+
+    private _ensureExecutable(filePath: string): void {
+        if (os.platform() !== 'win32' && fs.existsSync(filePath)) {
+            try {
+                const stats = fs.statSync(filePath);
+                if ((stats.mode & fs.constants.S_IXUSR) === 0) {
+                    fs.chmodSync(filePath, stats.mode | fs.constants.S_IXUSR | fs.constants.S_IXGRP | fs.constants.S_IXOTH);
+                }
+            } catch {
+                // ignore
+            }
+        }
     }
 
     public dispose(): void {

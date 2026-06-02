@@ -1,0 +1,28 @@
+{
+  "setupFiles": [
+    {
+      "path": "extract.etlsql",
+      "content": "INSERT INTO #ModuleStage (ID, Amount) VALUES (1, 10.00);\nINSERT INTO #ModuleStage (ID, Amount) VALUES (2, 15.50);\nINSERT INTO #ModuleAudit (StepName, RowCount) VALUES ('extract', 2);\n"
+    },
+    {
+      "path": "transform.etlsql",
+      "content": "SELECT ID, Amount * 2 AS AmountDoubled INTO #ModulePublished FROM #ModuleStage;\nINSERT INTO #ModuleAudit (StepName, RowCount) VALUES ('transform', (SELECT COUNT(*) FROM #ModulePublished));\n"
+    }
+  ],
+  "runtimeQueries": [
+    {
+      "sql": "SELECT StepName, RowCount FROM #ModuleAudit ORDER BY StepName;",
+      "rows": [
+        { "StepName": "extract", "RowCount": 2 },
+        { "StepName": "transform", "RowCount": 2 }
+      ]
+    },
+    {
+      "sql": "SELECT ID, AmountDoubled FROM #ModulePublished ORDER BY ID;",
+      "rows": [
+        { "ID": 1, "AmountDoubled": "20.00" },
+        { "ID": 2, "AmountDoubled": "31.00" }
+      ]
+    }
+  ]
+}

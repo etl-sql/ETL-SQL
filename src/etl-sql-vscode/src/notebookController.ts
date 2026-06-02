@@ -13,7 +13,7 @@ export class ETLNotebookController {
     private readonly _controller: vscode.NotebookController;
     private _executionOrder = 0;
 
-    constructor() {
+    constructor(private context: vscode.ExtensionContext) {
         this._controller = vscode.notebooks.createNotebookController(
             this.controllerId,
             this.notebookType,
@@ -120,6 +120,19 @@ export class ETLNotebookController {
         return html;
     }
 
+    private _ensureExecutable(filePath: string): void {
+        if (process.platform !== 'win32' && fs.existsSync(filePath)) {
+            try {
+                const stats = fs.statSync(filePath);
+                if ((stats.mode & fs.constants.S_IXUSR) === 0) {
+                    fs.chmodSync(filePath, stats.mode | fs.constants.S_IXUSR | fs.constants.S_IXGRP | fs.constants.S_IXOTH);
+                }
+            } catch {
+                // ignore
+            }
+        }
+    }
+
     private async _getExecutablePath(config: vscode.WorkspaceConfiguration): Promise<string> {
         const exePath = (config.get<string>('executable.path') || '').trim();
         if (exePath) {
@@ -132,7 +145,14 @@ export class ETLNotebookController {
             return inPath;
         }
 
-        // 2. Search in common build folders
+        // 2. Try bundled path
+        const bundledPath = path.join(this.context.extensionPath, 'bin', process.platform === 'win32' ? 'ETL-SQL.exe' : 'ETL-SQL');
+        if (await this._fileExists(bundledPath)) {
+            this._ensureExecutable(bundledPath);
+            return bundledPath;
+        }
+
+        // 3. Search in common build folders
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (workspaceFolder) {
             const projectRoot = path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin');

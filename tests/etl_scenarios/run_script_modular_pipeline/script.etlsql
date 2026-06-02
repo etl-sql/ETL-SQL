@@ -1,0 +1,5 @@
+CREATE TABLE #ModuleAudit (StepName VARCHAR(30), RowCount INT);
+CREATE TABLE #ModuleStage (ID INT, Amount DECIMAL);
+
+RUN SCRIPT '{ScenarioTempDir}/extract.etlsql';
+RUN SCRIPT '{ScenarioTempDir}/transform.etlsql';

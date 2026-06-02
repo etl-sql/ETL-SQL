@@ -10,9 +10,33 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="MiniExcel" />
     <PackageReference Include="PDFsharp-MigraDoc" />
     <PackageReference Include="Svg.Skia" />
+    <!-- Linux native libSkiaSharp.so for the Docker images (Svg.Skia omits it). -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
     <PackageReference Include="Spectre.Console" />
+    <!-- ClearScript/V8 hosts real ECharts (SSR) for export chart rendering. -->
+    <PackageReference Include="Microsoft.ClearScript.V8" />
+    <PackageReference Include="Microsoft.ClearScript.V8.Native.win-x64" />
+    <PackageReference Include="Microsoft.ClearScript.V8.Native.linux-x64" />
+    <PackageReference Include="Microsoft.ClearScript.V8.Native.linux-arm64" />
+    <PackageReference Include="Microsoft.ClearScript.V8.Native.osx-x64" />
+    <PackageReference Include="Microsoft.ClearScript.V8.Native.osx-arm64" />
+  </ItemGroup>
+
+  <!-- Embed the canonical (SSR-capable) ECharts bundle so the engine can render
+       charts server-side without the browser asset folder. Single source of truth. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\echarts.min.js" Link="echarts.min.js" />
+    <!-- GeoJSON for MAP charts: registered into ECharts on demand during SSR. -->
+    <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\maps\*.geojson">
+      <LogicalName>maps.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ETL-SQL.Tests" />
   </ItemGroup>
 
 </Project>

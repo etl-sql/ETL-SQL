@@ -39,23 +39,34 @@ namespace ETL_SQL.Tests.Scenarios
                 await File.ReadAllTextAsync(expectedPath),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new ScenarioExpectation();
 
-            var script = TestHelpers.Parse(scriptText);
-            Assert.Empty(script.Diagnostics.Select(d => d.Message));
-
-            if (expected.Failure != null)
+            var tempDir = CreateScenarioTempDirectory(scenarioDirectory);
+            try
             {
-                await AssertExpectedFailure(script, expected.Failure);
-                return;
+                await WriteSetupFiles(tempDir, expected.SetupFiles);
+                scriptText = ApplyScenarioTokens(scriptText, tempDir);
+
+                var script = TestHelpers.Parse(scriptText);
+                Assert.Empty(script.Diagnostics.Select(d => d.Message));
+
+                if (expected.Failure != null)
+                {
+                    await AssertExpectedFailure(script, expected.Failure);
+                    return;
+                }
+
+                if (expected.StaticLineage.Count > 0)
+                {
+                    AssertStaticLineage(script, expected);
+                }
+
+                if (expected.RuntimeQueries.Count > 0)
+                {
+                    await AssertRuntimeQueries(script, expected, tempDir);
+                }
             }
-
-            if (expected.StaticLineage.Count > 0)
+            finally
             {
-                AssertStaticLineage(script, expected);
-            }
-
-            if (expected.RuntimeQueries.Count > 0)
-            {
-                await AssertRuntimeQueries(script, expected);
+                TryDeleteDirectory(tempDir);
             }
         }
 
@@ -104,17 +115,59 @@ namespace ETL_SQL.Tests.Scenarios
             }
         }
 
-        private static async Task AssertRuntimeQueries(Script script, ScenarioExpectation expected)
+        private static async Task AssertRuntimeQueries(Script script, ScenarioExpectation expected, string tempDir)
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await evaluator.Evaluate(script);
 
             foreach (var query in expected.RuntimeQueries)
             {
-                var queryScript = TestHelpers.Parse(query.Sql);
+                var queryScript = TestHelpers.Parse(ApplyScenarioTokens(query.Sql, tempDir));
                 Assert.Single(queryScript.Statements);
                 var result = await evaluator.ExecuteQuery(queryScript.Statements[0]).FirstAsync();
                 AssertRows(result, query.Rows);
+            }
+        }
+
+        private static string CreateScenarioTempDirectory(string scenarioDirectory)
+        {
+            var name = Path.GetFileName(scenarioDirectory);
+            var root = Path.Combine(Path.GetTempPath(), "etl-sql-scenarios");
+            Directory.CreateDirectory(root);
+            return Directory.CreateDirectory(Path.Combine(root, $"{name}-{Guid.NewGuid():N}")).FullName;
+        }
+
+        private static async Task WriteSetupFiles(string tempDir, List<SetupFileExpectation> setupFiles)
+        {
+            foreach (var file in setupFiles)
+            {
+                var relativePath = file.Path.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+                var fullPath = Path.GetFullPath(Path.Combine(tempDir, relativePath));
+                if (!fullPath.StartsWith(tempDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException($"Scenario setup file escapes temp directory: {file.Path}");
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+                await File.WriteAllTextAsync(fullPath, file.Content);
+            }
+        }
+
+        private static string ApplyScenarioTokens(string text, string tempDir) =>
+            text.Replace("{ScenarioTempDir}", tempDir.Replace('\\', '/'), StringComparison.Ordinal);
+
+        private static void TryDeleteDirectory(string path)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, recursive: true);
+                }
+            }
+            catch
+            {
+                // Best-effort cleanup. A failed delete should not hide the test result.
             }
         }
 
@@ -183,9 +236,16 @@ namespace ETL_SQL.Tests.Scenarios
         private sealed class ScenarioExpectation
         {
             public FailureExpectation? Failure { get; set; }
+            public List<SetupFileExpectation> SetupFiles { get; set; } = new();
             public List<SeedLineageExpectation> SeedLineage { get; set; } = new();
             public List<LineageExpectation> StaticLineage { get; set; } = new();
             public List<RuntimeQueryExpectation> RuntimeQueries { get; set; } = new();
+        }
+
+        private sealed class SetupFileExpectation
+        {
+            public string Path { get; set; } = "";
+            public string Content { get; set; } = "";
         }
 
         private sealed class FailureExpectation

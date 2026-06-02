@@ -1,0 +1,17 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT PayloadId, OrderId, Region, TotalAmount FROM #ParsedOrders ORDER BY PayloadId;",
+      "rows": [
+        { "PayloadId": 1, "OrderId": "A100", "Region": "North", "TotalAmount": "25.50" },
+        { "PayloadId": 3, "OrderId": "A102", "Region": "North", "TotalAmount": "40.00" }
+      ]
+    },
+    {
+      "sql": "SELECT Region, OrderCount, RegionTotal FROM #JsonOrderSummary ORDER BY Region;",
+      "rows": [
+        { "Region": "North", "OrderCount": 2, "RegionTotal": "65.50" }
+      ]
+    }
+  ]
+}

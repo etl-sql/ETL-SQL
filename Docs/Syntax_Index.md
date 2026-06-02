@@ -88,6 +88,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `PIVOT` / `UNPIVOT` | DML / Transform | [Grammar.md](../Docs/Reference/Grammar.md) | [PIVOT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
 | `MATCH_RECOGNIZE` | DML / Pattern Matching | [Grammar.md](../Docs/Reference/Grammar.md#59-match_recognize) | [MATCH_RECOGNIZE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/MATCH_RECOGNIZE.md) |
 | `EXPORT REPORT` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [EXPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/EXPORT.md) |
+| `EXPORT REPORT ... WITH (PDF_MODE = ...)` | Reporting / Export | `PDF_MODE = STATIC\|AUTO\|HOSTED\|BROWSER`, `HOST`, `BROWSER_PATH` | [EXPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/EXPORT.md) |
 | `SUBSCRIPTION` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [SUBSCRIPTION.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SUBSCRIPTION.md) |
 | `RELDATE` | Variables | [RelativeDate_Parameters.md](../Docs/Reference/RelativeDate_Parameters.md) | [RELDATE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/RELDATE.md) |
 | `RAISEERROR` | Flow Control | [Grammar.md](../Docs/Reference/Grammar.md) | [THROW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/THROW.md) |

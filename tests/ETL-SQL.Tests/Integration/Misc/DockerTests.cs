@@ -11,8 +11,27 @@ using Spectre.Console;
 
 namespace ETL_SQL.Tests.Integration
 {
+    /// <summary>
+    /// Closes every container the engine's <see cref="IDockerManager"/> started, once, after the
+    /// whole class has run. The engine deliberately persists containers across runs (its
+    /// DisposeAsync is a no-op), so without this teardown the named DB containers and their
+    /// multi-GB anonymous data volumes are only reaped by Ryuk at process exit — and leak entirely
+    /// if the run is killed. CloseContainers operates on the manager's static registry, so a fresh
+    /// manager instance still sees and removes them all.
+    /// </summary>
+    public sealed class DockerCleanupFixture : IAsyncLifetime
+    {
+        public Task InitializeAsync() => Task.CompletedTask;
+
+        public async Task DisposeAsync()
+        {
+            var manager = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<IDockerManager>();
+            await manager.CloseContainers(null);
+        }
+    }
+
     [Trait("Category", "Integration")]
-    public class DockerTests
+    public class DockerTests : IClassFixture<DockerCleanupFixture>
     {
         private static Script Parse(string sql)
         {

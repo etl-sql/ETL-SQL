@@ -59,7 +59,7 @@ namespace ETL_SQL.Reporting
             {
                 // No pages defined — emit all visuals in definition order
                 foreach (var visual in manifest.Visuals)
-                    RenderVisual(sb, visual);
+                    RenderVisual(sb, visual, manifest);
             }
 
             return sb.ToString();
@@ -87,7 +87,7 @@ namespace ETL_SQL.Reporting
                     string.Equals(v.Name, itemName, StringComparison.OrdinalIgnoreCase));
                 if (visual != null)
                 {
-                    RenderVisual(sb, visual);
+                    RenderVisual(sb, visual, manifest);
                 }
                 else
                 {
@@ -117,7 +117,7 @@ namespace ETL_SQL.Reporting
                         string.Equals(v.Name, itemName, StringComparison.OrdinalIgnoreCase));
                     if (visual != null)
                     {
-                        RenderVisual(sb, visual);
+                        RenderVisual(sb, visual, manifest);
                     }
                     else
                     {
@@ -130,7 +130,7 @@ namespace ETL_SQL.Reporting
             }
         }
 
-        private void RenderVisual(StringBuilder sb, VisualManifest v)
+        private void RenderVisual(StringBuilder sb, VisualManifest v, ReportManifest manifest)
         {
             string heading = v.Options.TryGetValue("title", out var t) ? t : v.Name;
             if (v.TitleIsMarkdown)
@@ -155,14 +155,38 @@ namespace ETL_SQL.Reporting
                     RenderCard(sb, v);
                     break;
 
+                // Filter/input controls: show the selection in effect at export time.
                 case "SLICER":
-                    sb.AppendLine("*\\[Slicer — interactive only\\]*");
-                    sb.AppendLine();
+                case "MULTISELECT":
+                case "DATEPICKER":
+                case "RELDATEPICKER":
+                case "SLIDER":
+                case "SEARCH":
+                case "NUMBERBOX":
+                case "CHECKBOX":
+                case "DROPDOWN":
+                    RenderFilter(sb, v, manifest);
                     break;
+
+                case "IMAGE":
+                {
+                    var src = v.Options.GetValueOrDefault("SRC") ?? v.Options.GetValueOrDefault("src");
+                    if (!string.IsNullOrWhiteSpace(src))
+                    {
+                        // Attribute-safe (entities decode back to the original data URI / URL).
+                        var safe = src.Replace("&", "&amp;").Replace("\"", "&quot;");
+                        sb.AppendLine($"<img src=\"{safe}\" alt=\"{EscapeCell(v.Name)}\" />");
+                        sb.AppendLine();
+                    }
+                    break;
+                }
 
                 case "TEXT":
                 {
-                    v.Options.TryGetValue("VALUE", out var textContent);
+                    // Resolve via the shared resolver so PDF and Markdown agree on TEXT content
+                    // (CONTENT/VALUE/DefaultValue/mapping:content), rather than each renderer
+                    // checking a different subset of keys.
+                    var textContent = ReportVisualContent.ResolveTextContent(v);
                     v.Options.TryGetValue("ALIGN", out var align);
                     if (!string.IsNullOrWhiteSpace(textContent))
                     {
@@ -188,8 +212,9 @@ namespace ETL_SQL.Reporting
                         sb.AppendLine($"<!-- ECHART:{v.ChartConfig} -->");
                         sb.AppendLine();
                     }
-                    // Embed SVG image for static export (GitHub, PDF conversion, etc.)
-                    var svgStr = _svg.Render(v);
+                    // Embed SVG image for static export. Prefer real ECharts (SSR);
+                    // fall back to the static renderer when there's no option or SSR fails.
+                    var svgStr = EChartsSsrRenderer.Shared.RenderSvg(v) ?? _svg.Render(v);
                     if (svgStr != null)
                     {
                         var uri = SvgEmbed.ToDataUri(svgStr);
@@ -217,13 +242,20 @@ namespace ETL_SQL.Reporting
             for (int i = 0; i < cap; i++)
             {
                 var row = v.Rows[i];
-                var cells = v.Columns.Select((_, ci) => ci < row.Count ? EscapeCell(row[ci] ?? "") : "");
+                var cells = v.Columns.Select((_, ci) => ci < row.Count ? EscapeCell(ReportCellFormatter.FormatCell(row[ci])) : "");
                 sb.AppendLine("| " + string.Join(" | ", cells) + " |");
             }
 
             if (v.Rows.Count > 1000)
                 sb.AppendLine($"*… {v.Rows.Count - 1000:N0} more rows not shown.*");
 
+            sb.AppendLine();
+        }
+
+        private static void RenderFilter(StringBuilder sb, VisualManifest v, ReportManifest manifest)
+        {
+            var display = ReportVisualContent.ResolveFilterDisplay(v, manifest);
+            sb.AppendLine($"*{EscapeCell(v.VisualType.ToLowerInvariant())} filter — selected:* **{EscapeCell(display)}** *(interactive only — no static representation)*");
             sb.AppendLine();
         }
 

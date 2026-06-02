@@ -1,0 +1,51 @@
+CREATE TABLE #Employees (
+    EmployeeId INT,
+    EmployeeName VARCHAR(40),
+    ManagerId INT,
+    Department VARCHAR(20)
+);
+
+INSERT INTO #Employees (EmployeeId, EmployeeName, ManagerId, Department) VALUES (1, 'Avery', NULL, 'Executive');
+INSERT INTO #Employees (EmployeeId, EmployeeName, ManagerId, Department) VALUES (2, 'Blake', 1, 'Sales');
+INSERT INTO #Employees (EmployeeId, EmployeeName, ManagerId, Department) VALUES (3, 'Casey', 1, 'Engineering');
+INSERT INTO #Employees (EmployeeId, EmployeeName, ManagerId, Department) VALUES (4, 'Devon', 2, 'Sales');
+INSERT INTO #Employees (EmployeeId, EmployeeName, ManagerId, Department) VALUES (5, 'Emery', 3, 'Engineering');
+
+WITH RECURSIVE OrgTree AS (
+    SELECT
+        EmployeeId,
+        EmployeeName,
+        ManagerId,
+        Department,
+        0 AS Depth,
+        EmployeeName AS Path
+    FROM #Employees
+    WHERE ManagerId IS NULL
+    UNION ALL
+    SELECT
+        e.EmployeeId,
+        e.EmployeeName,
+        e.ManagerId,
+        e.Department,
+        o.Depth + 1 AS Depth,
+        o.Path + ' > ' + e.EmployeeName AS Path
+    FROM #Employees e
+    JOIN OrgTree o ON e.ManagerId = o.EmployeeId
+)
+SELECT
+    EmployeeId,
+    EmployeeName,
+    ManagerId,
+    Department,
+    Depth,
+    Path
+INTO #OrgTree
+FROM OrgTree;
+
+SELECT
+    Department,
+    COUNT(*) AS EmployeeCount,
+    MAX(Depth) AS MaxDepth
+INTO #DepartmentRollup
+FROM #OrgTree
+GROUP BY Department;

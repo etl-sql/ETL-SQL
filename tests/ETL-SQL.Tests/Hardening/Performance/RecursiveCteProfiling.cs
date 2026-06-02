@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
+    [Trait("Category", "Performance")]
     public class RecursiveCteProfiling
     {
         private readonly ITestOutputHelper _output;

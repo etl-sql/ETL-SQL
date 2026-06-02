@@ -44,7 +44,8 @@ foreach ($Bin in $BinaryList) {
         Write-Host "  Bundling $Bin" -ForegroundColor Gray
         Copy-Item $Src $BundledBinDir
     } else {
-        Write-Warning "  Binary not found: $Src"
+        Write-Error "  Required binary not found: $Src"
+        exit 1
     }
 }
 
@@ -54,11 +55,14 @@ try {
     # Ensure dependencies and compile extension
     Write-Host "  Compiling extension..." -ForegroundColor Gray
     npm install --no-audit --no-fund --legacy-peer-deps | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "npm install failed with exit code $LASTEXITCODE" }
     npm run compile | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "npm run compile failed with exit code $LASTEXITCODE" }
     
     # Package VSIX
     Write-Host "  Running vsce package..." -ForegroundColor Gray
     npx @vscode/vsce package --target $VsixTarget --no-dependencies --out "etl-sql-vscode-$VsixTarget.vsix" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "vsce package failed with exit code $LASTEXITCODE" }
     
     $VsixPath = Join-Path $ExtensionDir "etl-sql-vscode-$VsixTarget.vsix"
     if (Test-Path $VsixPath) {

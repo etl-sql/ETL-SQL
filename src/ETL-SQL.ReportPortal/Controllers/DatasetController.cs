@@ -139,7 +139,8 @@ public class DatasetController(
         [FromQuery] string? sort    = null,
         [FromQuery] string? dir     = null,
         [FromQuery] string? search  = null,
-        [FromQuery] string? filters = null)
+        [FromQuery] string? filters = null,
+        [FromQuery] string? format  = null)
     {
         var dataset = await LoadDataset(id);
         if (dataset is null) return NotFound();
@@ -150,11 +151,21 @@ public class DatasetController(
         var filterList = ParseFilters(filters);
         var safeName   = string.Concat(dataset.Name.Where(c => char.IsLetterOrDigit(c) || c == '_'));
 
-        Response.ContentType = "text/csv; charset=utf-8";
-        Response.Headers.Append("Content-Disposition", $"attachment; filename=\"{safeName}.csv\"");
-
         try
         {
+            if (string.Equals(format, "xlsx", StringComparison.OrdinalIgnoreCase))
+            {
+                // .xlsx is a zip and needs a seekable stream for its central directory,
+                // so buffer it rather than streaming to the (non-seekable) response body.
+                using var ms = new MemoryStream();
+                await viewer.ExportXlsxAsync(id, sort, dir, search, filterList, ms, dataset.Name);
+                return File(ms.ToArray(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    $"{safeName}.xlsx");
+            }
+
+            Response.ContentType = "text/csv; charset=utf-8";
+            Response.Headers.Append("Content-Disposition", $"attachment; filename=\"{safeName}.csv\"");
             await viewer.ExportCsvAsync(id, sort, dir, search, filterList, Response.Body);
             return new EmptyResult();
         }

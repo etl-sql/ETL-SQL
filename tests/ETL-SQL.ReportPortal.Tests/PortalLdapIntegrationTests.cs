@@ -183,7 +183,7 @@ namespace ETL_SQL.ReportPortal.Tests
                 {
                     var container = _ldapContainer;
                     _ldapContainer = null;
-                    await container.StopAsync();
+                    await container.DisposeAsync();
                 }
                 await base.DisposeAsync();
             }

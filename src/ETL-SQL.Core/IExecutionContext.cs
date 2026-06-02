@@ -64,6 +64,17 @@ namespace ETL_SQL.Core
     public interface ILineageContext
     {
         ILineageTracker LineageTracker { get; }
+
+        /// <summary>
+        /// When DB catalog import is enabled (off by default), import the given
+        /// source tables' column metadata — including comments recorded as the
+        /// lineage description — so it inherits onto derived columns. No-op unless
+        /// the evaluator overrides it.
+        /// </summary>
+        System.Threading.Tasks.Task EnsureCatalogMetadataImportedAsync(
+            System.Collections.Generic.IEnumerable<string> sourceTables,
+            System.Threading.CancellationToken ct = default)
+            => System.Threading.Tasks.Task.CompletedTask;
     }
 
     public interface ISqlCompilerContext

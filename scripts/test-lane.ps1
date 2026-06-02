@@ -49,6 +49,13 @@ function Invoke-DotNetTest {
     }
 }
 
+function Invoke-LineageUiSmoke {
+    & node (Join-Path $repoRoot "scripts\test-lineage-ui.mjs")
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+}
+
 switch ($Lane) {
     "smoke" {
         $smokeArgs = @{
@@ -64,23 +71,27 @@ switch ($Lane) {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $fastFilter
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
         Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"
+        Invoke-LineageUiSmoke
     }
     "engine" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $fastFilter
     }
     "portal" {
         Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"
+        Invoke-LineageUiSmoke
     }
     "integration" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=Integration"
     }
     "perf" {
+        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category=Performance"
         Invoke-DotNetTest "tests\ETL-SQL.PerfTests\ETL-SQL.PerfTests.csproj" "Category=Performance"
     }
     "full" {
         Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj"
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
         Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"
+        Invoke-LineageUiSmoke
         Invoke-DotNetTest "tests\ETL-SQL.PerfTests\ETL-SQL.PerfTests.csproj"
     }
     "release" {

@@ -1,0 +1,45 @@
+CREATE TABLE #WhatIfMergeTarget (
+    ID INT,
+    Name VARCHAR(40),
+    Val INT,
+    Status VARCHAR(20)
+);
+
+INSERT INTO #WhatIfMergeTarget (ID, Name, Val, Status) VALUES (1, 'Alice', 10, 'old');
+INSERT INTO #WhatIfMergeTarget (ID, Name, Val, Status) VALUES (2, 'Bob', 20, 'keep');
+
+CREATE TABLE #WhatIfMergeStage (
+    ID INT,
+    Name VARCHAR(40),
+    Val INT,
+    Status VARCHAR(20)
+);
+
+INSERT INTO #WhatIfMergeStage (ID, Name, Val, Status) VALUES (1, 'Alice', 100, 'updated');
+INSERT INTO #WhatIfMergeStage (ID, Name, Val, Status) VALUES (3, 'Charlie', 30, 'new');
+
+SET WHAT_IF ON;
+MERGE INTO #WhatIfMergeTarget AS T
+USING #WhatIfMergeStage AS S
+ON T.ID = S.ID
+WHEN MATCHED THEN
+    UPDATE SET Name = S.Name, Val = S.Val, Status = S.Status
+WHEN NOT MATCHED THEN
+    INSERT (ID, Name, Val, Status) VALUES (S.ID, S.Name, S.Val, S.Status);
+SET WHAT_IF OFF;
+
+SELECT
+    ID,
+    Name,
+    Val,
+    Status
+INTO #DryRunSnapshot
+FROM #WhatIfMergeTarget;
+
+MERGE INTO #WhatIfMergeTarget AS T
+USING #WhatIfMergeStage AS S
+ON T.ID = S.ID
+WHEN MATCHED THEN
+    UPDATE SET Name = S.Name, Val = S.Val, Status = S.Status
+WHEN NOT MATCHED THEN
+    INSERT (ID, Name, Val, Status) VALUES (S.ID, S.Name, S.Val, S.Status);

@@ -11,6 +11,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as nodeCrypto from 'crypto';
 import { LanguageClient } from 'vscode-languageclient/node';
+import * as logger from './logger';
 
 export class ReportDesignerPanel {
     public static readonly viewType = 'etlsql.reportDesigner';
@@ -79,6 +80,8 @@ export class ReportDesignerPanel {
             await this._handleSave(id, msg.script as string);
         } else if (type === 'cancel') {
             this._panel.dispose();
+        } else if (type === 'log') {
+            logger.logWebview('Designer', msg.message as string, msg.level as 'info' | 'warn' | 'error');
         }
     }
 
@@ -182,6 +185,44 @@ export class ReportDesignerPanel {
 <!-- Bridge: postMessage ↔ LSP + disk save -->
 <script nonce="${nonce}">
   const vscodeApi = acquireVsCodeApi();
+  window.acquireVsCodeApi = () => vscodeApi;
+
+  // Console and Error redirection to Extension Host OutputChannel
+  (function() {
+    const originalWarn = console.warn;
+    console.warn = function(...args) {
+      originalWarn.apply(console, args);
+      vscodeApi.postMessage({
+        type: 'log',
+        level: 'warn',
+        message: args.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ')
+      });
+    };
+    const originalError = console.error;
+    console.error = function(...args) {
+      originalError.apply(console, args);
+      vscodeApi.postMessage({
+        type: 'log',
+        level: 'error',
+        message: args.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' ')
+      });
+    };
+    window.addEventListener('error', function(e) {
+      vscodeApi.postMessage({
+        type: 'log',
+        level: 'error',
+        message: \`Unhandled runtime error: \${e.message} at \${e.filename}:\${e.lineno}:\${e.colno}\`
+      });
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      vscodeApi.postMessage({
+        type: 'log',
+        level: 'error',
+        message: \`Unhandled promise rejection: \${e.reason}\`
+      });
+    });
+  })();
+
   const _pending  = new Map();
 
   // Incoming messages from extension host

@@ -13,7 +13,6 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | void> = new vscode.EventEmitter<TreeItem | undefined | void>();
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | void> = this._onDidChangeTreeData.event;
 
-    private connections: Connection[] = [];
     private scriptConnectionsByUri: Map<string, Connection[]> = new Map();
     public variables: { name: string; value: string; type: string }[] = [];
     private metadataCache: Map<string, string[]> = new Map();
@@ -21,11 +20,9 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
     public outputChannel?: vscode.OutputChannel;
 
     constructor(private context: vscode.ExtensionContext) {
-        this.loadConnections();
     }
 
     refresh(): void {
-        this.loadConnections();
         this._onDidChangeTreeData.fire();
     }
 
@@ -67,33 +64,8 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
         this._onDidChangeTreeData.fire();
     }
 
-    private loadConnections() {
-        const stored = this.context.globalState.get<string>('etlsql.connections', '[]');
-        try {
-            this.connections = JSON.parse(stored);
-        } catch (e) {
-            this.connections = [];
-        }
-    }
-
-    private saveConnections() {
-        this.context.globalState.update('etlsql.connections', JSON.stringify(this.connections));
-    }
-
-    addConnection(conn: Connection) {
-        this.connections.push(conn);
-        this.saveConnections();
-        this.refresh();
-    }
-
-    removeConnection(name: string) {
-        this.connections = this.connections.filter(c => c.name !== name);
-        this.saveConnections();
-        this.refresh();
-    }
-
     getConnections(): Connection[] {
-        return this.connections;
+        return [];
     }
 
     getTreeItem(element: TreeItem): vscode.TreeItem {
@@ -108,7 +80,6 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
             }
 
             const all: (ConnectionItem | CategoryItem)[] = [
-                ...this.connections.map(c => new ConnectionItem(c.name, c.type, c, false, vscode.TreeItemCollapsibleState.Collapsed)),
                 ...allScriptConns.map(c => new ConnectionItem(c.name, c.type, c, true, vscode.TreeItemCollapsibleState.Collapsed, c.uri))
             ];
 
@@ -136,7 +107,7 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
                     try {
                         const response = await (this.client as LanguageClient).sendRequest('etlsql/getTempTables', { uri: element.uri }) as { tables: string[] };
                         return response.tables.map((t: string) => new TableItem(t, 'TEMP', vscode.TreeItemCollapsibleState.Collapsed, element.uri));
-                    } catch (e) {
+                    } catch {
                         return [new TreeItem("Error loading temp tables", vscode.TreeItemCollapsibleState.None)];
                     }
                 }
@@ -157,7 +128,7 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
                     
                     const list = element.category === 'Views' ? (response.views || []) : (response.tables || []);
                     return list.map((t: string) => new TableItem(t, element.connectionName, vscode.TreeItemCollapsibleState.Collapsed, element.uri));
-                } catch (e: unknown) {
+                } catch {
                     return [new TreeItem("Error loading " + element.category.toLowerCase(), vscode.TreeItemCollapsibleState.None)];
                 }
             }

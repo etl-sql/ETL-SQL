@@ -1,0 +1,12 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT CustomerId, CustomerName, Segment, LoadAction FROM #CustomerTarget ORDER BY CustomerId;",
+      "rows": [
+        { "CustomerId": 1, "CustomerName": "Alice", "Segment": "Premium", "LoadAction": "updated" },
+        { "CustomerId": 2, "CustomerName": "Bob", "Segment": "Silver", "LoadAction": "preserved" },
+        { "CustomerId": 3, "CustomerName": "Cara", "Segment": "Gold", "LoadAction": "inserted" }
+      ]
+    }
+  ]
+}

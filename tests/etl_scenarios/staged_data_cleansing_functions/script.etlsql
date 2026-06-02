@@ -1,0 +1,21 @@
+CREATE TABLE #RawCustomers (
+    CustomerId INT,
+    CustomerName VARCHAR(50),
+    Email VARCHAR(100),
+    AmountText VARCHAR(20)
+);
+
+INSERT INTO #RawCustomers (CustomerId, CustomerName, Email, AmountText) VALUES (1, '  alice  ', 'ALICE@EXAMPLE.COM', '25.50');
+INSERT INTO #RawCustomers (CustomerId, CustomerName, Email, AmountText) VALUES (2, 'bob', 'not-an-email', '10.00');
+INSERT INTO #RawCustomers (CustomerId, CustomerName, Email, AmountText) VALUES (3, 'carol', 'carol@example.com', 'N/A');
+INSERT INTO #RawCustomers (CustomerId, CustomerName, Email, AmountText) VALUES (4, ' dana ', 'DANA@EXAMPLE.COM', '40');
+
+SELECT
+    CustomerId,
+    UPPER(TRIM(CustomerName)) AS CustomerName,
+    LOWER(TRIM(Email)) AS Email,
+    TRY_CAST(AmountText AS DECIMAL) AS Amount
+INTO #CleanCustomers
+FROM #RawCustomers
+WHERE REGEXP_LIKE(Email, '^[^@]+@[^@]+\.[^@]+$')
+  AND TRY_CAST(AmountText AS DECIMAL) IS NOT NULL;

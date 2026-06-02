@@ -161,9 +161,9 @@ namespace ETL_SQL.Tests.Docs
                 new Regex(@"\bbacklog\b", RegexOptions.IgnoreCase),
                 new Regex(@"\broadmap\b", RegexOptions.IgnoreCase),
                 new Regex(@"\bremaining work\b", RegexOptions.IgnoreCase),
-                new Regex(@"\bfuture work\b", RegexOptions.IgnoreCase),
+                new Regex(@"\bfuture\b", RegexOptions.IgnoreCase),
+                new Regex(@"\bplanned\b", RegexOptions.IgnoreCase),
                 new Regex(@"\bnot yet implemented\b", RegexOptions.IgnoreCase),
-                new Regex(@"\bplanned (?:for|in)\b", RegexOptions.IgnoreCase),
                 new Regex(@"\bphase\s+\d+\b", RegexOptions.IgnoreCase),
             };
 

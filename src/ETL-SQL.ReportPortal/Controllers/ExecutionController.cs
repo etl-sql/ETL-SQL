@@ -21,29 +21,14 @@ public class ExecutionController(
     ExecutionJobService jobService,
     SessionCache        sessions,
     AuditService        audit,
-    PortalConfig        portalConfig) : ControllerBase
+    PortalConfig        portalConfig,
+    FolderPermissionService folderPermissions) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-    private bool IsAdmin => User.IsInRole("Admin");
-
-    // ── Permission helper (shared with ReportsController) ────────────────────
-
-    private async Task<FolderPermission?> GetEffectivePermissionAsync(int folderId)
-    {
-        if (IsAdmin) return FolderPermission.Manage;
-        var groupIds = await db.UserGroups
-            .Where(ug => ug.UserId == CurrentUserId)
-            .Select(ug => ug.GroupId)
-            .ToListAsync();
-        var perms = await db.FolderAcls
-            .Where(a => a.FolderId == folderId && groupIds.Contains(a.GroupId))
-            .Select(a => a.Permission)
-            .ToListAsync();
-        if (!perms.Any()) return null;
-        return (FolderPermission)perms.Max(p => (int)p);
-    }
+    private Task<FolderPermission?> GetEffectivePermissionAsync(int folderId) =>
+        folderPermissions.GetEffectivePermissionAsync(folderId, User);
 
     // ── 2.1  POST /api/reports/{id}/execute ──────────────────────────────────
 
@@ -316,7 +301,7 @@ public class ExecutionController(
             catch (Exception ex)
             {
                 // Fire and forget
-                audit.LogAsync(CurrentUserId, "PERSIST_LINEAGE_FAILED", "Report", id.ToString(), ex.Message).Wait();
+                await audit.LogAsync(CurrentUserId, "PERSIST_LINEAGE_FAILED", "Report", id.ToString(), ex.Message);
             }
         }
     }

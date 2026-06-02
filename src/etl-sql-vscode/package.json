@@ -1,7 +1,7 @@
 {
   "name": "etl-sql-vscode",
   "displayName": "ETL-SQL Tools",
-  "description": "Language support for ETL-SQL scripts with lineage tracking and diagnostics.",
+  "description": "SQL-like scripting for multi-source data pipelines. Run scripts against MSSQL, Postgres, Snowflake, BigQuery, SFTP, REST APIs, flat files, and more — with IntelliSense, linting, live results, and interactive report authoring.",
   "version": "0.9.0",
   "publisher": "etl-sql",
   "license": "MIT",
@@ -13,11 +13,41 @@
   "bugs": {
     "url": "https://github.com/etl-sql/ETL-SQL/issues"
   },
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1e2a3a",
+    "theme": "dark"
+  },
+  "keywords": [
+    "sql",
+    "etl",
+    "data pipeline",
+    "database",
+    "data engineering",
+    "mssql",
+    "postgres",
+    "postgresql",
+    "snowflake",
+    "bigquery",
+    "oracle",
+    "sftp",
+    "rest api",
+    "flatfile",
+    "csv",
+    "data orchestration",
+    "notebook",
+    "reporting",
+    "lineage",
+    "zero-trust"
+  ],
   "engines": {
     "vscode": "^1.75.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Data Science",
+    "Notebooks",
+    "Other"
   ],
   "activationEvents": [
     "onLanguage:etlsql",
@@ -105,8 +135,8 @@
       "properties": {
         "etlsql.executable.path": {
           "type": "string",
-          "default": "ETL-SQL.exe",
-          "description": "Path to the ETL-SQL CLI executable (ETL-SQL.exe) for running scripts."
+          "default": "",
+          "description": "Optional path or command for the ETL-SQL CLI executable. Leave empty to use the bundled executable, then PATH/build fallbacks."
         },
         "etlsql.server.path": {
           "type": "string",
@@ -115,8 +145,8 @@
         },
         "etlsql.report.executable.path": {
           "type": "string",
-          "default": "ETL-SQL-Report.exe",
-          "description": "Path to the ETL-SQL Report CLI executable (ETL-SQL-Report.exe) for building reports."
+          "default": "",
+          "description": "Optional path or command for the ETL-SQL Report CLI executable. Leave empty to use the bundled executable, then build fallback."
         },
         "etlsql.report.autoOpenPreview": {
           "type": "boolean",
@@ -155,11 +185,7 @@
         "command": "etlsql.showLineage",
         "title": "ETL-SQL: Show Visual Lineage"
       },
-      {
-        "command": "etlsql.removeConnection",
-        "title": "ETL-SQL: Remove Connection",
-        "icon": "$(trash)"
-      },
+
       {
         "command": "etlsql.refreshConnections",
         "title": "ETL-SQL: Refresh",
@@ -328,13 +354,8 @@
       ],
       "view/item/context": [
         {
-          "command": "etlsql.removeConnection",
-          "when": "view == etlsql-sidebar && viewItem == connection-global",
-          "group": "inline"
-        },
-        {
           "command": "etlsql.copyConnection",
-          "when": "view == etlsql-sidebar && (viewItem == connection-global || viewItem == connection-script)",
+          "when": "view == etlsql-sidebar && viewItem == connection-script",
           "group": "inline"
         }
       ],

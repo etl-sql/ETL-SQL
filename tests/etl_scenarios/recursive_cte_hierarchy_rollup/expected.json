@@ -1,0 +1,59 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT EmployeeId, EmployeeName, Depth, Path FROM #OrgTree ORDER BY EmployeeId;",
+      "rows": [
+        {
+          "EmployeeId": "1",
+          "EmployeeName": "Avery",
+          "Depth": "0",
+          "Path": "Avery"
+        },
+        {
+          "EmployeeId": "2",
+          "EmployeeName": "Blake",
+          "Depth": "1",
+          "Path": "Avery > Blake"
+        },
+        {
+          "EmployeeId": "3",
+          "EmployeeName": "Casey",
+          "Depth": "1",
+          "Path": "Avery > Casey"
+        },
+        {
+          "EmployeeId": "4",
+          "EmployeeName": "Devon",
+          "Depth": "2",
+          "Path": "Avery > Blake > Devon"
+        },
+        {
+          "EmployeeId": "5",
+          "EmployeeName": "Emery",
+          "Depth": "2",
+          "Path": "Avery > Casey > Emery"
+        }
+      ]
+    },
+    {
+      "sql": "SELECT Department, EmployeeCount, MaxDepth FROM #DepartmentRollup ORDER BY Department;",
+      "rows": [
+        {
+          "Department": "Engineering",
+          "EmployeeCount": "2",
+          "MaxDepth": "2"
+        },
+        {
+          "Department": "Executive",
+          "EmployeeCount": "1",
+          "MaxDepth": "0"
+        },
+        {
+          "Department": "Sales",
+          "EmployeeCount": "2",
+          "MaxDepth": "2"
+        }
+      ]
+    }
+  ]
+}

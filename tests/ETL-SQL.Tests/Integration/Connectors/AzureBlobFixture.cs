@@ -80,7 +80,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task DisposeAsync()
         {
             if (_container != null)
-                await _container.StopAsync();
+                await _container.DisposeAsync();
         }
     }
 

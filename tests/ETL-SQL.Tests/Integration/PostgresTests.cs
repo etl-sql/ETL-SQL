@@ -3,7 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Npgsql;
 using Testcontainers.PostgreSql;
+using ETL_SQL.Connectors.Postgres;
 using ETL_SQL.Core;
 using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,6 +95,38 @@ namespace ETL_SQL.Tests.Integration
                 
                 var columns = (await db.GetColumnsAsync("typetest")).ToList();
                 Assert.Contains(columns, c => c.Equals("varcharcol", StringComparison.OrdinalIgnoreCase));
+            }
+
+            await TestCatalogProviderColumnComments(connStr);
+        }
+
+        private static async Task TestCatalogProviderColumnComments(string connStr)
+        {
+            var tableName = "catalog_comment_" + Guid.NewGuid().ToString("N");
+
+            await using var conn = new NpgsqlConnection(connStr);
+            await conn.OpenAsync();
+            try
+            {
+                await using (var create = new NpgsqlCommand($@"
+CREATE TABLE public.{tableName} (
+    id INT PRIMARY KEY,
+    amount NUMERIC(18,2)
+);
+COMMENT ON COLUMN public.{tableName}.amount IS 'Sales amount from Postgres';", conn))
+                {
+                    await create.ExecuteNonQueryAsync();
+                }
+
+                var provider = new PostgresCatalogProvider(connStr);
+                var catalog = await provider.GetColumnMetadataAsync("public", tableName);
+                var amount = Assert.Single(catalog, c => c.ColumnName.Equals("amount", StringComparison.OrdinalIgnoreCase));
+                Assert.Equal("Sales amount from Postgres", amount.Description);
+            }
+            finally
+            {
+                await using var drop = new NpgsqlCommand($"DROP TABLE IF EXISTS public.{tableName};", conn);
+                await drop.ExecuteNonQueryAsync();
             }
         }
     }

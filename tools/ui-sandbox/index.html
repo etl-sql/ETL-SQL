@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ETL-SQL UI Sandbox</title>
+
+  <!-- Vendored ECharts (same build the portal ships) → renderDag reads window.echarts -->
+  <script src="/src/ETL-SQL.ReportPortal/wwwroot/js/echarts.min.js"></script>
+
+  <!-- Canonical component stylesheet (no sync needed) -->
+  <link rel="stylesheet" href="/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.css" />
+  <link rel="stylesheet" href="/src/ETL-SQL.ReportPortal/wwwroot/css/portal.css" />
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: flex;
+      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color: #e2e8f0; background: #0f172a;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────── */
+    #sidebar {
+      flex: 0 0 230px; display: flex; flex-direction: column;
+      background: #111827; border-right: 1px solid #1e293b; padding: 14px 10px;
+    }
+    #sidebar h1 { font-size: 14px; margin: 0 6px 2px; }
+    #sidebar .hint { color: #64748b; font-size: 11px; margin: 0 6px 14px; }
+    #stories { display: flex; flex-direction: column; gap: 4px; }
+    .story-link {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+      text-align: left; padding: 8px 10px; border: 1px solid transparent; border-radius: 7px;
+      background: none; color: #cbd5e1; cursor: pointer; font: inherit;
+    }
+    .story-link:hover { background: #1e293b; }
+    .story-link.is-active { background: #1e293b; border-color: #334155; }
+    .story-link-title { font-size: 13px; font-weight: 600; }
+    .story-link-sub { font-size: 11px; color: #64748b; font-family: ui-monospace, monospace; }
+
+    /* ── Main ────────────────────────────────────────────── */
+    main { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
+    header {
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+      padding: 10px 16px; border-bottom: 1px solid #1e293b; background: #0b1220;
+    }
+    header #storyTitle { font-size: 14px; font-weight: 600; margin: 0; }
+    select, #reloadBtn {
+      background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
+      border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer;
+    }
+    .stat { margin-left: auto; color: #64748b; font-size: 12px; }
+
+    /* The stage hosts each component in its own (portal) theme. */
+    #stage {
+      flex: 1 1 auto; min-height: 0; position: relative;
+      background: var(--portal-surface, #ffffff); color: var(--portal-text, #172033);
+      overflow: auto;
+    }
+    /* CodeMirror needs an explicit fill when mounted bare into the stage. */
+    #stage .cm-editor, #stage .cm-scroller { height: 100%; }
+    .vscode-webview-frame { width: 100%; height: 100%; min-height: 640px; border: 0; display: block; background: #0f172a; }
+
+    .sandbox-err { padding: 20px; margin: 0; color: #b91c1c; white-space: pre-wrap; font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <aside id="sidebar">
+    <h1>UI Sandbox</h1>
+    <p class="hint">imports canonical <code>designer.js</code> · no Docker</p>
+    <nav id="stories"></nav>
+  </aside>
+
+  <main>
+    <header>
+      <h2 id="storyTitle"></h2>
+      <label>Fixture: <select id="fixtureSel"></select></label>
+      <button id="reloadBtn" title="Re-import the component fresh and re-mount">↻ Reload</button>
+      <span class="stat" id="stat"></span>
+    </header>
+    <div id="stage"></div>
+  </main>
+
+  <script type="module" src="./sandbox.js"></script>
+</body>
+</html>

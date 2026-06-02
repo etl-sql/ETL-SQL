@@ -21,6 +21,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
     /// pass pre-built row lists. This avoids the cost of driving 100k+ rows through
     /// the script parser and keeps test execution time reasonable.
     /// </summary>
+    [Trait("Category", "Performance")]
     public class SpillToDiskTests
     {
         private readonly ITestOutputHelper _output;

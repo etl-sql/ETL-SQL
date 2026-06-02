@@ -1,0 +1,40 @@
+CREATE TABLE #CustomerTarget (
+    CustomerId INT,
+    CustomerName VARCHAR(40),
+    Segment VARCHAR(20),
+    RowHash BIGINT,
+    LoadAction VARCHAR(20)
+);
+
+INSERT INTO #CustomerTarget (CustomerId, CustomerName, Segment, RowHash, LoadAction)
+VALUES (1, 'Alice', 'Standard', CHECKSUM('Alice', 'Standard'), 'existing');
+
+INSERT INTO #CustomerTarget (CustomerId, CustomerName, Segment, RowHash, LoadAction)
+VALUES (2, 'Bob', 'Silver', CHECKSUM('Bob', 'Silver'), 'preserved');
+
+CREATE TABLE #CustomerSource (
+    CustomerId INT,
+    CustomerName VARCHAR(40),
+    Segment VARCHAR(20)
+);
+
+INSERT INTO #CustomerSource (CustomerId, CustomerName, Segment) VALUES (1, 'Alice', 'Premium');
+INSERT INTO #CustomerSource (CustomerId, CustomerName, Segment) VALUES (2, 'Bob', 'Silver');
+INSERT INTO #CustomerSource (CustomerId, CustomerName, Segment) VALUES (3, 'Cara', 'Gold');
+
+SELECT
+    CustomerId,
+    CustomerName,
+    Segment,
+    CHECKSUM(CustomerName, Segment) AS RowHash
+INTO #CustomerDelta
+FROM #CustomerSource;
+
+MERGE INTO #CustomerTarget AS T
+USING #CustomerDelta AS S
+ON T.CustomerId = S.CustomerId
+WHEN MATCHED AND T.RowHash <> S.RowHash THEN
+    UPDATE SET CustomerName = S.CustomerName, Segment = S.Segment, RowHash = S.RowHash, LoadAction = 'updated'
+WHEN NOT MATCHED THEN
+    INSERT (CustomerId, CustomerName, Segment, RowHash, LoadAction)
+    VALUES (S.CustomerId, S.CustomerName, S.Segment, S.RowHash, 'inserted');

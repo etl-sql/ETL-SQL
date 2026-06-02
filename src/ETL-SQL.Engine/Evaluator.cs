@@ -45,7 +45,7 @@ namespace ETL_SQL.Engine
     /// The primary execution engine for ETL-SQL scripts.
     /// Coordinates connections, variables, statement handlers, and expression evaluation.
     /// </summary>
-    public class Evaluator : IExecutionContext, IAsyncDisposable, IDataValidator, ISpillable
+    public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValidator, ISpillable
     {
         private readonly IEnumerable<IStatementHandler> _handlers;
         private readonly IServiceProvider _serviceProvider = null!;
@@ -73,6 +73,8 @@ namespace ETL_SQL.Engine
         private readonly SchemaManager _schemaManager;
         private readonly ExpressionEvaluator _expressionEvaluator;
         private readonly ProcedureExecutor _procedureExecutor;
+        private readonly DataConstraintValidator _constraintValidator;
+        private readonly EvaluatorSpillCoordinator _spillCoordinator;
         private readonly BatchPipelineHelper _batchPipelineHelper = new();
         private readonly Dictionary<Type, IStatementHandler> _statementHandlers = new();
 
@@ -103,36 +105,7 @@ namespace ETL_SQL.Engine
         [System.Obsolete("Use Telemetry.ExecutionTree")]
         public ExecutionTree ExecutionTree => Telemetry.ExecutionTree;
         
-        [System.Obsolete("Use Telemetry.IsProfiling")]
-        public bool IsProfiling { get => Telemetry.IsProfiling; set => Telemetry.IsProfiling = value; }
-        
-        [System.Obsolete("Use Telemetry.RowsProcessed")]
-        public long RowsProcessed => Telemetry.RowsProcessed;
-        
-        [System.Obsolete("Use Telemetry.PartitionsCount")]
-        public int PartitionsCount => Telemetry.PartitionsCount;
-        
-        [System.Obsolete("Use Telemetry.TotalSpilledBytes")]
-        public long TotalSpilledBytes => Telemetry.TotalSpilledBytes;
-
-        [System.Obsolete("Use Telemetry.AggregateExpansionRatio")]
-        public double AggregateExpansionRatio => Telemetry.AggregateExpansionRatio;
-
-        [System.Obsolete("Use Telemetry.TelemetryEnabled")]
-        public bool TelemetryEnabled { get => _options.TelemetryEnabled; set { _options.TelemetryEnabled = value; Telemetry.TelemetryEnabled = value; } }
-
-        [System.Obsolete("Use Telemetry.AggregateGroupsCount")]
-        public long AggregateGroupsCount => Telemetry.AggregateGroupsCount;
-        
-        [System.Obsolete("Use Telemetry.ProfileMetrics")]
-        public List<ExecutionMetrics> ProfileMetrics => Telemetry.ProfileMetrics;
-        
-        public List<LogEntry> Messages { get; } = new();
-        public int MaxMessages { get; set; } = 1000;
-        
-        public IVariableContext VarContext => _variableScopeManager;
         public IReportContext ReportContext => _registry.ReportContext;
-        public ITelemetryContext Telemetry => _registry.TelemetryManager;
 
         public long TempTableSpillThresholdRows { get => _options.TempTableSpillThresholdRows; set => _options.TempTableSpillThresholdRows = value; }
         public int MaxRecursiveDepth 
@@ -142,9 +115,6 @@ namespace ETL_SQL.Engine
         }
         public int CurrentRecursiveDepth { get; set; } = 0;
         public string? LastIndexUsedName { get; set; }
-        public ErrorInfo? LastError { get; set; }
-        public ErrorInfo? ActiveException { get; set; }
-        public int PreviousErrorNumber { get; set; } = 0;
         
         public bool AllowUnknownFileTypes { get => _options.AllowUnknownFileTypes; set => _options.AllowUnknownFileTypes = value; }
         public bool AllowLargeFileOperationCount { get => _options.AllowLargeFileOperationCount; set => _options.AllowLargeFileOperationCount = value; }
@@ -395,62 +365,7 @@ namespace ETL_SQL.Engine
         /// <summary>Registry for shared language help documentation.</summary>
         public Core.Interfaces.ILanguageHelpRegistry LanguageHelp => _languageHelp;
 
-        // ── Interface Implementations (IDataContext, IVariableContext, IEngineContext, etc.) ────────────────
-        public string SpillToken => $"Session_{SessionId}";
 
-        public object? GetVariable(string name)
-        {
-            if (SystemVariableProvider.IsSystemVariable(name))
-                return SystemVariableProvider.Resolve(name, this);
-            
-            return VarContext.GetVariable(name);
-        }
-
-        public void SetVariable(string name, object? value) => VarContext.SetVariable(name, value);
-        public void DeclareVariable(string name, object? value, VariableMetadata? metadata = null) => VarContext.DeclareVariable(name, value, metadata);
-        public bool ContainsVariable(string name) => VarContext.ContainsVariable(name);
-        public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null) => VarContext.PushScope(vars, metadata);
-        public void PopScope() => VarContext.PopScope();
-        public void Reset() => VarContext.Reset();
-        
-        public void SetProcedure(string name, CreateProcedureStatement stmt) => VarContext.SetProcedure(name, stmt);
-        public bool TryGetProcedure(string name, out CreateProcedureStatement? stmt) => VarContext.TryGetProcedure(name, out stmt);
-        public void SetFunction(string name, CreateFunctionStatement stmt) => VarContext.SetFunction(name, stmt);
-        public bool RemoveFunction(string name) => VarContext.RemoveFunction(name);
-        public bool TryGetFunction(string name, out CreateFunctionStatement? stmt) => VarContext.TryGetFunction(name, out stmt);
-        public void SetView(string name, CreateViewStatement stmt) => VarContext.SetView(name, stmt);
-        public bool RemoveView(string name) => VarContext.RemoveView(name);
-        public bool TryGetView(string name, out CreateViewStatement? stmt) => VarContext.TryGetView(name, out stmt);
-        public IReadOnlyDictionary<string, CreateViewStatement> GetViews() => VarContext.GetViews();
-        public bool RemoveProcedure(string name) => VarContext.RemoveProcedure(name);
-        public IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null) => VarContext.GetVariablesWithMetadata(predicate);
-        public bool ContainsVariableInCurrentScope(string name) => VarContext.ContainsVariableInCurrentScope(name);
-        
-        public IDictionary<string, object?> Variables => VarContext.Variables;
-        public IDictionary<string, object?> CurrentVariables => VarContext.CurrentVariables;
-        public IDictionary<string, VariableMetadata> VariableMetadata => VarContext.VariableMetadata;
-        public IDictionary<string, VariableMetadata> CurrentMetadata => VarContext.CurrentMetadata;
-        public long MemoryUsageBytes 
-        {
-            get
-            {
-                // Estimate variable metadata and subquery cache overhead
-                long varBytes = Variables.Count * 256;
-                long subqueryBytes = 0;
-                foreach(var result in _subqueryCache.Values) subqueryBytes += result.MemoryUsageBytes;
-                return varBytes + subqueryBytes;
-            }
-        }
-        public Task<bool> SpillAsync()
-        {
-            if (_subqueryCache.Count > 0)
-            {
-                _subqueryCache.Clear();
-                _logger.Warning("Evaluator spilled: Subquery cache cleared to reclaim memory.");
-                return Task.FromResult(true);
-            }
-            return Task.FromResult(false);
-        }
 
         // Consolidated Unified Constructor for DI and Sessions
         [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
@@ -508,6 +423,8 @@ namespace ETL_SQL.Engine
             _dataSourceManager = _registry.DataSourceManager;
             _schemaManager = _registry.SchemaManager;
             _procedureExecutor = _registry.ProcedureExecutor;
+            _constraintValidator = new DataConstraintValidator(_expressionEvaluator, _connections);
+            _spillCoordinator = new EvaluatorSpillCoordinator(this, _logger);
             
             // Link Telemetry to registry components if needed, or initialized via registry.Initialize
             Telemetry.IsProfiling = _options.IsProfiling;
@@ -637,85 +554,106 @@ namespace ETL_SQL.Engine
             }
         }
 
+        // Tables whose DB catalog metadata has already been imported this session.
+        private HashSet<string>? _catalogImported;
+
+        /// <summary>
+        /// When DB catalog import is enabled (off by default — see
+        /// <c>Lineage:ImportCatalogMetadata</c> / <c>SET LINEAGE_IMPORT_CATALOG = ON</c>),
+        /// import the given source tables' column metadata — including comments,
+        /// recorded as the lineage description — before dependent lineage is
+        /// recorded, so a database column comment inherits onto derived columns.
+        /// Best-effort and idempotent per table per session.
+        /// </summary>
+        public async Task EnsureCatalogMetadataImportedAsync(IEnumerable<string> sourceTables, System.Threading.CancellationToken ct = default)
+        {
+            if (!LineageImportCatalog || sourceTables == null) return;
+            foreach (var src in sourceTables)
+                await ImportCatalogForTableAsync(src, ct);
+        }
+
         private async Task ImportCatalogMetadataAsync(System.Threading.CancellationToken ct)
         {
-            var allEntries = LineageTracker.GetFullLineage().ToList();
-            var imported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var entry in allEntries)
-            {
+            foreach (var entry in LineageTracker.GetFullLineage().ToList())
                 foreach (var src in entry.SourceTables)
+                    await ImportCatalogForTableAsync(src, ct);
+        }
+
+        private async Task ImportCatalogForTableAsync(string src, System.Threading.CancellationToken ct)
+        {
+            _catalogImported ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Skip temp tables, report/dataset nodes, variables, already-processed
+            if (string.IsNullOrEmpty(src) || src.StartsWith('#') || src.StartsWith('@') ||
+                src.StartsWith("report:", StringComparison.OrdinalIgnoreCase) ||
+                src.StartsWith("dataset:", StringComparison.OrdinalIgnoreCase) ||
+                !_catalogImported.Add(src))
+                return;
+
+            // Parse: connectionAlias.schema.table  or  connectionAlias.table
+            var parts = src.Split('.', 3);
+            if (parts.Length < 2) return;
+
+            var connAlias = parts[0];
+            string schema, table;
+            if (parts.Length == 3) { schema = parts[1]; table = parts[2]; }
+            else { schema = "dbo"; table = parts[1]; }
+
+            if (!_connections.TryGetValue(connAlias, out var ds)) return;
+            var provider = ds.GetCatalogProvider();
+            if (provider == null) return;
+
+            try
+            {
+                var columns = await provider.GetColumnMetadataAsync(schema, table, ct);
+                var rels = await provider.GetRelationshipsAsync(schema, table, ct);
+
+                foreach (var col in columns)
                 {
-                    // Skip temp tables, report nodes, variables, already-processed
-                    if (src.StartsWith('#') || src.StartsWith('@') ||
-                        src.StartsWith("report:", StringComparison.OrdinalIgnoreCase) ||
-                        src.StartsWith("dataset:", StringComparison.OrdinalIgnoreCase) ||
-                        !imported.Add(src))
-                        continue;
+                    var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["db_type"]     = col.DataType,
+                        ["db_nullable"] = col.IsNullable ? "true" : "false",
+                        ["db_is_pk"]    = col.IsPrimaryKey ? "true" : "false",
+                    };
+                    // Record the DB column comment as the lineage description ("d")
+                    // so it inherits onto derived columns and surfaces as the
+                    // description, not merely a tag.
+                    if (!string.IsNullOrEmpty(col.Description))
+                        meta["d"] = col.Description!;
+                    foreach (var kv in col.ExtraProperties)
+                        meta[$"db_{kv.Key}"] = kv.Value;
 
-                    // Parse: connectionAlias.schema.table  or  connectionAlias.table
-                    var parts = src.Split('.', 3);
-                    if (parts.Length < 2) continue;
+                    LineageTracker.Record(src, Array.Empty<string>(), "DB_CATALOG",
+                        targetColumn: col.ColumnName, metadata: meta);
+                }
 
-                    var connAlias = parts[0];
-                    string schema, table;
-                    if (parts.Length == 3) { schema = parts[1]; table = parts[2]; }
-                    else { schema = "dbo"; table = parts[1]; }
+                // FK relationships → @db_referenced_by tag on the referenced table's column
+                foreach (var rel in rels)
+                {
+                    var refMeta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["db_referenced_by"] = $"{src}.{rel.ForeignKeyColumn}"
+                    };
+                    LineageTracker.Record(rel.ReferencedTable, Array.Empty<string>(), "DB_CATALOG",
+                        targetColumn: rel.ReferencedColumn, metadata: refMeta);
+                }
 
-                    if (!_connections.TryGetValue(connAlias, out var ds)) continue;
-                    var provider = ds.GetCatalogProvider();
-                    if (provider == null) continue;
-
+                // Attempt view/procedure definition expansion (best-effort, inside outer try)
+                if (provider is IViewDefinitionProvider vdp)
+                {
                     try
                     {
-                        var columns = await provider.GetColumnMetadataAsync(schema, table, ct);
-                        var rels = await provider.GetRelationshipsAsync(schema, table, ct);
-
-                        foreach (var col in columns)
-                        {
-                            var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                            {
-                                ["db_type"]     = col.DataType,
-                                ["db_nullable"] = col.IsNullable ? "true" : "false",
-                                ["db_is_pk"]    = col.IsPrimaryKey ? "true" : "false",
-                            };
-                            if (!string.IsNullOrEmpty(col.Description))
-                                meta["db_description"] = col.Description;
-                            foreach (var kv in col.ExtraProperties)
-                                meta[$"db_{kv.Key}"] = kv.Value;
-
-                            LineageTracker.Record(src, Array.Empty<string>(), "DB_CATALOG",
-                                targetColumn: col.ColumnName, metadata: meta);
-                        }
-
-                        // FK relationships → @db_referenced_by tag on the referenced table's column
-                        foreach (var rel in rels)
-                        {
-                            var refMeta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                            {
-                                ["db_referenced_by"] = $"{src}.{rel.ForeignKeyColumn}"
-                            };
-                            LineageTracker.Record(rel.ReferencedTable, Array.Empty<string>(), "DB_CATALOG",
-                                targetColumn: rel.ReferencedColumn, metadata: refMeta);
-                        }
-
-                        // Attempt view/procedure definition expansion (best-effort, inside outer try)
-                        if (provider is IViewDefinitionProvider vdp)
-                        {
-                            try
-                            {
-                                var def = await vdp.GetViewDefinitionAsync(schema, table, ct);
-                                if (!string.IsNullOrWhiteSpace(def))
-                                    await ExpandViewLineageAsync(src, def, ct);
-                            }
-                            catch { /* unparseable DDL or unsupported object — silently skip */ }
-                        }
+                        var def = await vdp.GetViewDefinitionAsync(schema, table, ct);
+                        if (!string.IsNullOrWhiteSpace(def))
+                            await ExpandViewLineageAsync(src, def, ct);
                     }
-                    catch (Exception ex)
-                    {
-                        _logger.Warning("Catalog import failed for {Table}: {Message}", src, ex.Message);
-                    }
+                    catch { /* unparseable DDL or unsupported object — silently skip */ }
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning("Catalog import failed for {Table}: {Message}", src, ex.Message);
             }
         }
 
@@ -1105,14 +1043,7 @@ namespace ETL_SQL.Engine
         public Task<IDataSource> ResolveDataSourceAsync(TableReference table) => _dataSourceManager.ResolveDataSourceAsync(table, _connections, _transactionManager);
         public IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table) => _dataSourceManager.ResolveAndApplyOperators(table, _connections, _transactionManager, BatchSize);
 
-        public async ValueTask<object?> ExecuteValue(string expression, Row? context = null, bool decryptSensitive = false)
-        {
-            var lexer = new ETL_SQL.Core.Parser.Lexer(expression);
-            var tokens = lexer.Tokenize();
-            var parser = new ETL_SQL.Core.Parser.Parser(tokens, expression);
-            var expr = parser.ParseExpression();
-            return await EvaluateValue(expr, context ?? new Row(), decryptSensitive);
-        }
+
 
         public async IAsyncEnumerable<DataTable> ExecuteQuery(Statement stmt)
         {
@@ -1137,46 +1068,7 @@ namespace ETL_SQL.Engine
             return LastResult!;
         }
 
-        public ValueTask<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false) => _expressionEvaluator.Evaluate(expr, context, decryptSensitive);
-        public IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context) => _expressionEvaluator.EvaluateStream(expr, context);
-        public CompiledSql CompileExpression(Expression e, string d = "MSSQL") => _queryCompiler.CompileExpression(e, d);
-        public CompiledSql CompileQuery(Statement s, string d = "MSSQL") => _queryCompiler.CompileQuery(s, d);
-        public string GetSqlTableName(TableReference t, string dialect = "MSSQL")
-        {
-            var parts = new List<string>();
-            if (t.DatabaseName != null) parts.Add(t.DatabaseName);
-            if (t.SchemaName != null) parts.Add(t.SchemaName);
-            
-            if (t.TableName.Contains(".") && t.SchemaName == null)
-            {
-                parts.AddRange(t.TableName.Split('.'));
-            }
-            else
-            {
-                parts.Add(t.TableName);
-            }
 
-            Func<string, string> quote = dialect.ToUpperInvariant() switch
-            {
-                "MSSQL" => QuoteIdentifierMssql,
-                "ORACLE" => s => QuoteIdentifierStandard(s.ToUpperInvariant()),
-                _ => QuoteIdentifierStandard
-            };
-
-            return string.Join(".", parts.Select(quote));
-        }
-
-        private static string QuoteIdentifierMssql(string s) => 
-            s.StartsWith("[") ? s : $"[{s.Replace("]", "]]")}]";
-
-        private static string QuoteIdentifierStandard(string s)
-        {
-            if (s.StartsWith("\"")) return s;
-            // For Postgres/Oracle, we only quote if the identifier contains special characters 
-            // that REQUIRE quoting. 
-            bool needsQuoting = s.Any(c => !char.IsLetterOrDigit(c) && c != '_');
-            return needsQuoting ? $"\"{s.Replace("\"", "\"\"")}\"" : s;
-        }
 
         public IAsyncEnumerable<DataTable> InterceptProgress(IAsyncEnumerable<DataTable> chunks)
         {
@@ -1200,24 +1092,7 @@ namespace ETL_SQL.Engine
         public IAsyncEnumerable<DataTable> EvaluateForClause(IAsyncEnumerable<DataTable> batches, ForClause forClause)
             => _batchPipelineHelper.EvaluateForClause(batches, forClause);
 
-        public bool IsSoftEqual(object? l, object? r) => _expressionEvaluator.IsSoftEqual(l, r);
-        public int CompareConstants(object? l, object? r) => _expressionEvaluator.CompareConstants(l, r);
-        public object? MathOp(object? l, object? r, TokenType op) => _expressionEvaluator.MathOp(l, r, op);
-        public bool EvaluateLike(object? left, object? right) => _expressionEvaluator.EvaluateLike(left, right);
 
-
-
-
-        public void EvaluateCreateProcedure(CreateProcedureStatement stmt) => _variableScopeManager.SetProcedure(stmt.ProcedureName, stmt);
-        public void EvaluateCreateFunction(CreateFunctionStatement stmt) => _variableScopeManager.SetFunction(stmt.FunctionName, stmt);
-        public bool ProcedureExists(string name) => _variableScopeManager.TryGetProcedure(name, out _);
-        public bool FunctionExists(string name) => _variableScopeManager.TryGetFunction(name, out _);
-
-        public ValueTask<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context)
-            => _procedureExecutor.EvaluateUserDefinedFunction(f, args, context);
-
-        public Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args)
-            => _procedureExecutor.EvaluateProcedure(name, args);
 
         public async Task EvaluateDelete(DeleteStatement stmt)
         {
@@ -1231,49 +1106,7 @@ namespace ETL_SQL.Engine
             await handler.Execute(stmt, this);
         }
 
-        public async ValueTask<bool> EvaluateCondition(Expression? expr, Row context)
-        {
-            if (expr == null) return true;
-            var res = await EvaluateValue(expr, context);
-            if (res == null || res == DBNull.Value) return false;
-            if (res is bool b) return b;
-            try { return Convert.ToBoolean(res); } catch { return false; }
-        }
 
-        public List<string> GetIndexedColumns(Expression? cond, string alias)
-        {
-            var cols = new List<string>();
-            if (cond is BinaryExpression bin)
-            {
-                if (bin.Operator == TokenType.EQUALS)
-                {
-                    if (bin.Left is IdentifierExpression lid && IsFromAlias(lid.Name, alias)) cols.Add(GetColumnName(lid.Name));
-                    if (bin.Right is IdentifierExpression rid && IsFromAlias(rid.Name, alias)) cols.Add(GetColumnName(rid.Name));
-                }
-                else if (bin.Operator == TokenType.AND)
-                {
-                    cols.AddRange(GetIndexedColumns(bin.Left, alias));
-                    cols.AddRange(GetIndexedColumns(bin.Right, alias));
-                }
-            }
-            return cols.Distinct().ToList();
-        }
-
-        private bool IsFromAlias(string identifier, string? alias)
-        {
-            if (string.IsNullOrEmpty(alias)) return true;
-            if (identifier.Contains(".")) return identifier.StartsWith(alias + ".", StringComparison.OrdinalIgnoreCase);
-            return true;
-        }
-
-        private string GetColumnName(string identifier)
-        {
-            int dot = identifier.IndexOf('.');
-            return dot >= 0 ? identifier.Substring(dot + 1) : identifier;
-        }
-
-        public object? CastToType(object? value, string dataType) => _expressionEvaluator.CastToType(value, dataType);
-        public bool IsSqlPushdown(string conn) => !string.Equals(conn, "DUAL", StringComparison.OrdinalIgnoreCase) && _connections.TryGetValue(conn, out var ds) && ds is IDatabaseSource db && db.SupportsSqlPushdown;
 
         public TableReference? GetIntoTable(Statement stmt)
         {
@@ -1287,102 +1120,7 @@ namespace ETL_SQL.Engine
         public async Task RollbackTransaction(string? name = null) => await _transactionManager.RollbackTransaction(_variableScopeManager.Variables, _connections);
         public async Task RollbackAllTransactions() => await _transactionManager.RollbackAll(_variableScopeManager.Variables, _connections);
 
-        public void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true)
-        {
-            var scrubbed = Scrub(message);
-            
-            if (forwardToLogger)
-            {
-                _logger.WriteLine(scrubbed, color);
-                
-                // If output is redirected, the OnMessage event (subscribed in constructor) 
-                // will handle adding to the Messages list to avoid double-capture.
-                if (RedirectOutput) return;
-            }
 
-            lock (_messagesLock)
-            {
-                Messages.Add(new LogEntry(scrubbed, color, DateTime.Now));
-                if (Messages.Count > MaxMessages)
-                {
-                    Messages.RemoveAt(0);
-                    if (Messages.Count > 0 && !Messages[0].Message.StartsWith("[TRUNCATED]"))
-                    {
-                        var first = Messages[0];
-                        Messages[0] = first with { Message = "[TRUNCATED] " + first.Message };
-                    }
-                }
-            }
-        }
-
-        public static string Scrub(string message)
-        {
-            if (string.IsNullOrEmpty(message)) return message;
-            // Scrub standard connection string passwords, tokens, etc.
-            var res = System.Text.RegularExpressions.Regex.Replace(message, @"(?i)(password|pwd|token|secret)\s*=\s*[^\s;]+", "$1=********");
-            // Scrub ETL-SQL encrypted constants
-            res = System.Text.RegularExpressions.Regex.Replace(res, @"ENC:[a-zA-Z0-9+/=]+", "ENC:********");
-            return res;
-        }
-
-        public string ResolvePath(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return path;
-
-            // Strip surrounding double-quotes that Windows "Copy as path" adds (e.g. "C:\tmp\file.csv")
-            if (path.Length >= 2 && path[0] == '"' && path[^1] == '"')
-                path = path[1..^1];
-
-            string resolved = path;
-            var parts = path.Split(new[] { '/', '\\' }, 2);
-            var connName = parts[0];
-            if (_connections.TryGetValue(connName, out var ds))
-            {
-                var baseUri = ds.Path;
-                if (!string.IsNullOrEmpty(baseUri) && baseUri != "MSSQL" && baseUri != "POSTGRES" && baseUri != "MYSQL" && baseUri != "SQLITE" && baseUri != "ORACLE")
-                {
-                    if (parts.Length > 1) resolved = Path.Combine(baseUri, parts[1]);
-                    else resolved = baseUri;
-                }
-            }
-
-            // Security Hardening: Always return full paths and validate
-            // If the path contains a placeholder, we skip full-path resolution to avoid breaking the placeholder
-            if (resolved.Contains("${"))
-            {
-                return resolved;
-            }
-
-            string basePath = WorkingDirectory;
-            if (!string.IsNullOrEmpty(CurrentScriptPath) &&
-                !BundleUri.TryParse(CurrentScriptPath, out _))
-            {
-                var scriptDir = Path.GetDirectoryName(CurrentScriptPath);
-                if (!string.IsNullOrEmpty(scriptDir)) basePath = scriptDir;
-            }
-
-            var fullPath = Path.IsPathRooted(resolved)
-                ? Path.GetFullPath(resolved)
-                : Path.GetFullPath(resolved, basePath);
-
-            // Canonicalize symlinks so callers always receive the real path
-            fullPath = SecurityService.ResolvePathSymlinks(fullPath);
-
-            if (_securityService != null)
-            {
-                _securityService.ValidatePath(fullPath);
-                // Security Hardening: We removed ValidateFileType from ResolvePath because it was causing 
-                // false positives for non-data-source operations like RUN SCRIPT. 
-                // Data connectors now perform their own explicit file type validation.
-            }
-            else
-            {
-                // Internal test fallback: Log a warning if the service is missing
-                _logger.Debug("Security validation skipped for path {Path}; SecurityService not initialized", fullPath);
-            }
-            
-            return fullPath;
-        }
 
         public object? ResolveIdentifier(string name, Row? row)
         {
@@ -1424,20 +1162,7 @@ namespace ETL_SQL.Engine
             _localSources.Clear();
         }
 
-        public async Task<bool> ValidateCheckConstraint(Expression expression, Row row)
-        {
-            var result = await _expressionEvaluator.Evaluate(expression, row);
-            return result != null && Convert.ToBoolean(result);
-        }
 
-        public async Task<bool> ValidateForeignKey(ForeignKeyReference reference, List<string> sourceColumns, Row row)
-        {
-            string connName = reference.Table.ConnectionName ?? reference.Table.TableName;
-            if (!_connections.TryGetValue(connName, out var dataSource)) return true; 
-            var sourceValues = sourceColumns.Select(col => row[col]).ToList();
-            if (sourceValues.All(v => v == null || v == DBNull.Value)) return true;
-            return await dataSource.ExistsAsync(reference.Columns, sourceValues);
-        }
 
         public IExecutionContext Fork()
         {

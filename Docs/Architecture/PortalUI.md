@@ -136,8 +136,8 @@ src/ETL-SQL.ReportRuntime/Resources/Shared/designer/
 
 | Host | Sync destination | Triggered by |
 |---|---|---|
-| ReportPortal | `src/ETL-SQL.ReportPortal/wwwroot/designer/` | `sync-assets.ps1` |
-| VS Code extension | `src/etl-sql-vscode/media/designer/` | `sync-assets.ps1` |
+| ReportPortal | `src/ETL-SQL.ReportPortal/wwwroot/designer/` | `sync-assets.js` |
+| VS Code extension | `src/etl-sql-vscode/media/designer/` | `sync-assets.js` |
 
 Follows the identical pattern used for `ETL-SQL.ReportRuntime/Resources/Shared/` today. Generated copies carry the canonical-source banner. Never edit the sync destinations directly.
 
@@ -232,7 +232,7 @@ Deliverables:
 - `v0.9.0-portal-ui` branch (done)
 - `src/ETL-SQL.ReportRuntime/Resources/Shared/designer/` directory with placeholder `designer.js` and `designer.css`
 - CodeMirror 6 bundle committed to `designer/codemirror/`
-- `sync-assets.ps1` updated to sync `designer/` to portal and VS Code extension
+- `sync-assets.js` updated to sync `designer/` to portal and VS Code extension
 - Sync destinations are checked in (not gitignored) — each synced file includes a banner identifying its canonical source
 - `Docs/Architecture/PortalUI.md` (this document)
 
@@ -323,3 +323,12 @@ New API endpoints introduced by this initiative:
 | `POST` | `/api/designer/generate` | 4 | DesignState JSON → rptsql string |
 
 All existing portal APIs (`/api/catalog/lineage`, `/api/reports`, etc.) are consumed as-is.
+
+---
+
+## 9. Related Subsystem Architecture
+
+For detailed information about adjacent subsystems, refer to the following architecture references:
+- **Report Portal Host:** [ReportPortal.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/ReportPortal.md) details database entities, authorization schemas, and hosting APIs.
+- **Reporting Engine:** [Reporting.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Reporting.md) explains layout manifests, ECharts options compilation, and PDF export pipelines.
+- **Orchestrator:** [Orchestrator.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Orchestrator.md) governs DAG parsing for job step monitoring and execution.

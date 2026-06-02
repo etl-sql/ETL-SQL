@@ -1,0 +1,22 @@
+CREATE CONNECTION csv_source AS FLATFILE('{ScenarioTempDir}/orders.csv', HEADER=ON);
+
+SELECT
+    OrderId,
+    CustomerId,
+    Amount
+INTO #FileStage
+FROM csv_source;
+
+SELECT
+    OrderId,
+    CustomerId,
+    Amount
+INTO #ValidFileOrders
+FROM #FileStage
+WHERE CAST(Amount AS DECIMAL) > 0;
+
+CREATE CONNECTION csv_output AS FLATFILE('{ScenarioTempDir}/valid_orders.csv', HEADER=ON);
+INSERT INTO csv_output SELECT OrderId, CustomerId, Amount FROM #ValidFileOrders;
+
+CREATE CONNECTION csv_verify AS FLATFILE('{ScenarioTempDir}/valid_orders.csv', HEADER=ON);
+SELECT * INTO #FileRoundTrip FROM csv_verify;

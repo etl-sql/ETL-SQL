@@ -87,7 +87,7 @@ namespace ETL_SQL.Engine.Engines
                         allBufferedRows = await ApplyResolvablePredicates(allBufferedRows, wherePredicates, effectiveJoin.JoinType);
                     continue;
                 }
-                else if (effectiveJoin.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase))
+                else if (IsSemiJoin(effectiveJoin.JoinType))
                 {
                     var rightAlias = effectiveJoin.Table.Alias ?? effectiveJoin.Table.TableName;
                     var hashKeysLeft = new List<string>();
@@ -97,7 +97,7 @@ namespace ETL_SQL.Engine.Engines
                     else
                         allBufferedRows = await PerformSemiJoin(allBufferedRows, joinRows, effectiveJoin);
                 }
-                else if (effectiveJoin.JoinType.Equals("ANTI", StringComparison.OrdinalIgnoreCase))
+                else if (IsAntiJoin(effectiveJoin.JoinType))
                 {
                     var rightAlias = effectiveJoin.Table.Alias ?? effectiveJoin.Table.TableName;
                     var hashKeysLeft = new List<string>();
@@ -616,15 +616,14 @@ namespace ETL_SQL.Engine.Engines
                         if (await _context.EvaluateCondition(join.Condition, combined))
                         {
                             foundMatch = true;
-                            if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase) ||
-                                join.JoinType.Equals("ANTI", StringComparison.OrdinalIgnoreCase)) break;
+                            if (IsSemiJoin(join.JoinType) || IsAntiJoin(join.JoinType)) break;
                             results.Add(combined);
                             matchedRightIndices?.Add(ri);
                         }
                     }
 
-                    if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase) && foundMatch) results.Add(left.Clone());
-                    else if (join.JoinType.Equals("ANTI", StringComparison.OrdinalIgnoreCase) && !foundMatch) results.Add(left.Clone());
+                    if (IsSemiJoin(join.JoinType) && foundMatch) results.Add(left.Clone());
+                    else if (IsAntiJoin(join.JoinType) && !foundMatch) results.Add(left.Clone());
                     else if (!foundMatch && IsLeftOuter(join.JoinType)) results.Add(left.Clone());
                 }
 
@@ -663,15 +662,15 @@ namespace ETL_SQL.Engine.Engines
                     if (await _context.EvaluateCondition(join.Condition, combined))
                     {
                         foundMatch = true;
-                        if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase) || join.JoinType.Equals("ANTI", StringComparison.OrdinalIgnoreCase)) break;
+                        if (IsSemiJoin(join.JoinType) || IsAntiJoin(join.JoinType)) break;
                         
                         yield return combined;
                         matchedRight.Add(right);
                     }
                 }
                 
-                if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase) && foundMatch) yield return left.Clone();
-                else if (join.JoinType.Equals("ANTI", StringComparison.OrdinalIgnoreCase) && !foundMatch) yield return left.Clone();
+                if (IsSemiJoin(join.JoinType) && foundMatch) yield return left.Clone();
+                else if (IsAntiJoin(join.JoinType) && !foundMatch) yield return left.Clone();
                 else if (!foundMatch && IsLeftOuter(join.JoinType)) yield return left.Clone();
             }
 
@@ -765,7 +764,7 @@ namespace ETL_SQL.Engine.Engines
                         if (await _context.EvaluateCondition(join.Condition, combined))
                         {
                             foundMatch = true;
-                            if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase) || join.JoinType.Equals("ANTI", StringComparison.OrdinalIgnoreCase)) break;
+                            if (IsSemiJoin(join.JoinType) || IsAntiJoin(join.JoinType)) break;
 
                             yield return combined;
                             matchedRight.Add(right);
@@ -773,8 +772,8 @@ namespace ETL_SQL.Engine.Engines
                     }
                 }
 
-                if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase) && foundMatch) yield return left.Clone();
-                else if (join.JoinType.Equals("ANTI", StringComparison.OrdinalIgnoreCase) && !foundMatch) yield return left.Clone();
+                if (IsSemiJoin(join.JoinType) && foundMatch) yield return left.Clone();
+                else if (IsAntiJoin(join.JoinType) && !foundMatch) yield return left.Clone();
                 else if (!foundMatch && IsLeftOuter(join.JoinType)) yield return left.Clone();
             }
 
@@ -927,7 +926,9 @@ namespace ETL_SQL.Engine.Engines
             return combined;
         }
 
-        private bool IsLeftOuter(string type) => type.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || type.Contains("FULL", StringComparison.OrdinalIgnoreCase) || type.Contains("OUTER", StringComparison.OrdinalIgnoreCase);
+        private static bool IsSemiJoin(string type) => type.Contains("SEMI", StringComparison.OrdinalIgnoreCase);
+        private static bool IsAntiJoin(string type) => type.Contains("ANTI", StringComparison.OrdinalIgnoreCase);
+        private bool IsLeftOuter(string type) => !IsSemiJoin(type) && !IsAntiJoin(type) && (type.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || type.Contains("FULL", StringComparison.OrdinalIgnoreCase) || type.Contains("OUTER", StringComparison.OrdinalIgnoreCase));
         private bool IsRightOuter(string type) => type.Contains("RIGHT", StringComparison.OrdinalIgnoreCase) || type.Contains("FULL", StringComparison.OrdinalIgnoreCase);
 
         public bool TryExtractEqualityKeys(

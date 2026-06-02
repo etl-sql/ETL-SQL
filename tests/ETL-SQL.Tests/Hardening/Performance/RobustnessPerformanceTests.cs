@@ -17,6 +17,7 @@ using Moq;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
+    [Trait("Category", "Performance")]
     public class RobustnessPerformanceTests
     {
         // ─── JSON Streaming ─────────────────────────────────────────────────────

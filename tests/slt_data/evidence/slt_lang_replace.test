@@ -9,7 +9,7 @@ halt
 hash-threshold 8
 
 statement ok
-CREATE TABLE t1( x INTEGER PRIMARY KEY, y VARCHAR(16) )
+CREATE TABLE t1( x INTEGER PRIMARY KEY, y VARCHAR(32) )
 
 statement ok
 INSERT INTO t1 VALUES(1, 'true')

@@ -7,9 +7,10 @@ param(
 )
 
 $Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.9.0" }
-$ReleaseRoot = Join-Path $PSScriptRoot "..\release"
-$SampleSource = Join-Path $PSScriptRoot "..\samples"
-$DocsSource = Join-Path $PSScriptRoot "..\Docs"
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+$ReleaseRoot = Join-Path $RepoRoot "release"
+$SampleSource = Join-Path $RepoRoot "samples"
+$DocsSource = Join-Path $RepoRoot "Docs"
 
 function Join-PathSegments {
     param([string[]]$Segments)
@@ -20,6 +21,64 @@ function Join-PathSegments {
     }
 
     return $Path
+}
+
+function Assert-NativeCommandSucceeded {
+    param([Parameter(Mandatory = $true)][string]$Description)
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Description failed with exit code $LASTEXITCODE"
+    }
+}
+
+function Assert-ReleaseBinaries {
+    param(
+        [Parameter(Mandatory = $true)][string]$Platform,
+        [Parameter(Mandatory = $true)][string]$BinFolder
+    )
+
+    $suffix = if ($Platform -eq "win-x64") { ".exe" } else { "" }
+    $required = @(
+        "ETL-SQL$suffix",
+        "ETL-SQL-TUI$suffix",
+        "ETL-SQL-LSP$suffix",
+        "ETL-SQL-Report$suffix",
+        "ETL-SQL-Player$suffix",
+        "ETL-SQL-Portal$suffix",
+        "ETL-SQL-Service$suffix"
+    )
+
+    $missing = @()
+    foreach ($file in $required) {
+        if (-not (Test-Path -LiteralPath (Join-Path $BinFolder $file))) {
+            $missing += $file
+        }
+    }
+
+    if ($missing.Count -gt 0) {
+        throw "Release publish for $Platform is missing required binaries: $($missing -join ', ')"
+    }
+}
+
+function New-VerifiedArchive {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceGlob,
+        [Parameter(Mandatory = $true)][string]$DestinationPath
+    )
+
+    $tempPath = "$DestinationPath.tmp.zip"
+    if (Test-Path -LiteralPath $DestinationPath) { Remove-Item -LiteralPath $DestinationPath -Force }
+    if (Test-Path -LiteralPath $tempPath) { Remove-Item -LiteralPath $tempPath -Force }
+
+    Compress-Archive -Path $SourceGlob -DestinationPath $tempPath -Force
+
+    $archive = Get-Item -LiteralPath $tempPath
+    if ($archive.Length -le 0) {
+        Remove-Item -LiteralPath $tempPath -Force
+        throw "Archive creation produced an empty file: $DestinationPath"
+    }
+
+    Move-Item -LiteralPath $tempPath -Destination $DestinationPath -Force
 }
 
 # Projects to publish
@@ -59,7 +118,10 @@ foreach ($Platform in $Platforms) {
         
         Write-Host "  Publishing $ProjName..." -ForegroundColor Gray
         dotnet publish $ProjPath -c Release -r $Platform --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -o $BinFolder --nologo | Out-Null
+        Assert-NativeCommandSucceeded "dotnet publish $ProjName for $Platform"
     }
+
+    Assert-ReleaseBinaries -Platform $Platform -BinFolder $BinFolder
 
     # 3. Cleanup redundant files
     Write-Host "  Cleaning up redundant assets..." -ForegroundColor Gray
@@ -69,7 +131,7 @@ foreach ($Platform in $Platforms) {
     # 4. Copy Docs
     Copy-Item (Join-Path $DocsSource "QUICKSTART.txt") $DocFolder
     Copy-Item (Join-Path $DocsSource "ReportPortal_Administrators_Guide.md") (Join-Path $DocFolder "ReportPortal_Guide.txt")
-    Copy-Item (Join-Path $PSScriptRoot "..\CHANGELOG.md") (Join-Path $DocFolder "CHANGELOG.txt") # Rename to txt for portability
+    Copy-Item (Join-Path $RepoRoot "CHANGELOG.md") (Join-Path $DocFolder "CHANGELOG.txt") # Rename to txt for portability
     
     # 5. Copy Curated Samples (Top 15)
     $SampleList = @(
@@ -117,8 +179,7 @@ foreach ($Platform in $Platforms) {
     Write-Host "  Creating ZIP archive for GitHub..." -ForegroundColor Gray
     $ZipFileName = "ETL-SQL-v$Version-$Platform.zip"
     $ZipDest = Join-Path $ReleaseRoot $ZipFileName
-    if (Test-Path $ZipDest) { Remove-Item $ZipDest -Force }
-    Compress-Archive -Path (Join-Path $PlatformFolder "*") -DestinationPath $ZipDest -Force
+    New-VerifiedArchive -SourceGlob (Join-Path $PlatformFolder "*") -DestinationPath $ZipDest
 
     Write-Host "  Platform $Platform complete. Archive: $ZipFileName" -ForegroundColor Green
 }

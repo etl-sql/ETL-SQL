@@ -1,0 +1,11 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT CustomerId, CustomerName, Email, Amount FROM #CleanCustomers ORDER BY CustomerId;",
+      "rows": [
+        { "CustomerId": 1, "CustomerName": "ALICE", "Email": "alice@example.com", "Amount": "25.50" },
+        { "CustomerId": 4, "CustomerName": "DANA", "Email": "dana@example.com", "Amount": "40.0" }
+      ]
+    }
+  ]
+}

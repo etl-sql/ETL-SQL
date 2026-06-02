@@ -169,5 +169,63 @@ namespace ETL_SQL.Tests.Orchestration
             if (File.Exists(localFile)) File.Delete(localFile);
             if (File.Exists(downloadFile)) File.Delete(downloadFile);
         }
+
+        [Fact]
+        public async Task Test_SingleFileSend_BlocksDangerousFileTypes()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = services.GetRequiredService<Evaluator>();
+            var mockFs = new MockRemoteFileSystem();
+            evaluator.Connections["MYREMOTE"] = mockFs;
+
+            string localFile = Path.Combine(Path.GetTempPath(), $"blocked_upload_{Guid.NewGuid():N}.exe");
+            File.WriteAllText(localFile, "blocked");
+
+            try
+            {
+                string sql = $"SEND FILE '{localFile.Replace("\\", "\\\\")}' TO 'remote/blocked.exe' AT MYREMOTE;";
+
+                await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() => ExecuteFirstStatementAsync(evaluator, sql));
+
+                Assert.False(mockFs.RemoteFiles.ContainsKey("remote/blocked.exe"));
+            }
+            finally
+            {
+                if (File.Exists(localFile)) File.Delete(localFile);
+            }
+        }
+
+        [Fact]
+        public async Task Test_SingleFileReceive_BlocksDangerousFileTypes()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = services.GetRequiredService<Evaluator>();
+            var mockFs = new MockRemoteFileSystem();
+            evaluator.Connections["MYREMOTE"] = mockFs;
+            mockFs.RemoteFiles["remote/tool.exe"] = "blocked";
+
+            string localFile = Path.Combine(Path.GetTempPath(), $"blocked_download_{Guid.NewGuid():N}.exe");
+
+            try
+            {
+                string sql = $"RECEIVE FILE FROM 'remote/tool.exe' TO '{localFile.Replace("\\", "\\\\")}' AT MYREMOTE;";
+
+                await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() => ExecuteFirstStatementAsync(evaluator, sql));
+
+                Assert.False(File.Exists(localFile));
+            }
+            finally
+            {
+                if (File.Exists(localFile)) File.Delete(localFile);
+            }
+        }
+
+        private static async Task ExecuteFirstStatementAsync(Evaluator evaluator, string sql)
+        {
+            var lexer = new Lexer(sql);
+            var parser = new Parser(lexer.Tokenize());
+            var script = parser.Parse();
+            await evaluator.EvaluateStatement(script.Statements[0]);
+        }
     }
 }

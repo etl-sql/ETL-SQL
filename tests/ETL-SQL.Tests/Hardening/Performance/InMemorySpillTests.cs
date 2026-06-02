@@ -10,6 +10,7 @@ using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
+    [Trait("Category", "Performance")]
     public class InMemorySpillTests
     {
         [Fact]

@@ -2,6 +2,8 @@
 
 ETL-SQL's test suite protects a broad product surface: parser and AST behavior, engine semantics, security rules, file and connector orchestration, reporting, the Report Portal, language tooling, and performance. The suite should make those signals explicit so local development and CI can run the right amount of validation for the moment.
 
+**Status:** Implemented (Test lanes, smoke tests, performance category tags, and no-Docker UI test sandbox are active in the test framework)
+
 ## Goals
 
 - Keep a fast path for everyday development.
@@ -18,7 +20,7 @@ ETL-SQL's test suite protects a broad product surface: parser and AST behavior, 
 | Engine | `.\scripts\test-lane.ps1 -Lane engine` | Main engine/parser/evaluator behavior in `ETL-SQL.Tests`. | Focused engine work. |
 | Portal | `.\scripts\test-lane.ps1 -Lane portal` | Report Portal integration behavior. | Portal/API work. |
 | Integration | `.\scripts\test-lane.ps1 -Lane integration` | Tests that need real-ish external boundaries, hosted portal infrastructure, or connector integration setup. | Scheduled, release, or targeted connector work. |
-| Perf | `.\scripts\test-lane.ps1 -Lane perf` | Performance assertions in `ETL-SQL.PerfTests`. | Scheduled, release, or perf-sensitive work. |
+| Perf | `.\scripts\test-lane.ps1 -Lane perf` | Performance assertions in `ETL-SQL.Tests` hardening coverage and `ETL-SQL.PerfTests`. | Scheduled, release, or perf-sensitive work. |
 | Release | `.\scripts\test-lane.ps1 -Lane release` | Smoke + fast + SLT, without benchmarks, installer packaging, Docker, or scale certification. | Local release candidate confidence when packaging is not needed. |
 | Full | `.\scripts\test-lane.ps1 -Lane full` | All real test projects, excluding benchmark executables and lint command-line programs. | Release validation and final confidence checks. |
 | Benchmarks | `.\scripts\test-lane.ps1 -Lane benchmarks` | BenchmarkDotNet executable runs. | Manual performance investigation. |
@@ -70,7 +72,7 @@ Nightly or release CI should add:
 3. SLT lane (`--filter "Category=SLT"`) for full SQL correctness sweep — expect 15+ minutes.
 4. Benchmarks when investigating performance trends.
 
-Local release validation should use `.\scripts\Test-PreRelease.ps1 -IncludeSlt`. Add `-IncludeDockerIntegration`, `-IncludeStandardScale`, and `-BuildInstallers` only when the release includes connector, scale, or installer claims.
+Local release validation should use `.\scripts\Test-PreRelease.ps1 -IncludeSlt`. The always-on phases are asset drift check, restore, NuGet audit, release build, smoke lane, fast lane, sample scripts, VS Code Node phases, and smoke scale certification. Add `-IncludeDockerIntegration`, `-IncludeStandardScale`, and `-BuildInstallers` only when the release includes connector, scale, or installer claims; use `-Explain` to print the exact phase list before spending a long run.
 
 ## Release Capability Evidence
 
@@ -85,8 +87,8 @@ Use [Release_Capability_Matrix.md](Release_Capability_Matrix.md) as the checklis
 
 - Decide whether `tests\ETL-SQL.LintTests` should become an xUnit test project or move under `tools`.
 - Remove benchmark projects from `dotnet test` paths; benchmarks should run via `dotnet run`.
-- Audit `tests\ETL-SQL.Tests\Hardening\Performance` and either tag real performance tests with `Category=Performance` or move correctness regressions out of the performance folder.
-- Audit `tests\ETL-SQL.Tests\Integration` and tag every true integration test with `Category=Integration`.
+- Continue auditing `tests\ETL-SQL.Tests\Integration`: tag every true integration test with `Category=Integration`, and move correctness/UI/connector unit regressions back into fast-covered folders when practical.
+- Keep `tests\ETL-SQL.Tests\Hardening\Performance` tagged with `Category=Performance`; this folder is now included in the perf lane alongside `ETL-SQL.PerfTests`.
 - Keep sandbox-sensitive filesystem/orchestrator tests out of Fast unless they are made hermetic.
 - Until that audit is complete, the Fast and Engine lanes exclude `FullyQualifiedName` patterns containing `Integration` and `Hardening.Performance` in addition to category filters.
 - Split the largest mixed folders only after tags reveal which tests routinely run together.

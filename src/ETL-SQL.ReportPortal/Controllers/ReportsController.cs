@@ -24,12 +24,18 @@ public class ReportsController : ControllerBase
     private readonly PortalDbContext db;
     private readonly AuditService audit;
     private readonly PortalConfig portalConfig;
+    private readonly ILineageCatalogStore lineageCatalog;
+    private readonly FolderPermissionService folderPermissions;
+    private readonly ReportScriptInspectionService scriptInspection;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection)
     {
         this.db = db;
         this.audit = audit;
         this.portalConfig = portalConfig;
+        this.lineageCatalog = lineageCatalog;
+        this.folderPermissions = folderPermissions;
+        this.scriptInspection = scriptInspection;
     }
 
     private int CurrentUserId =>
@@ -37,23 +43,8 @@ public class ReportsController : ControllerBase
 
     private bool IsAdmin => User.IsInRole("Admin");
 
-    private async Task<FolderPermission?> GetEffectivePermissionAsync(int folderId)
-    {
-        if (IsAdmin) return FolderPermission.Manage;
-
-        var groupIds = await db.UserGroups
-            .Where(ug => ug.UserId == CurrentUserId)
-            .Select(ug => ug.GroupId)
-            .ToListAsync();
-
-        var perms = await db.FolderAcls
-            .Where(a => a.FolderId == folderId && groupIds.Contains(a.GroupId))
-            .Select(a => a.Permission)
-            .ToListAsync();
-
-        if (!perms.Any()) return null;
-        return (FolderPermission)perms.Max(p => (int)p);
-    }
+    private Task<FolderPermission?> GetEffectivePermissionAsync(int folderId) =>
+        folderPermissions.GetEffectivePermissionAsync(folderId, User);
 
     private ReportDto ToDto(Report r, ReportSnapshot? snap, bool isFavorite = false)
     {
@@ -247,7 +238,7 @@ public class ReportsController : ControllerBase
         if (!PortalPathGuard.TryResolveScript(portalConfig, req.ScriptPath, out var resolved))
             return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
 
-        var validation = await ValidateResolvedScriptAsync(resolved);
+        var validation = await scriptInspection.ValidateResolvedScriptAsync(resolved);
         if (!validation.IsValid)
             return BadRequest(validation);
 
@@ -296,7 +287,7 @@ public class ReportsController : ControllerBase
                 Array.Empty<ReportParameterDto>(),
                 ["Script path must be within the configured ScriptRootPath"]));
 
-        var validation = await ValidateResolvedScriptAsync(resolved);
+        var validation = await scriptInspection.ValidateResolvedScriptAsync(resolved);
         return validation.IsValid ? Ok(validation) : BadRequest(validation);
     }
 
@@ -336,7 +327,7 @@ public class ReportsController : ControllerBase
             .OrderByDescending(s => s.BuiltAt)
             .FirstOrDefaultAsync();
 
-        var manifestDatasets = await ReadManifestDatasetsAsync(snapshot);
+        var manifestDatasets = await scriptInspection.ReadManifestDatasetsAsync(snapshot);
 
         List<int> datasetGroupIds = IsAdmin
             ? []
@@ -364,7 +355,7 @@ public class ReportsController : ControllerBase
                 d.RowCount,
                 d.LastRefresh,
                 d.RefreshInterval,
-                BuildSourceDtos(ParseSourceTables(d.SourceQuery), "DatasetSource")))
+                scriptInspection.BuildSourceDtos(scriptInspection.ParseSourceTables(d.SourceQuery), "DatasetSource")))
             .ToList();
 
         var jobs = await db.DatasetJobs
@@ -378,11 +369,11 @@ public class ReportsController : ControllerBase
             .ToListAsync();
 
         var sourceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var source in await ReadScriptSourceTablesAsync(report.ScriptPath))
+        foreach (var source in await scriptInspection.ReadScriptSourceTablesAsync(report.ScriptPath))
             sourceNames.Add(source);
-        foreach (var source in registeredDatasets.SelectMany(d => ParseSourceTables(d.SourceQuery)))
+        foreach (var source in registeredDatasets.SelectMany(d => scriptInspection.ParseSourceTables(d.SourceQuery)))
             sourceNames.Add(source);
-        var lineageEntries = await ReadScriptLineageAsync(report.ScriptPath);
+        var lineageEntries = await scriptInspection.ReadScriptLineageAsync(report.ScriptPath);
 
         var dto = new ReportDependencyDto(
             new ReportDependencyReportDto(report.Id, report.Name, report.Folder?.Path ?? "", report.ScriptPath),
@@ -390,7 +381,7 @@ public class ReportsController : ControllerBase
             manifestDatasets,
             datasetDtos,
             jobs,
-            BuildSourceDtos(sourceNames.OrderBy(s => s, StringComparer.OrdinalIgnoreCase), "ScriptSource"),
+            scriptInspection.BuildSourceDtos(sourceNames.OrderBy(s => s, StringComparer.OrdinalIgnoreCase), "ScriptSource"),
             lineageEntries);
 
         return Ok(dto);
@@ -454,8 +445,8 @@ public class ReportsController : ControllerBase
                     foreach (var src in info.Sources) WalkAncestors(src);
             }
 
-            string? currentPage = null;
             var visuals = script.Statements.OfType<CreateVisualStatement>().ToList();
+            var visualPages = BuildVisualPageMap(script);
 
             foreach (var vis in visuals)
             {
@@ -501,28 +492,33 @@ public class ReportsController : ControllerBase
             {
                 if (stmt is CreatePageStatement page)
                 {
-                    currentPage = page.Name;
                     var pageId = $"page:{page.Name}";
                     if (addedNodes.Add(pageId))
                         nodes.Add(new DagNodeDto(pageId, page.Name, "page", null));
+
+                    foreach (var visualName in page.SlotMap.Values)
+                    {
+                        if (!visualPages.ContainsKey(visualName)) continue;
+                        var visId = $"vis:{visualName}";
+                        edges.Add(new DagEdgeDto(pageId, visId, null));
+                    }
                 }
                 else if (stmt is CreateVisualStatement vis)
                 {
                     var visId = $"vis:{vis.Name}";
                     var label = $"{vis.VisualType} · {vis.Name}";
+                    visualPages.TryGetValue(vis.Name, out var pages);
                     if (addedNodes.Add(visId))
                         nodes.Add(new DagNodeDto(visId, label, "visual",
                             new
                             {
-                                page = currentPage,
+                                page = pages?.FirstOrDefault(),
+                                pages = pages ?? [],
                                 visualType = vis.VisualType.ToString(),
                                 mappings = vis.Mappings
                                     .Select(m => new { role = m.Role, column = m.Column, display = m.DisplayName })
                                     .ToList(),
                             }));
-
-                    if (currentPage is not null)
-                        edges.Add(new DagEdgeDto($"page:{currentPage}", visId, null));
 
                     var axisLabel = BuildMappingLabel(vis.Mappings);
 
@@ -553,10 +549,13 @@ public class ReportsController : ControllerBase
                 if (node.Type != "table" && node.Type != "dataset") continue;
 
                 var nodeEntries = allLineage
-                    .Where(e => e.TargetColumn != null &&
+                    .Where(e => e.TargetColumn != null && e.TargetColumn != "*" &&
                                 e.TargetTable.Equals(node.Label, StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
+                // A bare SELECT * yields only a "*" column with no real lineage —
+                // leave the node empty so the dataset bridge can fill it with the
+                // upstream dataset's actual columns (pass-through).
                 if (nodeEntries.Count == 0) continue;
 
                 var columns = nodeEntries
@@ -599,6 +598,14 @@ public class ReportsController : ControllerBase
             return UnprocessableEntity(new { Error = $"Could not parse report script: {ex.Message}" });
         }
 
+        // Best-effort cross-script enrichment: resolve dataset references (built by
+        // a separate script) to their column lineage so the detail panel can trace a
+        // visual's field back through the dataset to its origin + description.
+        try { await BridgeCatalogLineageAsync(nodes, edges); }
+        catch { /* never let enrichment fail the structure render */ }
+        try { await BridgeDatasetLineageAsync(id, nodes, edges); }
+        catch { /* never let enrichment fail the structure render */ }
+
         return Ok(new DagDto(nodes, edges));
 
         static string? BuildMappingLabel(List<VisualMapping> mappings)
@@ -609,6 +616,264 @@ public class ReportsController : ControllerBase
             if (x is not null) parts.Add($"X: {x}");
             if (y is not null) parts.Add($"Y: {y}");
             return parts.Count > 0 ? string.Join(" · ", parts) : null;
+        }
+
+        static Dictionary<string, List<string>> BuildVisualPageMap(Script script)
+        {
+            var visualNames = script.Statements
+                .OfType<CreateVisualStatement>()
+                .Select(v => v.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var map = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var page in script.Statements.OfType<CreatePageStatement>())
+            {
+                foreach (var target in page.SlotMap.Values)
+                {
+                    if (!visualNames.Contains(target)) continue;
+                    if (!map.TryGetValue(target, out var pages))
+                    {
+                        pages = [];
+                        map[target] = pages;
+                    }
+                    if (!pages.Contains(page.Name, StringComparer.OrdinalIgnoreCase))
+                        pages.Add(page.Name);
+                }
+            }
+
+            return map;
+        }
+    }
+
+    private static string NormalizeName(string? s) => (s ?? string.Empty).TrimStart('&', '#');
+
+    // Resolve a registered dataset's column lineage by stitching two sources:
+    //  - parsing its stored SourceQuery (column transform + source columns), and
+    //  - the persisted lineage catalog from its own build run (inherited
+    //    description / tags such as pii — which the SQL text alone cannot supply).
+    private (List<string> Columns, Dictionary<string, object> Lineage) ResolveDatasetColumnLineage(
+        Dataset ds, IEnumerable<LineageHistoryEntry> persistedEntries)
+    {
+        var parsed = new Dictionary<string, LineageEntry>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(ds.SourceQuery))
+            {
+                var tokens = new Lexer(ds.SourceQuery).Tokenize();
+                var script = new CoreParser(tokens, ds.SourceQuery).Parse();
+                var tr = new LineageTracker(ETL_SQL.Common.NullLogger.Instance);
+                new LineageAnalyzer(tr).Analyze(script);
+                foreach (var e in tr.GetFullLineage())
+                    if (e.TargetColumn != null && !parsed.ContainsKey(e.TargetColumn))
+                        parsed[e.TargetColumn] = e;
+            }
+        }
+        catch { /* unparseable source query — fall back to persisted lineage only */ }
+
+        // persistedEntries are pre-fetched by the caller in one batch query, ordered so the
+        // "dataset:&name" variant precedes "dataset:name"; first occurrence per column wins.
+        var persisted = new Dictionary<string, LineageHistoryEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in persistedEntries)
+            if (e.TargetColumn != null && !persisted.ContainsKey(e.TargetColumn))
+                persisted[e.TargetColumn] = e;
+
+        var columns = new List<string>();
+        var lineage = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var col in parsed.Keys.Concat(persisted.Keys).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c))
+        {
+            parsed.TryGetValue(col, out var p);
+            persisted.TryGetValue(col, out var h);
+
+            var srcTables = (p?.SourceTables ?? (IReadOnlyList<string>?)h?.SourceTables) ?? new List<string>();
+            var srcCols   = (p?.SourceColumns ?? (IReadOnlyList<string>?)h?.SourceColumns) ?? new List<string>();
+            var sources = srcTables
+                .Select((t, k) => new { table = t, column = k < srcCols.Count ? srcCols[k] : null })
+                .ToList();
+
+            string? description = p?.DerivedFromDescriptions
+                ?? (h?.Tags != null && h.Tags.TryGetValue("d", out var hd) ? hd : null)
+                ?? h?.DerivedFromDescriptions
+                ?? (p?.Metadata != null && p.Metadata.TryGetValue("d", out var pd) ? pd : null);
+
+            var tags = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (h?.Tags != null)
+                foreach (var kv in h.Tags)
+                    if (!kv.Key.Equals("d", StringComparison.OrdinalIgnoreCase)) tags[kv.Key] = kv.Value;
+            if (p?.Metadata != null)
+                foreach (var kv in p.Metadata)
+                    if (!kv.Key.Equals("d", StringComparison.OrdinalIgnoreCase) && !tags.ContainsKey(kv.Key)) tags[kv.Key] = kv.Value;
+
+            columns.Add(col);
+            lineage[col] = new
+            {
+                sources,
+                transform   = p?.TransformationExpression ?? h?.TransformationExpression,
+                functions   = (object?)p?.FunctionsApplied ?? h?.FunctionsApplied,
+                kind        = (p != null && p.TransformationKind != TransformationKind.Unknown) ? p.TransformationKind.ToString() : h?.TransformationKind,
+                description,
+                tags        = tags.Count > 0 ? tags : null,
+            };
+        }
+
+        return (columns, lineage);
+    }
+
+    // Replace dataset-reference nodes' (and their SELECT * consumers') column
+    // lineage with the resolved cross-script lineage.
+    private async Task BridgeDatasetLineageAsync(int reportId, List<DagNodeDto> nodes, List<DagEdgeDto> edges)
+    {
+        var reportDatasets = await db.Datasets.Where(d => d.OwningReportId == reportId).ToListAsync();
+        if (reportDatasets.Count == 0) return;
+
+        var dsByNorm = reportDatasets
+            .GroupBy(d => NormalizeName(d.Name), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        // Batch all datasets' persisted lineage in one round-trip (was 2 queries per dataset).
+        var persistedTargets = dsByNorm.Keys
+            .SelectMany(norm => new[] { $"dataset:&{norm}", $"dataset:{norm}" })
+            .ToList();
+        var persistedByTarget = (await lineageCatalog.GetHistoryForTablesAsync(persistedTargets, 500))
+            .GroupBy(e => e.TargetTable, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<LineageHistoryEntry>)g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var resolved = new Dictionary<string, (List<string> Columns, Dictionary<string, object> Lineage)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in dsByNorm)
+        {
+            var persistedEntries = new[] { $"dataset:&{kvp.Key}", $"dataset:{kvp.Key}" }
+                .SelectMany(t => persistedByTarget.TryGetValue(t, out var l) ? l : Array.Empty<LineageHistoryEntry>());
+            var r = ResolveDatasetColumnLineage(kvp.Value, persistedEntries);
+            if (r.Columns.Count > 0) resolved[kvp.Key] = r;
+        }
+        if (resolved.Count == 0) return;
+
+        // 1. Enrich the dataset-reference nodes themselves.
+        var datasetRefCols = new Dictionary<string, (List<string> Columns, string Label)>();
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+            if (node.Type != "table" && node.Type != "dataset") continue;
+            if (!resolved.TryGetValue(NormalizeName(node.Label), out var r)) continue;
+            nodes[i] = node with { Type = "dataset", Meta = new { columns = r.Columns, columnLineage = r.Lineage } };
+            datasetRefCols[node.Id] = (r.Columns, node.Label);
+        }
+        if (datasetRefCols.Count == 0) return;
+
+        // 2. Propagate to temp tables that SELECT * from a single dataset ref
+        //    (e.g. SELECT * INTO #sales FROM &sales_snap) — pass-through columns
+        //    pointing back at the dataset so the chain stays connected.
+        for (int i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+            if (node.Type != "table" && node.Type != "dataset") continue;
+            if (node.Meta != null) continue;   // already has column lineage from the report script
+            var inbound = edges.Where(e => e.Target == node.Id && datasetRefCols.ContainsKey(e.Source)).ToList();
+            if (inbound.Count != 1) continue;  // only the unambiguous single-source case
+            var (cols, label) = datasetRefCols[inbound[0].Source];
+            var passthrough = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            foreach (var c in cols)
+                passthrough[c] = new
+                {
+                    sources = new[] { new { table = label, column = (string?)c } },
+                    transform = (string?)null,
+                    functions = (object?)null,
+                    kind = "PassThrough",
+                    description = (string?)null,
+                    tags = (object?)null,
+                };
+            nodes[i] = node with { Meta = new { columns = cols, columnLineage = passthrough } };
+        }
+    }
+
+    // Enrich raw source-table nodes from persisted runtime DB_CATALOG lineage.
+    // This avoids portal-time DB round-trips while still making SELECT * consumers
+    // inspectable after a report has run with catalog import enabled.
+    private async Task BridgeCatalogLineageAsync(List<DagNodeDto> nodes, List<DagEdgeDto> edges)
+    {
+        var resolved = new Dictionary<string, (List<string> Columns, Dictionary<string, object> Lineage, string Label)>(StringComparer.OrdinalIgnoreCase);
+
+        // Fetch persisted catalog lineage for every unresolved table node in one round-trip
+        // (was an N+1: one SQLite query per node).
+        var tableLabels = nodes
+            .Where(n => n.Type == "table" && n.Meta == null)
+            .Select(n => n.Label)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (tableLabels.Count == 0) return;
+
+        var historyByTable = (await lineageCatalog.GetHistoryForTablesAsync(tableLabels, 500))
+            .GroupBy(e => e.TargetTable, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+            if (node.Type != "table" || node.Meta != null) continue;
+            if (!historyByTable.TryGetValue(node.Label, out var nodeHistory)) continue;
+
+            var history = nodeHistory
+                .Where(e => e.Operation.Equals("DB_CATALOG", StringComparison.OrdinalIgnoreCase) &&
+                            !string.IsNullOrWhiteSpace(e.TargetColumn))
+                .GroupBy(e => e.TargetColumn!, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.OrderByDescending(e => e.RunAt).First())
+                .OrderBy(e => e.TargetColumn, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (history.Count == 0) continue;
+
+            var columns = history.Select(e => e.TargetColumn!).ToList();
+            var lineage = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            foreach (var e in history)
+            {
+                var tags = e.Tags
+                    .Where(kv => !kv.Key.Equals("d", StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+                var description = e.Tags.TryGetValue("d", out var d)
+                    ? d
+                    : e.DerivedFromDescriptions;
+
+                lineage[e.TargetColumn!] = new
+                {
+                    sources = Array.Empty<object>(),
+                    transform = (string?)null,
+                    functions = (object?)null,
+                    kind = "Catalog",
+                    description,
+                    tags = tags.Count > 0 ? tags : null,
+                };
+            }
+
+            nodes[i] = node with { Meta = new { columns, columnLineage = lineage } };
+            resolved[node.Id] = (columns, lineage, node.Label);
+        }
+
+        if (resolved.Count == 0) return;
+
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+            if (node.Type != "table" || node.Meta != null) continue;
+
+            var inbound = edges.Where(e => e.Target == node.Id && resolved.ContainsKey(e.Source)).ToList();
+            if (inbound.Count != 1) continue;
+
+            var (cols, _, label) = resolved[inbound[0].Source];
+            var passthrough = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            foreach (var c in cols)
+            {
+                passthrough[c] = new
+                {
+                    sources = new[] { new { table = label, column = (string?)c } },
+                    transform = (string?)null,
+                    functions = (object?)null,
+                    kind = "PassThrough",
+                    description = (string?)null,
+                    tags = (object?)null,
+                };
+            }
+
+            nodes[i] = node with { Meta = new { columns = cols, columnLineage = passthrough } };
         }
     }
 
@@ -650,7 +915,7 @@ public class ReportsController : ControllerBase
                 a.Detail))
             .ToListAsync();
 
-        var currentHash = await ReadCurrentScriptHashAsync(report.ScriptPath);
+        var currentHash = await scriptInspection.ReadCurrentScriptHashAsync(report.ScriptPath);
         var scriptChanged = currentHash is not null
             && report.PublishedScriptHash is not null
             && !string.Equals(currentHash, report.PublishedScriptHash, StringComparison.OrdinalIgnoreCase);
@@ -706,7 +971,7 @@ public class ReportsController : ControllerBase
             if (!System.IO.File.Exists(resolved))
                 return BadRequest(new { error = $"Script file not found: {req.ScriptPath}" });
 
-            var validation = await ValidateResolvedScriptAsync(resolved);
+            var validation = await scriptInspection.ValidateResolvedScriptAsync(resolved);
             if (!validation.IsValid)
                 return BadRequest(validation);
 
@@ -1155,199 +1420,6 @@ public class ReportsController : ControllerBase
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
     }
-
-    private static async Task<Dictionary<string, string>> ReadScriptMetadataAsync(string scriptPath)
-    {
-        var scriptText = await System.IO.File.ReadAllTextAsync(scriptPath);
-        var tokens = new Lexer(scriptText).Tokenize();
-        var script = new CoreParser(tokens, scriptText).Parse();
-        return new Dictionary<string, string>(script.Metadata, StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static async Task<ReportScriptValidationDto> ValidateResolvedScriptAsync(string resolvedScriptPath)
-    {
-        if (!System.IO.File.Exists(resolvedScriptPath))
-        {
-            return new ReportScriptValidationDto(
-                false,
-                resolvedScriptPath,
-                null,
-                null,
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-                Array.Empty<ReportParameterDto>(),
-                ["Script file not found."]);
-        }
-
-        if (!resolvedScriptPath.EndsWith(".rptsql", StringComparison.OrdinalIgnoreCase))
-        {
-            return new ReportScriptValidationDto(
-                false,
-                resolvedScriptPath,
-                null,
-                System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath),
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-                Array.Empty<ReportParameterDto>(),
-                ["Only .rptsql files may be published as reports."]);
-        }
-
-        var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);
-        try
-        {
-            var tokens = new Lexer(scriptText).Tokenize();
-            var script = new CoreParser(tokens, scriptText).Parse();
-            var parameters = script.Statements
-                .OfType<DeclareStatement>()
-                .Where(d => d.IsInput)
-                .Select(d => new ReportParameterDto(
-                    d.VariableName,
-                    d.DataType,
-                    d.InitialValue is LiteralExpression lit ? lit.Value?.ToString() : null,
-                    d.InitialValue is null,
-                    d.Description))
-                .ToList();
-            var hash = "sha256:" + Convert.ToHexString(
-                SHA256.HashData(await System.IO.File.ReadAllBytesAsync(resolvedScriptPath))).ToLowerInvariant();
-
-            return new ReportScriptValidationDto(
-                true,
-                resolvedScriptPath,
-                hash,
-                System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath),
-                new Dictionary<string, string>(script.Metadata, StringComparer.OrdinalIgnoreCase),
-                parameters,
-                Array.Empty<string>());
-        }
-        catch (Exception ex)
-        {
-            return new ReportScriptValidationDto(
-                false,
-                resolvedScriptPath,
-                null,
-                System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath),
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-                Array.Empty<ReportParameterDto>(),
-                [ex.Message]);
-        }
-    }
-
-    private async Task<IReadOnlyList<ReportDependencyManifestDatasetDto>> ReadManifestDatasetsAsync(ReportSnapshot? snapshot)
-    {
-        if (snapshot is null) return Array.Empty<ReportDependencyManifestDatasetDto>();
-        if (!PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath))
-            return Array.Empty<ReportDependencyManifestDatasetDto>();
-        if (!System.IO.File.Exists(resolvedManifestPath))
-            return Array.Empty<ReportDependencyManifestDatasetDto>();
-
-        try
-        {
-            await using var stream = System.IO.File.OpenRead(resolvedManifestPath);
-            var manifest = await JsonSerializer.DeserializeAsync<ReportManifest>(stream);
-            if (manifest is null) return Array.Empty<ReportDependencyManifestDatasetDto>();
-
-            return manifest.Datasets
-                .Select(d => new ReportDependencyManifestDatasetDto(
-                    d.TempTableName,
-                    d.RefreshInterval,
-                    d.Ttl,
-                    d.LastRefresh,
-                    d.RowCount))
-                .ToList();
-        }
-        catch (JsonException)
-        {
-            return Array.Empty<ReportDependencyManifestDatasetDto>();
-        }
-    }
-
-    private async Task<IReadOnlyList<string>> ReadScriptSourceTablesAsync(string scriptPath)
-    {
-        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
-            return Array.Empty<string>();
-        if (!System.IO.File.Exists(resolvedScriptPath))
-            return Array.Empty<string>();
-
-        return ParseSourceTables(await System.IO.File.ReadAllTextAsync(resolvedScriptPath));
-    }
-
-    private async Task<IReadOnlyList<ReportDependencyLineageDto>> ReadScriptLineageAsync(string scriptPath)
-    {
-        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
-            return Array.Empty<ReportDependencyLineageDto>();
-        if (!System.IO.File.Exists(resolvedScriptPath))
-            return Array.Empty<ReportDependencyLineageDto>();
-
-        try
-        {
-            var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);
-            var tokens = new Lexer(scriptText).Tokenize();
-            var script = new CoreParser(tokens, scriptText).Parse();
-            var tracker = new LineageTracker(ETL_SQL.Common.NullLogger.Instance);
-            new LineageAnalyzer(tracker).Analyze(script);
-
-            return tracker.GetFullLineage()
-                .Select(e => new ReportDependencyLineageDto(
-                    e.TargetTable,
-                    e.TargetColumn,
-                    e.Operation,
-                    e.SourceTables.ToList(),
-                    e.SourceColumns.ToList(),
-                    e.Metadata,
-                    e.Line,
-                    e.TransformationKind == TransformationKind.Unknown ? null : e.TransformationKind.ToString(),
-                    e.TransformationExpression,
-                    e.FunctionsApplied,
-                    e.DerivedFromDescriptions))
-                .ToList();
-        }
-        catch
-        {
-            return Array.Empty<ReportDependencyLineageDto>();
-        }
-    }
-
-    private async Task<string?> ReadCurrentScriptHashAsync(string scriptPath)
-    {
-        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
-            return null;
-        if (!System.IO.File.Exists(resolvedScriptPath))
-            return null;
-
-        var bytes = await System.IO.File.ReadAllBytesAsync(resolvedScriptPath);
-        return "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-    }
-
-    private static IReadOnlyList<string> ParseSourceTables(string? scriptText)
-    {
-        if (string.IsNullOrWhiteSpace(scriptText)) return Array.Empty<string>();
-        try
-        {
-            var tokens = new Lexer(scriptText).Tokenize();
-            var script = new CoreParser(tokens, scriptText).Parse();
-            return script.Statements
-                .SelectMany(s => s.GetSourceTables())
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-        catch
-        {
-            return Array.Empty<string>();
-        }
-    }
-
-    private static IReadOnlyList<ReportDependencySourceDto> BuildSourceDtos(IEnumerable<string> sources, string kind) =>
-        sources
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(s =>
-            {
-                var parts = s.Split('.', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                var connection = parts.Length == 2 && !parts[0].StartsWith("#", StringComparison.Ordinal) ? parts[0] : null;
-                var objectName = parts.Length == 2 ? parts[1] : s;
-                return new ReportDependencySourceDto(s, connection, objectName, kind);
-            })
-            .ToList();
 
     private bool CanReadDataset(Dataset dataset, IReadOnlyCollection<int> groupIds)
     {

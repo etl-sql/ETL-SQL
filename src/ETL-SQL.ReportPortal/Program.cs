@@ -129,6 +129,8 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.TokenService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.FolderPermissionService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptInspectionService>();
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetViewerService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ILdapService, ETL_SQL.ReportPortal.Services.LdapService>();
@@ -192,6 +194,13 @@ builder.WebHost.ConfigureKestrel(options =>
 
 // ── App pipeline ──────────────────────────────────────────────────────────────
 var app = builder.Build();
+
+// Surface server-side chart SSR failures (engine init / per-chart render) to the logger so a
+// missing V8 runtime or a bad chart option is diagnosable instead of silently degrading exports.
+ETL_SQL.Reporting.EChartsSsrRenderer.OnError = (message, ex) =>
+    app.Services.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("ETL_SQL.Reporting.EChartsSsrRenderer")
+        .LogWarning(ex, "{Message}", message);
 
 // Apply EF migrations and enable WAL mode on startup
 using (var scope = app.Services.CreateScope())

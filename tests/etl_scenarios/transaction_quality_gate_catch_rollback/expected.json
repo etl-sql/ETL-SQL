@@ -1,0 +1,17 @@
+{
+  "runtimeQueries": [
+    {
+      "sql": "SELECT ID, Amount, Status FROM #Orders ORDER BY ID;",
+      "rows": [
+        { "ID": 1, "Amount": "25.50", "Status": "committed" }
+      ]
+    },
+    {
+      "sql": "SELECT StepName, Status FROM #LoadAudit ORDER BY StepName;",
+      "rows": [
+        { "StepName": "after_catch", "Status": "continued" },
+        { "StepName": "quality_gate", "Status": "rolled_back" }
+      ]
+    }
+  ]
+}

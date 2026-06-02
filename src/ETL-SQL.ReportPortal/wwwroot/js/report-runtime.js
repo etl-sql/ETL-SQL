@@ -3,6 +3,11 @@
  * Edit the canonical source, then run: .\scripts\sync-assets.ps1
  */
 /**
+ * Copyright (c) 2026 Charles Clemens
+ * Licensed under the PolyForm Noncommercial License 1.0.0
+ * Commercial use of this software requires a separate license.
+ * Contact etlsqlsoftware@gmail.com for commercial inquiries.
+ *
  * report-runtime.js — Phase 9E
  *
  * Dual-mode bootstrap:
@@ -18,6 +23,7 @@
     const isWebMode = window.__IS_WEB__ || window.location.protocol.startsWith('http');
     const vscode    = (typeof acquireVsCodeApi === 'function') ? acquireVsCodeApi() : null;
     const isInteractive = isWebMode || vscode;
+    const safeRequestAnimationFrame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
     
     let baselineManifest = null;
     
@@ -98,11 +104,85 @@
     const _uiStates = {};          // Keyed by object name; persists across re-renders (e.g. collapsed: true)
     let _lastManifest = null;
     let _maximizedVisualCard = null;
+    let _exportReadyGeneration = 0;
+    let _exportReadyPromise = Promise.resolve();
+    let _exportReadyResolve = null;
+
+    function publishExportState(status, detail) {
+        const state = {
+            status,
+            ready: status === 'ready',
+            timestamp: new Date().toISOString(),
+            ...(detail || {})
+        };
+        window.__etlSqlReportExportReady = state.ready;
+        window.__etlSqlReportExportState = state;
+        window.dispatchEvent(new CustomEvent('etl-sql-report-export-state', { detail: state }));
+        if (state.ready) {
+            window.dispatchEvent(new CustomEvent('etl-sql-report-export-ready', { detail: state }));
+        }
+        return state;
+    }
+
+    function markExportNotReady(reason, detail) {
+        _exportReadyGeneration++;
+        _exportReadyPromise = new Promise(resolve => {
+            _exportReadyResolve = resolve;
+        });
+        publishExportState('rendering', { reason, ...(detail || {}) });
+    }
+
+    function waitForImagesToSettle() {
+        const images = Array.from(document.images || []);
+        const pending = images
+            .filter(img => !img.complete)
+            .map(img => {
+                if (typeof img.decode === 'function') {
+                    return img.decode().catch(() => {});
+                }
+                return new Promise(resolve => {
+                    img.addEventListener('load', resolve, { once: true });
+                    img.addEventListener('error', resolve, { once: true });
+                });
+            });
+        return Promise.all(pending);
+    }
+
+    function markExportReady(manifest) {
+        const generation = _exportReadyGeneration;
+        safeRequestAnimationFrame(() => {
+            safeRequestAnimationFrame(() => {
+                waitForImagesToSettle().then(() => {
+                    if (generation !== _exportReadyGeneration) return;
+                    const pageCount = manifest && manifest.pages ? manifest.pages.length : 0;
+                    const visualCount = manifest && manifest.visuals ? manifest.visuals.length : 0;
+                    const state = publishExportState('ready', { pageCount, visualCount });
+                    if (_exportReadyResolve) _exportReadyResolve(state);
+                    _exportReadyResolve = null;
+                });
+            });
+        });
+    }
+
+    window.__etlSqlReportWhenExportReady = function (timeoutMs) {
+        const timeout = Number(timeoutMs || 0);
+        if (window.__etlSqlReportExportReady) {
+            return Promise.resolve(window.__etlSqlReportExportState);
+        }
+        if (timeout <= 0) return _exportReadyPromise;
+        return Promise.race([
+            _exportReadyPromise,
+            new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Report export readiness timed out.')), timeout);
+            })
+        ]);
+    };
 
     /**
      * Entry point: obtain manifest and render all visuals + pages.
      */
     async function boot() {
+        markExportNotReady('boot');
         if (window.__IS_PREVIEW__) {
             document.body.classList.add('preview-mode');
         }
@@ -119,16 +199,19 @@
             } catch (e) {
                 document.getElementById('root').innerHTML =
                     '<p class="error">Failed to load manifest: ' + e.message + '</p>';
+                publishExportState('error', { reason: 'manifest-load-failed', message: e.message });
                 return;
             }
         } else {
             document.getElementById('root').innerHTML =
                 '<p class="error">No manifest available.</p>';
+            publishExportState('error', { reason: 'manifest-missing' });
             return;
         }
 
         // Phase 4: Intercept execution if required parameters are missing
         if (!checkRequiredParameters(manifest)) {
+            publishExportState('blocked', { reason: 'required-parameters' });
             return; // Modal is showing, wait for user input
         }
 
@@ -236,6 +319,7 @@
     }
 
     function renderManifest(manifest) {
+        markExportNotReady('render-manifest');
         _lastManifest = manifest;
 
         // Cancel any running per-page auto-refresh timers before rebuilding.
@@ -243,7 +327,10 @@
         _refreshTimers = [];
 
         const root = document.getElementById('root');
-        if (!root) return;
+        if (!root) {
+            publishExportState('error', { reason: 'root-missing' });
+            return;
+        }
         root.replaceChildren(); // Clear without reparsing HTML.
         renderHeader(root, manifest);
 
@@ -341,6 +428,7 @@
         renderFooter(root, manifest);
         renderPipelineConsole(root, manifest);
         renderAutoPanel(root, manifest);
+        markExportReady(manifest);
     }
 
     function renderAutoPanel(container, manifest) {
@@ -546,7 +634,7 @@
                 _lastActivePage = pageName;
 
                 // Defer resize to the next frame so the active class renders first.
-                if (target) requestAnimationFrame(() => resizeChartsIn(target));
+                if (target) safeRequestAnimationFrame(() => resizeChartsIn(target));
 
                 // Notify portal of user-driven tab change so it can push a history entry
                 if (window.parent && window.parent !== window) {
@@ -1562,6 +1650,31 @@
         URL.revokeObjectURL(url);
     }
 
+    // Prefer a real .xlsx from the server (typed cells, one sheet, no "format
+    // mismatch" warning). Falls back to the lightweight client-side .xls when no
+    // export API is reachable (e.g. VS Code preview or a host without the endpoint).
+    async function exportExcelDownload(visual) {
+        const base = window.__API_BASE__;
+        if (base) {
+            try {
+                const res = await fetch(base + '/export/xlsx?visual=' + encodeURIComponent(visual.name || ''));
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url  = URL.createObjectURL(blob);
+                    const a    = document.createElement('a');
+                    a.href     = url;
+                    a.download = (visual.name || 'export') + '.xlsx';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    return;
+                }
+            } catch (e) { /* fall through to client-side export */ }
+        }
+        exportExcel(visual);
+    }
+
     function findVisualData(targetName) {
         const el = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`);
         return el ? el._visualData : null;
@@ -1650,6 +1763,12 @@
         exportItem.innerHTML = `<span>&#x2913;</span> Export to CSV`;
         exportItem.addEventListener('click', () => { exportCsv(visual); hideCtxMenu(); });
         menu.appendChild(exportItem);
+
+        const excelItem = document.createElement('div');
+        excelItem.className = 'ctx-item';
+        excelItem.innerHTML = `<span>&#x2913;</span> Export to Excel`;
+        excelItem.addEventListener('click', () => { exportExcelDownload(visual); hideCtxMenu(); });
+        menu.appendChild(excelItem);
 
         document.body.appendChild(menu);
         _ctxMenu = menu;
@@ -3875,7 +3994,7 @@
             const visual = targetName ? findVisualData(targetName) : null;
             if (!visual) { console.warn('EXPORT action: no target visual found:', targetName); return; }
             if (action.type === 'EXPORT_CSV') exportCsv(visual);
-            else exportExcel(visual);
+            else exportExcelDownload(visual);
         } else if (action.type === 'EXPORT_PDF') {
             window.print();
         } else if (action.type === 'NAVIGATE_PAGE') {

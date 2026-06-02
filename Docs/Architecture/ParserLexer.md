@@ -19,7 +19,7 @@ Source text (.etlsql / .rptsql)
                               ▼
 ┌─────────────────────────────────────────────────┐
 │  Parser  (ETL-SQL.Core/Parser/Parser.cs          │
-│          + StatementParser.*.cs partials)        │
+│          + StatementParser.cs)                   │
 │  tokens → Script { Statements, Diagnostics }    │
 │  Recursive descent; up to 3-token lookahead     │
 │  Selective 1-token backtracking                 │
@@ -79,7 +79,7 @@ Report-SQL: `VISUAL`, `PAGE`, `DATASET`, `BUTTON`, `TEMPLATE`, `THEME`, `MAPPING
 
 ## 3. Parser
 
-**Files:** `Parser.cs` (token stream, lookahead, dispatch), `StatementParser.cs` + domain-specific partials
+**Files:** `Parser.cs` (token stream, lookahead, dispatch), `StatementParser.cs`
 
 ### 3.1 Token Stream API (`IParser`)
 
@@ -334,7 +334,7 @@ public abstract record AstNode
 1. **Add token(s) to `TokenType.cs`** — one entry per new keyword not already covered.
 2. **Register keyword(s) in `Lexer.cs`** — add to the `Keywords` dictionary.
 3. **Add AST record to `Ast.cs`** (or `ReportAst.cs` for Report-SQL) — must be a `record` inheriting `Statement`.
-4. **Add parser case** in the appropriate `StatementParser.*.cs` partial:
+4. **Add parser case** in `StatementParser.cs`:
    - If it starts with a new keyword: add a `Match(TokenType.NEW_KW)` branch in `ParseStatement()`
    - If it starts with an existing dispatch keyword (e.g., `CREATE`): add a nested branch in the existing handler
 5. **Add statement handler** in `ETL-SQL.Engine/Handlers/` implementing `IStatementHandler`

@@ -72,6 +72,46 @@ namespace ETL_SQL.Tests.Core
         }
 
         [Fact]
+        public void ExportReport_WithPdfOptions_ParsesAndSerializes()
+        {
+            var source = "EXPORT REPORT 'sales.rptsql' FORMAT PDF TO 'sales.pdf' WITH (PDF_MODE = BROWSER, HOST = 'http://localhost:5080', BROWSER_PATH = 'C:\\Chrome\\chrome.exe');";
+            var script = new Parser(new Lexer(source).Tokenize()).Parse();
+
+            Assert.Empty(script.Diagnostics);
+            var stmt = Assert.IsType<ExportReportStatement>(script.Statements.Single());
+
+            Assert.Equal("PDF", stmt.Format);
+            Assert.Equal("BROWSER", stmt.PdfMode);
+            Assert.Equal("'http://localhost:5080'", stmt.Host?.ToSql());
+            Assert.Equal("'C:\\Chrome\\chrome.exe'", stmt.BrowserPath?.ToSql());
+            Assert.Equal(source, stmt.ToSql());
+        }
+
+        [Fact]
+        public void ExportReport_WithAutoPdfMode_Parses()
+        {
+            var source = "EXPORT REPORT 'sales.rptsql' FORMAT PDF TO 'sales.pdf' WITH (PDF_MODE = AUTO);";
+            var script = new Parser(new Lexer(source).Tokenize()).Parse();
+
+            Assert.Empty(script.Diagnostics);
+            var stmt = Assert.IsType<ExportReportStatement>(script.Statements.Single());
+
+            Assert.Equal("AUTO", stmt.PdfMode);
+            Assert.Null(stmt.Host);
+            Assert.Null(stmt.BrowserPath);
+        }
+
+        [Fact]
+        public void ExportReport_WithOptions_RejectsNonPdfFormat()
+        {
+            var source = "EXPORT REPORT 'sales.rptsql' FORMAT CSV TO 'sales.csv' WITH (PDF_MODE = STATIC);";
+            var script = new Parser(new Lexer(source).Tokenize()).Parse();
+
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Contains("only valid when FORMAT PDF", diagnostic.Message);
+        }
+
+        [Fact]
         public void TestParseExpressionPrecedence()
         {
             var source = "PRINT 1 + 2 * 3;";

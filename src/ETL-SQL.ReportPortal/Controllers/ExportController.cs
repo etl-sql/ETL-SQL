@@ -94,6 +94,31 @@ public class ExportController(
                     filename);
     }
 
+    // ── 4.1b GET /api/reports/{id}/export/xlsx?visual=<name> ──────────────────
+    [HttpGet("xlsx")]
+    public async Task<IActionResult> ExportXlsx(int id, [FromQuery] string? visual)
+    {
+        if (!await CanReadAsync(id)) return Forbid();
+
+        var (manifest, err, forbidden) = await LoadManifestAsync(id);
+        if (forbidden) return Forbid();
+        if (manifest is null) return NotFound(new { error = err });
+
+        var visuals = new CsvRenderer().SelectExportVisuals(manifest, visual);
+        if (visuals.Count == 0)
+            return NotFound(new { error = "No exportable visuals found" });
+
+        var bytes = await new XlsxExporter().ExportAsync(visuals);
+
+        var reportName = manifest.Title ?? System.IO.Path.GetFileNameWithoutExtension(manifest.Source);
+        var filename   = $"{SanitizeFilename(reportName)}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
+
+        await audit.LogAsync(CurrentUserId, "EXPORT_XLSX", "Report", id.ToString(), visual);
+        return File(bytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    filename);
+    }
+
     // ── 4.2  GET /api/reports/{id}/export/pdf ─────────────────────────────────
     [HttpGet("pdf")]
     public async Task<IActionResult> ExportPdf(int id)
@@ -123,8 +148,18 @@ public class ExportController(
         byte[] pdfBytes;
         try
         {
-            var exporter = new PdfExporter();
-            pdfBytes = exporter.Export(manifest);
+            // Render the already-loaded manifest entirely server-side (charts via ECharts SSR).
+            // We deliberately do NOT use the browser/high-fidelity path here: it would navigate a
+            // headless browser to the live portal and forward the caller's Authorization header via
+            // CDP Network.setExtraHTTPHeaders, which has no URL filter — leaking the viewer's bearer
+            // token to every sub-resource the report references (e.g. an attacker-controlled image
+            // URL embedded in report content). Static rendering needs no token and no host round-trip.
+            var exporter = new ReportPdfExporter();
+            pdfBytes = exporter.Export(manifest, new PdfExportOptions
+            {
+                Mode = PdfExportMode.Static,
+                Warn = message => { }
+            });
         }
         catch (Exception ex)
         {

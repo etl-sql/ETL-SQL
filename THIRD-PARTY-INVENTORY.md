@@ -20,10 +20,10 @@ About screens. It is not legal advice.
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Apache.Arrow | 23.0.0 | runtime | Apache-2.0 | expression | https://arrow.apache.org/ | src/ETL-SQL.Engine/ETL-SQL.Engine.csproj |
 | Apache.Avro | 1.12.1 | runtime | LICENSE | file | https://avro.apache.org/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| AWSSDK.S3 | 4.0.20.4 | runtime | Apache-2.0 | expression | https://github.com/aws/aws-sdk-net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| AWSSDK.S3 | 4.0.23.5 | runtime | Apache-2.0 | expression | https://github.com/aws/aws-sdk-net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Azure.Storage.Blobs | 12.28.0 | runtime | MIT | expression | https://github.com/Azure/azure-sdk-for-net/blob/Azure.Storage.Blobs_12.28.0/sdk/storage/Azure.Storage.Blobs/README.md | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | BenchmarkDotNet | 0.15.8 | test | MIT | expression | https://github.com/dotnet/BenchmarkDotNet | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj |
-| Confluent.Kafka | 2.8.0 | runtime | Apache-2.0 | expression | https://github.com/confluentinc/confluent-kafka-dotnet/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| Confluent.Kafka | 2.14.0 | runtime | Apache-2.0 | expression | https://github.com/confluentinc/confluent-kafka-dotnet/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | coverlet.collector | 10.0.1 | test | MIT | expression | https://github.com/coverlet-coverage/coverlet | tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | Cronos | 0.13.0 | runtime | MIT | expression | https://github.com/HangfireIO/Cronos | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
 | Docker.DotNet.Enhanced | 4.2.0 | runtime | MIT | expression | https://licenses.nuget.org/MIT | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
@@ -35,6 +35,12 @@ About screens. It is not legal advice.
 | Microsoft.AspNetCore.Authentication.JwtBearer | 10.0.8 | runtime | MIT | expression | https://asp.net/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
 | Microsoft.AspNetCore.Identity.EntityFrameworkCore | 10.0.8 | runtime | MIT | expression | https://asp.net/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
 | Microsoft.AspNetCore.Mvc.Testing | 10.0.8 | test | MIT | expression | https://asp.net/ | tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj |
+| Microsoft.ClearScript.V8 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
+| Microsoft.ClearScript.V8.Native.linux-x64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
+| Microsoft.ClearScript.V8.Native.linux-arm64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
+| Microsoft.ClearScript.V8.Native.osx-x64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
+| Microsoft.ClearScript.V8.Native.osx-arm64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
+| Microsoft.ClearScript.V8.Native.win-x64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
 | Microsoft.Data.SqlClient | 7.0.1 | runtime | MIT | expression | https://aka.ms/sqlclientproject | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Microsoft.Data.Sqlite | 10.0.8 | runtime | MIT | expression | https://docs.microsoft.com/dotnet/standard/data/sqlite/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
 | Microsoft.EntityFrameworkCore.Design | 10.0.8 | runtime | MIT | expression | https://docs.microsoft.com/ef/core/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
@@ -55,11 +61,12 @@ About screens. It is not legal advice.
 | Microsoft.Extensions.Options | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
 | Microsoft.Extensions.Options.ConfigurationExtensions | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
 | Microsoft.NET.Test.Sdk | 18.6.0 | test | MIT | expression | https://github.com/microsoft/vstest | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
-| Microsoft.OpenApi | 2.7.5 | runtime | MIT | expression | https://github.com/Microsoft/OpenAPI.NET | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
-| MongoDB.Driver | 3.1.0 | runtime | Apache-2.0 | expression | https://www.mongodb.com/docs/drivers/csharp/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| Microsoft.OpenApi | 3.5.5 | runtime | MIT | expression | https://github.com/Microsoft/OpenAPI.NET | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
+| MiniExcel | 1.44.1 | runtime | Apache-2.0 | expression | https://github.com/mini-software/MiniExcel | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
+| MongoDB.Driver | 3.9.0 | runtime | Apache-2.0 | expression | https://www.mongodb.com/docs/drivers/csharp/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Moq | 4.20.72 | test | BSD-3-Clause | expression | https://github.com/moq/moq | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | MySqlConnector | 2.5.0 | runtime | MIT | expression | https://mysqlconnector.net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| Npgsql | 10.0.2 | runtime | PostgreSQL | expression | https://github.com/npgsql/npgsql | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| Npgsql | 10.0.3 | runtime | PostgreSQL | expression | https://github.com/npgsql/npgsql | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | OmniSharp.Extensions.LanguageServer | 0.19.9 | runtime, test | LICENSE | file | https://github.com/OmniSharp/csharp-language-server-protocol | src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj |
 | Oracle.ManagedDataAccess.Core | 23.26.200 | runtime | LICENSE.txt | file | https://www.oracle.com/database/technologies/appdev/dotnet.html | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Parquet.Net | 6.0.3 | runtime | MIT | expression | https://github.com/aloneguid/parquet-dotnet | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
@@ -73,6 +80,7 @@ About screens. It is not legal advice.
 | Serilog.Sinks.Console | 6.1.1 | runtime | Apache-2.0 | expression | https://github.com/serilog/serilog-sinks-console | src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj |
 | Serilog.Sinks.File | 7.0.0 | runtime, test | Apache-2.0 | expression | https://github.com/serilog/serilog-sinks-file | src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | Serilog.Sinks.XUnit | 3.0.19 | test | MIT | expression | https://github.com/trbenning/serilog-sinks-xunit | tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
+| SkiaSharp.NativeAssets.Linux | 3.119.2 | runtime | MIT | expression | https://go.microsoft.com/fwlink/?linkid=868515 | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
 | Snappier | 1.3.1 | runtime | BSD-3-Clause | expression | https://brantburnett.github.io/Snappier/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Snowflake.Data | 5.6.0 | runtime | Apache-2.0 | expression | https://github.com/snowflakedb/snowflake-connector-net | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Spectre.Console | 0.55.2 | runtime, test | MIT | expression | https://github.com/spectreconsole/spectre.console | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Engine/ETL-SQL.Engine.csproj; src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |

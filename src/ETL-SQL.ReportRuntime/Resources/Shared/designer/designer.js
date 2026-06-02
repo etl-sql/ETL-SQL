@@ -1,4 +1,9 @@
 /**
+ * Copyright (c) 2026 Charles Clemens
+ * Licensed under the PolyForm Noncommercial License 1.0.0
+ * Commercial use of this software requires a separate license.
+ * Contact etlsqlsoftware@gmail.com for commercial inquiries.
+ *
  * ETL-SQL Designer — shared vanilla-JS component
  *
  * Three exported surface areas, implemented across phases:
@@ -158,9 +163,10 @@ function _lineageReach(rootId, allEdges, allNodes) {
  * @param {Object}      [options]
  * @param {string}      [options.theme='portal']   'portal' | 'vscode' — affects colour palette
  * @param {Function}    [options.onNodeClick]       Called with (nodeId, nodeMeta) on click
- * @returns {{ dispose: Function, resize: Function }}
+ * @returns {{ dispose: Function, resize: Function, showDetail: Function }}
  *   dispose() — destroys the ECharts instance and removes DOM listeners
  *   resize()  — re-fits the chart to the current container size (call on panel resize)
+ *   showDetail(id) — opens a node detail panel programmatically (used by tests/sandbox)
  */
 export function renderDag(container, { nodes, edges }, options = {}) {
     const ec = window.echarts;
@@ -180,6 +186,10 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     let   soloedPage     = null;   // page id drilled into — only its slice is shown
     let   focusedNode    = null;   // node id whose lineage is isolated, or null
     let   focusSet       = null;   // Set of node ids kept lit while focused
+    let   hasInitializedView = false;
+    let   viewDimensionsValid = false;
+    let   currentZoom    = 1;
+    let   currentCenter  = [0, 0];
     let   lastGraph      = null;   // most recent { allNodes, allEdges, pos } for search/minimap
     let   searchMatches  = [];     // node ids matching the current search term
     let   searchIdx      = -1;     // index into searchMatches of the current jump target
@@ -341,6 +351,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     container.innerHTML = '';
     container.style.display = 'flex';
     container.style.flexDirection = 'column';
+    container.classList.add('etlsql-dag-container');
 
     const toolbar = document.createElement('div');
     toolbar.className = 'etlsql-dag-toolbar';
@@ -361,13 +372,15 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     search.append(searchInput, searchCount);
     toolbar.appendChild(search);
 
-    const soloBadge = document.createElement('div');
+    const soloBadge = document.createElement('button');
+    soloBadge.type = 'button';
     soloBadge.className = 'etlsql-dag-focusbadge etlsql-dag-solobadge';
     soloBadge.style.display = 'none';
     soloBadge.addEventListener('click', () => { soloedPage = null; render(); });
     toolbar.appendChild(soloBadge);
 
-    const badge = document.createElement('div');
+    const badge = document.createElement('button');
+    badge.type = 'button';
     badge.className = 'etlsql-dag-focusbadge';
     badge.style.display = 'none';
     badge.addEventListener('click', () => { focusedNode = null; render(); });
@@ -390,6 +403,81 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     body.appendChild(panel);
 
     const chart = ec.init(chartDiv, null, { renderer: 'canvas' });
+
+    // Floating Zoom Controls (+, -, Reset)
+    const zoomControls = document.createElement('div');
+    zoomControls.className = 'etlsql-dag-zoom-controls';
+
+    const btnIn = document.createElement('button');
+    btnIn.type = 'button';
+    btnIn.className = 'etlsql-dag-zoom-btn';
+    btnIn.innerHTML = '&#43;'; // +
+    btnIn.title = 'Zoom In';
+    btnIn.setAttribute('aria-label', 'Zoom In');
+    btnIn.addEventListener('click', () => {
+        currentZoom *= 1.25;
+        render();
+    });
+
+    const btnOut = document.createElement('button');
+    btnOut.type = 'button';
+    btnOut.className = 'etlsql-dag-zoom-btn';
+    btnOut.innerHTML = '&minus;'; // −
+    btnOut.title = 'Zoom Out';
+    btnOut.setAttribute('aria-label', 'Zoom Out');
+    btnOut.addEventListener('click', () => {
+        currentZoom = Math.max(currentZoom / 1.25, 0.1);
+        render();
+    });
+
+    const btnReset = document.createElement('button');
+    btnReset.type = 'button';
+    btnReset.className = 'etlsql-dag-zoom-btn';
+    btnReset.innerHTML = '&#8634;'; // ⟲
+    btnReset.title = 'Reset View';
+    btnReset.setAttribute('aria-label', 'Reset View');
+    btnReset.addEventListener('click', () => {
+        let centerX = 0, centerY = 0;
+        const positions = Object.values(lastGraph?.pos || {});
+        if (positions.length > 1) {
+            const xs = positions.map(p => p.x);
+            const ys = positions.map(p => p.y);
+            centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+            centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+        }
+
+        let initialZoom = 1;
+        const containerW = chart.getWidth();
+        const containerH = chart.getHeight();
+        if (positions.length > 1 && containerW > 0 && containerH > 0) {
+            const xs = positions.map(p => p.x);
+            const ys = positions.map(p => p.y);
+            const graphW = Math.max(...xs) - Math.min(...xs) + 240;
+            const graphH = Math.max(...ys) - Math.min(...ys) + 160;
+            const fitZoom = Math.min(containerW / graphW, containerH / graphH);
+            initialZoom = Math.max(fitZoom, 0.65);
+        }
+
+        currentZoom = initialZoom;
+        currentCenter = [centerX, centerY];
+        render();
+    });
+
+    zoomControls.append(btnIn, btnOut, btnReset);
+    body.appendChild(zoomControls);
+
+    chart.on('graphRoam', () => {
+        const option = chart.getOption();
+        if (option && option.series && option.series[0]) {
+            if (option.series[0].zoom !== undefined) {
+                currentZoom = option.series[0].zoom;
+            }
+            if (option.series[0].center !== undefined) {
+                currentCenter = option.series[0].center;
+            }
+        }
+        drawMinimap();
+    });
 
     // ── Detail panel (columns for tables, field mappings for charts) ─────────
     const _ROLE_LABEL = {
@@ -422,6 +510,58 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         panel.appendChild(ul);
     }
 
+    // Resolve a source table name (as recorded in lineage) to a graph node id.
+    function findTableNodeId(tableName) {
+        if (_nodeById[`ds:${tableName}`])    return `ds:${tableName}`;
+        if (_nodeById[`table:${tableName}`]) return `table:${tableName}`;
+        const hit = nodes.find(n => (n.type === 'table' || n.type === 'dataset') && n.label === tableName);
+        return hit ? hit.id : null;
+    }
+
+    // Walk a column back through its sources, rendering each hop (transform,
+    // origin table, inherited description / tags) indented by depth.
+    function appendColumnLineage(container, tableNodeId, column, depth, seen) {
+        seen = seen || new Set();
+        const key = `${tableNodeId}|${column}`;
+        if (seen.has(key) || depth > 12) return;
+        seen.add(key);
+
+        const tnode = _nodeById[tableNodeId];
+        const cl = tnode?.meta?.columnLineage?.[column];
+
+        const row = _el('div', 'etlsql-dag-lin');
+        row.style.paddingLeft = `${depth * 14}px`;
+        if (depth > 0) { const a = _el('span', 'etlsql-dag-lin-arrow'); a.textContent = '↖'; row.append(a); }
+        const colEl = _el('span', 'etlsql-dag-lin-col'); colEl.textContent = column; row.append(colEl);
+        if (cl?.transform) { const t = _el('span', 'etlsql-dag-lin-expr'); t.textContent = `= ${cl.transform}`; row.append(t); }
+        const tbl = _el('span', 'etlsql-dag-lin-tbl'); tbl.textContent = tnode?.label ?? tableNodeId; row.append(tbl);
+        container.append(row);
+
+        if (cl?.tags && Object.keys(cl.tags).length) {
+            const tagRow = _el('div', 'etlsql-dag-lin-meta'); tagRow.style.paddingLeft = `${depth * 14 + 16}px`;
+            for (const k of Object.keys(cl.tags)) { const tg = _el('span', 'etlsql-dag-lin-tag'); tg.textContent = `⚠ ${k}`; tagRow.append(tg); }
+            container.append(tagRow);
+        }
+        if (cl?.description) {
+            const d = _el('div', 'etlsql-dag-lin-desc'); d.style.paddingLeft = `${depth * 14 + 16}px`;
+            d.textContent = cl.description; container.append(d);
+        }
+
+        for (const s of (cl?.sources ?? [])) {
+            if (!s.column) continue;
+            const srcId = findTableNodeId(s.table);
+            if (srcId) {
+                appendColumnLineage(container, srcId, s.column, depth + 1, seen);
+            } else {
+                const leaf = _el('div', 'etlsql-dag-lin'); leaf.style.paddingLeft = `${(depth + 1) * 14}px`;
+                const a = _el('span', 'etlsql-dag-lin-arrow'); a.textContent = '↖'; leaf.append(a);
+                const c = _el('span', 'etlsql-dag-lin-col'); c.textContent = s.column; leaf.append(c);
+                const tb = _el('span', 'etlsql-dag-lin-tbl'); tb.textContent = s.table; leaf.append(tb);
+                container.append(leaf);
+            }
+        }
+    }
+
     // node: { id, label, type, meta }
     function showDetail(node) {
         panel.replaceChildren();
@@ -441,19 +581,39 @@ export function renderDag(container, { nodes, edges }, options = {}) {
 
         if (node.type === 'visual') {
             const maps = node.meta?.mappings ?? [];
-            renderPanelList('Fields',
-                maps.length ? maps.map(m => ({ k: _ROLE_LABEL[m.role] ?? String(m.role ?? '').toLowerCase(), v: m.column })) : null,
-                'No field mappings.');
+            const h = _el('div', 'etlsql-dag-panel-h'); h.textContent = 'Fields'; panel.append(h);
+            if (!maps.length) {
+                const e = _el('div', 'etlsql-dag-panel-empty'); e.textContent = 'No field mappings.'; panel.append(e);
+            } else {
+                // Source tables/datasets feeding this visual, to resolve mapping columns against.
+                const srcIds = (edges ?? [])
+                    .filter(e => e.target === node.id)
+                    .map(e => e.source)
+                    .filter(sid => { const t = _nodeById[sid]?.type; return t === 'table' || t === 'dataset'; });
+                const sourceFor = (col) =>
+                    srcIds.find(sid => _nodeById[sid]?.meta?.columnLineage?.[col]
+                                    || (_nodeById[sid]?.meta?.columns || []).includes(col)) || srcIds[0];
+
+                for (const m of maps) {
+                    const fieldRow = _el('div', 'etlsql-dag-lin-field');
+                    const k = _el('span', 'etlsql-dag-panel-k'); k.textContent = `${_ROLE_LABEL[m.role] ?? String(m.role ?? '').toLowerCase()}:`;
+                    const v = _el('span', 'etlsql-dag-panel-v'); v.textContent = m.column;
+                    fieldRow.append(k, v); panel.append(fieldRow);
+                    const srcId = sourceFor(m.column);
+                    if (srcId) appendColumnLineage(panel, srcId, m.column, 1);
+                }
+            }
         } else if (node.type === 'page') {
             const kids = (pageChildren[node.id] ?? []).map(vid => ({ v: _nodeById[vid]?.label ?? vid }));
             renderPanelList(`Visuals (${kids.length})`, kids, 'No visuals.');
         } else {
             const cols = node.meta?.columns ?? [];
-            const srcByCol = {};
-            for (const ce of (node.meta?.colEdges ?? [])) srcByCol[ce.tgtCol] = `${ce.srcTable}.${ce.srcCol}`;
-            renderPanelList(`Columns (${cols.length})`,
-                cols.length ? cols.map(c => ({ v: c, from: srcByCol[c] })) : null,
-                'No column metadata.');
+            const h = _el('div', 'etlsql-dag-panel-h'); h.textContent = `Columns (${cols.length})`; panel.append(h);
+            if (!cols.length) {
+                const e = _el('div', 'etlsql-dag-panel-empty'); e.textContent = 'No column metadata.'; panel.append(e);
+            } else {
+                for (const c of cols) appendColumnLineage(panel, node.id, c, 0);
+            }
         }
 
         panel.style.display = 'block';
@@ -492,7 +652,9 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         const p = lastGraph.pos[id];
         if (!p) return;
         const curZoom = chart.getOption().series?.[0]?.zoom || 1;
-        chart.setOption({ series: [{ center: [p.x, p.y], zoom: Math.max(curZoom, 1.5) }] });
+        currentZoom = Math.max(curZoom, 1.5);
+        currentCenter = [p.x, p.y];
+        render();
         const di = lastGraph.allNodes.findIndex(n => n.id === id);
         if (di >= 0) {
             chart.dispatchAction({ type: 'downplay', seriesIndex: 0 });
@@ -500,7 +662,6 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             clearTimeout(_hlTimer);
             _hlTimer = setTimeout(() => chart.dispatchAction({ type: 'downplay', seriesIndex: 0 }), 1800);
         }
-        drawMinimap();
     }
 
     searchInput.addEventListener('input', () => { recomputeMatches(); searchIdx = -1; nextMatch(); });
@@ -511,12 +672,34 @@ export function renderDag(container, { nodes, edges }, options = {}) {
 
     // ── Minimap ──────────────────────────────────────────────────────────────
     const MINI_W = 190, MINI_H = 130, MINI_PAD = 8;
+    const minimapWrapper = document.createElement('div');
+    minimapWrapper.className = 'etlsql-dag-minimap-wrapper is-minimized';
+
+    const minimapToggle = document.createElement('button');
+    minimapToggle.type = 'button';
+    minimapToggle.className = 'etlsql-dag-minimap-toggle';
+    minimapToggle.innerHTML = '🗺️';
+    minimapToggle.title = 'Toggle Minimap';
+    minimapToggle.setAttribute('aria-label', 'Toggle Minimap');
+    minimapWrapper.appendChild(minimapToggle);
+
     const miniCanvas = document.createElement('canvas');
     miniCanvas.className = 'etlsql-dag-minimap';
     miniCanvas.width = MINI_W;
     miniCanvas.height = MINI_H;
     miniCanvas.title = 'Overview — click to recentre';
-    chartDiv.appendChild(miniCanvas);
+    minimapWrapper.appendChild(miniCanvas);
+
+    chartDiv.appendChild(minimapWrapper);
+
+    minimapToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        minimapWrapper.classList.toggle('is-minimized');
+        if (!minimapWrapper.classList.contains('is-minimized')) {
+            drawMinimap();
+        }
+    });
+
     const miniCtx = miniCanvas.getContext('2d');
     let _miniTx = null;   // { scale, minX, minY, offX, offY } for click→data mapping
 
@@ -555,9 +738,15 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             if (tl && br) {
                 const [x0, y0] = d2m(tl[0], tl[1]);
                 const [x1, y1] = d2m(br[0], br[1]);
-                miniCtx.strokeStyle = 'rgba(226,232,240,0.85)';
-                miniCtx.lineWidth = 1;
-                miniCtx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+                miniCtx.strokeStyle = 'rgba(37,99,235,0.7)';
+                miniCtx.lineWidth = 1.5;
+                const vx = Math.min(x0, x1);
+                const vy = Math.min(y0, y1);
+                const vw = Math.abs(x1 - x0);
+                const vh = Math.abs(y1 - y0);
+                miniCtx.fillStyle = 'rgba(37,99,235,0.06)';
+                miniCtx.fillRect(vx, vy, vw, vh);
+                miniCtx.strokeRect(vx, vy, vw, vh);
             }
         } catch { /* convertFromPixel not ready yet — next roam/render fixes it */ }
     }
@@ -567,13 +756,12 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         const r = miniCanvas.getBoundingClientRect();
         const mx = (e.clientX - r.left) * (MINI_W / r.width);
         const my = (e.clientY - r.top) * (MINI_H / r.height);
-        const dataX = (mx - _miniTx.offX) / _miniTx.scale;
-        const dataY = (my - _miniTx.offY) / _miniTx.scale;
-        chart.setOption({ series: [{ center: [dataX, dataY] }] });
-        drawMinimap();
+        currentCenter = [
+            (mx - _miniTx.offX) / _miniTx.scale,
+            (my - _miniTx.offY) / _miniTx.scale
+        ];
+        render();
     });
-
-    chart.on('graphroam', drawMinimap);
 
     // ── Type filter chips ──────────────────────────────────────────────────
     const _TYPE_LABEL = {
@@ -683,26 +871,49 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
         }
 
+        let initialZoom = 1;
+        const containerW = chart.getWidth();
+        const containerH = chart.getHeight();
+        if (positions.length > 1 && containerW > 0 && containerH > 0) {
+            const xs = positions.map(p => p.x);
+            const ys = positions.map(p => p.y);
+            const graphW = Math.max(...xs) - Math.min(...xs) + 240; // 240 is NODE_W
+            const graphH = Math.max(...ys) - Math.min(...ys) + 160; // 160 is LAYER_H
+            const fitZoom = Math.min(containerW / graphW, containerH / graphH);
+            initialZoom = Math.max(fitZoom, 0.65);
+            viewDimensionsValid = true;
+        }
+
+        if (!hasInitializedView || !viewDimensionsValid) {
+            currentZoom = initialZoom;
+            currentCenter = [centerX, centerY];
+            if (viewDimensionsValid) {
+                hasInitializedView = true;
+            }
+        }
+
+        const seriesOpt = {
+            type:           'graph',
+            layout:         'none',
+            nodes:          eNodes,
+            edges:          eEdges,
+            roam:           true,
+            edgeSymbol:     ['none', 'arrow'],
+            edgeSymbolSize: 8,
+            lineStyle:      { curveness: 0.15 },
+            label:          { position: 'inside', color: '#fff' },
+            emphasis:       { focus: 'adjacency' },
+            zoom:           currentZoom,
+            center:         currentCenter,
+        };
+
         chart.setOption({
             // notMerge replace below would otherwise replay the full entrance
             // animation of every node on each collapse/filter/focus re-render,
             // making the prior layout appear to linger. Snap instead.
             animation: false,
             tooltip: { show: true, confine: true },
-            series: [{
-                type:           'graph',
-                layout:         'none',
-                nodes:          eNodes,
-                edges:          eEdges,
-                roam:           true,
-                zoom:           1,
-                center:         [centerX, centerY],
-                edgeSymbol:     ['none', 'arrow'],
-                edgeSymbolSize: 8,
-                lineStyle:      { curveness: 0.15 },
-                label:          { position: 'inside', color: '#fff' },
-                emphasis:       { focus: 'adjacency' },
-            }],
+            series: [seriesOpt],
         }, true);
 
         updateFocusBadge();
@@ -751,7 +962,17 @@ export function renderDag(container, { nodes, edges }, options = {}) {
 
     return {
         dispose: () => { if (clickTimer) clearTimeout(clickTimer); clearTimeout(_hlTimer); chart.dispose(); },
-        resize:  () => { chart.resize(); drawMinimap(); },
+        resize:  () => {
+            chart.resize();
+            drawMinimap();
+            if (!hasInitializedView) {
+                render();
+            }
+        },
+        showDetail: (id) => {
+            const node = nodes.find(n => n.id === id);
+            if (node) showDetail(node);
+        },
     };
 }
 

@@ -1,4 +1,4 @@
-﻿# ETL-SQL Connectors Architecture & Engineering Reference
+# ETL-SQL Connectors Architecture & Engineering Reference
 
 **Applies to ETL-SQL 0.9.0**
 
@@ -71,22 +71,30 @@ This document describes the internal mechanics of the ETL-SQL data access layer.
 | `MSSQL`, `SQLSERVER` | Relational | ✓ | ✓ | SqlBulkCopy for writes |
 | `POSTGRES` | Relational | ✓ | ✓ | COPY protocol for bulk |
 | `ORACLE` | Relational | ✓ | ✓ | |
+| `MYSQL` | Relational | ✓ | ✓ | Native MySQL connector |
+| `SQLITE` | Relational / Embedded | ✓ | ✓ | SQLite database file |
 | `ODBC` | Relational | ✓ | | Provider-dependent |
 | `SNOWFLAKE` | Relational / warehouse | ✓ | ✓ | Native Snowflake connector |
 | `BIGQUERY` | Relational / warehouse | ✓ | — | BigQuery DML is auto-committed |
 | `MOCKDB` | In-memory | — | — | Test/dev only |
+| `MONGODB` | NoSQL | — | — | Document collection reads/writes |
 | `FLATFILE`, `CSV`, `FILE` | File | — | — | Delimited and fixed-width support |
 | `JSON` | File | — | — | Array or newline-delimited |
 | `XML` | File | — | — | XPath-rooted reads |
 | `PARQUET` | File | — | — | Columnar; high throughput |
 | `AVRO` | File | — | — | Schema-embedded |
 | `EXCEL` | File | — | — | Sheet-per-table |
+| `KAFKA` | Protocol / Queue | — | — | Message queue pub/sub |
 | `API`, `REST`, `HTTP` | Protocol | — | — | JSON response; any auth |
 | `SFTP` | Protocol | — | — | SSH key or password |
 | `FTP_CONN`, `FTP` | Protocol | — | — | |
 | `AZURE_BLOB`, `BLOB` | Protocol | — | — | SAS or connection string |
+| `SHAREPOINT` | Remote File / HTTP | — | — | SharePoint library integration |
+| `S3` | Protocol / Storage | — | — | Amazon S3 remote file system |
 | `DIRECTORY` | File | — | — | Folder enumeration |
+| `ACTIVE_DIRECTORY`, `AD` | Protocol / Directory | — | — | AD query and authentication |
 | `SMTP`, `EMAIL` | Protocol | — | — | Write-only email connector |
+| `ORCHESTRATOR` | Protocol / System | — | — | Inter-job control and triggering |
 
 ---
 
@@ -396,6 +404,37 @@ public interface IConnectorRegistry
 
     /// <summary>Merged option value map — used by autocomplete WithClauseProvider.</summary>
     Dictionary<string, string[]> GetAllConnectorOptionValues();
+}
+```
+
+### 2.6 `IPortalAdminConnection` : IDataSource — Portal & Orchestrator Scripting
+
+Admin-level connections that support direct portal or orchestrator management API integrations implement `IPortalAdminConnection`. When the remote execution engine statement handler detects an active connection implementing this interface, it routes statement blocks via `ExecuteAdminStatementAsync` instead of standard SQL compilation.
+
+```csharp
+// ETL_SQL.Data
+public interface IPortalAdminConnection : IDataSource
+{
+    Task ExecuteAdminStatementAsync(Statement statement, IExecutionContext context);
+}
+```
+
+### 2.7 `ISpillable` — In-Memory Spill-to-Disk Capability
+
+Data structures and sources (such as `InMemoryDataSource` used for `#temp` tables and MOCKDB operations) that can spill their buffered in-memory contents to encrypted disk storage under memory pressure implement `ISpillable`.
+
+```csharp
+// ETL_SQL.Core.Execution
+public interface ISpillable
+{
+    /// <summary>Approximate memory usage in bytes of the in-memory portion of this object.</summary>
+    long MemoryUsageBytes { get; }
+
+    /// <summary>Proactively flushes in-memory data to the SpillStore.</summary>
+    Task<bool> SpillAsync();
+
+    /// <summary>A human-readable identifier for logging (e.g. "#tempTableX").</summary>
+    string SpillToken { get; }
 }
 ```
 

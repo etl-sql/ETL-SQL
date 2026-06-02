@@ -362,11 +362,16 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
             var catalog = scope.ServiceProvider.GetRequiredService<ILineageCatalogStore>();
             var stageEntry = new LineageEntry(stageName, "SELECT")
             {
-                TargetColumn = "OrderId",
-                SourceTables = new List<string> { $"sales.Orders_{suffix}" },
-                Metadata = new Dictionary<string, string> { ["pii"] = "true", ["owner"] = "SalesOps" },
-                SourceFile = scriptPath,
-                Line = 3
+                TargetColumn             = "OrderId",
+                SourceTables             = new List<string> { $"sales.Orders_{suffix}" },
+                SourceColumns            = new List<string> { "order_id" },
+                TransformationKind       = TransformationKind.Cast,
+                TransformationExpression = "CAST(order_id AS INT)",
+                FunctionsApplied         = new List<string> { "CAST" },
+                DerivedFromDescriptions  = "order_id: ERP order key",
+                Metadata                 = new Dictionary<string, string> { ["pii"] = "true", ["owner"] = "SalesOps" },
+                SourceFile               = scriptPath,
+                Line                     = 3
             };
             var visualEntry = new LineageEntry(visualTarget, "CREATE VISUAL")
             {
@@ -415,6 +420,11 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var columnRows = await columnRes.Content.ReadFromJsonAsync<JsonArray>(_json);
         var columnHit = Assert.Single(columnRows!);
         Assert.Equal("OrderId", columnHit!["targetColumn"]!.GetValue<string>());
+        // Rich persisted fields surface through the catalog lineage DTO.
+        Assert.Equal("CAST(order_id AS INT)", columnHit["transformationExpression"]!.GetValue<string>());
+        Assert.Equal("Cast",                  columnHit["transformationKind"]!.GetValue<string>());
+        Assert.Equal("order_id: ERP order key", columnHit["derivedFromDescriptions"]!.GetValue<string>());
+        Assert.Contains(columnHit["sourceColumns"]!.AsArray(), n => n!.GetValue<string>() == "order_id");
 
         var tagRes = await AuthGet(token, "/api/catalog/lineage/tag?key=pii&value=true");
         Assert.Equal(HttpStatusCode.OK, tagRes.StatusCode);
@@ -761,6 +771,323 @@ CREATE VISUAL Total AS CARD (
             n!["target"]!.GetValue<string>() == "#stage" &&
             n["targetColumn"]!.GetValue<string>() == "OrderId" &&
             n["tags"]!["owner"]!.GetValue<string>() == "SalesOps");
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task Structure_BridgesDatasetReferenceAcrossScripts()
+    {
+        var token  = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var dsRef  = $"&sales_snap_{suffix}";
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = $"XScript {suffix}", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        // Report script — references a dataset built by a *separate* script.
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"xscript_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath,
+            $"USE DATASET {dsRef};\n" +
+            $"SELECT * INTO #sales FROM {dsRef};\n" +
+            "CREATE VISUAL salesBar AS BAR (\n" +
+            "    SOURCE = #sales,\n" +
+            "    MAPPINGS (X = Date, Y = total, SERIES = Vendor)\n" +
+            ");\n" +
+            "CREATE PAGE Main AS DASHBOARD( STRUCTURE = 'A', MAP ( 'A' = salesBar ) );\n");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = $"XScript Report {suffix}",
+            description = "cross-script lineage",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var reportId = (await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        // Register the dataset (its SourceQuery) + persist its build-run lineage
+        // (the inherited description/pii that the SQL text alone can't supply).
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.Datasets.Add(new Dataset
+            {
+                Name            = dsRef,
+                FolderPath      = $"/XScript {suffix}",
+                ParquetFilePath = Path.Combine(_factory.TempDir, "datasets", $"{suffix}.parquet"),
+                OwningReportId  = reportId,
+                SourceQuery     = "SELECT Date, Vendor, SUM(Amount) AS total FROM edw.Sales",
+                AccessLevel     = DatasetAccessLevel.Private,
+            });
+            await db.SaveChangesAsync();
+
+            var catalog = scope.ServiceProvider.GetRequiredService<ILineageCatalogStore>();
+            var totalEntry = new LineageEntry($"dataset:{dsRef}", "CREATE DATASET")
+            {
+                TargetColumn             = "total",
+                SourceTables             = new List<string> { "Sales" },
+                SourceColumns            = new List<string> { "Amount" },
+                TransformationKind       = TransformationKind.Aggregation,
+                TransformationExpression = "SUM(Amount)",
+                FunctionsApplied         = new List<string> { "SUM" },
+                DerivedFromDescriptions  = "Amount: Sales amounts",
+                Metadata                 = new Dictionary<string, string> { ["d"] = "Sales amounts", ["pii"] = "true" },
+            };
+            await catalog.SaveLineageAsync(new[] { totalEntry }, $"dataset:{dsRef}:build", "build_sales_snap.rptsql", DateTime.UtcNow);
+        }
+
+        var res = await AuthGet(token, $"/api/reports/{reportId}/structure");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var dag   = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var nodes = dag!["nodes"]!.AsArray();
+
+        string Norm(string s) => s.TrimStart('&', '#');
+
+        // The dataset-reference node resolved to its build lineage across the boundary.
+        var dsNode = Assert.Single(nodes, n =>
+            n!["type"]!.GetValue<string>() == "dataset" &&
+            string.Equals(Norm(n["label"]!.GetValue<string>()), Norm(dsRef), StringComparison.OrdinalIgnoreCase));
+        var total = dsNode!["meta"]!["columnLineage"]!["total"]!;
+        Assert.Equal("SUM(Amount)",   total["transform"]!.GetValue<string>());
+        Assert.Equal("Sales amounts", total["description"]!.GetValue<string>());
+        Assert.Equal("true",          total["tags"]!["pii"]!.GetValue<string>());
+        // Source resolves to the fully-qualified EDW table from the dataset's SourceQuery.
+        Assert.Contains(total["sources"]!.AsArray(), s =>
+            s!["table"]!.GetValue<string>().EndsWith("Sales", StringComparison.OrdinalIgnoreCase) &&
+            s["column"]!.GetValue<string>() == "Amount");
+
+        // The SELECT * consumer (#sales) pass-throughs back to the dataset, so the
+        // visual's Y=total stays connected to the dataset across the boundary.
+        var sales = Assert.Single(nodes, n => n!["label"]!.GetValue<string>() == "#sales");
+        Assert.True(sales!["meta"] is not null, $"#sales node had no meta. Node = {sales.ToJsonString()}");
+        var salesCl = sales["meta"]!["columnLineage"];
+        Assert.True(salesCl is not null && salesCl["total"] is not null,
+            $"#sales has no pass-through 'total'. meta = {sales["meta"]!.ToJsonString()}");
+        Assert.Contains(salesCl!["total"]!["sources"]!.AsArray(), s =>
+            string.Equals(Norm(s!["table"]!.GetValue<string>()), Norm(dsRef), StringComparison.OrdinalIgnoreCase) &&
+            s["column"]!.GetValue<string>() == "total");
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task Structure_ExpandsRawSelectStarFromPersistedCatalogLineage()
+    {
+        var token  = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var source = $"edw.Sales_{suffix}";
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = $"RawStar {suffix}", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"rawstar_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath,
+            $"SELECT * INTO #sales FROM {source};\n" +
+            "CREATE VISUAL salesTable AS TABLE (\n" +
+            "    SOURCE = #sales,\n" +
+            "    MAPPINGS (Date = Date, Amount = Amount)\n" +
+            ");\n" +
+            "CREATE PAGE Main AS DASHBOARD( STRUCTURE = 'A', MAP ( 'A' = salesTable ) );\n");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = $"Raw Star Report {suffix}",
+            description = "raw select star lineage",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var reportId = (await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var catalog = scope.ServiceProvider.GetRequiredService<ILineageCatalogStore>();
+            await catalog.SaveLineageAsync(new[]
+            {
+                new LineageEntry(source, "DB_CATALOG")
+                {
+                    TargetColumn = "Date",
+                    Metadata = new Dictionary<string, string> { ["d"] = "Transaction date", ["db_type"] = "date" },
+                },
+                new LineageEntry(source, "DB_CATALOG")
+                {
+                    TargetColumn = "Amount",
+                    Metadata = new Dictionary<string, string> { ["d"] = "Sales amount", ["db_type"] = "decimal" },
+                }
+            }, $"report:{reportId}:catalog-import", scriptPath, DateTime.UtcNow);
+        }
+
+        var res = await AuthGet(token, $"/api/reports/{reportId}/structure");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var nodes = (await res.Content.ReadFromJsonAsync<JsonObject>(_json))!["nodes"]!.AsArray();
+
+        var sourceNode = Assert.Single(nodes, n => n!["label"]!.GetValue<string>() == source);
+        var sourceCols = sourceNode!["meta"]!["columnLineage"]!;
+        Assert.Equal("Sales amount", sourceCols["Amount"]!["description"]!.GetValue<string>());
+        Assert.Equal("decimal", sourceCols["Amount"]!["tags"]!["db_type"]!.GetValue<string>());
+
+        var sales = Assert.Single(nodes, n => n!["label"]!.GetValue<string>() == "#sales");
+        var salesCols = sales!["meta"]!["columnLineage"]!;
+        Assert.Contains(salesCols["Amount"]!["sources"]!.AsArray(), s =>
+            s!["table"]!.GetValue<string>() == source &&
+            s["column"]!.GetValue<string>() == "Amount");
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task Structure_UsesPageLayoutForVisualEdges_WhenVisualsDeclaredBeforePages()
+    {
+        var token  = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = $"Layout {suffix}", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"layout_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, @"
+CREATE VISUAL SalesCard AS CARD (
+    SOURCE = (SELECT 42 AS Total),
+    MAPPINGS (VALUE = Total)
+);
+
+CREATE PAGE Main AS DASHBOARD(
+    STRUCTURE = 'A',
+    MAP ('A' = SalesCard)
+);
+");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = $"Layout Report {suffix}",
+            description = "visual before page",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var reportId = (await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var res = await AuthGet(token, $"/api/reports/{reportId}/structure");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var dag   = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var nodes = dag!["nodes"]!.AsArray();
+        var edges = dag["edges"]!.AsArray();
+
+        var visual = Assert.Single(nodes, n => n!["id"]!.GetValue<string>() == "vis:SalesCard");
+        Assert.Equal("Main", visual!["meta"]!["page"]!.GetValue<string>());
+        Assert.Contains(visual["meta"]!["pages"]!.AsArray(), p => p!.GetValue<string>() == "Main");
+        Assert.Contains(edges, e =>
+            e!["source"]!.GetValue<string>() == "page:Main" &&
+            e["target"]!.GetValue<string>() == "vis:SalesCard");
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task Structure_ReportColumnTags_OverrideDescriptionButPreserveDatasetHistory()
+    {
+        var token  = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var dsRef  = $"&sales_snap_{suffix}";
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = $"Tagged {suffix}", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        // Report explicitly selects the dataset's columns and adds inline tags — the
+        // 'total' tag deliberately overrides the description inherited from EDW.
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"tagged_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath,
+            $"USE DATASET {dsRef};\n" +
+            "SELECT\n" +
+            "  Date /*@d:date of the transaction;@source:Sales;*/\n" +
+            "  ,Vendor /*@d:vendor name;@notes:Does not include the vendor id;*/\n" +
+            "  ,total /*@d:Total sum of Amount;*/\n" +
+            "INTO #sales\n" +
+            $"FROM {dsRef} /*@d:This is the dataset created in a separate script;*/;\n" +
+            "CREATE VISUAL salesBar AS BAR (\n" +
+            "    SOURCE = #sales,\n" +
+            "    MAPPINGS (X = Date, Y = total, SERIES = Vendor)\n" +
+            ");\n" +
+            "CREATE PAGE Main AS DASHBOARD( STRUCTURE = 'A', MAP ( 'A' = salesBar ) );\n");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = $"Tagged Report {suffix}",
+            description = "report-side column tags",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var reportId = (await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.Datasets.Add(new Dataset
+            {
+                Name            = dsRef,
+                FolderPath      = $"/Tagged {suffix}",
+                ParquetFilePath = Path.Combine(_factory.TempDir, "datasets", $"{suffix}.parquet"),
+                OwningReportId  = reportId,
+                SourceQuery     = "SELECT Date, Vendor, SUM(Amount) AS total FROM edw.Sales",
+                AccessLevel     = DatasetAccessLevel.Private,
+            });
+            await db.SaveChangesAsync();
+
+            var catalog = scope.ServiceProvider.GetRequiredService<ILineageCatalogStore>();
+            await catalog.SaveLineageAsync(new[]
+            {
+                new LineageEntry($"dataset:{dsRef}", "CREATE DATASET")
+                {
+                    TargetColumn             = "total",
+                    SourceTables             = new List<string> { "Sales" },
+                    SourceColumns            = new List<string> { "Amount" },
+                    TransformationKind       = TransformationKind.Aggregation,
+                    TransformationExpression = "SUM(Amount)",
+                    DerivedFromDescriptions  = "Amount: Sales amounts",
+                    Metadata                 = new Dictionary<string, string> { ["d"] = "Sales amounts", ["pii"] = "true" },
+                }
+            }, $"dataset:{dsRef}:build", "build_sales_snap.rptsql", DateTime.UtcNow);
+        }
+
+        var res = await AuthGet(token, $"/api/reports/{reportId}/structure");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var nodes = (await res.Content.ReadFromJsonAsync<JsonObject>(_json))!["nodes"]!.AsArray();
+        string Norm(string s) => s.TrimStart('&', '#');
+        string? Tag(JsonNode? colLin, string key)
+        {
+            var t = colLin?["tags"]?.AsObject();
+            if (t is null) return null;
+            foreach (var kv in t) if (string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase)) return kv.Value?.GetValue<string>();
+            return null;
+        }
+
+        // ── #sales: the report's inline tags made it through ──────────────────
+        var sales = Assert.Single(nodes, n => n!["label"]!.GetValue<string>() == "#sales");
+        var salesCols = sales!["meta"]!["columnLineage"]!;
+
+        // total: the report description OVERRIDES the inherited EDW one here.
+        Assert.Contains("Total sum of Amount", salesCols["total"]!["description"]!.GetValue<string>());
+        Assert.Contains(salesCols["total"]!["sources"]!.AsArray(), s =>
+            string.Equals(Norm(s!["table"]!.GetValue<string>()), Norm(dsRef), StringComparison.OrdinalIgnoreCase) &&
+            s["column"]!.GetValue<string>() == "total");
+        // Other columns' tags flow too.
+        Assert.Equal("Sales", Tag(salesCols["Date"], "source"));
+        Assert.Contains("date of the transaction", salesCols["Date"]!["description"]!.GetValue<string>());
+        Assert.Contains("vendor id", Tag(salesCols["Vendor"], "notes") ?? "");
+
+        // ── &sales_snap: the EDW description + pii are PRESERVED one hop up ────
+        var dsNode = Assert.Single(nodes, n =>
+            n!["type"]!.GetValue<string>() == "dataset" &&
+            string.Equals(Norm(n["label"]!.GetValue<string>()), Norm(dsRef), StringComparison.OrdinalIgnoreCase));
+        var dsTotal = dsNode!["meta"]!["columnLineage"]!["total"]!;
+        Assert.Equal("SUM(Amount)",   dsTotal["transform"]!.GetValue<string>());
+        Assert.Equal("Sales amounts", dsTotal["description"]!.GetValue<string>());
+        Assert.Equal("true",          dsTotal["tags"]!["pii"]!.GetValue<string>());
+        Assert.Contains(dsTotal["sources"]!.AsArray(), s =>
+            s!["table"]!.GetValue<string>().EndsWith("Sales", StringComparison.OrdinalIgnoreCase) &&
+            s["column"]!.GetValue<string>() == "Amount");
     }
 
     [Fact]

@@ -254,6 +254,23 @@ if (multiMode)
         var manifest = await svc.RebuildAsync();
         return Results.Json(new { rebuilt = true, visuals = manifest.Visuals.Count });
     });
+
+    app.MapGet("/reports/{name}/api/export/pdf", async (string name, HttpContext ctx, DashboardServiceFactory fac) =>
+    {
+        var svc = fac.GetService(name);
+        if (svc == null) return Results.NotFound();
+        var manifest = await svc.GetManifestAsync();
+        var url = BuildAbsoluteUrl(ctx, "/reports/" + WebUtility.UrlEncode(name));
+        var bytes = new ReportPdfExporter().Export(manifest, new PdfExportOptions
+        {
+            Mode = PdfExportMode.Auto,
+            Host = url,
+            BrowserPath = builder.Configuration["ReportPlayer:PdfExport:BrowserPath"],
+            Warn = message => Console.WriteLine("PDF export: " + message)
+        });
+        var filename = SanitizeFilename(manifest.Title ?? name) + "_" + DateTime.UtcNow.ToString("yyyyMMdd") + ".pdf";
+        return Results.File(bytes, "application/pdf", filename);
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -327,6 +344,21 @@ else
     {
         var manifest = await svc.RebuildAsync();
         return Results.Json(new { rebuilt = true, visuals = manifest.Visuals.Count });
+    });
+
+    app.MapGet("/api/export/pdf", async (HttpContext ctx, DashboardService svc) =>
+    {
+        var manifest = await svc.GetManifestAsync();
+        var bytes = new ReportPdfExporter().Export(manifest, new PdfExportOptions
+        {
+            Mode = PdfExportMode.Auto,
+            Host = BuildAbsoluteUrl(ctx, "/"),
+            BrowserPath = builder.Configuration["ReportPlayer:PdfExport:BrowserPath"],
+            Warn = message => Console.WriteLine("PDF export: " + message)
+        });
+        var filename = SanitizeFilename(manifest.Title ?? Path.GetFileNameWithoutExtension(scriptPath) ?? "report")
+            + "_" + DateTime.UtcNow.ToString("yyyyMMdd") + ".pdf";
+        return Results.File(bytes, "application/pdf", filename);
     });
 }
 
@@ -559,6 +591,21 @@ static string GetDashboardHtml(ReportManifest manifest, string staleBanner)
         "<script src=\"/echarts.min.js\"></script>\n" +
         "<script src=\"/report-runtime.js\"></script>\n" +
         "</body>\n</html>";
+}
+
+static string BuildAbsoluteUrl(HttpContext ctx, string path)
+{
+    var scheme = ctx.Request.Scheme;
+    var host = ctx.Request.Host.ToString();
+    return scheme + "://" + host + path;
+}
+
+static string SanitizeFilename(string name)
+{
+    var invalid = Path.GetInvalidFileNameChars();
+    return new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray())
+        .Trim()
+        .Replace(' ', '_');
 }
 
 /// <summary>Multi-report dashboard shell — manifest is fetched via API on load.</summary>

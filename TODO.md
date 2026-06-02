@@ -1,25 +1,76 @@
 # ETL-SQL Development TODO List
+## v0.10.0 work
+- [ ] **Update 3rd party libraries to latest version**  Update all 3rd party libraries to the latest version. I saw a few outdated ones when I ran the test-prerelease script.
+- [ ] **Add lineage** Databases can store lineage in a variety of ways.  For it to flow all the way to a report we need to make it available that the user can import it into a script that falls outside the traditional ways
+  - Add Open Lineage import  CREATE LINEAGE FOR TABLE <table> FROM <markdown>.  I'm mocking this after this SHOW LINEAGE FOR #target_table TO 'lineage_report.md';
+  - CREATE TAG FOR TABLE <table> [COLUMN <col>]  I'm mocking this after this SHOW TAGS FOR TABLE <table> [COLUMN <col>]
+    This allows the user to loop through add add tags to table if they saved them in a non-standard area
 
-## Bugs
-### Security / Zero-Trust
-- [x] Split file prefix can escape the validated destination directory → Fixed: `SplitFileStatementHandler` now rejects empty/rooted/path-traversal prefixes, validates each generated part path with `ValidatePath`/`ValidateWriteAccess`/`ValidateFileType`, and verifies every part remains under the resolved destination directory. Added `TestSplitFileRejectsUnsafePrefix`.
-- [x] LDAP portal auth still contains diagnostic console/file logging that leaks directory details and bypasses configured logging → Fixed: removed `[LDAP-DIAG]` console writes and all hard-coded `ldap_debug.txt` writes; LDAP diagnostics now use structured `ILogger` with sanitized message text.
-- [x] SharePoint connector prints request URLs and may expose site/library/file paths in logs → Fixed: removed `System.Console.WriteLine("[TEST-PRINT] ...")` calls from SharePoint file listing/download paths and removed the mock handler print in connector tests.
-- [x] Portal refresh tokens remain valid after a user is disabled → Fixed: `AuthController.Refresh` now rejects and revokes refresh tokens for inactive users, and admin deactivation revokes outstanding refresh tokens. Extended the deactivated-user portal regression test to cover refresh.
+- [ ] **Job scheduling verification**  Harden Orchestrator job scheduling with a focused integration verification lane before broader load/chaos testing.
+  - Add Docker-backed integration coverage that starts the real `ETL-SQL.Orchestrator.Service` with a real SQLite job store and verifies scheduled jobs actually execute, not just create/list through the API.
+  - Reuse the existing Orchestrator service fixture and MailPit SMTP fixture where practical; avoid introducing new external services unless a scenario cannot be tested with existing fixtures.
+  - Cover core success path: create a short-interval job, wait for execution, assert `JobHistory` records `SUCCESS`, `LastRun`, `NextRun`, rows/metrics, and expected API history output.
+  - Cover failure path: create a job with invalid script or unreachable dependency, assert `FAILURE`, sanitized error text, retry attempts when configured, and correct final `NextRun`.
+  - Cover resume/restart behavior: persist a due job, restart/recreate the scheduler/service against the same SQLite database, and assert the job is discovered and executed after startup.
+  - Cover cancellation: trigger or schedule a long-running job, call the kill endpoint/handler, and assert the running history entry transitions out of `RUNNING` without leaving a stuck active job.
+  - Cover email notification behavior with MailPit by running a scheduled script that sends email on success or failure and asserting the message is received without leaking secrets.
+  - Cover dependency outage behavior with controlled local failures first: unreachable SMTP port, unavailable local HTTP/API source, and missing/blocked file path. Assert failures are recorded and the scheduler loop continues processing later jobs.
+  - Add polling helpers with bounded timeouts for history assertions so tests are deterministic and do not rely on fixed long sleeps.
+  - Keep this as an integration lane, not a load test. Defer high-concurrency sizing, breaking-point discovery, and long-running chaos scenarios to the separate Orchestrator load testing TODO.
 
-### Connectors
-- [x] SharePoint connector documentation says `PASSWORD`/`CLIENT_SECRET` can use `ENC:`, but the implementation does not decrypt them → Fixed: SharePoint `AD_WINDOWS` password and Entra `CLIENT_SECRET` now decrypt `ENC:` values through the execution context, and SharePoint provider response bodies are no longer reflected in credential-sensitive errors.
-- [x] New connector option aliases violate the no-alias connector standard → Fixed: removed S3 `ACCESSKEY`/`SECRETKEY`, Active Directory `LDAPS`, Kafka `SERVERS`, and MongoDB `URI`/`SERVER`/`UID`/`DB` option fallbacks; updated help/docs/snippets and added metadata assertions.
+- [ ] **Subscription verification**  Harden Report Portal subscription delivery with an end-to-end integration verification lane.
+  - Add coverage that creates a real portal subscription, registers the generated Orchestrator job, runs it against a real SQLite job store, and verifies delivery through MailPit.
+  - Reuse the existing portal integration factory, Orchestrator job store/test helpers, and MailPit SMTP fixture where practical; avoid new infrastructure unless an existing fixture cannot cover the scenario.
+  - Cover subscription creation for the supported delivery formats: `PDF`, `CSV`, `Markdown`, and `Link`. Treat `XLSX` as a portal export endpoint concern unless subscription delivery adds it as a format.
+  - For attachment formats, assert the email is received with the expected attachment filename, MIME type/extension, non-empty content, and report-specific content markers where feasible.
+  - For `Link`, assert the email body contains the expected report link and no attachment.
+  - Cover parameterized subscriptions: save parameters, verify the generated job script contains the expected `SET @param = ...` lines, run the job, and verify delivered output reflects the parameter values.
+  - Cover update behavior: changing schedule, format, SMTP alias, recipient, active state, and parameters updates both the portal subscription record and the generated Orchestrator job/script.
+  - Cover delete behavior: deleting a subscription removes the portal row, generated script, Orchestrator job, and related job history without leaving orphaned delivery artifacts.
+  - Cover failure scenarios with controlled local failures first: missing report snapshot/script, invalid report script, missing SMTP alias, unreachable SMTP port, blocked attachment path, disabled subscription, and Orchestrator DB unavailable.
+  - Assert failure outcomes are visible to administrators through subscription history, job history, audit/usage metrics, and sanitized error messages with no SMTP password or `ENC:` leakage.
+  - Add bounded polling helpers for MailPit and job-history assertions so tests are deterministic and do not depend on fixed long sleeps.
+  - Keep this as a subscription correctness lane, not a portal load/security-permission suite. Defer account visibility scenarios to the Report portal create users TODO and throughput sizing to Portal/Orchestrator load testing TODOs.
 
-### File Operations
-- [x] `MERGE FILES` can destroy an existing destination when the source pattern matches nothing → Fixed: source files are now resolved before destination replacement; zero matches throw and leave the destination unchanged. Added `TestMergeFilesNoMatchesPreservesDestination`.
-- [x] `SYNC DIRECTORY DELETE_EXTRA` bypasses the file-operation guardrail spirit and under-counts destructive work → Fixed: `DELETE_EXTRA` now validates file types, increments file-operation counts for each file/directory delete, and checks recursive depth before recursive sync traversal.
+- [ ] **Report portal create users**  Build a concrete portal user/group/permission verification scenario that can be run manually first and automated later.
+  - Create a repeatable setup script or fixture that provisions representative users, groups, folders, reports, datasets, saved views, subscriptions, alerts, share links, and embed tokens in an isolated portal database.
+  - Include local users for the main roles: `Admin`, `Publisher`, and `Viewer`, plus inactive users, must-change-password users, users with revoked tokens, and users with no groups.
+  - Include LDAP-backed users/groups only where the existing LDAP fixture can cover them; keep local identity scenarios runnable without LDAP.
+  - Define security groups by business scenario, not just by role: examples should include Finance readers, Finance publishers, Operations readers, cross-functional managers, and an outsider/no-access user.
+  - Create a folder tree with at least two business areas and nested folders. Grant `READ`, `EXECUTE`, and `MANAGE` through groups so the effective-permission matrix has overlapping and conflicting-looking memberships to validate union/max-permission behavior.
+  - Publish reports into each folder and validate who can list folders, list reports, view snapshots, execute/refresh reports, export reports, favorite reports, create saved views, create alerts, create subscriptions, and manage folder/report metadata.
+  - Include dataset ACL scenarios in the same matrix: public dataset, private dataset with reader access, private dataset with editor/manage access, and a user who can see a report but must not see private source datasets.
+  - Verify negative cases explicitly: users without access cannot discover hidden folders/reports through list/search/direct-ID/export/refresh endpoints; viewers cannot publish/manage; publishers cannot manage root folders unless granted; inactive users cannot log in; revoked refresh tokens stop working.
+  - Verify admin-only surfaces: user/group CRUD, SMTP administration, portal metrics, audit log export, Orchestrator proxy/status, and effective-permissions views are blocked for non-admins.
+  - Add an expected-results table to the scenario with one row per user and one column per workflow, so manual login testing and automated assertions use the same source of truth.
+  - Use `SHOW EFFECTIVE PERMISSIONS` / portal effective-permission APIs to compare computed permissions against the expected matrix before testing UI-visible behavior.
+  - Record audit expectations for sensitive operations: create/update/delete user, group membership changes, grants/revokes, report publish/delete, subscription changes, token revocation, and admin exports.
+  - Keep this as a correctness/security scenario suite, not a portal load test. Defer throughput and sizing work to the Portal load testing TODO.
 
-### Report Portal
-- [x] Structure DAG jumbled on large maps → Fixed: `render()` in `designer.js` now computes a fit-to-view zoom from the actual node bounding box (`min(containerW/dataW, containerH/dataH, 1.0)`, floor 0.15) so all nodes are visible on first open regardless of graph size. `roam: true` still lets users pan/zoom further.
-- [x] Dependencies transformation column shows only category name → Fixed: `formatTransformationKind(kind, expr, fns)` now shows the actual function names for Aggregation/FunctionCall (e.g. "SUM", "COUNT", "UPPER()"), extracts the target type for Cast (e.g. "→ INT"), and keeps the full expression as a hover tooltip.
-- [ ] Structure DAG emits no page→visual edges when visuals are declared before pages → In `GetStructure` (`ReportsController.cs`), `currentPage` is assigned by statement iteration order, so a report that declares every `CREATE VISUAL` before any `CREATE PAGE` (e.g. `samples/10_Kitchen_Sinks/report_kitchen_sink.rptsql`) leaves all visuals with `page = null` and produces zero page→visual edges — pages render as orphan nodes. Page membership should come from each page's layout (which visuals it references), not declaration order.
-- [x] Report designer generates invalid dataset syntax → Fixed: `DesignerController.StateToScript` now emits `CREATE DATASET &name` and `SOURCE = &name` for report datasets. Added `DesignerControllerTests.Generate_UsesReportDatasetIdentifiers`.
+- [ ] **Portal and Orchestrator load testing**  Build one repeatable capacity-testing program with separate Portal-user and Orchestrator-job workloads so administrators can size each server from measured baselines.
+  - Keep this separate from the correctness verification items above. Job scheduling, subscription delivery, and portal security scenarios should prove behavior; this item should measure throughput, latency, saturation points, and resource usage under controlled load.
+  - Define a fixed reference environment for every run: CPU count, RAM, disk type, OS/container mode, .NET version, database location, configured concurrency caps, sample data size, and whether services are running in-process, Docker, or installed services.
+  - Create a shared load harness that can provision test data, warm the service, run stepped load, collect metrics, summarize results, and clean up. Prefer repository scripts over ad hoc manual commands.
+  - Capture common metrics for both services: requests/jobs per minute, p50/p95/p99 latency, error rate, queue depth, active/queued work, CPU, working set, disk I/O, SQLite lock/contention indicators, GC counters, and service logs.
+  - Use a stepped-load method: establish idle/warm baseline, increase load in fixed increments, hold each step long enough to stabilize, identify the first sustained breach, then define recommended capacity at a safety margin below that point.
+  - Define breach criteria before testing: sustained error rate above threshold, p95 latency above target, queue depth that never drains, CPU or memory saturation, SQLite lock failures, worker starvation, or missed scheduling windows.
+  - Portal workload: simulate authenticated users across Admin/Publisher/Viewer roles performing realistic mixes of login/refresh-token use, folder/report listing, catalog search, report snapshot viewing, report execution/refresh, CSV/PDF/XLSX export, dataset browsing, favorites, saved views, alerts, subscriptions, audit views, and admin metrics.
+  - Portal scenarios should include cache-friendly viewing, cache-cold report execution, export-heavy users, admin/report-publisher activity, and mixed read/write traffic. Report results as estimated concurrent users per server profile.
+  - Orchestrator workload: simulate scheduled and triggered jobs using representative short, medium, and long ETL-SQL scripts, including lightweight no-op jobs, file/report export jobs, connector-like mocked I/O jobs, retry/failure jobs, and jobs that exercise `PARALLEL`.
+  - Orchestrator scenarios should vary `Jobs:MaxConcurrentJobs`, schedule density, trigger bursts, retry rate, process-spawning mode, and script duration. Report results as sustainable jobs/hour, max concurrent running jobs, queue drain time, and missed-run risk per server profile.
+  - Validate operational behavior under load: health endpoints stay meaningful, metrics endpoints reflect active/queued work, cancellation still works, failed work is recorded, audit/history tables remain queryable, and logs contain enough correlation to diagnose bottlenecks.
+  - Store baseline results in a documented location with machine specs and configuration, and add a comparison script or report format so future runs can show regressions or improvements.
+  - Produce administrator-facing sizing guidance from the results: recommended starter profiles, tuning knobs (`Resources:MaxConcurrentReportExecutions`, `Jobs:MaxConcurrentJobs`, DB/storage placement), warning signs, and when to split Portal and Orchestrator onto separate hosts.
 
-## Tooling / Dev Experience
-- [ ] Expand the no-Docker preview harness (`tools/dag-preview/`) into a general portal/VS Code component sandbox → Today it serves the repo root over loopback and renders `renderDag` against synthetic fixtures by importing the canonical `designer.js` directly (no sync, no portal build, no catalog DB). Generalize it to host other browser-side surfaces in isolation — the report designer (`createDesigner`), the lite script editor (`createScriptEditor`), the lineage/dependencies modals, and eventually VS Code webview components — each driven by fixture data so they can be developed and visually checked without spinning up Docker or the full portal. Likely shape: a harness index page that lists available "stories" (component + fixture), one fixture module per surface.
+- [ ] **Add some fuzzy matching samples**  Our matching joins, and functions haven't really been used.  Thinking we can add a few samples.
+
+- [ ] **Add some cookbook recipes**  Its been a while since we added some recipes to either the regular and reporting cookbooks.  Thinking fuzzy matching, some of the new report types, lineage, tags, orchestrator and portal examples.  We also need a way to check these queries that they work.  I think we have a script that looks through documentation to check them let's make sure it works for cookbook items.
+
+### v0.9.0 code-review follow-ups (deferred from the release gate)
+
+_Performance:_
+- [ ] **Chart SSR concurrency (V8 engine pool)**  `EChartsSsrRenderer` serializes every chart render through one process-wide V8 engine behind a single lock, so concurrent PDF/export requests with many charts fully serialize on it. Replace the single shared engine with a small pool (or per-request engine) so chart rendering can parallelize.
+- [ ] **XLSX export streaming**  `DatasetViewerService.ExportXlsxAsync` / `DatasetController` buffer the whole workbook in memory (`LoadCachedAsync` → `OrderBy().ToList()` → `Materialize` → `MemoryStream` → `ToArray()`), risking OOM on large datasets; the CSV path already streams to `Response.Body`. Stream the XLSX write to the response and drop the full materialization. (CancellationToken is already wired through `XlsxWriter`.)
+- [ ] **Catalog metadata import off the hot path**  With `LINEAGE_IMPORT_CATALOG` on, each distinct source table's first `SELECT … INTO` blocks on ~3 live-DB metadata round-trips in `SelectStatementHandler.EnsureCatalogMetadataImportedAsync`. Per-session deduped, but consider prefetching/batching or moving it off the statement-execution path.
+
+_(The cleanup/maintainability items from the v0.9.0 review — PDF/Markdown renderer dedup + TEXT-content drift, connector exception-wrapping dedup, and XLSX export double-selection/name-dedup — were completed during the v0.9.0 release wrap-up.)_

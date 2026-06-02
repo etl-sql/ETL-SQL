@@ -1,8 +1,9 @@
-﻿# ETL-SQL
+# ETL-SQL
 
 ![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.9.0-blue?style=for-the-badge&logo=dotnet)
 ![Language](https://img.shields.io/badge/Language-C%23-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-lightgrey?style=for-the-badge)
+[![Build Status](https://github.com/etl-sql/ETL-SQL/actions/workflows/ci.yml/badge.svg)](https://github.com/etl-sql/ETL-SQL/actions/workflows/ci.yml)
 
 ETL-SQL is a SQL-first automation engine for moving, transforming, validating, scheduling, and reporting on data across mixed systems. A single script can connect to databases, APIs, files, SFTP servers, and cloud storage; stage data in engine-managed `#temp` tables; apply procedural logic; publish dashboards; and run headless, in a terminal IDE, in VS Code, or as a scheduled job.
 
