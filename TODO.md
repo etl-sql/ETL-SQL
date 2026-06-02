@@ -18,13 +18,49 @@
   - Add polling helpers with bounded timeouts for history assertions so tests are deterministic and do not rely on fixed long sleeps.
   - Keep this as an integration lane, not a load test. Defer high-concurrency sizing, breaking-point discovery, and long-running chaos scenarios to the separate Orchestrator load testing TODO.
 
-- [ ] **Subscription verification**  I have not done any report subscription testing.  We need to create an SMTP so we can validate the emails come through.  Then we need to run it through the scenarios of where it could fail.  We'll want to try all export types and compare the results to what they should to to what the user got.
+- [ ] **Subscription verification**  Harden Report Portal subscription delivery with an end-to-end integration verification lane.
+  - Add coverage that creates a real portal subscription, registers the generated Orchestrator job, runs it against a real SQLite job store, and verifies delivery through MailPit.
+  - Reuse the existing portal integration factory, Orchestrator job store/test helpers, and MailPit SMTP fixture where practical; avoid new infrastructure unless an existing fixture cannot cover the scenario.
+  - Cover subscription creation for the supported delivery formats: `PDF`, `CSV`, `Markdown`, and `Link`. Treat `XLSX` as a portal export endpoint concern unless subscription delivery adds it as a format.
+  - For attachment formats, assert the email is received with the expected attachment filename, MIME type/extension, non-empty content, and report-specific content markers where feasible.
+  - For `Link`, assert the email body contains the expected report link and no attachment.
+  - Cover parameterized subscriptions: save parameters, verify the generated job script contains the expected `SET @param = ...` lines, run the job, and verify delivered output reflects the parameter values.
+  - Cover update behavior: changing schedule, format, SMTP alias, recipient, active state, and parameters updates both the portal subscription record and the generated Orchestrator job/script.
+  - Cover delete behavior: deleting a subscription removes the portal row, generated script, Orchestrator job, and related job history without leaving orphaned delivery artifacts.
+  - Cover failure scenarios with controlled local failures first: missing report snapshot/script, invalid report script, missing SMTP alias, unreachable SMTP port, blocked attachment path, disabled subscription, and Orchestrator DB unavailable.
+  - Assert failure outcomes are visible to administrators through subscription history, job history, audit/usage metrics, and sanitized error messages with no SMTP password or `ENC:` leakage.
+  - Add bounded polling helpers for MailPit and job-history assertions so tests are deterministic and do not depend on fixed long sleeps.
+  - Keep this as a subscription correctness lane, not a portal load/security-permission suite. Defer account visibility scenarios to the Report portal create users TODO and throughput sizing to Portal/Orchestrator load testing TODOs.
 
-- [ ] **Report portal create users**  We need to write out some real scenarios of different user accounts with different security options.  Then I'll log in and test them.  We need to create a script with users, groups, permissions, folders, and reports.  Then we test to see who can see what and make sure they work as they should.
+- [ ] **Report portal create users**  Build a concrete portal user/group/permission verification scenario that can be run manually first and automated later.
+  - Create a repeatable setup script or fixture that provisions representative users, groups, folders, reports, datasets, saved views, subscriptions, alerts, share links, and embed tokens in an isolated portal database.
+  - Include local users for the main roles: `Admin`, `Publisher`, and `Viewer`, plus inactive users, must-change-password users, users with revoked tokens, and users with no groups.
+  - Include LDAP-backed users/groups only where the existing LDAP fixture can cover them; keep local identity scenarios runnable without LDAP.
+  - Define security groups by business scenario, not just by role: examples should include Finance readers, Finance publishers, Operations readers, cross-functional managers, and an outsider/no-access user.
+  - Create a folder tree with at least two business areas and nested folders. Grant `READ`, `EXECUTE`, and `MANAGE` through groups so the effective-permission matrix has overlapping and conflicting-looking memberships to validate union/max-permission behavior.
+  - Publish reports into each folder and validate who can list folders, list reports, view snapshots, execute/refresh reports, export reports, favorite reports, create saved views, create alerts, create subscriptions, and manage folder/report metadata.
+  - Include dataset ACL scenarios in the same matrix: public dataset, private dataset with reader access, private dataset with editor/manage access, and a user who can see a report but must not see private source datasets.
+  - Verify negative cases explicitly: users without access cannot discover hidden folders/reports through list/search/direct-ID/export/refresh endpoints; viewers cannot publish/manage; publishers cannot manage root folders unless granted; inactive users cannot log in; revoked refresh tokens stop working.
+  - Verify admin-only surfaces: user/group CRUD, SMTP administration, portal metrics, audit log export, Orchestrator proxy/status, and effective-permissions views are blocked for non-admins.
+  - Add an expected-results table to the scenario with one row per user and one column per workflow, so manual login testing and automated assertions use the same source of truth.
+  - Use `SHOW EFFECTIVE PERMISSIONS` / portal effective-permission APIs to compare computed permissions against the expected matrix before testing UI-visible behavior.
+  - Record audit expectations for sensitive operations: create/update/delete user, group membership changes, grants/revokes, report publish/delete, subscription changes, token revocation, and admin exports.
+  - Keep this as a correctness/security scenario suite, not a portal load test. Defer throughput and sizing work to the Portal load testing TODO.
 
-- [ ] **Portal load testing** Need to be able to tell administrators how to size the portal server for number of users.  We need to get a baseline of how well it performs under load with fixed machine specs, find its breaking point, dial it back to an appropriate amount and then use that as the multiplier for an estimated system resource guide.
-
-- [ ] **Orchestrator load testing** Need to be to tell administrators how to size the orchestrator server for number of jobs.  We need to get a baseline of how well "normal" jobs run under load with fixed machine specs, find its breaking point, dial it back to an appropriate amount and then use that as the multiplier for an estimated system resource guide.
+- [ ] **Portal and Orchestrator load testing**  Build one repeatable capacity-testing program with separate Portal-user and Orchestrator-job workloads so administrators can size each server from measured baselines.
+  - Keep this separate from the correctness verification items above. Job scheduling, subscription delivery, and portal security scenarios should prove behavior; this item should measure throughput, latency, saturation points, and resource usage under controlled load.
+  - Define a fixed reference environment for every run: CPU count, RAM, disk type, OS/container mode, .NET version, database location, configured concurrency caps, sample data size, and whether services are running in-process, Docker, or installed services.
+  - Create a shared load harness that can provision test data, warm the service, run stepped load, collect metrics, summarize results, and clean up. Prefer repository scripts over ad hoc manual commands.
+  - Capture common metrics for both services: requests/jobs per minute, p50/p95/p99 latency, error rate, queue depth, active/queued work, CPU, working set, disk I/O, SQLite lock/contention indicators, GC counters, and service logs.
+  - Use a stepped-load method: establish idle/warm baseline, increase load in fixed increments, hold each step long enough to stabilize, identify the first sustained breach, then define recommended capacity at a safety margin below that point.
+  - Define breach criteria before testing: sustained error rate above threshold, p95 latency above target, queue depth that never drains, CPU or memory saturation, SQLite lock failures, worker starvation, or missed scheduling windows.
+  - Portal workload: simulate authenticated users across Admin/Publisher/Viewer roles performing realistic mixes of login/refresh-token use, folder/report listing, catalog search, report snapshot viewing, report execution/refresh, CSV/PDF/XLSX export, dataset browsing, favorites, saved views, alerts, subscriptions, audit views, and admin metrics.
+  - Portal scenarios should include cache-friendly viewing, cache-cold report execution, export-heavy users, admin/report-publisher activity, and mixed read/write traffic. Report results as estimated concurrent users per server profile.
+  - Orchestrator workload: simulate scheduled and triggered jobs using representative short, medium, and long ETL-SQL scripts, including lightweight no-op jobs, file/report export jobs, connector-like mocked I/O jobs, retry/failure jobs, and jobs that exercise `PARALLEL`.
+  - Orchestrator scenarios should vary `Jobs:MaxConcurrentJobs`, schedule density, trigger bursts, retry rate, process-spawning mode, and script duration. Report results as sustainable jobs/hour, max concurrent running jobs, queue drain time, and missed-run risk per server profile.
+  - Validate operational behavior under load: health endpoints stay meaningful, metrics endpoints reflect active/queued work, cancellation still works, failed work is recorded, audit/history tables remain queryable, and logs contain enough correlation to diagnose bottlenecks.
+  - Store baseline results in a documented location with machine specs and configuration, and add a comparison script or report format so future runs can show regressions or improvements.
+  - Produce administrator-facing sizing guidance from the results: recommended starter profiles, tuning knobs (`Resources:MaxConcurrentReportExecutions`, `Jobs:MaxConcurrentJobs`, DB/storage placement), warning signs, and when to split Portal and Orchestrator onto separate hosts.
 
 - [ ] **Add some fuzzy matching samples**  Our matching joins, and functions haven't really been used.  Thinking we can add a few samples.
 
