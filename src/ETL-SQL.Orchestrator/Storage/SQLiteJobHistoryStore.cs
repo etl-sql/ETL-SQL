@@ -831,6 +831,43 @@ namespace ETL_SQL.Orchestrator.Storage
             return await ReadLineageHistoryAsync(cmd);
         }
 
+        public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTablesAsync(
+            IReadOnlyCollection<string> tableNames, int limitPerTable = 100)
+        {
+            if (tableNames.Count == 0) return Array.Empty<LineageHistoryEntry>();
+
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var cmd = connection.CreateCommand();
+
+            // One round-trip for the whole set: a per-table ROW_NUMBER window applies the limit
+            // independently to each table (a plain LIMIT would cap the combined result instead).
+            var paramNames = new List<string>(tableNames.Count);
+            var i = 0;
+            foreach (var name in tableNames)
+            {
+                var p = "$t" + i++;
+                paramNames.Add(p);
+                cmd.Parameters.AddWithValue(p, name);
+            }
+            cmd.Parameters.AddWithValue("$limit", limitPerTable);
+            cmd.CommandText = $@"
+                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
+                       SourceTables, Operation, Tags, SourceFile, Line,
+                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
+                FROM (
+                    SELECT *, ROW_NUMBER() OVER (
+                        PARTITION BY TargetTable COLLATE NOCASE
+                        ORDER BY RunAt DESC, Id DESC) AS _rn
+                    FROM LineageHistory
+                    WHERE TargetTable COLLATE NOCASE IN ({string.Join(", ", paramNames)})
+                )
+                WHERE _rn <= $limit
+                ORDER BY RunAt DESC, Id DESC;";
+            return await ReadLineageHistoryAsync(cmd);
+        }
+
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTagAsync(string tagKey, string? tagValue = null, int limit = 100)
         {
             await EnsureInitializedAsync();

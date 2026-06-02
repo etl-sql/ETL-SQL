@@ -52,7 +52,7 @@ namespace ETL_SQL.Reporting
                 book[name] = Materialize(sheet.Columns, sheet.Rows);
             }
 
-            await MiniExcel.SaveAsAsync(output, book, printHeader: true, excelType: ExcelType.XLSX);
+            await MiniExcel.SaveAsAsync(output, book, printHeader: true, excelType: ExcelType.XLSX, cancellationToken: ct);
         }
 
         // Project each source row onto the column order with per-column type coercion.

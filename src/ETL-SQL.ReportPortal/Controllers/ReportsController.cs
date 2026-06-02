@@ -651,7 +651,8 @@ public class ReportsController : ControllerBase
     //  - parsing its stored SourceQuery (column transform + source columns), and
     //  - the persisted lineage catalog from its own build run (inherited
     //    description / tags such as pii — which the SQL text alone cannot supply).
-    private async Task<(List<string> Columns, Dictionary<string, object> Lineage)> ResolveDatasetColumnLineageAsync(Dataset ds)
+    private (List<string> Columns, Dictionary<string, object> Lineage) ResolveDatasetColumnLineage(
+        Dataset ds, IEnumerable<LineageHistoryEntry> persistedEntries)
     {
         var parsed = new Dictionary<string, LineageEntry>(StringComparer.OrdinalIgnoreCase);
         try
@@ -669,12 +670,12 @@ public class ReportsController : ControllerBase
         }
         catch { /* unparseable source query — fall back to persisted lineage only */ }
 
-        var norm = NormalizeName(ds.Name);
+        // persistedEntries are pre-fetched by the caller in one batch query, ordered so the
+        // "dataset:&name" variant precedes "dataset:name"; first occurrence per column wins.
         var persisted = new Dictionary<string, LineageHistoryEntry>(StringComparer.OrdinalIgnoreCase);
-        foreach (var target in new[] { $"dataset:&{norm}", $"dataset:{norm}" })
-            foreach (var e in await lineageCatalog.GetHistoryForTableAsync(target, 500))
-                if (e.TargetColumn != null && !persisted.ContainsKey(e.TargetColumn))
-                    persisted[e.TargetColumn] = e;
+        foreach (var e in persistedEntries)
+            if (e.TargetColumn != null && !persisted.ContainsKey(e.TargetColumn))
+                persisted[e.TargetColumn] = e;
 
         var columns = new List<string>();
         var lineage = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
@@ -729,10 +730,20 @@ public class ReportsController : ControllerBase
             .GroupBy(d => NormalizeName(d.Name), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
+        // Batch all datasets' persisted lineage in one round-trip (was 2 queries per dataset).
+        var persistedTargets = dsByNorm.Keys
+            .SelectMany(norm => new[] { $"dataset:&{norm}", $"dataset:{norm}" })
+            .ToList();
+        var persistedByTarget = (await lineageCatalog.GetHistoryForTablesAsync(persistedTargets, 500))
+            .GroupBy(e => e.TargetTable, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<LineageHistoryEntry>)g.ToList(), StringComparer.OrdinalIgnoreCase);
+
         var resolved = new Dictionary<string, (List<string> Columns, Dictionary<string, object> Lineage)>(StringComparer.OrdinalIgnoreCase);
         foreach (var kvp in dsByNorm)
         {
-            var r = await ResolveDatasetColumnLineageAsync(kvp.Value);
+            var persistedEntries = new[] { $"dataset:&{kvp.Key}", $"dataset:{kvp.Key}" }
+                .SelectMany(t => persistedByTarget.TryGetValue(t, out var l) ? l : Array.Empty<LineageHistoryEntry>());
+            var r = ResolveDatasetColumnLineage(kvp.Value, persistedEntries);
             if (r.Columns.Count > 0) resolved[kvp.Key] = r;
         }
         if (resolved.Count == 0) return;
@@ -782,12 +793,26 @@ public class ReportsController : ControllerBase
     {
         var resolved = new Dictionary<string, (List<string> Columns, Dictionary<string, object> Lineage, string Label)>(StringComparer.OrdinalIgnoreCase);
 
+        // Fetch persisted catalog lineage for every unresolved table node in one round-trip
+        // (was an N+1: one SQLite query per node).
+        var tableLabels = nodes
+            .Where(n => n.Type == "table" && n.Meta == null)
+            .Select(n => n.Label)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (tableLabels.Count == 0) return;
+
+        var historyByTable = (await lineageCatalog.GetHistoryForTablesAsync(tableLabels, 500))
+            .GroupBy(e => e.TargetTable, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
         for (var i = 0; i < nodes.Count; i++)
         {
             var node = nodes[i];
             if (node.Type != "table" || node.Meta != null) continue;
+            if (!historyByTable.TryGetValue(node.Label, out var nodeHistory)) continue;
 
-            var history = (await lineageCatalog.GetHistoryForTableAsync(node.Label, 500))
+            var history = nodeHistory
                 .Where(e => e.Operation.Equals("DB_CATALOG", StringComparison.OrdinalIgnoreCase) &&
                             !string.IsNullOrWhiteSpace(e.TargetColumn))
                 .GroupBy(e => e.TargetColumn!, StringComparer.OrdinalIgnoreCase)

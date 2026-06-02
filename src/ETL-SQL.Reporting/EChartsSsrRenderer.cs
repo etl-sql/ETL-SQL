@@ -22,6 +22,14 @@ namespace ETL_SQL.Reporting
         private static readonly Lazy<EChartsSsrRenderer> _shared = new(() => new EChartsSsrRenderer());
         public static EChartsSsrRenderer Shared => _shared.Value;
 
+        /// <summary>
+        /// Optional sink for SSR failures (engine init or per-chart render). The host's composition
+        /// root wires this to its logger; null by default so library/test usage stays silent. Without
+        /// it, SSR failures are invisible — a chart silently downgrades to the static renderer, or a
+        /// missing V8 runtime turns the whole high-fidelity path off with no diagnostic.
+        /// </summary>
+        public static Action<string, Exception>? OnError { get; set; }
+
         private readonly object _lock = new();
         private V8ScriptEngine? _engine;
         private bool _initFailed;
@@ -105,8 +113,9 @@ namespace ETL_SQL.Reporting
                     EnsureMapRegistered(visual.ChartConfig!);
                     return _engine.Script.__renderChartSvg(visual.ChartConfig, width, height) as string;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    OnError?.Invoke("ECharts SSR render failed; falling back to the static chart renderer", ex);
                     return null; // caller falls back to the static renderer
                 }
             }
@@ -124,9 +133,11 @@ namespace ETL_SQL.Reporting
                 engine.Execute("globalThis.__registerMap = function(name, geojson){ echarts.registerMap(name, JSON.parse(geojson)); };");
                 _engine = engine;
             }
-            catch
+            catch (Exception ex)
             {
                 _initFailed = true; // V8 unavailable / echarts failed to load → static fallback
+                OnError?.Invoke("ECharts SSR engine failed to initialize (V8/echarts unavailable); " +
+                                "all chart exports will use the static renderer", ex);
             }
         }
 

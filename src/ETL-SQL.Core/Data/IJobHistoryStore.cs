@@ -28,6 +28,21 @@ namespace ETL_SQL.Core.Data
     {
         Task SaveLineageAsync(IEnumerable<LineageEntry> entries, string? jobName, string? scriptPath, DateTime runAt);
         Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTableAsync(string tableName, int limit = 100);
+
+        /// <summary>
+        /// Batch variant of <see cref="GetHistoryForTableAsync"/>: fetches up to
+        /// <paramref name="limitPerTable"/> entries for each requested table in a single round-trip.
+        /// The default implementation falls back to one query per table; database-backed stores
+        /// should override it with a single query to avoid N+1 round-trips on lineage/DAG endpoints.
+        /// </summary>
+        async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTablesAsync(
+            IReadOnlyCollection<string> tableNames, int limitPerTable = 100)
+        {
+            var all = new List<LineageHistoryEntry>();
+            foreach (var name in tableNames)
+                all.AddRange(await GetHistoryForTableAsync(name, limitPerTable));
+            return all;
+        }
         Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTagAsync(string tagKey, string? tagValue = null, int limit = 100);
         Task<IEnumerable<LineageHistoryEntry>> GetHistoryForJobAsync(string jobName, int limit = 100);
         Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceAsync(string sourceName, int limit = 100);
