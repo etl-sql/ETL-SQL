@@ -1262,7 +1262,7 @@ The `--profile full` option adds checks that exercise the engine, report stack, 
 | Linter Smoke | Runs the linter on a trivial script and verifies no errors |
 | Security Guardrail Smoke | Verifies restricted system paths are rejected |
 | Report Build Smoke | Builds a small Report-SQL manifest |
-| Report PDF Export | Verifies the built-in PDF exporter returns a PDF payload |
+| Report PDF Export | Verifies the built-in static PDF exporter returns a PDF payload. High-fidelity `HOSTED`/`BROWSER` PDF export is optional and not required for this check. |
 | Graphviz / Browser Runtime | Reports optional runtime availability when configured features require them |
 | Asset Drift / Node.js / Portal DB | Checks shared report assets, Node.js availability, and portal database configuration |
 | Portal / Orchestrator / SMTP / SFTP / Azure Blob | Probes configured service endpoints; skipped as OK when no endpoint is configured |

@@ -81,6 +81,7 @@ namespace ETL_SQL.Core.Formatting
             PrintStatement                 s => FormatPrint(s),
             BulkInsertStatement            s => FormatBulkInsert(s),
             ExportStatement                s => FormatExport(s),
+            ExportReportStatement          s => FormatExportReport(s),
             EmailStatement                 s => FormatEmail(s),
             FileOperationStatement         s => FormatFileOperation(s),
             DirectoryOperationStatement    s => FormatDirectoryOperation(s),
@@ -519,6 +520,21 @@ namespace ETL_SQL.Core.Formatting
 
         private static string FormatExport(ExportStatement s)
             => $"EXPORT {s.Source.ToSql()} TO '{s.TargetPath}'" + (s.Options != null ? " WITH (...)" : "");
+
+        private static string FormatExportReport(ExportReportStatement s)
+        {
+            var sql = $"EXPORT REPORT {s.ReportPath.ToSql()} FORMAT {s.Format.ToUpperInvariant()} TO {s.OutputPath.ToSql()}";
+            var options = new List<string>();
+            if (!string.IsNullOrWhiteSpace(s.PdfMode))
+                options.Add($"PDF_MODE = {s.PdfMode.ToUpperInvariant()}");
+            if (s.Host != null)
+                options.Add($"HOST = {s.Host.ToSql()}");
+            if (s.BrowserPath != null)
+                options.Add($"BROWSER_PATH = {s.BrowserPath.ToSql()}");
+            if (options.Count > 0)
+                sql += $" WITH ({string.Join(", ", options)})";
+            return sql + ";";
+        }
 
         private static string FormatEmail(EmailStatement s)
         {

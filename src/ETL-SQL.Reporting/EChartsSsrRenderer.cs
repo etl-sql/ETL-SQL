@@ -1,6 +1,8 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using Microsoft.ClearScript.V8;
 
 namespace ETL_SQL.Reporting
@@ -23,6 +25,7 @@ namespace ETL_SQL.Reporting
         private readonly object _lock = new();
         private V8ScriptEngine? _engine;
         private bool _initFailed;
+        private readonly HashSet<string> _registeredMaps = new(StringComparer.OrdinalIgnoreCase);
 
         // Bare V8 has no host timer APIs; echarts schedules animation with them, which
         // SSR doesn't need — no-op shims let it load and render.
@@ -99,6 +102,7 @@ namespace ETL_SQL.Reporting
                 if (_engine == null) return null;
                 try
                 {
+                    EnsureMapRegistered(visual.ChartConfig!);
                     return _engine.Script.__renderChartSvg(visual.ChartConfig, width, height) as string;
                 }
                 catch
@@ -117,6 +121,7 @@ namespace ETL_SQL.Reporting
                 engine.Execute(Shims);
                 engine.Execute(LoadEcharts());
                 engine.Execute(RenderFn);
+                engine.Execute("globalThis.__registerMap = function(name, geojson){ echarts.registerMap(name, JSON.parse(geojson)); };");
                 _engine = engine;
             }
             catch
@@ -131,6 +136,39 @@ namespace ETL_SQL.Reporting
             var name = Array.Find(asm.GetManifestResourceNames(),
                            n => n.EndsWith("echarts.min.js", StringComparison.OrdinalIgnoreCase))
                        ?? throw new InvalidOperationException("echarts.min.js embedded resource not found");
+            using var s = asm.GetManifestResourceStream(name)!;
+            using var r = new StreamReader(s);
+            return r.ReadToEnd();
+        }
+
+        // MAP charts reference a registered map by name (series.map). Register the
+        // matching bundled GeoJSON into ECharts once, on demand.
+        private void EnsureMapRegistered(string chartConfig)
+        {
+            string? mapKey = null;
+            try
+            {
+                using var doc = JsonDocument.Parse(chartConfig);
+                if (doc.RootElement.TryGetProperty("__mapKey", out var mk) && mk.ValueKind == JsonValueKind.String)
+                    mapKey = mk.GetString();
+            }
+            catch { return; }
+
+            if (string.IsNullOrEmpty(mapKey) || _registeredMaps.Contains(mapKey)) return;
+
+            var geojson = LoadGeojson(mapKey);
+            if (geojson == null) return; // unknown map → render without it rather than fail
+
+            _engine!.Script.__registerMap(mapKey, geojson);
+            _registeredMaps.Add(mapKey);
+        }
+
+        private static string? LoadGeojson(string mapKey)
+        {
+            var asm  = typeof(EChartsSsrRenderer).Assembly;
+            var name = Array.Find(asm.GetManifestResourceNames(),
+                n => n.EndsWith("." + mapKey + ".geojson", StringComparison.OrdinalIgnoreCase));
+            if (name == null) return null;
             using var s = asm.GetManifestResourceStream(name)!;
             using var r = new StreamReader(s);
             return r.ReadToEnd();

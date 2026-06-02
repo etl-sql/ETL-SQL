@@ -2570,7 +2570,43 @@ CREATE BUTTON <name> AS (
 
 Common button actions include `BACK`, `REFRESH_REPORT`, `REFRESH_VISUALS(VisualName [, ...])`, `EXPORT_CSV`, `EXPORT_EXCEL`, `EXPORT_PDF`, `NAVIGATE_PAGE(PageName)`, `CLEAR_FILTERS`, `APPLY_PARAMETERS`, and `SET_UI_STATE(Target, Key, Value)`.
 
-### A.9 `ALTER` / `DROP` / `CREATE OR ALTER`
+### A.9 `EXPORT REPORT`
+Exports a Report-SQL script to a static artifact.
+
+```sql
+EXPORT REPORT 'reports/sales.rptsql'
+FORMAT PDF
+TO 'out/sales.pdf';
+
+EXPORT REPORT 'reports/sales.rptsql'
+FORMAT PDF
+TO 'out/sales.pdf'
+WITH (
+    PDF_MODE     = STATIC,   -- STATIC | AUTO | HOSTED | BROWSER
+    HOST         = 'http://localhost:5200',
+    BROWSER_PATH = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+);
+
+EXPORT REPORT 'reports/sales.rptsql'
+FORMAT CSV
+TO 'out/sales.csv';
+
+EXPORT REPORT 'reports/sales.rptsql'
+FORMAT MARKDOWN
+TO 'out/sales.md';
+```
+
+`WITH (...)` options are valid only with `FORMAT PDF`.
+
+| Option | Values | Meaning |
+| :--- | :--- | :--- |
+| `PDF_MODE` | `STATIC`, `AUTO`, `HOSTED`, `BROWSER` | Selects the PDF export renderer. Default is `STATIC`. |
+| `HOST` | string | ReportPortal or `report serve` URL for hosted browser-backed export. |
+| `BROWSER_PATH` | string | Installed Chrome, Edge, or Chromium executable path for optional browser export. |
+
+`STATIC` uses the built-in PDFsharp/MigraDoc exporter and requires no browser. Explicit `HOSTED` and `BROWSER` modes require their corresponding exporter implementation/configuration. `AUTO` may fall back to `STATIC`.
+
+### A.10 `ALTER` / `DROP` / `CREATE OR ALTER`
 All report object types support these forms:
 
 ```sql

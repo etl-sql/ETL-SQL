@@ -25,13 +25,17 @@ public class ReportsController : ControllerBase
     private readonly AuditService audit;
     private readonly PortalConfig portalConfig;
     private readonly ILineageCatalogStore lineageCatalog;
+    private readonly FolderPermissionService folderPermissions;
+    private readonly ReportScriptInspectionService scriptInspection;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection)
     {
         this.db = db;
         this.audit = audit;
         this.portalConfig = portalConfig;
         this.lineageCatalog = lineageCatalog;
+        this.folderPermissions = folderPermissions;
+        this.scriptInspection = scriptInspection;
     }
 
     private int CurrentUserId =>
@@ -39,23 +43,8 @@ public class ReportsController : ControllerBase
 
     private bool IsAdmin => User.IsInRole("Admin");
 
-    private async Task<FolderPermission?> GetEffectivePermissionAsync(int folderId)
-    {
-        if (IsAdmin) return FolderPermission.Manage;
-
-        var groupIds = await db.UserGroups
-            .Where(ug => ug.UserId == CurrentUserId)
-            .Select(ug => ug.GroupId)
-            .ToListAsync();
-
-        var perms = await db.FolderAcls
-            .Where(a => a.FolderId == folderId && groupIds.Contains(a.GroupId))
-            .Select(a => a.Permission)
-            .ToListAsync();
-
-        if (!perms.Any()) return null;
-        return (FolderPermission)perms.Max(p => (int)p);
-    }
+    private Task<FolderPermission?> GetEffectivePermissionAsync(int folderId) =>
+        folderPermissions.GetEffectivePermissionAsync(folderId, User);
 
     private ReportDto ToDto(Report r, ReportSnapshot? snap, bool isFavorite = false)
     {
@@ -249,7 +238,7 @@ public class ReportsController : ControllerBase
         if (!PortalPathGuard.TryResolveScript(portalConfig, req.ScriptPath, out var resolved))
             return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
 
-        var validation = await ValidateResolvedScriptAsync(resolved);
+        var validation = await scriptInspection.ValidateResolvedScriptAsync(resolved);
         if (!validation.IsValid)
             return BadRequest(validation);
 
@@ -298,7 +287,7 @@ public class ReportsController : ControllerBase
                 Array.Empty<ReportParameterDto>(),
                 ["Script path must be within the configured ScriptRootPath"]));
 
-        var validation = await ValidateResolvedScriptAsync(resolved);
+        var validation = await scriptInspection.ValidateResolvedScriptAsync(resolved);
         return validation.IsValid ? Ok(validation) : BadRequest(validation);
     }
 
@@ -338,7 +327,7 @@ public class ReportsController : ControllerBase
             .OrderByDescending(s => s.BuiltAt)
             .FirstOrDefaultAsync();
 
-        var manifestDatasets = await ReadManifestDatasetsAsync(snapshot);
+        var manifestDatasets = await scriptInspection.ReadManifestDatasetsAsync(snapshot);
 
         List<int> datasetGroupIds = IsAdmin
             ? []
@@ -366,7 +355,7 @@ public class ReportsController : ControllerBase
                 d.RowCount,
                 d.LastRefresh,
                 d.RefreshInterval,
-                BuildSourceDtos(ParseSourceTables(d.SourceQuery), "DatasetSource")))
+                scriptInspection.BuildSourceDtos(scriptInspection.ParseSourceTables(d.SourceQuery), "DatasetSource")))
             .ToList();
 
         var jobs = await db.DatasetJobs
@@ -380,11 +369,11 @@ public class ReportsController : ControllerBase
             .ToListAsync();
 
         var sourceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var source in await ReadScriptSourceTablesAsync(report.ScriptPath))
+        foreach (var source in await scriptInspection.ReadScriptSourceTablesAsync(report.ScriptPath))
             sourceNames.Add(source);
-        foreach (var source in registeredDatasets.SelectMany(d => ParseSourceTables(d.SourceQuery)))
+        foreach (var source in registeredDatasets.SelectMany(d => scriptInspection.ParseSourceTables(d.SourceQuery)))
             sourceNames.Add(source);
-        var lineageEntries = await ReadScriptLineageAsync(report.ScriptPath);
+        var lineageEntries = await scriptInspection.ReadScriptLineageAsync(report.ScriptPath);
 
         var dto = new ReportDependencyDto(
             new ReportDependencyReportDto(report.Id, report.Name, report.Folder?.Path ?? "", report.ScriptPath),
@@ -392,7 +381,7 @@ public class ReportsController : ControllerBase
             manifestDatasets,
             datasetDtos,
             jobs,
-            BuildSourceDtos(sourceNames.OrderBy(s => s, StringComparer.OrdinalIgnoreCase), "ScriptSource"),
+            scriptInspection.BuildSourceDtos(sourceNames.OrderBy(s => s, StringComparer.OrdinalIgnoreCase), "ScriptSource"),
             lineageEntries);
 
         return Ok(dto);
@@ -901,7 +890,7 @@ public class ReportsController : ControllerBase
                 a.Detail))
             .ToListAsync();
 
-        var currentHash = await ReadCurrentScriptHashAsync(report.ScriptPath);
+        var currentHash = await scriptInspection.ReadCurrentScriptHashAsync(report.ScriptPath);
         var scriptChanged = currentHash is not null
             && report.PublishedScriptHash is not null
             && !string.Equals(currentHash, report.PublishedScriptHash, StringComparison.OrdinalIgnoreCase);
@@ -957,7 +946,7 @@ public class ReportsController : ControllerBase
             if (!System.IO.File.Exists(resolved))
                 return BadRequest(new { error = $"Script file not found: {req.ScriptPath}" });
 
-            var validation = await ValidateResolvedScriptAsync(resolved);
+            var validation = await scriptInspection.ValidateResolvedScriptAsync(resolved);
             if (!validation.IsValid)
                 return BadRequest(validation);
 
@@ -1406,199 +1395,6 @@ public class ReportsController : ControllerBase
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
     }
-
-    private static async Task<Dictionary<string, string>> ReadScriptMetadataAsync(string scriptPath)
-    {
-        var scriptText = await System.IO.File.ReadAllTextAsync(scriptPath);
-        var tokens = new Lexer(scriptText).Tokenize();
-        var script = new CoreParser(tokens, scriptText).Parse();
-        return new Dictionary<string, string>(script.Metadata, StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static async Task<ReportScriptValidationDto> ValidateResolvedScriptAsync(string resolvedScriptPath)
-    {
-        if (!System.IO.File.Exists(resolvedScriptPath))
-        {
-            return new ReportScriptValidationDto(
-                false,
-                resolvedScriptPath,
-                null,
-                null,
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-                Array.Empty<ReportParameterDto>(),
-                ["Script file not found."]);
-        }
-
-        if (!resolvedScriptPath.EndsWith(".rptsql", StringComparison.OrdinalIgnoreCase))
-        {
-            return new ReportScriptValidationDto(
-                false,
-                resolvedScriptPath,
-                null,
-                System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath),
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-                Array.Empty<ReportParameterDto>(),
-                ["Only .rptsql files may be published as reports."]);
-        }
-
-        var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);
-        try
-        {
-            var tokens = new Lexer(scriptText).Tokenize();
-            var script = new CoreParser(tokens, scriptText).Parse();
-            var parameters = script.Statements
-                .OfType<DeclareStatement>()
-                .Where(d => d.IsInput)
-                .Select(d => new ReportParameterDto(
-                    d.VariableName,
-                    d.DataType,
-                    d.InitialValue is LiteralExpression lit ? lit.Value?.ToString() : null,
-                    d.InitialValue is null,
-                    d.Description))
-                .ToList();
-            var hash = "sha256:" + Convert.ToHexString(
-                SHA256.HashData(await System.IO.File.ReadAllBytesAsync(resolvedScriptPath))).ToLowerInvariant();
-
-            return new ReportScriptValidationDto(
-                true,
-                resolvedScriptPath,
-                hash,
-                System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath),
-                new Dictionary<string, string>(script.Metadata, StringComparer.OrdinalIgnoreCase),
-                parameters,
-                Array.Empty<string>());
-        }
-        catch (Exception ex)
-        {
-            return new ReportScriptValidationDto(
-                false,
-                resolvedScriptPath,
-                null,
-                System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath),
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-                Array.Empty<ReportParameterDto>(),
-                [ex.Message]);
-        }
-    }
-
-    private async Task<IReadOnlyList<ReportDependencyManifestDatasetDto>> ReadManifestDatasetsAsync(ReportSnapshot? snapshot)
-    {
-        if (snapshot is null) return Array.Empty<ReportDependencyManifestDatasetDto>();
-        if (!PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath))
-            return Array.Empty<ReportDependencyManifestDatasetDto>();
-        if (!System.IO.File.Exists(resolvedManifestPath))
-            return Array.Empty<ReportDependencyManifestDatasetDto>();
-
-        try
-        {
-            await using var stream = System.IO.File.OpenRead(resolvedManifestPath);
-            var manifest = await JsonSerializer.DeserializeAsync<ReportManifest>(stream);
-            if (manifest is null) return Array.Empty<ReportDependencyManifestDatasetDto>();
-
-            return manifest.Datasets
-                .Select(d => new ReportDependencyManifestDatasetDto(
-                    d.TempTableName,
-                    d.RefreshInterval,
-                    d.Ttl,
-                    d.LastRefresh,
-                    d.RowCount))
-                .ToList();
-        }
-        catch (JsonException)
-        {
-            return Array.Empty<ReportDependencyManifestDatasetDto>();
-        }
-    }
-
-    private async Task<IReadOnlyList<string>> ReadScriptSourceTablesAsync(string scriptPath)
-    {
-        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
-            return Array.Empty<string>();
-        if (!System.IO.File.Exists(resolvedScriptPath))
-            return Array.Empty<string>();
-
-        return ParseSourceTables(await System.IO.File.ReadAllTextAsync(resolvedScriptPath));
-    }
-
-    private async Task<IReadOnlyList<ReportDependencyLineageDto>> ReadScriptLineageAsync(string scriptPath)
-    {
-        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
-            return Array.Empty<ReportDependencyLineageDto>();
-        if (!System.IO.File.Exists(resolvedScriptPath))
-            return Array.Empty<ReportDependencyLineageDto>();
-
-        try
-        {
-            var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);
-            var tokens = new Lexer(scriptText).Tokenize();
-            var script = new CoreParser(tokens, scriptText).Parse();
-            var tracker = new LineageTracker(ETL_SQL.Common.NullLogger.Instance);
-            new LineageAnalyzer(tracker).Analyze(script);
-
-            return tracker.GetFullLineage()
-                .Select(e => new ReportDependencyLineageDto(
-                    e.TargetTable,
-                    e.TargetColumn,
-                    e.Operation,
-                    e.SourceTables.ToList(),
-                    e.SourceColumns.ToList(),
-                    e.Metadata,
-                    e.Line,
-                    e.TransformationKind == TransformationKind.Unknown ? null : e.TransformationKind.ToString(),
-                    e.TransformationExpression,
-                    e.FunctionsApplied,
-                    e.DerivedFromDescriptions))
-                .ToList();
-        }
-        catch
-        {
-            return Array.Empty<ReportDependencyLineageDto>();
-        }
-    }
-
-    private async Task<string?> ReadCurrentScriptHashAsync(string scriptPath)
-    {
-        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
-            return null;
-        if (!System.IO.File.Exists(resolvedScriptPath))
-            return null;
-
-        var bytes = await System.IO.File.ReadAllBytesAsync(resolvedScriptPath);
-        return "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-    }
-
-    private static IReadOnlyList<string> ParseSourceTables(string? scriptText)
-    {
-        if (string.IsNullOrWhiteSpace(scriptText)) return Array.Empty<string>();
-        try
-        {
-            var tokens = new Lexer(scriptText).Tokenize();
-            var script = new CoreParser(tokens, scriptText).Parse();
-            return script.Statements
-                .SelectMany(s => s.GetSourceTables())
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-        }
-        catch
-        {
-            return Array.Empty<string>();
-        }
-    }
-
-    private static IReadOnlyList<ReportDependencySourceDto> BuildSourceDtos(IEnumerable<string> sources, string kind) =>
-        sources
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(s =>
-            {
-                var parts = s.Split('.', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                var connection = parts.Length == 2 && !parts[0].StartsWith("#", StringComparison.Ordinal) ? parts[0] : null;
-                var objectName = parts.Length == 2 ? parts[1] : s;
-                return new ReportDependencySourceDto(s, connection, objectName, kind);
-            })
-            .ToList();
 
     private bool CanReadDataset(Dataset dataset, IReadOnlyCollection<int> groupIds)
     {

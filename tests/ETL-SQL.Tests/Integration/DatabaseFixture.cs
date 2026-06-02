@@ -51,10 +51,13 @@ namespace ETL_SQL.Tests.Integration
 
         public async Task DisposeAsync()
         {
+            // DisposeAsync removes the container and its anonymous volumes; StopAsync leaves both
+            // on disk if Ryuk never runs (e.g. a killed/crashed test process), leaking multi-GB
+            // database data volumes run over run.
             await Task.WhenAll(
-                _postgres.StopAsync(),
-                _sqlServer.StopAsync(),
-                _oracle.StopAsync()
+                _postgres.DisposeAsync().AsTask(),
+                _sqlServer.DisposeAsync().AsTask(),
+                _oracle.DisposeAsync().AsTask()
             );
         }
     }
@@ -89,7 +92,7 @@ namespace ETL_SQL.Tests.Integration
 
         public async Task DisposeAsync()
         {
-            await _mysql.StopAsync();
+            await _mysql.DisposeAsync();
         }
     }
 

@@ -68,7 +68,7 @@ namespace ETL_SQL.ReportBuilder
             switch (stmt.Format.ToUpperInvariant())
             {
                 case "PDF":
-                    var pdfBytes = new PdfExporter().Export(manifest);
+                    var pdfBytes = new ReportPdfExporter().Export(manifest, await BuildPdfExportOptionsAsync(stmt, context));
                     await File.WriteAllBytesAsync(outputPath, pdfBytes);
                     break;
 
@@ -86,5 +86,29 @@ namespace ETL_SQL.ReportBuilder
 
             logger.Debug("EXPORT REPORT: wrote {Format} to '{Output}'", stmt.Format, outputPath);
         }
+
+        private static async Task<PdfExportOptions> BuildPdfExportOptionsAsync(ExportReportStatement stmt, IExecutionContext context)
+        {
+            var host = stmt.Host == null ? null : (await context.EvaluateValue(stmt.Host, new Row()))?.ToString();
+            var browserPath = stmt.BrowserPath == null ? null : (await context.EvaluateValue(stmt.BrowserPath, new Row()))?.ToString();
+
+            return new PdfExportOptions
+            {
+                Mode = ParsePdfMode(stmt.PdfMode),
+                Host = host,
+                BrowserPath = browserPath,
+                Warn = message => context.Log($"EXPORT REPORT: {message}", ConsoleColor.Yellow)
+            };
+        }
+
+        private static PdfExportMode ParsePdfMode(string? mode) =>
+            (mode ?? "STATIC").ToUpperInvariant() switch
+            {
+                "STATIC" => PdfExportMode.Static,
+                "AUTO" => PdfExportMode.Auto,
+                "HOSTED" => PdfExportMode.Hosted,
+                "BROWSER" => PdfExportMode.Browser,
+                _ => throw new ExecutionException($"EXPORT REPORT: unsupported PDF_MODE '{mode}'")
+            };
     }
 }

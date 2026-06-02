@@ -29,6 +29,10 @@
        charts server-side without the browser asset folder. Single source of truth. -->
   <ItemGroup>
     <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\echarts.min.js" Link="echarts.min.js" />
+    <!-- GeoJSON for MAP charts: registered into ECharts on demand during SSR. -->
+    <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\maps\*.geojson">
+      <LogicalName>maps.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

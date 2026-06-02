@@ -11,44 +11,12 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [ApiController]
 [Route("api/folders")]
 [Authorize]
-public class FoldersController(PortalDbContext db, AuditService audit) : ControllerBase
+public class FoldersController(PortalDbContext db, AuditService audit, FolderPermissionService folderPermissions) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     private bool IsAdmin => User.IsInRole("Admin");
-
-    // ── ACL helpers ───────────────────────────────────────────────────────────
-
-    private async Task<ISet<int>> GetUserGroupIdsAsync(int userId)
-    {
-        var ids = await db.UserGroups
-            .Where(ug => ug.UserId == userId)
-            .Select(ug => ug.GroupId)
-            .ToListAsync();
-        return new HashSet<int>(ids);
-    }
-
-    private async Task<FolderPermission?> GetEffectivePermissionAsync(int folderId, ISet<int> groupIds)
-    {
-        if (IsAdmin) return FolderPermission.Manage;
-
-        var perms = await db.FolderAcls
-            .Where(a => a.FolderId == folderId && groupIds.Contains(a.GroupId))
-            .Select(a => a.Permission)
-            .ToListAsync();
-
-        if (!perms.Any()) return null;
-        return (FolderPermission)perms.Max(p => (int)p);
-    }
-
-    private async Task<bool> HasPermissionAsync(int folderId, FolderPermission required)
-    {
-        if (IsAdmin) return true;
-        var groupIds = await GetUserGroupIdsAsync(CurrentUserId);
-        var effective = await GetEffectivePermissionAsync(folderId, groupIds);
-        return effective.HasValue && effective.Value >= required;
-    }
 
     // ── Endpoints ─────────────────────────────────────────────────────────────
 
@@ -59,7 +27,7 @@ public class FoldersController(PortalDbContext db, AuditService audit) : Control
             .Include(f => f.Acls)
             .ToListAsync();
 
-        var groupIds = IsAdmin ? null : await GetUserGroupIdsAsync(CurrentUserId);
+        var groupIds = IsAdmin ? null : await folderPermissions.GetUserGroupIdsAsync(User);
 
         var visible = IsAdmin
             ? all
@@ -84,7 +52,7 @@ public class FoldersController(PortalDbContext db, AuditService audit) : Control
         {
             var parent = await db.Folders.FindAsync(req.ParentId.Value);
             if (parent is null) return NotFound("Parent folder not found");
-            if (!await HasPermissionAsync(parent.Id, FolderPermission.Manage))
+            if (!await folderPermissions.HasPermissionAsync(parent.Id, FolderPermission.Manage, User))
                 return Forbid();
             path = $"{parent.Path}/{req.Name}";
         }
@@ -117,7 +85,7 @@ public class FoldersController(PortalDbContext db, AuditService audit) : Control
     {
         var folder = await db.Folders.FindAsync(id);
         if (folder is null) return NotFound();
-        if (!IsAdmin && !await HasPermissionAsync(id, FolderPermission.Read))
+        if (!IsAdmin && !await folderPermissions.HasPermissionAsync(id, FolderPermission.Read, User))
             return Forbid();
 
         return Ok(new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, []));
@@ -130,7 +98,7 @@ public class FoldersController(PortalDbContext db, AuditService audit) : Control
         var folder = await db.Folders.FindAsync(id);
         if (folder is null) return NotFound();
 
-        if (!await HasPermissionAsync(folder.Id, FolderPermission.Manage))
+        if (!await folderPermissions.HasPermissionAsync(folder.Id, FolderPermission.Manage, User))
             return Forbid();
 
         bool pathChanged = false;
@@ -155,7 +123,7 @@ public class FoldersController(PortalDbContext db, AuditService audit) : Control
                 curr = curr.ParentId.HasValue ? await db.Folders.FindAsync(curr.ParentId.Value) : null;
             }
 
-            if (!await HasPermissionAsync(p.Id, FolderPermission.Manage))
+            if (!await folderPermissions.HasPermissionAsync(p.Id, FolderPermission.Manage, User))
                 return Forbid();
 
             folder.ParentId = req.ParentId;

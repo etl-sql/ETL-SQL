@@ -129,6 +129,8 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.TokenService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.FolderPermissionService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptInspectionService>();
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetViewerService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ILdapService, ETL_SQL.ReportPortal.Services.LdapService>();

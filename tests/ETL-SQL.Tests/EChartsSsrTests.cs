@@ -29,6 +29,24 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
+        public void RenderSvg_RegistersMap_AndRendersMapChart()
+        {
+            var visual = new VisualManifest
+            {
+                Name = "Map",
+                VisualType = "MAP",
+                ChartConfig = "{\"__mapKey\":\"us-states\",\"series\":[{\"type\":\"map\",\"map\":\"us-states\",\"data\":[{\"name\":\"Minnesota\",\"value\":185000}]}]}",
+            };
+
+            var svg = EChartsSsrRenderer.Shared.RenderSvg(visual);
+
+            Assert.False(string.IsNullOrWhiteSpace(svg));
+            Assert.Contains("<svg", svg);
+            Assert.Contains("<path", svg);                 // states render as vector paths
+            Assert.True(svg!.Length > 2000, $"map SVG implausibly small ({svg.Length} chars)");
+        }
+
+        [Fact]
         public void RenderSvg_ReturnsNull_WhenNoChartConfig()
         {
             var visual = new VisualManifest { Name = "T", VisualType = "TABLE", ChartConfig = null };

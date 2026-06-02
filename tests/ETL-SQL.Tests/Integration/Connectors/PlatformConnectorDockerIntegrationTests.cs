@@ -137,8 +137,14 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
         public async Task DisposeAsync()
         {
+            // DisposeAsync removes the container (and its anonymous volumes); StopAsync would leak
+            // both if Ryuk never runs (e.g. a killed/crashed test process).
             if (_container != null)
-                await _container.StopAsync();
+                await _container.DisposeAsync();
+
+            // The image is built fresh every run via raw `docker build`, so Ryuk does not track it.
+            // Remove it on teardown to stop dangling `<none>` layers from accumulating run over run.
+            await PlatformFixtureHelpers.RemoveDockerImageAsync(ImageName);
         }
     }
 
@@ -184,7 +190,9 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task DisposeAsync()
         {
             if (_container != null)
-                await _container.StopAsync();
+                await _container.DisposeAsync();
+
+            await PlatformFixtureHelpers.RemoveDockerImageAsync(ImageName);
         }
 
         private async Task ChangeInitialPasswordAsync()
@@ -223,47 +231,68 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
         public static async Task BuildDockerImageAsync(string dockerfile, string imageName)
         {
-            var repoRoot = FindRepoRoot();
+            var (exitCode, output) = await RunDockerAsync(
+                FindRepoRoot(),
+                timeoutMs: 600_000,
+                "build", "--progress=plain", "-f", dockerfile, "-t", imageName, ".");
+
+            if (exitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Docker image build failed for {imageName} with exit code {exitCode}.{Environment.NewLine}{output}");
+            }
+        }
+
+        /// <summary>
+        /// Removes a locally-built image so re-tagging <c>:latest</c> on the next run does not
+        /// orphan the previous layers as dangling images. Best-effort: failures are swallowed so
+        /// teardown never masks a test result.
+        /// </summary>
+        public static async Task RemoveDockerImageAsync(string imageName)
+        {
+            try
+            {
+                await RunDockerAsync(FindRepoRoot(), timeoutMs: 60_000, "rmi", "-f", imageName);
+            }
+            catch
+            {
+                // Image may already be gone, or docker unavailable during teardown — ignore.
+            }
+        }
+
+        private static async Task<(int ExitCode, string Output)> RunDockerAsync(
+            string workingDirectory, int timeoutMs, params string[] args)
+        {
             var output = new StringBuilder();
             var startInfo = new ProcessStartInfo
             {
                 FileName = "docker",
-                WorkingDirectory = repoRoot,
+                WorkingDirectory = workingDirectory,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false
             };
-
-            startInfo.ArgumentList.Add("build");
-            startInfo.ArgumentList.Add("--progress=plain");
-            startInfo.ArgumentList.Add("-f");
-            startInfo.ArgumentList.Add(dockerfile);
-            startInfo.ArgumentList.Add("-t");
-            startInfo.ArgumentList.Add(imageName);
-            startInfo.ArgumentList.Add(".");
+            foreach (var arg in args)
+                startInfo.ArgumentList.Add(arg);
 
             using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
             process.OutputDataReceived += (_, e) => { if (e.Data != null) output.AppendLine(e.Data); };
             process.ErrorDataReceived += (_, e) => { if (e.Data != null) output.AppendLine(e.Data); };
 
             if (!process.Start())
-                throw new InvalidOperationException("Failed to start docker build.");
+                throw new InvalidOperationException("Failed to start docker process.");
 
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            var completed = await Task.Run(() => process.WaitForExit(600_000));
+            var completed = await Task.Run(() => process.WaitForExit(timeoutMs));
             if (!completed)
             {
                 try { process.Kill(entireProcessTree: true); } catch { }
-                throw new TimeoutException($"Docker image build timed out for {imageName}.{Environment.NewLine}{output}");
+                throw new TimeoutException($"Docker command timed out: docker {string.Join(' ', args)}.{Environment.NewLine}{output}");
             }
 
-            if (process.ExitCode != 0)
-            {
-                throw new InvalidOperationException(
-                    $"Docker image build failed for {imageName} with exit code {process.ExitCode}.{Environment.NewLine}{output}");
-            }
+            return (process.ExitCode, output.ToString());
         }
     }
 

@@ -217,9 +217,10 @@ namespace ETL_SQL.Reporting
 
             switch (v.VisualType.ToUpperInvariant())
             {
-                case "TABLE":  RenderTable(section, v);  break;
-                case "CARD":   RenderCard(section, v);   break;
-                case "TEXT":   RenderText(section, v);   break;
+                case "TABLE":  RenderTable(section, v);             break;
+                case "CARD":   RenderCard(section, v);              break;
+                case "TEXT":   RenderText(section, v);              break;
+                case "IMAGE":  RenderImage(section, v, tempFiles);  break;
 
                 // Filter/input controls: render the selection that was in effect at
                 // export time, so the reader knows how the report was filtered.
@@ -394,26 +395,154 @@ namespace ETL_SQL.Reporting
 
         private static void RenderText(Section section, VisualManifest v)
         {
-            v.Options.TryGetValue("VALUE", out var textContent);
-            if (!string.IsNullOrWhiteSpace(textContent))
+            var textContent = ResolveTextContent(v);
+            if (string.IsNullOrWhiteSpace(textContent)) return;
+
+            foreach (var (text, heading) in MarkdownToLines(textContent))
             {
-                var p = section.AddParagraph(textContent);
-                p.Format.SpaceBefore = Unit.FromPoint(8);
-                p.Format.Font.Size   = Unit.FromPoint(10);
+                var p = section.AddParagraph(text);
+                p.Format.SpaceBefore = Unit.FromPoint(heading ? 8 : 2);
+                p.Format.Font.Size   = Unit.FromPoint(heading ? 12 : 10);
+                p.Format.Font.Bold   = heading;
             }
         }
 
-        internal static byte[] SvgToPng(string svgContent)
+        private static string? ResolveTextContent(VisualManifest v)
+        {
+            // Static TEXT uses CONTENT/DefaultValue. Older manifests may carry VALUE.
+            if (v.Options.TryGetValue("CONTENT", out var content) && !string.IsNullOrWhiteSpace(content))
+                return content;
+            if (v.Options.TryGetValue("content", out content) && !string.IsNullOrWhiteSpace(content))
+                return content;
+            if (v.Options.TryGetValue("VALUE", out content) && !string.IsNullOrWhiteSpace(content))
+                return content;
+            if (v.Options.TryGetValue("value", out content) && !string.IsNullOrWhiteSpace(content))
+                return content;
+            if (!string.IsNullOrWhiteSpace(v.DefaultValue))
+                return v.DefaultValue;
+
+            // Dynamic TEXT uses SOURCE + MAPPINGS (CONTENT = col). VisualBuilder stores
+            // mappings as option keys and the source data in Columns/Rows.
+            var contentColumn = v.Options.GetValueOrDefault("mapping:content")
+                ?? v.Options.GetValueOrDefault("MAPPING:CONTENT");
+            if (string.IsNullOrWhiteSpace(contentColumn) || v.Rows.Count == 0)
+                return null;
+
+            var contentIndex = v.Columns.FindIndex(c =>
+                string.Equals(c, contentColumn, StringComparison.OrdinalIgnoreCase));
+            if (contentIndex < 0 || contentIndex >= v.Rows[0].Count)
+                return null;
+
+            return v.Rows[0][contentIndex];
+        }
+
+        // Lightweight markdown → lines for PDF: headings become bold larger lines and
+        // bold/code markers are stripped. (Tables render as their raw "| a | b |" rows.)
+        private static IEnumerable<(string Text, bool Heading)> MarkdownToLines(string md)
+        {
+            foreach (var raw in md.Replace("\r\n", "\n").Split('\n'))
+            {
+                var line = raw.TrimEnd();
+                if (line.Length == 0) continue;
+                bool heading = line.StartsWith("#", StringComparison.Ordinal);
+                if (heading) line = line.TrimStart('#', ' ');
+                line = line.Replace("**", "").Replace("`", "");
+                yield return (line, heading);
+            }
+        }
+
+        private static void RenderImage(Section section, VisualManifest v, List<string> tempFiles)
+        {
+            var src  = v.Options.GetValueOrDefault("SRC") ?? v.Options.GetValueOrDefault("src");
+            var path = string.IsNullOrWhiteSpace(src) ? null : DataUriToTempImage(src!, tempFiles);
+            if (path != null)
+            {
+                var img = section.AddImage(path);
+                img.Width           = Unit.FromPoint(ContentWidthPt);
+                img.LockAspectRatio = true;
+            }
+            else
+            {
+                var nd = section.AddParagraph(string.IsNullOrWhiteSpace(src)
+                    ? "No image source." : "[Image could not be embedded in the PDF]");
+                nd.Format.SpaceBefore = Unit.FromPoint(4);
+                nd.Format.Font.Italic = true;
+                nd.Format.Font.Color  = _greyDark1;
+            }
+        }
+
+        // Decodes a data: URI to a temp image file (SVG rasterised at native aspect,
+        // base64 raster written as-is). Remote URLs are skipped (no network during export).
+        private static string? DataUriToTempImage(string src, List<string> tempFiles)
+        {
+            if (!src.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return null;
+            int comma = src.IndexOf(',');
+            if (comma < 0) return null;
+
+            var meta    = src.Substring(5, comma - 5);
+            var payload = src.Substring(comma + 1);
+            bool isBase64 = meta.Contains("base64", StringComparison.OrdinalIgnoreCase);
+            bool isSvg    = meta.Contains("svg", StringComparison.OrdinalIgnoreCase);
+
+            byte[] bytes;
+            string ext;
+            try
+            {
+                if (isSvg)
+                {
+                    var svg = isBase64
+                        ? Encoding.UTF8.GetString(Convert.FromBase64String(payload))
+                        : Uri.UnescapeDataString(payload);
+                    bytes = RasterizeSvg(svg, preserveAspect: true);
+                    ext = "png";
+                }
+                else if (isBase64)
+                {
+                    bytes = Convert.FromBase64String(payload);
+                    ext = meta.Contains("jpeg", StringComparison.OrdinalIgnoreCase)
+                       || meta.Contains("jpg", StringComparison.OrdinalIgnoreCase) ? "jpg" : "png";
+                }
+                else return null;
+            }
+            catch { return null; }
+
+            if (bytes.Length == 0) return null;
+            var tmp = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + "." + ext);
+            File.WriteAllBytes(tmp, bytes);
+            tempFiles.Add(tmp);
+            return tmp;
+        }
+
+        // Charts rasterise into a fixed 600x350 frame (their designed aspect).
+        internal static byte[] SvgToPng(string svgContent) => RasterizeSvg(svgContent, preserveAspect: false);
+
+        private static byte[] RasterizeSvg(string svgContent, bool preserveAspect)
         {
             using var svg    = new SKSvg();
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(svgContent));
             if (svg.Load(stream) == null) return Array.Empty<byte>();
 
             var bounds = svg.Picture!.CullRect;
-            float scaleX = bounds.Width  > 0 ? SvgNativeWidth  / bounds.Width  : 1f;
-            float scaleY = bounds.Height > 0 ? SvgNativeHeight / bounds.Height : 1f;
 
-            var info = new SKImageInfo(SvgNativeWidth, SvgNativeHeight);
+            int outW, outH;
+            float scaleX, scaleY;
+            if (preserveAspect && bounds.Width > 0 && bounds.Height > 0)
+            {
+                const float maxW = 1200f; // render at native aspect, capped for size
+                float scale = bounds.Width > maxW ? maxW / bounds.Width : 1f;
+                outW = Math.Max(1, (int)Math.Ceiling(bounds.Width  * scale));
+                outH = Math.Max(1, (int)Math.Ceiling(bounds.Height * scale));
+                scaleX = scaleY = scale;
+            }
+            else
+            {
+                outW = SvgNativeWidth;
+                outH = SvgNativeHeight;
+                scaleX = bounds.Width  > 0 ? SvgNativeWidth  / bounds.Width  : 1f;
+                scaleY = bounds.Height > 0 ? SvgNativeHeight / bounds.Height : 1f;
+            }
+
+            var info = new SKImageInfo(outW, outH);
             using var surface = SKSurface.Create(info);
             if (surface == null) return Array.Empty<byte>();
 

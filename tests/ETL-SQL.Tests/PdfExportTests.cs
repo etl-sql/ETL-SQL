@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using ETL_SQL.Reporting;
 using Xunit;
 
@@ -82,6 +83,97 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
+        public void ReportPdfExporter_DefaultsToStaticPdf()
+        {
+            var manifest = new ReportManifest
+            {
+                Title = "Default PDF",
+                Visuals = new List<VisualManifest>
+                {
+                    new() { Name = "Summary", VisualType = "CARD",
+                            Columns = new List<string> { "metric" },
+                            Rows = new List<List<string?>> { new() { "42" } } },
+                }
+            };
+
+            var bytes = new ReportPdfExporter().Export(manifest);
+
+            Assert.True(bytes.Length > 100);
+            Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, bytes[..4]);
+        }
+
+        [Fact]
+        public void ReportPdfExporter_AutoFallsBackToStaticWithWarning()
+        {
+            string? warning = null;
+            var manifest = new ReportManifest
+            {
+                Title = "Auto PDF",
+                Visuals = new List<VisualManifest>
+                {
+                    new() { Name = "Summary", VisualType = "CARD",
+                            Columns = new List<string> { "metric" },
+                            Rows = new List<List<string?>> { new() { "42" } } },
+                }
+            };
+
+            var bytes = new ReportPdfExporter().Export(
+                manifest,
+                new PdfExportOptions { Mode = PdfExportMode.Auto, Warn = message => warning = message });
+
+            Assert.True(bytes.Length > 100);
+            Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, bytes[..4]);
+            Assert.Contains("falling back to STATIC", warning);
+        }
+
+        [Theory]
+        [InlineData(PdfExportMode.Hosted)]
+        [InlineData(PdfExportMode.Browser)]
+        public void ReportPdfExporter_ExplicitHighFidelityModesFailUntilImplemented(PdfExportMode mode)
+        {
+            var manifest = new ReportManifest { Title = "Explicit PDF" };
+
+            var ex = Assert.Throws<System.InvalidOperationException>(() =>
+                new ReportPdfExporter().Export(manifest, new PdfExportOptions { Mode = mode }));
+
+            Assert.Contains("not implemented yet", ex.Message);
+        }
+
+        [Fact]
+        public void PdfExporter_ResolvesTextVisualContentOption()
+        {
+            var visual = new VisualManifest
+            {
+                Name = "Narrative",
+                VisualType = "TEXT",
+                Options = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
+                {
+                    ["CONTENT"] = "Revenue grew **12%**.",
+                },
+            };
+
+            Assert.Equal("Revenue grew **12%**.", ResolvePdfTextContent(visual));
+        }
+
+        [Fact]
+        public void PdfExporter_ResolvesMappedTextVisualContent()
+        {
+            var visual = new VisualManifest
+            {
+                Name = "Narrative",
+                VisualType = "TEXT",
+                Columns = new List<string> { "content", "other" },
+                Rows = new List<List<string?>> { new() { "Revenue grew 12%.", "ignored" } },
+                Options = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
+                {
+                    ["mapping:content"] = "content",
+                },
+            };
+
+            Assert.Equal("Revenue grew 12%.", ResolvePdfTextContent(visual));
+        }
+
+        [Fact]
         public void MarkdownRenderer_PreservesLongTableCellValues()
         {
             var longValue = "Customer note with enough detail to exceed the PDF table cell safety limit";
@@ -100,6 +192,16 @@ namespace ETL_SQL.Tests
             var markdown = new MarkdownRenderer().Render(manifest);
 
             Assert.Contains(longValue, markdown);
+        }
+
+        private static string? ResolvePdfTextContent(VisualManifest visual)
+        {
+            var method = typeof(PdfExporter).GetMethod(
+                "ResolveTextContent",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.NotNull(method);
+            return (string?)method!.Invoke(null, new object[] { visual });
         }
     }
 }

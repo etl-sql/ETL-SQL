@@ -32,7 +32,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
         {
             if (_container != null)
             {
-                await _container.StopAsync();
+                await _container.DisposeAsync();
             }
         }
     }

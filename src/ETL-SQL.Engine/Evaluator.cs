@@ -73,6 +73,8 @@ namespace ETL_SQL.Engine
         private readonly SchemaManager _schemaManager;
         private readonly ExpressionEvaluator _expressionEvaluator;
         private readonly ProcedureExecutor _procedureExecutor;
+        private readonly DataConstraintValidator _constraintValidator;
+        private readonly EvaluatorSpillCoordinator _spillCoordinator;
         private readonly BatchPipelineHelper _batchPipelineHelper = new();
         private readonly Dictionary<Type, IStatementHandler> _statementHandlers = new();
 
@@ -430,27 +432,8 @@ namespace ETL_SQL.Engine
         public IDictionary<string, object?> CurrentVariables => VarContext.CurrentVariables;
         public IDictionary<string, VariableMetadata> VariableMetadata => VarContext.VariableMetadata;
         public IDictionary<string, VariableMetadata> CurrentMetadata => VarContext.CurrentMetadata;
-        public long MemoryUsageBytes 
-        {
-            get
-            {
-                // Estimate variable metadata and subquery cache overhead
-                long varBytes = Variables.Count * 256;
-                long subqueryBytes = 0;
-                foreach(var result in _subqueryCache.Values) subqueryBytes += result.MemoryUsageBytes;
-                return varBytes + subqueryBytes;
-            }
-        }
-        public Task<bool> SpillAsync()
-        {
-            if (_subqueryCache.Count > 0)
-            {
-                _subqueryCache.Clear();
-                _logger.Warning("Evaluator spilled: Subquery cache cleared to reclaim memory.");
-                return Task.FromResult(true);
-            }
-            return Task.FromResult(false);
-        }
+        public long MemoryUsageBytes => _spillCoordinator.MemoryUsageBytes;
+        public Task<bool> SpillAsync() => _spillCoordinator.SpillAsync();
 
         // Consolidated Unified Constructor for DI and Sessions
         [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
@@ -508,6 +491,8 @@ namespace ETL_SQL.Engine
             _dataSourceManager = _registry.DataSourceManager;
             _schemaManager = _registry.SchemaManager;
             _procedureExecutor = _registry.ProcedureExecutor;
+            _constraintValidator = new DataConstraintValidator(_expressionEvaluator, _connections);
+            _spillCoordinator = new EvaluatorSpillCoordinator(this, _logger);
             
             // Link Telemetry to registry components if needed, or initialized via registry.Initialize
             Telemetry.IsProfiling = _options.IsProfiling;
@@ -1445,20 +1430,11 @@ namespace ETL_SQL.Engine
             _localSources.Clear();
         }
 
-        public async Task<bool> ValidateCheckConstraint(Expression expression, Row row)
-        {
-            var result = await _expressionEvaluator.Evaluate(expression, row);
-            return result != null && Convert.ToBoolean(result);
-        }
+        public Task<bool> ValidateCheckConstraint(Expression expression, Row row) =>
+            _constraintValidator.ValidateCheckConstraint(expression, row);
 
-        public async Task<bool> ValidateForeignKey(ForeignKeyReference reference, List<string> sourceColumns, Row row)
-        {
-            string connName = reference.Table.ConnectionName ?? reference.Table.TableName;
-            if (!_connections.TryGetValue(connName, out var dataSource)) return true; 
-            var sourceValues = sourceColumns.Select(col => row[col]).ToList();
-            if (sourceValues.All(v => v == null || v == DBNull.Value)) return true;
-            return await dataSource.ExistsAsync(reference.Columns, sourceValues);
-        }
+        public Task<bool> ValidateForeignKey(ForeignKeyReference reference, List<string> sourceColumns, Row row) =>
+            _constraintValidator.ValidateForeignKey(reference, sourceColumns, row);
 
         public IExecutionContext Fork()
         {

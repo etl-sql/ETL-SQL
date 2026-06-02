@@ -103,11 +103,85 @@
     const _uiStates = {};          // Keyed by object name; persists across re-renders (e.g. collapsed: true)
     let _lastManifest = null;
     let _maximizedVisualCard = null;
+    let _exportReadyGeneration = 0;
+    let _exportReadyPromise = Promise.resolve();
+    let _exportReadyResolve = null;
+
+    function publishExportState(status, detail) {
+        const state = {
+            status,
+            ready: status === 'ready',
+            timestamp: new Date().toISOString(),
+            ...(detail || {})
+        };
+        window.__etlSqlReportExportReady = state.ready;
+        window.__etlSqlReportExportState = state;
+        window.dispatchEvent(new CustomEvent('etl-sql-report-export-state', { detail: state }));
+        if (state.ready) {
+            window.dispatchEvent(new CustomEvent('etl-sql-report-export-ready', { detail: state }));
+        }
+        return state;
+    }
+
+    function markExportNotReady(reason, detail) {
+        _exportReadyGeneration++;
+        _exportReadyPromise = new Promise(resolve => {
+            _exportReadyResolve = resolve;
+        });
+        publishExportState('rendering', { reason, ...(detail || {}) });
+    }
+
+    function waitForImagesToSettle() {
+        const images = Array.from(document.images || []);
+        const pending = images
+            .filter(img => !img.complete)
+            .map(img => {
+                if (typeof img.decode === 'function') {
+                    return img.decode().catch(() => {});
+                }
+                return new Promise(resolve => {
+                    img.addEventListener('load', resolve, { once: true });
+                    img.addEventListener('error', resolve, { once: true });
+                });
+            });
+        return Promise.all(pending);
+    }
+
+    function markExportReady(manifest) {
+        const generation = _exportReadyGeneration;
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                waitForImagesToSettle().then(() => {
+                    if (generation !== _exportReadyGeneration) return;
+                    const pageCount = manifest && manifest.pages ? manifest.pages.length : 0;
+                    const visualCount = manifest && manifest.visuals ? manifest.visuals.length : 0;
+                    const state = publishExportState('ready', { pageCount, visualCount });
+                    if (_exportReadyResolve) _exportReadyResolve(state);
+                    _exportReadyResolve = null;
+                });
+            });
+        });
+    }
+
+    window.__etlSqlReportWhenExportReady = function (timeoutMs) {
+        const timeout = Number(timeoutMs || 0);
+        if (window.__etlSqlReportExportReady) {
+            return Promise.resolve(window.__etlSqlReportExportState);
+        }
+        if (timeout <= 0) return _exportReadyPromise;
+        return Promise.race([
+            _exportReadyPromise,
+            new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Report export readiness timed out.')), timeout);
+            })
+        ]);
+    };
 
     /**
      * Entry point: obtain manifest and render all visuals + pages.
      */
     async function boot() {
+        markExportNotReady('boot');
         if (window.__IS_PREVIEW__) {
             document.body.classList.add('preview-mode');
         }
@@ -124,16 +198,19 @@
             } catch (e) {
                 document.getElementById('root').innerHTML =
                     '<p class="error">Failed to load manifest: ' + e.message + '</p>';
+                publishExportState('error', { reason: 'manifest-load-failed', message: e.message });
                 return;
             }
         } else {
             document.getElementById('root').innerHTML =
                 '<p class="error">No manifest available.</p>';
+            publishExportState('error', { reason: 'manifest-missing' });
             return;
         }
 
         // Phase 4: Intercept execution if required parameters are missing
         if (!checkRequiredParameters(manifest)) {
+            publishExportState('blocked', { reason: 'required-parameters' });
             return; // Modal is showing, wait for user input
         }
 
@@ -241,6 +318,7 @@
     }
 
     function renderManifest(manifest) {
+        markExportNotReady('render-manifest');
         _lastManifest = manifest;
 
         // Cancel any running per-page auto-refresh timers before rebuilding.
@@ -248,7 +326,10 @@
         _refreshTimers = [];
 
         const root = document.getElementById('root');
-        if (!root) return;
+        if (!root) {
+            publishExportState('error', { reason: 'root-missing' });
+            return;
+        }
         root.replaceChildren(); // Clear without reparsing HTML.
         renderHeader(root, manifest);
 
@@ -346,6 +427,7 @@
         renderFooter(root, manifest);
         renderPipelineConsole(root, manifest);
         renderAutoPanel(root, manifest);
+        markExportReady(manifest);
     }
 
     function renderAutoPanel(container, manifest) {

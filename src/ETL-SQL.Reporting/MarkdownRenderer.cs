@@ -168,9 +168,24 @@ namespace ETL_SQL.Reporting
                     RenderFilter(sb, v, manifest);
                     break;
 
+                case "IMAGE":
+                {
+                    var src = v.Options.GetValueOrDefault("SRC") ?? v.Options.GetValueOrDefault("src");
+                    if (!string.IsNullOrWhiteSpace(src))
+                    {
+                        // Attribute-safe (entities decode back to the original data URI / URL).
+                        var safe = src.Replace("&", "&amp;").Replace("\"", "&quot;");
+                        sb.AppendLine($"<img src=\"{safe}\" alt=\"{EscapeCell(v.Name)}\" />");
+                        sb.AppendLine();
+                    }
+                    break;
+                }
+
                 case "TEXT":
                 {
-                    v.Options.TryGetValue("VALUE", out var textContent);
+                    // TEXT content lives in DefaultValue (markdown); some reports use options["VALUE"].
+                    if (!v.Options.TryGetValue("VALUE", out var textContent) || string.IsNullOrWhiteSpace(textContent))
+                        textContent = v.DefaultValue;
                     v.Options.TryGetValue("ALIGN", out var align);
                     if (!string.IsNullOrWhiteSpace(textContent))
                     {

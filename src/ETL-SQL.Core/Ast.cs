@@ -1613,11 +1613,14 @@ namespace ETL_SQL.Core
         }
     }
 
-    /// <summary>EXPORT REPORT 'path.rptsql' FORMAT PDF|CSV|MARKDOWN TO 'output.pdf'</summary>
+    /// <summary>EXPORT REPORT 'path.rptsql' FORMAT PDF|CSV|MARKDOWN TO 'output.pdf' [WITH (...)]</summary>
     public record ExportReportStatement(
         Expression ReportPath,
         string     Format,
-        Expression OutputPath) : Statement;
+        Expression OutputPath,
+        string?    PdfMode = null,
+        Expression? Host = null,
+        Expression? BrowserPath = null) : Statement;
 
     public record ExportStatement : Statement
     {

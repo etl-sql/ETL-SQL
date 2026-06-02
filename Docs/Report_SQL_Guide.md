@@ -2083,8 +2083,36 @@ etl-sql-report build report.rptsql --format pdf
 |------|-------------|
 | `<script>.report.md` | GitHub Flavored Markdown document. Default when `--format md`. |
 | `<script>.report.json` | Raw manifest JSON. Default when `--format json`. |
-| `<script>.report.pdf` | PDF export via QuestPDF. Charts rendered as SVGs, tables capped at 500 rows. Default when `--format pdf`. |
+| `<script>.report.pdf` | Static PDF export via PDFsharp/MigraDoc. Charts render from ECharts/SVG, tables are capped for readability. Default when `--format pdf`. |
 | `<script>.snapshot.json` | Snapshot of all visual data rows and metadata. Always written alongside the report. |
+
+### PDF Export Modes
+
+Script-level report export supports an optional PDF mode selector:
+
+```sql
+EXPORT REPORT 'reports/sales.rptsql'
+FORMAT PDF
+TO 'out/sales.pdf'
+WITH (PDF_MODE = STATIC);
+
+EXPORT REPORT 'reports/sales.rptsql'
+FORMAT PDF
+TO 'out/sales.pdf'
+WITH (
+  PDF_MODE     = BROWSER,
+  BROWSER_PATH = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+);
+```
+
+| Mode | Behavior |
+|---|---|
+| `STATIC` | Default. Uses the built-in PDFsharp/MigraDoc exporter; no browser is required. |
+| `AUTO` | Uses a configured high-fidelity path when available, otherwise falls back to `STATIC` with a warning. |
+| `HOSTED` | Reserved for ReportPortal / `report serve` browser-backed export. Explicit mode fails if unavailable. |
+| `BROWSER` | Reserved for optional installed Chrome, Edge, or Chromium export. No browser is bundled or required. |
+
+`HOST` and `BROWSER_PATH` are accepted only with `FORMAT PDF`. `HOSTED` and `BROWSER` are opt-in high-fidelity modes; `STATIC` remains the portable default.
 
 **Flags:**
 

@@ -1,12 +1,13 @@
 {
-  "source": "samples/10_Kitchen_Sinks/01_BAR.rptsql",
-  "builtAt": "2026-05-19T01:54:01.1588386Z",
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\01_BAR.rptsql",
+  "builtAt": "2026-06-01T22:45:53.075718Z",
   "title": "Kitchen Sink: BAR Visual",
   "description": "Comprehensive demonstration of BAR chart capabilities, including stacking, overlays, and styling.",
   "visuals": [
     {
       "name": "BasicBar",
       "visualType": "BAR",
+      "fetch": "AUTO",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Basic Bar Chart (Revenue by Month)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[390,280,220,340]}]}",
       "columns": [
         "Month",
@@ -42,6 +43,7 @@
     {
       "name": "GroupedBar",
       "visualType": "BAR",
+      "fetch": "AUTO",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Grouped Bar Chart (By Region)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022top\u0022:\u0022top\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022North\u0022,\u0022data\u0022:[200,150,100,180]},{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022South\u0022,\u0022data\u0022:[190,130,120,160]}]}",
       "columns": [
         "Month",
@@ -113,6 +115,7 @@
     {
       "name": "StackedBar",
       "visualType": "BAR",
+      "fetch": "AUTO",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Stacked Bar Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022North\u0022,\u0022data\u0022:[200,150,100,180],\u0022stack\u0022:\u0022total\u0022,\u0022label\u0022:{\u0022show\u0022:true,\u0022position\u0022:\u0022inside\u0022,\u0022color\u0022:\u0022#FFFFFF\u0022,\u0022formatter\u0022:\u0022{c}\u0022}},{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022South\u0022,\u0022data\u0022:[190,130,120,160],\u0022stack\u0022:\u0022total\u0022,\u0022label\u0022:{\u0022show\u0022:true,\u0022position\u0022:\u0022inside\u0022,\u0022color\u0022:\u0022#FFFFFF\u0022,\u0022formatter\u0022:\u0022{c}\u0022}}]}",
       "columns": [
         "Month",
@@ -197,6 +200,7 @@
     {
       "name": "OverlayBar",
       "visualType": "BAR",
+      "fetch": "AUTO",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Bar Chart with Overlays\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[390,280,220,340],\u0022markLine\u0022:{\u0022symbol\u0022:\u0022none\u0022,\u0022data\u0022:[{\u0022yAxis\u0022:150,\u0022name\u0022:\u0022Monthly Goal\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022dashed\u0022,\u0022color\u0022:\u0022Red\u0022},\u0022label\u0022:{\u0022formatter\u0022:\u0022Monthly Goal\u0022,\u0022color\u0022:\u0022Red\u0022}},{\u0022yAxis\u0022:307.5,\u0022name\u0022:\u0022Average Revenue\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022dotted\u0022,\u0022color\u0022:\u0022Blue\u0022},\u0022label\u0022:{\u0022formatter\u0022:\u0022Average Revenue\u0022,\u0022color\u0022:\u0022Blue\u0022}}]}},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u00222-Month Moving Avg\u0022,\u0022data\u0022:[null,335,250,280],\u0022smooth\u0022:true,\u0022symbol\u0022:\u0022none\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022solid\u0022,\u0022color\u0022:\u0022Green\u0022},\u0022itemStyle\u0022:{\u0022color\u0022:\u0022Green\u0022},\u0022tooltip\u0022:{\u0022valueFormatter\u0022:null}}]}",
       "columns": [
         "Month",
@@ -255,6 +259,7 @@
     {
       "name": "StyledBar",
       "visualType": "BAR",
+      "fetch": "AUTO",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled Bar Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022],\u0022name\u0022:\u0022Fiscal Month\u0022},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022,\u0022name\u0022:\u0022USD Revenue\u0022,\u0022min\u0022:0,\u0022max\u0022:300},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022North\u0022,\u0022data\u0022:[200,150,100,180]},{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022South\u0022,\u0022data\u0022:[190,130,120,160]}]}",
       "columns": [
         "Month",
@@ -335,6 +340,7 @@
     {
       "name": "PercentBar",
       "visualType": "BAR",
+      "fetch": "AUTO",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022100% Stacked Bar (Manual Calculation)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022,\u0022name\u0022:\u0022Percentage (%)\u0022,\u0022max\u0022:100},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022North\u0022,\u0022data\u0022:[51.282051282051285,53.57142857142857,45.45454545454545,52.94117647058823],\u0022stack\u0022:\u0022total\u0022},{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022South\u0022,\u0022data\u0022:[48.717948717948715,46.42857142857143,54.54545454545455,47.05882352941177],\u0022stack\u0022:\u0022total\u0022}]}",
       "columns": [
         "Month",
@@ -400,6 +406,7 @@
     {
       "name": "MonthDetail",
       "visualType": "BAR",
+      "fetch": "AUTO",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Regional Detail for Selected Month\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[]}]}",
       "columns": [
         "Region",
@@ -418,6 +425,7 @@
     {
       "name": "BarWithTooltip",
       "visualType": "BAR",
+      "fetch": "AUTO",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Bar with Hover Tooltip\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[390,280,220,340]}]}",
       "tooltip": {
         "type": "container",
@@ -457,6 +465,7 @@
     {
       "name": "MonthOrderBar",
       "visualType": "BAR",
+      "fetch": "AUTO",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Revenue by Month (Source Order)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022January\u0022,\u0022February\u0022,\u0022March\u0022,\u0022April\u0022,\u0022May\u0022,\u0022June\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[320,290,410,380,450,500]}]}",
       "columns": [
         "Month",
@@ -501,6 +510,7 @@
     {
       "name": "DescBar",
       "visualType": "BAR",
+      "fetch": "AUTO",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Revenue by Month (Z to A)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022May\u0022,\u0022March\u0022,\u0022June\u0022,\u0022January\u0022,\u0022February\u0022,\u0022April\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[450,410,500,320,290,380]}]}",
       "columns": [
         "Month",
@@ -545,6 +555,7 @@
     {
       "name": "RankedBar",
       "visualType": "BAR",
+      "fetch": "AUTO",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Revenue by Region (Ranked, Highest First)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022North\u0022,\u0022South\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[630,600]}]}",
       "columns": [
         "Region",
@@ -575,6 +586,7 @@
     {
       "name": "BarKitchenSink",
       "structure": "A B / C D / E F / G G / H I J",
+      "mode": "DASHBOARD",
       "slotMap": {
         "A": "BasicBar",
         "B": "GroupedBar",
@@ -632,114 +644,114 @@
   },
   "messages": [
     {
-      "message": "[02b546f5] [SELECT] Executing SelectStatement. Session: 02b546f5",
+      "message": "[9c9a3fc9] [SELECT] Executing SelectStatement. Session: 9c9a3fc9",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1232728Z"
+      "timestamp": "2026-06-01T22:45:53.0111086Z"
     },
     {
-      "message": "[02b546f5] 8 rows affected.",
+      "message": "[9c9a3fc9] 8 rows affected.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1442703Z"
+      "timestamp": "2026-06-01T22:45:53.0485105Z"
     },
     {
-      "message": "[02b546f5] Visual \u0027BasicBar\u0027 created.",
+      "message": "[9c9a3fc9] Visual \u0027BasicBar\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1469547Z"
+      "timestamp": "2026-06-01T22:45:53.0527517Z"
     },
     {
-      "message": "[02b546f5] Visual \u0027GroupedBar\u0027 created.",
+      "message": "[9c9a3fc9] Visual \u0027GroupedBar\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1493561Z"
+      "timestamp": "2026-06-01T22:45:53.0556094Z"
     },
     {
-      "message": "[02b546f5] Visual \u0027StackedBar\u0027 created.",
+      "message": "[9c9a3fc9] Visual \u0027StackedBar\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1495558Z"
+      "timestamp": "2026-06-01T22:45:53.0558711Z"
     },
     {
-      "message": "[02b546f5] Visual \u0027OverlayBar\u0027 created.",
+      "message": "[9c9a3fc9] Visual \u0027OverlayBar\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1496009Z"
+      "timestamp": "2026-06-01T22:45:53.0559639Z"
     },
     {
-      "message": "[02b546f5] Visual \u0027StyledBar\u0027 created.",
+      "message": "[9c9a3fc9] Visual \u0027StyledBar\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1496293Z"
+      "timestamp": "2026-06-01T22:45:53.0560081Z"
     },
     {
-      "message": "[02b546f5] Visual \u0027PercentBar\u0027 created.",
+      "message": "[9c9a3fc9] Visual \u0027PercentBar\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1497585Z"
+      "timestamp": "2026-06-01T22:45:53.0562203Z"
     },
     {
-      "message": "[02b546f5] Visual \u0027MonthDetail\u0027 created.",
+      "message": "[9c9a3fc9] Visual \u0027MonthDetail\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1501735Z"
+      "timestamp": "2026-06-01T22:45:53.0562736Z"
     },
     {
-      "message": "[02b546f5] Container \u0027TooltipBox\u0027 registered.",
+      "message": "[9c9a3fc9] Container \u0027TooltipBox\u0027 registered.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1508665Z"
+      "timestamp": "2026-06-01T22:45:53.0569363Z"
     },
     {
-      "message": "[02b546f5] Visual \u0027BarWithTooltip\u0027 created.",
+      "message": "[9c9a3fc9] Visual \u0027BarWithTooltip\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1510571Z"
+      "timestamp": "2026-06-01T22:45:53.0570045Z"
     },
     {
-      "message": "[02b546f5] [SELECT] Executing SelectStatement. Session: 02b546f5",
+      "message": "[9c9a3fc9] [SELECT] Executing SelectStatement. Session: 9c9a3fc9",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1511151Z"
+      "timestamp": "2026-06-01T22:45:53.057057Z"
     },
     {
-      "message": "[02b546f5] 6 rows affected.",
+      "message": "[9c9a3fc9] 6 rows affected.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1513216Z"
+      "timestamp": "2026-06-01T22:45:53.0573532Z"
     },
     {
-      "message": "[02b546f5] Visual \u0027MonthOrderBar\u0027 created.",
+      "message": "[9c9a3fc9] Visual \u0027MonthOrderBar\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1513845Z"
+      "timestamp": "2026-06-01T22:45:53.0574447Z"
     },
     {
-      "message": "[02b546f5] Visual \u0027DescBar\u0027 created.",
+      "message": "[9c9a3fc9] Visual \u0027DescBar\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1514248Z"
+      "timestamp": "2026-06-01T22:45:53.0575272Z"
     },
     {
-      "message": "[02b546f5] Visual \u0027RankedBar\u0027 created.",
+      "message": "[9c9a3fc9] Visual \u0027RankedBar\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1514486Z"
+      "timestamp": "2026-06-01T22:45:53.0577116Z"
     },
     {
-      "message": "[02b546f5] Page \u0027BarKitchenSink\u0027 created.",
+      "message": "[9c9a3fc9] Page \u0027BarKitchenSink\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1526242Z"
+      "timestamp": "2026-06-01T22:45:53.0622516Z"
     },
     {
-      "message": "[02b546f5] Navigation \u0027MainNav\u0027 registered.",
+      "message": "[9c9a3fc9] Navigation \u0027MainNav\u0027 registered.",
       "color": "white",
-      "timestamp": "2026-05-19T01:54:01.1532615Z"
+      "timestamp": "2026-06-01T22:45:53.0626646Z"
     }
   ],
   "executionTree": [
     {
-      "id": "08374b31-c7c2-41c3-8162-e587551247e0",
+      "id": "b20ec7e6-fb5e-4be8-958d-04758de6e5e6",
       "name": "Script Execution",
       "status": "Completed",
       "rowsProcessed": 0,
-      "durationMs": 39.6288,
+      "durationMs": 65.4544,
       "iterationCount": 1,
       "isParallelBlock": false,
       "velocity": 0,
       "error": null,
       "children": [
         {
-          "id": "161a49b9-ac16-4c1d-8339-69174dc00b1f",
+          "id": "48205fb6-a0a6-4cde-81f5-b446b8d0f3b0",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.2839,
+          "durationMs": 1.7035,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -747,11 +759,11 @@
           "children": []
         },
         {
-          "id": "ef2db3ea-d8ba-4edb-876e-836d5bd5e5b5",
+          "id": "ee0a3843-e750-4a4e-bc76-fd94533dcb8d",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0371,
+          "durationMs": 0.4932,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -759,23 +771,23 @@
           "children": []
         },
         {
-          "id": "53bb36d9-98d8-4b86-b630-4ef59d489901",
+          "id": "b88c7804-099c-4e64-9406-9f923df579e3",
           "name": "SetOperation",
           "status": "Completed",
-          "rowsProcessed": 16,
-          "durationMs": 24.3011,
+          "rowsProcessed": 25,
+          "durationMs": 42.1303,
           "iterationCount": 1,
           "isParallelBlock": false,
-          "velocity": 658.4064095863973,
+          "velocity": 593.3971512189564,
           "error": null,
           "children": []
         },
         {
-          "id": "6ef8d536-b17c-454d-8fe8-08cbad61d4cd",
+          "id": "af2efa6d-d212-4249-8e33-8fd09e7f0406",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.8102,
+          "durationMs": 2.347,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -783,11 +795,11 @@
           "children": []
         },
         {
-          "id": "26feba69-d774-46e3-aaaa-6fa4801aea03",
+          "id": "221cb38e-22da-41e6-a16f-d70af35ac79f",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.6024,
+          "durationMs": 0.2549,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -795,11 +807,11 @@
           "children": []
         },
         {
-          "id": "b6483d3b-cdcb-471a-9e12-ab3872bf5bab",
+          "id": "60d3ba71-4292-44ff-a2d3-c5dc5e6a4ac3",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.052,
+          "durationMs": 0.0868,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -807,11 +819,11 @@
           "children": []
         },
         {
-          "id": "bbd15d0b-aebd-4d30-879e-4abd75175d4f",
+          "id": "70402661-fc8e-41cf-952a-33d7c859795a",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0243,
+          "durationMs": 0.0636,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -819,11 +831,11 @@
           "children": []
         },
         {
-          "id": "be05644a-ed90-4122-9630-d0cdd5a6d675",
+          "id": "617b54e3-d152-4d73-ba4c-2b821ad3aa6e",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0196,
+          "durationMs": 0.0354,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -831,11 +843,11 @@
           "children": []
         },
         {
-          "id": "e48f0958-c3cb-42f2-b423-6549215ee601",
+          "id": "1042a8f2-2702-474b-ad48-80538476facf",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0399,
+          "durationMs": 0.0789,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -843,11 +855,11 @@
           "children": []
         },
         {
-          "id": "e6f1220b-efb7-408c-8619-35d478c0d00b",
+          "id": "578eab3c-c942-4c77-bc6c-969a1ed32ae7",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0645,
+          "durationMs": 0.0321,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -855,11 +867,11 @@
           "children": []
         },
         {
-          "id": "451d02b2-cddb-40a1-8377-48715f82734a",
+          "id": "e8b47017-b0de-4777-b548-357f96f19064",
           "name": "CreateContainer",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.3911,
+          "durationMs": 0.4282,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -867,11 +879,11 @@
           "children": []
         },
         {
-          "id": "0c51524a-d422-4079-b0e7-3ea7b686ab2e",
+          "id": "2a58e2f6-21ca-4650-8a05-a0e5806bbb49",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0518,
+          "durationMs": 0.0479,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -879,23 +891,23 @@
           "children": []
         },
         {
-          "id": "4b719b32-cf4b-4893-8d21-d51e15393f0e",
+          "id": "e3f24547-20f5-4d7e-a0c9-01bad7bd26a7",
           "name": "SetOperation",
           "status": "Completed",
-          "rowsProcessed": 11,
-          "durationMs": 0.2426,
+          "rowsProcessed": 17,
+          "durationMs": 0.3321,
           "iterationCount": 1,
           "isParallelBlock": false,
-          "velocity": 45342.12695795548,
+          "velocity": 51189.400782896715,
           "error": null,
           "children": []
         },
         {
-          "id": "96e549fd-4c44-4fad-ac79-40f471ccaf4f",
+          "id": "7f39d9c1-5c90-48a8-aa83-7d099666d032",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0228,
+          "durationMs": 0.035,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -903,11 +915,11 @@
           "children": []
         },
         {
-          "id": "2cb17bd9-0d5b-4899-8aae-9c117eefb405",
+          "id": "f327f1e4-202b-49cd-9368-78d79dc35ec8",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0248,
+          "durationMs": 0.0675,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -915,11 +927,11 @@
           "children": []
         },
         {
-          "id": "d7f98bcd-eb31-4c95-9a72-405bc7c50a68",
+          "id": "6b1391f1-a468-411f-9080-af86ca6e91e0",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0165,
+          "durationMs": 0.1303,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -927,11 +939,11 @@
           "children": []
         },
         {
-          "id": "d3f8ba5e-f83c-4e7a-9bff-e8ec2e82442a",
+          "id": "006fb141-cda9-4123-ba37-0c922d1bdc3f",
           "name": "CreatePage",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.0028,
+          "durationMs": 4.5053,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -939,11 +951,11 @@
           "children": []
         },
         {
-          "id": "d68cf364-dcae-4180-83ac-42ce61f237ce",
+          "id": "0d1d577d-5e2d-4065-909f-d6d2e18ffc0e",
           "name": "CreateNavigation",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2696,
+          "durationMs": 0.3818,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
