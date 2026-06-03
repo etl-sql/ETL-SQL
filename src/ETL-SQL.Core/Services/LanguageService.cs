@@ -189,7 +189,7 @@ namespace ETL_SQL.Core.Services
                 var last = tokens.Last();
                 var prev1 = tokens.Count > 1 ? tokens[tokens.Count - 2] : null;
                 var prev2 = tokens.Count > 2 ? tokens[tokens.Count - 3] : null;
-                if (last.Text.Equals("CREATE", StringComparison.OrdinalIgnoreCase)) results.AddRange(new[] { "CONNECTION", "TABLE", "VIEW", "VISUAL", "PAGE", "DATASET", "STYLE", "CONTAINER", "NAVIGATION", "JOB", "DIRECTORY", "PROCEDURE", "FUNCTION", "INDEX" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
+                if (last.Text.Equals("CREATE", StringComparison.OrdinalIgnoreCase)) results.AddRange(new[] { "CONNECTION", "TABLE", "VIEW", "VISUAL", "PAGE", "DATASET", "STYLE", "CONTAINER", "NAVIGATION", "JOB", "DIRECTORY", "PROCEDURE", "FUNCTION", "INDEX", "TAG", "LINEAGE", "SETS" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
                 else if (last.Text.Equals("SHOW", StringComparison.OrdinalIgnoreCase)) results.AddRange(new[] { "DATASETS", "VIEWS", "JOBS", "JOB", "CONNECTIONS", "TABLES", "COLUMNS", "VARIABLES", "VERSION", "LINEAGE", "TAGS", "PROFILE", "ACTIVE" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
                 else if (last.Text.Equals("USE", StringComparison.OrdinalIgnoreCase)) results.AddRange(new[] { "DATASET", "DOCKER", "SETS", "PASSWORD" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
                 else if (last.Text.Equals("AS", StringComparison.OrdinalIgnoreCase) && prev2?.Text.Equals("CONNECTION", StringComparison.OrdinalIgnoreCase) == true) results.AddRange(_metadata.GetRegisteredNames().Select(c => new Suggestion(c, SuggestionType.Connection, Priority: 0)));
