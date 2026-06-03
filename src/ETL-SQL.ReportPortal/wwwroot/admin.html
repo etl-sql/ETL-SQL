@@ -271,7 +271,17 @@
           <div class="form-row">
             <div class="form-group">
               <label for="pr-folder">Destination Folder</label>
-              <select id="pr-folder"></select>
+              <div class="inline-control inline-control-gap">
+                <select id="pr-folder"></select>
+                <button class="btn btn-outline btn-sm" id="pr-newFolderToggle" type="button">+ New folder</button>
+              </div>
+              <div class="inline-control inline-control-gap" id="pr-newFolderRow" style="display:none; margin-top:8px">
+                <input id="pr-newFolderName" type="text" placeholder="New folder name" autocomplete="off">
+                <select id="pr-newFolderParent"><option value="">— Root —</option></select>
+                <button class="btn btn-primary btn-sm" id="pr-newFolderCreate" type="button">Create</button>
+                <button class="btn btn-outline btn-sm" id="pr-newFolderCancelBtn" type="button">Cancel</button>
+              </div>
+              <div id="pr-newFolderErr" class="error-msg" style="display:none"></div>
             </div>
           </div>
           <div class="form-group">
@@ -458,6 +468,7 @@
 <script src="/js/echarts.min.js"></script>
 <script type="module">
 import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi, catalogApi } from '/js/api.js';
+import { populateFolderSelects, createFolderInline } from '/js/publish-folders.js';
 import { applyPortalBranding, initTheme } from '/js/branding.js';
 import { renderDag } from '/designer/designer.js';
 import { createDatasetsAdmin } from '/js/datasets-admin.js';
@@ -996,10 +1007,13 @@ async function loadReports() {
         document.getElementById('pr-error').classList.remove('show');
         resetPublishValidation();
 
-        const folders = allFolders.length ? allFolders : await foldersApi.list().catch(() => []);
-        const $sel = document.getElementById('pr-folder');
-        $sel.innerHTML = folders.map(f => `<option value="${f.id}">${esc(f.path || f.name)}</option>`).join('');
-        $sel.value = r.folderId;
+        hidePublishNewFolder();
+        await populateFolderSelects({
+          foldersApi, esc,
+          select: document.getElementById('pr-folder'),
+          parentSelect: document.getElementById('pr-newFolderParent'),
+          selectedId: r.folderId,
+        });
       });
     });
   } catch { $wrap.innerHTML = `<div class="empty-state">Failed to load reports.</div>`; }
@@ -1019,10 +1033,56 @@ document.getElementById('openPublishBtn').addEventListener('click', async () => 
   document.getElementById('pr-error').classList.remove('show');
   resetPublishValidation();
 
-  // Populate folder dropdown
-  const folders = allFolders.length ? allFolders : await foldersApi.list().catch(() => []);
-  const $sel = document.getElementById('pr-folder');
-  $sel.innerHTML = folders.map(f => `<option value="${f.id}">${esc(f.path || f.name)}</option>`).join('');
+  // Always fetch fresh so a folder created moments ago shows up without a page reload.
+  hidePublishNewFolder();
+  await populateFolderSelects({
+    foldersApi, esc,
+    select: document.getElementById('pr-folder'),
+    parentSelect: document.getElementById('pr-newFolderParent'),
+  });
+});
+
+// ── Inline folder creation from the publish form ─────────────────────────────────
+function hidePublishNewFolder() {
+  document.getElementById('pr-newFolderRow').style.display = 'none';
+  document.getElementById('pr-newFolderName').value = '';
+  const $err = document.getElementById('pr-newFolderErr');
+  $err.style.display = 'none';
+  $err.textContent = '';
+}
+
+document.getElementById('pr-newFolderToggle').addEventListener('click', () => {
+  const $row = document.getElementById('pr-newFolderRow');
+  if ($row.style.display !== 'none') { hidePublishNewFolder(); return; }
+  $row.style.display = '';
+  // Default the new folder's parent to whatever is selected in the destination dropdown.
+  const current = document.getElementById('pr-folder').value;
+  if (current) document.getElementById('pr-newFolderParent').value = current;
+  document.getElementById('pr-newFolderName').focus();
+});
+
+document.getElementById('pr-newFolderCancelBtn').addEventListener('click', hidePublishNewFolder);
+
+document.getElementById('pr-newFolderCreate').addEventListener('click', async () => {
+  const $err = document.getElementById('pr-newFolderErr');
+  $err.style.display = 'none';
+  try {
+    const created = await createFolderInline({
+      foldersApi,
+      name: document.getElementById('pr-newFolderName').value,
+      parentId: document.getElementById('pr-newFolderParent').value,
+    });
+    await populateFolderSelects({
+      foldersApi, esc,
+      select: document.getElementById('pr-folder'),
+      parentSelect: document.getElementById('pr-newFolderParent'),
+      selectedId: created?.id,
+    });
+    hidePublishNewFolder();
+  } catch (err) {
+    $err.textContent = err?.body?.error || err?.message || 'Could not create folder.';
+    $err.style.display = '';
+  }
 });
 
 // Publish Report
