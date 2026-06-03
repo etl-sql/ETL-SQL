@@ -2242,10 +2242,16 @@ SHOW LINEAGE FOR DATASET &<dataset_name> [INTO #temp];
 SHOW LINEAGE HISTORY FOR TABLE <table_name> [AT <connection>] [LIMIT <n>] [INTO #temp];
 SHOW LINEAGE HISTORY FOR TAG <tag_key> [= '<tag_value>'] [AT <connection>] [LIMIT <n>] [INTO #temp];
 
+-- Import lineage from an OpenLineage document (file path or inline JSON; <table> is expr/@var)
+CREATE LINEAGE FOR TABLE <table> FROM <openlineage_source>;
+
 -- Metadata Tags
 SHOW TAGS FOR SCRIPT                         [INTO #temp];
 SHOW TAGS FOR TABLE <table> [COLUMN <col>]    [INTO #temp];
 SHOW TAG VALUE FOR TABLE <table> [COLUMN <col>] WITH TAG <name> [INTO #temp];
+
+-- Seed table-/column-level tags explicitly (<table>/<col> are exprs and may be @variables)
+CREATE TAG FOR TABLE <table> [COLUMN <col>] (<tag> = <expr> [, <tag> = <expr> ...]);
 ```
 
 ### 19.3 Jobs

@@ -2178,6 +2178,41 @@ namespace ETL_SQL.Core
         }
     }
 
+    /// <summary>
+    /// CREATE TAG FOR TABLE &lt;table&gt; [COLUMN &lt;col&gt;] (key = expr, ...) — explicitly seeds
+    /// table-/column-level metadata (tags) into the lineage tracker. Table/column names are
+    /// expressions so they may be variables (e.g. @r.tbl in a FOR loop) or static identifiers.
+    /// </summary>
+    public record CreateTagStatement : Statement
+    {
+        public Expression TableName { get; }
+        public Expression? ColumnName { get; }
+        public Dictionary<string, Expression> Tags { get; }
+
+        public CreateTagStatement(Expression tableName, Expression? columnName, Dictionary<string, Expression> tags)
+        {
+            TableName = tableName;
+            ColumnName = columnName;
+            Tags = tags;
+        }
+    }
+
+    /// <summary>
+    /// CREATE LINEAGE FOR TABLE &lt;table&gt; FROM &lt;source&gt; — imports lineage from an OpenLineage
+    /// JSON document (file path or inline JSON string), mirroring SHOW LINEAGE EXPORT AS OPENLINEAGE.
+    /// </summary>
+    public record CreateLineageStatement : Statement
+    {
+        public Expression TableName { get; }
+        public Expression Source { get; }
+
+        public CreateLineageStatement(Expression tableName, Expression source)
+        {
+            TableName = tableName;
+            Source = source;
+        }
+    }
+
     /// <summary>DROP SETS [IF EXISTS] !&lt;name&gt;</summary>
     public record DropSetsStatement : Statement
     {

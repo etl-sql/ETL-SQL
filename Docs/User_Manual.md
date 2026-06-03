@@ -1124,6 +1124,19 @@ WHERE TargetColumn = 'Email';
 >
 > …or globally with `"Lineage": { "ImportCatalogMetadata": true }` in `appsettings.json` (see the Administrator's Guide). An inline `/* @d: ... */` tag always overrides an imported database comment.
 
+> **Importing tags and lineage you already have.** If your metadata lives in a *custom* store (your own catalog tables) rather than native DB comments, seed it with `CREATE TAG` — the table/column names are expressions, so you can loop over your own rows. And if you exported lineage before (`SHOW LINEAGE EXPORT AS OPENLINEAGE`), re-import it with `CREATE LINEAGE … FROM` instead of re-deriving it. Apply both up front; the script's own lineage accrues on top (last-writer-wins).
+>
+> ```sql
+> FOR @r IN (SELECT tbl, col, descr FROM mycat.column_docs)
+> BEGIN
+>     CREATE TAG FOR TABLE @r.tbl COLUMN @r.col (d = @r.descr);
+> END
+>
+> CREATE LINEAGE FOR TABLE #final FROM 'prior_run_lineage.jsonl';
+> ```
+>
+> See the [Lineage reference](Reference/Lineage.md) for the round-trip details.
+
 ---
 
 ### 11.1 Cross-Run Lineage History

@@ -398,6 +398,7 @@ namespace ETL_SQL.Core
         IEnumerable<LineageEntry> GetColumnLineage(string tableName, string columnName);
         Dictionary<string, string> GetTableMetadata(string tableName);
         Dictionary<string, string> GetColumnMetadata(string tableName, string columnName);
+        void ApplyTags(string table, string? column, IReadOnlyDictionary<string, string> tags);
         IEnumerable<LineageEntry> GetAncestors(string tableName, string? columnName = null);
         Dictionary<string, string> InheritMetadata(IEnumerable<string> sourceTables, IEnumerable<string> sourceColumns, out string? derivedFromDescriptions);
         IEnumerable<LineageEntry> GetFullLineage();

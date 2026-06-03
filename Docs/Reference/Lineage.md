@@ -90,6 +90,22 @@ TAG #raw WITH (
 );
 ```
 
+### Seeding Tags from a Custom Catalog (`CREATE TAG`)
+
+`CREATE TAG` seeds table- or column-level tags explicitly — including for **source** tables, *before* the transforms that read them run, so the tags inherit onto derived columns. Unlike `TAG … WITH (…)` (which tags an existing temp table), the table and column names are expressions and may be variables. That makes it easy to project an in-house metadata catalog into the engine by looping over your own rows:
+
+```sql
+CREATE TAG FOR TABLE Orders COLUMN Amount (d = 'Gross sale amount', owner = 'Finance');
+
+-- Or loop over your own catalog table:
+FOR @r IN (SELECT tbl, col, descr FROM mycat.column_docs)
+BEGIN
+    CREATE TAG FOR TABLE @r.tbl COLUMN @r.col (d = @r.descr);
+END
+```
+
+Omit `COLUMN` to tag the whole table. Tags applied this way follow the same [inheritance](#tag-inheritance) and last-writer-wins rules as inline `/* @tag */` tags: a later `CREATE TAG`, inline tag, or catalog import for the same key overrides an earlier one.
+
 ### Boolean Tag Shorthand
 
 A tag with no value is treated as `true`:
@@ -366,6 +382,20 @@ You can dynamically adjust the namespace or catalog settings during a session:
   ```sql
   SET LINEAGE_IMPORT_CATALOG = ON;
   ```
+
+---
+
+## Importing Lineage (`CREATE LINEAGE … FROM`)
+
+`CREATE LINEAGE FOR TABLE <table> FROM <source>` re-imports lineage from an OpenLineage document — the same format `SHOW LINEAGE EXPORT AS OPENLINEAGE` produces — so lineage curated in a prior run or an upstream system does not have to be re-derived. `<source>` is a file path or an inline JSON string (a `.jsonl` file with multiple events is merged).
+
+```sql
+CREATE LINEAGE FOR TABLE #final FROM 'lineage.jsonl';
+```
+
+Imports are a **starting point**: apply them up front, and any lineage the script produces afterwards accrues on top (last-writer-wins). The whole document is imported; the `FOR TABLE` clause names the focus table for messaging.
+
+**Round-trip notes:** temp tables (`#x`) round-trip exactly. External table names come back as `schema.table` because the OpenLineage export folds the connection alias into the dataset namespace; the script's own lineage re-establishes the aliased name when it runs. Per-column descriptions are exported at the dataset (table) level, so a re-import restores them as table-level tags.
 
 ---
 

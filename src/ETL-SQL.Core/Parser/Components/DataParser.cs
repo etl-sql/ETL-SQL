@@ -127,6 +127,18 @@ namespace ETL_SQL.Core.Parser.Components
                 return ParseCreateSets(startToken);
             }
 
+            if (Match(TokenType.TAG))
+            {
+                if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for TAG.", _parser.Current.Line, _parser.Current.Column);
+                return ParseCreateTag(startToken);
+            }
+
+            if (Match(TokenType.LINEAGE))
+            {
+                if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for LINEAGE.", _parser.Current.Line, _parser.Current.Column);
+                return ParseCreateLineage(startToken);
+            }
+
             // Report-SQL
             if (Match(TokenType.VISUAL))     return _parent.ReportParser.ParseCreateVisual(startToken, mode);
             if (Match(TokenType.PAGE))       return _parent.ReportParser.ParseCreatePage(startToken, mode);
@@ -963,6 +975,79 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.RPAREN, "Expected ')' to close CREATE CONNECTION");
             Consume(TokenType.SEMICOLON, "Expected ';' at the end of CREATE CONNECTION");
             return new CreateConnectionStatement(name, connectionType, target, options, mode) { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        /// <summary>
+        /// Parses a table/column name that may be a variable (e.g. @r.tbl) or a static reference.
+        /// Variables (and their member-access chains) are returned as expressions to be evaluated at
+        /// runtime; static names are canonicalized to the same full-path string SELECT ... INTO uses
+        /// to key lineage, so explicitly-created tags inherit onto derived columns downstream.
+        /// </summary>
+        private Expression ParseLineageNameExpression(bool tableLevel)
+        {
+            if (_parser.Current.Type == TokenType.VARIABLE)
+            {
+                var varToken = Advance();
+                Expression target = new VariableExpression(varToken.Value) { Line = varToken.Line, Column = varToken.Column };
+                while (Match(TokenType.DOT))
+                {
+                    if (!_parser.IsIdentifier(_parser.Current) && !ETL_SQL.Common.LanguageMetadata.IsKeyword(_parser.Current.Value))
+                        throw new SyntaxException("Expected member name after '.'", _parser.Current.Line, _parser.Current.Column);
+                    var member = Advance();
+                    target = new MemberAccessExpression(target, member.Value) { Line = varToken.Line, Column = varToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                }
+                return target;
+            }
+
+            if (tableLevel)
+            {
+                var tableRef = ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
+                var canonical = tableRef.GetSourceTables().FirstOrDefault() ?? tableRef.TableName;
+                return new LiteralExpression(canonical, TokenType.STRING_LITERAL) { Line = tableRef.Line, Column = tableRef.Column };
+            }
+
+            var idTok = ConsumeIdentifier("Expected column name");
+            return new LiteralExpression(idTok.Value, TokenType.STRING_LITERAL) { Line = idTok.Line, Column = idTok.Column };
+        }
+
+        /// <summary>CREATE TAG FOR TABLE &lt;table&gt; [COLUMN &lt;col&gt;] (key = expr, ...)</summary>
+        private Statement ParseCreateTag(Token startToken)
+        {
+            Consume(TokenType.FOR, "Expected FOR after CREATE TAG");
+            Consume(TokenType.TABLE, "Expected TABLE after CREATE TAG FOR");
+            var tableExpr = ParseLineageNameExpression(tableLevel: true);
+
+            Expression? columnExpr = null;
+            if (Match(TokenType.COLUMN)) columnExpr = ParseLineageNameExpression(tableLevel: false);
+
+            Consume(TokenType.LPAREN, "Expected '(' to begin the tag list in CREATE TAG");
+            var tags = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+            {
+                string key = Advance().Value;
+                Consume(TokenType.EQUALS, "Expected '=' after tag name in CREATE TAG");
+                tags[key] = ParseExpression();
+                if (!Match(TokenType.COMMA)) break;
+            }
+            Consume(TokenType.RPAREN, "Expected ')' to close CREATE TAG");
+            Consume(TokenType.SEMICOLON, "Expected ';' at the end of CREATE TAG");
+
+            if (tags.Count == 0)
+                throw new SyntaxException("CREATE TAG requires at least one 'key = value' assignment.", startToken.Line, startToken.Column);
+
+            return new CreateTagStatement(tableExpr, columnExpr, tags) { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        /// <summary>CREATE LINEAGE FOR TABLE &lt;table&gt; FROM &lt;openlineage-json file or string&gt;</summary>
+        private Statement ParseCreateLineage(Token startToken)
+        {
+            Consume(TokenType.FOR, "Expected FOR after CREATE LINEAGE");
+            Consume(TokenType.TABLE, "Expected TABLE after CREATE LINEAGE FOR");
+            var tableExpr = ParseLineageNameExpression(tableLevel: true);
+            Consume(TokenType.FROM, "Expected FROM after the table name in CREATE LINEAGE");
+            var source = ParseExpression();
+            Consume(TokenType.SEMICOLON, "Expected ';' at the end of CREATE LINEAGE");
+            return new CreateLineageStatement(tableExpr, source) { Line = startToken.Line, Column = startToken.Column };
         }
 
         private Statement ParseCreateTable(Token startToken)

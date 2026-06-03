@@ -154,6 +154,51 @@ namespace ETL_SQL.Core
             }
         }
 
+        /// <summary>
+        /// Explicitly upserts table- or column-level tags (last-writer-wins) and records a
+        /// TABLE_TAGS audit entry so the tags round-trip through SHOW LINEAGE / OpenLineage export.
+        /// Unlike <see cref="Record"/>, this writes the inheritance dictionaries directly and so is
+        /// safe to call repeatedly from the same source line (e.g. a CREATE TAG inside a FOR loop),
+        /// where Record's location-based dedup would otherwise skip re-seeding the dictionaries.
+        /// </summary>
+        public void ApplyTags(string table, string? column, IReadOnlyDictionary<string, string> tags)
+        {
+            if (string.IsNullOrEmpty(table) || tags == null || tags.Count == 0) return;
+
+            lock (_lock)
+            {
+                if (string.IsNullOrEmpty(column))
+                {
+                    if (!_latestTableMetadata.TryGetValue(table, out var tm))
+                    {
+                        tm = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        _latestTableMetadata[table] = tm;
+                    }
+                    foreach (var kv in tags) tm[kv.Key] = kv.Value;
+                }
+                else
+                {
+                    if (!_latestColumnMetadata.TryGetValue(table, out var cols))
+                    {
+                        cols = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+                        _latestColumnMetadata[table] = cols;
+                    }
+                    if (!cols.TryGetValue(column, out var cm))
+                    {
+                        cm = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        cols[column] = cm;
+                    }
+                    foreach (var kv in tags) cm[kv.Key] = kv.Value;
+                }
+
+                _entries.Add(new LineageEntry(table, "TABLE_TAGS")
+                {
+                    TargetColumn = column,
+                    Metadata = new Dictionary<string, string>(tags, StringComparer.OrdinalIgnoreCase)
+                });
+            }
+        }
+
         public IEnumerable<LineageEntry> GetLineage(string tableName)
         {
             lock (_lock)
