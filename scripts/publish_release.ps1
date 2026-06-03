@@ -170,9 +170,16 @@ foreach ($Platform in $Platforms) {
     if (-not $SkipVsix) {
         Write-Host "  Packaging VSIX bundle..." -ForegroundColor Gray
         $VsixPath = & (Join-Path $PSScriptRoot "publish_vsix.ps1") -Platform $Platform -BinSourceDir $BinFolder
-        if (Test-Path $VsixPath) {
-            Move-Item $VsixPath $BinFolder # Put it next to the EXEs
+        # Fail loudly instead of silently shipping a release with no extension. publish_vsix.ps1
+        # exits non-zero on failure; that leaves $VsixPath empty/invalid here.
+        if (-not $VsixPath -or -not (Test-Path $VsixPath)) {
+            throw "VSIX packaging failed for $Platform (no .vsix produced). Re-run with -SkipVsix to bypass."
         }
+        # Publish the VSIX as a standalone GitHub release asset (discoverable for VS Code users)
+        # rather than burying it inside the platform ZIP.
+        $VsixDest = Join-Path $ReleaseRoot ([System.IO.Path]::GetFileName($VsixPath))
+        Move-Item $VsixPath $VsixDest -Force
+        Write-Host "  VSIX asset: $VsixDest" -ForegroundColor Green
     }
 
     # 7. Zip for GitHub Release

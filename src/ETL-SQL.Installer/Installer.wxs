@@ -109,11 +109,12 @@
         <!-- Opt-in: delete runtime data (reports/db/logs) on uninstall. Default off (data preserved). -->
         <Property Id="CLEANDATA" Value="0" Secure="yes" />
 
-        <!-- Deferred custom actions (JScript). Deferred actions only see CustomActionData, so the
-             install folder path is marshaled in via the matching type-51 SetWriteJwtData/SetCleanDataDir. -->
+        <!-- Custom actions (JScript). Deferred actions only see CustomActionData, so the install
+             folder path is marshaled in via the matching type-51 SetWriteJwtData/SetCleanDataDir. -->
         <Binary Id="InstallerActionsJs" SourceFile="installer-actions.js" />
         <CustomAction Id="SetWriteJwtData" Property="WriteJwt" Value="[INSTALLFOLDER]" Execute="immediate" />
         <CustomAction Id="WriteJwt" BinaryKey="InstallerActionsJs" JScriptCall="ConfigureJwt" Execute="deferred" Impersonate="no" Return="ignore" />
+        <CustomAction Id="PromptCleanData" BinaryKey="InstallerActionsJs" JScriptCall="PromptCleanData" Execute="immediate" Return="ignore" />
         <CustomAction Id="SetCleanDataDir" Property="CleanData" Value="[INSTALLFOLDER]" Execute="immediate" />
         <CustomAction Id="CleanData" BinaryKey="InstallerActionsJs" JScriptCall="CleanData" Execute="deferred" Impersonate="no" Return="ignore" />
 
@@ -121,9 +122,12 @@
             <!-- On install: generate the JWT secret + approve the install folder as a safe zone. -->
             <Custom Action="SetWriteJwtData" After="CostFinalize"><![CDATA[&Feature_Portal=3 OR &Feature_Orchestrator=3]]></Custom>
             <Custom Action="WriteJwt" After="InstallFiles"><![CDATA[&Feature_Portal=3 OR &Feature_Orchestrator=3]]></Custom>
-            <!-- On uninstall: remove leftover runtime data only when the user opted in. -->
-            <Custom Action="SetCleanDataDir" After="CostFinalize"><![CDATA[REMOVE="ALL" AND CLEANDATA="1"]]></Custom>
-            <Custom Action="CleanData" After="RemoveFiles"><![CDATA[REMOVE="ALL" AND CLEANDATA="1"]]></Custom>
+            <!-- On a real (non-upgrade), interactive uninstall: prompt, then remove data if the user
+                 said yes. The OS-level Yes/No box works even when Settings > Apps runs basic UI;
+                 UILevel >= 3 skips fully-silent (/qn) uninstalls so automation never hangs. -->
+            <Custom Action="PromptCleanData" After="CostFinalize"><![CDATA[REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE AND UILevel >= 3]]></Custom>
+            <Custom Action="SetCleanDataDir" After="PromptCleanData"><![CDATA[REMOVE="ALL" AND CLEANDATA="1" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
+            <Custom Action="CleanData" After="RemoveFiles"><![CDATA[REMOVE="ALL" AND CLEANDATA="1" AND NOT UPGRADINGPRODUCTCODE]]></Custom>
         </InstallExecuteSequence>
 
         <!-- Connection hint shown on the final installer page -->
@@ -141,12 +145,14 @@
                 <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Select components to install" />
                 <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="15" Transparent="yes" NoPrefix="yes" Text="Check the components you want to install. All install into the same folder." />
 
-                <Control Id="SdkCheckBox" Type="CheckBox" X="20" Y="62" Width="335" Height="17" Property="INSTALL_SDK" CheckBoxValue="1"
-                         Text="Client Tools — CLI, Language Server, and Report CLI (adds to PATH)" />
-                <Control Id="OrchestratorCheckBox" Type="CheckBox" X="20" Y="98" Width="335" Height="17" Property="INSTALL_ORCHESTRATOR" CheckBoxValue="1"
-                         Text="Orchestrator Service — job scheduler (Windows Service, http://localhost:5001)" />
-                <Control Id="PortalCheckBox" Type="CheckBox" X="20" Y="134" Width="335" Height="17" Property="INSTALL_PORTAL" CheckBoxValue="1"
-                         Text="Report Portal — web dashboard (Windows Service, http://localhost:5002)" />
+                <Control Id="SdkCheckBox" Type="CheckBox" X="20" Y="60" Width="335" Height="17" Property="INSTALL_SDK" CheckBoxValue="1" Text="Client Tools" />
+                <Control Id="SdkDesc" Type="Text" X="34" Y="77" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="CLI, Language Server, and Report CLI (adds the install folder to PATH)" />
+
+                <Control Id="OrchestratorCheckBox" Type="CheckBox" X="20" Y="105" Width="335" Height="17" Property="INSTALL_ORCHESTRATOR" CheckBoxValue="1" Text="Orchestrator Service" />
+                <Control Id="OrchestratorDesc" Type="Text" X="34" Y="122" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="Job scheduler — Windows Service — http://localhost:5001" />
+
+                <Control Id="PortalCheckBox" Type="CheckBox" X="20" Y="150" Width="335" Height="17" Property="INSTALL_PORTAL" CheckBoxValue="1" Text="Report Portal" />
+                <Control Id="PortalDesc" Type="Text" X="34" Y="167" Width="325" Height="12" Transparent="yes" NoPrefix="yes" Text="Web dashboard — Windows Service — http://localhost:5002" />
 
                 <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
                 <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
@@ -163,32 +169,9 @@
             <!-- Route License -> ChooseFeaturesDlg -> VerifyReady (replacing the icon-tree CustomizeDlg). -->
             <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ChooseFeaturesDlg" Order="10">LicenseAccepted = "1"</Publish>
             <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ChooseFeaturesDlg" Order="10">NOT Installed</Publish>
-
-            <!-- Uninstall: a remove confirmation with an opt-in 'delete all data' checkbox. -->
-            <Dialog Id="RemoveDataDlg" Width="370" Height="270" Title="[ProductName] Setup">
-                <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="!(loc.CustomizeDlgBannerBitmap)" />
-                <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
-                <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Remove ETL-SQL" />
-                <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="15" Transparent="yes" NoPrefix="yes" Text="Choose whether to keep or delete your data." />
-                <Control Id="InfoText" Type="Text" X="25" Y="60" Width="320" Height="40" NoPrefix="yes"
-                         Text="Your reports, database, snapshots, and logs are kept by default so they survive an upgrade or reinstall. Check the box below only if you want them permanently deleted." />
-                <Control Id="CleanDataCheckBox" Type="CheckBox" X="20" Y="112" Width="335" Height="17" Property="CLEANDATA" CheckBoxValue="1"
-                         Text="Also delete all data (reports, database, snapshots, logs) — this cannot be undone." />
-                <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
-                <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
-                    <Publish Event="NewDialog" Value="MaintenanceTypeDlg">1</Publish>
-                </Control>
-                <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)">
-                    <Publish Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
-                </Control>
-                <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
-                    <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
-                </Control>
-            </Dialog>
-
-            <!-- Route Remove -> RemoveDataDlg -> VerifyReady (only in full-UI maintenance mode). -->
-            <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="RemoveDataDlg" Order="10">1</Publish>
-            <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="RemoveDataDlg" Order="20">REMOVE="ALL"</Publish>
+            <!-- The "delete all data on uninstall" choice is handled by the PromptCleanData custom
+                 action (Yes/No message box) rather than an authored dialog, so it also works when
+                 Settings > Apps runs the uninstall in basic UI with no wizard. -->
         </UI>
         <!-- Real EULA (PolyForm Noncommercial License 1.0.0); overrides WiX's placeholder License.rtf -->
         <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />

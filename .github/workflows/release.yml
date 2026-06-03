@@ -93,7 +93,7 @@ jobs:
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload $env:TAG_NAME release/*.zip release/*.msi --clobber
+        run: gh release upload $env:TAG_NAME release/*.zip release/*.msi release/*.vsix --clobber
 
   # 3. Linux Build (ZIP + DEB)
   build-linux:
@@ -124,7 +124,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG_NAME" release/*.zip release/*.deb --clobber
+        run: gh release upload "$TAG_NAME" release/*.zip release/*.deb release/*.vsix --clobber
 
   # 4. macOS Build (ZIP + DMG)
   build-macos:
@@ -155,7 +155,7 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG_NAME" release/*.zip release/*.dmg --clobber
+        run: gh release upload "$TAG_NAME" release/*.zip release/*.dmg release/*.vsix --clobber
 
   # 5. Publish GitHub Release
   publish-release:
