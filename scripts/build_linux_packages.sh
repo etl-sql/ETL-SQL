@@ -15,8 +15,6 @@ echo "--- ETL-SQL Linux Package Builder ---"
 rm -rf "$BUILD_ROOT"
 mkdir -p "$BUILD_ROOT/usr/bin"
 mkdir -p "$BUILD_ROOT/usr/lib/etl-sql/bin"
-mkdir -p "$BUILD_ROOT/usr/lib/etl-sql/orchestrator"
-mkdir -p "$BUILD_ROOT/usr/lib/etl-sql/portal"
 mkdir -p "$BUILD_ROOT/etc/systemd/system"
 mkdir -p "$BUILD_ROOT/DEBIAN"
 
@@ -52,6 +50,7 @@ Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: $ARCH
+Depends: python3
 Maintainer: Charles Clemens <etlsqlsoftware@gmail.com>
 Description: ETL-SQL Enterprise Suite
  Hybrid engine that executes SQL-like syntax against diverse data sources.
@@ -61,14 +60,71 @@ EOF
 cp "$BASE_DIR/etl-sql-orchestrator.service" "$BUILD_ROOT/etc/systemd/system/"
 cp "$BASE_DIR/etl-sql-portal.service" "$BUILD_ROOT/etc/systemd/system/"
 
-# 5. Create post-install script (user creation)
-cat <<EOF > "$BUILD_ROOT/DEBIAN/postinst"
+# 5. Maintainer scripts (quoted heredocs so nothing expands at build time).
+
+# postinst: create the service user, generate a JWT secret + approve the install folder as a
+# security safe zone (so the portal starts and may write data under /usr/lib/etl-sql/bin), then
+# enable and start the services.
+cat <<'POSTINST' > "$BUILD_ROOT/DEBIAN/postinst"
 #!/bin/bash
-id -u etlsql &>/dev/null || useradd -r -s /usr/sbin/nologin etlsql
+set -e
+
+id -u etlsql >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin etlsql
+
+CFG=/usr/lib/etl-sql/bin/appsettings.json
+if command -v python3 >/dev/null 2>&1 && [ -f "$CFG" ]; then
+    python3 - "$CFG" <<'PY'
+import json, sys, os, base64
+path = sys.argv[1]
+with open(path) as f:
+    data = json.load(f)
+changed = False
+jwt = data.get("Portal", {}).get("Jwt")
+if isinstance(jwt, dict) and not (jwt.get("Secret") or "").strip():
+    jwt["Secret"] = base64.b64encode(os.urandom(32)).decode("ascii")
+    changed = True
+sec = data.get("Security")
+if isinstance(sec, dict) and sec.get("ApprovedSafeZones") != ["/usr/lib/etl-sql/bin"]:
+    sec["ApprovedSafeZones"] = ["/usr/lib/etl-sql/bin"]
+    changed = True
+if changed:
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+PY
+else
+    echo "[ETL-SQL] python3 or appsettings.json missing; set Portal:Jwt:Secret and Security:ApprovedSafeZones manually." >&2
+fi
+
 chown -R etlsql:etlsql /usr/lib/etl-sql
 systemctl daemon-reload
-EOF
+systemctl enable --now etl-sql-orchestrator.service etl-sql-portal.service || true
+
+echo ""
+echo "ETL-SQL installed. Once the services start:"
+echo "  Report Portal:    http://localhost:5002"
+echo "  Orchestrator API: http://localhost:5001"
+POSTINST
 chmod 755 "$BUILD_ROOT/DEBIAN/postinst"
+
+# prerm: stop and disable the services before files are removed.
+cat <<'PRERM' > "$BUILD_ROOT/DEBIAN/prerm"
+#!/bin/bash
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    systemctl disable --now etl-sql-portal.service etl-sql-orchestrator.service >/dev/null 2>&1 || true
+fi
+PRERM
+chmod 755 "$BUILD_ROOT/DEBIAN/prerm"
+
+# postrm: on purge (apt purge), delete runtime data that dpkg does not track. apt remove keeps it.
+cat <<'POSTRM' > "$BUILD_ROOT/DEBIAN/postrm"
+#!/bin/bash
+systemctl daemon-reload >/dev/null 2>&1 || true
+if [ "$1" = "purge" ]; then
+    rm -rf /usr/lib/etl-sql/bin/logs /usr/lib/etl-sql/bin/Snapshots /usr/lib/etl-sql/bin/data
+    rm -f /usr/lib/etl-sql/bin/portal.db* /usr/lib/etl-sql/bin/etlsql.db*
+fi
+POSTRM
+chmod 755 "$BUILD_ROOT/DEBIAN/postrm"
 
 # 6. Build .deb
 if command -v dpkg-deb &> /dev/null; then

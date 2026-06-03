@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=etlsql
-WorkingDirectory=/usr/lib/etl-sql/orchestrator
+WorkingDirectory=/usr/lib/etl-sql/bin
 ExecStart=/usr/lib/etl-sql/bin/ETL-SQL-Service
 Restart=always
 RestartSec=10

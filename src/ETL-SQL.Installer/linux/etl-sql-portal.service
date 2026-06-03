@@ -5,7 +5,7 @@ After=network.target etl-sql-orchestrator.service
 [Service]
 Type=simple
 User=etlsql
-WorkingDirectory=/usr/lib/etl-sql/portal
+WorkingDirectory=/usr/lib/etl-sql/bin
 ExecStart=/usr/lib/etl-sql/bin/ETL-SQL-Portal
 Restart=always
 RestartSec=10
