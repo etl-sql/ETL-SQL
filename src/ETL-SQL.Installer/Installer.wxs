@@ -1,93 +1,196 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-    <Product Id="*" Name="ETL-SQL Enterprise Suite" Language="1033" Version="$(var.ProductVersion)" Manufacturer="Charles Clemens" UpgradeCode="7e3da743-19a2-463e-a794-b9fb9a1757e1">
+    <Product Id="*" Name="ETL-SQL" Language="1033" Version="$(var.ProductVersion)" Manufacturer="Charles Clemens" UpgradeCode="7e3da743-19a2-463e-a794-b9fb9a1757e1">
         <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="x64" />
 
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
         <MediaTemplate EmbedCab="yes" />
 
-        <Feature Id="ProductFeature" Title="ETL-SQL Enterprise" Level="1" ConfigurableDirectory="INSTALLFOLDER">
-            <!-- 1. Workstation SDK Feature -->
-            <Feature Id="Feature_SDK" Title="Workstation SDK" Description="CLI, TUI, and Language Server for developers." Level="1">
+        <!-- Component selection is driven by these checkbox-backed properties (default: all on). -->
+        <Property Id="INSTALL_SDK" Value="1" Secure="yes" />
+        <Property Id="INSTALL_ORCHESTRATOR" Value="1" Secure="yes" />
+        <Property Id="INSTALL_PORTAL" Value="1" Secure="yes" />
+
+        <!-- Everything installs into a single flat folder (the 5 executables + one appsettings.json).
+             Each sub-feature is turned off (Level 0) when its checkbox property is not "1". -->
+        <Feature Id="ProductFeature" Title="ETL-SQL" Level="1" ConfigurableDirectory="INSTALLFOLDER" Display="expand">
+            <Feature Id="Feature_SDK" Title="Client Tools" Level="1" Absent="allow" AllowAdvertise="no"
+                     Description="CLI, Language Server, and Report CLI for developers (adds the install folder to PATH).">
+                <Condition Level="0"><![CDATA[INSTALL_SDK <> "1"]]></Condition>
                 <ComponentGroupRef Id="SDKComponents" />
                 <ComponentRef Id="PathEnvironment" />
+                <ComponentRef Id="AppSettings" />
             </Feature>
 
-            <!-- 2. Server Features -->
-            <Feature Id="Feature_Server" Title="Server Components" Description="Backend services for enterprise deployment." Level="1">
-                <Feature Id="Feature_Orchestrator" Title="Orchestrator Service" Description="Background job scheduler and engine coordinator." Level="1">
-                    <ComponentGroupRef Id="OrchestratorComponents" />
-                </Feature>
-                <Feature Id="Feature_Portal" Title="Report Portal" Description="Web-based dashboard and report management portal." Level="1">
-                    <ComponentGroupRef Id="PortalComponents" />
-                </Feature>
+            <Feature Id="Feature_Orchestrator" Title="Orchestrator Service" Level="1" Absent="allow" AllowAdvertise="no"
+                     Description="Background job scheduler and engine coordinator, installed as a Windows Service (http://localhost:5001).">
+                <Condition Level="0"><![CDATA[INSTALL_ORCHESTRATOR <> "1"]]></Condition>
+                <ComponentRef Id="Orchestrator_EXE" />
+                <ComponentRef Id="AppSettings" />
+            </Feature>
+
+            <Feature Id="Feature_Portal" Title="Report Portal" Level="1" Absent="allow" AllowAdvertise="no"
+                     Description="Web-based dashboard and report management portal, installed as a Windows Service (http://localhost:5002).">
+                <Condition Level="0"><![CDATA[INSTALL_PORTAL <> "1"]]></Condition>
+                <ComponentRef Id="Portal_EXE" />
+                <ComponentRef Id="PortalJwtScript" />
+                <ComponentRef Id="AppSettings" />
+                <ComponentGroupRef Id="PortalWwwroot" />
             </Feature>
         </Feature>
 
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="ProgramFiles64Folder">
-                <Directory Id="INSTALLFOLDER" Name="ETL-SQL">
-                    <Directory Id="BINDIR" Name="bin" />
-                    <Directory Id="PortalDir" Name="portal" />
-                    <Directory Id="OrchestratorDir" Name="orchestrator" />
-                </Directory>
+                <Directory Id="INSTALLFOLDER" Name="ETL-SQL" />
             </Directory>
         </Directory>
 
-        <!-- SDK Components -->
-        <ComponentGroup Id="SDKComponents" Directory="BINDIR">
+        <!-- Everything lives directly in INSTALLFOLDER -->
+        <ComponentGroup Id="SDKComponents" Directory="INSTALLFOLDER">
             <Component Id="ETL_SQL_EXE" Guid="*" Win64="yes">
                 <File Source="publish\win-x64\bin\ETL-SQL.exe" KeyPath="yes" />
             </Component>
             <Component Id="ETL_SQL_LSP_EXE" Guid="*" Win64="yes">
-                <File Source="publish\win-x64\bin\ETL-SQL-LSP.exe" />
+                <File Source="publish\win-x64\bin\ETL-SQL-LSP.exe" KeyPath="yes" />
             </Component>
             <Component Id="ETL_SQL_REPORT_EXE" Guid="*" Win64="yes">
-                <File Source="publish\win-x64\bin\ETL-SQL-Report.exe" />
+                <File Source="publish\win-x64\bin\ETL-SQL-Report.exe" KeyPath="yes" />
             </Component>
         </ComponentGroup>
 
-        <!-- Orchestrator Components & Service -->
-        <ComponentGroup Id="OrchestratorComponents" Directory="OrchestratorDir">
+        <DirectoryRef Id="INSTALLFOLDER">
+            <!-- Single shared configuration file -->
+            <Component Id="AppSettings" Guid="*" Win64="yes">
+                <File Id="appsettings_json" Source="publish\win-x64\bin\appsettings.json" KeyPath="yes" />
+            </Component>
+
+            <!-- Orchestrator service (pinned to port 5001 via the urls argument) -->
             <Component Id="Orchestrator_EXE" Guid="*" Win64="yes">
                 <File Source="publish\win-x64\bin\ETL-SQL-Service.exe" KeyPath="yes" />
-                <ServiceInstall Id="ServiceInstaller_Orchestrator" 
-                                Type="ownProcess" 
-                                Name="ETL-SQL-Orchestrator" 
-                                DisplayName="ETL-SQL Orchestrator" 
-                                Description="Coordinates distributed ETL-SQL jobs." 
-                                Start="auto" 
-                                Account="LocalSystem" 
-                                ErrorControl="normal" />
+                <ServiceInstall Id="ServiceInstaller_Orchestrator"
+                                Type="ownProcess"
+                                Name="ETL-SQL-Orchestrator"
+                                DisplayName="ETL-SQL Orchestrator"
+                                Description="Coordinates distributed ETL-SQL jobs."
+                                Start="auto"
+                                Account="LocalSystem"
+                                ErrorControl="normal"
+                                Arguments=" --urls http://localhost:5001" />
                 <ServiceControl Id="StartService_Orchestrator" Start="install" Stop="both" Remove="uninstall" Name="ETL-SQL-Orchestrator" Wait="yes" />
             </Component>
-        </ComponentGroup>
 
-        <!-- Portal Components & Service -->
-        <ComponentGroup Id="PortalComponents" Directory="PortalDir">
+            <!-- Report Portal service (pinned to port 5002 via the urls argument) -->
             <Component Id="Portal_EXE" Guid="*" Win64="yes">
                 <File Source="publish\win-x64\bin\ETL-SQL-Portal.exe" KeyPath="yes" />
-                <ServiceInstall Id="ServiceInstaller_Portal" 
-                                Type="ownProcess" 
-                                Name="ETL-SQL-Portal" 
-                                DisplayName="ETL-SQL Report Portal" 
-                                Description="Web interface for ETL-SQL reports." 
-                                Start="auto" 
-                                Account="LocalSystem" 
-                                ErrorControl="normal" />
+                <ServiceInstall Id="ServiceInstaller_Portal"
+                                Type="ownProcess"
+                                Name="ETL-SQL-Portal"
+                                DisplayName="ETL-SQL Report Portal"
+                                Description="Web interface for ETL-SQL reports."
+                                Start="auto"
+                                Account="LocalSystem"
+                                ErrorControl="normal"
+                                Arguments=" --urls http://localhost:5002" />
                 <ServiceControl Id="StartService_Portal" Start="install" Stop="both" Remove="uninstall" Name="ETL-SQL-Portal" Wait="yes" />
             </Component>
-        </ComponentGroup>
 
-        <!-- Environment Variables -->
-        <DirectoryRef Id="BINDIR">
+            <!-- JWT bootstrap script (used by the deferred WriteJwt custom action) -->
+            <Component Id="PortalJwtScript" Guid="*" Win64="yes">
+                <File Id="configure_portal_jwt_ps1" Source="configure-portal-jwt.ps1" KeyPath="yes" />
+            </Component>
+
+            <!-- PATH entry for the client tools -->
             <Component Id="PathEnvironment" Guid="dc70ead1-c4db-42f1-a8e1-7a35cc06cf3f" Win64="yes">
                 <RegistryValue Root="HKLM" Key="Software\ETL-SQL" Name="PathConfigured" Value="1" Type="integer" KeyPath="yes" />
-                <Environment Id="PATH" Name="PATH" Value="[BINDIR]" Permanent="no" Part="last" Action="set" System="yes" />
+                <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
             </Component>
         </DirectoryRef>
 
-        <!-- UI -->
-        <UIRef Id="WixUI_FeatureTree" />
+        <!-- Opt-in: delete runtime data (reports/db/logs) on uninstall. Default off (data preserved). -->
+        <Property Id="CLEANDATA" Value="0" Secure="yes" />
+
+        <!-- Deferred custom actions (JScript). Deferred actions only see CustomActionData, so the
+             install folder path is marshaled in via the matching type-51 SetWriteJwtData/SetCleanDataDir. -->
+        <Binary Id="InstallerActionsJs" SourceFile="installer-actions.js" />
+        <CustomAction Id="SetWriteJwtData" Property="WriteJwt" Value="[INSTALLFOLDER]" Execute="immediate" />
+        <CustomAction Id="WriteJwt" BinaryKey="InstallerActionsJs" JScriptCall="ConfigureJwt" Execute="deferred" Impersonate="no" Return="ignore" />
+        <CustomAction Id="SetCleanDataDir" Property="CleanData" Value="[INSTALLFOLDER]" Execute="immediate" />
+        <CustomAction Id="CleanData" BinaryKey="InstallerActionsJs" JScriptCall="CleanData" Execute="deferred" Impersonate="no" Return="ignore" />
+
+        <InstallExecuteSequence>
+            <!-- On install: generate the JWT secret + approve the install folder as a safe zone. -->
+            <Custom Action="SetWriteJwtData" After="CostFinalize"><![CDATA[&Feature_Portal=3 OR &Feature_Orchestrator=3]]></Custom>
+            <Custom Action="WriteJwt" After="InstallFiles"><![CDATA[&Feature_Portal=3 OR &Feature_Orchestrator=3]]></Custom>
+            <!-- On uninstall: remove leftover runtime data only when the user opted in. -->
+            <Custom Action="SetCleanDataDir" After="CostFinalize"><![CDATA[REMOVE="ALL" AND CLEANDATA="1"]]></Custom>
+            <Custom Action="CleanData" After="RemoveFiles"><![CDATA[REMOVE="ALL" AND CLEANDATA="1"]]></Custom>
+        </InstallExecuteSequence>
+
+        <!-- Connection hint shown on the final installer page -->
+        <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT"
+                  Value="Once the services start, the components are reachable at:&#13;&#10;&#13;&#10;Report Portal:        http://localhost:5002&#13;&#10;Orchestrator API:   http://localhost:5001" />
+
+        <!-- UI: standard WiX feature-tree flow, but the icon-tree CustomizeDlg is replaced with a
+             checkbox dialog (ChooseFeaturesDlg) inserted right after the license page. -->
+        <UI>
+            <UIRef Id="WixUI_FeatureTree" />
+
+            <Dialog Id="ChooseFeaturesDlg" Width="370" Height="270" Title="[ProductName] Setup">
+                <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="!(loc.CustomizeDlgBannerBitmap)" />
+                <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+                <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Select components to install" />
+                <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="15" Transparent="yes" NoPrefix="yes" Text="Check the components you want to install. All install into the same folder." />
+
+                <Control Id="SdkCheckBox" Type="CheckBox" X="20" Y="62" Width="335" Height="17" Property="INSTALL_SDK" CheckBoxValue="1"
+                         Text="Client Tools — CLI, Language Server, and Report CLI (adds to PATH)" />
+                <Control Id="OrchestratorCheckBox" Type="CheckBox" X="20" Y="98" Width="335" Height="17" Property="INSTALL_ORCHESTRATOR" CheckBoxValue="1"
+                         Text="Orchestrator Service — job scheduler (Windows Service, http://localhost:5001)" />
+                <Control Id="PortalCheckBox" Type="CheckBox" X="20" Y="134" Width="335" Height="17" Property="INSTALL_PORTAL" CheckBoxValue="1"
+                         Text="Report Portal — web dashboard (Windows Service, http://localhost:5002)" />
+
+                <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+                <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
+                    <Publish Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+                </Control>
+                <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)">
+                    <Publish Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
+                </Control>
+                <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
+                    <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
+                </Control>
+            </Dialog>
+
+            <!-- Route License -> ChooseFeaturesDlg -> VerifyReady (replacing the icon-tree CustomizeDlg). -->
+            <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="ChooseFeaturesDlg" Order="10">LicenseAccepted = "1"</Publish>
+            <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="ChooseFeaturesDlg" Order="10">NOT Installed</Publish>
+
+            <!-- Uninstall: a remove confirmation with an opt-in 'delete all data' checkbox. -->
+            <Dialog Id="RemoveDataDlg" Width="370" Height="270" Title="[ProductName] Setup">
+                <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="!(loc.CustomizeDlgBannerBitmap)" />
+                <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+                <Control Id="Title" Type="Text" X="15" Y="6" Width="300" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Remove ETL-SQL" />
+                <Control Id="Description" Type="Text" X="25" Y="23" Width="320" Height="15" Transparent="yes" NoPrefix="yes" Text="Choose whether to keep or delete your data." />
+                <Control Id="InfoText" Type="Text" X="25" Y="60" Width="320" Height="40" NoPrefix="yes"
+                         Text="Your reports, database, snapshots, and logs are kept by default so they survive an upgrade or reinstall. Check the box below only if you want them permanently deleted." />
+                <Control Id="CleanDataCheckBox" Type="CheckBox" X="20" Y="112" Width="335" Height="17" Property="CLEANDATA" CheckBoxValue="1"
+                         Text="Also delete all data (reports, database, snapshots, logs) — this cannot be undone." />
+                <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+                <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)">
+                    <Publish Event="NewDialog" Value="MaintenanceTypeDlg">1</Publish>
+                </Control>
+                <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)">
+                    <Publish Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
+                </Control>
+                <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
+                    <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
+                </Control>
+            </Dialog>
+
+            <!-- Route Remove -> RemoveDataDlg -> VerifyReady (only in full-UI maintenance mode). -->
+            <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="RemoveDataDlg" Order="10">1</Publish>
+            <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="RemoveDataDlg" Order="20">REMOVE="ALL"</Publish>
+        </UI>
+        <!-- Real EULA (PolyForm Noncommercial License 1.0.0); overrides WiX's placeholder License.rtf -->
+        <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
     </Product>
 </Wix>

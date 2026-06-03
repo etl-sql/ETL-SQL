@@ -6,6 +6,8 @@
     <!-- Disable automatic static web assets to prevent duplicate conflicts with referenced projects -->
     <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+    <!-- Define WINDOWS when building on Windows so the portal can host as a Windows Service (matches ETL-SQL.Orchestrator.Service). -->
+    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('windows'))">$(DefineConstants);WINDOWS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,6 +38,8 @@
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="Cronos" />
     <PackageReference Include="Microsoft.OpenApi" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices"
+                      Condition="$([MSBuild]::IsOSPlatform('windows'))" />
   </ItemGroup>
 
   <Target Name="CopyManualAssetsOnPublish" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">

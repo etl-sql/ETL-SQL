@@ -18,6 +18,18 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Engine.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+#if WINDOWS
+// Running as a Windows Service, the working directory defaults to System32, which sends every
+// relative path (file logs, portal.db, snapshots) there instead of the install folder. Anchor the
+// working directory to the executable's folder before anything resolves a relative path.
+if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
+{
+    System.IO.Directory.SetCurrentDirectory(System.AppContext.BaseDirectory);
+}
+// Integrate with the Windows SCM so the portal can run as a Windows Service (installed by the MSI);
+// this also sets the content root to the executable's directory.
+builder.Host.UseWindowsService(o => o.ServiceName = "ETL-SQL Report Portal");
+#endif
 builder.Configuration.AddSecureConfiguration();
 
 // ── Configuration ─────────────────────────────────────────────────────────────

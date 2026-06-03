@@ -33,6 +33,16 @@ using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Service;
 using ETL_SQL.Orchestrator.Storage;
 
+#if WINDOWS
+// Running as a Windows Service, the working directory defaults to System32, which sends relative
+// paths (Serilog file logs, SQLite job store) there. Anchor it to the executable folder before the
+// bootstrap logger opens its file sink so all logs land in the install folder.
+if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
+{
+    System.IO.Directory.SetCurrentDirectory(System.AppContext.BaseDirectory);
+}
+#endif
+
 // ── Serilog bootstrap logger (captures startup errors before host is ready) ──
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Debug()

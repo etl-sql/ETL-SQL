@@ -125,10 +125,18 @@ Write-Host "Compiling WiX manifest (using $($WixToolset.Candle))..." -Foreground
 Push-Location $InstallerDir
 try {
     $WixVersion = Get-WixProductVersion -InputVersion $Version
-    $wxsPath = Resolve-Path "Installer.wxs"
     Write-Host "  ProductVersion: $WixVersion" -ForegroundColor Gray
 
-    & $WixToolset.Candle $wxsPath.Path "-dProductVersion=$WixVersion" -o Installer.wixobj -arch x64
+    # Harvest the portal's static web assets (wwwroot) into the PortalWwwroot component group.
+    $heat = Join-Path (Split-Path -Parent $WixToolset.Candle) 'heat.exe'
+    $wwwrootSource = Join-Path $BuildDir 'wwwroot'
+    & $heat dir $wwwrootSource -cg PortalWwwroot -dr INSTALLFOLDER -ag -g1 -scom -sreg -sfrag -var var.WwwrootSource -out wwwroot.wxs
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "heat.exe failed (exit code $LASTEXITCODE)"
+        exit $LASTEXITCODE
+    }
+
+    & $WixToolset.Candle Installer.wxs wwwroot.wxs "-dProductVersion=$WixVersion" "-dWwwrootSource=$wwwrootSource" -arch x64
     if ($LASTEXITCODE -ne 0) {
         Write-Error "candle.exe failed (exit code $LASTEXITCODE)"
         exit $LASTEXITCODE
@@ -136,13 +144,13 @@ try {
 
     # 3. Link MSI
     Write-Host "Linking MSI package..." -ForegroundColor Gray
-    & $WixToolset.Light Installer.wixobj -o "ETL-SQL-Enterprise-v$Version.msi" -ext WixUIExtension
+    & $WixToolset.Light Installer.wixobj wwwroot.wixobj -o "ETL-SQL-v$Version.msi" -ext WixUIExtension
     if ($LASTEXITCODE -ne 0) {
         Write-Error "light.exe failed (exit code $LASTEXITCODE)"
         exit $LASTEXITCODE
     }
 
-    Write-Host "[SUCCESS] Installer created: ETL-SQL-Enterprise-v$Version.msi" -ForegroundColor Green
+    Write-Host "[SUCCESS] Installer created: ETL-SQL-v$Version.msi" -ForegroundColor Green
 } finally {
     Pop-Location
 }
