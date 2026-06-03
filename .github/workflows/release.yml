@@ -141,21 +141,61 @@ jobs:
       - name: Verify Node.js
         run: node --version
 
-      - name: Publish Binaries
+      # Apple Silicon is the priority artifact (most current Macs). Publish and upload it
+      # FIRST so an Intel/R2R failure below can never cost us the arm64 release. Each
+      # publish_release.ps1 run wipes release/, so arm64 is safely uploaded before x64 starts.
+      - name: Publish Apple Silicon (arm64) VSIX + ZIP
+        shell: pwsh
+        run: |
+          $Version = $env:TAG_NAME.TrimStart('v')
+          $env:ETL_SQL_VERSION = $Version
+          ./scripts/publish_release.ps1 -Platforms osx-arm64
+
+      - name: Upload arm64 release assets
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$TAG_NAME" release/*.zip release/*.vsix --clobber
+
+      # Intel build is best-effort: if osx-x64 R2R cross-gen breaks on the arm64 runner,
+      # the job degrades (arm64 already shipped) instead of failing the whole release.
+      - name: Publish Intel (x64) VSIX + ZIP (best effort)
+        id: macos_x64
+        continue-on-error: true
         shell: pwsh
         run: |
           $Version = $env:TAG_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
           ./scripts/publish_release.ps1 -Platforms osx-x64
-          chmod +x scripts/build_mac_dmg.sh
-          ./scripts/build_mac_dmg.sh $Version release/osx-x64/bin
-          mv "ETL-SQL_v${Version}.dmg" release/
 
-      - name: Upload macOS release assets
+      - name: Upload x64 release assets
+        if: steps.macos_x64.outcome == 'success'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG_NAME" release/*.zip release/*.dmg release/*.vsix --clobber
+        run: gh release upload "$TAG_NAME" release/*.zip release/*.vsix --clobber
+
+      # DMG is parked at "TUI launcher" parity and fully optional — never block the release.
+      - name: Build & upload macOS DMG (best effort)
+        if: steps.macos_x64.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Version="${TAG_NAME#v}"
+          chmod +x scripts/build_mac_dmg.sh
+          ./scripts/build_mac_dmg.sh "$Version" release/osx-x64/bin
+          mv "ETL-SQL_v${Version}.dmg" release/
+          gh release upload "$TAG_NAME" release/*.dmg --clobber
+
+      # Make a degraded macOS release visible: the arm64 VSIX/ZIP still shipped, but Intel
+      # (x64 VSIX/ZIP + DMG) was dropped. Surfaces as a ::warning:: annotation on the run
+      # without failing the job (echo exits 0, so the release still publishes).
+      - name: Flag missing Intel (x64) artifacts
+        if: steps.macos_x64.outcome == 'failure'
+        shell: bash
+        run: echo "::warning title=macOS Intel build skipped::osx-x64 publish failed; release ${TAG_NAME} shipped arm64 only (no Intel VSIX/ZIP, no DMG)."
 
   # 5. Publish GitHub Release
   publish-release:

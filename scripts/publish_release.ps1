@@ -2,7 +2,7 @@
 # Usage: ./publish_release.ps1 [-Platforms win-x64,linux-x64]
 
 param(
-    [string[]]$Platforms = @("win-x64", "linux-x64", "osx-x64"),
+    [string[]]$Platforms = @("win-x64", "linux-x64", "osx-x64", "osx-arm64"),
     [switch]$SkipVsix
 )
 
