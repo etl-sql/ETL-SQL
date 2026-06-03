@@ -326,6 +326,26 @@ Default log locations vary by deployment, but the bundled services write applica
 
 Set log retention and size limits in configuration where supported, and make sure service accounts can write to the chosen directories.
 
+### Deleting all data
+
+To wipe every piece of ETL-SQL runtime data consistently — reports, snapshots, the portal and orchestrator databases, logs, persistent sessions, and portal data directories — use the built-in purge command. It resolves the actual configured locations (and the `LocalApplicationData` defaults for sessions and orchestrator history), so it works the same whether ETL-SQL was installed by the Windows MSI, the Linux `.deb`, the macOS bundle, or run ad hoc.
+
+```bash
+# Preview exactly what would be deleted, with sizes — deletes nothing
+etl-sql purge --dry-run
+
+# Delete after an interactive confirmation
+etl-sql purge
+
+# Non-interactive (scripts / uninstall automation)
+etl-sql purge --yes
+```
+
+> [!CAUTION]
+> `etl-sql purge` permanently deletes all reports, snapshots, databases, logs, and sessions. It cannot be undone. Back up anything you need first (see **Databases** above). Stop the Portal and Orchestrator services before purging so database files are not locked or recreated.
+
+The Windows MSI uninstaller and the Linux `.deb` purge step still remove this same data automatically when you opt in during uninstall; `etl-sql purge` gives you the same cleanup on demand and on platforms without an uninstall wizard.
+
 ---
 
 ## 9. Operational Checks

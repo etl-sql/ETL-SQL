@@ -123,6 +123,14 @@ namespace ETL_SQL.App
             Description = "Check depth: 'quick' (fast local checks) or 'full' (adds engine, report, asset, runtime, and configured service probes).",
             DefaultValueFactory = _ => "quick"
         };
+        private static readonly Option<bool> PurgeDryRunOption = new("--dry-run", Array.Empty<string>())
+        {
+            Description = "List the data that would be removed without deleting anything."
+        };
+        private static readonly Option<bool> PurgeYesOption = new("--yes", new[] { "-y" })
+        {
+            Description = "Skip the confirmation prompt (for scripts and installers)."
+        };
 
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
@@ -230,6 +238,14 @@ namespace ETL_SQL.App
             };
             serveCommand.SetAction(context => Dispatch(context, "serve", handler));
 
+            // 10. PURGE Command — delete all runtime data (cross-platform "delete all data")
+            var purgeCommand = new Command("purge", "Delete all ETL-SQL runtime data (reports, snapshots, databases, logs, sessions)")
+            {
+                PurgeDryRunOption,
+                PurgeYesOption,
+            };
+            purgeCommand.SetAction(context => Dispatch(context, "purge", handler));
+
             rootCommand.Add(runCommand);
             rootCommand.Add(testCommand);
             rootCommand.Add(encryptCommand);
@@ -240,6 +256,7 @@ namespace ETL_SQL.App
             rootCommand.Add(doctorCommand);
             rootCommand.Add(configCommand);
             rootCommand.Add(serveCommand);
+            rootCommand.Add(purgeCommand);
 
             return rootCommand;
         }
@@ -311,6 +328,11 @@ namespace ETL_SQL.App
                 cliContext.DoctorStrict = res.GetValue(DoctorStrictOption);
                 cliContext.DoctorProfile = res.GetValue(DoctorProfileOption) ?? "quick";
             }
+            else if (commandName == "purge")
+            {
+                cliContext.PurgeDryRun = res.GetValue(PurgeDryRunOption);
+                cliContext.PurgeYes = res.GetValue(PurgeYesOption);
+            }
 
             var sessionOptVal = res.GetValue(SessionOption);
             if (sessionOptVal != null) cliContext.SessionId = sessionOptVal;
@@ -362,6 +384,7 @@ namespace ETL_SQL.App
             table.AddRow("generate", "Generate large scale mock data for performance validation.");
             table.AddRow("notices", "Show third-party notices and dependency credits.");
             table.AddRow("config setup-jwt", "Generate a secure 256-bit JWT secret.");
+            table.AddRow("purge", "Delete all runtime data (reports, snapshots, DBs, logs, sessions). Use --dry-run to preview.");
             table.AddRow("ui repl", "Start the JSON-based REPL protocol.");
             AnsiConsole.Write(table);
             AnsiConsole.MarkupLine($"\nUse [cyan]ETL-SQL {Markup.Escape("<command>")} --help[/] for details on specific options.");

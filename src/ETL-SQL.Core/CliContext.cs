@@ -43,5 +43,9 @@ namespace ETL_SQL.Core
         // doctor command
         public bool DoctorStrict { get; set; }
         public string DoctorProfile { get; set; } = "quick";
+
+        // purge command
+        public bool PurgeDryRun { get; set; }
+        public bool PurgeYes { get; set; }
     }
 }

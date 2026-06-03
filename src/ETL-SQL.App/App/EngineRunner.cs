@@ -97,6 +97,11 @@ namespace ETL_SQL.App
                 return await RunSetupJwt(logger, ctx.UpdateConfig);
             }
 
+            if (ctx.Command == "purge")
+            {
+                return RunPurge(ctx);
+            }
+
             if (ctx.Command.StartsWith("ui-"))
             {
                 return await ETL_SQL.TUI.TuiRunner.Run(ctx, Program.ServiceProvider);
@@ -1380,6 +1385,77 @@ CREATE PAGE Main AS DASHBOARD (
             }
 
             return 0;
+        }
+
+        // ── purge command ──────────────────────────────────────────────────────────
+
+        private static int RunPurge(CliContext ctx)
+        {
+            var config = Program.ServiceProvider.GetRequiredService<IConfiguration>();
+            var targets = DataPurgeService.ResolveTargets(config, AppContext.BaseDirectory);
+
+            // Measure existing targets up front so we can show the user what is at stake.
+            var existing = targets
+                .Select(t => (Target: t, Bytes: DataPurgeService.MeasureBytes(t),
+                              Exists: t.IsDirectory ? Directory.Exists(t.Path) : File.Exists(t.Path)))
+                .Where(t => t.Exists)
+                .ToList();
+
+            if (existing.Count == 0)
+            {
+                AnsiConsole.MarkupLine("[green]No ETL-SQL runtime data found. Nothing to purge.[/]");
+                return 0;
+            }
+
+            var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey);
+            table.AddColumn("Data");
+            table.AddColumn("Path");
+            table.AddColumn(new TableColumn("Size").RightAligned());
+            foreach (var (target, bytes, _) in existing)
+                table.AddRow(Markup.Escape(target.Description), Markup.Escape(target.Path), FormatBytes(bytes));
+
+            AnsiConsole.Write(new Rule(ctx.PurgeDryRun
+                ? "[yellow]ETL-SQL Data Purge (dry run)[/]"
+                : "[red]ETL-SQL Data Purge[/]").RuleStyle("grey"));
+            AnsiConsole.Write(table);
+
+            if (ctx.PurgeDryRun)
+            {
+                AnsiConsole.MarkupLine($"\n[yellow]Dry run:[/] {existing.Count} item(s) would be deleted. Re-run without [cyan]--dry-run[/] to delete.");
+                return 0;
+            }
+
+            if (!ctx.PurgeYes)
+            {
+                AnsiConsole.MarkupLine("\n[bold red]This permanently deletes all of the above and cannot be undone.[/]");
+                Console.Write("Type 'yes' to confirm: ");
+                var answer = Console.ReadLine();
+                if (!string.Equals(answer?.Trim(), "yes", StringComparison.OrdinalIgnoreCase))
+                {
+                    AnsiConsole.MarkupLine("[yellow]Aborted. No data was deleted.[/]");
+                    return 1;
+                }
+            }
+
+            var results = DataPurgeService.Execute(existing.Select(e => e.Target), dryRun: false);
+            var deleted = results.Count(r => r.Deleted);
+            var failed = results.Where(r => r.Error != null && r.Existed).ToList();
+            var freed = results.Where(r => r.Deleted).Sum(r => r.Bytes);
+
+            AnsiConsole.MarkupLine($"\n[green]Deleted {deleted} item(s), freeing {FormatBytes(freed)}.[/]");
+            foreach (var f in failed)
+                AnsiConsole.MarkupLine($"[yellow]Could not delete[/] {Markup.Escape(f.Target.Path)}: {Markup.Escape(f.Error ?? "unknown error")}");
+
+            return failed.Count > 0 ? 1 : 0;
+        }
+
+        private static string FormatBytes(long bytes)
+        {
+            string[] units = { "B", "KB", "MB", "GB", "TB" };
+            double size = bytes;
+            int unit = 0;
+            while (size >= 1024 && unit < units.Length - 1) { size /= 1024; unit++; }
+            return unit == 0 ? $"{bytes} B" : $"{size:0.0} {units[unit]}";
         }
 
         // ── serve command ────────────────────────────────────────────────────────

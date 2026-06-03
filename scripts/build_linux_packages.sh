@@ -120,7 +120,9 @@ cat <<'POSTRM' > "$BUILD_ROOT/DEBIAN/postrm"
 #!/bin/bash
 systemctl daemon-reload >/dev/null 2>&1 || true
 if [ "$1" = "purge" ]; then
-    rm -rf /usr/lib/etl-sql/bin/logs /usr/lib/etl-sql/bin/Snapshots /usr/lib/etl-sql/bin/data
+    # Keep this list in sync with DataPurgeService / the MSI CleanData action until the installers
+    # are unified to call `etl-sql purge --yes` (tracked under the installer-parity TODO).
+    rm -rf /usr/lib/etl-sql/bin/logs /usr/lib/etl-sql/bin/Snapshots /usr/lib/etl-sql/bin/Reports /usr/lib/etl-sql/bin/data
     rm -f /usr/lib/etl-sql/bin/portal.db* /usr/lib/etl-sql/bin/etlsql.db*
 fi
 POSTRM
