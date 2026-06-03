@@ -204,7 +204,7 @@ export async function activate(context: vscode.ExtensionContext) {
             debug: { command: serverPath, transport: TransportKind.stdio }
         };
 
-        const lspOutputChannel = vscode.window.createOutputChannel('ETL-SQL Language Server');
+        const lspOutputChannel = vscode.window.createOutputChannel('ETL-SQL Language Server', { log: true });
         const clientOptions: LanguageClientOptions = {
             documentSelector: [
                 { scheme: 'file', language: 'etlsql' },

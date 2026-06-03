@@ -41,7 +41,7 @@
     "zero-trust"
   ],
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.91.0"
   },
   "categories": [
     "Programming Languages",
@@ -185,7 +185,6 @@
         "command": "etlsql.showLineage",
         "title": "ETL-SQL: Show Visual Lineage"
       },
-
       {
         "command": "etlsql.refreshConnections",
         "title": "ETL-SQL: Refresh",
@@ -396,7 +395,7 @@
     "@types/jsdom": "^28.0.1",
     "@types/mocha": "^10.0.1",
     "@types/node": "^25.9.1",
-    "@types/vscode": "^1.75.0",
+    "@types/vscode": "^1.91.0",
     "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.60.0",
     "@vitest/coverage-v8": "^4.1.2",
@@ -408,7 +407,7 @@
     "mocha": "^11.3.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.2",
-    "vscode-languageclient": "^9.0.1"
+    "vscode-languageclient": "^10.0.0"
   },
   "overrides": {
     "serialize-javascript": ">=7.0.5",
