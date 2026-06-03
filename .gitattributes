@@ -1,0 +1,4 @@
+# Shell scripts and systemd unit files MUST use LF line endings — CRLF breaks bash
+# (`bad interpreter`) and systemd unit parsing on Linux. Pin them regardless of core.autocrlf.
+*.sh        text eol=lf
+*.service   text eol=lf
