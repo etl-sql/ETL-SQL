@@ -62,6 +62,10 @@ function Invoke-LineageUiSmoke {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
+    & node (Join-Path $repoRoot "scripts\test-subscription-history-ui.mjs")
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
 }
 
 switch ($Lane) {

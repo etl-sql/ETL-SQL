@@ -646,6 +646,12 @@ Subscription jobs are handed to the **ETL-SQL Orchestrator** for scheduling. If 
 
 Each subscription tracks a `FailCount`. After repeated failures the Orchestrator will stop retrying. Investigate via **Admin → Subscriptions → History** and correct the SMTP configuration or report script before re-enabling.
 
+The Admin subscription table shows active/paused state, the last successful delivery time or failure count, and provides:
+
+- **History** — recent delivery attempts with status, attempt time, duration, rows processed, and sanitized error text.
+- **Pause / Resume** — stop or restart future deliveries without deleting the subscription.
+- **Delete** — retire the subscription and remove its generated Orchestrator job.
+
 ### 8.4 Scripted Subscription Management
 
 Administrators can create and modify subscriptions using ETL-SQL script syntax. This is useful for bulk setup, deployment automation, or version-controlling subscription configuration alongside report scripts.

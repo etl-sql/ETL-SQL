@@ -5,6 +5,7 @@ import designer from './designer.story.js';
 import lineageUi from './lineage-ui.story.js';
 import lineageCatalog from './lineage-catalog.story.js';
 import datasetsAdmin from './datasets-admin.story.js';
+import subscriptionHistory from './subscription-history.story.js';
 import vscodeWebviews from './vscode-webviews.story.js';
 
-export const stories = [dag, scriptEditor, designer, lineageUi, lineageCatalog, datasetsAdmin, vscodeWebviews];
+export const stories = [dag, scriptEditor, designer, lineageUi, lineageCatalog, datasetsAdmin, subscriptionHistory, vscodeWebviews];

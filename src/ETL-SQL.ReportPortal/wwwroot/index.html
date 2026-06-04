@@ -151,6 +151,22 @@
   </div>
 </div>
 
+<div id="subscriptionHistoryModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="subscriptionHistoryTitle">
+  <div class="modal-card modal-lg history-modal">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Subscription</span>
+        <h3 class="modal-title" id="subscriptionHistoryTitle">Delivery History</h3>
+        <p class="modal-subtitle">Recent delivery attempts and sanitized failure details.</p>
+      </div>
+    </div>
+    <div class="modal-body" id="subscriptionHistoryBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="subscriptionHistoryCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Subscribe modal ──────────────────────────────────────────────────── -->
 <div id="subscribeModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="subscribeTitle">
   <div class="modal-card modal-lg modal-workflow">
@@ -252,6 +268,7 @@
 <script src="/js/echarts.min.js"></script>
 <script type="module">
 import { auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
+import { renderSubscriptionHistory } from '/js/subscription-history-ui.js';
 import { applyPortalBranding, initTheme } from '/js/branding.js';
 import { lineageRowsToCsv, renderDependencies, renderLineageRow } from '/js/lineage-ui.js';
 import { createLineageCatalog } from '/js/lineage-catalog.js';
@@ -1522,6 +1539,8 @@ function renderMySubscriptions(subs) {
                   data-params='${escAttr(JSON.stringify(s.parameters || {}))}'>
             Edit Params
           </button>
+          <button class="btn btn-outline btn-sm" data-action="history" data-id="${s.id}"
+                  data-name="${escAttr(s.name || s.reportName)}">History</button>
           <button class="btn btn-outline btn-sm" data-action="toggle" data-id="${s.id}"
                   data-active="${s.isActive}">${s.isActive ? 'Pause' : 'Resume'}</button>
           <button class="btn btn-outline btn-sm btn-danger-soft" data-action="delete" data-id="${s.id}">Delete</button>
@@ -1575,6 +1594,8 @@ async function handleSubAction(btn) {
     const isActive = btn.dataset.active === 'true';
     try { await subscriptionsApi.update(id, { isActive: !isActive }); showMySubscriptions(); }
     catch (err) { alert(err.message); }
+  } else if (action === 'history') {
+    showSubscriptionHistory(id, btn.dataset.name);
   } else if (action === 'edit-params') {
     const currentParams = JSON.parse(btn.dataset.params || '{}');
     const reportId      = +btn.dataset.reportId;
@@ -1582,6 +1603,27 @@ async function handleSubAction(btn) {
     openEditParamsModal(id, reportId, label, currentParams, () => showMySubscriptions());
   }
 }
+
+async function showSubscriptionHistory(id, name) {
+  const $modal = document.getElementById('subscriptionHistoryModal');
+  const $body = document.getElementById('subscriptionHistoryBody');
+  document.getElementById('subscriptionHistoryTitle').textContent = `${name || 'Subscription'} Delivery History`;
+  $modal.style.display = 'flex';
+  $body.innerHTML = '<div class="loading-state"><span class="spinner"></span><span>Loading delivery history…</span></div>';
+  try {
+    const history = await subscriptionsApi.history(id);
+    $body.innerHTML = renderSubscriptionHistory(history, {
+      esc,
+      formatDate: value => value ? new Date(value).toLocaleString() : '—',
+    });
+  } catch (err) {
+    $body.innerHTML = `<div class="empty-state">Failed to load delivery history: ${esc(err.message)}</div>`;
+  }
+}
+
+document.getElementById('subscriptionHistoryCloseBtn').addEventListener('click', () => {
+  document.getElementById('subscriptionHistoryModal').style.display = 'none';
+});
 
 // ── Edit Parameters modal ─────────────────────────────────────────────────────
 let _epSubId      = null;

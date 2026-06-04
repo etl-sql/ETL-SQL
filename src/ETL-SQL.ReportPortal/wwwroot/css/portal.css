@@ -733,6 +733,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .change-history-table th:nth-child(2), .change-history-table td:nth-child(2) { width: 20%; }
 .change-history-table th:nth-child(3), .change-history-table td:nth-child(3) { width: 12%; }
 .change-history-table th:nth-child(4), .change-history-table td:nth-child(4) { width: 42%; }
+.subscription-history-table th:nth-child(1), .subscription-history-table td:nth-child(1) { width: 13%; }
+.subscription-history-table th:nth-child(2), .subscription-history-table td:nth-child(2) { width: 22%; }
+.subscription-history-table th:nth-child(3), .subscription-history-table td:nth-child(3) { width: 12%; }
+.subscription-history-table th:nth-child(4), .subscription-history-table td:nth-child(4) { width: 10%; }
+.subscription-history-table th:nth-child(5), .subscription-history-table td:nth-child(5) { width: 43%; }
+.subscription-history-error { color: var(--portal-danger); line-height: 1.35; }
 .history-code-cell code {
   display: block;
   color: var(--portal-text-soft);
