@@ -108,6 +108,21 @@ namespace ETL_SQL.ReportPortal.Tests
             throw new TimeoutException($"Timed out waiting for {expectedCount} completed history entries for job '{jobName}'.");
         }
 
+        private async Task PollHistoryUntilStatusAsync(SQLiteJobHistoryStore store, string jobName, string status, int timeoutSeconds = 15)
+        {
+            var start = DateTime.UtcNow;
+            while ((DateTime.UtcNow - start).TotalSeconds < timeoutSeconds)
+            {
+                var history = (await store.GetHistoryAsync(jobName, 10)).ToList();
+                if (history.Any(h => string.Equals(h.Status, status, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return;
+                }
+                await Task.Delay(200);
+            }
+            throw new TimeoutException($"Timed out waiting for job '{jobName}' to reach status '{status}'.");
+        }
+
         private async Task PollMailPitUntilCountAsync(int expectedCount, int timeoutSeconds = 15)
         {
             var start = DateTime.UtcNow;
@@ -487,6 +502,71 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var reenabledJob = await store.GetJobAsync(jobName);
             Assert.NotNull(reenabledJob);
             Assert.True(reenabledJob.IsEnabled);
+        }
+
+        [Fact]
+        public async Task Verify_Subscription_Update_While_Running_Preserves_Active_Attempt_And_Future_Config()
+        {
+            using var portalFactory = new PortalWebFactory();
+            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
+
+            using var portalClient = portalFactory.CreateClient();
+            using var orchClient = orchestratorFactory.CreateClient();
+
+            var token = await GetAdminTokenAsync(portalClient);
+            var reportScript = @"
+SET REPORT TITLE = 'Concurrent Update Report';
+WAITFOR DELAY '00:00:03';
+SELECT 1 AS Val INTO #data;
+CREATE VISUAL SalesTable AS TABLE (SOURCE = #data, MAPPINGS (Val = Val));
+CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
+";
+            var (_, reportId, smtpAlias, reportName) = await SetupReportAndSmtpAsync(
+                portalClient, token, portalFactory.TempDir, reportScript);
+
+            var subRes = await AuthPost(portalClient, token, "/api/subscriptions", new
+            {
+                reportId,
+                schedule = "Daily",
+                format = "CSV",
+                smtpAlias,
+                recipientEmail = "before-update@test.local",
+                atTime = "08:00"
+            });
+            Assert.Equal(HttpStatusCode.Created, subRes.StatusCode);
+            var sub = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var subId = sub!["id"]!.GetValue<int>();
+            var jobName = $"SUB:{subId}:{reportName}";
+            var store = orchestratorFactory.Services.GetRequiredService<IJobHistoryStore>() as SQLiteJobHistoryStore;
+            Assert.NotNull(store);
+
+            await TriggerJobAsync(orchClient, jobName);
+            await PollHistoryUntilStatusAsync(store, jobName, "RUNNING");
+
+            var updateRes = await AuthPut(portalClient, token, $"/api/subscriptions/{subId}", new
+            {
+                schedule = "Weekly",
+                recipients = "after-update@test.local"
+            });
+            Assert.Equal(HttpStatusCode.OK, updateRes.StatusCode);
+
+            var history = await PollHistoryUntilCountAsync(store, jobName, 1);
+            Assert.Equal("SUCCESS", history[0].Status);
+
+            var getRes = await AuthGet(portalClient, token, $"/api/subscriptions/{subId}");
+            var body = await getRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            Assert.Equal("Weekly", body!["schedule"]!.GetValue<string>());
+            Assert.Equal("after-update@test.local", body["recipients"]!.GetValue<string>());
+
+            var job = await store.GetJobAsync(jobName);
+            Assert.NotNull(job);
+            Assert.Equal("WEEK", job.Unit);
+            Assert.True(job.IsEnabled);
+
+            var generatedScriptPath = GeneratedSubscriptionScriptPath(portalFactory.TempDir, subId, reportName);
+            var generatedScript = await File.ReadAllTextAsync(generatedScriptPath);
+            Assert.Contains("after-update@test.local", generatedScript, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("before-update@test.local", generatedScript, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]

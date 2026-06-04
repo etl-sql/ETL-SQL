@@ -115,6 +115,25 @@ namespace ETL_SQL.ReportPortal.Tests
             throw new TimeoutException("Timed out waiting for scheduler metrics to report no active or queued jobs.");
         }
 
+        private static async Task<JobDefinition> PollJobDefinitionUpdatedAsync(
+            IJobHistoryStore store,
+            string jobName,
+            int timeoutSeconds = 10)
+        {
+            var start = DateTime.UtcNow;
+            while ((DateTime.UtcNow - start).TotalSeconds < timeoutSeconds)
+            {
+                var job = await store.GetJobAsync(jobName);
+                if (job?.LastRun is not null && job.NextRun is not null)
+                {
+                    return job;
+                }
+                await Task.Delay(200);
+            }
+
+            throw new TimeoutException($"Timed out waiting for job definition '{jobName}' to persist LastRun and NextRun.");
+        }
+
         private static void AssertNoSecretLeak(string? text, params string[] secrets)
         {
             Assert.NotNull(text);
@@ -169,8 +188,7 @@ namespace ETL_SQL.ReportPortal.Tests
             Assert.Equal(entry.RowsProcessed, dbEntry.RowsProcessed);
             Assert.Equal(entry.PeakMemoryBytes, dbEntry.PeakMemoryBytes);
 
-            var jobDef = await store.GetJobAsync(jobName);
-            Assert.NotNull(jobDef);
+            var jobDef = await PollJobDefinitionUpdatedAsync(store, jobName);
             Assert.NotNull(jobDef.LastRun);
             Assert.NotNull(jobDef.NextRun);
 
@@ -180,6 +198,40 @@ namespace ETL_SQL.ReportPortal.Tests
             Assert.True(apiEntry.TryGetProperty("rowsProcessed", out _));
             Assert.True(apiEntry.TryGetProperty("peakMemoryBytes", out _));
             Assert.True(apiEntry.TryGetProperty("cpuTimeSeconds", out _));
+        }
+
+        [Fact]
+        public async Task Verify_Multiple_Jobs_Due_Together_Complete_And_Drain_Queue()
+        {
+            using var factory = new OrchestratorWebFactory();
+            using var client = factory.CreateClient();
+
+            var jobNames = Enumerable.Range(1, 6)
+                .Select(i => $"ConcurrentDueJob{i}")
+                .ToArray();
+
+            await Task.WhenAll(jobNames.Select(name =>
+                CreateJobAsync(client, name, $"SELECT '{name}' AS JobName;", interval: 1, unit: "SECOND")));
+
+            var histories = await Task.WhenAll(jobNames.Select(name =>
+                PollHistoryUntilCountAsync(client, name, 1)));
+
+            Assert.All(histories, history =>
+            {
+                var entry = Assert.Single(history);
+                Assert.Equal("SUCCESS", entry.Status);
+                Assert.NotNull(entry.EndTime);
+            });
+
+            await PollSchedulerIdleAsync(client);
+
+            var store = factory.Services.GetRequiredService<IJobHistoryStore>();
+            foreach (var jobName in jobNames)
+            {
+                var job = await PollJobDefinitionUpdatedAsync(store, jobName);
+                Assert.NotNull(job.LastRun);
+                Assert.NotNull(job.NextRun);
+            }
         }
 
         [Fact]
