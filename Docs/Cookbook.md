@@ -918,4 +918,41 @@ END;
 
 ---
 
+## 24. Publishing and Operating a Report Portal Catalog
+Portal administration is script-first: connect with `REPORTPORTAL`, then send catalog commands inside an `EXECUTE <portal> BEGIN ... END` block. This makes report deployment repeatable across environments and keeps validation, publication, refresh, and catalog inspection in one reviewable script.
+
+**Pattern Scenario:** Validate and publish a finance report, trigger its first refresh, and capture the resulting catalog metadata.
+
+```sql
+CREATE CONNECTION portal AS REPORTPORTAL(
+    HOST = 'http://report-server.company.com:5000',
+    USER = 'admin',
+    PASSWORD = 'ENC:U2FsdGVkX1+...'
+);
+
+EXECUTE portal BEGIN
+    CREATE FOLDER '/Finance';
+
+    VALIDATE REPORT SCRIPT 'C:\Reports\Finance\monthly_sales.rptsql'
+        INTO #validation;
+
+    PUBLISH REPORT 'Monthly Sales'
+        FROM 'C:\Reports\Finance\monthly_sales.rptsql'
+        IN FOLDER '/Finance'
+        WITH (
+            DESCRIPTION = 'Monthly revenue by region',
+            TAGS = 'finance,monthly,certified'
+        );
+
+    REFRESH REPORT 'Monthly Sales';
+    SHOW REPORT 'Monthly Sales' INTO #report;
+    SHOW REPORT HISTORY 'Monthly Sales' INTO #history;
+    SHOW REPORT DEPENDENCIES 'Monthly Sales' INTO #dependencies;
+END;
+```
+
+> Use the same script with environment-specific connection values during promotion. See [Reference/Grammar.md](Reference/Grammar.md) Appendix B for users, groups, permissions, subscriptions, share links, embed tokens, saved views, alerts, and usage metrics.
+
+---
+
 *Refer to [Reference/Standard_Library.md](Reference/Standard_Library.md) for function signatures, [Reference/Data_Connectors.md](Reference/Data_Connectors.md) for connector options, and [User_Manual.md](User_Manual.md) for the mental model.*
