@@ -34,6 +34,11 @@ public class SubscriptionDeliveryStatusService(
         }
 
         var completed = history.Where(h => h.EndTime.HasValue).ToList();
+        if (completed.Count == 0)
+        {
+            return history.Take(Math.Max(0, limit)).ToList();
+        }
+
         var failures = completed
             .Where(h => string.Equals(h.Status, "FAILURE", StringComparison.OrdinalIgnoreCase))
             .ToList();
