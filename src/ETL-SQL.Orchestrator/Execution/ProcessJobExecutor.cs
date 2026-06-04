@@ -148,7 +148,22 @@ namespace ETL_SQL.Orchestrator.Execution
                     using var doc = JsonDocument.Parse(line);
                     var root = doc.RootElement;
 
-                    bool   success  = root.TryGetProperty("success",       out var s) && s.GetBoolean();
+                    bool success;
+                    if (root.TryGetProperty("success", out var s))
+                    {
+                        success = s.GetBoolean();
+                    }
+                    else if (root.TryGetProperty("type", out var type) &&
+                             string.Equals(type.GetString(), "done", StringComparison.OrdinalIgnoreCase) &&
+                             root.TryGetProperty("exitCode", out var doneExitCode))
+                    {
+                        success = doneExitCode.GetInt32() == 0;
+                    }
+                    else
+                    {
+                        success = exitCode == 0;
+                    }
+
                     long   rows     = root.TryGetProperty("rowsProcessed", out var r) ? r.GetInt64() : 0;
                     string? error   = root.TryGetProperty("error",         out var e) ? e.GetString() : null;
                     string? session = root.TryGetProperty("sessionId",     out var sid) ? sid.GetString() : null;

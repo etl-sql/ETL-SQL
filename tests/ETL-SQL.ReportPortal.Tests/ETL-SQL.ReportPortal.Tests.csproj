@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ETL-SQL.ReportPortal\ETL-SQL.ReportPortal.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.Orchestrator.Service\ETL-SQL.Orchestrator.Service.csproj" />
+    <ProjectReference Include="..\..\tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" />
   </ItemGroup>
 
   <ItemGroup>

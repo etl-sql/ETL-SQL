@@ -60,6 +60,41 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 PlatformConnectorContextLock.Semaphore.Release();
             }
         }
+
+        [Fact]
+        public async Task Service_ExecutesScheduledJob_AgainstDockerService()
+        {
+            using var http = _fixture.CreateClient();
+            var jobName = "docker_exec_" + Guid.NewGuid().ToString("N");
+
+            var create = await http.PostAsJsonAsync("/api/scheduled-jobs", new
+            {
+                Name = jobName,
+                ScriptText = "PRINT 'docker scheduled execution';",
+                Interval = 1,
+                Unit = "HOUR",
+                MaxRetries = 0,
+                RetryDelaySeconds = 30,
+                HashPolicy = "Warn"
+            });
+            create.EnsureSuccessStatusCode();
+
+            var history = await _fixture.PollHistoryUntilCompletedAsync(http, jobName);
+            var entry = Assert.Single(history);
+            Assert.True(
+                string.Equals("SUCCESS", entry.GetProperty("status").GetString(), StringComparison.Ordinal),
+                $"Expected SUCCESS but got {entry.GetProperty("status").GetString()}: {entry.GetProperty("errorMessage").GetString()}");
+            Assert.True(entry.GetProperty("endTime").ValueKind != JsonValueKind.Null);
+            Assert.True(entry.TryGetProperty("peakMemoryBytes", out _));
+            Assert.True(entry.TryGetProperty("rowsProcessed", out _));
+            Assert.True(entry.TryGetProperty("cpuTimeSeconds", out _));
+
+            var jobs = await http.GetFromJsonAsync<JsonElement>("/api/scheduled-jobs");
+            var job = jobs.EnumerateArray().Single(j =>
+                string.Equals(j.GetProperty("name").GetString(), jobName, StringComparison.OrdinalIgnoreCase));
+            Assert.True(job.GetProperty("lastRun").ValueKind != JsonValueKind.Null);
+            Assert.True(job.GetProperty("nextRun").ValueKind != JsonValueKind.Null);
+        }
     }
 
     [Trait("Connector", "REPORTPORTAL")]
@@ -111,6 +146,33 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public string BaseUrl => $"http://localhost:{Port}";
         public int Port { get; private set; }
 
+        public HttpClient CreateClient()
+        {
+            var http = new HttpClient { BaseAddress = new Uri(BaseUrl) };
+            http.DefaultRequestHeaders.Add("X-Orchestrator-Key", ApiKey);
+            return http;
+        }
+
+        public async Task<JsonElement[]> PollHistoryUntilCompletedAsync(HttpClient http, string jobName, int timeoutSeconds = 30)
+        {
+            var started = DateTime.UtcNow;
+            while ((DateTime.UtcNow - started).TotalSeconds < timeoutSeconds)
+            {
+                var history = await http.GetFromJsonAsync<JsonElement[]>($"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/history");
+                var completed = history?
+                    .Where(h => h.GetProperty("endTime").ValueKind != JsonValueKind.Null)
+                    .ToArray();
+                if (completed is { Length: > 0 })
+                {
+                    return completed;
+                }
+
+                await Task.Delay(500);
+            }
+
+            throw new TimeoutException($"Timed out waiting for completed Docker service history for job '{jobName}'.");
+        }
+
         public async Task InitializeAsync()
         {
             await PlatformFixtureHelpers.BuildDockerImageAsync(
@@ -124,8 +186,10 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 .WithPortBinding(ServicePort, true)
                 .WithEnvironment("ASPNETCORE_URLS", $"http://+:{ServicePort}")
                 .WithEnvironment("Orchestrator__ApiKey", ApiKey)
+                .WithEnvironment("Orchestrator__DatabasePath", "/app/data/etlsql.db")
                 .WithEnvironment("Orchestrator__ScriptRoot", "/app/Reports")
-                .WithEnvironment("Jobs__UseProcessSpawning", "false")
+                .WithEnvironment("Jobs__UseProcessSpawning", "true")
+                .WithEnvironment("Jobs__TimeoutSeconds", "30")
                 .WithEnvironment("Session__Root", "/app/Sessions")
                 .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r =>
                     r.ForPort(ServicePort).ForPath("/health")))

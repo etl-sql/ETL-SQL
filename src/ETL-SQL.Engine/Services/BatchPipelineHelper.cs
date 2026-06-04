@@ -3,6 +3,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Data;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
@@ -100,7 +101,7 @@ namespace ETL_SQL.Engine.Services
                 var target = targetCols[i];
                 if (oldRow.HasColumn(target))
                     newRow[i] = oldRow[target];
-                else if (i < sourceCols.Count)
+                else if (i < sourceCols.Count && !targetCols.Contains(sourceCols[i], StringComparer.OrdinalIgnoreCase))
                     newRow[i] = oldRow[sourceCols[i]];
                 else
                     newRow[i] = null;

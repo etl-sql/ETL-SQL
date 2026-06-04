@@ -45,8 +45,8 @@ namespace ETL_SQL.ReportBuilder
 
             string? oldPath = context.CurrentScriptPath;
             context.CurrentScriptPath = Path.GetFullPath(reportPath);
-            context.VarContext.PushScope(new System.Collections.Generic.Dictionary<string, object?>(),
-                              new System.Collections.Generic.Dictionary<string, VariableMetadata>());
+            var reportVars = new System.Collections.Generic.Dictionary<string, object?>(context.VarContext.CurrentVariables, StringComparer.OrdinalIgnoreCase);
+            context.VarContext.PushScope(reportVars, new System.Collections.Generic.Dictionary<string, VariableMetadata>(StringComparer.OrdinalIgnoreCase));
             try
             {
                 await context.Evaluate(script);

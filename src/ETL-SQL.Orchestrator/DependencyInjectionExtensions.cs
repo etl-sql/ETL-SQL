@@ -148,8 +148,12 @@ namespace ETL_SQL.Orchestrator
                 services.AddTransient(type);
             }
 
+            services.AddTransient<IStatementHandler, ETL_SQL.ReportBuilder.ExportReportStatementHandler>();
+            services.AddTransient<ETL_SQL.ReportBuilder.ExportReportStatementHandler>();
+
             // 4. Orchestration & Storage
-            services.AddSingleton<SQLiteJobHistoryStore>();
+            services.AddSingleton(sp => new SQLiteJobHistoryStore(
+                configuration["Orchestrator:DatabasePath"]));
             services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());

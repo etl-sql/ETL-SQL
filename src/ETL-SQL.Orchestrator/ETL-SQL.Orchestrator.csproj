@@ -23,6 +23,7 @@
     <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
     <ProjectReference Include="..\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
     <ProjectReference Include="..\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
+    <ProjectReference Include="..\ETL-SQL.ReportBuilder\ETL-SQL.ReportBuilder.csproj" />
   </ItemGroup>
 
   <ItemGroup>

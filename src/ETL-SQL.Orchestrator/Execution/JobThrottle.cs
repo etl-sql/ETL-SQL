@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -35,12 +36,18 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly SemaphoreSlim _initLock = new(1, 1);
 
         public JobThrottle(IOptions<JobThrottleOptions> options, ILogger<JobThrottle> logger)
+            : this(options, logger, new ConfigurationBuilder().Build())
+        {
+        }
+
+        public JobThrottle(IOptions<JobThrottleOptions> options, ILogger<JobThrottle> logger, IConfiguration configuration)
         {
             _maxConcurrent = options.Value.MaxConcurrentJobs > 0
                 ? options.Value.MaxConcurrentJobs
                 : Math.Max(1, Environment.ProcessorCount / 2);
 
-            _connectionString = $"Data Source={SQLiteJobHistoryStore.DefaultDbPath()}";
+            var dbPath = configuration["Orchestrator:DatabasePath"];
+            _connectionString = $"Data Source={dbPath ?? SQLiteJobHistoryStore.DefaultDbPath()}";
             _logger = logger;
             _logger.LogInformation("JobThrottle initialized: max_concurrent_jobs={Max} (cross-process, pid={Pid})",
                 _maxConcurrent, _pid);

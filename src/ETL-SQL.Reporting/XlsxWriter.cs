@@ -59,10 +59,9 @@ namespace ETL_SQL.Reporting
         // NOTE: MiniExcel infers headers from the first row's keys, so a sheet with
         // zero rows produces an empty worksheet (acceptable; exports almost always
         // carry data).
-        private static List<Dictionary<string, object?>> Materialize(
+        private static IEnumerable<Dictionary<string, object?>> Materialize(
             IReadOnlyList<Column> columns, IEnumerable<IDictionary<string, object?>> rows)
         {
-            var result = new List<Dictionary<string, object?>>();
             foreach (var row in rows)
             {
                 var mapped = new Dictionary<string, object?>(columns.Count);
@@ -71,9 +70,8 @@ namespace ETL_SQL.Reporting
                     row.TryGetValue(col.Name, out var raw);
                     mapped[col.Name] = Coerce(raw, col.Type);
                 }
-                result.Add(mapped);
+                yield return mapped;
             }
-            return result;
         }
 
         private enum Kind { Text, Number, Date }

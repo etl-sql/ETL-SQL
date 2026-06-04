@@ -89,7 +89,7 @@ namespace ETL_SQL.Engine.Handlers
             var result = new List<SubscriptionParameter>();
             foreach (var line in File.ReadAllLines(scriptPath))
             {
-                var m = Regex.Match(line, @"^SET\s+(@\w+)\s*=\s*'(.*)';\s*$", RegexOptions.IgnoreCase);
+                var m = Regex.Match(line, @"^(?:SET|DECLARE)\s+(@\w+)(?:\s+STRING)?\s*=\s*'(.*)';\s*$", RegexOptions.IgnoreCase);
                 if (m.Success) result.Add(new SubscriptionParameter(m.Groups[1].Value, m.Groups[2].Value));
             }
             return result;
@@ -100,16 +100,16 @@ namespace ETL_SQL.Engine.Handlers
             if (!File.Exists(scriptPath)) return;
             var lines = File.ReadAllLines(scriptPath).ToList();
 
-            // Remove old SET @param = '...' lines
-            lines.RemoveAll(l => Regex.IsMatch(l, @"^SET\s+@\w+\s*=\s*'.*';\s*$", RegexOptions.IgnoreCase));
+            // Remove old SET / DECLARE @param lines
+            lines.RemoveAll(l => Regex.IsMatch(l, @"^(?:SET|DECLARE)\s+@\w+(?:\s+STRING)?\s*=\s*'.*';\s*$", RegexOptions.IgnoreCase));
 
             // Find insertion point: after comment block
             int insertAt = 0;
             while (insertAt < lines.Count && lines[insertAt].StartsWith("--")) insertAt++;
             if (insertAt < lines.Count && lines[insertAt] == "") insertAt++;
 
-            // Insert new parameter SET statements
-            var setLines = parameters.Select(p => $"SET {p.Name} = '{p.Value.Replace("'", "\\'")}';").ToList();
+            // Insert new parameter DECLARE statements
+            var setLines = parameters.Select(p => $"DECLARE {p.Name} STRING = '{p.Value.Replace("'", "\\'")}';").ToList();
             if (setLines.Count > 0)
             {
                 setLines.Add("");

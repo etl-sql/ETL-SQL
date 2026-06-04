@@ -517,13 +517,59 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
     }
 
+    [Fact]
+    public async Task ExportData_CsvAndXlsx_StreamCorrectly()
+    {
+        var token  = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var name   = $"#export_{suffix}";
+        var folder = $"/export_{suffix}";
+        var schema = """[{"name":"ID","type":"INT"},{"name":"Name","type":"VARCHAR"}]""";
+
+        // 1. Write the Parquet file
+        var datasetFileName = $"export_{suffix}.parquet";
+        var datasetFile = Path.Combine(_factory.TempDir, "datasets", datasetFileName);
+
+        var ds = new ETL_SQL.Connectors.Parquet.ParquetDataSource(ETL_SQL.Core.Common.SystemExecutionContext.Instance, datasetFile);
+        var batch = new ETL_SQL.Data.DataTable();
+        batch.ColumnNames.AddRange(new[] { "ID", "Name" });
+        var r1 = new ETL_SQL.Data.Row(); r1["ID"] = 1L; r1["Name"] = "Alice";
+        await batch.AddRowAsync(r1);
+        await ds.WriteBatches(new[] { batch }.ToAsyncEnumerable());
+
+        // 2. Register it in the Db
+        await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Public, rowCount: 1, columnSchema: schema, lastRefresh: DateTime.UtcNow);
+
+        var id = await GetDatasetIdAsync(name, folder);
+
+        // 3. Request CSV export
+        var csvRes = await AuthGet(token, $"/api/datasets/{id}/data/export?format=csv");
+        if (csvRes.StatusCode != HttpStatusCode.OK)
+        {
+            var errMsg = await csvRes.Content.ReadAsStringAsync();
+            Assert.Fail($"Export failed: {csvRes.StatusCode} - {errMsg}");
+        }
+        Assert.StartsWith("text/csv", csvRes.Content.Headers.ContentType?.MediaType);
+        var csvContent = await csvRes.Content.ReadAsStringAsync();
+        Assert.Contains("ID,Name", csvContent);
+        Assert.Contains("1,Alice", csvContent);
+
+        // 4. Request XLSX export
+        var xlsxRes = await AuthGet(token, $"/api/datasets/{id}/data/export?format=xlsx");
+        Assert.Equal(HttpStatusCode.OK, xlsxRes.StatusCode);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xlsxRes.Content.Headers.ContentType?.MediaType);
+        var xlsxBytes = await xlsxRes.Content.ReadAsByteArrayAsync();
+        Assert.NotEmpty(xlsxBytes);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private async Task RegisterDatasetAsync(
         string name, string folder,
         DatasetAccessLevel accessLevel = DatasetAccessLevel.Public,
         long rowCount = 0, string? ttl = null, string? columnSchema = null,
-        DateTime? lastRefresh = null, int? owningReportId = null)
+        DateTime? lastRefresh = null, int? owningReportId = null,
+        ETL_SQL.Core.DatasetEncryptionMode encryptionMode = ETL_SQL.Core.DatasetEncryptionMode.None)
     {
         using var scope = _factory.Services.CreateScope();
         var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
@@ -535,6 +581,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
             ParquetFilePath = $"{name.TrimStart('&', '#')}.parquet",
             SourceQuery     = "SELECT 1",
             AccessLevel     = accessLevel,
+            EncryptionMode  = encryptionMode,
             RowCount        = rowCount,
             Ttl             = ttl,
             ColumnSchema    = columnSchema,

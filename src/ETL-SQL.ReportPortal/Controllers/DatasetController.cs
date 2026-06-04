@@ -1,3 +1,4 @@
+using System.IO.Pipelines;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -153,21 +154,48 @@ public class DatasetController(
 
         try
         {
+            var (filteredRows, columns) = await viewer.PrepareExportAsync(id, sort, dir, search, filterList);
+
             if (string.Equals(format, "xlsx", StringComparison.OrdinalIgnoreCase))
             {
-                // .xlsx is a zip and needs a seekable stream for its central directory,
-                // so buffer it rather than streaming to the (non-seekable) response body.
-                using var ms = new MemoryStream();
-                await viewer.ExportXlsxAsync(id, sort, dir, search, filterList, ms, dataset.Name);
-                return File(ms.ToArray(),
+                var pipe = new Pipe();
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await using var stream = pipe.Writer.AsStream();
+                        await viewer.ExportXlsxAsync(columns, filteredRows, stream, dataset.Name);
+                        await pipe.Writer.CompleteAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        await pipe.Writer.CompleteAsync(ex);
+                    }
+                });
+
+                return File(pipe.Reader.AsStream(),
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     $"{safeName}.xlsx");
             }
 
-            Response.ContentType = "text/csv; charset=utf-8";
-            Response.Headers.Append("Content-Disposition", $"attachment; filename=\"{safeName}.csv\"");
-            await viewer.ExportCsvAsync(id, sort, dir, search, filterList, Response.Body);
-            return new EmptyResult();
+            var csvPipe = new Pipe();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await using var stream = csvPipe.Writer.AsStream();
+                    await viewer.ExportCsvAsync(columns, filteredRows, stream);
+                    await csvPipe.Writer.CompleteAsync();
+                }
+                catch (Exception ex)
+                {
+                    await csvPipe.Writer.CompleteAsync(ex);
+                }
+            });
+
+            return File(csvPipe.Reader.AsStream(),
+                "text/csv; charset=utf-8",
+                $"{safeName}.csv");
         }
         catch (InvalidOperationException ex)
         {

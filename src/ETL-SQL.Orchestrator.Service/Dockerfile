@@ -25,6 +25,8 @@ RUN dotnet build "ETL-SQL.Orchestrator.Service.csproj" -c Release -o /app/build
 
 FROM build AS publish
 RUN dotnet publish "ETL-SQL.Orchestrator.Service.csproj" -c Release -o /app/publish /p:UseAppHost=false
+WORKDIR "/src/ETL-SQL.App"
+RUN dotnet publish "ETL-SQL.App.csproj" -c Release -o /app/publish /p:UseAppHost=true
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
@@ -38,8 +40,8 @@ RUN apt-get update \
 
 COPY --from=publish /app/publish .
 
-# Create logs and snapshots directories
-RUN mkdir -p logs Snapshots Reports
+# Create runtime data directories
+RUN mkdir -p logs Snapshots Reports data Sessions
 
 EXPOSE 5001
 ENV ASPNETCORE_URLS=http://+:5001

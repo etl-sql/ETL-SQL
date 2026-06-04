@@ -1,8 +1,10 @@
 #nullable enable
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using Microsoft.ClearScript.V8;
 
 namespace ETL_SQL.Reporting
@@ -29,11 +31,6 @@ namespace ETL_SQL.Reporting
         /// missing V8 runtime turns the whole high-fidelity path off with no diagnostic.
         /// </summary>
         public static Action<string, Exception>? OnError { get; set; }
-
-        private readonly object _lock = new();
-        private V8ScriptEngine? _engine;
-        private bool _initFailed;
-        private readonly HashSet<string> _registeredMaps = new(StringComparer.OrdinalIgnoreCase);
 
         // Bare V8 has no host timer APIs; echarts schedules animation with them, which
         // SSR doesn't need — no-op shims let it load and render.
@@ -96,6 +93,28 @@ namespace ETL_SQL.Reporting
                 return svg;
             };";
 
+        private readonly ConcurrentQueue<PooledEngine> _pool = new();
+        private readonly SemaphoreSlim _poolSemaphore = new(Environment.ProcessorCount);
+        private readonly object _initLock = new();
+        private bool _initFailed;
+        private string? _cachedEchartsJs;
+
+        private sealed class PooledEngine : IDisposable
+        {
+            public V8ScriptEngine Engine { get; }
+            public HashSet<string> RegisteredMaps { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+            public PooledEngine(V8ScriptEngine engine)
+            {
+                Engine = engine;
+            }
+
+            public void Dispose()
+            {
+                Engine.Dispose();
+            }
+        }
+
         /// <summary>
         /// Render the visual's ECharts option to an SVG string, or null if it has no
         /// chart option (CARD/TABLE/TEXT/etc.) or rendering is unavailable.
@@ -103,42 +122,70 @@ namespace ETL_SQL.Reporting
         public string? RenderSvg(VisualManifest visual, int width = 600, int height = 350)
         {
             if (string.IsNullOrWhiteSpace(visual.ChartConfig)) return null;
+            if (_initFailed) return null;
 
-            lock (_lock)
-            {
-                EnsureEngine();
-                if (_engine == null) return null;
-                try
-                {
-                    EnsureMapRegistered(visual.ChartConfig!);
-                    return _engine.Script.__renderChartSvg(visual.ChartConfig, width, height) as string;
-                }
-                catch (Exception ex)
-                {
-                    OnError?.Invoke("ECharts SSR render failed; falling back to the static chart renderer", ex);
-                    return null; // caller falls back to the static renderer
-                }
-            }
-        }
-
-        private void EnsureEngine()
-        {
-            if (_engine != null || _initFailed) return;
+            _poolSemaphore.Wait();
+            PooledEngine? pooled = null;
             try
             {
-                var engine = new V8ScriptEngine();
-                engine.Execute(Shims);
-                engine.Execute(LoadEcharts());
-                engine.Execute(RenderFn);
-                engine.Execute("globalThis.__registerMap = function(name, geojson){ echarts.registerMap(name, JSON.parse(geojson)); };");
-                _engine = engine;
+                if (_initFailed) return null;
+
+                if (!_pool.TryDequeue(out pooled))
+                {
+                    lock (_initLock)
+                    {
+                        if (_initFailed) return null;
+                        try
+                        {
+                            pooled = CreateEngine();
+                        }
+                        catch (Exception ex)
+                        {
+                            _initFailed = true;
+                            OnError?.Invoke("ECharts SSR engine failed to initialize (V8/echarts unavailable); " +
+                                            "all chart exports will use the static renderer", ex);
+                            return null;
+                        }
+                    }
+                }
+
+                EnsureMapRegistered(pooled, visual.ChartConfig!);
+                return pooled.Engine.Script.__renderChartSvg(visual.ChartConfig, width, height) as string;
             }
             catch (Exception ex)
             {
-                _initFailed = true; // V8 unavailable / echarts failed to load → static fallback
-                OnError?.Invoke("ECharts SSR engine failed to initialize (V8/echarts unavailable); " +
-                                "all chart exports will use the static renderer", ex);
+                OnError?.Invoke("ECharts SSR render failed; falling back to the static chart renderer", ex);
+                return null; // caller falls back to the static renderer
             }
+            finally
+            {
+                if (pooled != null)
+                {
+                    if (_initFailed)
+                    {
+                        pooled.Dispose();
+                    }
+                    else
+                    {
+                        _pool.Enqueue(pooled);
+                    }
+                }
+                _poolSemaphore.Release();
+            }
+        }
+
+        private PooledEngine CreateEngine()
+        {
+            var engine = new V8ScriptEngine();
+            engine.Execute(Shims);
+            if (_cachedEchartsJs == null)
+            {
+                _cachedEchartsJs = LoadEcharts();
+            }
+            engine.Execute(_cachedEchartsJs);
+            engine.Execute(RenderFn);
+            engine.Execute("globalThis.__registerMap = function(name, geojson){ echarts.registerMap(name, JSON.parse(geojson)); };");
+            return new PooledEngine(engine);
         }
 
         private static string LoadEcharts()
@@ -154,7 +201,7 @@ namespace ETL_SQL.Reporting
 
         // MAP charts reference a registered map by name (series.map). Register the
         // matching bundled GeoJSON into ECharts once, on demand.
-        private void EnsureMapRegistered(string chartConfig)
+        private void EnsureMapRegistered(PooledEngine pooled, string chartConfig)
         {
             string? mapKey = null;
             try
@@ -165,13 +212,13 @@ namespace ETL_SQL.Reporting
             }
             catch { return; }
 
-            if (string.IsNullOrEmpty(mapKey) || _registeredMaps.Contains(mapKey)) return;
+            if (string.IsNullOrEmpty(mapKey) || pooled.RegisteredMaps.Contains(mapKey)) return;
 
             var geojson = LoadGeojson(mapKey);
             if (geojson == null) return; // unknown map → render without it rather than fail
 
-            _engine!.Script.__registerMap(mapKey, geojson);
-            _registeredMaps.Add(mapKey);
+            pooled.Engine.Script.__registerMap(mapKey, geojson);
+            pooled.RegisteredMaps.Add(mapKey);
         }
 
         private static string? LoadGeojson(string mapKey)
@@ -187,7 +234,11 @@ namespace ETL_SQL.Reporting
 
         public void Dispose()
         {
-            lock (_lock) { _engine?.Dispose(); _engine = null; }
+            while (_pool.TryDequeue(out var pooled))
+            {
+                pooled.Dispose();
+            }
+            _poolSemaphore.Dispose();
         }
     }
 }

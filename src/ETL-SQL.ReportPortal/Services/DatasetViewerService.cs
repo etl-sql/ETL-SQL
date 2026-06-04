@@ -24,29 +24,30 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
         string? search, IEnumerable<DatasetColumnFilterDto> filters)
     {
         var (rows, columns) = await LoadCachedAsync(id);
-        var filtered = Apply(rows, columns, search, filters);
+        var filteredList = Apply(rows, columns, search, filters);
 
         if (!string.IsNullOrWhiteSpace(sort) && columns.Any(c => c.Name.Equals(sort, StringComparison.OrdinalIgnoreCase)))
         {
             bool desc = "desc".Equals(dir, StringComparison.OrdinalIgnoreCase);
-            filtered = desc
-                ? filtered.OrderByDescending(r => r.GetValueOrDefault(sort)).ToList()
-                : filtered.OrderBy(r => r.GetValueOrDefault(sort)).ToList();
+            filteredList = desc
+                ? filteredList.OrderByDescending(r => r.GetValueOrDefault(sort))
+                : filteredList.OrderBy(r => r.GetValueOrDefault(sort));
         }
 
+        var materialized = filteredList.ToList();
+
         long totalCount    = rows.Count;
-        long filteredCount = filtered.Count;
+        long filteredCount = materialized.Count;
 
         var page1 = Math.Max(1, page);
         var size  = Math.Clamp(pageSize, 1, 1000);
-        var paged = filtered.Skip((page1 - 1) * size).Take(size).ToList();
+        var paged = materialized.Skip((page1 - 1) * size).Take(size).ToList();
 
         return new DatasetRowsDto(columns, paged, totalCount, filteredCount, page1, size);
     }
 
-    public async Task ExportCsvAsync(
-        int id, string? sort, string? dir, string? search,
-        IEnumerable<DatasetColumnFilterDto> filters, Stream output)
+    public async Task<(IEnumerable<Dictionary<string, object?>> rows, List<DatasetColumnDto> columns)> PrepareExportAsync(
+        int id, string? sort, string? dir, string? search, IEnumerable<DatasetColumnFilterDto> filters)
     {
         var (rows, columns) = await LoadCachedAsync(id);
         var filtered = Apply(rows, columns, search, filters);
@@ -55,10 +56,16 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
         {
             bool desc = "desc".Equals(dir, StringComparison.OrdinalIgnoreCase);
             filtered = desc
-                ? filtered.OrderByDescending(r => r.GetValueOrDefault(sort)).ToList()
-                : filtered.OrderBy(r => r.GetValueOrDefault(sort)).ToList();
+                ? filtered.OrderByDescending(r => r.GetValueOrDefault(sort))
+                : filtered.OrderBy(r => r.GetValueOrDefault(sort));
         }
 
+        return (filtered, columns);
+    }
+
+    public async Task ExportCsvAsync(
+        List<DatasetColumnDto> columns, IEnumerable<Dictionary<string, object?>> filtered, Stream output)
+    {
         await using var writer = new StreamWriter(output, Encoding.UTF8, leaveOpen: true);
 
         // Header
@@ -70,20 +77,8 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
     }
 
     public async Task ExportXlsxAsync(
-        int id, string? sort, string? dir, string? search,
-        IEnumerable<DatasetColumnFilterDto> filters, Stream output, string sheetName = "Data")
+        List<DatasetColumnDto> columns, IEnumerable<Dictionary<string, object?>> filtered, Stream output, string sheetName = "Data")
     {
-        var (rows, columns) = await LoadCachedAsync(id);
-        var filtered = Apply(rows, columns, search, filters);
-
-        if (!string.IsNullOrWhiteSpace(sort) && columns.Any(c => c.Name.Equals(sort, StringComparison.OrdinalIgnoreCase)))
-        {
-            bool desc = "desc".Equals(dir, StringComparison.OrdinalIgnoreCase);
-            filtered = desc
-                ? filtered.OrderByDescending(r => r.GetValueOrDefault(sort)).ToList()
-                : filtered.OrderBy(r => r.GetValueOrDefault(sort)).ToList();
-        }
-
         // Columns carry their SQL type, so XlsxWriter emits typed number/date cells.
         var cols = columns.Select(c => new XlsxWriter.Column(c.Name, c.Type)).ToList();
         await XlsxWriter.WriteAsync(output, cols, filtered, sheetName);
@@ -93,7 +88,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
         int id, IEnumerable<DatasetColumnFilterDto> filters)
     {
         var (rows, columns) = await LoadCachedAsync(id);
-        var filtered = Apply(rows, columns, null, filters);
+        var filtered = Apply(rows, columns, null, filters).ToList();
 
         return columns.Select(col =>
         {
@@ -242,7 +237,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
 
     // ── Filtering ─────────────────────────────────────────────────────────────
 
-    private static List<Dictionary<string, object?>> Apply(
+    private static IEnumerable<Dictionary<string, object?>> Apply(
         List<Dictionary<string, object?>> rows,
         List<DatasetColumnDto> columns,
         string? search,
@@ -275,7 +270,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
             };
         }
 
-        return result.ToList();
+        return result;
     }
 
     private static int CompareNum(object? val, string? threshold)

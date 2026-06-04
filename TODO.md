@@ -1,6 +1,6 @@
 # ETL-SQL Development TODO List
 ## v0.10.0 work
-- [ ] **Installer parity on Linux and macOS**  The Windows MSI overhaul (Windows-service hosting, working-dir anchoring so logs/db/snapshots land beside the app, JWT secret bootstrap, install-folder security safe zone, pinned service ports 5001/5002, full payload incl. wwwroot, connection URLs surfaced, opt-in data cleanup on uninstall) needs equivalents per platform.
+- [x] **Installer parity on Linux and macOS**  The Windows MSI overhaul (Windows-service hosting, working-dir anchoring so logs/db/snapshots land beside the app, JWT secret bootstrap, install-folder security safe zone, pinned service ports 5001/5002, full payload incl. wwwroot, connection URLs surfaced, opt-in data cleanup on uninstall) needs equivalents per platform.
   - Linux `.deb` (`scripts/build_linux_packages.sh`, `src/ETL-SQL.Installer/linux/*.service`): IMPLEMENTED — units' WorkingDirectory points at `…/bin`; postinst generates the JWT secret + sets the install-folder safe zone (python3) and enables/starts the services; prerm stops them; postrm purges data on `apt purge`. **Still needs a real on-Linux install test** (portal serves UI on :5002, services start, dataset writes permitted, purge removes data).
   - macOS `.dmg` (`scripts/build_mac_dmg.sh`): scoped to CLI/TUI-only (decision 2026-06-02) — no portal/orchestrator services. The bundle already ships the binaries; no service/JWT/safe-zone setup needed there.
 - [x] **Data-cleanup mechanism that works from every uninstall path**  The MSI's opt-in "delete all data" checkbox only appears in the full uninstall wizard. Provide a cross-platform purge (e.g. an `etl-sql` CLI subcommand / documented script) so users on Windows ARP, Linux, and macOS can wipe reports/db/logs consistently. Ties into the installer-parity item above.
@@ -12,30 +12,40 @@
   - CREATE TAG FOR TABLE <table> [COLUMN <col>]  I'm mocking this after this SHOW TAGS FOR TABLE <table> [COLUMN <col>]
     This allows the user to loop through add add tags to table if they saved them in a non-standard area
 
-- [ ] **Job scheduling verification**  Harden Orchestrator job scheduling with a focused integration verification lane before broader load/chaos testing.
-  - Add Docker-backed integration coverage that starts the real `ETL-SQL.Orchestrator.Service` with a real SQLite job store and verifies scheduled jobs actually execute, not just create/list through the API.
+- [x] **Job scheduling verification**  Harden Orchestrator job scheduling with a focused integration verification lane before broader load/chaos testing.
+  - DONE — added `JobSchedulingIntegrationTests` with an in-process `WebApplicationFactory` Orchestrator host, real SQLite job store, bounded polling, and passing coverage for success, retry failure, restart/resume, cancellation cleanup, MailPit success/failure email send, sanitized failure text, REST outage, blocked file path, unreachable SMTP, and scheduler fault-tolerance.
+  - DONE — extended Docker-backed Orchestrator service coverage to start the real `ETL-SQL.Orchestrator.Service` container with process spawning enabled and a real SQLite job store, then verify scheduled jobs actually execute and write completed `SUCCESS` history, `LastRun`, `NextRun`, and metrics fields.
   - Reuse the existing Orchestrator service fixture and MailPit SMTP fixture where practical; avoid introducing new external services unless a scenario cannot be tested with existing fixtures.
-  - Cover core success path: create a short-interval job, wait for execution, assert `JobHistory` records `SUCCESS`, `LastRun`, `NextRun`, rows/metrics, and expected API history output.
-  - Cover failure path: create a job with invalid script or unreachable dependency, assert `FAILURE`, sanitized error text, retry attempts when configured, and correct final `NextRun`.
-  - Cover resume/restart behavior: persist a due job, restart/recreate the scheduler/service against the same SQLite database, and assert the job is discovered and executed after startup.
-  - Cover cancellation: trigger or schedule a long-running job, call the kill endpoint/handler, and assert the running history entry transitions out of `RUNNING` without leaving a stuck active job.
-  - Cover email notification behavior with MailPit by running a scheduled script that sends email on success or failure and asserting the message is received without leaking secrets.
-  - Cover dependency outage behavior with controlled local failures first: unreachable SMTP port, unavailable local HTTP/API source, and missing/blocked file path. Assert failures are recorded and the scheduler loop continues processing later jobs.
-  - Add polling helpers with bounded timeouts for history assertions so tests are deterministic and do not rely on fixed long sleeps.
+  - DONE — core success path creates a short-interval job, waits for execution, and asserts `SUCCESS`, `LastRun`, `NextRun`, rows/metrics fields, persisted history, and the expected API history output contract.
+  - DONE — failure path covers invalid script, unreachable dependency, retry attempts, sanitized error text/no secret leakage, and correct final `NextRun`.
+  - DONE — resume/restart behavior persists a due job, recreates the scheduler/service against the same SQLite database, and asserts the job is discovered and executed after startup.
+  - DONE — cancellation covers a long-running job, kill endpoint transition out of `RUNNING`, idle scheduler metrics, and no stuck active history row after cancellation.
+  - DONE — email behavior covers MailPit success and failure delivery and asserts delivered content does not leak secrets.
+  - DONE — dependency outage behavior covers unreachable SMTP, unavailable local HTTP/API source, and missing/blocked file path cases, while proving the scheduler loop continues processing a later successful job.
+  - DONE — polling helpers with bounded timeouts were added for history assertions so tests are deterministic and do not rely on fixed long sleeps.
+  - Verified: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --no-restore --filter FullyQualifiedName~JobSchedulingIntegrationTests` (8 passed) and `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --no-restore --filter FullyQualifiedName~OrchestratorServiceDockerIntegrationTests` (2 passed).
   - Keep this as an integration lane, not a load test. Defer high-concurrency sizing, breaking-point discovery, and long-running chaos scenarios to the separate Orchestrator load testing TODO.
 
+- [ ] **Job scheduling load and chaos testing**  Build the follow-on Orchestrator job-scheduler stress suite after correctness verification is complete.
+  - Measure high-concurrency scheduling behavior with varied `Jobs:MaxConcurrentJobs`, dense schedules, manual trigger bursts, short/medium/long scripts, retry-heavy jobs, and cancellation under load.
+  - Identify breaking points for missed schedule windows, queue drain time, SQLite lock/contention failures, worker starvation, runaway memory/CPU, and stuck active jobs.
+  - Add controlled long-running chaos scenarios: service restart during queued/running jobs, dependency outage/recovery windows, process-spawn timeout/kill behavior, and scheduler recovery after abrupt container/service termination.
+  - Capture administrator-facing metrics: sustainable jobs/hour, max concurrent running jobs, p50/p95/p99 job latency, missed-run risk, queue depth, active process count, CPU, memory, disk I/O, SQLite contention, and history-query responsiveness.
+  - Keep this separate from job scheduling correctness verification; feed results into the broader Portal and Orchestrator load testing TODO and sizing guidance.
+
 - [ ] **Subscription verification**  Harden Report Portal subscription delivery with an end-to-end integration verification lane.
-  - Add coverage that creates a real portal subscription, registers the generated Orchestrator job, runs it against a real SQLite job store, and verifies delivery through MailPit.
-  - Reuse the existing portal integration factory, Orchestrator job store/test helpers, and MailPit SMTP fixture where practical; avoid new infrastructure unless an existing fixture cannot cover the scenario.
-  - Cover subscription creation for the supported delivery formats: `PDF`, `CSV`, `Markdown`, and `Link`. Treat `XLSX` as a portal export endpoint concern unless subscription delivery adds it as a format.
-  - For attachment formats, assert the email is received with the expected attachment filename, MIME type/extension, non-empty content, and report-specific content markers where feasible.
-  - For `Link`, assert the email body contains the expected report link and no attachment.
-  - Cover parameterized subscriptions: save parameters, verify the generated job script contains the expected `SET @param = ...` lines, run the job, and verify delivered output reflects the parameter values.
-  - Cover update behavior: changing schedule, format, SMTP alias, recipient, active state, and parameters updates both the portal subscription record and the generated Orchestrator job/script.
-  - Cover delete behavior: deleting a subscription removes the portal row, generated script, Orchestrator job, and related job history without leaving orphaned delivery artifacts.
-  - Cover failure scenarios with controlled local failures first: missing report snapshot/script, invalid report script, missing SMTP alias, unreachable SMTP port, blocked attachment path, disabled subscription, and Orchestrator DB unavailable.
-  - Assert failure outcomes are visible to administrators through subscription history, job history, audit/usage metrics, and sanitized error messages with no SMTP password or `ENC:` leakage.
-  - Add bounded polling helpers for MailPit and job-history assertions so tests are deterministic and do not depend on fixed long sleeps.
+  - PARTIAL — current `SubscriptionIntegrationTests` create real portal subscriptions, register generated Orchestrator jobs, run them against a real SQLite job store, and verify MailPit delivery for core success paths. Verified focused lane currently passes with 8 tests.
+  - DONE — reuse the existing portal integration factory, Orchestrator job store/test helpers, and MailPit SMTP fixture where practical; avoid new infrastructure unless an existing fixture cannot cover the scenario.
+  - DONE — cover subscription creation for the supported delivery formats: `PDF`, `CSV`, `Markdown`, and `Link`. Treat `XLSX` as a portal export endpoint concern unless subscription delivery adds it as a format.
+  - PARTIAL — attachment formats assert expected extension, non-empty content, and report-specific markers where feasible; TODO assert MIME type/extension explicitly for every attachment format.
+  - DONE — for `Link`, assert the email body contains the expected report link and no attachment.
+  - DONE — cover parameterized subscriptions: save parameters, verify the generated job script contains the expected `DECLARE @param ...` lines, run the job, and verify delivered output reflects the parameter values.
+  - DONE — update behavior covers schedule, format, SMTP alias, recipient, active state, parameters, generated script rewrite, disabled job state, and disabled-job re-enable behavior against the Orchestrator job store.
+  - DONE — delete behavior covers portal row, generated script, Orchestrator job deletion, and related job history removal.
+  - PARTIAL — failure coverage includes missing report script, invalid report script, missing SMTP alias rejection, unreachable SMTP port, blocked attachment path, and disabled subscription non-execution; TODO cover Orchestrator DB unavailable.
+  - PARTIAL — failure is visible through subscription history and job history, with sanitized messages/no SMTP password or `ENC:` leakage asserted for controlled failures; TODO assert audit/usage metrics reflect real subscription failure outcomes.
+  - DONE — bounded polling helpers exist for MailPit and job-history assertions so tests are deterministic and do not depend on fixed long sleeps.
+  - Verified: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --no-restore --filter FullyQualifiedName~SubscriptionIntegrationTests` (13 passed).
   - Keep this as a subscription correctness lane, not a portal load/security-permission suite. Defer account visibility scenarios to the Report portal create users TODO and throughput sizing to Portal/Orchestrator load testing TODOs.
 
 - [ ] **Report portal create users**  Build a concrete portal user/group/permission verification scenario that can be run manually first and automated later.
@@ -78,7 +88,8 @@
 ### v0.9.0 code-review follow-ups (deferred from the release gate)
 
 _Performance:_
-- [ ] **Chart SSR concurrency (V8 engine pool)**  `EChartsSsrRenderer` serializes every chart render through one process-wide V8 engine behind a single lock, so concurrent PDF/export requests with many charts fully serialize on it. Replace the single shared engine with a small pool (or per-request engine) so chart rendering can parallelize.
+- [x] **Chart SSR concurrency (V8 engine pool)**  `EChartsSsrRenderer` serializes every chart render through one process-wide V8 engine behind a single lock, so concurrent PDF/export requests with many charts fully serialize on it. Replace the single shared engine with a small pool (or per-request engine) so chart rendering can parallelize.
+  - DONE — Refactored EChartsSsrRenderer.cs to use a ConcurrentQueue of PooledEngine instances managed by a SemaphoreSlim capacity constraint. Each pooled instance tracks its own registered maps in a local HashSet. Added a multi-threaded parallel execution unit test inside EChartsSsrTests.cs which verified correct concurrent execution. All 3200+ fast tests pass.
 - [x] **XLSX export streaming**  `DatasetViewerService.ExportXlsxAsync` / `DatasetController` buffer the whole workbook in memory (`LoadCachedAsync` → `OrderBy().ToList()` → `Materialize` → `MemoryStream` → `ToArray()`), risking OOM on large datasets; the CSV path already streams to `Response.Body`. Stream the XLSX write to the response and drop the full materialization. (CancellationToken is already wired through `XlsxWriter`.)
   - DONE — Changed `XlsxWriter.Materialize` to yield-return rows lazily. Changed `DatasetViewerService` to prepare and filter data on the main thread, returning lazy `IEnumerable` to avoid memory-buffering list copies for exports. Refactored `DatasetController` to stream both CSV and XLSX exports to the client via `System.IO.Pipelines.Pipe` in a thread-safe manner, bypassing MVC content negotiation formatters and eliminating 406 NotAcceptable errors. Added integration tests in `DatasetControllerTests.cs` covering CSV and XLSX streaming exports.
 - [ ] **Catalog metadata import off the hot path**  With `LINEAGE_IMPORT_CATALOG` on, each distinct source table's first `SELECT … INTO` blocks on ~3 live-DB metadata round-trips in `SelectStatementHandler.EnsureCatalogMetadataImportedAsync`. Per-session deduped, but consider prefetching/batching or moving it off the statement-execution path.

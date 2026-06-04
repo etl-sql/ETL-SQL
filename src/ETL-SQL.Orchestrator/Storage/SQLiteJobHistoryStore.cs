@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -42,17 +42,20 @@ namespace ETL_SQL.Orchestrator.Storage
 
         private async Task EnsureInitializedAsync()
         {
-            if (_initialized) return;
-            await _initLock.WaitAsync();
-            try { if (!_initialized) { await InitializeAsync(); _initialized = true; } }
-            finally { _initLock.Release(); }
+            await InitializeAsync();
         }
 
         /// <summary>Initializes the SQLite database and creates the necessary tables if they don't exist.</summary>
         public async Task InitializeAsync()
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
+            if (_initialized) return;
+            await _initLock.WaitAsync();
+            try
+            {
+                if (_initialized) return;
+
+                using var connection = new SqliteConnection(_connectionString);
+                await connection.OpenAsync();
 
             var createJobsTable = @"
                 CREATE TABLE IF NOT EXISTS Jobs (
@@ -144,6 +147,13 @@ namespace ETL_SQL.Orchestrator.Storage
             await EnsureHistoryColumnsExist(connection);
             await EnsureJobColumnsExist(connection);
             await EnsureLineageHistoryColumnsExist(connection);
+
+            _initialized = true;
+            }
+            finally
+            {
+                _initLock.Release();
+            }
         }
 
         private async Task EnsureJobColumnsExist(SqliteConnection connection)
