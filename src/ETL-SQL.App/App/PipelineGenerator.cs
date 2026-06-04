@@ -292,7 +292,27 @@ namespace ETL_SQL.App
                 }
             }
             sb.Indent(1).AppendLine("INTO #cleaned_data");
-            sb.Indent(1).AppendLine("FROM #staging;");
+            sb.Indent(1).AppendLine("FROM #staging");
+
+            var hasLookups = spec.Schema != null && spec.Schema.Any(c => c.MappingType?.ToLower() == "lookup");
+            var hasAggregations = spec.Schema != null && spec.Schema.Any(c => c.MappingType?.ToLower() == "aggregation");
+
+            if (hasLookups)
+            {
+                sb.Indent(1).AppendLine("-- [USER TODO]: Uncomment and complete reference lookup joins (L alias)");
+                sb.Indent(1).AppendLine("-- LEFT JOIN target_db.dbo.LookupTable AS L ON #staging.SourceKey = L.SourceKey");
+            }
+            if (hasAggregations)
+            {
+                var nonAggCols = spec.Schema!
+                    .Where(c => c.MappingType?.ToLower() != "aggregation")
+                    .Select(c => c.ColumnName)
+                    .ToList();
+                var groupByList = string.Join(", ", nonAggCols);
+                sb.Indent(1).AppendLine("-- [USER TODO]: Group by non-aggregated columns for calculations");
+                sb.Indent(1).AppendLine($"-- GROUP BY {groupByList}");
+            }
+            sb.Indent(1).Append(";").AppendLine();
             sb.AppendLine();
 
             // 7. Regex Formatting Checks
@@ -350,6 +370,23 @@ namespace ETL_SQL.App
 
         private static string GetCastingExpression(SpecColumn col)
         {
+            var mappingType = col.MappingType?.ToLower() ?? "flat";
+            var mappingRule = col.MappingRule ?? "";
+
+            if (mappingType == "lookup")
+            {
+                return $"L.{col.ColumnName} /* [LOOKUP]: {mappingRule} */";
+            }
+            if (mappingType == "aggregation")
+            {
+                return $"SUM({col.ColumnName}) /* [AGGREGATION]: {mappingRule} */";
+            }
+            if (mappingType == "constant")
+            {
+                var isStr = col.TypeFamily?.ToUpper() == "VARCHAR";
+                return isStr ? $"'{mappingRule.Replace("'", "''")}'" : mappingRule;
+            }
+
             var type = col.TypeFamily?.ToUpper() ?? "VARCHAR";
             var colName = col.ColumnName;
 
@@ -505,5 +542,11 @@ namespace ETL_SQL.App
 
         [JsonPropertyName("tags")]
         public List<string>? Tags { get; set; }
+
+        [JsonPropertyName("mapping_type")]
+        public string? MappingType { get; set; }
+
+        [JsonPropertyName("mapping_rule")]
+        public string? MappingRule { get; set; }
     }
 }
