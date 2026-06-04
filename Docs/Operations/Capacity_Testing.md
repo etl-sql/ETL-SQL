@@ -76,6 +76,25 @@ For a checked-in developer-workstation starter baseline, see
 Always label jobs/hour figures with the row profile used. A no-op `SELECT 1` job measures scheduler
 and trigger overhead only. It should not be presented as the normal ETL jobs/hour capacity.
 
+For hardware planning, publish at least one row-volume table alongside every jobs/hour number:
+
+| Row profile | What it represents |
+| ---: | :--- |
+| No-op / 1 row | Scheduler and trigger overhead only |
+| 10K rows | Default normal ETL sizing baseline |
+| 50K rows | Upper starter tier |
+| 100K rows | Heavier validation tier |
+
+Convert observed job duration into a rough ceiling with:
+
+```text
+jobs/hour = (3600 / seconds_per_job) * MaxConcurrentJobs
+starter_guidance = jobs/hour * 0.8
+```
+
+Then validate the estimate with the full harness and watch queue depth, SQLite contention, CPU,
+memory, disk I/O, and history-query responsiveness.
+
 ## Stepped Load And Breaches
 
 Start with an idle/warm baseline, increase concurrency in fixed steps, and hold each step long enough

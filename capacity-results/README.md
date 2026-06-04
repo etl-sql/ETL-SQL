@@ -22,3 +22,7 @@ The checked-in developer-workstation starter baseline is documented in
 When publishing Orchestrator job capacity, record the row profile used. A `SELECT 1` no-op job is
 useful for scheduler and trigger lower bounds, but normal operator guidance should start with a
 10K-row workload and then test 50K/100K tiers as heavier validation profiles.
+
+The local reference baseline includes an initial row-volume sizing table in
+[`reference-local/README.md`](reference-local/README.md). Treat that table as starter hardware
+planning guidance until the same row profiles are run through the full service-capacity harness.

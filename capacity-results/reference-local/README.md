@@ -51,6 +51,24 @@ the deployment's common jobs actually operate near that size. The row workload s
 Real connector I/O, joins, exports, retries, file work, and process-spawning jobs will reduce the
 jobs/hour number, often substantially.
 
+## Row-Volume Sizing Estimates
+
+The row workload profiles were validated by running them directly through the local ETL-SQL app on
+the reference machine. These timings are useful for first-pass hardware planning, but they are not a
+replacement for a full Orchestrator harness run because the scheduler, queue, history writes, and
+service hosting add their own overhead.
+
+| Row profile | Direct observed time/job | Theoretical ceiling at 4 workers | Conservative 20% margin | Recommended use |
+| ---: | ---: | ---: | ---: | :--- |
+| 10K rows | ~9 seconds | ~1,600 jobs/hour | ~1,200-1,300 jobs/hour | Default normal-workload sizing baseline |
+| 50K rows | ~27 seconds | ~530 jobs/hour | ~420 jobs/hour | Upper starter tier |
+| 100K rows | ~51 seconds | ~280 jobs/hour | ~220 jobs/hour | Heavier validation tier |
+
+Use the 10K-row estimate, not the no-op estimate, when explaining realistic starter hardware needs.
+For this reference host, that means the first planning number is approximately **1,200-1,300 normal
+10K-row jobs/hour** at `MaxConcurrentJobs=4`. To increase jobs/hour, first confirm CPU, memory, disk,
+and SQLite remain healthy, then test higher `MaxConcurrentJobs` values against the same row profile.
+
 After the final load step, `/metrics` reported `active_jobs=0`, `queued_jobs=0`, `max_jobs=4`, and
 `available_slots=4`. No SQLite lock or busy errors were observed.
 
