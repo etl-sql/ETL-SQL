@@ -1,0 +1,67 @@
+{
+  "pipeline_name": "sales_extract",
+  "metadata": {
+    "description": "Outbound sales transaction data compiled daily.",
+    "classification": "internal",
+    "owner": "finance_ops"
+  },
+  "destination": {
+    "connector_type": "FLATFILE",
+    "format": "EXCEL",
+    "delimiter": "none",
+    "text_qualifier": "none",
+    "encoding": "UTF8",
+    "naming_pattern": "sales_extract_{yyyyMMdd}.xlsx",
+    "path": "C:/Outbound/SalesReports",
+    "has_header": true
+  },
+  "schema": [
+    {
+      "column_name": "transaction_id",
+      "type_family": "INT",
+      "nullable": false,
+      "description": "Primary Key, auto-incrementing",
+      "tags": ["none"]
+    },
+    {
+      "column_name": "product_sku",
+      "type_family": "VARCHAR",
+      "max_length": 20,
+      "nullable": false,
+      "validation_regex": "^SKU-\\d{5}$",
+      "description": "Format: SKU-XXXXX",
+      "tags": ["none"]
+    },
+    {
+      "column_name": "quantity",
+      "type_family": "INT",
+      "nullable": false,
+      "description": "Must be greater than 0",
+      "tags": ["none"]
+    },
+    {
+      "column_name": "price_each",
+      "type_family": "DECIMAL",
+      "precision": 10,
+      "scale": 2,
+      "nullable": false,
+      "description": "Unit price in USD",
+      "tags": ["none"]
+    },
+    {
+      "column_name": "sale_date",
+      "type_family": "DATETIME",
+      "nullable": false,
+      "description": "UTC timestamp of purchase",
+      "tags": ["none"]
+    },
+    {
+      "column_name": "coupon_code",
+      "type_family": "VARCHAR",
+      "max_length": 15,
+      "nullable": true,
+      "description": "Optional discount code",
+      "tags": ["none"]
+    }
+  ]
+}

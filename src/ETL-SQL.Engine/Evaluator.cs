@@ -556,6 +556,8 @@ namespace ETL_SQL.Engine
 
         // Tables whose DB catalog metadata has already been imported this session.
         private HashSet<string>? _catalogImported;
+        private readonly object _catalogImportGate = new();
+        private readonly object _catalogRecordGate = new();
 
         /// <summary>
         /// When DB catalog import is enabled (off by default — see
@@ -568,27 +570,48 @@ namespace ETL_SQL.Engine
         public async Task EnsureCatalogMetadataImportedAsync(IEnumerable<string> sourceTables, System.Threading.CancellationToken ct = default)
         {
             if (!LineageImportCatalog || sourceTables == null) return;
-            foreach (var src in sourceTables)
-                await ImportCatalogForTableAsync(src, ct);
+            var imports = sourceTables
+                .Select(src => StartCatalogImportForTableAsync(src, ct))
+                .Where(task => task != null)
+                .Cast<Task>()
+                .ToArray();
+            if (imports.Length > 0)
+                await Task.WhenAll(imports);
         }
 
         private async Task ImportCatalogMetadataAsync(System.Threading.CancellationToken ct)
         {
-            foreach (var entry in LineageTracker.GetFullLineage().ToList())
-                foreach (var src in entry.SourceTables)
-                    await ImportCatalogForTableAsync(src, ct);
+            var imports = LineageTracker.GetFullLineage()
+                .ToList()
+                .SelectMany(entry => entry.SourceTables)
+                .Select(src => StartCatalogImportForTableAsync(src, ct))
+                .Where(task => task != null)
+                .Cast<Task>()
+                .ToArray();
+            if (imports.Length > 0)
+                await Task.WhenAll(imports);
+        }
+
+        private Task? StartCatalogImportForTableAsync(string src, System.Threading.CancellationToken ct)
+        {
+            // Skip temp tables, report/dataset nodes, variables, already-processed
+            if (string.IsNullOrEmpty(src) || src.StartsWith('#') || src.StartsWith('@') ||
+                src.StartsWith("report:", StringComparison.OrdinalIgnoreCase) ||
+                src.StartsWith("dataset:", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            lock (_catalogImportGate)
+            {
+                _catalogImported ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (!_catalogImported.Add(src))
+                    return null;
+            }
+
+            return ImportCatalogForTableAsync(src, ct);
         }
 
         private async Task ImportCatalogForTableAsync(string src, System.Threading.CancellationToken ct)
         {
-            _catalogImported ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            // Skip temp tables, report/dataset nodes, variables, already-processed
-            if (string.IsNullOrEmpty(src) || src.StartsWith('#') || src.StartsWith('@') ||
-                src.StartsWith("report:", StringComparison.OrdinalIgnoreCase) ||
-                src.StartsWith("dataset:", StringComparison.OrdinalIgnoreCase) ||
-                !_catalogImported.Add(src))
-                return;
 
             // Parse: connectionAlias.schema.table  or  connectionAlias.table
             var parts = src.Split('.', 3);
@@ -608,35 +631,38 @@ namespace ETL_SQL.Engine
                 var columns = await provider.GetColumnMetadataAsync(schema, table, ct);
                 var rels = await provider.GetRelationshipsAsync(schema, table, ct);
 
-                foreach (var col in columns)
+                lock (_catalogRecordGate)
                 {
-                    var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    foreach (var col in columns)
                     {
-                        ["db_type"]     = col.DataType,
-                        ["db_nullable"] = col.IsNullable ? "true" : "false",
-                        ["db_is_pk"]    = col.IsPrimaryKey ? "true" : "false",
-                    };
-                    // Record the DB column comment as the lineage description ("d")
-                    // so it inherits onto derived columns and surfaces as the
-                    // description, not merely a tag.
-                    if (!string.IsNullOrEmpty(col.Description))
-                        meta["d"] = col.Description!;
-                    foreach (var kv in col.ExtraProperties)
-                        meta[$"db_{kv.Key}"] = kv.Value;
+                        var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["db_type"]     = col.DataType,
+                            ["db_nullable"] = col.IsNullable ? "true" : "false",
+                            ["db_is_pk"]    = col.IsPrimaryKey ? "true" : "false",
+                        };
+                        // Record the DB column comment as the lineage description ("d")
+                        // so it inherits onto derived columns and surfaces as the
+                        // description, not merely a tag.
+                        if (!string.IsNullOrEmpty(col.Description))
+                            meta["d"] = col.Description!;
+                        foreach (var kv in col.ExtraProperties)
+                            meta[$"db_{kv.Key}"] = kv.Value;
 
-                    LineageTracker.Record(src, Array.Empty<string>(), "DB_CATALOG",
-                        targetColumn: col.ColumnName, metadata: meta);
-                }
+                        LineageTracker.Record(src, Array.Empty<string>(), "DB_CATALOG",
+                            targetColumn: col.ColumnName, metadata: meta);
+                    }
 
-                // FK relationships → @db_referenced_by tag on the referenced table's column
-                foreach (var rel in rels)
-                {
-                    var refMeta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    // FK relationships → @db_referenced_by tag on the referenced table's column
+                    foreach (var rel in rels)
                     {
-                        ["db_referenced_by"] = $"{src}.{rel.ForeignKeyColumn}"
-                    };
-                    LineageTracker.Record(rel.ReferencedTable, Array.Empty<string>(), "DB_CATALOG",
-                        targetColumn: rel.ReferencedColumn, metadata: refMeta);
+                        var refMeta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["db_referenced_by"] = $"{src}.{rel.ForeignKeyColumn}"
+                        };
+                        LineageTracker.Record(rel.ReferencedTable, Array.Empty<string>(), "DB_CATALOG",
+                            targetColumn: rel.ReferencedColumn, metadata: refMeta);
+                    }
                 }
 
                 // Attempt view/procedure definition expansion (best-effort, inside outer try)
@@ -673,13 +699,16 @@ namespace ETL_SQL.Engine
                 foreach (var entry in viewTracker.GetFullLineage())
                 {
                     // Re-record: target is the view name (so downstream consumers see the true upstream)
-                    LineageTracker.Record(
-                        viewQualifiedName,
-                        entry.SourceTables,
-                        "VIEW_EXPAND",
-                        targetColumn: entry.TargetColumn,
-                        sourceColumns: entry.SourceColumns,
-                        line: entry.Line);
+                    lock (_catalogRecordGate)
+                    {
+                        LineageTracker.Record(
+                            viewQualifiedName,
+                            entry.SourceTables,
+                            "VIEW_EXPAND",
+                            targetColumn: entry.TargetColumn,
+                            sourceColumns: entry.SourceColumns,
+                            line: entry.Line);
+                    }
                 }
             }
             catch { /* unparseable DDL — silently skip */ }

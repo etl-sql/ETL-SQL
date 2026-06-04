@@ -17,7 +17,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
         public async Task InMemoryDataSource_SpillsToDisk_WhenThresholdExceeded()
         {
             // Arrange
-            var eval = ServiceProviderServiceExtensions.GetRequiredService<Evaluator>(App.DependencyInjectionSetup.BuildServiceProvider());
+            var eval = ServiceProviderServiceExtensions.GetRequiredService<Evaluator>(global::ETL_SQL.App.DependencyInjectionSetup.BuildServiceProvider());
             eval.TempTableSpillThresholdRows = 20;
             eval.SpillEncryptionEnabled = false; // Simplify for test matching old style if needed, but new is better
             

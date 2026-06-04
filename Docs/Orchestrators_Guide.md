@@ -1,4 +1,4 @@
-﻿# ETL-SQL Orchestrator's Guide
+# ETL-SQL Orchestrator's Guide
 
 **Audience:** Operators, data engineers, and pipeline administrators who need to schedule, run, and monitor ETL-SQL jobs from the command line.
 
@@ -166,7 +166,47 @@ Generates a large test dataset for performance validation.
 ETL-SQL generate [--estimate <rows>]
 ```
 
-### 2.7 Exit Codes
+### 2.7 `gen-script` — Compile Spec JSON to Script
+
+Compiles an intermediate JSON specification (schema and metadata) into a validated, security-compliant `.etlsql` script boilerplate.
+
+```
+ETL-SQL gen-script --schema <path-to-json> --output <path-to-etlsql>
+```
+
+**Options:**
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--schema` | `-s` | Path to the input JSON schema specification file |
+| `--output` | `-o` | Destination path for the compiled ETL-SQL script |
+
+**Example:**
+```bash
+ETL-SQL gen-script --schema ./specs/customer_feed.json --output ./scripts/load_customers.etlsql
+```
+
+### 2.8 `extract-spec` — Trim Schema Pages from Large PDF
+
+Uses heuristic analysis to extract and trim data dictionary / schema pages from large vendor PDF specifications, removing administrative fluff.
+
+```
+ETL-SQL extract-spec --input <path-to-large-pdf> --output <path-to-trimmed-pdf>
+```
+
+**Options:**
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--input` | `-i` | Path to the input large PDF specification file |
+| `--output` | `-o` | Destination path for the extracted trimmed PDF file |
+
+**Example:**
+```bash
+ETL-SQL extract-spec --input ./specs/vendor_api_spec.pdf --output ./specs/trimmed_schema_spec.pdf
+```
+
+### 2.9 Exit Codes
 
 | Code | Meaning |
 |------|---------|

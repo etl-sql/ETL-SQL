@@ -1,0 +1,68 @@
+﻿-- =========================================================================
+-- Pipeline: employees_feed
+-- Description: Multi-dataset Human Resources Feed containing Employees and Departments.
+-- Owner: hr_ops
+-- Security Classification: internal
+-- Generated from specification: multi_spec.json
+-- Generated at: 2026-06-04 21:56:06 UTC
+-- =========================================================================
+
+-- 2. DYNAMIC FILENAME GENERATION
+DECLARE @DateStr VARCHAR(8);
+SET @DateStr = FORMAT(GETDATE(), 'yyyyMMdd');
+DECLARE @FileName VARCHAR(100);
+SET @FileName = 'emp_' + @DateStr + '.csv';
+
+-- 3. OUTBOUND DESTINATION CONNECTION
+CREATE CONNECTION outbound_dest AS FLATFILE(
+    PATH = 'C:/Outbound/Feeds' + '/' + @FileName,
+    FORMAT = 'CSV',
+    HAS_HEADER = TRUE,
+    DELIMITER = ',',
+    ENCODING = 'UTF8'
+);
+
+-- =========================================================================
+-- 4. EXTRACT PHASE (USER CONTRACT)
+-- =========================================================================
+-- [USER TODO]: Define your source connection and query into #staging below.
+-- All columns must match the names defined in the schema validation below.
+/*
+CREATE CONNECTION src_db AS POSTGRES(HOST='...', DATABASE='...', USER='...', PASSWORD='...');
+SELECT 
+    raw_emp_id               AS emp_id,
+    raw_full_name            AS full_name
+INTO #staging
+FROM src_db.public.raw_table;
+*/
+
+BEGIN TRY
+    -- 5. SCHEMATIC GATEKEEPER CHECK
+    EXPECT SCHEMA #staging (
+        emp_id                    INT,
+        full_name                 VARCHAR(100)
+    );
+
+    -- 6. TRANSFORMATION, CASTING & GOVERNANCE TAGGING
+    SELECT
+        TRY_CAST(emp_id AS INT)                            AS emp_id                    /*@d: Unique employee identifier*/,
+        SUBSTRING(ISNULL(TRY_CAST(full_name AS VARCHAR), ''), 1, 100) AS full_name                 /*@d: Full name of employee*/
+    INTO #cleaned_data
+    FROM #staging;
+
+    -- 8. PIPELINE INHERITED DATA GOVERNANCE
+    TAG #cleaned_data WITH (
+        pipeline_source = 'multi_spec.json',
+        owner = 'hr_ops',
+        classification = 'internal'
+    );
+
+    -- 9. OUTBOUND UPLOAD
+    SELECT * INTO outbound_dest FROM #cleaned_data;
+
+    PRINT 'Pipeline execution completed successfully.';
+END TRY
+BEGIN CATCH
+    PRINT 'Pipeline execution aborted: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

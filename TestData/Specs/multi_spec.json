@@ -1,0 +1,66 @@
+{
+  "pipeline_name": "hr_feed_multi",
+  "metadata": {
+    "description": "Multi-dataset Human Resources Feed containing Employees and Departments.",
+    "classification": "internal",
+    "owner": "hr_ops"
+  },
+  "datasets": [
+    {
+      "name": "employees_feed",
+      "destination": {
+        "connector_type": "FLATFILE",
+        "format": "CSV",
+        "delimiter": "comma",
+        "text_qualifier": "doublequote",
+        "encoding": "UTF8",
+        "naming_pattern": "emp_{yyyyMMdd}.csv",
+        "path": "C:/Outbound/Feeds",
+        "has_header": true
+      },
+      "schema": [
+        {
+          "column_name": "emp_id",
+          "type_family": "INT",
+          "nullable": false,
+          "description": "Unique employee identifier"
+        },
+        {
+          "column_name": "full_name",
+          "type_family": "VARCHAR",
+          "max_length": 100,
+          "nullable": false,
+          "description": "Full name of employee"
+        }
+      ]
+    },
+    {
+      "name": "departments_feed",
+      "destination": {
+        "connector_type": "FLATFILE",
+        "format": "CSV",
+        "delimiter": "comma",
+        "text_qualifier": "doublequote",
+        "encoding": "UTF8",
+        "naming_pattern": "dept_{yyyyMMdd}.csv",
+        "path": "C:/Outbound/Feeds",
+        "has_header": true
+      },
+      "schema": [
+        {
+          "column_name": "dept_id",
+          "type_family": "INT",
+          "nullable": false,
+          "description": "Unique department identifier"
+        },
+        {
+          "column_name": "dept_name",
+          "type_family": "VARCHAR",
+          "max_length": 50,
+          "nullable": false,
+          "description": "Name of department"
+        }
+      ]
+    }
+  ]
+}

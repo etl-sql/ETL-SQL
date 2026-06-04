@@ -1,0 +1,18 @@
+# =========================================================================
+# FILE SPECIFICATION METADATA
+# =========================================================================
+# OutputFormat: CSV
+# Delimiter: Comma (,)
+# TextQualifier: DoubleQuotes (")
+# FileNamingConvention: customer_feed_yyyyMMdd.csv
+# DateFormat: yyyy-MM-dd
+# Encoding: UTF-8
+# DestinationDirectory: C:/Outbound/CustomerFeeds
+# =========================================================================
+FieldName,DataType,Required,Tags,Description
+CustomerID,INT,YES,none,Unique customer ID
+FirstName,VARCHAR(50),YES,none,First name of the customer
+LastName,VARCHAR(50),YES,none,Last name of the customer
+Email,VARCHAR(255),NO,pii,Customer email address (must contain @)
+SignupDate,DATE,NO,none,Date customer registered (formatted as yyyy-MM-dd)
+IsActive,BIT,NO,none,1 = active; 0 = inactive

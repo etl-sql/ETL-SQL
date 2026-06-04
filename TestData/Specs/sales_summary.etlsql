@@ -1,0 +1,79 @@
+﻿-- =========================================================================
+-- Pipeline: sales_summary
+-- Description: Outbound sales summary containing lookup validation and aggregations.
+-- Owner: finance_ops
+-- Security Classification: internal
+-- Generated from specification: mapping_spec.json
+-- Generated at: 2026-06-04 22:00:18 UTC
+-- =========================================================================
+
+-- 2. DYNAMIC FILENAME GENERATION
+DECLARE @DateStr VARCHAR(8);
+SET @DateStr = FORMAT(GETDATE(), 'yyyyMMdd');
+DECLARE @FileName VARCHAR(100);
+SET @FileName = 'summary_' + @DateStr + '.csv';
+
+-- 3. OUTBOUND DESTINATION CONNECTION
+CREATE CONNECTION outbound_dest AS FLATFILE(
+    PATH = 'C:/Outbound' + '/' + @FileName,
+    FORMAT = 'CSV',
+    HAS_HEADER = TRUE,
+    DELIMITER = ',',
+    ENCODING = 'UTF8'
+);
+
+-- =========================================================================
+-- 4. EXTRACT PHASE (USER CONTRACT)
+-- =========================================================================
+-- [USER TODO]: Define your source connection and query into #staging below.
+-- All columns must match the names defined in the schema validation below.
+/*
+CREATE CONNECTION src_db AS POSTGRES(HOST='...', DATABASE='...', USER='...', PASSWORD='...');
+SELECT 
+    raw_store_id             AS store_id,
+    raw_total_sales          AS total_sales,
+    raw_feed_status          AS feed_status,
+    raw_export_date          AS export_date
+INTO #staging
+FROM src_db.public.raw_table;
+*/
+
+BEGIN TRY
+    -- 5. SCHEMATIC GATEKEEPER CHECK
+    EXPECT SCHEMA #staging (
+        store_id                  INT,
+        total_sales               DECIMAL(18,2),
+        feed_status               VARCHAR(10),
+        export_date               DATETIME
+    );
+
+    -- 6. TRANSFORMATION, CASTING & GOVERNANCE TAGGING
+    SELECT
+        L.store_id /* [LOOKUP]: Lookup StoreID from dbo.StoreRef using store_code */ AS store_id                  /*@d: Primary key identifier for the retail outlet*/,
+        SUM(total_sales) /* [AGGREGATION]: Sum of quantity * unit_price */ AS total_sales               /*@d: Total aggregated sales amount for this store*/,
+        'ACTIVE'                                           AS feed_status               /*@d: Static indicator status*/,
+        TRY_CAST(export_date AS DATETIME)                  AS export_date               /*@d: UTC processing timestamp*/
+    INTO #cleaned_data
+    FROM #staging
+    -- [USER TODO]: Uncomment and complete reference lookup joins (L alias)
+    -- LEFT JOIN target_db.dbo.LookupTable AS L ON #staging.SourceKey = L.SourceKey
+    -- [USER TODO]: Group by non-aggregated columns for calculations
+    -- GROUP BY store_id, feed_status, export_date
+    ;
+
+    -- 8. PIPELINE INHERITED DATA GOVERNANCE
+    TAG #cleaned_data WITH (
+        pipeline_source = 'mapping_spec.json',
+        owner = 'finance_ops',
+        classification = 'internal'
+    );
+
+    -- 9. OUTBOUND UPLOAD
+    SELECT * INTO outbound_dest FROM #cleaned_data;
+
+    PRINT 'Pipeline execution completed successfully.';
+END TRY
+BEGIN CATCH
+    PRINT 'Pipeline execution aborted: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

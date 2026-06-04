@@ -1,0 +1,89 @@
+﻿-- =========================================================================
+-- Pipeline: customer_feed
+-- Description: Standard outbound customer feed generated daily.
+-- Owner: sales_ops
+-- Security Classification: internal
+-- Generated from specification: customer_spec.json
+-- Generated at: 2026-06-04 22:10:05 UTC
+-- =========================================================================
+
+-- 2. DYNAMIC FILENAME GENERATION
+DECLARE @DateStr VARCHAR(8);
+SET @DateStr = FORMAT(GETDATE(), 'yyyyMMdd');
+DECLARE @FileName VARCHAR(100);
+SET @FileName = 'customer_feed_' + @DateStr + '.csv';
+
+-- 3. OUTBOUND DESTINATION CONNECTION
+-- Base directory connection context (isolates physical drive paths)
+CREATE CONNECTION target_dir AS DIRECTORY('C:/Outbound/CustomerFeeds');
+CREATE CONNECTION outbound_dest AS FLATFILE(
+    PATH = target_dir + '/' + @FileName,
+    FORMAT = 'CSV',
+    HAS_HEADER = TRUE,
+    DELIMITER = ',',
+    ENCODING = 'UTF8'
+);
+
+-- =========================================================================
+-- 4. EXTRACT PHASE (USER CONTRACT)
+-- =========================================================================
+-- [USER TODO]: Define your source connection and query into #staging below.
+-- All columns must match the names defined in the schema validation below.
+/*
+CREATE CONNECTION src_db AS POSTGRES(HOST='...', DATABASE='...', USER='...', PASSWORD='...');
+SELECT 
+    raw_customer_id          AS customer_id,
+    raw_first_name           AS first_name,
+    raw_last_name            AS last_name,
+    raw_email                AS email,
+    raw_signup_date          AS signup_date,
+    raw_is_active            AS is_active
+INTO #staging
+FROM src_db.public.raw_table;
+*/
+
+BEGIN TRY
+    -- 5. SCHEMATIC GATEKEEPER CHECK
+    EXPECT SCHEMA #staging (
+        customer_id               INT,
+        first_name                VARCHAR(50),
+        last_name                 VARCHAR(50),
+        email                     VARCHAR(255),
+        signup_date               DATE,
+        is_active                 BIT
+    );
+
+    -- 6. TRANSFORMATION, CASTING & GOVERNANCE TAGGING
+    SELECT
+        TRY_CAST(customer_id AS INT)                       AS customer_id               /*@d: Unique customer ID*/,
+        SUBSTRING(ISNULL(TRY_CAST(first_name AS VARCHAR), ''), 1, 50) AS first_name                /*@d: First name of the customer*/,
+        SUBSTRING(ISNULL(TRY_CAST(last_name AS VARCHAR), ''), 1, 50) AS last_name                 /*@d: Last name of the customer*/,
+        SUBSTRING(TRY_CAST(email AS VARCHAR), 1, 255)      AS email                     /*@d: Customer email address (must contain @); @pii*/,
+        TRY_CAST(signup_date AS DATE)                      AS signup_date               /*@d: Date customer registered (formatted as yyyy-MM-dd)*/,
+        TRY_CAST(is_active AS BIT)                         AS is_active                 /*@d: 1 = active; 0 = inactive*/
+    INTO #cleaned_data
+    FROM #staging
+    ;
+
+    -- 7. FORMAT VALIDATION GATES (REGULAR EXPRESSIONS)
+    IF EXISTS (SELECT 1 FROM #cleaned_data WHERE email IS NOT NULL AND REGEXP_LIKE(email, '^[^@]+@[^@]+\.[^@]+$') = 0)
+    BEGIN
+        THROW 50002, 'Specification format violation: column [email] contains values that fail validation pattern.', 16;
+    END
+
+    -- 8. PIPELINE INHERITED DATA GOVERNANCE
+    TAG #cleaned_data WITH (
+        pipeline_source = 'customer_spec.json',
+        owner = 'sales_ops',
+        classification = 'internal'
+    );
+
+    -- 9. OUTBOUND UPLOAD
+    SELECT * INTO outbound_dest FROM #cleaned_data;
+
+    PRINT 'Pipeline execution completed successfully.';
+END TRY
+BEGIN CATCH
+    PRINT 'Pipeline execution aborted: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

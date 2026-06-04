@@ -26,12 +26,20 @@
   - Verified: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --no-restore --filter FullyQualifiedName~JobSchedulingIntegrationTests` (8 passed) and `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --no-restore --filter FullyQualifiedName~OrchestratorServiceDockerIntegrationTests` (2 passed).
   - Keep this as an integration lane, not a load test. Defer high-concurrency sizing, breaking-point discovery, and long-running chaos scenarios to the separate Orchestrator load testing TODO.
 
-- [ ] **Job scheduling load and chaos testing**  Build the follow-on Orchestrator job-scheduler stress suite after correctness verification is complete.
+- [x] **Job scheduling load and chaos testing**  Build the follow-on Orchestrator job-scheduler stress suite after correctness verification is complete.
   - Measure high-concurrency scheduling behavior with varied `Jobs:MaxConcurrentJobs`, dense schedules, manual trigger bursts, short/medium/long scripts, retry-heavy jobs, and cancellation under load.
   - Identify breaking points for missed schedule windows, queue drain time, SQLite lock/contention failures, worker starvation, runaway memory/CPU, and stuck active jobs.
   - Add controlled long-running chaos scenarios: service restart during queued/running jobs, dependency outage/recovery windows, process-spawn timeout/kill behavior, and scheduler recovery after abrupt container/service termination.
   - Capture administrator-facing metrics: sustainable jobs/hour, max concurrent running jobs, p50/p95/p99 job latency, missed-run risk, queue depth, active process count, CPU, memory, disk I/O, SQLite contention, and history-query responsiveness.
-  - Keep this separate from job scheduling correctness verification; feed results into the broader Portal and Orchestrator load testing TODO and sizing guidance.
+  - DONE - the checked-in local capacity baseline measures paced no-op trigger breaking points, queue depth, queue drain, HTTP latency, jobs/hour, and SQLite contention with `MaxConcurrentJobs=4`.
+  - DONE - added 10K, 50K, and 100K row workload scripts; use 10K rows as the default normal-workload sizing target before publishing operator-facing jobs/hour guidance.
+  - DONE - added checked-in workload templates for short/medium/long row-volume jobs, retry/failure jobs, mocked I/O, `PARALLEL`, schedule density, manual trigger bursts, and process-spawning comparisons.
+  - DONE - bounded integration coverage verifies due-job fan-in, retries, cancellation, restart recovery for overdue schedules, dependency outages, running-job trigger/disable/delete/kill races, mixed Portal/Orchestrator SQLite writes, and no stuck active/queued work.
+  - DONE - process-spawn chaos coverage verifies timeout/kill cleanup and orphan child-process cleanup after abrupt service termination.
+  - DONE - capacity harness process telemetry now records per-step process metric maxima when `portal.processId` or `orchestrator.processId` is configured, including Windows working set/CPU/thread/handle counters and Linux `/proc` memory/I/O/CPU counters.
+  - Verified: `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --no-restore --filter FullyQualifiedName~ProcessJobExecutorChaosTests` (2 passed).
+  - Verified: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --no-build --filter FullyQualifiedName~JobSchedulingIntegrationTests` (11 passed; `--no-build` used because an unrelated `ETL_SQL.Tests.App.DependencyInjectionSetup` compile error currently blocks rebuilding the full dependency graph).
+  - Verified: `node scripts\test-service-capacity-smoke.mjs`.
 
 - [x] **Subscription verification**  Harden Report Portal subscription delivery with an end-to-end integration verification lane.
   - DONE — `SubscriptionIntegrationTests` create real portal subscriptions, register generated Orchestrator jobs, run them against a real SQLite job store, and verify MailPit delivery for core success paths.
@@ -62,24 +70,80 @@
   - Verified regression lane: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --no-build --filter FullyQualifiedName~SubscriptionIntegrationTests` (14 passed; `--no-build` used because an unrelated staged documentation-test rename temporarily prevents project compilation).
   - Keep this as a correctness/security scenario suite, not a portal load test. Defer throughput and sizing work to the Portal load testing TODO.
 
-- [ ] **Portal and Orchestrator load testing**  Build one repeatable capacity-testing program with separate Portal-user and Orchestrator-job workloads so administrators can size each server from measured baselines.
+- [x] **Portal and Orchestrator load testing**  Build one repeatable capacity-testing program with separate Portal-user and Orchestrator-job workloads so administrators can size each server from measured baselines.
+  - DONE — added dependency-free cross-platform Node harness `scripts/test-service-capacity.mjs`, comparison script `scripts/compare-capacity-results.mjs`, self-contained mock-endpoint smoke test, example workload configuration, results location, and operator guide.
+  - DONE — harness supports Portal and Orchestrator workloads, role login, API-key requests, setup/cleanup requests, warmup, stepped concurrency, weighted request mixes, JSON-variable capture/substitution, metrics endpoint sampling, SQLite contention detection, breach criteria, and JSON/Markdown reports.
+  - DONE — reference-environment requirements, workload profiles, stepped-load method, breach interpretation, tuning knobs, warning signs, and baseline comparison workflow are documented in `Docs/Operations/Capacity_Testing.md`.
+  - DONE — added checked-in workload templates for Portal cache-cold refresh and CSV/XLSX/PDF export traffic, Orchestrator short/medium/long row-volume jobs, retry/failure jobs, mocked I/O, `PARALLEL`, schedule density, and process-spawning comparison.
+  - DONE — added `scripts/test-capacity-workload-configs.mjs` so every checked-in capacity workload JSON file is validated by the capacity harness in `--validate-only` mode.
+  - DONE — published `capacity-results/reference-local` with the sanitized workload, deterministic report/provisioner, generated JSON/Markdown report, environment details, limitations, and reproduction steps.
+  - DONE — published administrator-facing sizing guidance in `Docs/Operations/Capacity_Planning.md`, including starter server profiles, row-volume jobs/hour guidance, split-host signals, and server-admin handoff checklist.
+  - Verified: `node scripts/test-service-capacity.mjs --config capacity-results/workload.example.json --validate-only`.
+  - Verified: `node scripts/test-service-capacity-smoke.mjs`.
+  - Verified: `node scripts\test-capacity-workload-configs.mjs` (6 checked-in workload configurations valid).
   - Keep this separate from the correctness verification items above. Job scheduling, subscription delivery, and portal security scenarios should prove behavior; this item should measure throughput, latency, saturation points, and resource usage under controlled load.
-  - Define a fixed reference environment for every run: CPU count, RAM, disk type, OS/container mode, .NET version, database location, configured concurrency caps, sample data size, and whether services are running in-process, Docker, or installed services.
-  - Create a shared load harness that can provision test data, warm the service, run stepped load, collect metrics, summarize results, and clean up. Prefer repository scripts over ad hoc manual commands.
-  - Capture common metrics for both services: requests/jobs per minute, p50/p95/p99 latency, error rate, queue depth, active/queued work, CPU, working set, disk I/O, SQLite lock/contention indicators, GC counters, and service logs.
-  - Use a stepped-load method: establish idle/warm baseline, increase load in fixed increments, hold each step long enough to stabilize, identify the first sustained breach, then define recommended capacity at a safety margin below that point.
-  - Define breach criteria before testing: sustained error rate above threshold, p95 latency above target, queue depth that never drains, CPU or memory saturation, SQLite lock failures, worker starvation, or missed scheduling windows.
-  - Portal workload: simulate authenticated users across Admin/Publisher/Viewer roles performing realistic mixes of login/refresh-token use, folder/report listing, catalog search, report snapshot viewing, report execution/refresh, CSV/PDF/XLSX export, dataset browsing, favorites, saved views, alerts, subscriptions, audit views, and admin metrics.
-  - Portal scenarios should include cache-friendly viewing, cache-cold report execution, export-heavy users, admin/report-publisher activity, and mixed read/write traffic. Report results as estimated concurrent users per server profile.
-  - Orchestrator workload: simulate scheduled and triggered jobs using representative short, medium, and long ETL-SQL scripts, including lightweight no-op jobs, file/report export jobs, connector-like mocked I/O jobs, retry/failure jobs, and jobs that exercise `PARALLEL`.
-  - Orchestrator scenarios should vary `Jobs:MaxConcurrentJobs`, schedule density, trigger bursts, retry rate, process-spawning mode, and script duration. Report results as sustainable jobs/hour, max concurrent running jobs, queue drain time, and missed-run risk per server profile.
-  - Validate operational behavior under load: health endpoints stay meaningful, metrics endpoints reflect active/queued work, cancellation still works, failed work is recorded, audit/history tables remain queryable, and logs contain enough correlation to diagnose bottlenecks.
-  - Store baseline results in a documented location with machine specs and configuration, and add a comparison script or report format so future runs can show regressions or improvements.
-  - Produce administrator-facing sizing guidance from the results: recommended starter profiles, tuning knobs (`Resources:MaxConcurrentReportExecutions`, `Jobs:MaxConcurrentJobs`, DB/storage placement), warning signs, and when to split Portal and Orchestrator onto separate hosts.
+  - Measured local reference run completed with no Portal errors or SQLite contention; Orchestrator queue breached at 80 workers and drained to zero after load.
 
-- [ ] **Add some fuzzy matching samples**  Our matching joins, and functions haven't really been used.  Thinking we can add a few samples.
+### Portal and Orchestrator operational-readiness follow-ups
 
-- [ ] **Add some cookbook recipes**  Its been a while since we added some recipes to either the regular and reporting cookbooks.  Thinking fuzzy matching, some of the new report types, lineage, tags, orchestrator and portal examples.  We also need a way to check these queries that they work.  I think we have a script that looks through documentation to check them let's make sure it works for cookbook items.
+- [x] **Restore a fully green Report Portal regression lane**  Diagnose and fix `PortalIntegrationTests.AdminUsageMetrics_ReturnsViewsRefreshAndSubscriptionFailures`, then run the complete Portal lane successfully before making production-readiness claims.
+  - DONE - subscription delivery synchronization now preserves the Portal's persisted failure count when the Orchestrator database is readable but contains no completed history for that subscription. Missing history no longer erases known failures from usage metrics.
+  - Verified: `PortalIntegrationTests.AdminUsageMetrics_ReturnsViewsRefreshAndSubscriptionFailures` and `SubscriptionIntegrationTests` pass.
+  - Verified: `.\scripts\test-lane.ps1 -Lane portal` (79 Portal tests passed; lineage UI and publish-folder Node checks passed).
+
+- [x] **Expose subscription delivery history and failure diagnosis in the Portal UI**  The user and administrator guides describe subscription history, but the current subscription tables do not provide a History action or enough delivery-failure detail. Add last delivery status/time, failure count, sanitized error detail, and delivery history access for both owners and administrators. Ensure admins can pause/resume or retire failed subscriptions without impersonating the owner.
+  - DONE - owner and Admin subscription tables now expose delivery history, failure counts or last successful delivery time, and a shared diagnostics modal with attempt status, time, duration, rows, and sanitized error detail.
+  - DONE - Admins can pause/resume and delete subscriptions directly from the Admin subscription table.
+  - DONE - extracted the shared renderer into `wwwroot/js/subscription-history-ui.js`, added a UI sandbox story, a Node renderer test, and operator documentation.
+  - Verified: `.\scripts\test-lane.ps1 -Lane portal` (79 Portal tests passed; lineage UI, publish-folder, and subscription-history UI checks passed).
+  - Manual visual verification remains pending because the local UI sandbox server could not be started during this run.
+
+- [x] **Add deterministic Portal and Orchestrator concurrency-race verification**  Extend the correctness suites with bounded scenarios for updating/deleting a subscription while it fires, disabling/deleting/triggering a running job, multiple jobs becoming due together, concurrent report refresh/export, permission changes during active sessions, and mixed Portal/Orchestrator SQLite writes. Keep this separate from throughput sizing so failures identify correctness races rather than capacity limits.
+  - DONE - added a bounded scheduler fan-in scenario proving six jobs due together complete successfully, persist `LastRun`/`NextRun`, and drain active/queued metrics.
+  - DONE - added a subscription update-during-execution scenario proving the active attempt completes while future schedule, recipient, generated script, and Orchestrator job configuration are updated.
+  - DONE - added subscription delete-during-execution cleanup and running-job trigger/disable/kill scenarios that assert no stuck active work remains.
+  - DONE - extended the existing concurrent report read and duplicate-refresh scenario to verify CSV, XLSX, and PDF exports remain available from the last complete snapshot while a refresh is active.
+  - DONE - added an active-session permission scenario proving an already-issued token immediately reflects group membership removal and restoration.
+  - DONE - added running-job delete verification and a bounded mixed Portal/Orchestrator SQLite write scenario that preserves concurrent subscription rows, generated scripts, job definitions, and active job history.
+  - Verified: `JobSchedulingIntegrationTests` (11 passed), `SubscriptionIntegrationTests` (17 passed), `UserPermissionIntegrationTests` (10 passed), `PortalIntegrationTests` (45 passed), and `.\scripts\test-lane.ps1 -Lane portal` (80 Portal tests plus lineage UI, publish-folder, and subscription-history UI checks). SMTP-backed suites were run sequentially because they share the fixed MailPit test container.
+
+- [x] **Improve Portal administration for larger user and subscription catalogs**  Add search, filtering, pagination, and practical bulk operations for users, groups, memberships, and subscriptions so administrators can operate dozens or hundreds of accounts without scanning full in-memory tables or repeating one-row actions.
+  - DONE - added backward-compatible paged catalog APIs for users, groups, group members, and Admin subscriptions with server-side search and relevant status/provider/role/group/format filters.
+  - DONE - added bulk user activation, group deletion with explicit cascade semantics, group membership add/remove, and subscription pause/resume APIs.
+  - DONE - updated the Admin UI with compact search/filter controls, page-local selection, pagination, bulk actions, searchable multi-user membership assignment, a reusable catalog UI helper, a UI sandbox story, and operator documentation.
+  - Verified: focused `AdminCatalogs_FilterPageAndBulkMutateUsersGroupsMembersAndSubscriptions`, `PortalIntegrationTests` (46 passed), and `.\scripts\test-lane.ps1 -Lane portal` (81 Portal tests plus lineage UI, publish-folder, subscription-history UI, and admin-catalog UI checks).
+  - Manual visual verification remains pending because the local browser connection could not be established during this run.
+
+- [x] **Add enterprise identity integration verification**  Create an LDAP integration fixture and verify login, group mapping, inactive/removed users, permission changes, token/session behavior, and local-admin recovery before claiming enterprise identity readiness.
+  - DONE - expanded the real OpenLDAP Testcontainers fixture into a lifecycle scenario covering login, auto-provisioning, role/group mapping, directory group removal, permission loss for already-issued tokens, directory user deletion, local-admin recovery, Portal account deactivation, and refresh/access token rejection.
+  - DONE - JWT validation now rejects disabled or deleted Portal users on every authenticated request, closing the gap where an already-issued access token remained usable after administrative deactivation.
+  - DONE - documented the operational boundary that directory deletion blocks new LDAP logins but requires Portal account deactivation to terminate existing sessions, and documented the need for a tested local recovery Admin.
+  - Verified: `PortalLdapIntegrationTests` (real OpenLDAP lifecycle passed), `LdapAuthTests` (4 passed), `.\scripts\test-lane.ps1 -Lane portal` (81 Portal tests plus UI checks), and `.\scripts\test-lane.ps1 -Lane integration` (99 engine integration tests and 29 Report Portal integration tests passed).
+
+- [x] **Publish measured Portal and Orchestrator capacity baselines**  Complete the existing Portal and Orchestrator load-testing TODO by running fixed reference environments, storing sanitized reports, identifying sustained breach points, and publishing conservative concurrent-user and jobs/hour guidance.
+  - DONE - published `capacity-results/reference-local` with the sanitized workload, deterministic report/provisioner, generated JSON/Markdown report, environment details, limitations, and reproduction steps.
+  - DONE - recommended 20 simultaneously active Portal users for the lightweight mixed workload and approximately 47,000 lightweight no-op jobs/hour with a 20% margin below the highest no-queue Orchestrator step.
+  - Verified: Portal remained error-free through 120 workers; Orchestrator first breached the queue threshold at 80 workers, and `/metrics` returned `active_jobs=0` and `queued_jobs=0` after the run.
+
+- [x] **Fix Report Portal snapshot manifests for remote Orchestrator execution**  Portal report execution through `HttpJobChannelClient` currently records a `ReportSnapshots` row after the remote job completes, but the Orchestrator does not write or return the manifest file that snapshot-manifest and export endpoints require.
+  - DONE - completed remote report jobs return their serialized manifest only to job-status requests with a valid non-empty Orchestrator API key; unauthenticated status responses never include report data.
+  - DONE - Portal sends its configured API key, atomically persists the returned manifest under its own guarded `SnapshotDirectory`, and retains shared-filesystem compatibility during upgrades.
+  - DONE - documented that separate-host deployments do not require shared snapshot storage but do require matching API keys.
+  - Verified: separate Portal and Orchestrator test hosts cover execute, refresh, snapshot manifest, CSV/XLSX/PDF export, Portal-owned snapshot persistence, and authenticated-only manifest transport.
+
+- [x] **Add some fuzzy matching samples**  Our matching joins, and functions haven't really been used.  Thinking we can add a few samples.
+  - DONE - added self-contained samples for fuzzy matching functions, `FUZZY JOIN`/`LEFT FUZZY JOIN` candidate selection, and a real-world customer entity-resolution workflow.
+  - DONE - indexed the new scripts in `Docs/Sample_Guide.md`.
+  - Verified: each new sample executes successfully through `dotnet run --no-build --project src\ETL-SQL.App -- run <sample> --silent`.
+
+- [x] **Register or remove the documented DIFFERENCE function**  `src/ETL-SQL.Core/Resources/Help/Functions/DIFFERENCE.md` and related help links describe `DIFFERENCE(s1, s2)`, but the engine currently rejects it as an unknown function. Add the implementation and tests, or remove the stale documentation and links.
+  - DONE - implemented `DIFFERENCE(s1, s2)` in `FuzzyFunctions.cs` (0-4 Soundex similarity, position-by-position match of the two 4-char codes; NULL if either arg NULL), registered with help, and added to the `LanguageMetadata` fuzzy list. 4 unit tests; enriched DIFFERENCE.md help + added the row to Standard_Library §16.4.
+
+- [x] **Add some cookbook recipes**  Its been a while since we added some recipes to either the regular and reporting cookbooks.  Thinking fuzzy matching, some of the new report types, lineage, tags, orchestrator and portal examples.  We also need a way to check these queries that they work.  I think we have a script that looks through documentation to check them let's make sure it works for cookbook items.
+  - DONE - added regular cookbook recipes for curated lineage and tags, fuzzy entity resolution, remote Orchestrator scheduling, and script-first Report Portal catalog deployment.
+  - DONE - added a report cookbook recipe combining the newer `SANKEY`, `SUNBURST`, and `NETWORK` visuals.
+  - DONE - `CookbookVerificationTests` extracts every SQL/ETL-SQL/Report-SQL fenced block from both cookbooks and requires each recipe to parse without errors.
+  - Verified: `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --no-restore --filter "FullyQualifiedName~CookbookVerificationTests" -m:1` (41 passed).
 
 - [x] **Report portal publish report create folder**  When publishing a report if you forget to create a folder you have to cancel out and do the steps all over, can we add a create new link right in the folder dropdown.  Also I had to refresh the page after creating the folder to get it to show up so we need that to not happen either.
   - DONE — extracted the publish-form folder logic into `wwwroot/js/publish-folders.js` (flatten tree, fresh populate, inline create) with a Node unit test (`scripts/test-publish-folders.mjs`, run in the Node UI lane). admin.html's publish form now has a "+ New folder" inline create (name + parent) and always fetches a fresh list, so new folders appear without a page reload and nested folders are selectable. Verified: both reported behaviors are covered by the passing unit test (incl. an end-to-end create→re-populate→auto-select assertion) and the create handler re-populates with the new folder selected. A live visual smoke in the running portal is the only remaining manual confirmation.

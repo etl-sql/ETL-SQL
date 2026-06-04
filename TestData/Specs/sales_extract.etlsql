@@ -1,0 +1,85 @@
+﻿-- =========================================================================
+-- Pipeline: sales_extract
+-- Description: Outbound sales transaction data compiled daily.
+-- Owner: finance_ops
+-- Security Classification: internal
+-- Generated from specification: sales_spec.json
+-- Generated at: 2026-06-04 21:41:43 UTC
+-- =========================================================================
+
+-- 2. DYNAMIC FILENAME GENERATION
+DECLARE @DateStr VARCHAR(8);
+SET @DateStr = FORMAT(GETDATE(), 'yyyyMMdd');
+DECLARE @FileName VARCHAR(100);
+SET @FileName = 'sales_extract_' + @DateStr + '.xlsx';
+
+-- 3. OUTBOUND DESTINATION CONNECTION
+CREATE CONNECTION outbound_dest AS FLATFILE(
+    PATH = 'C:/Outbound/SalesReports' + '/' + @FileName,
+    FORMAT = 'EXCEL',
+    HAS_HEADER = TRUE,
+    ENCODING = 'UTF8'
+);
+
+-- =========================================================================
+-- 4. EXTRACT PHASE (USER CONTRACT)
+-- =========================================================================
+-- [USER TODO]: Define your source connection and query into #staging below.
+-- All columns must match the names defined in the schema validation below.
+/*
+CREATE CONNECTION src_db AS POSTGRES(HOST='...', DATABASE='...', USER='...', PASSWORD='...');
+SELECT 
+    raw_transaction_id       AS transaction_id,
+    raw_product_sku          AS product_sku,
+    raw_quantity             AS quantity,
+    raw_price_each           AS price_each,
+    raw_sale_date            AS sale_date,
+    raw_coupon_code          AS coupon_code
+INTO #staging
+FROM src_db.public.raw_table;
+*/
+
+BEGIN TRY
+    -- 5. SCHEMATIC GATEKEEPER CHECK
+    EXPECT SCHEMA #staging (
+        transaction_id            INT,
+        product_sku               VARCHAR(20),
+        quantity                  INT,
+        price_each                DECIMAL(10,2),
+        sale_date                 DATETIME,
+        coupon_code               VARCHAR(15)
+    );
+
+    -- 6. TRANSFORMATION, CASTING & GOVERNANCE TAGGING
+    SELECT
+        TRY_CAST(transaction_id AS INT)                    AS transaction_id            /*@d: Primary Key, auto-incrementing*/,
+        SUBSTRING(ISNULL(TRY_CAST(product_sku AS VARCHAR), ''), 1, 20) AS product_sku               /*@d: Format: SKU-XXXXX*/,
+        TRY_CAST(quantity AS INT)                          AS quantity                  /*@d: Must be greater than 0*/,
+        TRY_CAST(price_each AS DECIMAL(10,2))              AS price_each                /*@d: Unit price in USD*/,
+        TRY_CAST(sale_date AS DATETIME)                    AS sale_date                 /*@d: UTC timestamp of purchase*/,
+        SUBSTRING(TRY_CAST(coupon_code AS VARCHAR), 1, 15) AS coupon_code               /*@d: Optional discount code*/
+    INTO #cleaned_data
+    FROM #staging;
+
+    -- 7. FORMAT VALIDATION GATES (REGULAR EXPRESSIONS)
+    IF EXISTS (SELECT 1 FROM #cleaned_data WHERE product_sku IS NOT NULL AND REGEXP_LIKE(product_sku, '^SKU-\d{5}$') = 0)
+    BEGIN
+        THROW 50002, 'Specification format violation: column [product_sku] contains values that fail validation pattern.', 16;
+    END
+
+    -- 8. PIPELINE INHERITED DATA GOVERNANCE
+    TAG #cleaned_data WITH (
+        pipeline_source = 'sales_spec.json',
+        owner = 'finance_ops',
+        classification = 'internal'
+    );
+
+    -- 9. OUTBOUND UPLOAD
+    SELECT * INTO outbound_dest FROM #cleaned_data;
+
+    PRINT 'Pipeline execution completed successfully.';
+END TRY
+BEGIN CATCH
+    PRINT 'Pipeline execution aborted: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

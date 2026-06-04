@@ -1,0 +1,54 @@
+{
+  "pipeline_name": "sales_summary",
+  "metadata": {
+    "description": "Outbound sales summary containing lookup validation and aggregations.",
+    "classification": "internal",
+    "owner": "finance_ops"
+  },
+  "destination": {
+    "connector_type": "FLATFILE",
+    "format": "CSV",
+    "delimiter": "comma",
+    "text_qualifier": "doublequote",
+    "encoding": "UTF8",
+    "naming_pattern": "summary_{yyyyMMdd}.csv",
+    "path": "C:/Outbound",
+    "has_header": true
+  },
+  "schema": [
+    {
+      "column_name": "store_id",
+      "type_family": "INT",
+      "nullable": false,
+      "mapping_type": "lookup",
+      "mapping_rule": "Lookup StoreID from dbo.StoreRef using store_code",
+      "description": "Primary key identifier for the retail outlet"
+    },
+    {
+      "column_name": "total_sales",
+      "type_family": "DECIMAL",
+      "precision": 18,
+      "scale": 2,
+      "nullable": false,
+      "mapping_type": "aggregation",
+      "mapping_rule": "Sum of quantity * unit_price",
+      "description": "Total aggregated sales amount for this store"
+    },
+    {
+      "column_name": "feed_status",
+      "type_family": "VARCHAR",
+      "max_length": 10,
+      "nullable": false,
+      "mapping_type": "constant",
+      "mapping_rule": "ACTIVE",
+      "description": "Static indicator status"
+    },
+    {
+      "column_name": "export_date",
+      "type_family": "DATETIME",
+      "nullable": false,
+      "mapping_type": "flat",
+      "description": "UTC processing timestamp"
+    }
+  ]
+}

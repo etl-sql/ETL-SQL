@@ -1,0 +1,85 @@
+﻿-- =========================================================================
+-- Pipeline: employee_import
+-- Description: Human Resources Employee Import Feed.
+-- Owner: hr_ops
+-- Security Classification: restricted
+-- Generated from specification: employee_spec.json
+-- Generated at: 2026-06-04 21:42:01 UTC
+-- =========================================================================
+
+-- 2. DYNAMIC FILENAME GENERATION
+DECLARE @DateStr VARCHAR(8);
+SET @DateStr = FORMAT(GETDATE(), 'yyyyMMdd');
+DECLARE @TimeStr VARCHAR(6);
+SET @TimeStr = FORMAT(GETDATE(), 'HHmmss');
+DECLARE @FileName VARCHAR(100);
+SET @FileName = 'HR_EmployeeImport_' + @DateStr + '_' + @TimeStr + '.txt';
+
+-- 3. OUTBOUND DESTINATION CONNECTION
+CREATE CONNECTION outbound_dest AS FLATFILE(
+    PATH = 'sftp_partner_conn' + '/' + @FileName,
+    FORMAT = 'PIPE',
+    HAS_HEADER = TRUE,
+    DELIMITER = '|',
+    ENCODING = 'UTF8'
+);
+
+-- =========================================================================
+-- 4. EXTRACT PHASE (USER CONTRACT)
+-- =========================================================================
+-- [USER TODO]: Define your source connection and query into #staging below.
+-- All columns must match the names defined in the schema validation below.
+/*
+CREATE CONNECTION src_db AS POSTGRES(HOST='...', DATABASE='...', USER='...', PASSWORD='...');
+SELECT 
+    raw_emp_id               AS emp_id,
+    raw_ssn                  AS ssn,
+    raw_home_address         AS home_address,
+    raw_salary               AS salary,
+    raw_department           AS department
+INTO #staging
+FROM src_db.public.raw_table;
+*/
+
+BEGIN TRY
+    -- 5. SCHEMATIC GATEKEEPER CHECK
+    EXPECT SCHEMA #staging (
+        emp_id                    INT,
+        ssn                       VARCHAR(11),
+        home_address              VARCHAR(200),
+        salary                    DECIMAL(12,2),
+        department                VARCHAR(50)
+    );
+
+    -- 6. TRANSFORMATION, CASTING & GOVERNANCE TAGGING
+    SELECT
+        TRY_CAST(emp_id AS INT)                            AS emp_id                    /*@d: Unique employee identifier*/,
+        SUBSTRING(ISNULL(TRY_CAST(ssn AS VARCHAR), ''), 1, 11) AS ssn                       /*@d: Social Security Number; @pii; @sensitive*/,
+        SUBSTRING(TRY_CAST(home_address AS VARCHAR), 1, 200) AS home_address              /*@d: Street, City, State, Zip; @pii*/,
+        TRY_CAST(salary AS DECIMAL(12,2))                  AS salary                    /*@d: Base salary amount in USD; @sensitive*/,
+        SUBSTRING(ISNULL(TRY_CAST(department AS VARCHAR), ''), 1, 50) AS department                /*@d: Assigned business unit / department*/
+    INTO #cleaned_data
+    FROM #staging;
+
+    -- 7. FORMAT VALIDATION GATES (REGULAR EXPRESSIONS)
+    IF EXISTS (SELECT 1 FROM #cleaned_data WHERE ssn IS NOT NULL AND REGEXP_LIKE(ssn, '^\d{3}-\d{2}-\d{4}$') = 0)
+    BEGIN
+        THROW 50002, 'Specification format violation: column [ssn] contains values that fail validation pattern.', 16;
+    END
+
+    -- 8. PIPELINE INHERITED DATA GOVERNANCE
+    TAG #cleaned_data WITH (
+        pipeline_source = 'employee_spec.json',
+        owner = 'hr_ops',
+        classification = 'restricted'
+    );
+
+    -- 9. OUTBOUND UPLOAD
+    SELECT * INTO outbound_dest FROM #cleaned_data;
+
+    PRINT 'Pipeline execution completed successfully.';
+END TRY
+BEGIN CATCH
+    PRINT 'Pipeline execution aborted: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

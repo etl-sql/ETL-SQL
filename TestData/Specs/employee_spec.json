@@ -1,0 +1,61 @@
+{
+  "pipeline_name": "employee_import",
+  "metadata": {
+    "description": "Human Resources Employee Import Feed.",
+    "classification": "restricted",
+    "owner": "hr_ops"
+  },
+  "destination": {
+    "connector_type": "FLATFILE",
+    "format": "PIPE",
+    "delimiter": "pipe",
+    "text_qualifier": "doublequote",
+    "encoding": "UTF8",
+    "naming_pattern": "HR_EmployeeImport_{yyyyMMdd}_{HHmmss}.txt",
+    "path": "sftp_partner_conn",
+    "has_header": true
+  },
+  "schema": [
+    {
+      "column_name": "emp_id",
+      "type_family": "INT",
+      "nullable": false,
+      "description": "Unique employee identifier",
+      "tags": ["none"]
+    },
+    {
+      "column_name": "ssn",
+      "type_family": "VARCHAR",
+      "max_length": 11,
+      "nullable": false,
+      "validation_regex": "^\\d{3}-\\d{2}-\\d{4}$",
+      "description": "Social Security Number",
+      "tags": ["pii", "sensitive"]
+    },
+    {
+      "column_name": "home_address",
+      "type_family": "VARCHAR",
+      "max_length": 200,
+      "nullable": true,
+      "description": "Street, City, State, Zip",
+      "tags": ["pii"]
+    },
+    {
+      "column_name": "salary",
+      "type_family": "DECIMAL",
+      "precision": 12,
+      "scale": 2,
+      "nullable": false,
+      "description": "Base salary amount in USD",
+      "tags": ["sensitive"]
+    },
+    {
+      "column_name": "department",
+      "type_family": "VARCHAR",
+      "max_length": 50,
+      "nullable": false,
+      "description": "Assigned business unit / department",
+      "tags": ["none"]
+    }
+  ]
+}

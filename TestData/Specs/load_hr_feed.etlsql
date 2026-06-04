@@ -1,0 +1,22 @@
+﻿-- =========================================================================
+-- Master Pipeline: hr_feed_multi
+-- Description: Multi-dataset Human Resources Feed containing Employees and Departments.
+-- Owner: hr_ops
+-- Security Classification: internal
+-- Generated from specification: multi_spec.json
+-- Generated at: 2026-06-04 21:56:06 UTC
+-- =========================================================================
+
+BEGIN TRY
+    PRINT 'Running specification module: employees_feed...';
+    RUN SCRIPT './load_hr_feed_modules/employees_feed.etlsql';
+    
+    PRINT 'Running specification module: departments_feed...';
+    RUN SCRIPT './load_hr_feed_modules/departments_feed.etlsql';
+    
+    PRINT 'All specification pipeline modules completed successfully.';
+END TRY
+BEGIN CATCH
+    PRINT 'Specification pipeline execution aborted: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

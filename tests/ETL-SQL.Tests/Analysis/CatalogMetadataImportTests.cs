@@ -165,6 +165,29 @@ namespace ETL_SQL.Tests.Analysis
                 e => e.Operation == "DB_CATALOG");
         }
 
+        [Fact]
+        public async Task Evaluator_ImportsDistinctSourceTablesConcurrently()
+        {
+            var evaluator = CreateEvaluator();
+            evaluator.LineageImportCatalog = true;
+
+            var provider = new BlockingCatalogProvider(expectedColumnRequests: 2);
+            evaluator.Connections["mock"] = new CatalogBackedDataSource(provider);
+
+            var importTask = evaluator.EnsureCatalogMetadataImportedAsync(new[]
+            {
+                "mock.dbo.Sales",
+                "mock.dbo.Customers"
+            });
+
+            var completed = await Task.WhenAny(importTask, Task.Delay(TimeSpan.FromSeconds(5)));
+            Assert.Same(importTask, completed);
+            await importTask;
+
+            Assert.Contains(("dbo", "Sales"), provider.ColumnRequests);
+            Assert.Contains(("dbo", "Customers"), provider.ColumnRequests);
+        }
+
         private static Dictionary<string, string> BuildDbTags(CatalogColumn col)
         {
             var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -254,11 +277,44 @@ namespace ETL_SQL.Tests.Analysis
             }
         }
 
+        private sealed class BlockingCatalogProvider : ICatalogMetadataProvider
+        {
+            private readonly int _expectedColumnRequests;
+            private readonly TaskCompletionSource _allColumnRequestsSeen = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            private readonly object _gate = new();
+
+            public List<(string Schema, string Table)> ColumnRequests { get; } = new();
+
+            public BlockingCatalogProvider(int expectedColumnRequests)
+            {
+                _expectedColumnRequests = expectedColumnRequests;
+            }
+
+            public async Task<IReadOnlyList<CatalogColumn>> GetColumnMetadataAsync(string schema, string tableName, CancellationToken ct = default)
+            {
+                lock (_gate)
+                {
+                    ColumnRequests.Add((schema, tableName));
+                    if (ColumnRequests.Count >= _expectedColumnRequests)
+                        _allColumnRequestsSeen.TrySetResult();
+                }
+
+                await _allColumnRequestsSeen.Task.WaitAsync(ct);
+                return new List<CatalogColumn>
+                {
+                    new("Amount", "DECIMAL(18,2)", false, false, $"{tableName} amount", new Dictionary<string, string>())
+                };
+            }
+
+            public Task<IReadOnlyList<CatalogRelationship>> GetRelationshipsAsync(string schema, string tableName, CancellationToken ct = default)
+                => Task.FromResult<IReadOnlyList<CatalogRelationship>>(Array.Empty<CatalogRelationship>());
+        }
+
         private sealed class CatalogBackedDataSource : IDataSource
         {
-            private readonly RecordingCatalogProvider _provider;
+            private readonly ICatalogMetadataProvider _provider;
 
-            public CatalogBackedDataSource(RecordingCatalogProvider provider)
+            public CatalogBackedDataSource(ICatalogMetadataProvider provider)
             {
                 _provider = provider;
             }
