@@ -1,0 +1,25 @@
+CREATE TABLE #JobRows (
+    RowId INT,
+    CustomerName VARCHAR(50),
+    Region VARCHAR(20),
+    Amount DECIMAL(18,2)
+);
+
+FOR @i = 1 TO 100000
+BEGIN
+    INSERT INTO #JobRows VALUES (
+        @i,
+        'Customer ' + CAST(@i AS VARCHAR(20)),
+        CASE WHEN @i % 4 = 0 THEN 'North'
+             WHEN @i % 4 = 1 THEN 'South'
+             WHEN @i % 4 = 2 THEN 'East'
+             ELSE 'West' END,
+        CAST((@i % 1000) + 0.25 AS DECIMAL(18,2))
+    );
+END
+
+SELECT
+    COUNT(*) AS RowCount,
+    SUM(Amount) AS TotalAmount,
+    AVG(Amount) AS AverageAmount
+FROM #JobRows;

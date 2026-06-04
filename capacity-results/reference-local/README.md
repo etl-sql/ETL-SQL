@@ -10,7 +10,9 @@ Orchestrator. It is a reproducible lower-bound reference, not a universal produc
 - Portal and Orchestrator ran as separate local processes with separate SQLite databases.
 - Portal used in-process report execution with `MaxConcurrentReportExecutions=4`.
 - Orchestrator used in-process job execution with `MaxConcurrentJobs=4`.
-- The Portal report was a deterministic one-row table report. The Orchestrator job was `SELECT 1`.
+- The Portal report was a deterministic one-row table report. The Orchestrator baseline job was
+  `SELECT 1`, so the measured jobs/hour number is a scheduler and trigger-capacity lower bound, not
+  a realistic data-processing throughput claim.
 - Each step ran for 15 seconds. The Orchestrator workload used pacing so trigger traffic represented
   a deliberate jobs-per-hour rate instead of an unbounded HTTP ingestion flood.
 
@@ -31,10 +33,23 @@ Orchestrator first breached the configured queue threshold at 80 workers: 388 no
 triggered in 15 seconds and queued work reached 154. At 40 workers, 247 no-op jobs were triggered in
 15 seconds, equivalent to approximately 59,280 jobs/hour, with no sampled queue.
 
-Use **approximately 47,000 lightweight jobs/hour** as the conservative starter recommendation for
-this host and configuration, applying a 20% operating margin below the highest no-queue step. Real
-ETL, connector I/O, retries, file work, and process-spawning jobs will reduce that number, often
-substantially.
+Use **approximately 47,000 no-op jobs/hour** only as the scheduler/trigger lower-bound reference for
+this host and configuration, applying a 20% operating margin below the highest no-queue step. This is
+not a recommended production jobs/hour setting for normal ETL workloads.
+
+For operator-facing sizing, use a **10K-row job** as the default normal-workload baseline target.
+That better matches the common case for small-to-moderate ETL jobs while still exercising temp-table
+memory, row construction, aggregation, history, and queue behavior. Treat 50K rows as an upper starter
+tier and 100K rows as a heavier validation tier. Do not use 100K as the default recommendation unless
+the deployment's common jobs actually operate near that size. The row workload scripts are stored in
+[`jobs/`](jobs/):
+
+- `row-workload-10k.etlsql` - normal/default sizing tier.
+- `row-workload-50k.etlsql` - upper starter tier.
+- `row-workload-100k.etlsql` - heavier validation tier.
+
+Real connector I/O, joins, exports, retries, file work, and process-spawning jobs will reduce the
+jobs/hour number, often substantially.
 
 After the final load step, `/metrics` reported `active_jobs=0`, `queued_jobs=0`, `max_jobs=4`, and
 `available_slots=4`. No SQLite lock or busy errors were observed.
@@ -62,5 +77,7 @@ node .\scripts\test-service-capacity.mjs `
   characteristics.
 - The sample report and job are intentionally small. This baseline does not replace workload-specific
   testing for large reports, exports, connector latency, retries, or process-spawning mode.
+- The no-op jobs/hour figure should not be used as a row-processing capacity claim. Run the 10K,
+  50K, and 100K row job profiles before publishing production-facing scheduler sizing.
 - Fifteen-second steps identify an initial boundary. Production certification should use longer
   sustained runs and OS-level CPU, memory, GC, and disk monitoring.

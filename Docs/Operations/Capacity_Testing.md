@@ -61,6 +61,8 @@ Portal runs should cover:
 Orchestrator runs should cover:
 
 - lightweight no-op jobs
+- normal 10K-row temp-table jobs for default operator sizing
+- 50K-row and 100K-row temp-table jobs for upper starter and heavier validation tiers
 - medium and long ETL-SQL scripts
 - file/report export jobs
 - mocked connector-I/O jobs
@@ -70,6 +72,9 @@ Orchestrator runs should cover:
 
 For a checked-in developer-workstation starter baseline, see
 [`capacity-results/reference-local/README.md`](../../capacity-results/reference-local/README.md).
+
+Always label jobs/hour figures with the row profile used. A no-op `SELECT 1` job measures scheduler
+and trigger overhead only. It should not be presented as the normal ETL jobs/hour capacity.
 
 ## Stepped Load And Breaches
 
