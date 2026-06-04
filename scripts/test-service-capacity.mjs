@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { execFileSync } from 'node:child_process';
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -74,6 +76,9 @@ function validateConfig(value) {
     if (!service) continue;
     if (!service.baseUrl) throw new Error(`${serviceName}.baseUrl is required.`);
     validateThinkTime(service.thinkTimeMs, `${serviceName}.thinkTimeMs`);
+    if (service.processId !== undefined && (!Number.isInteger(Number(service.processId)) || Number(service.processId) <= 0)) {
+      throw new Error(`${serviceName}.processId must be a positive integer when provided.`);
+    }
     for (const step of service.steps ?? []) {
       if (!Number.isInteger(step.concurrency) || step.concurrency < 1) {
         throw new Error(`${serviceName}.steps concurrency must be a positive integer.`);
@@ -253,6 +258,7 @@ function summarizeObservations(observations, durationSeconds, metricSamples) {
   const latencies = observations.map(x => x.latencyMs).sort((a, b) => a - b);
   const failures = observations.filter(x => !x.ok);
   const flattenedMetrics = metricSamples.map(x => flattenNumeric(x.serviceMetrics)).filter(x => Object.keys(x).length);
+  const flattenedProcessMetrics = metricSamples.map(x => flattenNumeric(x.process)).filter(x => Object.keys(x).length);
   return {
     requestCount: observations.length,
     requestsPerMinute: round(observations.length / durationSeconds * 60),
@@ -268,6 +274,7 @@ function summarizeObservations(observations, durationSeconds, metricSamples) {
     statusCounts: countBy(observations, x => String(x.status)),
     requestCounts: countBy(observations, x => x.name),
     serviceMetricMaxima: numericMaxima(flattenedMetrics),
+    processMetricMaxima: numericMaxima(flattenedProcessMetrics),
     metricSamples,
   };
 }
@@ -301,12 +308,72 @@ function collectEnvironment(value) {
 }
 
 function readProcessSample(processId) {
+  const pid = Number(processId);
+  if (!Number.isInteger(pid) || pid <= 0) return { processId, error: 'invalid processId' };
+
   try {
-    const stat = process.getActiveResourcesInfo ? process.getActiveResourcesInfo() : [];
-    return { processId, runnerActiveResources: stat.length };
-  } catch {
-    return { processId };
+    if (os.platform() === 'win32') return readWindowsProcessSample(pid);
+    return readProcfsProcessSample(pid);
+  } catch (error) {
+    return { processId: pid, error: String(error) };
   }
+}
+
+function readWindowsProcessSample(pid) {
+  const script = [
+    '& {',
+    `$p = Get-Process -Id ${pid} -ErrorAction Stop`,
+    '[pscustomobject]@{',
+    '  processId = $p.Id',
+    '  cpuSeconds = $p.CPU',
+    '  workingSetBytes = $p.WorkingSet64',
+    '  privateMemoryBytes = $p.PrivateMemorySize64',
+    '  pagedMemoryBytes = $p.PagedMemorySize64',
+    '  handleCount = $p.HandleCount',
+    '  threadCount = $p.Threads.Count',
+    '} | ConvertTo-Json -Compress',
+    '}'
+  ].join('\n');
+  const output = execFileSync('powershell.exe', ['-NoProfile', '-Command', script], { encoding: 'utf8', timeout: 5000 });
+  return JSON.parse(output);
+}
+
+function readProcfsProcessSample(pid) {
+  const sample = { processId: pid };
+  const statusPath = `/proc/${pid}/status`;
+  const ioPath = `/proc/${pid}/io`;
+  const statPath = `/proc/${pid}/stat`;
+
+  if (fsSync.existsSync(statusPath)) {
+    const status = fsSync.readFileSync(statusPath, 'utf8');
+    const vmRss = status.match(/^VmRSS:\s+(\d+)\s+kB/im);
+    const vmSize = status.match(/^VmSize:\s+(\d+)\s+kB/im);
+    const threads = status.match(/^Threads:\s+(\d+)/im);
+    if (vmRss) sample.workingSetBytes = Number(vmRss[1]) * 1024;
+    if (vmSize) sample.virtualMemoryBytes = Number(vmSize[1]) * 1024;
+    if (threads) sample.threadCount = Number(threads[1]);
+  }
+
+  if (fsSync.existsSync(ioPath)) {
+    const io = fsSync.readFileSync(ioPath, 'utf8');
+    const readBytes = io.match(/^read_bytes:\s+(\d+)/im);
+    const writeBytes = io.match(/^write_bytes:\s+(\d+)/im);
+    if (readBytes) sample.readBytes = Number(readBytes[1]);
+    if (writeBytes) sample.writeBytes = Number(writeBytes[1]);
+  }
+
+  if (fsSync.existsSync(statPath)) {
+    const stat = fsSync.readFileSync(statPath, 'utf8');
+    const endOfCommand = stat.lastIndexOf(')');
+    const parts = stat.slice(endOfCommand + 2).split(' ');
+    const userTicks = Number(parts[11]);
+    const systemTicks = Number(parts[12]);
+    if (Number.isFinite(userTicks) && Number.isFinite(systemTicks)) {
+      sample.cpuSeconds = round((userTicks + systemTicks) / 100);
+    }
+  }
+
+  return sample;
 }
 
 function renderMarkdown(report) {

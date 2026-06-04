@@ -58,9 +58,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private async Task<ScriptExecutionResult> RunProcessAsync(string scriptFile, string? sessionId, CancellationToken ct)
         {
             var exePath = ResolveExecutablePath();
-            var args    = $"run \"{scriptFile}\" --json";
-            if (!string.IsNullOrEmpty(sessionId))
-                args += $" --session \"{sessionId}\"";
+            var args    = BuildArguments(scriptFile, sessionId);
 
             _logger.LogInformation("Spawning job process: {Exe} {Args}", exePath, args);
 
@@ -199,12 +197,29 @@ namespace ETL_SQL.Orchestrator.Execution
                 $"Could not locate ETL-SQL executable. Set 'Jobs:ExecutablePath' in appsettings.json. " +
                 $"Searched in: {dir}");
         }
+
+        private string BuildArguments(string scriptFile, string? sessionId)
+        {
+            if (!string.IsNullOrWhiteSpace(_options.ArgumentsTemplate))
+            {
+                return _options.ArgumentsTemplate
+                    .Replace("{ScriptFile}", scriptFile, StringComparison.Ordinal)
+                    .Replace("{SessionId}", sessionId ?? string.Empty, StringComparison.Ordinal);
+            }
+
+            var args = $"run \"{scriptFile}\" --json";
+            if (!string.IsNullOrEmpty(sessionId))
+                args += $" --session \"{sessionId}\"";
+            return args;
+        }
     }
 
     public class ProcessJobExecutorOptions
     {
         /// <summary>Full path to ETL-SQL.exe. If empty, auto-discovery is attempted.</summary>
         public string? ExecutablePath { get; set; }
+        /// <summary>Optional process argument template. Supports {ScriptFile} and {SessionId}; defaults to run "{ScriptFile}" --json.</summary>
+        public string? ArgumentsTemplate { get; set; }
         /// <summary>Maximum seconds a job process may run before it is killed. 0 = unlimited.</summary>
         public int TimeoutSeconds     { get; set; } = 3600;
         /// <summary>When true, SchedulerService uses ProcessJobExecutor instead of ScriptExecutorAdapter.</summary>

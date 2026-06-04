@@ -32,6 +32,7 @@ await fs.writeFile(configPath, JSON.stringify({
   orchestrator: {
     baseUrl: `http://127.0.0.1:${port}`,
     metricsPath: '/metrics',
+    processId: process.pid,
     steps: [{ concurrency: 1, durationSeconds: 0.2 }],
     workload: [{ name: 'orchestrator-smoke', method: 'GET', path: '/health', service: 'orchestrator' }]
   }
@@ -44,6 +45,8 @@ try {
   if (!report.portal[0].passed || !report.orchestrator[0].passed) throw new Error('Expected smoke workload steps to pass.');
   if (report.portal[0].requestCount > 10) throw new Error('Expected Portal think time to pace request volume.');
   if (report.orchestrator[0].serviceMetricMaxima.queued_jobs !== 0) throw new Error('Expected queued_jobs metric sample.');
+  if (report.orchestrator[0].processMetricMaxima.processId !== process.pid) throw new Error('Expected OS process metric sample.');
+  if (!report.orchestrator[0].processMetricMaxima.workingSetBytes) throw new Error('Expected OS working-set metric sample.');
   await runNode([
     'scripts/compare-capacity-results.mjs',
     path.join(outDir, 'capacity-report.json'),

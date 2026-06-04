@@ -25,6 +25,12 @@ Every measured run must record:
 The harness records host basics and service endpoint samples. Use OS monitoring or `dotnet-counters`
 alongside measured runs for target-process CPU, GC, working set, and disk I/O.
 
+When the service process id is known, set `portal.processId` or `orchestrator.processId` in the
+workload file. The harness samples OS process telemetry and records `processMetricMaxima` in each
+step. On Windows this uses `Get-Process`; on Linux it reads `/proc/<pid>/status`, `/proc/<pid>/io`,
+and `/proc/<pid>/stat`. External monitoring is still recommended for host-wide disk queues, network
+latency, and GC counters.
+
 ## Running A Test
 
 1. Copy `capacity-results/workload.example.json` to an ignored local file.
