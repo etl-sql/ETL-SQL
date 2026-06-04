@@ -39,17 +39,60 @@ namespace ETL_SQL.App
                     return 1;
                 }
 
-                logger.WriteLine($"Compiling ETL-SQL script for pipeline: '{spec.PipelineName}'");
-                var etlSqlCode = CompilePipeline(spec, Path.GetFileName(schemaPath));
-
-                var outputDir = Path.GetDirectoryName(outputPath);
+                var outputDir = Path.GetDirectoryName(outputPath) ?? "";
                 if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
                 {
                     Directory.CreateDirectory(outputDir);
                 }
 
-                await File.WriteAllTextAsync(outputPath, etlSqlCode, Encoding.UTF8);
-                logger.WriteLine($"ETL-SQL script successfully generated: {outputPath}", ConsoleColor.Green);
+                if (spec.Datasets != null && spec.Datasets.Count > 0)
+                {
+                    logger.WriteLine($"Compiling multi-dataset master pipeline: '{spec.PipelineName}' ({spec.Datasets.Count} datasets)");
+                    
+                    var masterFileNameWithoutExtension = Path.GetFileNameWithoutExtension(outputPath);
+                    var modulesDirName = $"{masterFileNameWithoutExtension}_modules";
+                    var modulesDirPath = Path.Combine(outputDir, modulesDirName);
+                    
+                    if (!Directory.Exists(modulesDirPath))
+                    {
+                        Directory.CreateDirectory(modulesDirPath);
+                    }
+
+                    // 1. Generate individual sub-modules
+                    foreach (var ds in spec.Datasets)
+                    {
+                        var dsName = ds.Name ?? "unnamed_dataset";
+                        logger.WriteLine($"  -> Compiling sub-module: '{dsName}'");
+                        
+                        var subSpec = new SpecPipeline
+                        {
+                            PipelineName = dsName,
+                            Metadata = spec.Metadata,
+                            Destination = ds.Destination,
+                            Schema = ds.Schema
+                        };
+
+                        var subEtlSql = CompilePipeline(subSpec, Path.GetFileName(schemaPath));
+                        var subOutputPath = Path.Combine(modulesDirPath, $"{dsName}.etlsql");
+                        await File.WriteAllTextAsync(subOutputPath, subEtlSql, Encoding.UTF8);
+                    }
+
+                    // 2. Generate Master Runner
+                    var masterEtlSql = CompileMasterPipeline(spec, modulesDirName, Path.GetFileName(schemaPath));
+                    await File.WriteAllTextAsync(outputPath, masterEtlSql, Encoding.UTF8);
+                    
+                    logger.WriteLine($"Multi-dataset pipeline successfully compiled.", ConsoleColor.Green);
+                    logger.WriteLine($"  Master Script: {outputPath}", ConsoleColor.Green);
+                    logger.WriteLine($"  Modules Directory: {modulesDirPath}", ConsoleColor.Green);
+                }
+                else
+                {
+                    logger.WriteLine($"Compiling single-dataset pipeline: '{spec.PipelineName}'");
+                    var etlSqlCode = CompilePipeline(spec, Path.GetFileName(schemaPath));
+                    await File.WriteAllTextAsync(outputPath, etlSqlCode, Encoding.UTF8);
+                    logger.WriteLine($"ETL-SQL script successfully generated: {outputPath}", ConsoleColor.Green);
+                }
+
                 return 0;
             }
             catch (Exception ex)
@@ -58,6 +101,43 @@ namespace ETL_SQL.App
                 logger.WriteLine(ex.ToString(), ConsoleColor.DarkGray);
                 return 1;
             }
+        }
+
+        private static string CompileMasterPipeline(SpecPipeline spec, string modulesDirName, string specFileName)
+        {
+            var sb = new StringBuilder();
+            var pipelineName = spec.PipelineName ?? "master_pipeline";
+            var desc = spec.Metadata?.Description ?? "Master wrapper pipeline.";
+            var owner = spec.Metadata?.Owner ?? "Data Team";
+            var classification = spec.Metadata?.Classification ?? "internal";
+
+            sb.AppendLine("-- =========================================================================");
+            sb.AppendLine($"-- Master Pipeline: {pipelineName}");
+            sb.AppendLine($"-- Description: {desc}");
+            sb.AppendLine($"-- Owner: {owner}");
+            sb.AppendLine($"-- Security Classification: {classification}");
+            sb.AppendLine($"-- Generated from specification: {specFileName}");
+            sb.AppendLine($"-- Generated at: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
+            sb.AppendLine("-- =========================================================================");
+            sb.AppendLine();
+            sb.AppendLine("BEGIN TRY");
+            
+            foreach (var ds in spec.Datasets!)
+            {
+                var dsName = ds.Name ?? "unnamed";
+                sb.Indent(1).AppendLine($"PRINT 'Running specification module: {dsName}...';");
+                sb.Indent(1).AppendLine($"RUN SCRIPT './{modulesDirName}/{dsName}.etlsql';");
+                sb.Indent(1).AppendLine();
+            }
+
+            sb.Indent(1).AppendLine("PRINT 'All specification pipeline modules completed successfully.';");
+            sb.AppendLine("END TRY");
+            sb.AppendLine("BEGIN CATCH");
+            sb.Indent(1).AppendLine("PRINT 'Specification pipeline execution aborted: ' + ERROR_MESSAGE();");
+            sb.Indent(1).AppendLine("THROW;");
+            sb.AppendLine("END CATCH");
+
+            return sb.ToString();
         }
 
         private static string CompilePipeline(SpecPipeline spec, string specFileName)
@@ -335,6 +415,21 @@ namespace ETL_SQL.App
 
         [JsonPropertyName("metadata")]
         public SpecMetadata? Metadata { get; set; }
+
+        [JsonPropertyName("destination")]
+        public SpecDestination? Destination { get; set; }
+
+        [JsonPropertyName("schema")]
+        public List<SpecColumn>? Schema { get; set; }
+
+        [JsonPropertyName("datasets")]
+        public List<SpecDataset>? Datasets { get; set; }
+    }
+
+    public class SpecDataset
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
 
         [JsonPropertyName("destination")]
         public SpecDestination? Destination { get; set; }

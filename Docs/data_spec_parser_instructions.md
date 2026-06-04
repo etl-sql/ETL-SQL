@@ -10,7 +10,10 @@ Do not write any markdown descriptions, preambles, or explanations. Return only 
 
 ### 1. TARGET JSON SCHEMA CONTRACT
 
-You must output a single, valid JSON object following this structure:
+You must output a single, valid JSON object. 
+
+*   **For a Single-Dataset Specification:** You can place `destination` and `schema` directly at the root.
+*   **For a Multi-Dataset Specification (Multiple Files/Sheets):** Omit the root-level `destination` and `schema` keys, and instead define a list under `datasets`.
 
 ```json
 {
@@ -20,6 +23,7 @@ You must output a single, valid JSON object following this structure:
     "classification": "string (public | internal | confidential | restricted)",
     "owner": "string (steward, team, or email responsible for the feed, if mentioned)"
   },
+  // OPTIONAL (Omit if datasets list is provided):
   "destination": {
     "connector_type": "string (FLATFILE | MSSQL | POSTGRES | MYSQL | ORACLE | SNOWFLAKE | BIGQUERY)",
     "format": "string (CSV | TSV | PIPE | EXCEL | JSON | XML | PARQUET | AVRO | DB_TABLE)",
@@ -40,6 +44,34 @@ You must output a single, valid JSON object following this structure:
       "description": "string (description of the field's purpose)",
       "validation_regex": "string (optional, regular expression to validate formatting rules)",
       "tags": ["array of strings (pii | phi | pci | sensitive | etc. if column contains personal or sensitive info)"]
+    }
+  ],
+  // OPTIONAL (Use for multi-file specifications, omit destination and schema at the root):
+  "datasets": [
+    {
+      "name": "string (snake_case name of the sub-file or sheet)",
+      "destination": {
+        "connector_type": "string (FLATFILE | MSSQL | ...)",
+        "format": "string (CSV | TSV | ...)",
+        "delimiter": "string (comma | pipe | ...)",
+        "text_qualifier": "string (doublequote | none)",
+        "encoding": "string (UTF8 | ...)",
+        "naming_pattern": "string (filename pattern)",
+        "path": "string (target path)"
+      },
+      "schema": [
+        {
+          "column_name": "string (snake_case column name)",
+          "type_family": "string (INT | DECIMAL | VARCHAR | DATE | DATETIME | BIT)",
+          "max_length": "integer",
+          "precision": "integer",
+          "scale": "integer",
+          "nullable": "boolean",
+          "description": "string",
+          "validation_regex": "string",
+          "tags": ["strings"]
+        }
+      ]
     }
   ]
 }
