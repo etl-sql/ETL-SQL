@@ -1,0 +1,4665 @@
+{
+  "generatedAt": "2026-06-04T19:58:33.885Z",
+  "configPath": "capacity-results/reference-local/workload.sanitized.json",
+  "environment": {
+    "hostname": "ChuckPC",
+    "platform": "win32 10.0.26200 x64",
+    "cpuModel": "Intel(R) Core(TM) Ultra 9 275HX",
+    "cpuCount": 24,
+    "totalMemoryBytes": 33690271744,
+    "nodeVersion": "v24.14.0",
+    "dotnetVersion": "10.0",
+    "diskType": "SSD",
+    "deploymentMode": "Release build, local processes, Orchestrator in-process execution",
+    "databaseLocation": "local SSD, separate Portal and Orchestrator SQLite files",
+    "notes": "Local developer-workstation starter baseline. Portal MaxConcurrentReportExecutions=4; Orchestrator JobThrottle MaxConcurrentJobs=4."
+  },
+  "breachCriteria": {
+    "maxErrorRatePct": 1,
+    "maxP95LatencyMs": 2000,
+    "maxSqliteContentionCount": 0,
+    "maxQueuedWork": 50
+  },
+  "portal": [
+    {
+      "service": "portal",
+      "concurrency": 1,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T19:58:34.061Z",
+      "endedAt": "2026-06-04T19:58:49.140Z",
+      "requestCount": 7181,
+      "requestsPerMinute": 28724,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 1.55,
+        "p95": 3.47,
+        "p99": 4.69,
+        "max": 180.94
+      },
+      "statusCounts": {
+        "200": 6834,
+        "202": 142,
+        "204": 205
+      },
+      "requestCounts": {
+        "reports": 1062,
+        "folders": 1421,
+        "snapshot": 1788,
+        "refresh": 142,
+        "audit": 380,
+        "csv-export": 724,
+        "usage-metrics": 367,
+        "catalog-search": 1092,
+        "favorite": 205
+      },
+      "serviceMetricMaxima": {
+        "checks.execution.data.execution_cap": 4,
+        "checks.execution.data.smtp_connections": 0,
+        "checks.execution.data.active_subscriptions": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T19:58:34.062Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:35.087Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:36.095Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:37.098Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:38.099Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:39.102Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:40.110Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:41.111Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:42.121Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:43.121Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:44.122Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:45.123Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:46.126Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:47.128Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:48.131Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        }
+      ],
+      "breaches": [],
+      "passed": true
+    },
+    {
+      "service": "portal",
+      "concurrency": 5,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T19:58:49.146Z",
+      "endedAt": "2026-06-04T19:59:04.316Z",
+      "requestCount": 9198,
+      "requestsPerMinute": 36792,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 1.66,
+        "p95": 6.87,
+        "p99": 167.43,
+        "max": 951.27
+      },
+      "statusCounts": {
+        "200": 8724,
+        "202": 207,
+        "204": 267
+      },
+      "requestCounts": {
+        "catalog-search": 1385,
+        "reports": 1387,
+        "audit": 446,
+        "folders": 1822,
+        "usage-metrics": 476,
+        "snapshot": 2234,
+        "csv-export": 974,
+        "favorite": 267,
+        "refresh": 207
+      },
+      "serviceMetricMaxima": {
+        "checks.execution.data.execution_cap": 4,
+        "checks.execution.data.smtp_connections": 0,
+        "checks.execution.data.active_subscriptions": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T19:58:49.146Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:50.151Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:51.157Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:52.158Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:53.158Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:54.165Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:55.166Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:56.165Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:57.169Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:58.170Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:58:59.170Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:00.171Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:01.178Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:02.179Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:03.179Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        }
+      ],
+      "breaches": [],
+      "passed": true
+    },
+    {
+      "service": "portal",
+      "concurrency": 10,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T19:59:04.321Z",
+      "endedAt": "2026-06-04T19:59:19.483Z",
+      "requestCount": 9199,
+      "requestsPerMinute": 36796,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 1.9,
+        "p95": 14.03,
+        "p99": 340.97,
+        "max": 2872.26
+      },
+      "statusCounts": {
+        "200": 8763,
+        "202": 165,
+        "204": 271
+      },
+      "requestCounts": {
+        "folders": 1823,
+        "reports": 1383,
+        "catalog-search": 1393,
+        "favorite": 271,
+        "snapshot": 2257,
+        "csv-export": 959,
+        "audit": 460,
+        "usage-metrics": 488,
+        "refresh": 165
+      },
+      "serviceMetricMaxima": {
+        "checks.execution.data.execution_cap": 4,
+        "checks.execution.data.smtp_connections": 0,
+        "checks.execution.data.active_subscriptions": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T19:59:04.322Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:05.324Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:06.328Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:07.327Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:08.329Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:09.331Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:10.340Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:11.342Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:12.347Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:13.348Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:14.352Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:15.354Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:16.356Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:17.363Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:18.364Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        }
+      ],
+      "breaches": [],
+      "passed": true
+    },
+    {
+      "service": "portal",
+      "concurrency": 20,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T19:59:19.488Z",
+      "endedAt": "2026-06-04T19:59:35.161Z",
+      "requestCount": 8898,
+      "requestsPerMinute": 35592,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 2.18,
+        "p95": 155.99,
+        "p99": 795.36,
+        "max": 5361.73
+      },
+      "statusCounts": {
+        "200": 8471,
+        "202": 171,
+        "204": 256
+      },
+      "requestCounts": {
+        "folders": 1757,
+        "reports": 1361,
+        "snapshot": 2250,
+        "catalog-search": 1291,
+        "audit": 440,
+        "csv-export": 918,
+        "refresh": 171,
+        "usage-metrics": 454,
+        "favorite": 256
+      },
+      "serviceMetricMaxima": {
+        "checks.execution.data.execution_cap": 4,
+        "checks.execution.data.smtp_connections": 0,
+        "checks.execution.data.active_subscriptions": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T19:59:19.489Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:20.495Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:21.496Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:22.500Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:23.502Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:24.502Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:25.504Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:26.505Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:27.507Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:28.506Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:29.506Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:30.517Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:31.520Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:32.529Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:33.530Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        }
+      ],
+      "breaches": [],
+      "passed": true
+    },
+    {
+      "service": "portal",
+      "concurrency": 40,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T19:59:35.166Z",
+      "endedAt": "2026-06-04T19:59:51.644Z",
+      "requestCount": 7756,
+      "requestsPerMinute": 31024,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 11.81,
+        "p95": 329.58,
+        "p99": 1733.84,
+        "max": 6630.9
+      },
+      "statusCounts": {
+        "200": 7368,
+        "202": 152,
+        "204": 236
+      },
+      "requestCounts": {
+        "folders": 1552,
+        "snapshot": 1975,
+        "audit": 379,
+        "catalog-search": 1195,
+        "reports": 1124,
+        "favorite": 236,
+        "csv-export": 754,
+        "usage-metrics": 389,
+        "refresh": 152
+      },
+      "serviceMetricMaxima": {
+        "checks.execution.data.execution_cap": 4,
+        "checks.execution.data.smtp_connections": 0,
+        "checks.execution.data.active_subscriptions": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T19:59:35.167Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:36.193Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:37.219Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:38.257Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:39.297Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:40.319Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:41.347Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:42.543Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:43.551Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:44.565Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:45.568Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:46.582Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:47.593Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:48.593Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:49.596Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        }
+      ],
+      "breaches": [],
+      "passed": true
+    },
+    {
+      "service": "portal",
+      "concurrency": 80,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T19:59:51.649Z",
+      "endedAt": "2026-06-04T20:00:10.259Z",
+      "requestCount": 7088,
+      "requestsPerMinute": 28352,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 50.13,
+        "p95": 584.19,
+        "p99": 3632.64,
+        "max": 10161.17
+      },
+      "statusCounts": {
+        "200": 6729,
+        "202": 136,
+        "204": 223
+      },
+      "requestCounts": {
+        "folders": 1445,
+        "favorite": 223,
+        "snapshot": 1830,
+        "catalog-search": 1049,
+        "csv-export": 645,
+        "reports": 1072,
+        "audit": 335,
+        "usage-metrics": 353,
+        "refresh": 136
+      },
+      "serviceMetricMaxima": {
+        "checks.execution.data.execution_cap": 4,
+        "checks.execution.data.smtp_connections": 0,
+        "checks.execution.data.active_subscriptions": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T19:59:51.651Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:52.694Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:53.725Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:54.747Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:55.771Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:56.813Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:57.850Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T19:59:59.233Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:00.432Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:01.708Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:02.766Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:03.851Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:04.891Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:05.927Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        }
+      ],
+      "breaches": [],
+      "passed": true
+    },
+    {
+      "service": "portal",
+      "concurrency": 120,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T20:00:10.263Z",
+      "endedAt": "2026-06-04T20:00:27.907Z",
+      "requestCount": 7554,
+      "requestsPerMinute": 30216,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 71.17,
+        "p95": 823.02,
+        "p99": 4855.51,
+        "max": 17494.13
+      },
+      "statusCounts": {
+        "200": 7191,
+        "202": 148,
+        "204": 215
+      },
+      "requestCounts": {
+        "folders": 1582,
+        "catalog-search": 1137,
+        "csv-export": 794,
+        "favorite": 215,
+        "snapshot": 1803,
+        "reports": 1107,
+        "audit": 355,
+        "refresh": 148,
+        "usage-metrics": 413
+      },
+      "serviceMetricMaxima": {
+        "checks.execution.data.execution_cap": 4,
+        "checks.execution.data.smtp_connections": 0,
+        "checks.execution.data.active_subscriptions": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T20:00:10.266Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:11.339Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:12.436Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:13.792Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:15.176Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:16.358Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:17.788Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:19.092Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:20.520Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:21.999Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:23.522Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:24.857Z",
+          "serviceMetrics": {
+            "status": "Healthy",
+            "checks": {
+              "db": {
+                "status": "Healthy",
+                "description": "Database is reachable.",
+                "data": null,
+                "error": null
+              },
+              "orchestrator": {
+                "status": "Healthy",
+                "description": "Orchestrator DB found at C:\\Users\\chuck\\AppData\\Local\\ETL-SQL\\etlsql.db",
+                "data": null,
+                "error": null
+              },
+              "execution": {
+                "status": "Healthy",
+                "description": "Execution cap: 4. SMTP connections: 0. Active subscriptions: 0.",
+                "data": {
+                  "execution_cap": 4,
+                  "smtp_connections": 0,
+                  "active_subscriptions": 0
+                },
+                "error": null
+              }
+            }
+          }
+        }
+      ],
+      "breaches": [],
+      "passed": true
+    }
+  ],
+  "orchestrator": [
+    {
+      "service": "orchestrator",
+      "concurrency": 1,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T20:00:27.913Z",
+      "endedAt": "2026-06-04T20:00:43.111Z",
+      "requestCount": 39,
+      "requestsPerMinute": 156,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 0.86,
+        "p95": 4.17,
+        "p99": 9.49,
+        "max": 9.49
+      },
+      "statusCounts": {
+        "200": 32,
+        "202": 7
+      },
+      "requestCounts": {
+        "health": 13,
+        "history": 6,
+        "metrics": 13,
+        "trigger": 7
+      },
+      "serviceMetricMaxima": {
+        "active_jobs": 0,
+        "queued_jobs": 0,
+        "max_jobs": 4,
+        "available_slots": 4,
+        "active_processes": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T20:00:27.913Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:28.928Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:29.941Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:30.949Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:31.951Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:32.964Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:33.972Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:34.986Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:35.999Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:37.012Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:38.019Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:39.031Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:40.046Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:41.060Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:42.068Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        }
+      ],
+      "breaches": [],
+      "passed": true
+    },
+    {
+      "service": "orchestrator",
+      "concurrency": 5,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T20:00:43.112Z",
+      "endedAt": "2026-06-04T20:00:58.772Z",
+      "requestCount": 220,
+      "requestsPerMinute": 880,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 0.53,
+        "p95": 1.06,
+        "p99": 15.91,
+        "max": 189.03
+      },
+      "statusCounts": {
+        "200": 193,
+        "202": 27
+      },
+      "requestCounts": {
+        "health": 78,
+        "metrics": 80,
+        "history": 35,
+        "trigger": 27
+      },
+      "serviceMetricMaxima": {
+        "active_jobs": 0,
+        "queued_jobs": 0,
+        "max_jobs": 4,
+        "available_slots": 4,
+        "active_processes": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T20:00:43.112Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:44.124Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:45.139Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:46.149Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:47.160Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:48.167Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:49.180Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:50.188Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:51.197Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:52.208Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:53.220Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:54.225Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:55.239Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:56.248Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:57.260Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        }
+      ],
+      "breaches": [],
+      "passed": true
+    },
+    {
+      "service": "orchestrator",
+      "concurrency": 10,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T20:00:58.773Z",
+      "endedAt": "2026-06-04T20:01:14.512Z",
+      "requestCount": 408,
+      "requestsPerMinute": 1632,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 0.53,
+        "p95": 6.78,
+        "p99": 16.79,
+        "max": 188.97
+      },
+      "statusCounts": {
+        "200": 343,
+        "202": 65
+      },
+      "requestCounts": {
+        "health": 120,
+        "trigger": 65,
+        "metrics": 139,
+        "history": 84
+      },
+      "serviceMetricMaxima": {
+        "active_jobs": 1,
+        "queued_jobs": 0,
+        "max_jobs": 4,
+        "available_slots": 4,
+        "active_processes": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T20:00:58.774Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:00:59.781Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:00.789Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:01.794Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:02.804Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:03.819Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:04.836Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:05.843Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:06.850Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:07.862Z",
+          "serviceMetrics": {
+            "active_jobs": 1,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 3,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:08.871Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:09.885Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:10.894Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:11.904Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:12.917Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        }
+      ],
+      "breaches": [],
+      "passed": true
+    },
+    {
+      "service": "orchestrator",
+      "concurrency": 20,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T20:01:14.513Z",
+      "endedAt": "2026-06-04T20:01:30.524Z",
+      "requestCount": 806,
+      "requestsPerMinute": 3224,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 0.51,
+        "p95": 16.08,
+        "p99": 189.79,
+        "max": 381.6
+      },
+      "statusCounts": {
+        "200": 672,
+        "202": 134
+      },
+      "requestCounts": {
+        "health": 269,
+        "trigger": 134,
+        "history": 152,
+        "metrics": 251
+      },
+      "serviceMetricMaxima": {
+        "active_jobs": 1,
+        "queued_jobs": 0,
+        "max_jobs": 4,
+        "available_slots": 4,
+        "active_processes": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T20:01:14.513Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:15.527Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:16.541Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:17.553Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:18.563Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:19.572Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:20.580Z",
+          "serviceMetrics": {
+            "active_jobs": 1,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 3,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:21.595Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:22.609Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:23.620Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:24.631Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:25.641Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:26.649Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:27.658Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:28.672Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        }
+      ],
+      "breaches": [],
+      "passed": true
+    },
+    {
+      "service": "orchestrator",
+      "concurrency": 40,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T20:01:30.525Z",
+      "endedAt": "2026-06-04T20:01:46.517Z",
+      "requestCount": 1655,
+      "requestsPerMinute": 6620,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 0.44,
+        "p95": 16.1,
+        "p99": 189.22,
+        "max": 221.84
+      },
+      "statusCounts": {
+        "200": 1408,
+        "202": 247
+      },
+      "requestCounts": {
+        "health": 567,
+        "metrics": 581,
+        "history": 260,
+        "trigger": 247
+      },
+      "serviceMetricMaxima": {
+        "active_jobs": 2,
+        "queued_jobs": 0,
+        "max_jobs": 4,
+        "available_slots": 4,
+        "active_processes": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T20:01:30.526Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:31.533Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:32.542Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:33.551Z",
+          "serviceMetrics": {
+            "active_jobs": 1,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 3,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:34.560Z",
+          "serviceMetrics": {
+            "active_jobs": 1,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 3,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:35.569Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:36.580Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:37.589Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:38.599Z",
+          "serviceMetrics": {
+            "active_jobs": 2,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 2,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:39.607Z",
+          "serviceMetrics": {
+            "active_jobs": 1,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 3,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:40.615Z",
+          "serviceMetrics": {
+            "active_jobs": 1,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 3,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:41.626Z",
+          "serviceMetrics": {
+            "active_jobs": 2,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 2,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:42.636Z",
+          "serviceMetrics": {
+            "active_jobs": 1,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 3,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:43.647Z",
+          "serviceMetrics": {
+            "active_jobs": 1,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 3,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:44.661Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        }
+      ],
+      "breaches": [],
+      "passed": true
+    },
+    {
+      "service": "orchestrator",
+      "concurrency": 80,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T20:01:46.519Z",
+      "endedAt": "2026-06-04T20:02:02.888Z",
+      "requestCount": 2434,
+      "requestsPerMinute": 9736,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 68.74,
+        "p95": 525.61,
+        "p99": 708.2,
+        "max": 914.54
+      },
+      "statusCounts": {
+        "200": 2046,
+        "202": 388
+      },
+      "requestCounts": {
+        "metrics": 824,
+        "health": 833,
+        "trigger": 388,
+        "history": 389
+      },
+      "serviceMetricMaxima": {
+        "active_jobs": 4,
+        "queued_jobs": 154,
+        "max_jobs": 4,
+        "available_slots": 4,
+        "active_processes": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T20:01:46.521Z",
+          "serviceMetrics": {
+            "active_jobs": 0,
+            "queued_jobs": 0,
+            "max_jobs": 4,
+            "available_slots": 4,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:47.545Z",
+          "serviceMetrics": {
+            "active_jobs": 3,
+            "queued_jobs": 8,
+            "max_jobs": 4,
+            "available_slots": 1,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:48.556Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 7,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:49.565Z",
+          "serviceMetrics": {
+            "active_jobs": 1,
+            "queued_jobs": 39,
+            "max_jobs": 4,
+            "available_slots": 3,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:50.574Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 55,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:52.075Z",
+          "serviceMetrics": {
+            "active_jobs": 3,
+            "queued_jobs": 66,
+            "max_jobs": 4,
+            "available_slots": 1,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:53.087Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 76,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:54.100Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 104,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:55.105Z",
+          "serviceMetrics": {
+            "active_jobs": 3,
+            "queued_jobs": 100,
+            "max_jobs": 4,
+            "available_slots": 1,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:56.113Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 110,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:57.121Z",
+          "serviceMetrics": {
+            "active_jobs": 3,
+            "queued_jobs": 120,
+            "max_jobs": 4,
+            "available_slots": 1,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:58.136Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 147,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:01:59.266Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 148,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:00.273Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 154,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:01.338Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 150,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        }
+      ],
+      "breaches": [
+        "queued work 154 > 50"
+      ],
+      "passed": false
+    },
+    {
+      "service": "orchestrator",
+      "concurrency": 120,
+      "durationSeconds": 15,
+      "startedAt": "2026-06-04T20:02:02.889Z",
+      "endedAt": "2026-06-04T20:02:18.825Z",
+      "requestCount": 3036,
+      "requestsPerMinute": 12144,
+      "errorCount": 0,
+      "errorRatePct": 0,
+      "sqliteContentionCount": 0,
+      "latencyMs": {
+        "p50": 89,
+        "p95": 841.19,
+        "p99": 917.23,
+        "max": 918.93
+      },
+      "statusCounts": {
+        "200": 2541,
+        "202": 495
+      },
+      "requestCounts": {
+        "metrics": 1000,
+        "health": 1066,
+        "trigger": 495,
+        "history": 475
+      },
+      "serviceMetricMaxima": {
+        "active_jobs": 4,
+        "queued_jobs": 365,
+        "max_jobs": 4,
+        "available_slots": 3,
+        "active_processes": 0
+      },
+      "metricSamples": [
+        {
+          "timestamp": "2026-06-04T20:02:02.893Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 149,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:03.962Z",
+          "serviceMetrics": {
+            "active_jobs": 1,
+            "queued_jobs": 145,
+            "max_jobs": 4,
+            "available_slots": 3,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:04.966Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 172,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:06.230Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 206,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:07.684Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 235,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:09.056Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 254,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:10.121Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 292,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:11.130Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 321,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:12.140Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 322,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:13.499Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 353,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:14.509Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 356,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:15.884Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 350,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        },
+        {
+          "timestamp": "2026-06-04T20:02:17.241Z",
+          "serviceMetrics": {
+            "active_jobs": 4,
+            "queued_jobs": 365,
+            "max_jobs": 4,
+            "available_slots": 0,
+            "active_processes": 0
+          }
+        }
+      ],
+      "breaches": [
+        "queued work 365 > 50"
+      ],
+      "passed": false
+    }
+  ]
+}

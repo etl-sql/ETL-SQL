@@ -1,0 +1,18 @@
+SET REPORT TITLE = 'Capacity Reference Report';
+SET REPORT DESCRIPTION = 'Small deterministic report used for local capacity baseline measurements.';
+
+SELECT
+    1 AS Id,
+    'North' AS Region,
+    1250 AS Revenue
+INTO #capacity_data;
+
+CREATE VISUAL RevenueTable AS TABLE (
+    SOURCE = #capacity_data,
+    MAPPINGS (Id = Id, Region = Region, Revenue = Revenue)
+);
+
+CREATE PAGE Overview AS DASHBOARD (
+    STRUCTURE = 'A',
+    MAP ('A' = RevenueTable)
+);

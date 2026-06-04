@@ -1,0 +1,73 @@
+{
+  "environment": {
+    "deploymentMode": "Release build, local processes, Orchestrator in-process execution",
+    "databaseLocation": "local SSD, separate Portal and Orchestrator SQLite files",
+    "diskType": "SSD",
+    "dotnetVersion": "10.0",
+    "notes": "Local developer-workstation starter baseline. Portal MaxConcurrentReportExecutions=4; Orchestrator JobThrottle MaxConcurrentJobs=4."
+  },
+  "breachCriteria": {
+    "maxErrorRatePct": 1,
+    "maxP95LatencyMs": 2000,
+    "maxSqliteContentionCount": 0,
+    "maxQueuedWork": 50
+  },
+  "variables": {
+    "reportId": "1",
+    "folderId": "1",
+    "jobName": "capacity-noop"
+  },
+  "portal": {
+    "baseUrl": "http://127.0.0.1:5110",
+    "roles": {
+      "admin": { "username": "admin", "password": "REDACTED" },
+      "viewer": { "username": "capacity_viewer", "password": "REDACTED" },
+      "publisher": { "username": "capacity_publisher", "password": "REDACTED" }
+    },
+    "warmupIterations": 2,
+    "metricsPath": "/health",
+    "steps": [
+      { "concurrency": 1, "durationSeconds": 15 },
+      { "concurrency": 5, "durationSeconds": 15 },
+      { "concurrency": 10, "durationSeconds": 15 },
+      { "concurrency": 20, "durationSeconds": 15 },
+      { "concurrency": 40, "durationSeconds": 15 },
+      { "concurrency": 80, "durationSeconds": 15 },
+      { "concurrency": 120, "durationSeconds": 15 }
+    ],
+    "workload": [
+      { "name": "folders", "method": "GET", "path": "/api/folders", "role": "viewer", "weight": 20 },
+      { "name": "reports", "method": "GET", "path": "/api/folders/{{folderId}}/reports", "role": "viewer", "weight": 15 },
+      { "name": "catalog-search", "method": "GET", "path": "/api/catalog/search?q=capacity", "role": "viewer", "weight": 15 },
+      { "name": "snapshot", "method": "GET", "path": "/api/reports/{{reportId}}/snapshot", "role": "viewer", "weight": 25 },
+      { "name": "csv-export", "method": "GET", "path": "/api/reports/{{reportId}}/export/csv", "role": "viewer", "weight": 10 },
+      { "name": "favorite", "method": "POST", "path": "/api/reports/{{reportId}}/favorite", "role": "viewer", "weight": 3 },
+      { "name": "refresh", "method": "POST", "path": "/api/reports/{{reportId}}/refresh", "role": "publisher", "weight": 2 },
+      { "name": "audit", "method": "GET", "path": "/api/admin/audit?pageSize=50", "role": "admin", "weight": 5 },
+      { "name": "usage-metrics", "method": "GET", "path": "/api/admin/metrics/usage", "role": "admin", "weight": 5 }
+    ]
+  },
+  "orchestrator": {
+    "baseUrl": "http://127.0.0.1:5111",
+    "apiKey": "REDACTED",
+    "metricsPath": "/metrics",
+    "thinkTimeMs": 250,
+    "steps": [
+      { "concurrency": 1, "durationSeconds": 15 },
+      { "concurrency": 5, "durationSeconds": 15 },
+      { "concurrency": 10, "durationSeconds": 15 },
+      { "concurrency": 20, "durationSeconds": 15 },
+      { "concurrency": 40, "durationSeconds": 15 },
+      { "concurrency": 80, "durationSeconds": 15 },
+      { "concurrency": 120, "durationSeconds": 15 }
+    ],
+    "workload": [
+      { "name": "health", "method": "GET", "path": "/health", "service": "orchestrator", "weight": 10 },
+      { "name": "metrics", "method": "GET", "path": "/metrics", "service": "orchestrator", "weight": 10 },
+      { "name": "trigger", "method": "POST", "path": "/api/scheduled-jobs/{{jobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 5, "thinkTimeMs": 1000 },
+      { "name": "history", "method": "GET", "path": "/api/scheduled-jobs/{{jobName}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 5 }
+    ]
+  },
+  "setupRequests": [],
+  "cleanupRequests": []
+}
