@@ -894,4 +894,28 @@ LEFT FUZZY JOIN #reference r
 
 ---
 
+## 23. Scheduling a Recurring Job on a Remote Orchestrator
+Once a pipeline is published, register it as a scheduled job on the Orchestrator so it runs unattended with retries. Remote job creation is wrapped in an `EXECUTE <orch> BEGIN ... END` block targeting the orchestrator connection.
+
+**Pattern Scenario:** Run a versioned finance pipeline nightly at 02:30 with up to 3 retries.
+
+```sql
+-- 1. Connect to the Orchestrator. An ENC: secret must be a quoted string.
+CREATE CONNECTION orch AS ORCHESTRATOR(HOST = 'http://localhost:5001', API_KEY = 'ENC:U2FsdGVkX1+...');
+
+-- 2. Register the job ON the remote orchestrator. The WITH(...) retry options
+--    must precede the AS block (see Grammar.md §15.1).
+EXECUTE orch BEGIN
+    CREATE JOB NightlyReconciliation
+        ON SCHEDULE EVERY 1 DAY AT '02:30'
+        WITH (MAX_RETRIES = 3, RETRY_DELAY = 60)
+    AS
+        RUN SCRIPT 'orch://finance-pipeline/main.etlsql';
+END;
+```
+
+> Pair this with recipe 20: publish an immutable bundle, then schedule `orch://<bundle>/<entry>` so production runs are pinned to a specific version. See [Reference/Grammar.md](Reference/Grammar.md) §15 for `ALTER JOB`, `START`/`STOP JOB`, and `SHOW JOB HISTORY`.
+
+---
+
 *Refer to [Reference/Standard_Library.md](Reference/Standard_Library.md) for function signatures, [Reference/Data_Connectors.md](Reference/Data_Connectors.md) for connector options, and [User_Manual.md](User_Manual.md) for the mental model.*
