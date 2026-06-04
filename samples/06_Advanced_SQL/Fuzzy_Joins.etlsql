@@ -1,0 +1,70 @@
+-- FUZZY JOIN matches rows by similarity score and injects the __score column.
+
+CREATE TABLE #IncomingCompanies (
+    SourceID INT,
+    RawName VARCHAR(100)
+);
+
+INSERT INTO #IncomingCompanies VALUES
+    (1, 'Acme Corp.'),
+    (2, 'Globex Corporaton'),
+    (3, 'Initech LLC'),
+    (4, 'Unknown Trading Co');
+
+CREATE TABLE #CompanyReference (
+    CompanyID INT,
+    CanonicalName VARCHAR(100)
+);
+
+INSERT INTO #CompanyReference VALUES
+    (101, 'Acme Incorporated'),
+    (102, 'Globex Corporation'),
+    (103, 'Initech'),
+    (104, 'Umbrella Corporation');
+
+PRINT 'Return the single best company match above the threshold.';
+SELECT
+    i.SourceID,
+    i.RawName,
+    r.CompanyID,
+    r.CanonicalName,
+    __score AS MatchScore
+FROM #IncomingCompanies i
+FUZZY JOIN #CompanyReference r
+    ON SIMILARITY(
+        NORMALIZE(i.RawName, 'COMPANY'),
+        NORMALIZE(r.CanonicalName, 'COMPANY'),
+        'TRIGRAM'
+    ) > 0.65
+KEEP BEST 1
+ORDER BY i.SourceID;
+
+PRINT 'LEFT FUZZY JOIN preserves rows that do not meet the threshold.';
+SELECT
+    i.SourceID,
+    i.RawName,
+    r.CompanyID,
+    r.CanonicalName,
+    __score AS MatchScore
+FROM #IncomingCompanies i
+LEFT FUZZY JOIN #CompanyReference r
+    ON SIMILARITY(
+        NORMALIZE(i.RawName, 'COMPANY'),
+        NORMALIZE(r.CanonicalName, 'COMPANY'),
+        'TRIGRAM'
+    ) > 0.80
+KEEP BEST 1
+ORDER BY i.SourceID;
+
+PRINT 'KEEP BEST 3 returns a short candidate list for manual review.';
+SELECT
+    i.SourceID,
+    i.RawName,
+    r.CompanyID,
+    r.CanonicalName,
+    __score AS MatchScore
+FROM #IncomingCompanies i
+FUZZY JOIN #CompanyReference r
+    ON SIMILARITY(i.RawName, r.CanonicalName) > 0.55
+KEEP BEST 3
+ORDER BY i.SourceID, __score DESC;

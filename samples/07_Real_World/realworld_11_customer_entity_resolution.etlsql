@@ -1,0 +1,71 @@
+-- Real-world pattern: resolve messy customer records to a canonical master,
+-- automatically accept strong matches, and route ambiguous rows for review.
+
+CREATE TABLE #CustomerMaster (
+    CustomerID INT,
+    CanonicalName VARCHAR(100),
+    City VARCHAR(50)
+);
+
+INSERT INTO #CustomerMaster VALUES
+    (1001, 'Acme Incorporated', 'Chicago'),
+    (1002, 'Globex Corporation', 'Boston'),
+    (1003, 'Initech', 'Austin'),
+    (1004, 'Umbrella Corporation', 'Central City');
+
+CREATE TABLE #InboundCustomers (
+    FeedRowID INT,
+    CustomerName VARCHAR(100),
+    City VARCHAR(50)
+);
+
+INSERT INTO #InboundCustomers VALUES
+    (1, 'ACME Corp.', 'Chicago'),
+    (2, 'Globex Corporaton', 'Boston'),
+    (3, 'Ini Tech LLC', 'Austin'),
+    (4, 'Umbrella Co', 'Centrl City'),
+    (5, 'New Customer Holdings', 'Denver');
+
+-- Blend name and city scores. KEEP BEST 1 prevents one inbound row from
+-- resolving to multiple master customers.
+SELECT
+    i.FeedRowID,
+    i.CustomerName,
+    i.City AS InboundCity,
+    m.CustomerID,
+    m.CanonicalName,
+    m.City AS MasterCity,
+    __score AS MatchScore
+INTO #Candidates
+FROM #InboundCustomers i
+LEFT FUZZY JOIN #CustomerMaster m
+    ON 0.75 * SIMILARITY(
+        NORMALIZE(i.CustomerName, 'COMPANY'),
+        NORMALIZE(m.CanonicalName, 'COMPANY'),
+        'TRIGRAM'
+    )
+    + 0.25 * SIMILARITY(i.City, m.City, 'LEVENSHTEIN') > 0.55
+KEEP BEST 1;
+
+PRINT 'Automatically accepted matches.';
+SELECT
+    FeedRowID,
+    CustomerName,
+    CustomerID,
+    CanonicalName,
+    MatchScore
+FROM #Candidates
+WHERE MatchScore >= 0.85
+ORDER BY FeedRowID;
+
+PRINT 'Manual review queue: weak matches and unmatched rows.';
+SELECT
+    FeedRowID,
+    CustomerName,
+    InboundCity,
+    CustomerID,
+    CanonicalName,
+    MatchScore
+FROM #Candidates
+WHERE MatchScore IS NULL OR MatchScore < 0.85
+ORDER BY FeedRowID;

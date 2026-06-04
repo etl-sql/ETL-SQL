@@ -1,0 +1,55 @@
+-- Fuzzy matching functions help compare strings with typos, formatting differences,
+-- word-order changes, or phonetic spelling variations.
+
+CREATE TABLE #NamePairs (
+    PairID INT,
+    SourceName VARCHAR(100),
+    CandidateName VARCHAR(100)
+);
+
+INSERT INTO #NamePairs VALUES
+    (1, 'Martha', 'Marhta'),
+    (2, 'Robert Smith', 'Smith Robert'),
+    (3, 'Acme Corp.', 'ACME Incorporated'),
+    (4, 'kitten', 'sitting'),
+    (5, 'Robert', 'Rupert');
+
+PRINT 'Compare algorithms before choosing a threshold.';
+SELECT
+    PairID,
+    SourceName,
+    CandidateName,
+    SIMILARITY(SourceName, CandidateName, 'JAROWINKLER') AS JaroWinklerScore,
+    SIMILARITY(SourceName, CandidateName, 'LEVENSHTEIN') AS LevenshteinScore,
+    SIMILARITY(SourceName, CandidateName, 'TRIGRAM') AS TrigramScore,
+    SIMILARITY(SourceName, CandidateName, 'TOKENSORT') AS TokenSortScore,
+    LEVENSHTEIN(SourceName, CandidateName) AS EditDistance
+FROM #NamePairs
+ORDER BY PairID;
+
+PRINT 'Normalize company suffixes and punctuation before scoring.';
+SELECT
+    SourceName,
+    CandidateName,
+    NORMALIZE(SourceName, 'COMPANY') AS NormalizedSource,
+    NORMALIZE(CandidateName, 'COMPANY') AS NormalizedCandidate,
+    SIMILARITY(
+        NORMALIZE(SourceName, 'COMPANY'),
+        NORMALIZE(CandidateName, 'COMPANY'),
+        'TRIGRAM'
+    ) AS NormalizedCompanyScore
+FROM #NamePairs
+WHERE PairID = 3;
+
+PRINT 'Use phonetic codes as a fast candidate filter for person names.';
+SELECT
+    SourceName,
+    CandidateName,
+    SOUNDEX(SourceName) AS SourceSoundex,
+    SOUNDEX(CandidateName) AS CandidateSoundex,
+    CASE
+        WHEN SOUNDEX(SourceName) = SOUNDEX(CandidateName) THEN 'same phonetic code'
+        ELSE 'different phonetic code'
+    END AS PhoneticCandidate
+FROM #NamePairs
+WHERE PairID = 5;

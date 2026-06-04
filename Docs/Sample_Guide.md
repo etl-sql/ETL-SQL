@@ -193,11 +193,19 @@ Core samples introduce language features and small workflows. Some read or write
 **Purpose**: Forcing specific join algorithms.
 - Demonstrates `INNER HASH JOIN`, `INNER LOOP JOIN`, `LEFT HASH JOIN`, etc., to explicitly configure the SQL execution engine's behavior for strict streaming allocations.
 
-### 24. [Bulk_Insert_Mapping.etlsql](../samples/02_Data_Movement/Bulk_Insert_Mapping.etlsql)
+### 24. [Fuzzy_Matching_Functions.etlsql](../samples/06_Advanced_SQL/Fuzzy_Matching_Functions.etlsql)
+**Purpose**: Choosing fuzzy matching functions and thresholds.
+- Compares `SIMILARITY` algorithms, raw `LEVENSHTEIN` distance, company-name `NORMALIZE`, and `SOUNDEX`.
+
+### 25. [Fuzzy_Joins.etlsql](../samples/06_Advanced_SQL/Fuzzy_Joins.etlsql)
+**Purpose**: Similarity-based joins with candidate control.
+- Demonstrates `FUZZY JOIN`, `LEFT FUZZY JOIN`, the injected `__score` column, normalization, and `KEEP BEST`.
+
+### 26. [Bulk_Insert_Mapping.etlsql](../samples/02_Data_Movement/Bulk_Insert_Mapping.etlsql)
 **Purpose**: Bulk insertion with target column mapping.
 - Demonstrates the `BULK INSERT` statement allocating disparate CSV streams onto explicitly reordered table columns without a staging table.
 
-### 25. [Throughput_Stress_Test.etlsql](../samples/99_Experimental/Throughput_Stress_Test.etlsql)
+### 27. [Throughput_Stress_Test.etlsql](../samples/99_Experimental/Throughput_Stress_Test.etlsql)
 **Purpose**: High-volume throughput evaluation.
 - Illustrates a 5-million row streaming data pipeline stressing engine memory ceilings directly evaluating outer-streams against fixed dimension schemas via `.csv` file orchestration.
 
@@ -205,35 +213,38 @@ Core samples introduce language features and small workflows. Some read or write
 
 These advanced scripts demonstrate complex, production-grade business requirements implemented natively in ETL-SQL.
 
-### 26. [realworld_01_dw_load.etlsql](../samples/07_Real_World/realworld_01_dw_load.etlsql)
+### 28. [realworld_01_dw_load.etlsql](../samples/07_Real_World/realworld_01_dw_load.etlsql)
 **Multi-System DW Load**: Extracts PostgreSQL transactions, joins a legacy CSV dimension map via `INNER HASH JOIN`, aggregates metrics, and bulk inserts them into a SQL Server Data Warehouse.
 
-### 27. [realworld_02_secure_sftp_alert.etlsql](../samples/07_Real_World/realworld_02_secure_sftp_alert.etlsql)
+### 29. [realworld_02_secure_sftp_alert.etlsql](../samples/07_Real_World/realworld_02_secure_sftp_alert.etlsql)
 **Secure File Transfer & Alerting**: Self-contained local simulation of a finance extract, encrypted payload handoff, and `TRY/CATCH` failure handling. It uses local folders to stand in for an SFTP drop.
 
-### 28. [realworld_03_schema_quarantine.etlsql](../samples/07_Real_World/realworld_03_schema_quarantine.etlsql)
+### 30. [realworld_03_schema_quarantine.etlsql](../samples/07_Real_World/realworld_03_schema_quarantine.etlsql)
 **Strict Schema Quarantine**: Ingests third-party files utilizing `STRICT_SCHEMA='ON'`. Splits traffic dynamically into a "Clean" #Temp table and a "Malaligned" Quarantined audit log, printing validation counts to the console natively.
 
-### 29. [realworld_04_incremental_merge.etlsql](../samples/07_Real_World/realworld_04_incremental_merge.etlsql)
+### 31. [realworld_04_incremental_merge.etlsql](../samples/07_Real_World/realworld_04_incremental_merge.etlsql)
 **Incremental UPSERT**: Demonstrates a daily delta load with `MERGE INTO`, updating existing rows and inserting new rows while recording an audit-style result set.
 
-### 30. [realworld_05_masking_json.etlsql](../samples/07_Real_World/realworld_05_masking_json.etlsql)
+### 32. [realworld_05_masking_json.etlsql](../samples/07_Real_World/realworld_05_masking_json.etlsql)
 **Dynamic Masking & JSON Formatting**: Redacts PII-like fields with string functions and writes a masked profile export to local JSON output.
 
-### 31. [realworld_06_reconciliation_anti_join.etlsql](../samples/07_Real_World/realworld_06_reconciliation_anti_join.etlsql)
+### 33. [realworld_06_reconciliation_anti_join.etlsql](../samples/07_Real_World/realworld_06_reconciliation_anti_join.etlsql)
 **Data Reconciliation Anti-Join**: Demonstrates a reconciliation pattern using anti-join logic and writes unmatched rows to a flat audit report.
 
-### 32. [realworld_07_window_deduplication.etlsql](../samples/07_Real_World/realworld_07_window_deduplication.etlsql)
+### 34. [realworld_07_window_deduplication.etlsql](../samples/07_Real_World/realworld_07_window_deduplication.etlsql)
 **Window Analytics Deduplication**: Uses `ROW_NUMBER() OVER(PARTITION BY ...)` to identify duplicate or older events before writing a cleaned Parquet-style output.
 
-### 33. [realworld_08_aggregation_pivot.etlsql](../samples/07_Real_World/realworld_08_aggregation_pivot.etlsql)
+### 35. [realworld_08_aggregation_pivot.etlsql](../samples/07_Real_World/realworld_08_aggregation_pivot.etlsql)
 **Complex Quarterly Pivot**: Uses `SUM(CASE WHEN ...)` aggregation to build a quarterly pivot-style board report.
 
-### 34. [realworld_09_directory_watcher.etlsql](../samples/07_Real_World/realworld_09_directory_watcher.etlsql)
+### 36. [realworld_09_directory_watcher.etlsql](../samples/07_Real_World/realworld_09_directory_watcher.etlsql)
 **Directory Watcher Pattern**: Uses a `WHILE` loop and directory/file checks to wait for an incoming drop, process it, and archive the artifact.
 
-### 35. [realworld_10_docker_sync.etlsql](../samples/07_Real_World/realworld_10_docker_sync.etlsql)
+### 37. [realworld_10_docker_sync.etlsql](../samples/07_Real_World/realworld_10_docker_sync.etlsql)
 **Docker-Based Synchronization**: Starts temporary SQL Server and Postgres containers, copies a small reference table between them through the engine, and closes the containers. Requires Docker to be available.
+
+### 38. [realworld_11_customer_entity_resolution.etlsql](../samples/07_Real_World/realworld_11_customer_entity_resolution.etlsql)
+**Customer Entity Resolution**: Blends normalized company-name and city similarity scores, automatically accepts strong matches, and creates a review queue for weak or unmatched rows.
 
 ---
 
