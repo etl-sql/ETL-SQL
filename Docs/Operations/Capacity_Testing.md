@@ -4,6 +4,9 @@ Use `scripts/test-service-capacity.mjs` to measure Portal-user and Orchestrator-
 an isolated deployment. Correctness lanes prove behavior; this harness measures throughput,
 latency, saturation, and operational visibility.
 
+For plain-English server sizing guidance, starter server shapes, and what to give a server
+administrator, see [Capacity_Planning.md](Capacity_Planning.md).
+
 ## Reference Environment
 
 Every measured run must record:

@@ -1,6 +1,6 @@
 # ETL-SQL Administrator's Guide
 
-This guide is for operators who install, configure, back up, and monitor ETL-SQL in production or shared test environments. For day-to-day portal administration, see [ReportPortal_Administrators_Guide.md](ReportPortal_Administrators_Guide.md). For command-line job operations, see [Orchestrators_Guide.md](Orchestrators_Guide.md).
+This guide is for operators who install, configure, back up, and monitor ETL-SQL in production or shared test environments. For day-to-day portal administration, see [ReportPortal_Administrators_Guide.md](ReportPortal_Administrators_Guide.md). For command-line job operations, see [Orchestrators_Guide.md](Orchestrators_Guide.md). For Report Portal and Orchestrator server sizing, see [Operations/Capacity_Planning.md](Operations/Capacity_Planning.md).
 
 ---
 
@@ -14,7 +14,7 @@ ETL-SQL can be deployed as workstation tooling, server services, or both.
 | Orchestrator Service | Background scheduler and job execution service | Application server |
 | Report Portal | Web application for report catalog, snapshots, subscriptions, and administration | Application server |
 
-The Orchestrator and Report Portal may run on the same host or on separate hosts. In separate-host deployments, configure the portal with the orchestrator API URL and shared API key.
+The Orchestrator and Report Portal may run on the same host or on separate hosts. In separate-host deployments, configure the portal with the orchestrator API URL and shared API key. Use [Operations/Capacity_Planning.md](Operations/Capacity_Planning.md) when deciding whether to start shared or split the services.
 
 ---
 
