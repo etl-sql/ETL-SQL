@@ -199,13 +199,10 @@ namespace ETL_SQL.App
 
             if (connType.Equals("FLATFILE", StringComparison.OrdinalIgnoreCase))
             {
-                var fileRef = hasDatePattern ? $"'{path}' + '/' + @FileName" : $"'{path}/{namingPattern}'";
-                if (!hasDatePattern)
-                {
-                    sb.AppendLine($"-- Base directory connection context");
-                    sb.AppendLine($"CREATE CONNECTION dest_dir AS DIRECTORY('{path}');");
-                    fileRef = $"dest_dir + '/{namingPattern}'";
-                }
+                sb.AppendLine($"-- Base directory connection context (isolates physical drive paths)");
+                sb.AppendLine($"CREATE CONNECTION target_dir AS DIRECTORY('{path}');");
+                
+                var fileRef = hasDatePattern ? "target_dir + '/' + @FileName" : $"target_dir + '/{namingPattern}'";
                 
                 sb.AppendLine($"CREATE CONNECTION outbound_dest AS FLATFILE(");
                 sb.AppendLine($"    PATH = {fileRef},");
