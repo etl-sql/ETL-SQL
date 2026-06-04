@@ -43,7 +43,9 @@ You must output a single, valid JSON object.
       "nullable": "boolean (true if column can be null or is optional; false if required/mandatory)",
       "description": "string (description of the field's purpose)",
       "validation_regex": "string (optional, regular expression to validate formatting rules)",
-      "tags": ["array of strings (pii | phi | pci | sensitive | etc. if column contains personal or sensitive info)"]
+      "tags": ["array of strings (pii | phi | pci | sensitive | etc. if column contains personal or sensitive info)"],
+      "mapping_type": "string (optional: lookup | aggregation | constant | flat)",
+      "mapping_rule": "string (optional: join lookup explanation, aggregation logic, or constant value)"
     }
   ],
   // OPTIONAL (Use for multi-file specifications, omit destination and schema at the root):
@@ -69,7 +71,9 @@ You must output a single, valid JSON object.
           "nullable": "boolean",
           "description": "string",
           "validation_regex": "string",
-          "tags": ["strings"]
+          "tags": ["strings"],
+          "mapping_type": "string (lookup | aggregation | constant | flat)",
+          "mapping_rule": "string"
         }
       ]
     }
