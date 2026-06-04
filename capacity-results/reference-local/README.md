@@ -57,8 +57,9 @@ node .\scripts\test-service-capacity.mjs `
 
 ## Limitations
 
-- The Portal baseline uses in-process report execution. Remote Orchestrator report execution currently
-  has a separate TODO because it records snapshot rows without producing exportable manifest files.
+- The Portal baseline uses in-process report execution. Remote Orchestrator report execution is
+  verified separately because its manifest transport and network path have different performance
+  characteristics.
 - The sample report and job are intentionally small. This baseline does not replace workload-specific
   testing for large reports, exports, connector latency, retries, or process-spawning mode.
 - Fifteen-second steps identify an initial boundary. Production certification should use longer

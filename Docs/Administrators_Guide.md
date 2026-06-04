@@ -163,6 +163,12 @@ When the Portal and Orchestrator run on different servers, configure the Portal 
 
 The same values can be set through the Portal Admin UI under **Admin -> Settings -> Orchestrator Connection**. UI-saved values are written to a `portal-orchestrator.json` sidecar file next to the portal database and take precedence over startup configuration.
 
+For report execution, the Orchestrator returns the completed report manifest over the authenticated
+job-status API and the Portal writes it under `Portal:SnapshotDirectory`. Separate-host deployments do
+not require a shared snapshot filesystem, but both services must have the same non-empty API key so
+report data is never returned from the backward-compatible unauthenticated job-status surface. After
+configuration, execute a small report and confirm its snapshot manifest and CSV export are available.
+
 ### Same-Host Service Start
 
 On Windows, if the Portal and Orchestrator run on the same host, the portal can start the Orchestrator service through `ServiceController` when it is offline:

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
@@ -99,18 +100,20 @@ namespace ETL_SQL.Orchestrator.Service
                 return Results.Ok(new { JobId = id, Status = "Cancelled" });
             }).WithName("cancelJob");
 
-            app.MapGet("/jobs/{id}", (string id) =>
+            app.MapGet("/jobs/{id}", (string id, HttpContext ctx, IConfiguration cfg) =>
             {
                 if (!_jobs.TryGetValue(id, out var entry))
                     return Results.NotFound(new { Error = $"Job '{id}' not found." });
 
+                var includeSensitivePayload = ApiKeyAcceptedForSensitivePayload(ctx, cfg);
                 return Results.Ok(new JobStatusResponse
                 {
                     JobId           = entry.JobId,
                     Status          = entry.Status,
                     RowsProcessed   = entry.RowsProcessed,
                     ExecutionTimeMs = entry.ExecutionTimeMs,
-                    ErrorMessage    = entry.ErrorMessage
+                    ErrorMessage    = entry.ErrorMessage,
+                    ReportManifestJson = includeSensitivePayload ? entry.ReportManifestJson : null
                 });
             }).WithName("getJobStatus");
 
@@ -396,6 +399,14 @@ namespace ETL_SQL.Orchestrator.Service
             return !string.Equals(configuredKey, provided.ToString(), StringComparison.Ordinal);
         }
 
+        private static bool ApiKeyAcceptedForSensitivePayload(HttpContext ctx, IConfiguration cfg)
+        {
+            var configuredKey = cfg["Orchestrator:ApiKey"];
+            if (string.IsNullOrWhiteSpace(configuredKey)) return false;
+            ctx.Request.Headers.TryGetValue("X-Orchestrator-Key", out var provided);
+            return string.Equals(configuredKey, provided.ToString(), StringComparison.Ordinal);
+        }
+
         private static string GetScriptRoot(IConfiguration cfg) =>
             cfg["Orchestrator:ScriptRoot"] ?? AppDomain.CurrentDomain.BaseDirectory;
 
@@ -447,6 +458,7 @@ namespace ETL_SQL.Orchestrator.Service
                         {
                             var builder = new ManifestBuilder(evaluator);
                             var manifest = await builder.BuildAsync("remote_script.rptsql");
+                            entry.ReportManifestJson = JsonSerializer.Serialize(manifest);
 
                             var snapshotDir = "Snapshots";
                             Directory.CreateDirectory(snapshotDir);
@@ -525,6 +537,7 @@ namespace ETL_SQL.Orchestrator.Service
             public long                    RowsProcessed   { get; set; }
             public long                    ExecutionTimeMs { get; set; }
             public string?                 ErrorMessage    { get; set; }
+            public string?                 ReportManifestJson { get; set; }
         }
     }
 }

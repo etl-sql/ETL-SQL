@@ -7,8 +7,11 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.ReportHosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ETL_SQL.ReportPortal.Tests;
 
@@ -144,11 +147,130 @@ public class CrossHostConsistencyTests : IClassFixture<PortalWebFactory>
         }
     }
 
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task RemoteOrchestratorExecution_PersistsPortalSnapshotAndSupportsExport()
+    {
+        using var portalFactory = new PortalWebFactory();
+        using var orchestratorFactory = new OrchestratorWebFactory();
+        Assert.NotEqual(portalFactory.TempDir, orchestratorFactory.TempDir);
+        using var orchestratorClient = orchestratorFactory.CreateClient();
+        orchestratorClient.DefaultRequestHeaders.Add("X-Orchestrator-Key", "test-orch-key-12345");
+        using var remotePortalFactory = portalFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IJobChannel>();
+                services.AddSingleton<IJobChannel>(_ =>
+                    new HttpJobChannelClient(orchestratorClient, NullLogger<HttpJobChannelClient>.Instance));
+            });
+        });
+        using var client = remotePortalFactory.CreateClient();
+
+        var scriptPath = Path.Combine(portalFactory.TempDir, "scripts", "remote_fixture.rptsql");
+        await File.WriteAllTextAsync(scriptPath, FixtureScript);
+        var token = await GetAdminTokenAsync(client);
+
+        var folderRes = await AuthPost(client, token, "/api/folders", new { name = "Remote", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var publishRes = await AuthPost(client, token, "/api/reports", new
+        {
+            folderId,
+            name = "Remote Fixture",
+            description = "Remote Orchestrator manifest transport fixture",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var reportId = (await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var executeRes = await AuthPost(client, token, $"/api/reports/{reportId}/execute",
+            new { parameters = new Dictionary<string, string>() });
+        Assert.Equal(HttpStatusCode.Accepted, executeRes.StatusCode);
+        var jobId = (await executeRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["jobId"]!.GetValue<string>();
+
+        var job = await WaitForJobAsync(client, token, jobId);
+        Assert.Equal("Completed", job["status"]?.GetValue<string>());
+
+        var manifestRes = await AuthGet(client, token, $"/api/reports/{reportId}/snapshot/manifest");
+        Assert.Equal(HttpStatusCode.OK, manifestRes.StatusCode);
+        var manifest = await manifestRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal("Cross-Host Consistency", manifest?["title"]?.GetValue<string>());
+
+        var sessions = remotePortalFactory.Services.GetRequiredService<ETL_SQL.ReportPortal.Services.SessionCache>();
+        var sessionBeforeRefresh = sessions.GetOrCreate(reportId, 1, scriptPath);
+
+        var refreshRes = await AuthPost(client, token, $"/api/reports/{reportId}/refresh", new { });
+        Assert.Equal(HttpStatusCode.Accepted, refreshRes.StatusCode);
+        var refreshJobId = (await refreshRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["jobId"]!.GetValue<string>();
+        var refreshJob = await WaitForJobAsync(client, token, refreshJobId);
+        Assert.Equal("Completed", refreshJob["status"]?.GetValue<string>());
+        var sessionAfterRefresh = sessions.GetOrCreate(reportId, 1, scriptPath);
+        Assert.NotSame(sessionBeforeRefresh, sessionAfterRefresh);
+
+        var csvRes = await AuthGet(client, token, $"/api/reports/{reportId}/export/csv");
+        Assert.Equal(HttpStatusCode.OK, csvRes.StatusCode);
+        Assert.Contains("Alpha", await csvRes.Content.ReadAsStringAsync());
+
+        var xlsxRes = await AuthGet(client, token, $"/api/reports/{reportId}/export/xlsx");
+        Assert.Equal(HttpStatusCode.OK, xlsxRes.StatusCode);
+        Assert.NotEmpty(await xlsxRes.Content.ReadAsByteArrayAsync());
+
+        var pdfRes = await AuthGet(client, token, $"/api/reports/{reportId}/export/pdf");
+        Assert.Equal(HttpStatusCode.OK, pdfRes.StatusCode);
+        Assert.NotEmpty(await pdfRes.Content.ReadAsByteArrayAsync());
+        Assert.NotEmpty(Directory.GetFiles(Path.Combine(portalFactory.TempDir, "snapshots"), "*.snapshot.json"));
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task OrchestratorReportManifest_IsReturnedOnlyWithValidApiKey()
+    {
+        using var orchestratorFactory = new OrchestratorWebFactory();
+        using var authenticatedClient = orchestratorFactory.CreateClient();
+        authenticatedClient.DefaultRequestHeaders.Add("X-Orchestrator-Key", "test-orch-key-12345");
+
+        var submitRes = await authenticatedClient.PostAsJsonAsync("/jobs", new JobSubmitRequest
+        {
+            ScriptText = FixtureScript,
+            SessionId = "manifest-security",
+            Label = "Manifest security fixture",
+            Metadata = new Dictionary<string, string>
+            {
+                ["IsReport"] = "true",
+                ["ReportId"] = "security"
+            }
+        });
+        Assert.Equal(HttpStatusCode.Accepted, submitRes.StatusCode);
+        var jobId = (await submitRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["jobId"]!.GetValue<string>();
+
+        ETL_SQL.Orchestrator.Channels.JobStatusResponse authenticatedStatus = null!;
+        for (var i = 0; i < 300; i++)
+        {
+            authenticatedStatus = (await authenticatedClient.GetFromJsonAsync<ETL_SQL.Orchestrator.Channels.JobStatusResponse>(
+                $"/jobs/{jobId}", _json))!;
+            if (authenticatedStatus.Status is JobRunStatus.Completed or JobRunStatus.Failed or JobRunStatus.Cancelled)
+                break;
+            await Task.Delay(100);
+        }
+        Assert.Equal(JobRunStatus.Completed, authenticatedStatus.Status);
+        Assert.False(string.IsNullOrWhiteSpace(authenticatedStatus.ReportManifestJson));
+
+        using var unauthenticatedClient = orchestratorFactory.CreateClient();
+        var unauthenticatedStatus = await unauthenticatedClient.GetFromJsonAsync<ETL_SQL.Orchestrator.Channels.JobStatusResponse>(
+            $"/jobs/{jobId}", _json);
+        Assert.Null(unauthenticatedStatus?.ReportManifestJson);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private async Task<string> GetAdminTokenAsync()
+        => await GetAdminTokenAsync(_client);
+
+    private static async Task<string> GetAdminTokenAsync(HttpClient client)
     {
-        var loginRes = await _client.PostAsJsonAsync("/api/auth/login",
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login",
             new { username = "admin", password = "Admin@12345!" });
         loginRes.EnsureSuccessStatusCode();
         var token = (await loginRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["token"]!.GetValue<string>();
@@ -156,34 +278,43 @@ public class CrossHostConsistencyTests : IClassFixture<PortalWebFactory>
         using var cpReq = new HttpRequestMessage(HttpMethod.Post, "/api/auth/change-password");
         cpReq.Headers.Authorization = new("Bearer", token);
         cpReq.Content = JsonContent.Create(new { currentPassword = "Admin@12345!", newPassword = "Admin@Tests99!" });
-        (await _client.SendAsync(cpReq)).EnsureSuccessStatusCode();
+        (await client.SendAsync(cpReq)).EnsureSuccessStatusCode();
 
-        var reloginRes = await _client.PostAsJsonAsync("/api/auth/login",
+        var reloginRes = await client.PostAsJsonAsync("/api/auth/login",
             new { username = "admin", password = "Admin@Tests99!" });
         reloginRes.EnsureSuccessStatusCode();
         return (await reloginRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["token"]!.GetValue<string>();
     }
 
     private Task<HttpResponseMessage> AuthGet(string token, string url)
+        => AuthGet(_client, token, url);
+
+    private static Task<HttpResponseMessage> AuthGet(HttpClient client, string token, string url)
     {
         var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.Authorization = new("Bearer", token);
-        return _client.SendAsync(req);
+        return client.SendAsync(req);
     }
 
     private Task<HttpResponseMessage> AuthPost(string token, string url, object body)
+        => AuthPost(_client, token, url, body);
+
+    private static Task<HttpResponseMessage> AuthPost(HttpClient client, string token, string url, object body)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, url);
         req.Headers.Authorization = new("Bearer", token);
         req.Content = JsonContent.Create(body);
-        return _client.SendAsync(req);
+        return client.SendAsync(req);
     }
 
     private async Task<JsonObject> WaitForJobAsync(string token, string jobId)
+        => await WaitForJobAsync(_client, token, jobId);
+
+    private static async Task<JsonObject> WaitForJobAsync(HttpClient client, string token, string jobId)
     {
         for (var i = 0; i < 300; i++)
         {
-            var res = await AuthGet(token, $"/api/jobs/{jobId}");
+            var res = await AuthGet(client, token, $"/api/jobs/{jobId}");
             var job = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
             if (job!["status"]!.GetValue<string>() is "Completed" or "Failed" or "Cancelled")
                 return job;

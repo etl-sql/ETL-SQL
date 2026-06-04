@@ -184,6 +184,8 @@ if (!string.IsNullOrEmpty(portalConfig.Orchestrator.ApiUrl))
     builder.Services.AddHttpClient<IJobChannel, HttpJobChannelClient>(client =>
     {
         client.BaseAddress = new Uri(portalConfig.Orchestrator.ApiUrl);
+        if (!string.IsNullOrWhiteSpace(portalConfig.Orchestrator.ApiKey))
+            client.DefaultRequestHeaders.Add("X-Orchestrator-Key", portalConfig.Orchestrator.ApiKey);
     });
 }
 else

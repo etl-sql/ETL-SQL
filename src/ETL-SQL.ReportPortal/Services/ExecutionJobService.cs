@@ -146,7 +146,23 @@ public class ExecutionJobService : IDisposable
                 while (true)
                 {
                     var status = await _channel.GetStatusAsync(remoteJobId, cts.Token);
-                    if (status.Status == JobRunStatus.Completed) break;
+                    if (status.Status == JobRunStatus.Completed)
+                    {
+                        if (!string.IsNullOrWhiteSpace(status.ReportManifestJson))
+                        {
+                            var manifest = System.Text.Json.JsonSerializer.Deserialize<ReportManifest>(
+                                status.ReportManifestJson)
+                                ?? throw new InvalidOperationException("Remote orchestrator returned an invalid report manifest.");
+                            var store = new SnapshotStore();
+                            await store.SaveAsync(manifest, manifestPath);
+                        }
+                        else if (!System.IO.File.Exists(manifestPath))
+                        {
+                            throw new InvalidOperationException(
+                                "Remote orchestrator completed the report without returning or writing a snapshot manifest.");
+                        }
+                        break;
+                    }
                     if (status.Status == JobRunStatus.Failed) throw new Exception(status.ErrorMessage ?? "Remote job failed.");
                     if (status.Status == JobRunStatus.Cancelled) throw new OperationCanceledException();
                     await Task.Delay(1000, cts.Token);

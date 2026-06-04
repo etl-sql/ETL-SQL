@@ -1057,6 +1057,13 @@ The API key is sent as an `X-Orchestrator-Key` header on every request the porta
 Orchestrator__ApiKey=your-shared-secret
 ```
 
+Remote report execution returns the completed report manifest through the authenticated Orchestrator
+job-status API. The Portal then persists the manifest under its own `SnapshotDirectory`, so a shared
+snapshot folder is not required when the two services run on separate hosts. Configure the same
+non-empty API key on both services; the Orchestrator never includes report manifest data in an
+unauthenticated status response. Verify the connection by executing a small report and confirming both
+the snapshot manifest and CSV export are available.
+
 The portal never echoes the stored API key back to the browser — the **Admin → Settings** page shows only whether a key is set (`HasApiKey: true/false`). To change the key, type a new value and save. To clear it, check **Clear API key** and save.
 
 ### 13.2 What the Orchestrator Tab Shows
