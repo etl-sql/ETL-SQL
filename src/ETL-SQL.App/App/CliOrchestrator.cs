@@ -131,6 +131,18 @@ namespace ETL_SQL.App
         {
             Description = "Skip the confirmation prompt (for scripts and installers)."
         };
+        private static readonly Option<string?> SpecSchemaOption = new("--schema", new[] { "-s" })
+        {
+            Description = "Path to the input JSON schema specification file.",
+            Arity = ArgumentArity.ExactlyOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> SpecOutputOption = new("--output", new[] { "-o" })
+        {
+            Description = "Destination path for the generated ETL-SQL script.",
+            Arity = ArgumentArity.ExactlyOne,
+            DefaultValueFactory = _ => null
+        };
 
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
@@ -246,6 +258,14 @@ namespace ETL_SQL.App
             };
             purgeCommand.SetAction(context => Dispatch(context, "purge", handler));
 
+            // 11. GEN-SCRIPT Command — compile specification JSON to ETL-SQL script template
+            var genScriptCommand = new Command("gen-script", "Compile a schema JSON specification into a validated ETL-SQL script template")
+            {
+                SpecSchemaOption,
+                SpecOutputOption
+            };
+            genScriptCommand.SetAction(context => Dispatch(context, "gen-script", handler));
+
             rootCommand.Add(runCommand);
             rootCommand.Add(testCommand);
             rootCommand.Add(encryptCommand);
@@ -257,6 +277,7 @@ namespace ETL_SQL.App
             rootCommand.Add(configCommand);
             rootCommand.Add(serveCommand);
             rootCommand.Add(purgeCommand);
+            rootCommand.Add(genScriptCommand);
 
             return rootCommand;
         }
@@ -333,6 +354,11 @@ namespace ETL_SQL.App
                 cliContext.PurgeDryRun = res.GetValue(PurgeDryRunOption);
                 cliContext.PurgeYes = res.GetValue(PurgeYesOption);
             }
+            else if (commandName == "gen-script")
+            {
+                cliContext.SpecSchema = res.GetValue(SpecSchemaOption);
+                cliContext.SpecOutput = res.GetValue(SpecOutputOption);
+            }
 
             var sessionOptVal = res.GetValue(SessionOption);
             if (sessionOptVal != null) cliContext.SessionId = sessionOptVal;
@@ -385,6 +411,7 @@ namespace ETL_SQL.App
             table.AddRow("notices", "Show third-party notices and dependency credits.");
             table.AddRow("config setup-jwt", "Generate a secure 256-bit JWT secret.");
             table.AddRow("purge", "Delete all runtime data (reports, snapshots, DBs, logs, sessions). Use --dry-run to preview.");
+            table.AddRow($"gen-script [blue]-s <json> -o <etlsql>[/]", "Compile a schema JSON specification into an ETL-SQL script template.");
             table.AddRow("ui repl", "Start the JSON-based REPL protocol.");
             AnsiConsole.Write(table);
             AnsiConsole.MarkupLine($"\nUse [cyan]ETL-SQL {Markup.Escape("<command>")} --help[/] for details on specific options.");

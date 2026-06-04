@@ -47,5 +47,9 @@ namespace ETL_SQL.Core
         // purge command
         public bool PurgeDryRun { get; set; }
         public bool PurgeYes { get; set; }
+
+        // gen-script command
+        public string? SpecSchema { get; set; }
+        public string? SpecOutput { get; set; }
     }
 }

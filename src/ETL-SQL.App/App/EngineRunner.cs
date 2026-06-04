@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Diagnostics;
 using System.Collections.Generic;
@@ -54,6 +54,16 @@ namespace ETL_SQL.App
             {
                 DataGenerator.Generate(ctx.EstimatedRows);
                 return 0;
+            }
+
+            if (ctx.Command == "gen-script")
+            {
+                if (string.IsNullOrEmpty(ctx.SpecSchema) || string.IsNullOrEmpty(ctx.SpecOutput))
+                {
+                    logger.WriteLine("Both --schema (-s) and --output (-o) options are required for the gen-script command.", ConsoleColor.Red);
+                    return 1;
+                }
+                return await PipelineGenerator.Generate(ctx.SpecSchema, ctx.SpecOutput, logger);
             }
 
             if (ctx.Command == "notices")
