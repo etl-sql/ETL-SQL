@@ -15,6 +15,11 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.10.0 — Runtime: Subscription creation enforces report visibility
+- **What changed**: Creating a Portal subscription now requires `READ` permission on the report's folder.
+- **Who is affected**: Portal clients that attempted to create subscriptions for reports the current user could not view.
+- **Migration**: Grant the user an appropriate folder permission or create the subscription as an authorized user.
+
 ### v0.10.0 — Connector: SMTP attachment MIME types
 - **What changed**: SMTP attachments now use the MIME type inferred from their file extension instead of the generic default content type.
 - **Who is affected**: Scripts that send attachments through an `SMTP` connection and consumers that inspect attachment MIME metadata.

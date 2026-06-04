@@ -21,6 +21,7 @@ public class SubscriptionsController(
     OrchestratorDbLocator  dbLocator,
     AuditService           audit,
     SubscriptionDeliveryStatusService deliveryStatus,
+    FolderPermissionService folderPermissions,
     SmtpPasswordProtector  pwdProtector) : ControllerBase
 {
     private const string SubPrefix = "SUB:";
@@ -60,6 +61,9 @@ public class SubscriptionsController(
     {
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == req.ReportId && !r.IsDeleted);
         if (report is null) return NotFound(new { error = "Report not found" });
+        // COMPAT_BREAK: 0.10
+        if (!await folderPermissions.HasPermissionAsync(report.FolderId, FolderPermission.Read, User))
+            return Forbid();
 
         if (!Enum.TryParse<SubscriptionFormat>(req.Format, true, out var format))
             return BadRequest(new { error = "Format must be PDF, CSV, Markdown, or Link" });

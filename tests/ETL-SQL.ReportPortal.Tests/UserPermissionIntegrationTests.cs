@@ -22,6 +22,7 @@ using Xunit;
 namespace ETL_SQL.ReportPortal.Tests
 {
     [Trait("Category", "Portal")]
+    [Trait("CompatBreak", "0.10")]
     public class UserPermissionIntegrationTests : IClassFixture<PortalWebFactory>
     {
         private readonly HttpClient _client;
@@ -206,6 +207,17 @@ namespace ETL_SQL.ReportPortal.Tests
                     };
 
                     db.Reports.AddRange(rRevenue, rInvoices, rSysLogs, rErrorAudit);
+                    await db.SaveChangesAsync();
+
+                    var snapshotPath = Path.Combine(_factory.TempDir, "snapshots", "RevenueReport.snapshot.json");
+                    await File.WriteAllTextAsync(snapshotPath, "{}");
+                    db.ReportSnapshots.Add(new ReportSnapshot
+                    {
+                        ReportId = rRevenue.Id,
+                        ManifestPath = snapshotPath,
+                        BuiltAt = DateTime.UtcNow,
+                        BuiltBy = uAdmin.Id
+                    });
                     await db.SaveChangesAsync();
 
                     // 6. Seed Datasets using IDatasetRegistry
@@ -702,6 +714,105 @@ namespace ETL_SQL.ReportPortal.Tests
         }
 
         [Fact]
+        public async Task ReportWorkflows_VerifyVisibilityAndCreationPermissions()
+        {
+            var tFinRead = await GetUserTokenAsync("finance_read");
+            var tFinPub = await GetUserTokenAsync("finance_pub");
+            var tOutsider = await GetUserTokenAsync("outsider_user");
+
+            int fFinanceId, fInvoicesId, rRevenueId, rInvoiceId, rSysLogsId;
+            string invoiceScriptPath;
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                fFinanceId = (await db.Folders.SingleAsync(f => f.Path == "/Finance")).Id;
+                fInvoicesId = (await db.Folders.SingleAsync(f => f.Path == "/Finance/Invoices")).Id;
+                rRevenueId = (await db.Reports.SingleAsync(r => r.Name == "RevenueReport")).Id;
+                var invoice = await db.Reports.SingleAsync(r => r.Name == "InvoiceDetails");
+                rInvoiceId = invoice.Id;
+                invoiceScriptPath = invoice.ScriptPath;
+                rSysLogsId = (await db.Reports.SingleAsync(r => r.Name == "SystemLogs")).Id;
+            }
+
+            var visibleList = await AuthGet(tFinRead, $"/api/folders/{fFinanceId}/reports");
+            Assert.Equal(HttpStatusCode.OK, visibleList.StatusCode);
+            var visibleReports = await visibleList.Content.ReadFromJsonAsync<JsonArray>(_json);
+            Assert.Contains(visibleReports!, r => r!["name"]!.GetValue<string>() == "RevenueReport");
+
+            var hiddenList = await AuthGet(tFinRead, "/api/catalog/search?q=SystemLogs");
+            Assert.Equal(HttpStatusCode.OK, hiddenList.StatusCode);
+            var hiddenSearchResults = await hiddenList.Content.ReadFromJsonAsync<JsonArray>(_json);
+            Assert.Empty(hiddenSearchResults!);
+
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(tFinRead, $"/api/reports/{rSysLogsId}/snapshot")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(tFinRead, $"/api/reports/{rSysLogsId}/export/csv")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await AuthGet(tFinRead, $"/api/reports/{rRevenueId}/snapshot")).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await AuthPost(tFinRead, $"/api/reports/{rRevenueId}/favorite", new { })).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthPost(tFinRead, $"/api/reports/{rSysLogsId}/favorite", new { })).StatusCode);
+
+            var savedView = await AuthPost(tFinRead, $"/api/reports/{rRevenueId}/saved-views", new
+            {
+                name = "Finance workflow view",
+                parameters = new Dictionary<string, string>(),
+                filters = new Dictionary<string, string>(),
+                isDefault = false
+            });
+            Assert.Equal(HttpStatusCode.Created, savedView.StatusCode);
+
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthPost(tFinRead, $"/api/reports/{rRevenueId}/alerts", new
+            {
+                name = "Read-only alert",
+                visualName = "Card1",
+                @operator = ">=",
+                threshold = 1,
+                recipient = "finance_read@test.local"
+            })).StatusCode);
+
+            Assert.Equal(HttpStatusCode.Created, (await AuthPost(tFinPub, $"/api/reports/{rRevenueId}/alerts", new
+            {
+                name = "Publisher alert",
+                visualName = "Card1",
+                @operator = ">=",
+                threshold = 1,
+                recipient = "finance_pub@test.local"
+            })).StatusCode);
+
+            Assert.Equal(HttpStatusCode.Created, (await AuthPost(tFinRead, "/api/subscriptions", new
+            {
+                reportId = rRevenueId,
+                schedule = "Daily",
+                format = "Link",
+                recipientEmail = "finance_read@test.local",
+                atTime = "08:00"
+            })).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthPost(tOutsider, "/api/subscriptions", new
+            {
+                reportId = rRevenueId,
+                schedule = "Daily",
+                format = "Link",
+                recipientEmail = "outsider_user@test.local",
+                atTime = "08:00"
+            })).StatusCode);
+
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthPost(tFinRead, "/api/reports", new
+            {
+                folderId = fInvoicesId,
+                name = "Viewer publish attempt",
+                scriptPath = invoiceScriptPath
+            })).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthPost(tFinPub, "/api/folders", new
+            {
+                name = "PublisherRoot",
+                parentId = (int?)null
+            })).StatusCode);
+
+            Assert.Equal(HttpStatusCode.OK, (await AuthPut(tFinPub, $"/api/reports/{rInvoiceId}", new
+            {
+                description = "Updated by authorized publisher"
+            })).StatusCode);
+        }
+
+        [Fact]
         public async Task DatasetAccess_VerifyPermissionsAndAcls()
         {
             var tFinRead = await GetUserTokenAsync("finance_read");
@@ -779,6 +890,10 @@ namespace ETL_SQL.ReportPortal.Tests
             // 6. Orchestrator settings/service -> 403 Forbidden
             var resRestart = await AuthPost(tFinPub, "/api/admin/service/restart", new { });
             Assert.Equal(HttpStatusCode.Forbidden, resRestart.StatusCode);
+
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(tFinPub, "/api/admin/audit/export/csv")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(tFinPub, "/api/orchestrator/status")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(tFinPub, "/api/admin/permissions/effective/user/1")).StatusCode);
         }
 
         [Fact]
@@ -797,15 +912,24 @@ namespace ETL_SQL.ReportPortal.Tests
                 lastName = "User"
             });
             Assert.Equal(HttpStatusCode.Created, createUserRes.StatusCode);
+            var createdUser = await createUserRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var createdUserId = createdUser!["id"]!.GetValue<int>();
+
+            var createGroupRes = await AuthPost(adminToken, "/api/admin/groups", new
+            {
+                name = $"Audit Group {Guid.NewGuid():N}"[..24],
+                description = "Temporary audit verification group"
+            });
+            Assert.Equal(HttpStatusCode.Created, createGroupRes.StatusCode);
+            var createdGroup = await createGroupRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var groupId = createdGroup!["id"]!.GetValue<int>();
 
             // 2. Grant folder permission via Admin API to generate GRANT_PERMISSION audit log
             int folderId;
-            int groupId;
             using (var scope = _factory.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
                 folderId = (await db.Folders.FirstAsync()).Id;
-                groupId = (await db.Groups.FirstAsync()).Id;
             }
 
             var grantRes = await AuthPost(adminToken, $"/api/folders/{folderId}/acl", new
@@ -814,6 +938,16 @@ namespace ETL_SQL.ReportPortal.Tests
                 Permission = 0
             });
             Assert.True(grantRes.StatusCode == HttpStatusCode.NoContent || grantRes.StatusCode == HttpStatusCode.OK);
+
+            Assert.Equal(HttpStatusCode.NoContent, (await AuthPost(adminToken, $"/api/admin/groups/{groupId}/members", new
+            {
+                userId = createdUserId
+            })).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await AuthDelete(adminToken, $"/api/admin/groups/{groupId}/members/{createdUserId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await AuthPost(adminToken, $"/api/admin/users/{createdUserId}/revoke-tokens", new { })).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await AuthDelete(adminToken, $"/api/folders/{folderId}/acl/{groupId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await AuthDelete(adminToken, $"/api/admin/users/{createdUserId}?cascade=true")).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await AuthDelete(adminToken, $"/api/admin/groups/{groupId}")).StatusCode);
 
             // 3. Fetch audit logs and verify
             var resAudit = await AuthGet(adminToken, "/api/admin/audit?pageSize=200");
@@ -826,9 +960,16 @@ namespace ETL_SQL.ReportPortal.Tests
 
             // Verify CREATE_USER is logged
             Assert.Contains("CREATE_USER", actions);
+            Assert.Contains("CREATE_GROUP", actions);
 
             // Verify GRANT_PERMISSION is logged
             Assert.Contains("GRANT_PERMISSION", actions);
+            Assert.Contains("ADD_USER_TO_GROUP", actions);
+            Assert.Contains("REMOVE_USER_FROM_GROUP", actions);
+            Assert.Contains("REVOKE_TOKENS", actions);
+            Assert.Contains("REVOKE_PERMISSION", actions);
+            Assert.Contains("DELETE_USER", actions);
+            Assert.Contains("DELETE_GROUP", actions);
         }
     }
 }

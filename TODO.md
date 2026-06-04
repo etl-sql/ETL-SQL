@@ -50,13 +50,16 @@
   - Keep this as a subscription correctness lane, not a portal load/security-permission suite. Defer account visibility scenarios to the Report portal create users TODO and throughput sizing to Portal/Orchestrator load testing TODOs.
 
 - [x] **Report portal create users**  Build a concrete portal user/group/permission verification scenario that can be run manually first and automated later.
-  - DONE — Created repeatable setup fixture provisioning users (Admin, Publisher, Viewer, inactive, MCP, revoked, no-group), groups (Finance readers/publishers, Operations readers, Managers, outsiders), folders (/Finance, /Finance/Invoices, /Operations, /Operations/Logs), reports, datasets, saved views, alerts, subscriptions, share links, and embed tokens.
-  - DONE — Mapped permissions matrix and asserted effective user permissions on folders, reports, and datasets matching design matrix.
-  - DONE — Asserted direct API endpoint access, lists, direct ID GET requests, report execution/refreshes, and dataset permissions.
-  - DONE — Asserted negative access scenarios, inactive logins, MCP blocks, token revocations, and blocked admin-only surfaces (metrics, user/group CRUD, SMTP configuration, orchestrator settings, audits).
-  - DONE — Added design matrix results table (see user_permissions_matrix.md).
-  - DONE — Asserts audit logs are recorded for user creations, group memberships, and permission grants.
-  - Verified: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --filter "FullyQualifiedName~UserPermissionIntegrationTests"` (8 passed).
+  - DONE — repeatable isolated fixture provisions representative local users, business groups, nested Finance/Operations folders, reports, datasets, saved views, subscriptions, alerts, share links, and embed tokens.
+  - DONE — local identity scenarios cover Admin, Publisher, Viewer, inactive, must-change-password, revoked-token, no-group, and outsider users. LDAP scenarios remain deferred until an LDAP integration fixture is available.
+  - DONE — effective folder/report/dataset permissions are compared against the expected matrix in `tests/ETL-SQL.ReportPortal.Tests/user_permissions_matrix.md`.
+  - DONE — report workflows cover folder/report listing, catalog search, direct-ID access, readable and hidden snapshots, refresh, hidden export, favorites, saved views, alerts, subscriptions, metadata management, viewer publish rejection, and publisher root-folder rejection.
+  - DONE — dataset ACL scenarios cover public visibility, private viewer/editor access, direct-ID denial, and ACL-management denial.
+  - DONE — negative cases cover hidden resources, inactive login, must-change-password blocking, revoked refresh tokens, and non-admin denial for users, groups, SMTP, metrics, audit, audit export, Orchestrator status, and effective-permissions surfaces.
+  - DONE — subscription creation now enforces `READ` permission on the report folder so hidden report IDs cannot be subscribed to directly.
+  - DONE — audit verification uses API-generated user, group membership, token revocation, folder grant/revoke, user delete, and group delete operations; the matrix records the broader sensitive-operation audit expectations.
+  - Verified: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --no-restore --filter FullyQualifiedName~UserPermissionIntegrationTests` (9 passed).
+  - Verified regression lane: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --no-restore --filter FullyQualifiedName~SubscriptionIntegrationTests` (14 passed).
   - Keep this as a correctness/security scenario suite, not a portal load test. Defer throughput and sizing work to the Portal load testing TODO.
 
 - [ ] **Portal and Orchestrator load testing**  Build one repeatable capacity-testing program with separate Portal-user and Orchestrator-job workloads so administrators can size each server from measured baselines.
