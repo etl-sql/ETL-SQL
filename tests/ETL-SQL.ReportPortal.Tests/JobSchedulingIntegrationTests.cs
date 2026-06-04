@@ -427,6 +427,39 @@ INTO mail_conn.Email;
         }
 
         [Fact]
+        public async Task Verify_Delete_While_Running_Removes_Schedule_And_Drains_Active_Work()
+        {
+            using var factory = new OrchestratorWebFactory();
+            using var client = factory.CreateClient();
+
+            var jobName = "DeleteRunningJob";
+            await CreateJobAsync(client, jobName, "WAITFOR DELAY '00:00:02';");
+            await TriggerJobAsync(client, jobName);
+
+            var store = factory.Services.GetRequiredService<IJobHistoryStore>();
+            var start = DateTime.UtcNow;
+            while ((DateTime.UtcNow - start).TotalSeconds < 10)
+            {
+                var history = (await store.GetHistoryAsync(jobName, 10)).ToList();
+                if (history.Any(h => h.Status == "RUNNING" && h.EndTime == null)) break;
+                await Task.Delay(200);
+            }
+            Assert.Contains(await store.GetHistoryAsync(jobName, 10), h => h.Status == "RUNNING" && h.EndTime == null);
+
+            using var deleteReq = Authorized(HttpMethod.Delete, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}");
+            var deleteRes = await client.SendAsync(deleteReq);
+            Assert.Equal(HttpStatusCode.OK, deleteRes.StatusCode);
+
+            Assert.Null(await store.GetJobAsync(jobName));
+            Assert.Empty(await store.GetHistoryAsync(jobName, 10));
+
+            await PollSchedulerIdleAsync(client, timeoutSeconds: 15);
+
+            Assert.Null(await store.GetJobAsync(jobName));
+            Assert.Empty(await store.GetHistoryAsync(jobName, 10));
+        }
+
+        [Fact]
         public async Task Verify_Email_Notification_Behavior()
         {
             using var factory = new OrchestratorWebFactory();

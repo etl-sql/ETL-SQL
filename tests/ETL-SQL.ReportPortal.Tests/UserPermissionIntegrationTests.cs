@@ -733,6 +733,48 @@ namespace ETL_SQL.ReportPortal.Tests
         }
 
         [Fact]
+        public async Task ReportAccess_ExistingSessionReflectsGroupMembershipChanges()
+        {
+            var token = await GetUserTokenAsync("finance_read");
+
+            int userId, groupId, reportId;
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                userId = (await db.Users.SingleAsync(u => u.UserName == "finance_read")).Id;
+                groupId = (await db.Groups.SingleAsync(g => g.Name == "Finance_Readers")).Id;
+                reportId = (await db.Reports.SingleAsync(r => r.Name == "RevenueReport")).Id;
+            }
+
+            Assert.Equal(HttpStatusCode.OK, (await AuthGet(token, $"/api/reports/{reportId}")).StatusCode);
+
+            try
+            {
+                using (var scope = _factory.Services.CreateScope())
+                {
+                    var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                    var membership = await db.UserGroups.SingleAsync(ug => ug.UserId == userId && ug.GroupId == groupId);
+                    db.UserGroups.Remove(membership);
+                    await db.SaveChangesAsync();
+                }
+
+                Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(token, $"/api/reports/{reportId}")).StatusCode);
+            }
+            finally
+            {
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                if (!await db.UserGroups.AnyAsync(ug => ug.UserId == userId && ug.GroupId == groupId))
+                {
+                    db.UserGroups.Add(new UserGroup { UserId = userId, GroupId = groupId });
+                    await db.SaveChangesAsync();
+                }
+            }
+
+            Assert.Equal(HttpStatusCode.OK, (await AuthGet(token, $"/api/reports/{reportId}")).StatusCode);
+        }
+
+        [Fact]
         public async Task ReportWorkflows_VerifyVisibilityAndCreationPermissions()
         {
             var tFinRead = await GetUserTokenAsync("finance_read");

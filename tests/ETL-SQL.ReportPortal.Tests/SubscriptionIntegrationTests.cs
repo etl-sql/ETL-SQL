@@ -570,6 +570,85 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
         }
 
         [Fact]
+        public async Task Verify_Concurrent_Portal_And_Orchestrator_Sqlite_Writes_Preserve_All_Subscriptions()
+        {
+            using var portalFactory = new PortalWebFactory();
+            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
+
+            using var portalClient = portalFactory.CreateClient();
+            using var orchClient = orchestratorFactory.CreateClient();
+
+            var token = await GetAdminTokenAsync(portalClient);
+            var reportScript = @"
+SET REPORT TITLE = 'Mixed SQLite Writes Report';
+WAITFOR DELAY '00:00:01';
+SELECT 1 AS Val INTO #data;
+CREATE VISUAL SalesTable AS TABLE (SOURCE = #data, MAPPINGS (Val = Val));
+CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
+";
+            var (_, reportId, smtpAlias, reportName) = await SetupReportAndSmtpAsync(
+                portalClient, token, portalFactory.TempDir, reportScript);
+
+            var initialRes = await AuthPost(portalClient, token, "/api/subscriptions", new
+            {
+                reportId,
+                schedule = "Daily",
+                format = "CSV",
+                smtpAlias,
+                recipientEmail = "mixed-write-initial@test.local",
+                atTime = "08:00"
+            });
+            Assert.Equal(HttpStatusCode.Created, initialRes.StatusCode);
+            var initialSub = await initialRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var initialId = initialSub!["id"]!.GetValue<int>();
+            var initialJobName = $"SUB:{initialId}:{reportName}";
+
+            var store = orchestratorFactory.Services.GetRequiredService<IJobHistoryStore>() as SQLiteJobHistoryStore;
+            Assert.NotNull(store);
+
+            await TriggerJobAsync(orchClient, initialJobName);
+            await PollHistoryUntilStatusAsync(store, initialJobName, "RUNNING");
+
+            var createTasks = Enumerable.Range(1, 4)
+                .Select(i => AuthPost(portalClient, token, "/api/subscriptions", new
+                {
+                    reportId,
+                    schedule = "Daily",
+                    format = "CSV",
+                    smtpAlias,
+                    recipientEmail = $"mixed-write-{i}@test.local",
+                    atTime = "08:00"
+                }))
+                .ToArray();
+
+            var createResponses = await Task.WhenAll(createTasks);
+            Assert.All(createResponses, response => Assert.Equal(HttpStatusCode.Created, response.StatusCode));
+
+            var createdIds = new List<int>();
+            foreach (var response in createResponses)
+            {
+                var subscription = await response.Content.ReadFromJsonAsync<JsonObject>(_json);
+                createdIds.Add(subscription!["id"]!.GetValue<int>());
+            }
+            Assert.Equal(4, createdIds.Distinct().Count());
+
+            var history = await PollHistoryUntilCountAsync(store, initialJobName, 1);
+            Assert.Equal("SUCCESS", history[0].Status);
+
+            var listRes = await AuthGet(portalClient, token, "/api/subscriptions");
+            Assert.Equal(HttpStatusCode.OK, listRes.StatusCode);
+            var subscriptions = await listRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+            Assert.All(createdIds, id => Assert.Contains(subscriptions!, s => s!["id"]!.GetValue<int>() == id));
+
+            foreach (var id in createdIds)
+            {
+                var jobName = $"SUB:{id}:{reportName}";
+                Assert.NotNull(await store.GetJobAsync(jobName));
+                Assert.True(File.Exists(GeneratedSubscriptionScriptPath(portalFactory.TempDir, id, reportName)));
+            }
+        }
+
+        [Fact]
         public async Task Verify_Subscription_Delete_While_Running_Cleans_Up_Without_Stuck_Work()
         {
             using var portalFactory = new PortalWebFactory();

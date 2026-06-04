@@ -2140,7 +2140,7 @@ CREATE VISUAL Answer AS CARD (
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
-    public async Task Snapshot_ConcurrentRefreshAndReads_ReturnConsistentResponses()
+    public async Task Snapshot_ConcurrentRefreshReadsAndExports_ReturnConsistentResponses()
     {
         var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
@@ -2152,9 +2152,9 @@ CREATE VISUAL Answer AS CARD (
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"concurrent_refresh_{suffix}.rptsql");
         await File.WriteAllTextAsync(scriptPath, @"
-CREATE VISUAL Answer AS CARD (
+CREATE VISUAL Answer AS TABLE (
     SOURCE = (SELECT 42 AS Value),
-    MAPPINGS (VALUE = Value)
+    MAPPINGS (Value = Value)
 );
 ");
 
@@ -2179,9 +2179,9 @@ CREATE VISUAL Answer AS CARD (
 
         await File.WriteAllTextAsync(scriptPath, @"
 WAITFOR DELAY '00:00:01';
-CREATE VISUAL Answer AS CARD (
+CREATE VISUAL Answer AS TABLE (
     SOURCE = (SELECT 43 AS Value),
-    MAPPINGS (VALUE = Value)
+    MAPPINGS (Value = Value)
 );
 ");
 
@@ -2198,7 +2198,10 @@ CREATE VISUAL Answer AS CARD (
             AuthGet(token, $"/api/reports/{reportId}/snapshot/manifest"),
             AuthGet(token, $"/api/reports/{reportId}/history"),
             AuthGet(token, $"/api/reports/{reportId}"),
-            AuthGet(token, $"/api/folders/{folderId}/reports")
+            AuthGet(token, $"/api/folders/{folderId}/reports"),
+            AuthGet(token, $"/api/reports/{reportId}/export/csv"),
+            AuthGet(token, $"/api/reports/{reportId}/export/xlsx"),
+            AuthGet(token, $"/api/reports/{reportId}/export/pdf")
         };
         var duplicateRefreshTask = AuthPost(token, $"/api/reports/{reportId}/refresh", new { });
 
@@ -2213,9 +2216,15 @@ CREATE VISUAL Answer AS CARD (
         Assert.Equal(HttpStatusCode.OK, responses[2].StatusCode);
         Assert.Equal(HttpStatusCode.OK, responses[3].StatusCode);
         Assert.Equal(HttpStatusCode.OK, responses[4].StatusCode);
+        Assert.Equal(HttpStatusCode.OK, responses[5].StatusCode);
+        Assert.Equal("text/csv", responses[5].Content.Headers.ContentType?.MediaType);
+        Assert.Equal(HttpStatusCode.OK, responses[6].StatusCode);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", responses[6].Content.Headers.ContentType?.MediaType);
+        Assert.Equal(HttpStatusCode.OK, responses[7].StatusCode);
+        Assert.Equal("application/pdf", responses[7].Content.Headers.ContentType?.MediaType);
 
-        Assert.Equal(HttpStatusCode.Accepted, responses[5].StatusCode);
-        var duplicateRefresh = await responses[5].Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal(HttpStatusCode.Accepted, responses[8].StatusCode);
+        var duplicateRefresh = await responses[8].Content.ReadFromJsonAsync<JsonObject>(_json);
         Assert.Equal(refreshJobId, duplicateRefresh!["jobId"]!.GetValue<string>());
         Assert.True(duplicateRefresh["alreadyRunning"]!.GetValue<bool>());
 
