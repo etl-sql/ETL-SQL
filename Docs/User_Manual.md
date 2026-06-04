@@ -998,7 +998,7 @@ END
 -- Copy, compress, encrypt, then transmit
 COPY FILE     @src TO @dest WITH(OVERWRITE=ON);
 COMPRESS FILE @dest TO @dest + '.gz' WITH(OVERWRITE=ON);
-ENCRYPT FILE  @dest + '.gz' TO @dest + '.enc' PASSWORD('vaultkey', OVERWRITE=ON);
+ENCRYPT FILE  @dest + '.gz' TO @dest + '.enc' PASSWORD('vaultkey') WITH(OVERWRITE=ON);
 
 -- Upload to SFTP and clean up
 SEND FILE @dest + '.enc' TO '/outbox/' AT sftp_conn;

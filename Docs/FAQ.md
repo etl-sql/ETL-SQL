@@ -270,10 +270,10 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > -- Form 2: Execute against a remote database (passes SQL verbatim to the remote engine)
 > DECLARE @tableName = 'Archive_' + CAST(YEAR(GETDATE()) AS STRING);
 > DECLARE @sql = 'SELECT TOP 100 * FROM dbo.' + @tableName + ' ORDER BY Id DESC;';
-> EXEC @sql ON prod_db;
+> EXEC (@sql) AT prod_db;
 >
 > -- Both forms support INTO to capture results in a temp table
-> EXEC @sql ON prod_db INTO #results;
+> EXEC (@sql) AT prod_db INTO #results;
 > SELECT * FROM #results;
 > ```
 >
