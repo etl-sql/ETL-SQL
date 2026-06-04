@@ -253,6 +253,8 @@ To enable and configure LDAP, update `appsettings.json` under `"Identity"`:
    - The user is added to matching LDAP portal groups they belong to in AD.
    - The user is removed from any LDAP portal groups they no longer belong to in AD.
    - **Safety Boundary**: Local portal groups (`Provider == "Local"`) are completely ignored during this synchronization, allowing manual group assignments to be preserved.
+6. **Removed Directory Users**: Removing or disabling a user in the directory prevents their next LDAP login, but the Portal does not poll the directory for account lifecycle changes. Disable the corresponding Portal account in **Admin → Users** as part of the offboarding workflow. Disabling the Portal account revokes refresh tokens and causes already-issued access tokens to be rejected on their next request.
+7. **Recovery Administration**: Keep at least one tested local Admin account. Local accounts bypass LDAP authentication, allowing an operator to disable stale LDAP accounts or correct mappings when the directory is unavailable.
 
 ##### Scripted LDAP Administration:
 Administrators can script-manage LDAP users and groups inside `EXECUTE portal BEGIN...END` blocks:

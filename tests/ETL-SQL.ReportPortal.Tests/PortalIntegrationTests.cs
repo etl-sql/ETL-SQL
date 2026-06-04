@@ -96,6 +96,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         });
         Assert.Equal(HttpStatusCode.OK, activeLoginRes.StatusCode);
         var activeLogin = await activeLoginRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var accessToken = activeLogin!["token"]!.GetValue<string>();
         var refreshToken = activeLogin!["refreshToken"]!.GetValue<string>();
 
         // Deactivate the user via admin PUT.
@@ -116,6 +117,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
             refreshToken
         });
         Assert.Equal(HttpStatusCode.Unauthorized, refreshRes.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await AuthGet(accessToken, "/api/folders")).StatusCode);
     }
 
     [Fact]

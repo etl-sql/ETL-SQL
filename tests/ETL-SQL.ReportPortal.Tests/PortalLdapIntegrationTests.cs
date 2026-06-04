@@ -36,9 +36,40 @@ namespace ETL_SQL.ReportPortal.Tests
 
         public class OpenLdapPortalWebFactory : PortalWebFactory, IAsyncLifetime
         {
+            private const string JohnDn = "cn=john,ou=users,dc=etl-sql,dc=org";
+            private const string PublisherGroupDn = "cn=GG-Portal-Publishers,ou=groups,dc=etl-sql,dc=org";
             private IContainer? _ldapContainer;
 
             public int LdapPort { get; private set; }
+
+            private System.DirectoryServices.Protocols.LdapConnection CreateLdapConnection()
+            {
+                var identifier = new System.DirectoryServices.Protocols.LdapDirectoryIdentifier("127.0.0.1", LdapPort);
+                var connection = new System.DirectoryServices.Protocols.LdapConnection(identifier)
+                {
+                    Credential = new NetworkCredential("cn=admin,dc=etl-sql,dc=org", "adminpassword"),
+                    AuthType = System.DirectoryServices.Protocols.AuthType.Basic
+                };
+                connection.SessionOptions.ProtocolVersion = 3;
+                connection.Bind();
+                return connection;
+            }
+
+            public void RemoveJohnFromPublisherGroup()
+            {
+                using var connection = CreateLdapConnection();
+                connection.SendRequest(new System.DirectoryServices.Protocols.ModifyRequest(
+                    PublisherGroupDn,
+                    System.DirectoryServices.Protocols.DirectoryAttributeOperation.Delete,
+                    "member",
+                    JohnDn));
+            }
+
+            public void DeleteJohn()
+            {
+                using var connection = CreateLdapConnection();
+                connection.SendRequest(new System.DirectoryServices.Protocols.DeleteRequest(JohnDn));
+            }
 
             public async Task InitializeAsync()
             {
@@ -61,14 +92,7 @@ namespace ETL_SQL.ReportPortal.Tests
                 await Task.Delay(2000);
 
                 // 2. Seed LDAP entries using standard System.DirectoryServices.Protocols
-                var identifier = new System.DirectoryServices.Protocols.LdapDirectoryIdentifier("127.0.0.1", LdapPort);
-                using var conn = new System.DirectoryServices.Protocols.LdapConnection(identifier)
-                {
-                    Credential = new NetworkCredential("cn=admin,dc=etl-sql,dc=org", "adminpassword"),
-                    AuthType = System.DirectoryServices.Protocols.AuthType.Basic
-                };
-                conn.SessionOptions.ProtocolVersion = 3;
-                conn.Bind();
+                using var conn = CreateLdapConnection();
 
                 try
                 {
@@ -94,7 +118,7 @@ namespace ETL_SQL.ReportPortal.Tests
 
                     // Create test user 'john'
                     conn.SendRequest(new System.DirectoryServices.Protocols.AddRequest(
-                        "cn=john,ou=users,dc=etl-sql,dc=org",
+                        JohnDn,
                         new System.DirectoryServices.Protocols.DirectoryAttribute[]
                         {
                             new("objectClass", new[] { "inetOrgPerson", "organizationalPerson", "person" }),
@@ -109,12 +133,12 @@ namespace ETL_SQL.ReportPortal.Tests
 
                     // Create group matching CN=GG-Portal-Publishers
                     conn.SendRequest(new System.DirectoryServices.Protocols.AddRequest(
-                        "cn=GG-Portal-Publishers,ou=groups,dc=etl-sql,dc=org",
+                        PublisherGroupDn,
                         new System.DirectoryServices.Protocols.DirectoryAttribute[]
                         {
                             new("objectClass", "groupOfNames"),
                             new("cn", "GG-Portal-Publishers"),
-                            new("member", "cn=john,ou=users,dc=etl-sql,dc=org")
+                            new("member", new[] { JohnDn, "cn=admin,dc=etl-sql,dc=org" })
                         }
                     ));
                 }
@@ -193,8 +217,23 @@ namespace ETL_SQL.ReportPortal.Tests
         }
 
         [Fact]
-        public async Task Login_WithRealOpenLdapContainer_Success_And_AutoProvision()
+        public async Task RealOpenLdap_Lifecycle_ProvisionSyncRemoveAndLocalAdminRecovery()
         {
+            async Task<HttpResponseMessage> AuthGet(string token, string url)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Authorization = new("Bearer", token);
+                return await _client.SendAsync(request);
+            }
+
+            async Task<HttpResponseMessage> AuthPut(string token, string url, object body)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Put, url);
+                request.Headers.Authorization = new("Bearer", token);
+                request.Content = JsonContent.Create(body);
+                return await _client.SendAsync(request);
+            }
+
             // Seed a portal group mapped to the LDAP group inside DB
             using (var scope = _factory.Services.CreateScope())
             {
@@ -217,6 +256,8 @@ namespace ETL_SQL.ReportPortal.Tests
             Assert.NotNull(loginResp!.Token);
 
             // 2. Validate user created and roles/groups assigned
+            int userId;
+            int reportId;
             using (var scope = _factory.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
@@ -231,6 +272,7 @@ namespace ETL_SQL.ReportPortal.Tests
                 Assert.Equal("john@etl-sql.org", user.Email);
                 Assert.Equal("John", user.FirstName);
                 Assert.Equal("Doe", user.LastName);
+                userId = user.Id;
 
                 // Verify roles mapped: cn=GG-Portal-Publishers... -> Publisher
                 var roles = await userManager.GetRolesAsync(user);
@@ -239,7 +281,75 @@ namespace ETL_SQL.ReportPortal.Tests
                 // Verify group mapped
                 var grpNames = user.UserGroups.Select(ug => ug.Group.Name).ToList();
                 Assert.Contains("GG-Portal-Publishers", grpNames);
+
+                var groupId = user.UserGroups.Single(ug => ug.Group.Name == "GG-Portal-Publishers").GroupId;
+                var folder = new Folder { Name = "LDAP Finance", Path = "/LDAP Finance", OwnerId = user.Id };
+                db.Folders.Add(folder);
+                await db.SaveChangesAsync();
+                db.FolderAcls.Add(new FolderAcl { FolderId = folder.Id, GroupId = groupId, Permission = FolderPermission.Read });
+                var report = new Report
+                {
+                    FolderId = folder.Id,
+                    Name = "LDAP Revenue",
+                    ScriptPath = Path.Combine(_factory.TempDir, "scripts", "ldap-revenue.rptsql"),
+                    CreatedBy = user.Id
+                };
+                db.Reports.Add(report);
+                await db.SaveChangesAsync();
+                reportId = report.Id;
             }
+
+            Assert.Equal(HttpStatusCode.OK, (await AuthGet(loginResp.Token, $"/api/reports/{reportId}")).StatusCode);
+
+            // 3. Directory group removal is synchronized on the next LDAP login.
+            _factory.RemoveJohnFromPublisherGroup();
+            var reloginRes = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest("john", "johnpassword"));
+            Assert.Equal(HttpStatusCode.OK, reloginRes.StatusCode);
+            var relogin = await reloginRes.Content.ReadFromJsonAsync<LoginResponse>();
+
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                var userManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<PortalUser>>();
+                var user = await db.Users
+                    .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
+                    .SingleAsync(u => u.Id == userId);
+                Assert.DoesNotContain(user.UserGroups, ug => ug.Group.Name == "GG-Portal-Publishers");
+                Assert.DoesNotContain("Publisher", await userManager.GetRolesAsync(user));
+            }
+
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(loginResp.Token, $"/api/reports/{reportId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(relogin!.Token, $"/api/reports/{reportId}")).StatusCode);
+
+            // 4. A removed directory user cannot establish a new session.
+            _factory.DeleteJohn();
+            var removedLoginRes = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest("john", "johnpassword"));
+            Assert.Equal(HttpStatusCode.Unauthorized, removedLoginRes.StatusCode);
+
+            // 5. The local recovery admin remains usable and can terminate stale LDAP sessions.
+            var adminLoginRes = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest("admin", "Admin@12345!"));
+            Assert.Equal(HttpStatusCode.OK, adminLoginRes.StatusCode);
+            var adminLogin = await adminLoginRes.Content.ReadFromJsonAsync<LoginResponse>();
+            using (var changePassword = new HttpRequestMessage(HttpMethod.Post, "/api/auth/change-password"))
+            {
+                changePassword.Headers.Authorization = new("Bearer", adminLogin!.Token);
+                changePassword.Content = JsonContent.Create(new
+                {
+                    currentPassword = "Admin@12345!",
+                    newPassword = "Admin@LdapTests99!"
+                });
+                Assert.Equal(HttpStatusCode.NoContent, (await _client.SendAsync(changePassword)).StatusCode);
+            }
+
+            var adminReloginRes = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest("admin", "Admin@LdapTests99!"));
+            Assert.Equal(HttpStatusCode.OK, adminReloginRes.StatusCode);
+            var adminRelogin = await adminReloginRes.Content.ReadFromJsonAsync<LoginResponse>();
+            var deactivateRes = await AuthPut(adminRelogin!.Token, $"/api/admin/users/{userId}", new { isActive = false });
+            Assert.Equal(HttpStatusCode.NoContent, deactivateRes.StatusCode);
+
+            Assert.Equal(HttpStatusCode.Unauthorized, (await AuthGet(relogin.Token, "/api/folders")).StatusCode);
+            var refreshRes = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(relogin.RefreshToken));
+            Assert.Equal(HttpStatusCode.Unauthorized, refreshRes.StatusCode);
         }
     }
 }

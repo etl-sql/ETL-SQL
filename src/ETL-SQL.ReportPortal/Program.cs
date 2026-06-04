@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
@@ -108,6 +109,22 @@ builder.Services.AddAuthentication(opt =>
         ValidateIssuerSigningKey = true,
         IssuerSigningKey         = signingKey,
         ClockSkew                = TimeSpan.FromSeconds(30)
+    };
+    opt.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var userIdValue = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(userIdValue, out var userId))
+            {
+                context.Fail("Invalid user identity.");
+                return;
+            }
+
+            var portalDb = context.HttpContext.RequestServices.GetRequiredService<PortalDbContext>();
+            if (!await portalDb.Users.AnyAsync(user => user.Id == userId && user.IsActive))
+                context.Fail("User account is disabled.");
+        }
     };
 });
 
