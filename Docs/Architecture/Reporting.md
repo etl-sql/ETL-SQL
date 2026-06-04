@@ -557,16 +557,15 @@ Chart visuals use `echarts.init(div)` + `chart.setOption(JSON.parse(config))`. F
 
 ### 8.1 Declaration
 
-Parameters are declared in `CREATE PAGE ... WITH PARAMETERS`:
+Parameters are declared at the top of the script with `DECLARE @x <TYPE> INPUT = <default>` and consumed by visuals/slicers; pages no longer take a trailing `WITH PARAMETERS` clause:
 
 ```sql
+DECLARE @region    VARCHAR INPUT = 'All';
+DECLARE @startDate DATE    INPUT = '2024-01-01';
+
 CREATE PAGE Sales AS DASHBOARD (
     STRUCTURE = 'A A / B C',
     MAP ( 'A' = RevChart, 'B' = RegionSlicer, 'C' = DetailTable )
-)
-WITH PARAMETERS (
-    @region    = 'All',
-    @startDate = '2024-01-01'
 );
 ```
 
