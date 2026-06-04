@@ -288,21 +288,32 @@ export const catalogApi = {
 export const adminApi = {
     // users
     listUsers:       ()           => apiJson('/api/admin/users'),
+    userCatalog:     (query = '') => apiJson(`/api/admin/users/catalog${query ? `?${query}` : ''}`),
     createUser:      (body)       => apiJson('/api/admin/users',     { method: 'POST',   body }),
     updateUser:      (id, body)   => apiJson(`/api/admin/users/${id}`, { method: 'PUT',  body }),
     deleteUser:      (id)         => apiJson(`/api/admin/users/${id}`, { method: 'DELETE' }),
+    bulkUserStatus:  (userIds, isActive) => apiJson('/api/admin/users/bulk-status',
+                                        { method: 'POST', body: { userIds, isActive } }),
     resetPassword:   (id, pwd)    => apiJson(`/api/admin/users/${id}/reset-password`,
                                         { method: 'POST', body: { newPassword: pwd } }),
     revokeTokens:    (id)         => apiJson(`/api/admin/users/${id}/revoke-tokens`, { method: 'POST' }),
 
     // groups
     listGroups:      ()           => apiJson('/api/admin/groups'),
+    groupCatalog:    (query = '') => apiJson(`/api/admin/groups/catalog${query ? `?${query}` : ''}`),
     createGroup:     (body)       => apiJson('/api/admin/groups',    { method: 'POST',   body }),
     updateGroup:     (id, body)   => apiJson(`/api/admin/groups/${id}`, { method: 'PUT', body }),
     deleteGroup:     (id)         => apiJson(`/api/admin/groups/${id}`, { method: 'DELETE' }),
+    bulkDeleteGroups:(groupIds, cascade = false) => apiJson('/api/admin/groups/bulk-delete',
+                                        { method: 'POST', body: { groupIds, cascade } }),
     listMembers:     (id)         => apiJson(`/api/admin/groups/${id}/members`),
+    memberCatalog:   (id, query = '') => apiJson(`/api/admin/groups/${id}/members/catalog${query ? `?${query}` : ''}`),
     addMember:       (id, userId) => apiJson(`/api/admin/groups/${id}/members`,
                                         { method: 'POST', body: { userId } }),
+    bulkAddMembers:  (id, userIds) => apiJson(`/api/admin/groups/${id}/members/bulk-add`,
+                                        { method: 'POST', body: { userIds } }),
+    bulkRemoveMembers: (id, userIds) => apiJson(`/api/admin/groups/${id}/members/bulk-remove`,
+                                        { method: 'POST', body: { userIds } }),
     removeMember:    (id, userId) => apiJson(`/api/admin/groups/${id}/members/${userId}`,
                                         { method: 'DELETE' }),
 
@@ -315,6 +326,9 @@ export const adminApi = {
 
     // subscriptions (admin sees all)
     listAllSubscriptions: () => apiJson('/api/subscriptions'),
+    subscriptionCatalog: (query = '') => apiJson(`/api/admin/subscriptions/catalog${query ? `?${query}` : ''}`),
+    bulkSubscriptionStatus: (subscriptionIds, isActive) => apiJson('/api/admin/subscriptions/bulk-status',
+                                        { method: 'POST', body: { subscriptionIds, isActive } }),
 
     // reports (admin sees all)
     listAllReports: () => apiJson('/api/admin/reports'),

@@ -58,10 +58,19 @@
               <h3>Users</h3>
             </div>
             <div class="admin-action-group">
+              <input id="userFilter" type="search" placeholder="Search users…" class="admin-filter-input">
+              <select id="userStatusFilter" class="admin-filter-select" aria-label="Filter users by status">
+                <option value="">All statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <button class="btn btn-outline btn-sm" id="usersEnableBtn" disabled>Enable</button>
+              <button class="btn btn-outline btn-sm" id="usersDisableBtn" disabled>Disable</button>
               <button class="btn btn-outline btn-sm" id="newUserBtn">New User</button>
             </div>
           </div>
           <div id="userTableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading users…</span></div></div>
+          <div id="userPager" class="admin-pager"></div>
         </div>
 
         <!-- Inline new-user form -->
@@ -111,10 +120,13 @@
               <h3>Groups</h3>
             </div>
             <div class="admin-action-group">
+              <input id="groupFilter" type="search" placeholder="Search groups…" class="admin-filter-input">
+              <button class="btn btn-danger btn-sm" id="groupsDeleteBtn" disabled>Delete Selected</button>
               <button class="btn btn-outline btn-sm" id="newGroupBtn">New Group</button>
             </div>
           </div>
           <div id="groupTableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading groups…</span></div></div>
+          <div id="groupPager" class="admin-pager"></div>
         </div>
 
         <div class="card" id="newGroupForm" style="display:none">
@@ -147,15 +159,22 @@
               <h3>Members of <span id="memberGroupName"></span></h3>
             </div>
             <div class="admin-action-group">
+              <input id="memberFilter" type="search" placeholder="Search members…" class="admin-filter-input">
+              <button class="btn btn-danger btn-sm" id="membersRemoveBtn" disabled>Remove Selected</button>
               <button class="btn btn-outline btn-sm" id="addMemberBtn">Add Member</button>
             </div>
           </div>
           <div id="memberTableWrap"></div>
+          <div id="memberPager" class="admin-pager"></div>
           <div id="addMemberForm" class="stacked-form" style="display:none">
             <div class="form-row">
               <div class="form-group">
-                <label for="addMemberSelect">User</label>
-                <select id="addMemberSelect"></select>
+                <label for="addMemberSearch">Find User</label>
+                <input id="addMemberSearch" type="search" placeholder="Search by username or email…">
+              </div>
+              <div class="form-group">
+                <label for="addMemberSelect">Matches</label>
+                <select id="addMemberSelect" multiple size="8"></select>
               </div>
             </div>
             <div class="form-actions">
@@ -328,10 +347,20 @@
               <h3>All Subscriptions</h3>
             </div>
             <div class="admin-action-group">
+              <input id="subsFilter" type="search" placeholder="Search subscriptions…" class="admin-filter-input">
+              <select id="subsStatusFilter" class="admin-filter-select" aria-label="Filter subscriptions by status">
+                <option value="">All statuses</option>
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+                <option value="failed">Failed</option>
+              </select>
+              <button class="btn btn-outline btn-sm" id="subsResumeBtn" disabled>Resume</button>
+              <button class="btn btn-outline btn-sm" id="subsPauseBtn" disabled>Pause</button>
               <button class="btn btn-outline btn-sm" id="subsRefreshBtn">Refresh</button>
             </div>
           </div>
           <div class="subs-table-wrap" id="subsTableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading subscriptions…</span></div></div>
+          <div id="subsPager" class="admin-pager"></div>
         </div>
       </div>
 
@@ -485,6 +514,7 @@
 import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi, catalogApi } from '/js/api.js';
 import { populateFolderSelects, createFolderInline } from '/js/publish-folders.js';
 import { renderSubscriptionHistory } from '/js/subscription-history-ui.js';
+import { bindSelection, catalogQuery, headerSelectionCell, renderCatalogPager, selectedIds, selectionCell } from '/js/admin-catalog-ui.js';
 import { applyPortalBranding, initTheme } from '/js/branding.js';
 import { renderDag } from '/designer/designer.js';
 import { createDatasetsAdmin } from '/js/datasets-admin.js';
@@ -612,13 +642,21 @@ function initModalA11y() {
 
 // ── Users ──────────────────────────────────────────────────────────────────────
 let allUsers = [];
+let userPage = 1;
 
 async function loadUsers() {
   const $wrap = document.getElementById('userTableWrap');
   try {
-    allUsers = await adminApi.listUsers();
+    const result = await adminApi.userCatalog(catalogQuery({
+      q: document.getElementById('userFilter').value.trim(),
+      status: document.getElementById('userStatusFilter').value,
+      page: userPage,
+      pageSize: 25,
+    }));
+    allUsers = result.items || [];
     const rows = allUsers.map(u => `
       <tr>
+        ${selectionCell(u.id, `user ${escAttr(u.userName)}`)}
         <td>${esc(u.userName)}</td>
         <td>${esc(u.email || '')}</td>
         <td>${(u.roles || []).map(r => `<span class="chip chip-${r.toLowerCase()}">${esc(r)}</span>`).join(' ')}</td>
@@ -637,14 +675,31 @@ async function loadUsers() {
 
     $wrap.innerHTML = `
       <table class="data-table">
-        <thead><tr><th>Username</th><th>Email</th><th>Roles</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="5" class="empty-state">No users.</td></tr>'}</tbody>
+        <thead><tr>${headerSelectionCell('users')}<th>Username</th><th>Email</th><th>Roles</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="6" class="empty-state">No users.</td></tr>'}</tbody>
       </table>`;
 
     $wrap.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', () => handleUserAction(btn));
     });
+    bindSelection($wrap, ids => {
+      document.getElementById('usersEnableBtn').disabled = ids.length === 0;
+      document.getElementById('usersDisableBtn').disabled = ids.length === 0;
+    });
+    renderCatalogPager(document.getElementById('userPager'), result, page => { userPage = page; loadUsers(); });
   } catch { $wrap.innerHTML = `<div class="empty-state">Failed to load users.</div>`; }
+}
+
+document.getElementById('userFilter').addEventListener('input', () => { userPage = 1; loadUsers(); });
+document.getElementById('userStatusFilter').addEventListener('change', () => { userPage = 1; loadUsers(); });
+document.getElementById('usersEnableBtn').addEventListener('click', () => bulkUserStatus(true));
+document.getElementById('usersDisableBtn').addEventListener('click', () => bulkUserStatus(false));
+
+async function bulkUserStatus(isActive) {
+  const ids = selectedIds(document.getElementById('userTableWrap'));
+  if (!ids.length) return;
+  await adminApi.bulkUserStatus(ids, isActive).catch(alertErr);
+  loadUsers();
 }
 
 async function handleUserAction(btn) {
@@ -727,14 +782,24 @@ document.getElementById('nu-saveBtn').addEventListener('click', async () => {
 // ── Groups ─────────────────────────────────────────────────────────────────────
 let selectedGroupId = null;
 let allGroups = [];
+let groupPage = 1;
+let memberPage = 1;
 
 async function loadGroups() {
   const $wrap = document.getElementById('groupTableWrap');
   try {
+    const result = await adminApi.groupCatalog(catalogQuery({
+      q: document.getElementById('groupFilter').value.trim(),
+      page: groupPage,
+      pageSize: 25,
+    }));
+    allGroups = result.items || [];
     const rows = allGroups.map(g => `
       <tr>
+        ${selectionCell(g.id, `group ${escAttr(g.name)}`)}
         <td>${esc(g.name)}</td>
         <td class="text-sm text-muted">${esc(g.description || '')}</td>
+        <td>${g.memberCount}</td>
         <td>
           <div class="table-actions">
             <button class="btn btn-outline btn-sm" data-action="edit-group" data-id="${g.id}">Edit</button>
@@ -746,15 +811,27 @@ async function loadGroups() {
 
     $wrap.innerHTML = `
       <table class="data-table">
-        <thead><tr><th>Group Name</th><th>Description</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="3" class="empty-state">No groups.</td></tr>'}</tbody>
+        <thead><tr>${headerSelectionCell('groups')}<th>Group Name</th><th>Description</th><th>Members</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" class="empty-state">No groups.</td></tr>'}</tbody>
       </table>`;
 
     $wrap.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', () => handleGroupAction(btn));
     });
+    bindSelection($wrap, ids => {
+      document.getElementById('groupsDeleteBtn').disabled = ids.length === 0;
+    });
+    renderCatalogPager(document.getElementById('groupPager'), result, page => { groupPage = page; loadGroups(); });
   } catch { $wrap.innerHTML = `<div class="empty-state">Failed to load groups.</div>`; }
 }
+
+document.getElementById('groupFilter').addEventListener('input', () => { groupPage = 1; loadGroups(); });
+document.getElementById('groupsDeleteBtn').addEventListener('click', async () => {
+  const ids = selectedIds(document.getElementById('groupTableWrap'));
+  if (!ids.length || !confirm('Delete the selected groups? Groups with members or ACL entries will be rejected.')) return;
+  await adminApi.bulkDeleteGroups(ids).catch(alertErr);
+  loadGroups();
+});
 
 async function handleGroupAction(btn) {
   const id = +btn.dataset.id;
@@ -773,6 +850,7 @@ async function handleGroupAction(btn) {
     document.getElementById('newGroupForm').style.display = '';
   } else if (btn.dataset.action === 'members') {
     selectedGroupId = id;
+    memberPage = 1;
     document.getElementById('memberGroupName').textContent = btn.dataset.name;
     document.getElementById('membersPanel').style.display = '';
     loadMembers(id);
@@ -782,18 +860,26 @@ async function handleGroupAction(btn) {
 async function loadMembers(groupId) {
   const $wrap = document.getElementById('memberTableWrap');
   try {
-    const members = await adminApi.listMembers(groupId);
+    const result = await adminApi.memberCatalog(groupId, catalogQuery({
+      q: document.getElementById('memberFilter').value.trim(),
+      page: memberPage,
+      pageSize: 25,
+    }));
+    const members = result.items || [];
     const rows = members.map(m => `
       <tr>
-        <td>${esc(m.userName)}</td>
+        ${selectionCell(m.id, `member ${escAttr(m.username)}`)}
+        <td>${esc(m.username)}</td>
+        <td>${esc(m.email || '')}</td>
+        <td><span class="chip ${m.isActive ? 'chip-active' : 'chip-inactive'}">${m.isActive ? 'Active' : 'Inactive'}</span></td>
         <td>
           <button class="btn btn-danger btn-sm" data-uid="${m.id}">Remove</button>
         </td>
       </tr>`).join('');
     $wrap.innerHTML = `
       <table class="data-table">
-        <thead><tr><th>Username</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="2" class="empty-state">No members.</td></tr>'}</tbody>
+        <thead><tr>${headerSelectionCell('members')}<th>Username</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" class="empty-state">No members.</td></tr>'}</tbody>
       </table>`;
     $wrap.querySelectorAll('[data-uid]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -801,8 +887,24 @@ async function loadMembers(groupId) {
         loadMembers(groupId);
       });
     });
+    bindSelection($wrap, ids => {
+      document.getElementById('membersRemoveBtn').disabled = ids.length === 0;
+    });
+    renderCatalogPager(document.getElementById('memberPager'), result, page => { memberPage = page; loadMembers(groupId); });
   } catch {}
 }
+
+document.getElementById('memberFilter').addEventListener('input', () => {
+  memberPage = 1;
+  if (selectedGroupId) loadMembers(selectedGroupId);
+});
+document.getElementById('membersRemoveBtn').addEventListener('click', async () => {
+  const ids = selectedIds(document.getElementById('memberTableWrap'));
+  if (!selectedGroupId || !ids.length || !confirm('Remove the selected users from this group?')) return;
+  await adminApi.bulkRemoveMembers(selectedGroupId, ids).catch(alertErr);
+  loadMembers(selectedGroupId);
+  loadGroups();
+});
 
 document.getElementById('newGroupBtn').addEventListener('click', () => {
   document.getElementById('newGroupForm').style.display = '';
@@ -840,17 +942,31 @@ document.getElementById('newGroupBtn').addEventListener('click', () => {
 document.getElementById('addMemberBtn').addEventListener('click', async () => {
   const $form = document.getElementById('addMemberForm');
   $form.style.display = '';
-  const $sel = document.getElementById('addMemberSelect');
-  $sel.innerHTML = allUsers.map(u => `<option value="${u.id}">${esc(u.userName)}</option>`).join('');
+  document.getElementById('addMemberSearch').value = '';
+  refreshAddMemberOptions();
 });
+document.getElementById('addMemberSearch').addEventListener('input', refreshAddMemberOptions);
+
+async function refreshAddMemberOptions() {
+  const result = await adminApi.userCatalog(catalogQuery({
+    q: document.getElementById('addMemberSearch').value.trim(),
+    status: 'active',
+    pageSize: 25,
+  })).catch(() => ({ items: [] }));
+  document.getElementById('addMemberSelect').innerHTML = (result.items || [])
+    .map(u => `<option value="${u.id}">${esc(u.userName)}${u.email ? ` — ${esc(u.email)}` : ''}</option>`)
+    .join('');
+}
 document.getElementById('am-cancelBtn').addEventListener('click', () => {
   document.getElementById('addMemberForm').style.display = 'none';
 });
 document.getElementById('am-saveBtn').addEventListener('click', async () => {
-  const uid = +document.getElementById('addMemberSelect').value;
-  await adminApi.addMember(selectedGroupId, uid).catch(alertErr);
+  const userIds = [...document.getElementById('addMemberSelect').selectedOptions].map(option => +option.value);
+  if (!selectedGroupId || !userIds.length) return;
+  await adminApi.bulkAddMembers(selectedGroupId, userIds).catch(alertErr);
   document.getElementById('addMemberForm').style.display = 'none';
   loadMembers(selectedGroupId);
+  loadGroups();
 });
 
 // ── Folders & ACL ──────────────────────────────────────────────────────────────
@@ -1289,15 +1405,23 @@ document.getElementById('auditExportBtn').addEventListener('click', () => {
 });
 
 // ── Subscriptions ──────────────────────────────────────────────────────────────
+let subscriptionPage = 1;
+
 async function loadSubscriptions() {
   const $wrap = document.getElementById('subsTableWrap');
   try {
-    const subs = await adminApi.listAllSubscriptions();
-    if (!subs.length) { $wrap.innerHTML = '<div class="empty-state">No subscriptions.</div>'; return; }
+    const result = await adminApi.subscriptionCatalog(catalogQuery({
+      q: document.getElementById('subsFilter').value.trim(),
+      status: document.getElementById('subsStatusFilter').value,
+      page: subscriptionPage,
+      pageSize: 25,
+    }));
+    const subs = result.items || [];
     const rows = subs.map(s => {
       const schedule = s.deliverOnRefresh ? 'On Refresh' : (s.schedule || '—');
       return `
         <tr>
+          ${selectionCell(s.id, `subscription ${escAttr(s.name || s.reportName)}`)}
           <td class="text-sm">${esc(s.recipients || '')}</td>
           <td>${esc(s.reportName || '')}</td>
           <td>${esc(s.name || '—')}</td>
@@ -1325,18 +1449,34 @@ async function loadSubscriptions() {
     }).join('');
     $wrap.innerHTML = `
       <table class="data-table">
-        <thead><tr><th>Recipients</th><th>Report</th><th>Name</th><th>Schedule</th><th>Format</th><th>Parameters</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody>${rows}</tbody>
+        <thead><tr>${headerSelectionCell('subscriptions')}<th>Recipients</th><th>Report</th><th>Name</th><th>Schedule</th><th>Format</th><th>Parameters</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="9" class="empty-state">No subscriptions.</td></tr>'}</tbody>
       </table>`;
     $wrap.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', () => {
         handleAdminSubscriptionAction(btn);
       });
     });
+    bindSelection($wrap, ids => {
+      document.getElementById('subsResumeBtn').disabled = ids.length === 0;
+      document.getElementById('subsPauseBtn').disabled = ids.length === 0;
+    });
+    renderCatalogPager(document.getElementById('subsPager'), result, page => { subscriptionPage = page; loadSubscriptions(); });
   } catch { $wrap.innerHTML = '<div class="empty-state">Failed to load subscriptions.</div>'; }
 }
 
-document.getElementById('subsRefreshBtn').addEventListener('click', () => loadSubscriptions());
+document.getElementById('subsRefreshBtn').addEventListener('click', () => { subscriptionPage = 1; loadSubscriptions(); });
+document.getElementById('subsFilter').addEventListener('input', () => { subscriptionPage = 1; loadSubscriptions(); });
+document.getElementById('subsStatusFilter').addEventListener('change', () => { subscriptionPage = 1; loadSubscriptions(); });
+document.getElementById('subsResumeBtn').addEventListener('click', () => bulkSubscriptionStatus(true));
+document.getElementById('subsPauseBtn').addEventListener('click', () => bulkSubscriptionStatus(false));
+
+async function bulkSubscriptionStatus(isActive) {
+  const ids = selectedIds(document.getElementById('subsTableWrap'));
+  if (!ids.length) return;
+  await adminApi.bulkSubscriptionStatus(ids, isActive).catch(alertErr);
+  loadSubscriptions();
+}
 
 async function handleAdminSubscriptionAction(btn) {
   const id = +btn.dataset.id;

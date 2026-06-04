@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Core;
 using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -240,6 +241,139 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var folderId = folder!["id"]!.GetValue<int>();
         Assert.True(folderId > 0);
+    }
+
+    [Fact]
+    public async Task AdminCatalogs_FilterPageAndBulkMutateUsersGroupsMembersAndSubscriptions()
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var usernames = Enumerable.Range(1, 3).Select(i => $"catalog_{suffix}_{i}").ToList();
+        var userIds = new List<int>();
+
+        foreach (var username in usernames)
+        {
+            var createRes = await AuthPost(token, "/api/admin/users", new
+            {
+                username,
+                email = $"{username}@test.local",
+                password = "Catalog@Tests99!",
+                role = "Viewer"
+            });
+            Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
+            var user = await createRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            userIds.Add(user!["id"]!.GetValue<int>());
+        }
+
+        var userPage1 = await AuthGet(token, $"/api/admin/users/catalog?q=catalog_{suffix}&page=1&pageSize=2");
+        var userPage1Body = await userPage1.Content.ReadFromJsonAsync<PagedResult<UserDto>>(_json);
+        Assert.Equal(HttpStatusCode.OK, userPage1.StatusCode);
+        Assert.Equal(3, userPage1Body!.Total);
+        Assert.Equal(2, userPage1Body.Items.Count);
+
+        var userPage2 = await AuthGet(token, $"/api/admin/users/catalog?q=catalog_{suffix}&page=2&pageSize=2");
+        var userPage2Body = await userPage2.Content.ReadFromJsonAsync<PagedResult<UserDto>>(_json);
+        Assert.Single(userPage2Body!.Items);
+
+        var disableRes = await AuthPost(token, "/api/admin/users/bulk-status", new
+        {
+            userIds = userIds.Take(2).ToArray(),
+            isActive = false
+        });
+        Assert.Equal(HttpStatusCode.OK, disableRes.StatusCode);
+        var inactiveUsers = await AuthGet(token, $"/api/admin/users/catalog?q=catalog_{suffix}&status=inactive");
+        var inactiveUsersBody = await inactiveUsers.Content.ReadFromJsonAsync<PagedResult<UserDto>>(_json);
+        Assert.Equal(2, inactiveUsersBody!.Total);
+
+        var groupName = $"Catalog Group {suffix}";
+        var groupRes = await AuthPost(token, "/api/admin/groups", new { name = groupName, description = "Catalog test group" });
+        Assert.Equal(HttpStatusCode.Created, groupRes.StatusCode);
+        var group = await groupRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var groupId = group!["id"]!.GetValue<int>();
+
+        var addMembersRes = await AuthPost(token, $"/api/admin/groups/{groupId}/members/bulk-add", new { userIds });
+        Assert.Equal(HttpStatusCode.OK, addMembersRes.StatusCode);
+        var memberPage = await AuthGet(token, $"/api/admin/groups/{groupId}/members/catalog?q=catalog_{suffix}&pageSize=2");
+        var memberPageBody = await memberPage.Content.ReadFromJsonAsync<PagedResult<GroupMemberDto>>(_json);
+        Assert.Equal(3, memberPageBody!.Total);
+        Assert.Equal(2, memberPageBody.Items.Count);
+
+        var removeMembersRes = await AuthPost(token, $"/api/admin/groups/{groupId}/members/bulk-remove", new
+        {
+            userIds = userIds.Take(2).ToArray()
+        });
+        Assert.Equal(HttpStatusCode.OK, removeMembersRes.StatusCode);
+        var remainingMembers = await AuthGet(token, $"/api/admin/groups/{groupId}/members/catalog");
+        var remainingMembersBody = await remainingMembers.Content.ReadFromJsonAsync<PagedResult<GroupMemberDto>>(_json);
+        Assert.Single(remainingMembersBody!.Items);
+
+        var groupCatalog = await AuthGet(token, $"/api/admin/groups/catalog?q={Uri.EscapeDataString(suffix)}");
+        var groupCatalogBody = await groupCatalog.Content.ReadFromJsonAsync<PagedResult<GroupDto>>(_json);
+        Assert.Contains(groupCatalogBody!.Items, item => item.Id == groupId);
+
+        var emptyGroupIds = new List<int>();
+        foreach (var index in Enumerable.Range(1, 2))
+        {
+            var emptyGroupRes = await AuthPost(token, "/api/admin/groups", new
+            {
+                name = $"Empty Catalog Group {suffix} {index}",
+                description = ""
+            });
+            Assert.Equal(HttpStatusCode.Created, emptyGroupRes.StatusCode);
+            var emptyGroup = await emptyGroupRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            emptyGroupIds.Add(emptyGroup!["id"]!.GetValue<int>());
+        }
+        var deleteGroupsRes = await AuthPost(token, "/api/admin/groups/bulk-delete", new { groupIds = emptyGroupIds });
+        Assert.Equal(HttpStatusCode.OK, deleteGroupsRes.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await AuthGet(token, $"/api/admin/groups/{emptyGroupIds[0]}")).StatusCode);
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = $"Catalog Subs {suffix}", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"catalog_subs_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "CREATE VISUAL Answer AS CARD (SOURCE = (SELECT 1 AS Value), MAPPINGS (VALUE = Value));");
+        var reportRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId = folder!["id"]!.GetValue<int>(),
+            name = $"Catalog Subscription Report {suffix}",
+            description = "",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, reportRes.StatusCode);
+        var report = await reportRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var subscriptionIds = new List<int>();
+        foreach (var index in Enumerable.Range(1, 2))
+        {
+            var subRes = await AuthPost(token, "/api/subscriptions", new
+            {
+                reportId,
+                name = $"Catalog Subscription {suffix} {index}",
+                schedule = "Daily",
+                format = "Link",
+                recipientEmail = $"catalog-sub-{suffix}-{index}@test.local",
+                atTime = "08:00"
+            });
+            Assert.Equal(HttpStatusCode.Created, subRes.StatusCode);
+            var sub = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            subscriptionIds.Add(sub!["id"]!.GetValue<int>());
+        }
+
+        var subscriptionCatalog = await AuthGet(token, $"/api/admin/subscriptions/catalog?q={Uri.EscapeDataString(suffix)}&pageSize=1");
+        var subscriptionCatalogBody = await subscriptionCatalog.Content.ReadFromJsonAsync<PagedResult<SubscriptionDto>>(_json);
+        Assert.Equal(2, subscriptionCatalogBody!.Total);
+        Assert.Single(subscriptionCatalogBody.Items);
+
+        var pauseRes = await AuthPost(token, "/api/admin/subscriptions/bulk-status", new
+        {
+            subscriptionIds,
+            isActive = false
+        });
+        Assert.Equal(HttpStatusCode.OK, pauseRes.StatusCode);
+        var pausedCatalog = await AuthGet(token, $"/api/admin/subscriptions/catalog?q={Uri.EscapeDataString(suffix)}&status=paused");
+        var pausedCatalogBody = await pausedCatalog.Content.ReadFromJsonAsync<PagedResult<SubscriptionDto>>(_json);
+        Assert.Equal(2, pausedCatalogBody!.Total);
     }
 
     // ── 4. Report publish ──────────────────────────────────────────────────────

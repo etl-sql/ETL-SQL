@@ -44,6 +44,8 @@ public record UpdateSubscriptionRequest(
     bool?                        IsActive,
     Dictionary<string, string>?  Parameters);
 
+public record BulkSubscriptionStatusRequest(IList<int> SubscriptionIds, bool IsActive);
+
 public record SmtpConnectionDto(
     int    Id,
     string Alias,

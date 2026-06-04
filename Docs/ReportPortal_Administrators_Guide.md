@@ -190,6 +190,8 @@ On first start the portal:
 
 Open **Admin → Users** to manage accounts.
 
+The user catalog is server-paged. Use the search box and status filter to narrow large account lists, then select rows on the current page to enable or disable multiple users. Selection is page-local and is cleared when the filter or page changes.
+
 ### 4.1 Enterprise Identity Path
 
 The portal supports integration with enterprise identity providers via two primary paths: **OpenID Connect (OIDC)** and **LDAP / Active Directory (AD)**.
@@ -320,6 +322,8 @@ Folder visibility is controlled through **groups** and **ACLs** (access control 
 ### 5.1 Groups
 
 A group is a named collection of users. Open **Admin → Groups** to create groups and add members.
+
+Use the group search box to locate groups by name, description, or directory mapping. The member panel is also server-paged: search active users when adding members, select multiple matches to add them together, or select current members to remove them together. **Delete Selected** rejects groups that still have members or ACL entries; remove those references first or use the administrative API with an explicit cascade decision.
 
 ### 5.2 Folder ACLs
 
@@ -651,6 +655,8 @@ The Admin subscription table shows active/paused state, the last successful deli
 - **History** — recent delivery attempts with status, attempt time, duration, rows processed, and sanitized error text.
 - **Pause / Resume** — stop or restart future deliveries without deleting the subscription.
 - **Delete** — retire the subscription and remove its generated Orchestrator job.
+
+Use the search box and status filter to isolate subscriptions by report, name, recipient, active/paused state, or delivery failure. Select rows on the current page to pause or resume multiple subscriptions together. Selection is page-local and is cleared when the filter or page changes.
 
 ### 8.4 Scripted Subscription Management
 

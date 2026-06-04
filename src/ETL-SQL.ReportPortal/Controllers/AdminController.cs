@@ -45,6 +45,67 @@ public class AdminController(
         return Ok(dtos);
     }
 
+    [HttpGet("users/catalog")]
+    public async Task<IActionResult> GetUserCatalog(
+        [FromQuery] string? q = null,
+        [FromQuery] string? status = null,
+        [FromQuery] string? provider = null,
+        [FromQuery] string? role = null,
+        [FromQuery] string? group = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var query = userManager.Users.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = $"%{q.Trim()}%";
+            query = query.Where(u =>
+                EF.Functions.Like(u.UserName!, term) ||
+                EF.Functions.Like(u.Email ?? "", term) ||
+                EF.Functions.Like(u.FirstName ?? "", term) ||
+                EF.Functions.Like(u.LastName ?? "", term));
+        }
+        if (string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
+            query = query.Where(u => u.IsActive);
+        else if (string.Equals(status, "inactive", StringComparison.OrdinalIgnoreCase))
+            query = query.Where(u => !u.IsActive);
+        if (!string.IsNullOrWhiteSpace(provider))
+            query = query.Where(u => u.Provider == provider);
+        if (!string.IsNullOrWhiteSpace(group))
+            query = query.Where(u => u.UserGroups.Any(ug => ug.Group.Name == group));
+        if (!string.IsNullOrWhiteSpace(role))
+        {
+            var roleId = await db.Roles
+                .Where(r => r.Name == role)
+                .Select(r => (int?)r.Id)
+                .FirstOrDefaultAsync();
+            query = roleId.HasValue
+                ? query.Where(u => db.UserRoles.Any(ur => ur.UserId == u.Id && ur.RoleId == roleId.Value))
+                : query.Where(_ => false);
+        }
+
+        var total = await query.CountAsync();
+        var users = await query
+            .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
+            .OrderBy(u => u.UserName)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        var items = new List<UserDto>();
+        foreach (var u in users)
+        {
+            var roles = await userManager.GetRolesAsync(u);
+            var groups = u.UserGroups.Select(ug => ug.Group.Name).OrderBy(name => name).ToList();
+            items.Add(new UserDto(u.Id, u.UserName!, u.Email, u.FirstName, u.LastName,
+                u.IsActive, u.MustChangePassword, u.CreatedAt, roles, groups, u.Provider));
+        }
+        return Ok(new PagedResult<UserDto>(items, total, page, pageSize));
+    }
+
     [HttpPost("users")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest req)
     {
@@ -126,6 +187,30 @@ public class AdminController(
         }
         await audit.LogAsync(CurrentUserId, "UPDATE_USER", "User", id.ToString());
         return NoContent();
+    }
+
+    [HttpPost("users/bulk-status")]
+    public async Task<IActionResult> BulkUpdateUserStatus([FromBody] BulkUserStatusRequest req)
+    {
+        var ids = req.UserIds.Distinct().ToList();
+        if (ids.Count == 0) return BadRequest(new { error = "Select at least one user." });
+
+        var users = await db.Users.Where(u => ids.Contains(u.Id)).ToListAsync();
+        foreach (var user in users)
+            user.IsActive = req.IsActive;
+
+        if (!req.IsActive)
+        {
+            var tokens = await db.RefreshTokens
+                .Where(t => ids.Contains(t.UserId) && t.RevokedAt == null)
+                .ToListAsync();
+            foreach (var token in tokens) token.RevokedAt = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "BULK_UPDATE_USER_STATUS", "User", null,
+            $"{users.Count} users set active={req.IsActive}");
+        return Ok(new { Updated = users.Count });
     }
 
     [HttpDelete("users/{id:int}")]
@@ -293,6 +378,38 @@ public class AdminController(
         return Ok(groups);
     }
 
+    [HttpGet("groups/catalog")]
+    public async Task<IActionResult> GetGroupCatalog(
+        [FromQuery] string? q = null,
+        [FromQuery] string? provider = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var query = db.Groups.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = $"%{q.Trim()}%";
+            query = query.Where(g =>
+                EF.Functions.Like(g.Name, term) ||
+                EF.Functions.Like(g.Description ?? "", term) ||
+                EF.Functions.Like(g.AdGroup ?? "", term));
+        }
+        if (!string.IsNullOrWhiteSpace(provider))
+            query = query.Where(g => g.Provider == provider);
+
+        var total = await query.CountAsync();
+        var items = await query
+            .OrderBy(g => g.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(g => new GroupDto(g.Id, g.Name, g.Description,
+                g.UserGroups.Count, g.Provider, g.AdGroup))
+            .ToListAsync();
+        return Ok(new PagedResult<GroupDto>(items, total, page, pageSize));
+    }
+
     [HttpPost("groups")]
     public async Task<IActionResult> CreateGroup([FromBody] CreateGroupRequest req)
     {
@@ -317,8 +434,9 @@ public class AdminController(
     public async Task<IActionResult> GetGroup(int id)
     {
         var group = await db.Groups
+            .Where(g => g.Id == id)
             .Select(g => new GroupDto(g.Id, g.Name, g.Description, g.UserGroups.Count, g.Provider, g.AdGroup))
-            .FirstOrDefaultAsync(g => g.Id == id);
+            .FirstOrDefaultAsync();
         return group is null ? NotFound() : Ok(group);
     }
 
@@ -370,6 +488,31 @@ public class AdminController(
         return NoContent();
     }
 
+    [HttpPost("groups/bulk-delete")]
+    public async Task<IActionResult> BulkDeleteGroups([FromBody] BulkDeleteGroupsRequest req)
+    {
+        var ids = req.GroupIds.Distinct().ToList();
+        if (ids.Count == 0) return BadRequest(new { error = "Select at least one group." });
+
+        var groups = await db.Groups
+            .Include(g => g.UserGroups)
+            .Include(g => g.FolderAcls)
+            .Where(g => ids.Contains(g.Id))
+            .ToListAsync();
+        if (!req.Cascade && groups.Any(g => g.UserGroups.Any() || g.FolderAcls.Any()))
+            return Conflict(new { error = "One or more groups have members or ACL entries. Use cascade=true." });
+
+        foreach (var group in groups)
+        {
+            db.UserGroups.RemoveRange(group.UserGroups);
+            db.FolderAcls.RemoveRange(group.FolderAcls);
+        }
+        db.Groups.RemoveRange(groups);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "BULK_DELETE_GROUPS", "Group", null, $"{groups.Count} groups deleted");
+        return Ok(new { Deleted = groups.Count });
+    }
+
     [HttpGet("groups/{id:int}/members")]
     public async Task<IActionResult> GetMembers(int id)
     {
@@ -380,6 +523,38 @@ public class AdminController(
                   (ug, u) => new { u.Id, u.UserName })
             .ToListAsync();
         return Ok(members);
+    }
+
+    [HttpGet("groups/{id:int}/members/catalog")]
+    public async Task<IActionResult> GetMemberCatalog(
+        int id,
+        [FromQuery] string? q = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25)
+    {
+        if (!await db.Groups.AnyAsync(g => g.Id == id)) return NotFound();
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var query = db.UserGroups
+            .Where(ug => ug.GroupId == id)
+            .Join(db.Users, ug => ug.UserId, u => u.Id,
+                (ug, u) => u);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = $"%{q.Trim()}%";
+            query = query.Where(u =>
+                EF.Functions.Like(u.UserName!, term) ||
+                EF.Functions.Like(u.Email ?? "", term));
+        }
+
+        var total = await query.CountAsync();
+        var items = await query
+            .OrderBy(u => u.UserName)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(u => new GroupMemberDto(u.Id, u.UserName!, u.Email, u.IsActive))
+            .ToListAsync();
+        return Ok(new PagedResult<GroupMemberDto>(items, total, page, pageSize));
     }
 
     [HttpPost("groups/{id:int}/members")]
@@ -400,6 +575,45 @@ public class AdminController(
         await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "ADD_USER_TO_GROUP", "Group", id.ToString(), user.UserName);
         return NoContent();
+    }
+
+    [HttpPost("groups/{id:int}/members/bulk-add")]
+    public async Task<IActionResult> BulkAddMembers(int id, [FromBody] BulkGroupMembershipRequest req)
+    {
+        if (!await db.Groups.AnyAsync(g => g.Id == id)) return NotFound("Group not found");
+        var ids = req.UserIds.Distinct().ToList();
+        if (ids.Count == 0) return BadRequest(new { error = "Select at least one user." });
+
+        var existingIds = await db.UserGroups
+            .Where(ug => ug.GroupId == id && ids.Contains(ug.UserId))
+            .Select(ug => ug.UserId)
+            .ToListAsync();
+        var validIds = await db.Users
+            .Where(u => ids.Contains(u.Id) && !existingIds.Contains(u.Id))
+            .Select(u => u.Id)
+            .ToListAsync();
+        db.UserGroups.AddRange(validIds.Select(userId => new UserGroup { GroupId = id, UserId = userId }));
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "BULK_ADD_USERS_TO_GROUP", "Group", id.ToString(),
+            $"{validIds.Count} users added");
+        return Ok(new { Added = validIds.Count });
+    }
+
+    [HttpPost("groups/{id:int}/members/bulk-remove")]
+    public async Task<IActionResult> BulkRemoveMembers(int id, [FromBody] BulkGroupMembershipRequest req)
+    {
+        if (!await db.Groups.AnyAsync(g => g.Id == id)) return NotFound("Group not found");
+        var ids = req.UserIds.Distinct().ToList();
+        if (ids.Count == 0) return BadRequest(new { error = "Select at least one user." });
+
+        var memberships = await db.UserGroups
+            .Where(ug => ug.GroupId == id && ids.Contains(ug.UserId))
+            .ToListAsync();
+        db.UserGroups.RemoveRange(memberships);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "BULK_REMOVE_USERS_FROM_GROUP", "Group", id.ToString(),
+            $"{memberships.Count} users removed");
+        return Ok(new { Removed = memberships.Count });
     }
 
     [HttpDelete("groups/{id:int}/members/{userId:int}")]

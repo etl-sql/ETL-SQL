@@ -43,6 +43,45 @@ public class SubscriptionsController(
         return Ok(subs.Select(ToDto));
     }
 
+    [HttpGet("api/admin/subscriptions/catalog")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAdminCatalog(
+        [FromQuery] string? q = null,
+        [FromQuery] string? status = null,
+        [FromQuery] string? format = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 25)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var query = db.Subscriptions.Include(s => s.Report).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = $"%{q.Trim()}%";
+            query = query.Where(s =>
+                EF.Functions.Like(s.Name ?? "", term) ||
+                EF.Functions.Like(s.Recipients, term) ||
+                EF.Functions.Like(s.Report.Name, term));
+        }
+        if (string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
+            query = query.Where(s => s.IsActive);
+        else if (string.Equals(status, "paused", StringComparison.OrdinalIgnoreCase))
+            query = query.Where(s => !s.IsActive);
+        else if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase))
+            query = query.Where(s => s.FailCount > 0);
+        if (!string.IsNullOrWhiteSpace(format) &&
+            Enum.TryParse<SubscriptionFormat>(format, true, out var parsedFormat))
+            query = query.Where(s => s.Format == parsedFormat);
+
+        var total = await query.CountAsync();
+        var items = await query
+            .OrderBy(s => s.Report.Name).ThenBy(s => s.Recipients)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+        return Ok(new PagedResult<SubscriptionDto>(items.Select(ToDto).ToList(), total, page, pageSize));
+    }
+
     [HttpGet("api/subscriptions/{id:int}")]
     public async Task<IActionResult> Get(int id)
     {
@@ -206,6 +245,40 @@ public class SubscriptionsController(
         await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "UPDATE_SUBSCRIPTION", "Subscription", sub.Id.ToString());
         return Ok(ToDto(sub));
+    }
+
+    [HttpPost("api/admin/subscriptions/bulk-status")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> BulkUpdateStatus([FromBody] BulkSubscriptionStatusRequest req)
+    {
+        var ids = req.SubscriptionIds.Distinct().ToList();
+        if (ids.Count == 0) return BadRequest(new { error = "Select at least one subscription." });
+
+        var subs = await db.Subscriptions
+            .Include(s => s.Report)
+            .Where(s => ids.Contains(s.Id))
+            .ToListAsync();
+        foreach (var sub in subs)
+            sub.IsActive = req.IsActive;
+
+        var orchDbPath = dbLocator.Resolve();
+        if (orchDbPath is not null)
+        {
+            var store = new SQLiteJobHistoryStore(orchDbPath);
+            await store.InitializeAsync();
+            foreach (var sub in subs)
+            {
+                var jobName = $"{SubPrefix}{sub.Id}:{sub.Report.Name}";
+                var job = await store.GetJobAsync(jobName);
+                if (job is not null)
+                    await store.SaveJobAsync(job with { IsEnabled = req.IsActive });
+            }
+        }
+
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "BULK_UPDATE_SUBSCRIPTION_STATUS", "Subscription", null,
+            $"{subs.Count} subscriptions set active={req.IsActive}");
+        return Ok(new { Updated = subs.Count });
     }
 
     [HttpDelete("api/subscriptions/{id:int}")]

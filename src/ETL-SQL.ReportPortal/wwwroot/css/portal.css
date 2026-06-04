@@ -383,8 +383,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .admin-filter-input { padding: 5px 9px; border: 1px solid var(--portal-border); border-radius: var(--portal-radius-sm);
                       font-size: .85em; min-width: 190px; background: var(--portal-surface); color: var(--portal-text); }
 .admin-filter-input:focus { outline: none; border-color: var(--portal-accent); box-shadow: 0 0 0 3px var(--portal-focus); }
-.admin-pager { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+.admin-filter-select { padding: 5px 9px; border: 1px solid var(--portal-border); border-radius: var(--portal-radius-sm);
+                       font-size: .85em; background: var(--portal-surface); color: var(--portal-text); }
+.admin-filter-select:focus { outline: none; border-color: var(--portal-accent); box-shadow: 0 0 0 3px var(--portal-focus); }
+.admin-pager { display: flex; gap: 8px; justify-content: flex-end; align-items: center; margin-top: 12px; min-height: 30px; }
 .admin-pager .active { background: var(--portal-accent-soft); border-color: var(--portal-accent); color: var(--portal-accent); }
+.catalog-count, .catalog-page-label { color: var(--portal-muted); font-size: .8em; }
+.catalog-select-cell { width: 38px; text-align: center !important; padding-left: 8px !important; padding-right: 8px !important; }
+.catalog-select-cell input { width: 16px; height: 16px; margin: 0; accent-color: var(--portal-accent); cursor: pointer; }
 
 /* Tables */
 .data-table { width: 100%; border-collapse: collapse; background: var(--portal-surface);
