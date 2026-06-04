@@ -36,10 +36,22 @@ By leveraging an external AI to parse unstructured documents into a standard JSO
 
 ## Detailed Step-by-Step
 
+### Step 0: Extract Schema from Large PDFs (Optional)
+
+If you are dealing with a large vendor PDF specification (e.g., 50+ pages containing API credentials, security whitelists, and introduction fluff), you should trim the PDF first. This ensures the LLM's context window focuses exclusively on the data dictionary tables, preventing token limits and extraction drift.
+
+Run the `extract-spec` command:
+
+```powershell
+etl-sql extract-spec --input ./Specs/large_vendor_spec.pdf --output ./Specs/trimmed_spec.pdf
+```
+
+The C# extraction engine uses heuristic analysis (scanning for database type keywords and column header terms while penalizing API/connectivity jargon) to automatically slice out only the pages containing schemas and output them to the trimmed PDF.
+
 ### Step 1: Generate the Intermediate JSON
 
 1. Copy the contents of the prompt instructions in [data_spec_parser_instructions.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/data_spec_parser_instructions.md).
-2. Paste the prompt text into your AI assistant (e.g. Gemini, ChatGPT, or Claude) and upload the vendor specification document.
+2. Paste the prompt text into your AI assistant (e.g. Gemini, ChatGPT, or Claude) and upload the specification document (use the `trimmed_spec.pdf` if you ran Step 0).
 3. Save the resulting JSON block in your local repository as `my_spec.json`.
 4. (Optional) Review the JSON file. If the AI misunderstood any columns or custom types, edit them directly in the JSON file.
 
