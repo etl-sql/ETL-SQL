@@ -297,6 +297,21 @@ etl-sql-report build sales_dashboard.rptsql --format json
 
 ---
 
+## Testing & Quality
+
+ETL-SQL moves and transforms real data, so we have tried to test as much of it as we reasonably can. No software is bug-free — but a great deal of effort goes into validating behavior, and the suite grows with every change:
+
+- **Over 3,400 automated unit and integration tests** (xUnit) spanning the parser, evaluator, expression and type system, connectors, security guardrails, reporting engine, language server, and Report Portal.
+- **~2 million SQL-correctness checks.** The engine is exercised against the industry-standard SQLite [`sqllogictest`](https://www.sqlite.org/sqllogictest/) corpus — roughly 250 files of hash-verified query/result assertions — as a dedicated lane that compares ETL-SQL's output against a reference SQL implementation.
+- **70+ VS Code extension unit tests** (Vitest) plus Node-based UI checks for the report designer and portal components.
+- **Real-infrastructure integration tests** run each connector (MSSQL, Postgres, MySQL, Oracle, SFTP, Kafka, S3, Azure Blob, …) against a containerized server, and the Orchestrator and Portal subscription pipelines against a real SQLite job store and a live SMTP (MailPit) server.
+- **Performance and scale tests** exercise large-dataset paths (including a one-million-row memory test) and a BenchmarkDotNet suite, with a scale-certification lane that gates against regressions.
+- **A 70% minimum line-coverage gate** in CI, plus a local pre-release lane (`Test-PreRelease.ps1`) that runs the smoke, fast, SLT, and scale lanes and audits every dependency for known vulnerabilities before a release ships.
+
+We make no claim that it is perfect — if you hit a bug, please [open an issue](https://github.com/etl-sql/ETL-SQL/issues). But the breadth above reflects a genuine, ongoing commitment to making ETL-SQL something you can trust with real data.
+
+---
+
 ## Release Build
 
 Maintainers can run the release script to validate, package, and publish the 0.9.0 artifacts:
