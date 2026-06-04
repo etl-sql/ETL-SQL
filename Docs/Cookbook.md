@@ -71,7 +71,7 @@ BEGIN TRY
     -- 2. Post-Processing (Archive & Secure)
     -- Note: WITH() options use = for assignment
     COMPRESS FILE 'C:\Exports\monthly_ledger.csv' TO 'C:\Exports\ledger.zip' WITH(OVERWRITE=ON);
-    ENCRYPT FILE  'C:\Exports\ledger.zip' TO 'C:\Exports\ledger.zip.enc' PASSWORD('MasterSecret2026', OVERWRITE=ON);
+    ENCRYPT FILE  'C:\Exports\ledger.zip' TO 'C:\Exports\ledger.zip.enc' PASSWORD('MasterSecret2026') WITH(OVERWRITE=ON);
 
     -- 3. Transmit
     SEND FILE 'C:\Exports\ledger.zip.enc' TO '/inbox/incoming/' AT sftp_vendor;
@@ -85,6 +85,7 @@ END TRY
 BEGIN CATCH
     -- Alert on failure — use a string expression for BODY
     SEND EMAIL
+        FROM    'alerts@corp.com'
         TO      'admin@corp.com'
         SUBJECT 'VENDOR EXPORT FAILED'
         BODY    ('Export pipeline failed: ' + ERROR_MESSAGE())
@@ -325,6 +326,7 @@ AS
 BEGIN
     DECLARE @Subj = '[' + @Level + '] ETL Pipeline Alert';
     SEND EMAIL 
+        FROM    'etl@company.com'
         TO      'dev-alerts@company.slack.com'
         SUBJECT @Subj
         BODY    @Msg
@@ -337,7 +339,7 @@ BEGIN TRY
 END TRY
 BEGIN CATCH
     IF @@TRANCOUNT > 0 ROLLBACK;
-    EXEC NotifyTeam ('Nightly Load Failed: ' + ERROR_MESSAGE()), 'CRITICAL';
+    EXEC NotifyTeam @Msg = ('Nightly Load Failed: ' + ERROR_MESSAGE()), @Level = 'CRITICAL';
 END CATCH;
 ```
 
@@ -382,7 +384,7 @@ BEGIN
     INSERT INTO country_out SELECT * FROM prod.Sales WHERE Country = @C;
 
     -- Encrypt and transmit (SQL style — includes password)
-    ENCRYPT FILE @OutFile TO @EncFile PASSWORD('ExportSecret2026', OVERWRITE=ON);
+    ENCRYPT FILE @OutFile TO @EncFile PASSWORD('ExportSecret2026') WITH(OVERWRITE=ON);
     SEND FILE @EncFile TO @RemotePath AT vendor_sftp;
 
     -- Cleanup local files
@@ -691,7 +693,7 @@ BEGIN
         'IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ''' + @ArchiveTable + ''') ' +
         'CREATE TABLE ' + @ArchiveTable + ' (OrderId INT, Amount DECIMAL(18,2), OrderDate DATETIME, ArchivedAt DATETIME);';
 
-    EXEC @CreateSql ON orders_db;   -- Execute against the remote connection
+    EXEC (@CreateSql) AT orders_db;   -- Execute against the remote connection
 
     -- Dynamic INSERT — archive this tenant's old orders
     DECLARE @InsertSql =
@@ -700,7 +702,7 @@ BEGIN
         'FROM dbo.Orders ' +
         'WHERE TenantId = ''' + @Tenant + ''' AND YEAR(OrderDate) < ' + @ArchiveYear + ';';
 
-    EXEC @InsertSql ON orders_db;
+    EXEC (@InsertSql) AT orders_db;
 
     PRINT 'Archived orders for tenant: ' + @Tenant;
 END
@@ -746,7 +748,7 @@ CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = RegionTable));
 ### Detail Report (`regional_detail.rptsql`)
 ```sql
 -- 1. Declare the input parameter
-DECLARE @TargetRegion AS STRING INPUT = 'All';
+DECLARE @TargetRegion STRING INPUT = 'All';
 
 -- 2. Data Source filtered by input
 CREATE DATASET &Transactions AS (
@@ -775,7 +777,7 @@ CREATE CONNECTION src_db AS MSSQL('Server=prod_db;Database=Finance;Trusted_Conne
 CREATE CONNECTION pg_dest AS POSTGRES('Host=dest_db;Database=Analytics;Username=loader;Password=...');
 
 -- Note: Remote administration connections must use ENCRYPT/ENC options
-CREATE CONNECTION local_orch AS ORCHESTRATOR(HOST = 'http://localhost:5001', API_KEY = ENC:U2FsdGVkX1+...);
+CREATE CONNECTION local_orch AS ORCHESTRATOR(HOST = 'http://localhost:5001', API_KEY = 'ENC:U2FsdGVkX1+...');
 
 BEGIN TRY
     -- 2. Publish the source directory as an immutable script bundle
@@ -783,11 +785,7 @@ BEGIN TRY
     PUBLISH BUNDLE 'finance-pipeline'
         FROM 'C:\ETL\finance'
         ENTRY 'main.etlsql'
-        WITH (
-            PASSWORD = 'lockbox-master-password', 
-            ENCRYPT = MACHINE,
-            DESCRIPTION = 'Nightly reconciliation and ledger sync'
-        );
+        WITH (PASSWORD = 'lockbox-master-password', ENCRYPT = MACHINE);
 
     -- 3. Verify the published bundle structure and dependencies
     VALIDATE BUNDLE 'finance-pipeline'

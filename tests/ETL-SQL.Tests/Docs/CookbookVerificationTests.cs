@@ -38,12 +38,11 @@ namespace ETL_SQL.Tests.Docs
         // moment the recipe is edited). Burn this down — every entry is a known-broken published example.
         private static readonly Dictionary<string, string> KnownBroken = new()
         {
-            ["d9b8523cff214742"] = "Cookbook.md - secure vendor handshake: SFTP connection PASSWORD close-paren",
-            ["8ac7e9590dc40197"] = "Cookbook.md - SEND EMAIL needs FROM clause; EXEC trailing args",
-            ["9b70b34fc763a830"] = "Cookbook.md - connection PASSWORD close-paren",
-            ["657dce756a9fc79e"] = "Cookbook.md - multi-statement INSERT into orders_db",
-            ["f7c449a633ce8618"] = "Cookbook.md - AS misuse at statement start",
-            ["62f7754eba7a2386"] = "Cookbook.md - CREATE CONNECTION close paren",
+            // PUBLISH BUNDLE / VALIDATE BUNDLE / EXECUTE <orch> BEGIN..END parse fine at top level
+            // (see Grammar.md §15.1) but fail when wrapped in BEGIN TRY here: the parser ends the
+            // statement at the WITH(...) ')' and rejects the trailing ';'. Looks like a real parser
+            // limitation for orchestrator meta-statements inside TRY blocks, not a recipe typo.
+            ["05e4aae5a65affcd"] = "Cookbook.md #20 - PUBLISH BUNDLE inside BEGIN TRY (orchestrator meta-statement in TRY block)",
         };
 
         public static IEnumerable<object[]> CookbookBlocks()
