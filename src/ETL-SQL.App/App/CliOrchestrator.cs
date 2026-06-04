@@ -143,6 +143,18 @@ namespace ETL_SQL.App
             Arity = ArgumentArity.ExactlyOne,
             DefaultValueFactory = _ => null
         };
+        private static readonly Option<string?> ExtractInputOption = new("--input", new[] { "-i" })
+        {
+            Description = "Path to the input large PDF specification file.",
+            Arity = ArgumentArity.ExactlyOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> ExtractOutputOption = new("--output", new[] { "-o" })
+        {
+            Description = "Destination path for the extracted trimmed PDF file.",
+            Arity = ArgumentArity.ExactlyOne,
+            DefaultValueFactory = _ => null
+        };
 
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
@@ -266,6 +278,14 @@ namespace ETL_SQL.App
             };
             genScriptCommand.SetAction(context => Dispatch(context, "gen-script", handler));
 
+            // 12. EXTRACT-SPEC Command — trim large PDF specifications to data dictionary pages
+            var extractSpecCommand = new Command("extract-spec", "Extract data dictionary / schema pages from a large PDF specification")
+            {
+                ExtractInputOption,
+                ExtractOutputOption
+            };
+            extractSpecCommand.SetAction(context => Dispatch(context, "extract-spec", handler));
+
             rootCommand.Add(runCommand);
             rootCommand.Add(testCommand);
             rootCommand.Add(encryptCommand);
@@ -278,6 +298,7 @@ namespace ETL_SQL.App
             rootCommand.Add(serveCommand);
             rootCommand.Add(purgeCommand);
             rootCommand.Add(genScriptCommand);
+            rootCommand.Add(extractSpecCommand);
 
             return rootCommand;
         }
@@ -359,6 +380,11 @@ namespace ETL_SQL.App
                 cliContext.SpecSchema = res.GetValue(SpecSchemaOption);
                 cliContext.SpecOutput = res.GetValue(SpecOutputOption);
             }
+            else if (commandName == "extract-spec")
+            {
+                cliContext.ExtractInput = res.GetValue(ExtractInputOption);
+                cliContext.ExtractOutput = res.GetValue(ExtractOutputOption);
+            }
 
             var sessionOptVal = res.GetValue(SessionOption);
             if (sessionOptVal != null) cliContext.SessionId = sessionOptVal;
@@ -412,6 +438,7 @@ namespace ETL_SQL.App
             table.AddRow("config setup-jwt", "Generate a secure 256-bit JWT secret.");
             table.AddRow("purge", "Delete all runtime data (reports, snapshots, DBs, logs, sessions). Use --dry-run to preview.");
             table.AddRow($"gen-script [blue]-s <json> -o <etlsql>[/]", "Compile a schema JSON specification into an ETL-SQL script template.");
+            table.AddRow($"extract-spec [blue]-i <pdf> -o <pdf>[/]", "Extract data dictionary / schema pages from a large PDF specification.");
             table.AddRow("ui repl", "Start the JSON-based REPL protocol.");
             AnsiConsole.Write(table);
             AnsiConsole.MarkupLine($"\nUse [cyan]ETL-SQL {Markup.Escape("<command>")} --help[/] for details on specific options.");

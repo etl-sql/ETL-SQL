@@ -66,6 +66,16 @@ namespace ETL_SQL.App
                 return await PipelineGenerator.Generate(ctx.SpecSchema, ctx.SpecOutput, logger);
             }
 
+            if (ctx.Command == "extract-spec")
+            {
+                if (string.IsNullOrEmpty(ctx.ExtractInput) || string.IsNullOrEmpty(ctx.ExtractOutput))
+                {
+                    logger.WriteLine("Both --input (-i) and --output (-o) options are required for the extract-spec command.", ConsoleColor.Red);
+                    return 1;
+                }
+                return SpecExtractor.Extract(ctx.ExtractInput, ctx.ExtractOutput, logger);
+            }
+
             if (ctx.Command == "notices")
             {
                 ShowThirdPartyNotices(logger);

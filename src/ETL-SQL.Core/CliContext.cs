@@ -51,5 +51,9 @@ namespace ETL_SQL.Core
         // gen-script command
         public string? SpecSchema { get; set; }
         public string? SpecOutput { get; set; }
+
+        // extract-spec command
+        public string? ExtractInput { get; set; }
+        public string? ExtractOutput { get; set; }
     }
 }
