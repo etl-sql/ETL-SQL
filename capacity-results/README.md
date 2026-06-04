@@ -4,9 +4,13 @@ Store measured Portal and Orchestrator capacity reports here in dated subdirecto
 
 Do not treat `workload.example.json` as a baseline. Copy it, replace credentials and resource IDs,
 record the reference environment, and run the harness against an isolated non-production deployment.
+The workload templates under [`workloads/`](workloads/) cover cache-cold Portal execution and
+exports, representative Orchestrator row-volume jobs, retry/failure jobs, mocked I/O, `PARALLEL`,
+schedule density, and process-spawning comparisons.
 
 ```powershell
 node .\scripts\test-service-capacity.mjs --config .\capacity-results\workload.local.json
+node .\scripts\test-capacity-workload-configs.mjs
 node .\scripts\compare-capacity-results.mjs `
   .\capacity-results\baseline\capacity-report.json `
   .\capacity-results\current\capacity-report.json

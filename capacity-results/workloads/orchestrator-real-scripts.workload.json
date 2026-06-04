@@ -1,0 +1,143 @@
+{
+  "environment": {
+    "deploymentMode": "installed services or fixed reference local processes",
+    "databaseLocation": "local SSD/NVMe, Orchestrator database separate from Portal database",
+    "diskType": "SSD/NVMe",
+    "dotnetVersion": "record exact runtime",
+    "notes": "Representative short, medium, long, retry/failure, mocked-I/O, and PARALLEL Orchestrator jobs. Replace URL, API key, and steps before a measured run."
+  },
+  "breachCriteria": {
+    "maxErrorRatePct": 1,
+    "maxP95LatencyMs": 3000,
+    "maxSqliteContentionCount": 0,
+    "maxQueuedWork": 100
+  },
+  "variables": {
+    "shortJobName": "capacity-short-10k",
+    "mediumJobName": "capacity-medium-50k",
+    "longJobName": "capacity-long-100k",
+    "retryJobName": "capacity-retry-failure",
+    "mockIoJobName": "capacity-mock-io",
+    "parallelJobName": "capacity-parallel"
+  },
+  "portal": null,
+  "orchestrator": {
+    "baseUrl": "http://localhost:5001",
+    "apiKey": "CHANGE_ME",
+    "metricsPath": "/metrics",
+    "thinkTimeMs": 500,
+    "steps": [
+      { "concurrency": 1, "durationSeconds": 60 },
+      { "concurrency": 5, "durationSeconds": 120 },
+      { "concurrency": 10, "durationSeconds": 120 },
+      { "concurrency": 20, "durationSeconds": 120 }
+    ],
+    "workload": [
+      { "name": "health", "method": "GET", "path": "/health", "service": "orchestrator", "weight": 10 },
+      { "name": "metrics", "method": "GET", "path": "/metrics", "service": "orchestrator", "weight": 10 },
+      { "name": "trigger-short-10k", "method": "POST", "path": "/api/scheduled-jobs/{{shortJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 8, "thinkTimeMs": 1500 },
+      { "name": "trigger-medium-50k", "method": "POST", "path": "/api/scheduled-jobs/{{mediumJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 4, "thinkTimeMs": 3000 },
+      { "name": "trigger-long-100k", "method": "POST", "path": "/api/scheduled-jobs/{{longJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 2, "thinkTimeMs": 6000 },
+      { "name": "trigger-mock-io", "method": "POST", "path": "/api/scheduled-jobs/{{mockIoJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 3, "thinkTimeMs": 3000 },
+      { "name": "trigger-parallel", "method": "POST", "path": "/api/scheduled-jobs/{{parallelJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 2, "thinkTimeMs": 5000 },
+      { "name": "trigger-retry-failure", "method": "POST", "path": "/api/scheduled-jobs/{{retryJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 1, "thinkTimeMs": 10000 },
+      { "name": "history-short", "method": "GET", "path": "/api/scheduled-jobs/{{shortJobName}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 5 },
+      { "name": "history-long", "method": "GET", "path": "/api/scheduled-jobs/{{longJobName}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 3 }
+    ]
+  },
+  "setupRequests": [
+    {
+      "name": "create-short-10k",
+      "baseUrl": "http://localhost:5001",
+      "method": "POST",
+      "path": "/api/scheduled-jobs",
+      "useApiKey": true,
+      "body": {
+        "name": "{{shortJobName}}",
+        "scriptText": "WITH numbers AS (\n    SELECT 1 AS n\n    UNION ALL\n    SELECT n + 1 FROM numbers WHERE n < 10000\n)\nSELECT n, n * 2 AS doubled\nINTO #capacity_short\nFROM numbers;\nSELECT COUNT(*) AS row_count FROM #capacity_short;",
+        "interval": 1,
+        "unit": "DAY",
+        "maxRetries": 0
+      }
+    },
+    {
+      "name": "create-medium-50k",
+      "baseUrl": "http://localhost:5001",
+      "method": "POST",
+      "path": "/api/scheduled-jobs",
+      "useApiKey": true,
+      "body": {
+        "name": "{{mediumJobName}}",
+        "scriptText": "WITH numbers AS (\n    SELECT 1 AS n\n    UNION ALL\n    SELECT n + 1 FROM numbers WHERE n < 50000\n)\nSELECT n, n % 100 AS bucket, n * 3 AS amount\nINTO #capacity_medium\nFROM numbers;\nSELECT bucket, COUNT(*) AS row_count, SUM(amount) AS total_amount\nINTO #capacity_medium_summary\nFROM #capacity_medium\nGROUP BY bucket;",
+        "interval": 1,
+        "unit": "DAY",
+        "maxRetries": 0
+      }
+    },
+    {
+      "name": "create-long-100k",
+      "baseUrl": "http://localhost:5001",
+      "method": "POST",
+      "path": "/api/scheduled-jobs",
+      "useApiKey": true,
+      "body": {
+        "name": "{{longJobName}}",
+        "scriptText": "WITH numbers AS (\n    SELECT 1 AS n\n    UNION ALL\n    SELECT n + 1 FROM numbers WHERE n < 100000\n)\nSELECT n, n % 250 AS bucket, n * 5 AS amount\nINTO #capacity_long\nFROM numbers;\nSELECT bucket, COUNT(*) AS row_count, SUM(amount) AS total_amount, AVG(amount) AS average_amount\nINTO #capacity_long_summary\nFROM #capacity_long\nGROUP BY bucket;",
+        "interval": 1,
+        "unit": "DAY",
+        "maxRetries": 0
+      }
+    },
+    {
+      "name": "create-mock-io",
+      "baseUrl": "http://localhost:5001",
+      "method": "POST",
+      "path": "/api/scheduled-jobs",
+      "useApiKey": true,
+      "body": {
+        "name": "{{mockIoJobName}}",
+        "scriptText": "WAITFOR DELAY '00:00:02';\nSELECT 'mock-io' AS workload, GETDATE() AS completed_at INTO #capacity_mock_io;",
+        "interval": 1,
+        "unit": "DAY",
+        "maxRetries": 0
+      }
+    },
+    {
+      "name": "create-parallel",
+      "baseUrl": "http://localhost:5001",
+      "method": "POST",
+      "path": "/api/scheduled-jobs",
+      "useApiKey": true,
+      "body": {
+        "name": "{{parallelJobName}}",
+        "scriptText": "PARALLEL\nBEGIN\n    WAITFOR DELAY '00:00:01';\n    SELECT 1 AS branch_id INTO #capacity_parallel_a;\nEND\nBEGIN\n    WAITFOR DELAY '00:00:01';\n    SELECT 2 AS branch_id INTO #capacity_parallel_b;\nEND;",
+        "interval": 1,
+        "unit": "DAY",
+        "maxRetries": 0
+      }
+    },
+    {
+      "name": "create-retry-failure",
+      "baseUrl": "http://localhost:5001",
+      "method": "POST",
+      "path": "/api/scheduled-jobs",
+      "useApiKey": true,
+      "body": {
+        "name": "{{retryJobName}}",
+        "scriptText": "THROW 'capacity controlled retry failure';",
+        "interval": 1,
+        "unit": "DAY",
+        "maxRetries": 2,
+        "retryDelaySeconds": 1
+      }
+    }
+  ],
+  "cleanupRequests": [
+    { "name": "delete-short-10k", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{shortJobName}}", "useApiKey": true, "required": false },
+    { "name": "delete-medium-50k", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{mediumJobName}}", "useApiKey": true, "required": false },
+    { "name": "delete-long-100k", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{longJobName}}", "useApiKey": true, "required": false },
+    { "name": "delete-retry-failure", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{retryJobName}}", "useApiKey": true, "required": false },
+    { "name": "delete-mock-io", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{mockIoJobName}}", "useApiKey": true, "required": false },
+    { "name": "delete-parallel", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{parallelJobName}}", "useApiKey": true, "required": false }
+  ]
+}

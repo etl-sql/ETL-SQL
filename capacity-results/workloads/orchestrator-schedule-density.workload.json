@@ -1,0 +1,61 @@
+{
+  "environment": {
+    "deploymentMode": "installed services or fixed reference local processes",
+    "databaseLocation": "local SSD/NVMe, Orchestrator database separate from Portal database",
+    "diskType": "SSD/NVMe",
+    "dotnetVersion": "record exact runtime",
+    "notes": "Dense scheduled-job fan-in profile. Run with short Scheduler:SleepIntervalSeconds so due jobs are discovered promptly."
+  },
+  "breachCriteria": {
+    "maxErrorRatePct": 1,
+    "maxP95LatencyMs": 3000,
+    "maxSqliteContentionCount": 0,
+    "maxQueuedWork": 100
+  },
+  "variables": {
+    "denseJobA": "capacity-dense-a",
+    "denseJobB": "capacity-dense-b",
+    "denseJobC": "capacity-dense-c",
+    "denseJobD": "capacity-dense-d",
+    "denseJobE": "capacity-dense-e"
+  },
+  "portal": null,
+  "orchestrator": {
+    "baseUrl": "http://localhost:5001",
+    "apiKey": "CHANGE_ME",
+    "metricsPath": "/metrics",
+    "metricSampleIntervalMs": 500,
+    "thinkTimeMs": 250,
+    "steps": [
+      { "concurrency": 1, "durationSeconds": 90 },
+      { "concurrency": 5, "durationSeconds": 120 },
+      { "concurrency": 10, "durationSeconds": 120 },
+      { "concurrency": 20, "durationSeconds": 120 }
+    ],
+    "workload": [
+      { "name": "metrics", "method": "GET", "path": "/metrics", "service": "orchestrator", "weight": 10 },
+      { "name": "list-jobs", "method": "GET", "path": "/api/scheduled-jobs", "service": "orchestrator", "useApiKey": true, "weight": 4 },
+      { "name": "trigger-dense-a", "method": "POST", "path": "/api/scheduled-jobs/{{denseJobA}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 4, "thinkTimeMs": 1000 },
+      { "name": "trigger-dense-b", "method": "POST", "path": "/api/scheduled-jobs/{{denseJobB}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 4, "thinkTimeMs": 1000 },
+      { "name": "trigger-dense-c", "method": "POST", "path": "/api/scheduled-jobs/{{denseJobC}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 4, "thinkTimeMs": 1000 },
+      { "name": "trigger-dense-d", "method": "POST", "path": "/api/scheduled-jobs/{{denseJobD}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 4, "thinkTimeMs": 1000 },
+      { "name": "trigger-dense-e", "method": "POST", "path": "/api/scheduled-jobs/{{denseJobE}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 4, "thinkTimeMs": 1000 },
+      { "name": "history-dense-a", "method": "GET", "path": "/api/scheduled-jobs/{{denseJobA}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 2 },
+      { "name": "history-dense-e", "method": "GET", "path": "/api/scheduled-jobs/{{denseJobE}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 2 }
+    ]
+  },
+  "setupRequests": [
+    { "name": "create-dense-a", "baseUrl": "http://localhost:5001", "method": "POST", "path": "/api/scheduled-jobs", "useApiKey": true, "body": { "name": "{{denseJobA}}", "scriptText": "WAITFOR DELAY '00:00:01';\nSELECT 'A' AS job INTO #dense_a;", "interval": 1, "unit": "MINUTE", "maxRetries": 0 } },
+    { "name": "create-dense-b", "baseUrl": "http://localhost:5001", "method": "POST", "path": "/api/scheduled-jobs", "useApiKey": true, "body": { "name": "{{denseJobB}}", "scriptText": "WAITFOR DELAY '00:00:01';\nSELECT 'B' AS job INTO #dense_b;", "interval": 1, "unit": "MINUTE", "maxRetries": 0 } },
+    { "name": "create-dense-c", "baseUrl": "http://localhost:5001", "method": "POST", "path": "/api/scheduled-jobs", "useApiKey": true, "body": { "name": "{{denseJobC}}", "scriptText": "WAITFOR DELAY '00:00:01';\nSELECT 'C' AS job INTO #dense_c;", "interval": 1, "unit": "MINUTE", "maxRetries": 0 } },
+    { "name": "create-dense-d", "baseUrl": "http://localhost:5001", "method": "POST", "path": "/api/scheduled-jobs", "useApiKey": true, "body": { "name": "{{denseJobD}}", "scriptText": "WAITFOR DELAY '00:00:01';\nSELECT 'D' AS job INTO #dense_d;", "interval": 1, "unit": "MINUTE", "maxRetries": 0 } },
+    { "name": "create-dense-e", "baseUrl": "http://localhost:5001", "method": "POST", "path": "/api/scheduled-jobs", "useApiKey": true, "body": { "name": "{{denseJobE}}", "scriptText": "WAITFOR DELAY '00:00:01';\nSELECT 'E' AS job INTO #dense_e;", "interval": 1, "unit": "MINUTE", "maxRetries": 0 } }
+  ],
+  "cleanupRequests": [
+    { "name": "delete-dense-a", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{denseJobA}}", "useApiKey": true, "required": false },
+    { "name": "delete-dense-b", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{denseJobB}}", "useApiKey": true, "required": false },
+    { "name": "delete-dense-c", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{denseJobC}}", "useApiKey": true, "required": false },
+    { "name": "delete-dense-d", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{denseJobD}}", "useApiKey": true, "required": false },
+    { "name": "delete-dense-e", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{denseJobE}}", "useApiKey": true, "required": false }
+  ]
+}

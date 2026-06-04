@@ -1,0 +1,56 @@
+{
+  "environment": {
+    "deploymentMode": "installed services or fixed reference local processes",
+    "databaseLocation": "local SSD/NVMe, Portal database separate from Orchestrator database",
+    "diskType": "SSD/NVMe",
+    "dotnetVersion": "record exact runtime",
+    "notes": "Portal cache-cold execution, refresh, and export-heavy workload. Replace URLs, credentials, IDs, and steps before a measured run."
+  },
+  "breachCriteria": {
+    "maxErrorRatePct": 1,
+    "maxP95LatencyMs": 5000,
+    "maxSqliteContentionCount": 0,
+    "maxQueuedWork": 100
+  },
+  "variables": {
+    "reportId": "1",
+    "folderId": "1",
+    "datasetId": "1",
+    "cacheColdReportId": "1"
+  },
+  "portal": {
+    "baseUrl": "http://localhost:5002",
+    "roles": {
+      "admin": { "username": "admin", "password": "CHANGE_ME" },
+      "viewer": { "username": "capacity_viewer", "password": "CHANGE_ME" },
+      "publisher": { "username": "capacity_publisher", "password": "CHANGE_ME" }
+    },
+    "warmupIterations": 2,
+    "metricsPath": "/health",
+    "steps": [
+      { "concurrency": 1, "durationSeconds": 60 },
+      { "concurrency": 10, "durationSeconds": 120 },
+      { "concurrency": 20, "durationSeconds": 120 },
+      { "concurrency": 40, "durationSeconds": 120 }
+    ],
+    "workload": [
+      { "name": "folder-list", "method": "GET", "path": "/api/folders", "role": "viewer", "weight": 10 },
+      { "name": "folder-reports", "method": "GET", "path": "/api/folders/{{folderId}}/reports", "role": "viewer", "weight": 10 },
+      { "name": "catalog-search", "method": "GET", "path": "/api/catalog/search?q=capacity", "role": "viewer", "weight": 8 },
+      { "name": "snapshot-view", "method": "GET", "path": "/api/reports/{{reportId}}/snapshot", "role": "viewer", "weight": 16 },
+      { "name": "cache-cold-refresh", "method": "POST", "path": "/api/reports/{{cacheColdReportId}}/refresh", "role": "publisher", "weight": 4, "thinkTimeMs": 5000 },
+      { "name": "cache-cold-snapshot", "method": "GET", "path": "/api/reports/{{cacheColdReportId}}/snapshot", "role": "viewer", "weight": 8 },
+      { "name": "csv-export", "method": "GET", "path": "/api/reports/{{reportId}}/export/csv", "role": "viewer", "weight": 8, "thinkTimeMs": 1500 },
+      { "name": "xlsx-export", "method": "GET", "path": "/api/reports/{{reportId}}/export/xlsx", "role": "viewer", "weight": 5, "thinkTimeMs": 2500 },
+      { "name": "pdf-export", "method": "GET", "path": "/api/reports/{{reportId}}/export/pdf", "role": "viewer", "weight": 3, "thinkTimeMs": 5000 },
+      { "name": "dataset-list", "method": "GET", "path": "/api/datasets", "role": "viewer", "weight": 6 },
+      { "name": "dataset-detail", "method": "GET", "path": "/api/datasets/{{datasetId}}", "role": "viewer", "weight": 4 },
+      { "name": "favorite", "method": "POST", "path": "/api/reports/{{reportId}}/favorite", "role": "viewer", "weight": 2 },
+      { "name": "admin-usage", "method": "GET", "path": "/api/admin/metrics/usage", "role": "admin", "weight": 3 },
+      { "name": "admin-audit", "method": "GET", "path": "/api/admin/audit?pageSize=50", "role": "admin", "weight": 3 }
+    ]
+  },
+  "orchestrator": null,
+  "setupRequests": [],
+  "cleanupRequests": []
+}

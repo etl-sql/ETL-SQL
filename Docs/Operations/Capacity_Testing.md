@@ -76,6 +76,22 @@ Orchestrator runs should cover:
 For a checked-in developer-workstation starter baseline, see
 [`capacity-results/reference-local/README.md`](../../capacity-results/reference-local/README.md).
 
+Checked-in workload templates are available under
+[`capacity-results/workloads`](../../capacity-results/workloads):
+
+| Template | Purpose |
+| :--- | :--- |
+| `portal-cache-cold-exports.workload.json` | Portal catalog, snapshot, cache-cold refresh, CSV, XLSX, PDF, dataset, and Admin traffic |
+| `orchestrator-real-scripts.workload.json` | Short 10K-row, medium 50K-row, long 100K-row, mocked-I/O, retry/failure, and `PARALLEL` jobs |
+| `orchestrator-process-spawning.workload.json` | Process-spawning comparison profile with active-process metrics and kill traffic |
+| `orchestrator-schedule-density.workload.json` | Dense scheduled-job fan-in and trigger burst profile |
+
+Validate all checked-in workload configurations with:
+
+```powershell
+node .\scripts\test-capacity-workload-configs.mjs
+```
+
 Always label jobs/hour figures with the row profile used. A no-op `SELECT 1` job measures scheduler
 and trigger overhead only. It should not be presented as the normal ETL jobs/hour capacity.
 

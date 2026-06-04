@@ -1,0 +1,74 @@
+{
+  "environment": {
+    "deploymentMode": "fixed reference environment with Jobs:UseProcessSpawning=true",
+    "databaseLocation": "local SSD/NVMe, Orchestrator database separate from Portal database",
+    "diskType": "SSD/NVMe",
+    "dotnetVersion": "record exact runtime",
+    "notes": "Run against the same hardware as the in-process profile to compare process-spawning overhead, active process count, timeout behavior, and kill behavior."
+  },
+  "breachCriteria": {
+    "maxErrorRatePct": 1,
+    "maxP95LatencyMs": 4000,
+    "maxSqliteContentionCount": 0,
+    "maxQueuedWork": 100
+  },
+  "variables": {
+    "spawnShortJobName": "capacity-spawn-short",
+    "spawnLongJobName": "capacity-spawn-long"
+  },
+  "portal": null,
+  "orchestrator": {
+    "baseUrl": "http://localhost:5001",
+    "apiKey": "CHANGE_ME",
+    "metricsPath": "/metrics",
+    "thinkTimeMs": 750,
+    "steps": [
+      { "concurrency": 1, "durationSeconds": 60 },
+      { "concurrency": 5, "durationSeconds": 120 },
+      { "concurrency": 10, "durationSeconds": 120 },
+      { "concurrency": 20, "durationSeconds": 120 }
+    ],
+    "workload": [
+      { "name": "metrics", "method": "GET", "path": "/metrics", "service": "orchestrator", "weight": 10 },
+      { "name": "trigger-spawn-short", "method": "POST", "path": "/api/scheduled-jobs/{{spawnShortJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 8, "thinkTimeMs": 1500 },
+      { "name": "trigger-spawn-long", "method": "POST", "path": "/api/scheduled-jobs/{{spawnLongJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 3, "thinkTimeMs": 6000 },
+      { "name": "kill-spawn-long", "method": "POST", "path": "/api/scheduled-jobs/{{spawnLongJobName}}/kill", "service": "orchestrator", "useApiKey": true, "weight": 1, "thinkTimeMs": 10000 },
+      { "name": "history-spawn-short", "method": "GET", "path": "/api/scheduled-jobs/{{spawnShortJobName}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 4 },
+      { "name": "history-spawn-long", "method": "GET", "path": "/api/scheduled-jobs/{{spawnLongJobName}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 4 }
+    ]
+  },
+  "setupRequests": [
+    {
+      "name": "create-spawn-short",
+      "baseUrl": "http://localhost:5001",
+      "method": "POST",
+      "path": "/api/scheduled-jobs",
+      "useApiKey": true,
+      "body": {
+        "name": "{{spawnShortJobName}}",
+        "scriptText": "WITH numbers AS (\n    SELECT 1 AS n\n    UNION ALL\n    SELECT n + 1 FROM numbers WHERE n < 10000\n)\nSELECT n INTO #capacity_spawn_short FROM numbers;",
+        "interval": 1,
+        "unit": "DAY",
+        "maxRetries": 0
+      }
+    },
+    {
+      "name": "create-spawn-long",
+      "baseUrl": "http://localhost:5001",
+      "method": "POST",
+      "path": "/api/scheduled-jobs",
+      "useApiKey": true,
+      "body": {
+        "name": "{{spawnLongJobName}}",
+        "scriptText": "WAITFOR DELAY '00:00:20';\nSELECT 'spawn-long' AS workload INTO #capacity_spawn_long;",
+        "interval": 1,
+        "unit": "DAY",
+        "maxRetries": 0
+      }
+    }
+  ],
+  "cleanupRequests": [
+    { "name": "delete-spawn-short", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{spawnShortJobName}}", "useApiKey": true, "required": false },
+    { "name": "delete-spawn-long", "baseUrl": "http://localhost:5001", "method": "DELETE", "path": "/api/scheduled-jobs/{{spawnLongJobName}}", "useApiKey": true, "required": false }
+  ]
+}
