@@ -41,6 +41,8 @@ Reference docs describe the supported product surface. They should stay factual,
 | [Reference/Specialized_Operations.md](Reference/Specialized_Operations.md) | File operations, email, Docker, profiling, and automation operations |
 | [Reference/Lineage.md](Reference/Lineage.md) | Lineage statements, tags, and governance metadata |
 | [Reference/RelativeDate_Parameters.md](Reference/RelativeDate_Parameters.md) | Relative date expressions for reports and subscriptions |
+| [Reference/Spec_Driven_Development.md](Reference/Spec_Driven_Development.md) | Workflow guide for generating scripts from specs |
+| [data_spec_parser_instructions.md](data_spec_parser_instructions.md) | Prompt instructions payload for parsing spec files |
 | [Syntax_Index.md](Syntax_Index.md) | Cross-reference from syntax tokens to docs and help files |
 
 Start with [Reference/README.md](Reference/README.md) for ownership and maintenance rules for this section.
