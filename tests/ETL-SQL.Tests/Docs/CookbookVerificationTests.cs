@@ -44,12 +44,6 @@ namespace ETL_SQL.Tests.Docs
             ["657dce756a9fc79e"] = "Cookbook.md - multi-statement INSERT into orders_db",
             ["f7c449a633ce8618"] = "Cookbook.md - AS misuse at statement start",
             ["62f7754eba7a2386"] = "Cookbook.md - CREATE CONNECTION close paren",
-            ["00e4677c18649a1d"] = "Report_Cookbook.md - CREATE PAGE WITH PARAMETERS removed",
-            ["e0400c82ee3ed06a"] = "Report_Cookbook.md - CREATE PAGE WITH PARAMETERS removed",
-            ["7bb8479c13ff9aba"] = "Report_Cookbook.md - CREATE PAGE WITH PARAMETERS removed",
-            ["f9ccc0b2d05a43f0"] = "Report_Cookbook.md - CREATE PAGE WITH PARAMETERS removed",
-            ["c1677d9598269346"] = "Report_Cookbook.md - CREATE PAGE WITH PARAMETERS removed",
-            ["28c55268ce246f15"] = "Report_Cookbook.md - CREATE PAGE WITH PARAMETERS removed",
         };
 
         public static IEnumerable<object[]> CookbookBlocks()

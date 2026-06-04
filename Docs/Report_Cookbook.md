@@ -24,10 +24,11 @@ A collection of copy-paste-ready dashboard recipes for ETL-SQL. Every example is
 
 **Pattern**: KPI cards, regional bar chart, slicer-filtered detail table. The go-to starting point for any executive summary report.
 
-**Demonstrates**: `CARD` goal/progress/delta options, `BAR` `AXIS_SORT`, `TABLE`, `SLICER`, `WITH PARAMETERS`, `CREATE DATASET`, `FORMAT`, `FORMATTING`, conditional formatting, multi-slot layout.
+**Demonstrates**: `CARD` goal/progress/delta options, `BAR` `AXIS_SORT`, `TABLE`, `SLICER`, `DECLARE @x ... INPUT` parameters, `CREATE DATASET`, `FORMAT`, `FORMATTING`, conditional formatting, multi-slot layout.
 
 ```sql
 SET REPORT TITLE       = 'Executive Sales Dashboard';
+DECLARE @region VARCHAR INPUT = 'All';
 SET REPORT DESCRIPTION = 'Top-level KPIs with regional breakdown and filterable order detail.';
 
 -- ── Inline sample data ────────────────────────────────────────────────────
@@ -141,8 +142,7 @@ CREATE PAGE Main AS DASHBOARD (
     'C' = RevenueByRegion,
     'D' = SalesDetail
   )
-)
-WITH PARAMETERS (@region = 'All');
+);
 ```
 
 ---
@@ -151,10 +151,12 @@ WITH PARAMETERS (@region = 'All');
 
 **Pattern**: A line chart over time with goal line, rolling average, and linear trend overlaid. Add a date-range picker to narrow the window.
 
-**Demonstrates**: `LINE`, `OVERLAYS`, `GOAL`, `AVERAGE`, `MOVING_AVG`, `LINEAR`, `SMOOTH`, `DATEPICKER`, `WITH PARAMETERS`, typed date parameters.
+**Demonstrates**: `LINE`, `OVERLAYS`, `GOAL`, `AVERAGE`, `MOVING_AVG`, `LINEAR`, `SMOOTH`, `DATEPICKER`, typed `DECLARE @x DATE INPUT` parameters.
 
 ```sql
 SET REPORT TITLE = 'Monthly Sales Trend & Forecast';
+DECLARE @start DATE INPUT = '2025-01-01';
+DECLARE @end   DATE INPUT = '2025-12-31';
 
 -- ── Inline sample data ────────────────────────────────────────────────────
 SELECT '2025-01-01' AS sale_date, 42000 AS revenue INTO #monthly
@@ -221,10 +223,6 @@ CREATE PAGE Trends AS DASHBOARD (
     'C' = EndPicker,
     'D' = RevenueTrend
   )
-)
-WITH PARAMETERS (
-  @start AS DATE DEFAULT '2025-01-01',
-  @end   AS DATE DEFAULT '2025-12-31'
 );
 ```
 
@@ -326,6 +324,7 @@ CREATE PAGE YoY AS DASHBOARD (
 
 ```sql
 SET REPORT TITLE = 'Regional Drill-Down';
+DECLARE @region VARCHAR INPUT = 'All';
 
 -- ── Inline sample data ────────────────────────────────────────────────────
 SELECT 'North' AS region, 'Albany'   AS branch, 28000 AS revenue INTO #branches
@@ -387,8 +386,7 @@ CREATE PAGE DrillDown AS DASHBOARD (
     'B' = RegionReset,
     'C' = BranchChart
   )
-)
-WITH PARAMETERS (@region = 'All');
+);
 ```
 
 ---
@@ -397,10 +395,11 @@ WITH PARAMETERS (@region = 'All');
 
 **Pattern**: A slicer on Page 1 sets a parameter that Page 2 also reads. Navigation tabs let users switch pages while the filter persists. Both pages share the same `@region` parameter.
 
-**Demonstrates**: `CREATE NAVIGATION`, multi-page `WITH PARAMETERS`, cross-page parameter sharing, `ORIENTATION = HORIZONTAL`.
+**Demonstrates**: `CREATE NAVIGATION`, multi-page `DECLARE @x ... INPUT` parameters, cross-page parameter sharing, `ORIENTATION = HORIZONTAL`.
 
 ```sql
 SET REPORT TITLE = 'Multi-Page Sales Dashboard';
+DECLARE @region VARCHAR INPUT = 'All';
 
 -- ── Inline sample data ────────────────────────────────────────────────────
 SELECT 'Jan' AS month, 'North' AS region, 52000 AS revenue, 420 AS units INTO #sales
@@ -478,8 +477,7 @@ CREATE PAGE Overview AS DASHBOARD (
     'B' = RegionFilter,
     'C' = RevByRegion
   )
-)
-WITH PARAMETERS (@region = 'All');
+);
 
 CREATE PAGE Trends AS DASHBOARD (
   STRUCTURE = 'A B',
@@ -487,8 +485,7 @@ CREATE PAGE Trends AS DASHBOARD (
     'A' = RevTrend,
     'B' = UnitTrend
   )
-)
-WITH PARAMETERS (@region = 'All');
+);
 
 -- ── Navigation ────────────────────────────────────────────────────────────
 CREATE NAVIGATION MainNav AS TAB (
@@ -510,6 +507,7 @@ CREATE NAVIGATION MainNav AS TAB (
 
 ```sql
 SET REPORT TITLE = 'Warehouse Inventory Monitor';
+DECLARE @category VARCHAR INPUT = 'All';
 
 -- ── Inline sample data ────────────────────────────────────────────────────
 SELECT 'A' AS bin, 'Shelf 1' AS shelf, 'Electronics' AS category, 'Widget Pro'  AS item, 45 AS qty, 20 AS reorder INTO #inv
@@ -573,8 +571,7 @@ CREATE PAGE Inventory AS DASHBOARD (
     'C' = CategoryFilter,
     'D' = LowStockTable
   )
-)
-WITH PARAMETERS (@category = 'All');
+);
 ```
 
 ---
@@ -727,6 +724,9 @@ CREATE PAGE Combo AS DASHBOARD (
 
 ```sql
 SET REPORT TITLE = 'Product Catalog Browser';
+DECLARE @category  VARCHAR INPUT = 'All';
+DECLARE @search    VARCHAR INPUT = '';
+DECLARE @max_price DECIMAL INPUT = 500;
 
 -- ── Inline sample data ────────────────────────────────────────────────────
 SELECT 'Electronics' AS category, 'Widget Pro 2000' AS name, 299.99 AS price, 4.8 AS rating INTO #products
@@ -795,11 +795,6 @@ CREATE PAGE Catalog AS DASHBOARD (
     'D' = ProductTable,
     'E' = PriceByCategory
   )
-)
-WITH PARAMETERS (
-  @category  AS VARCHAR DEFAULT 'All',
-  @search    AS VARCHAR DEFAULT '',
-  @max_price AS NUMBER  DEFAULT '500'
 );
 ```
 
@@ -813,7 +808,7 @@ WITH PARAMETERS (
 
 **Slicer and MULTISELECT require a SOURCE** — the source rows become the dropdown options. Include an `'All'` row via `UNION ALL SELECT 'All' ...` if you want a reset option.
 
-**Page parameters are initialized at load time** — `WITH PARAMETERS` default values run immediately, so every visual has valid data on first render even before any filter interaction.
+**Page parameters are initialized at load time** — a parameter's `DECLARE @x ... INPUT = <default>` value applies immediately, so every visual has valid data on first render even before any filter interaction.
 
 **TITLE on visuals vs OPTIONS** — the top-level `TITLE = '...'` clause is preferred over `OPTIONS (TITLE = '...')`. Both work but the clause form is cleaner.
 
