@@ -1,5 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Email;
@@ -23,6 +27,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
     [Trait("Category", "Integration")]
     [Trait("Connector", "SMTP")]
     [Trait("CertificationClass", "DockerRealIntegration")]
+    [Trait("CompatBreak", "0.10")]
     public class SmtpIntegrationTests
     {
         private readonly SmtpFixture _smtp;
@@ -113,6 +118,44 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
             int afterCount = await _smtp.GetMessageCountAsync();
             Assert.Equal(beforeCount + 2, afterCount);
+        }
+
+        [Fact]
+        public async Task Send_CsvAttachment_UsesExtensionAppropriateMimeType()
+        {
+            var attachmentPath = Path.Combine(Path.GetTempPath(), $"smtp_attachment_{Guid.NewGuid():N}.csv");
+            await File.WriteAllTextAsync(attachmentPath, "Name,Value\nTest,1\n");
+            var subject = $"MIME attachment {Guid.NewGuid():N}";
+
+            try
+            {
+                var ds = MakeDataSource();
+                var table = new DataTable();
+                table.SetColumns(new[] { "To", "From", "Subject", "Body", "Attachments" });
+                var row = table.NewRow();
+                row["To"] = "recipient@example.com";
+                row["From"] = "sender@etl-sql.test";
+                row["Subject"] = subject;
+                row["Body"] = "body";
+                row["Attachments"] = attachmentPath;
+                await table.AddRowAsync(row);
+
+                await ds.WriteBatches(new[] { table }.ToAsyncEnumerable());
+
+                var messages = (await _smtp.GetMessagesAsync()).GetProperty("messages");
+                var message = messages.EnumerateArray().Single(m => m.GetProperty("Subject").GetString() == subject);
+                var messageId = message.GetProperty("ID").GetString()!;
+                using var http = new HttpClient();
+                var detailJson = await http.GetStringAsync($"http://localhost:{_smtp.ApiPort}/api/v1/message/{messageId}");
+                var detail = JsonDocument.Parse(detailJson).RootElement;
+                var attachment = Assert.Single(detail.GetProperty("Attachments").EnumerateArray().ToList());
+
+                Assert.Equal("text/csv", attachment.GetProperty("ContentType").GetString());
+            }
+            finally
+            {
+                File.Delete(attachmentPath);
+            }
         }
 
         // ── 3. Connection refused — wraps as ExecutionException ───────────────────

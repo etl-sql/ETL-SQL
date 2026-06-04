@@ -128,7 +128,8 @@ namespace ETL_SQL.Connectors.Email
                             await fs.CopyToAsync(ms);
                             ms.Position = 0;
 
-                            var attachment = new MimePart()
+                            // COMPAT_BREAK: 0.10
+                            var attachment = new MimePart(MimeTypes.GetMimeType(resolvedPath))
                             {
                                 Content = new MimeContent(ms),
                                 ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),

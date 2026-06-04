@@ -200,11 +200,11 @@ namespace ETL_SQL.ReportPortal.Tests
         }
 
         [Theory]
-        [InlineData("CSV", "csv")]
-        [InlineData("Markdown", "md")]
-        [InlineData("PDF", "pdf")]
-        [InlineData("Link", null)]
-        public async Task Verify_Subscription_E2E_Delivery(string format, string? expectedExtension)
+        [InlineData("CSV", "csv", "text/csv")]
+        [InlineData("Markdown", "md", "text/markdown")]
+        [InlineData("PDF", "pdf", "application/pdf")]
+        [InlineData("Link", null, null)]
+        public async Task Verify_Subscription_E2E_Delivery(string format, string? expectedExtension, string? expectedMimeType)
         {
             using var portalFactory = new PortalWebFactory();
             using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
@@ -286,6 +286,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
 
                 var filename = attachment.GetProperty("FileName").GetString()!;
                 Assert.Contains(expectedExtension, filename);
+                Assert.Equal(expectedMimeType, attachment.GetProperty("ContentType").GetString());
 
                 var partId = attachment.GetProperty("PartID").GetString()!;
                 var fileBytes = await http.GetByteArrayAsync($"http://localhost:{_smtp.ApiPort}/api/v1/message/{msgId}/part/{partId}");
@@ -606,6 +607,67 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var subEntry = Assert.Single(portalHistory);
             Assert.Equal("FAILURE", subEntry.Status);
             Assert.Contains("report file not found", subEntry.ErrorMessage);
+
+            var subGetRes = await AuthGet(portalClient, token, $"/api/subscriptions/{subId}");
+            var subBody = await subGetRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            Assert.Equal(1, subBody!["failCount"]!.GetValue<int>());
+
+            var auditRes = await AuthGet(portalClient, token, "/api/admin/audit?action=SUBSCRIPTION_DELIVERY_FAILED");
+            Assert.Equal(HttpStatusCode.OK, auditRes.StatusCode);
+            var auditBody = await auditRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var auditItems = auditBody!["items"]!.AsArray();
+            var auditEntry = Assert.Single(auditItems);
+            Assert.Equal(subId.ToString(), auditEntry!["resourceId"]!.GetValue<string>());
+            Assert.Contains("Job history entry", auditEntry["detail"]!.GetValue<string>());
+            Assert.DoesNotContain("report file not found", auditEntry["detail"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+
+            var metricsRes = await AuthGet(portalClient, token, "/api/admin/metrics/usage");
+            Assert.Equal(HttpStatusCode.OK, metricsRes.StatusCode);
+            var metricsBody = await metricsRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            Assert.Equal(1, metricsBody!["subscriptionDeliveryFailureCount"]!.GetValue<int>());
+        }
+
+        [Fact]
+        public async Task Verify_Subscription_History_When_Orchestrator_Db_Is_Unavailable()
+        {
+            using var portalFactory = new PortalWebFactory();
+            var orchDbPath = Path.Combine(portalFactory.TempDir, "etlsql.db");
+            File.Delete(orchDbPath);
+            using var portalClient = portalFactory.CreateClient();
+
+            var token = await GetAdminTokenAsync(portalClient);
+            var reportScript = @"
+SET REPORT TITLE = 'Unavailable Orchestrator Report';
+SELECT 1 AS Val INTO #data;
+CREATE VISUAL SalesTable AS TABLE (SOURCE = #data, MAPPINGS (Val = Val));
+CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
+";
+            var (_, reportId, smtpAlias, _) = await SetupReportAndSmtpAsync(portalClient, token, portalFactory.TempDir, reportScript);
+            var db = portalFactory.Services.GetRequiredService<PortalDbContext>();
+            var subscription = new Subscription
+            {
+                ReportId = reportId,
+                UserId = 1,
+                Schedule = "Daily",
+                Format = SubscriptionFormat.CSV,
+                SmtpAlias = smtpAlias,
+                Recipients = "orchestrator-unavailable@test.local",
+                IsActive = true
+            };
+            db.Subscriptions.Add(subscription);
+            await db.SaveChangesAsync();
+            Assert.False(File.Exists(orchDbPath));
+
+            var historyRes = await AuthGet(portalClient, token, $"/api/subscriptions/{subscription.Id}/history");
+            Assert.Equal(HttpStatusCode.OK, historyRes.StatusCode);
+            var history = await historyRes.Content.ReadFromJsonAsync<List<JobHistoryEntry>>(_json);
+            Assert.NotNull(history);
+            Assert.Empty(history);
+            Assert.False(File.Exists(orchDbPath));
+
+            var metricsRes = await AuthGet(portalClient, token, "/api/admin/metrics/usage");
+            Assert.Equal(HttpStatusCode.OK, metricsRes.StatusCode);
+            Assert.False(File.Exists(orchDbPath));
         }
 
         [Fact]

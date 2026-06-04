@@ -20,6 +20,7 @@ public class SubscriptionsController(
     PortalConfig           config,
     OrchestratorDbLocator  dbLocator,
     AuditService           audit,
+    SubscriptionDeliveryStatusService deliveryStatus,
     SmtpPasswordProtector  pwdProtector) : ControllerBase
 {
     private const string SubPrefix = "SUB:";
@@ -241,14 +242,7 @@ public class SubscriptionsController(
         if (sub is null) return NotFound();
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
 
-        var orchDbPath = dbLocator.Resolve();
-        if (orchDbPath is null)
-            return Ok(Array.Empty<object>());
-
-        var jobName = $"{SubPrefix}{sub.Id}:{sub.Report?.Name}";
-        var store   = new SQLiteJobHistoryStore(orchDbPath);
-        await store.InitializeAsync();
-        var history = await store.GetHistoryAsync(jobName, limit);
+        var history = await deliveryStatus.SynchronizeAsync(sub, limit);
         return Ok(history);
     }
 

@@ -15,6 +15,11 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.10.0 — Connector: SMTP attachment MIME types
+- **What changed**: SMTP attachments now use the MIME type inferred from their file extension instead of the generic default content type.
+- **Who is affected**: Scripts that send attachments through an `SMTP` connection and consumers that inspect attachment MIME metadata.
+- **Migration**: Accept the extension-appropriate MIME type, such as `text/csv`, `text/markdown`, or `application/pdf`.
+
 ## v1.0.0 (baseline)
 
 All syntax and behavior documented in:

@@ -19,6 +19,7 @@ public class AdminController(
     PortalDbContext          db,
     AuditService             audit,
     PortalConfig             config,
+    SubscriptionDeliveryStatusService deliveryStatus,
     IHostApplicationLifetime lifetime) : ControllerBase
 {
     private int CurrentUserId =>
@@ -538,6 +539,7 @@ public class AdminController(
     {
         days = Math.Clamp(days, 1, 366);
         var since = DateTime.UtcNow.AddDays(-days);
+        await deliveryStatus.SynchronizeAllAsync();
 
         var viewLogs = await db.AuditLogs
             .Where(a => a.Action == "VIEW_SNAPSHOT"
