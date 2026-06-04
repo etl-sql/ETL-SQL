@@ -63,8 +63,11 @@ Run the CLI command `gen-script` to compile the JSON schema definition:
 etl-sql gen-script --schema ./my_spec.json --output ./Scripts/load_feed.etlsql
 ```
 
+Before writing any `.etlsql` file, `gen-script` validates the JSON against the specification contract. The machine-readable contract is checked in at [spec_pipeline.schema.json](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Reference/spec_pipeline.schema.json). If the AI output is missing required fields, mixes root-level `schema` with `datasets`, has unsupported enum values, duplicate column names, invalid numeric bounds, or a malformed `validation_regex`, the command prints the validation errors and stops.
+
 The command generates a pre-formatted ETL-SQL script containing:
 *   Header blocks with metadata descriptions, owner information, and security classifications.
+*   Source layout notes for file format, headers, skipped rows, null tokens, keys, duplicate policy, fixed-width positions, date formats, and allowed values when the vendor spec provides them.
 *   Outbound connection declarations (e.g. `CREATE CONNECTION ... AS FLATFILE`) mapped from the spec.
 *   Cleansing and casting statements (e.g. `TRY_CAST`, `SUBSTRING`) for every target column.
 *   Lineage tagging declarations using `TAG` (see [Lineage.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Lineage.md)).
@@ -95,6 +98,8 @@ SELECT
 INTO #staging
 FROM src_db.public.customers c;
 ```
+
+If the JSON includes `source` metadata, the generated placeholder includes the inferred source connection and comments for the vendor layout. Treat those comments as a review checklist: confirm header rows, skipped rows, null tokens, fixed-width positions, date formats, allowed values, and duplicate rules before running the pipeline.
 
 ---
 

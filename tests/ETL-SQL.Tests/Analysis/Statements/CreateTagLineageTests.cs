@@ -38,6 +38,26 @@ namespace ETL_SQL.Tests.Analysis.Statements
         }
 
         [Fact]
+        public void ParseTag_LegacyTableSyntax_WithMultipleTags()
+        {
+            var stmt = TestHelpers.Parse(@"
+                TAG #raw WITH (
+                    source_system = 'SourceDB',
+                    classification = 'confidential',
+                    owner = 'finance_team',
+                    load_pattern = 'incremental'
+                );")
+                .Statements.OfType<CreateTagStatement>().Single();
+
+            Assert.Null(stmt.ColumnName);
+            Assert.Equal(4, stmt.Tags.Count);
+            Assert.True(stmt.Tags.ContainsKey("source_system"));
+            Assert.True(stmt.Tags.ContainsKey("classification"));
+            Assert.True(stmt.Tags.ContainsKey("owner"));
+            Assert.True(stmt.Tags.ContainsKey("load_pattern"));
+        }
+
+        [Fact]
         public void ParseCreateTag_VariableNames_ParseAsExpressions()
         {
             var stmt = TestHelpers.Parse("CREATE TAG FOR TABLE @r.tbl COLUMN @r.col (d = @r.descr);")
@@ -79,6 +99,25 @@ namespace ETL_SQL.Tests.Analysis.Statements
             var meta = eval.LineageTracker.GetColumnMetadata("MyTable", "Amount");
             Assert.Equal("Sales amount", meta["d"]);
             Assert.Equal("Finance", meta["owner"]);
+        }
+
+        [Fact]
+        public async Task Tag_SeedsTableMetadata()
+        {
+            var eval = NewEval();
+            await TestHelpers.Execute(eval, @"
+                TAG #raw WITH (
+                    source_system = 'SourceDB',
+                    classification = 'confidential',
+                    owner = 'finance_team',
+                    load_pattern = 'incremental'
+                );");
+
+            var meta = eval.LineageTracker.GetTableMetadata("#raw");
+            Assert.Equal("SourceDB", meta["source_system"]);
+            Assert.Equal("confidential", meta["classification"]);
+            Assert.Equal("finance_team", meta["owner"]);
+            Assert.Equal("incremental", meta["load_pattern"]);
         }
 
         [Fact]

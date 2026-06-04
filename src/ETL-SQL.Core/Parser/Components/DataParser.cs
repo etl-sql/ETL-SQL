@@ -198,6 +198,19 @@ namespace ETL_SQL.Core.Parser.Components
             throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, VIEW, TABLE, JOB, or REPORT object after ALTER", _parser.Current.Line, _parser.Current.Column);
         }
 
+        /// <summary>TAG &lt;table&gt; [COLUMN &lt;col&gt;] WITH (key = expr, ...)</summary>
+        public Statement ParseTag(Token startToken)
+        {
+            var tableExpr = ParseLineageNameExpression(tableLevel: true);
+
+            Expression? columnExpr = null;
+            if (Match(TokenType.COLUMN)) columnExpr = ParseLineageNameExpression(tableLevel: false);
+
+            Consume(TokenType.WITH, "Expected WITH after TAG target");
+            var tags = ParseTagAssignments(startToken, "TAG");
+            return new CreateTagStatement(tableExpr, columnExpr, tags) { Line = startToken.Line, Column = startToken.Column };
+        }
+
         /// <summary>
         /// ALTER JOB &lt;name&gt; [ON SCHEDULE EVERY n unit [AT 'time']] [AS &lt;statement&gt;];
         /// At least one of schedule or script must be provided.
@@ -1020,22 +1033,28 @@ namespace ETL_SQL.Core.Parser.Components
             Expression? columnExpr = null;
             if (Match(TokenType.COLUMN)) columnExpr = ParseLineageNameExpression(tableLevel: false);
 
-            Consume(TokenType.LPAREN, "Expected '(' to begin the tag list in CREATE TAG");
+            var tags = ParseTagAssignments(startToken, "CREATE TAG");
+            return new CreateTagStatement(tableExpr, columnExpr, tags) { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        private Dictionary<string, Expression> ParseTagAssignments(Token startToken, string statementName)
+        {
+            Consume(TokenType.LPAREN, $"Expected '(' to begin the tag list in {statementName}");
             var tags = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
             while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
             {
                 string key = Advance().Value;
-                Consume(TokenType.EQUALS, "Expected '=' after tag name in CREATE TAG");
+                Consume(TokenType.EQUALS, $"Expected '=' after tag name in {statementName}");
                 tags[key] = ParseExpression();
                 if (!Match(TokenType.COMMA)) break;
             }
-            Consume(TokenType.RPAREN, "Expected ')' to close CREATE TAG");
-            Consume(TokenType.SEMICOLON, "Expected ';' at the end of CREATE TAG");
+            Consume(TokenType.RPAREN, $"Expected ')' to close {statementName}");
+            Consume(TokenType.SEMICOLON, $"Expected ';' at the end of {statementName}");
 
             if (tags.Count == 0)
-                throw new SyntaxException("CREATE TAG requires at least one 'key = value' assignment.", startToken.Line, startToken.Column);
+                throw new SyntaxException($"{statementName} requires at least one 'key = value' assignment.", startToken.Line, startToken.Column);
 
-            return new CreateTagStatement(tableExpr, columnExpr, tags) { Line = startToken.Line, Column = startToken.Column };
+            return tags;
         }
 
         /// <summary>CREATE LINEAGE FOR TABLE &lt;table&gt; FROM &lt;openlineage-json file or string&gt;</summary>

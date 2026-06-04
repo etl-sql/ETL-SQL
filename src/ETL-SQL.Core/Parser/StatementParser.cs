@@ -38,6 +38,7 @@ namespace ETL_SQL.Core.Parser
         {
             _dispatchMap[TokenType.WITH]          = ParseStatementWithCte;
             _dispatchMap[TokenType.CREATE]        = () => { var t = _parser.Previous; return DataParser.ParseCreate(t); };
+            _dispatchMap[TokenType.TAG]           = () => { var t = _parser.Previous; return DataParser.ParseTag(t); };
             _dispatchMap[TokenType.ALTER]         = () => { var t = _parser.Previous; return DataParser.ParseAlter(t); };
             _dispatchMap[TokenType.EXPLAIN]       = () => { var t = _parser.Previous; return SystemParser.ParseExplain(t); };
             _dispatchMap[TokenType.DROP]          = () => { var t = _parser.Previous; return DataParser.ParseDrop(t); };

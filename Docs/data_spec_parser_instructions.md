@@ -12,8 +12,12 @@ Do not write any markdown descriptions, preambles, or explanations. Return only 
 
 You must output a single, valid JSON object. 
 
+The machine-readable contract is maintained at `Docs/Reference/spec_pipeline.schema.json`. Do not include comments, markdown fences, or fields from both shapes in the same output.
+
 *   **For a Single-Dataset Specification:** You can place `destination` and `schema` directly at the root.
 *   **For a Multi-Dataset Specification (Multiple Files/Sheets):** Omit the root-level `destination` and `schema` keys, and instead define a list under `datasets`.
+
+Single-dataset shape:
 
 ```json
 {
@@ -23,7 +27,23 @@ You must output a single, valid JSON object.
     "classification": "string (public | internal | confidential | restricted)",
     "owner": "string (steward, team, or email responsible for the feed, if mentioned)"
   },
-  // OPTIONAL (Omit if datasets list is provided):
+  "source": {
+    "connector_type": "string (optional: FLATFILE | MSSQL | POSTGRES | MYSQL | ORACLE | SNOWFLAKE | BIGQUERY)",
+    "format": "string (optional: CSV | TSV | PIPE | EXCEL | JSON | XML | PARQUET | AVRO | DB_TABLE)",
+    "path": "string (optional: inbound file path, folder, table name, or source alias if mentioned)",
+    "delimiter": "string (optional: comma | tab | pipe | none)",
+    "text_qualifier": "string (optional: doublequote | singlequote | none)",
+    "encoding": "string (optional: UTF8 | ANSI | ASCII | UNICODE)",
+    "has_header": "boolean (optional)",
+    "header_rows": "integer (optional, number of header rows)",
+    "skip_rows": "integer (optional, rows before data begins)",
+    "sheet_name": "string (optional, Excel sheet or named range)",
+    "record_terminator": "string (optional, row delimiter)",
+    "null_tokens": ["array of strings (optional, values meaning null such as blank, NULL, N/A)"],
+    "primary_keys": ["array of strings (optional, business key columns if specified)"],
+    "duplicate_policy": "string (optional: allow | first_wins | last_wins | reject)",
+    "reject_policy": "string (optional: fail_batch | quarantine | warn)"
+  },
   "destination": {
     "connector_type": "string (FLATFILE | MSSQL | POSTGRES | MYSQL | ORACLE | SNOWFLAKE | BIGQUERY)",
     "format": "string (CSV | TSV | PIPE | EXCEL | JSON | XML | PARQUET | AVRO | DB_TABLE)",
@@ -36,6 +56,9 @@ You must output a single, valid JSON object.
   "schema": [
     {
       "column_name": "string (snake_case column name)",
+      "source_name": "string (optional, exact vendor/source field name if different)",
+      "start_position": "integer (optional, 1-based fixed-width start position)",
+      "width": "integer (optional, fixed-width field width)",
       "type_family": "string (INT | DECIMAL | VARCHAR | DATE | DATETIME | BIT)",
       "max_length": "integer (optional, maximum characters for string types)",
       "precision": "integer (optional, decimal precision)",
@@ -43,15 +66,43 @@ You must output a single, valid JSON object.
       "nullable": "boolean (true if column can be null or is optional; false if required/mandatory)",
       "description": "string (description of the field's purpose)",
       "validation_regex": "string (optional, regular expression to validate formatting rules)",
+      "date_format": "string (optional, exact vendor date/time format such as MM/dd/yyyy)",
+      "null_tokens": ["array of strings (optional, column-specific null tokens)"],
+      "allowed_values": ["array of strings (optional, enum/domain values from the spec)"],
+      "is_key": "boolean (optional, true if the field is part of the business key)",
       "tags": ["array of strings (pii | phi | pci | sensitive | etc. if column contains personal or sensitive info)"],
       "mapping_type": "string (optional: lookup | aggregation | constant | flat)",
       "mapping_rule": "string (optional: join lookup explanation, aggregation logic, or constant value)"
     }
-  ],
-  // OPTIONAL (Use for multi-file specifications, omit destination and schema at the root):
+  ]
+}
+```
+
+Multi-dataset shape:
+
+```json
+{
+  "pipeline_name": "string (snake_case representation of the feed name)",
+  "metadata": {
+    "description": "string (brief summary of what the feed represents)",
+    "classification": "string (public | internal | confidential | restricted)",
+    "owner": "string (steward, team, or email responsible for the feed, if mentioned)"
+  },
   "datasets": [
     {
       "name": "string (snake_case name of the sub-file or sheet)",
+      "source": {
+        "connector_type": "string (optional: FLATFILE | MSSQL | ...)",
+        "format": "string (optional: CSV | TSV | EXCEL | ...)",
+        "path": "string (optional: inbound path, sheet, table, or alias)",
+        "delimiter": "string (optional: comma | tab | pipe | none)",
+        "header_rows": "integer (optional)",
+        "skip_rows": "integer (optional)",
+        "null_tokens": ["strings"],
+        "primary_keys": ["strings"],
+        "duplicate_policy": "string (optional: allow | first_wins | last_wins | reject)",
+        "reject_policy": "string (optional: fail_batch | quarantine | warn)"
+      },
       "destination": {
         "connector_type": "string (FLATFILE | MSSQL | ...)",
         "format": "string (CSV | TSV | ...)",
@@ -64,6 +115,9 @@ You must output a single, valid JSON object.
       "schema": [
         {
           "column_name": "string (snake_case column name)",
+          "source_name": "string",
+          "start_position": "integer",
+          "width": "integer",
           "type_family": "string (INT | DECIMAL | VARCHAR | DATE | DATETIME | BIT)",
           "max_length": "integer",
           "precision": "integer",
@@ -71,6 +125,10 @@ You must output a single, valid JSON object.
           "nullable": "boolean",
           "description": "string",
           "validation_regex": "string",
+          "date_format": "string",
+          "null_tokens": ["strings"],
+          "allowed_values": ["strings"],
+          "is_key": "boolean",
           "tags": ["strings"],
           "mapping_type": "string (lookup | aggregation | constant | flat)",
           "mapping_rule": "string"
@@ -89,6 +147,19 @@ Map loose specification type names to ETL-SQL standard type families:
 *   Map `"Float"`, `"Double"`, `"Amount"`, `"Currency"`, `"Decimal"`, `"Numeric"`, `"Real"` to **`DECIMAL`**.
 *   Map `"Yes/No"`, `"True/False"`, `"Flag"`, `"Logical"`, `"Boolean"` to **`BIT`**.
 *   Map `"Date"`, `"Time"`, `"Timestamp"`, `"Datetime"` to **`DATE`** or **`DATETIME`**.
+
+### 2.1 SOURCE LAYOUT EXTRACTION RULES
+
+Extract source layout fields only when the specification states or strongly implies them. Omit unknown optional fields rather than guessing.
+
+*   For delimited files, populate `source.format`, `source.delimiter`, `source.text_qualifier`, `source.has_header`, `source.header_rows`, and `source.skip_rows` when present.
+*   For Excel workbooks, populate `source.format = "EXCEL"` and `source.sheet_name` when the sheet, tab, range, or worksheet name is listed.
+*   For fixed-width files, populate each column's `start_position` and `width`. Use 1-based positions. If the spec lists end positions instead of widths, calculate `width = end - start + 1`.
+*   For date/time fields, put the exact vendor format in `date_format` (for example `MM/dd/yyyy`, `yyyyMMdd`, or `yyyy-MM-dd HH:mm:ss`).
+*   For values that represent missing data, populate dataset-level `source.null_tokens` and column-level `null_tokens` when a rule applies only to one field.
+*   For enum/domain constraints such as "Y/N", "A/I", or a listed set of status codes, populate `allowed_values`.
+*   For primary keys, unique identifiers, natural keys, or duplicate handling instructions, populate `is_key`, `source.primary_keys`, and `source.duplicate_policy`.
+*   For reject/error handling instructions, populate `source.reject_policy`.
 
 ### 3. GOVERNANCE & SENSITIVITY TAGGING RULES
 

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 
@@ -29,13 +30,25 @@ namespace ETL_SQL.App
                 {
                     PropertyNameCaseInsensitive = true,
                     ReadCommentHandling = JsonCommentHandling.Skip,
-                    AllowTrailingCommas = true
+                    AllowTrailingCommas = true,
+                    UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
                 };
 
                 var spec = JsonSerializer.Deserialize<SpecPipeline>(jsonContent, options);
                 if (spec == null)
                 {
                     logger.WriteLine("Failed to deserialize the JSON schema specification.", ConsoleColor.Red);
+                    return 1;
+                }
+
+                var validationErrors = SpecPipelineValidator.Validate(spec);
+                if (validationErrors.Count > 0)
+                {
+                    logger.WriteLine("Schema JSON does not match the ETL-SQL specification contract:", ConsoleColor.Red);
+                    foreach (var error in validationErrors)
+                    {
+                        logger.WriteLine($"  - {error}", ConsoleColor.Red);
+                    }
                     return 1;
                 }
 
@@ -68,6 +81,7 @@ namespace ETL_SQL.App
                         {
                             PipelineName = dsName,
                             Metadata = spec.Metadata,
+                            Source = ds.Source,
                             Destination = ds.Destination,
                             Schema = ds.Schema
                         };
@@ -240,8 +254,9 @@ namespace ETL_SQL.App
             sb.AppendLine("-- =========================================================================");
             sb.AppendLine("-- [USER TODO]: Define your source connection and query into #staging below.");
             sb.AppendLine("-- All columns must match the names defined in the schema validation below.");
+            WriteSourceContractComments(sb, spec);
             sb.AppendLine("/*");
-            sb.AppendLine("CREATE CONNECTION src_db AS POSTGRES(HOST='...', DATABASE='...', USER='...', PASSWORD='...');");
+            WriteSourceConnectionTemplate(sb, spec.Source);
             sb.AppendLine("SELECT ");
             if (spec.Schema != null && spec.Schema.Count > 0)
             {
@@ -249,11 +264,13 @@ namespace ETL_SQL.App
                 {
                     var col = spec.Schema[i];
                     var comma = (i == spec.Schema.Count - 1) ? "" : ",";
-                    sb.AppendLine($"    raw_{col.ColumnName,-20} AS {col.ColumnName}{comma}");
+                    var sourceName = string.IsNullOrWhiteSpace(col.SourceName) ? $"raw_{col.ColumnName}" : col.SourceName;
+                    var extractionNote = GetExtractionNote(col);
+                    sb.AppendLine($"    {sourceName,-28} AS {col.ColumnName}{extractionNote}{comma}");
                 }
             }
             sb.AppendLine("INTO #staging");
-            sb.AppendLine("FROM src_db.public.raw_table;");
+            sb.AppendLine(GetSourceFromTemplate(spec.Source));
             sb.AppendLine("*/");
             sb.AppendLine();
 
@@ -351,6 +368,126 @@ namespace ETL_SQL.App
             return sb.ToString();
         }
 
+        private static void WriteSourceContractComments(StringBuilder sb, SpecPipeline spec)
+        {
+            if (spec.Source == null && spec.Schema?.Any(HasColumnSourceMetadata) != true) return;
+
+            sb.AppendLine("-- Source layout captured from the vendor specification:");
+            if (spec.Source != null)
+            {
+                AppendCommentIfPresent(sb, "source connector", spec.Source.ConnectorType);
+                AppendCommentIfPresent(sb, "source format", spec.Source.Format);
+                AppendCommentIfPresent(sb, "source path", spec.Source.Path);
+                AppendCommentIfPresent(sb, "source sheet", spec.Source.SheetName);
+                AppendCommentIfPresent(sb, "header rows", spec.Source.HeaderRows?.ToString());
+                AppendCommentIfPresent(sb, "skip rows", spec.Source.SkipRows?.ToString());
+                AppendCommentIfPresent(sb, "record terminator", spec.Source.RecordTerminator);
+                AppendCommentIfPresent(sb, "null tokens", spec.Source.NullTokens == null ? null : string.Join(", ", spec.Source.NullTokens));
+                AppendCommentIfPresent(sb, "duplicate policy", spec.Source.DuplicatePolicy);
+                AppendCommentIfPresent(sb, "reject policy", spec.Source.RejectPolicy);
+                AppendCommentIfPresent(sb, "primary keys", spec.Source.PrimaryKeys == null ? null : string.Join(", ", spec.Source.PrimaryKeys));
+            }
+
+            if (spec.Schema != null)
+            {
+                foreach (var column in spec.Schema.Where(HasColumnSourceMetadata))
+                {
+                    var details = new List<string>();
+                    AddDetail(details, "source", column.SourceName);
+                    AddDetail(details, "position", column.StartPosition?.ToString());
+                    AddDetail(details, "width", column.Width?.ToString());
+                    AddDetail(details, "date_format", column.DateFormat);
+                    AddDetail(details, "null_tokens", column.NullTokens == null ? null : string.Join("|", column.NullTokens));
+                    AddDetail(details, "allowed_values", column.AllowedValues == null ? null : string.Join("|", column.AllowedValues));
+                    AddDetail(details, "key", column.IsKey.HasValue ? column.IsKey.Value.ToString().ToLowerInvariant() : null);
+                    if (details.Count > 0)
+                    {
+                        sb.AppendLine($"--   column {column.ColumnName}: {string.Join("; ", details)}");
+                    }
+                }
+            }
+        }
+
+        private static void WriteSourceConnectionTemplate(StringBuilder sb, SpecSource? source)
+        {
+            if (source == null)
+            {
+                sb.AppendLine("CREATE CONNECTION src_db AS POSTGRES(HOST='...', DATABASE='...', USER='...', PASSWORD='...');");
+                return;
+            }
+
+            var connectorType = source.ConnectorType ?? "FLATFILE";
+            if (connectorType.Equals("FLATFILE", StringComparison.OrdinalIgnoreCase))
+            {
+                var path = string.IsNullOrWhiteSpace(source.Path) ? "C:/Inbound/vendor_feed.csv" : source.Path;
+                sb.AppendLine("CREATE CONNECTION src_file AS FLATFILE(");
+                sb.AppendLine($"    PATH = '{EscapeSqlString(path)}',");
+                sb.AppendLine($"    FORMAT = '{EscapeSqlString(source.Format ?? "CSV")}',");
+                if (!string.IsNullOrWhiteSpace(source.Delimiter))
+                    sb.AppendLine($"    DELIMITER = '{EscapeSqlString(ToDelimiterLiteral(source.Delimiter))}',");
+                if (source.HasHeader.HasValue)
+                    sb.AppendLine($"    HAS_HEADER = {(source.HasHeader.Value ? "TRUE" : "FALSE")},");
+                if (!string.IsNullOrWhiteSpace(source.Encoding))
+                    sb.AppendLine($"    ENCODING = '{EscapeSqlString(source.Encoding)}',");
+                sb.AppendLine("    -- Review header_rows, skip_rows, null_tokens, and fixed-width layout before running.");
+                sb.AppendLine(");");
+                return;
+            }
+
+            sb.AppendLine($"CREATE CONNECTION src_db AS {connectorType}(SERVER='...', DATABASE='...', USER='...', PASSWORD='...');");
+        }
+
+        private static string GetSourceFromTemplate(SpecSource? source)
+        {
+            if (source?.ConnectorType?.Equals("FLATFILE", StringComparison.OrdinalIgnoreCase) == true)
+                return "FROM src_file;";
+
+            return "FROM src_db.public.raw_table;";
+        }
+
+        private static string GetExtractionNote(SpecColumn col)
+        {
+            var notes = new List<string>();
+            AddDetail(notes, "pos", col.StartPosition?.ToString());
+            AddDetail(notes, "width", col.Width?.ToString());
+            AddDetail(notes, "date", col.DateFormat);
+            if (notes.Count == 0) return "";
+            return $" /* {string.Join(", ", notes)} */";
+        }
+
+        private static bool HasColumnSourceMetadata(SpecColumn col)
+            => !string.IsNullOrWhiteSpace(col.SourceName)
+               || col.StartPosition.HasValue
+               || col.Width.HasValue
+               || !string.IsNullOrWhiteSpace(col.DateFormat)
+               || col.NullTokens is { Count: > 0 }
+               || col.AllowedValues is { Count: > 0 }
+               || col.IsKey.HasValue;
+
+        private static void AppendCommentIfPresent(StringBuilder sb, string label, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                sb.AppendLine($"--   {label}: {value}");
+        }
+
+        private static void AddDetail(List<string> details, string label, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                details.Add($"{label}={value}");
+        }
+
+        private static string ToDelimiterLiteral(string delimiter)
+            => delimiter.ToLowerInvariant() switch
+            {
+                "comma" => ",",
+                "tab" => "\\t",
+                "pipe" => "|",
+                "none" => "",
+                _ => delimiter
+            };
+
+        private static string EscapeSqlString(string value) => value.Replace("'", "''");
+
         private static string GetSqlTypeString(SpecColumn col)
         {
             var type = col.TypeFamily?.ToUpper() ?? "VARCHAR";
@@ -432,6 +569,258 @@ namespace ETL_SQL.App
         }
     }
 
+    internal static class SpecPipelineValidator
+    {
+        private static readonly HashSet<string> ConnectorTypes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "FLATFILE", "MSSQL", "POSTGRES", "MYSQL", "ORACLE", "SNOWFLAKE", "BIGQUERY"
+        };
+
+        private static readonly HashSet<string> Formats = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "CSV", "TSV", "PIPE", "EXCEL", "JSON", "XML", "PARQUET", "AVRO", "DB_TABLE"
+        };
+
+        private static readonly HashSet<string> Delimiters = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "comma", "tab", "pipe", "none"
+        };
+
+        private static readonly HashSet<string> Encodings = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "UTF8", "ANSI", "ASCII", "UNICODE"
+        };
+
+        private static readonly HashSet<string> TextQualifiers = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "doublequote", "singlequote", "none"
+        };
+
+        private static readonly HashSet<string> TypeFamilies = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "INT", "DECIMAL", "VARCHAR", "DATE", "DATETIME", "BIT"
+        };
+
+        private static readonly HashSet<string> MappingTypes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "lookup", "aggregation", "constant", "flat"
+        };
+
+        private static readonly HashSet<string> DuplicatePolicies = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "allow", "first_wins", "last_wins", "reject"
+        };
+
+        private static readonly HashSet<string> RejectPolicies = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "fail_batch", "quarantine", "warn"
+        };
+
+        public static List<string> Validate(SpecPipeline spec)
+        {
+            var errors = new List<string>();
+
+            RequireText(spec.PipelineName, "pipeline_name", errors);
+            if (spec.Metadata == null)
+            {
+                errors.Add("metadata is required.");
+            }
+            else
+            {
+                RequireText(spec.Metadata.Description, "metadata.description", errors);
+                RequireEnum(spec.Metadata.Classification, "metadata.classification", errors, new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "public", "internal", "confidential", "restricted"
+                });
+                RequireText(spec.Metadata.Owner, "metadata.owner", errors);
+            }
+
+            var hasDatasets = spec.Datasets is { Count: > 0 };
+            var hasRootDataset = spec.Source != null || spec.Destination != null || spec.Schema is { Count: > 0 };
+
+            if (hasDatasets && hasRootDataset)
+            {
+                errors.Add("Use either root-level destination/schema or datasets[], not both.");
+            }
+            else if (hasDatasets)
+            {
+                ValidateDatasets(spec.Datasets!, errors);
+            }
+            else
+            {
+                ValidateDatasetBody("root", spec.Source, spec.Destination, spec.Schema, errors);
+            }
+
+            return errors;
+        }
+
+        private static void ValidateDatasets(List<SpecDataset> datasets, List<string> errors)
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < datasets.Count; i++)
+            {
+                var dataset = datasets[i];
+                var path = $"datasets[{i}]";
+                RequireText(dataset.Name, $"{path}.name", errors);
+                if (!string.IsNullOrWhiteSpace(dataset.Name) && !names.Add(dataset.Name))
+                {
+                    errors.Add($"{path}.name duplicates another dataset name.");
+                }
+
+                ValidateDatasetBody(path, dataset.Source, dataset.Destination, dataset.Schema, errors);
+            }
+        }
+
+        private static void ValidateDatasetBody(string path, SpecSource? source, SpecDestination? destination, List<SpecColumn>? schema, List<string> errors)
+        {
+            if (source != null)
+            {
+                ValidateSource($"{path}.source", source, errors);
+            }
+
+            if (destination == null)
+            {
+                errors.Add($"{path}.destination is required.");
+            }
+            else
+            {
+                ValidateDestination($"{path}.destination", destination, errors);
+            }
+
+            if (schema == null || schema.Count == 0)
+            {
+                errors.Add($"{path}.schema must contain at least one column.");
+            }
+            else
+            {
+                ValidateColumns($"{path}.schema", schema, errors);
+            }
+        }
+
+        private static void ValidateSource(string path, SpecSource source, List<string> errors)
+        {
+            if (!string.IsNullOrWhiteSpace(source.ConnectorType))
+                RequireEnum(source.ConnectorType, $"{path}.connector_type", errors, ConnectorTypes);
+
+            if (!string.IsNullOrWhiteSpace(source.Format))
+                RequireEnum(source.Format, $"{path}.format", errors, Formats);
+
+            if (!string.IsNullOrWhiteSpace(source.Delimiter))
+                RequireEnum(source.Delimiter, $"{path}.delimiter", errors, Delimiters);
+
+            if (!string.IsNullOrWhiteSpace(source.TextQualifier))
+                RequireEnum(source.TextQualifier, $"{path}.text_qualifier", errors, TextQualifiers);
+
+            if (!string.IsNullOrWhiteSpace(source.Encoding))
+                RequireEnum(source.Encoding, $"{path}.encoding", errors, Encodings);
+
+            if (source.HeaderRows.HasValue && source.HeaderRows < 0)
+                errors.Add($"{path}.header_rows must be zero or greater.");
+
+            if (source.SkipRows.HasValue && source.SkipRows < 0)
+                errors.Add($"{path}.skip_rows must be zero or greater.");
+
+            if (!string.IsNullOrWhiteSpace(source.DuplicatePolicy))
+                RequireEnum(source.DuplicatePolicy, $"{path}.duplicate_policy", errors, DuplicatePolicies);
+
+            if (!string.IsNullOrWhiteSpace(source.RejectPolicy))
+                RequireEnum(source.RejectPolicy, $"{path}.reject_policy", errors, RejectPolicies);
+
+            if (source.PrimaryKeys is { Count: > 0 } && source.PrimaryKeys.Any(string.IsNullOrWhiteSpace))
+                errors.Add($"{path}.primary_keys cannot contain blank values.");
+        }
+
+        private static void ValidateDestination(string path, SpecDestination destination, List<string> errors)
+        {
+            RequireEnum(destination.ConnectorType, $"{path}.connector_type", errors, ConnectorTypes);
+            RequireEnum(destination.Format, $"{path}.format", errors, Formats);
+            RequireText(destination.Path, $"{path}.path", errors);
+
+            if (!string.IsNullOrWhiteSpace(destination.Delimiter))
+                RequireEnum(destination.Delimiter, $"{path}.delimiter", errors, Delimiters);
+
+            if (!string.IsNullOrWhiteSpace(destination.TextQualifier))
+                RequireEnum(destination.TextQualifier, $"{path}.text_qualifier", errors, TextQualifiers);
+
+            if (!string.IsNullOrWhiteSpace(destination.Encoding))
+                RequireEnum(destination.Encoding, $"{path}.encoding", errors, Encodings);
+        }
+
+        private static void ValidateColumns(string path, List<SpecColumn> columns, List<string> errors)
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < columns.Count; i++)
+            {
+                var column = columns[i];
+                var columnPath = $"{path}[{i}]";
+                RequireText(column.ColumnName, $"{columnPath}.column_name", errors);
+                if (!string.IsNullOrWhiteSpace(column.ColumnName) && !names.Add(column.ColumnName))
+                {
+                    errors.Add($"{columnPath}.column_name duplicates another column in the same schema.");
+                }
+
+                RequireEnum(column.TypeFamily, $"{columnPath}.type_family", errors, TypeFamilies);
+
+                if (column.MaxLength.HasValue && column.MaxLength <= 0)
+                    errors.Add($"{columnPath}.max_length must be greater than zero.");
+
+                if (column.Precision.HasValue && column.Precision <= 0)
+                    errors.Add($"{columnPath}.precision must be greater than zero.");
+
+                if (column.Scale.HasValue && column.Scale < 0)
+                    errors.Add($"{columnPath}.scale must be zero or greater.");
+
+                if (column.Precision.HasValue && column.Scale.HasValue && column.Scale > column.Precision)
+                    errors.Add($"{columnPath}.scale cannot be greater than precision.");
+
+                if (!string.IsNullOrWhiteSpace(column.ValidationRegex))
+                {
+                    try
+                    {
+                        _ = new Regex(column.ValidationRegex);
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        errors.Add($"{columnPath}.validation_regex is not a valid regular expression: {ex.Message}");
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(column.MappingType))
+                    RequireEnum(column.MappingType, $"{columnPath}.mapping_type", errors, MappingTypes);
+
+                if (column.StartPosition.HasValue && column.StartPosition <= 0)
+                    errors.Add($"{columnPath}.start_position must be greater than zero.");
+
+                if (column.Width.HasValue && column.Width <= 0)
+                    errors.Add($"{columnPath}.width must be greater than zero.");
+
+                if (column.AllowedValues is { Count: > 0 } && column.AllowedValues.Any(string.IsNullOrWhiteSpace))
+                    errors.Add($"{columnPath}.allowed_values cannot contain blank values.");
+
+                if (column.NullTokens is { Count: > 0 } && column.NullTokens.Any(t => t == null))
+                    errors.Add($"{columnPath}.null_tokens cannot contain null values.");
+            }
+        }
+
+        private static void RequireText(string? value, string path, List<string> errors)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                errors.Add($"{path} is required.");
+        }
+
+        private static void RequireEnum(string? value, string path, List<string> errors, HashSet<string> allowed)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                errors.Add($"{path} is required.");
+                return;
+            }
+
+            if (!allowed.Contains(value))
+                errors.Add($"{path} has unsupported value '{value}'. Allowed values: {string.Join(", ", allowed.OrderBy(v => v))}.");
+        }
+    }
+
     public static class StringBuilderExtensions
     {
         public static StringBuilder Indent(this StringBuilder sb, int count)
@@ -450,6 +839,9 @@ namespace ETL_SQL.App
         [JsonPropertyName("metadata")]
         public SpecMetadata? Metadata { get; set; }
 
+        [JsonPropertyName("source")]
+        public SpecSource? Source { get; set; }
+
         [JsonPropertyName("destination")]
         public SpecDestination? Destination { get; set; }
 
@@ -464,6 +856,9 @@ namespace ETL_SQL.App
     {
         [JsonPropertyName("name")]
         public string? Name { get; set; }
+
+        [JsonPropertyName("source")]
+        public SpecSource? Source { get; set; }
 
         [JsonPropertyName("destination")]
         public SpecDestination? Destination { get; set; }
@@ -482,6 +877,54 @@ namespace ETL_SQL.App
 
         [JsonPropertyName("owner")]
         public string? Owner { get; set; }
+    }
+
+    public class SpecSource
+    {
+        [JsonPropertyName("connector_type")]
+        public string? ConnectorType { get; set; }
+
+        [JsonPropertyName("format")]
+        public string? Format { get; set; }
+
+        [JsonPropertyName("path")]
+        public string? Path { get; set; }
+
+        [JsonPropertyName("delimiter")]
+        public string? Delimiter { get; set; }
+
+        [JsonPropertyName("text_qualifier")]
+        public string? TextQualifier { get; set; }
+
+        [JsonPropertyName("encoding")]
+        public string? Encoding { get; set; }
+
+        [JsonPropertyName("has_header")]
+        public bool? HasHeader { get; set; }
+
+        [JsonPropertyName("header_rows")]
+        public int? HeaderRows { get; set; }
+
+        [JsonPropertyName("skip_rows")]
+        public int? SkipRows { get; set; }
+
+        [JsonPropertyName("sheet_name")]
+        public string? SheetName { get; set; }
+
+        [JsonPropertyName("record_terminator")]
+        public string? RecordTerminator { get; set; }
+
+        [JsonPropertyName("null_tokens")]
+        public List<string>? NullTokens { get; set; }
+
+        [JsonPropertyName("primary_keys")]
+        public List<string>? PrimaryKeys { get; set; }
+
+        [JsonPropertyName("duplicate_policy")]
+        public string? DuplicatePolicy { get; set; }
+
+        [JsonPropertyName("reject_policy")]
+        public string? RejectPolicy { get; set; }
     }
 
     public class SpecDestination
@@ -516,6 +959,15 @@ namespace ETL_SQL.App
         [JsonPropertyName("column_name")]
         public string? ColumnName { get; set; }
 
+        [JsonPropertyName("source_name")]
+        public string? SourceName { get; set; }
+
+        [JsonPropertyName("start_position")]
+        public int? StartPosition { get; set; }
+
+        [JsonPropertyName("width")]
+        public int? Width { get; set; }
+
         [JsonPropertyName("type_family")]
         public string? TypeFamily { get; set; }
 
@@ -536,6 +988,18 @@ namespace ETL_SQL.App
 
         [JsonPropertyName("validation_regex")]
         public string? ValidationRegex { get; set; }
+
+        [JsonPropertyName("date_format")]
+        public string? DateFormat { get; set; }
+
+        [JsonPropertyName("null_tokens")]
+        public List<string>? NullTokens { get; set; }
+
+        [JsonPropertyName("allowed_values")]
+        public List<string>? AllowedValues { get; set; }
+
+        [JsonPropertyName("is_key")]
+        public bool? IsKey { get; set; }
 
         [JsonPropertyName("tags")]
         public List<string>? Tags { get; set; }

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Xunit;
 using ETL_SQL.App;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Tests.App
 {
@@ -45,6 +46,29 @@ namespace ETL_SQL.Tests.App
         }
 
         [Fact]
+        public async Task Generate_InvalidSchemaContract_ReturnsError()
+        {
+            var schemaPath = Path.Combine(_tempDir, "invalid_schema.json");
+            var outputPath = Path.Combine(_tempDir, "invalid_output.etlsql");
+
+            var jsonContent = @"
+{
+  ""pipeline_name"": ""bad_feed"",
+  ""metadata"": {
+    ""description"": ""Missing destination and schema"",
+    ""classification"": ""confidential"",
+    ""owner"": ""Data Team""
+  }
+}";
+            await File.WriteAllTextAsync(schemaPath, jsonContent);
+
+            var result = await PipelineGenerator.Generate(schemaPath, outputPath, NullLogger.Instance);
+
+            Assert.Equal(1, result);
+            Assert.False(File.Exists(outputPath));
+        }
+
+        [Fact]
         public async Task Generate_SingleDataset_CompilesCorrectly()
         {
             var schemaPath = Path.Combine(_tempDir, "single_schema.json");
@@ -58,6 +82,21 @@ namespace ETL_SQL.Tests.App
     ""owner"": ""Sales Team"",
     ""classification"": ""confidential""
   },
+  ""source"": {
+    ""connector_type"": ""FLATFILE"",
+    ""format"": ""CSV"",
+    ""path"": ""C:/Inbound/customers.csv"",
+    ""delimiter"": ""comma"",
+    ""text_qualifier"": ""doublequote"",
+    ""encoding"": ""UTF8"",
+    ""has_header"": true,
+    ""header_rows"": 1,
+    ""skip_rows"": 0,
+    ""null_tokens"": ["""", ""NULL"", ""N/A""],
+    ""primary_keys"": [""CustomerId""],
+    ""duplicate_policy"": ""reject"",
+    ""reject_policy"": ""quarantine""
+  },
   ""destination"": {
     ""connector_type"": ""FLATFILE"",
     ""format"": ""CSV"",
@@ -70,18 +109,23 @@ namespace ETL_SQL.Tests.App
   ""schema"": [
     {
       ""column_name"": ""CustomerId"",
+      ""source_name"": ""customer_id"",
       ""type_family"": ""INT"",
       ""nullable"": false,
       ""description"": ""Unique customer ID"",
+      ""is_key"": true,
       ""tags"": [""PII""]
     },
     {
       ""column_name"": ""Email"",
+      ""source_name"": ""email_address"",
       ""type_family"": ""VARCHAR"",
       ""max_length"": 150,
       ""nullable"": true,
       ""description"": ""Email address"",
       ""validation_regex"": ""^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"",
+      ""null_tokens"": ["""", ""UNKNOWN""],
+      ""allowed_values"": [""valid_email_format""],
       ""tags"": [""PII""]
     }
   ]
@@ -110,6 +154,18 @@ namespace ETL_SQL.Tests.App
             Assert.Contains("CREATE CONNECTION target_dir AS DIRECTORY('target_folder');", code);
             Assert.Contains("CREATE CONNECTION outbound_dest AS FLATFILE", code);
 
+            // Assert Source Layout Contract
+            Assert.Contains("--   source connector: FLATFILE", code);
+            Assert.Contains("--   header rows: 1", code);
+            Assert.Contains("--   null tokens: , NULL, N/A", code);
+            Assert.Contains("--   primary keys: CustomerId", code);
+            Assert.Contains("--   duplicate policy: reject", code);
+            Assert.Contains("CREATE CONNECTION src_file AS FLATFILE(", code);
+            Assert.Contains("PATH = 'C:/Inbound/customers.csv'", code);
+            Assert.Contains("customer_id                  AS CustomerId", code);
+            Assert.Contains("email_address                AS Email", code);
+            Assert.Contains("column Email: source=email_address; null_tokens=|UNKNOWN; allowed_values=valid_email_format", code);
+
             // Assert Expect Schema Checks
             Assert.Contains("EXPECT SCHEMA #staging (", code);
             Assert.Contains("CustomerId                INT", code);
@@ -126,6 +182,51 @@ namespace ETL_SQL.Tests.App
             // Assert Final Tag statement
             Assert.Contains("TAG #cleaned_data WITH (", code);
             Assert.Contains("pipeline_source = 'single_schema.json'", code);
+
+            var script = new Parser(new Lexer(code).Tokenize(), code).Parse();
+            Assert.Empty(script.Diagnostics);
+        }
+
+        [Fact]
+        public async Task Generate_InvalidSourceLayout_ReturnsError()
+        {
+            var schemaPath = Path.Combine(_tempDir, "invalid_layout_schema.json");
+            var outputPath = Path.Combine(_tempDir, "invalid_layout_output.etlsql");
+
+            var jsonContent = @"
+{
+  ""pipeline_name"": ""bad_layout"",
+  ""metadata"": {
+    ""description"": ""Invalid fixed-width metadata"",
+    ""classification"": ""internal"",
+    ""owner"": ""Data Team""
+  },
+  ""source"": {
+    ""connector_type"": ""FLATFILE"",
+    ""format"": ""CSV"",
+    ""duplicate_policy"": ""reject""
+  },
+  ""destination"": {
+    ""connector_type"": ""FLATFILE"",
+    ""format"": ""CSV"",
+    ""path"": ""outbound""
+  },
+  ""schema"": [
+    {
+      ""column_name"": ""CustomerId"",
+      ""source_name"": ""customer_id"",
+      ""start_position"": 0,
+      ""type_family"": ""INT"",
+      ""nullable"": false
+    }
+  ]
+}";
+            await File.WriteAllTextAsync(schemaPath, jsonContent);
+
+            var result = await PipelineGenerator.Generate(schemaPath, outputPath, NullLogger.Instance);
+
+            Assert.Equal(1, result);
+            Assert.False(File.Exists(outputPath));
         }
 
         [Fact]
@@ -209,6 +310,10 @@ namespace ETL_SQL.Tests.App
             Assert.Contains("Pipeline: inventory_feed", invCode);
             Assert.Contains("CREATE CONNECTION target_dir AS DIRECTORY('inv_folder');", invCode);
             Assert.Contains("ItemId                    INT", invCode);
+
+            Assert.Empty(new Parser(new Lexer(masterCode).Tokenize(), masterCode).Parse().Diagnostics);
+            Assert.Empty(new Parser(new Lexer(salesCode).Tokenize(), salesCode).Parse().Diagnostics);
+            Assert.Empty(new Parser(new Lexer(invCode).Tokenize(), invCode).Parse().Diagnostics);
         }
 
         [Fact]
