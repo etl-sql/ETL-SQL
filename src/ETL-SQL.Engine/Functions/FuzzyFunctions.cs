@@ -37,6 +37,10 @@ namespace ETL_SQL.Engine.Functions
                 (args, ctx) => Task.FromResult(SoundexFn(args, ctx)),
                 "SOUNDEX(str): Returns the 4-character Soundex code (e.g. 'S532').");
 
+            registry.RegisterWithHelp("DIFFERENCE",
+                (args, ctx) => Task.FromResult(DifferenceFn(args, ctx)),
+                "DIFFERENCE(s1, s2): Soundex similarity score 0-4 (4 = identical Soundex codes, 0 = none match).");
+
             registry.RegisterWithHelp("METAPHONE",
                 (args, ctx) => Task.FromResult(MetaphoneFn(args, ctx)),
                 "METAPHONE(str): Returns the original Metaphone phonetic encoding for English words.");
@@ -350,6 +354,21 @@ namespace ETL_SQL.Engine.Functions
         {
             if (args.Count < 1 || args[0] == null) return null;
             return ComputeSoundex(args[0]!.ToString() ?? "");
+        }
+
+        /// <summary>
+        /// DIFFERENCE(s1, s2): returns 0-4 by comparing the two 4-character Soundex codes position by
+        /// position (4 = identical codes, 0 = none match). NULL if either argument is NULL.
+        /// </summary>
+        private static object? DifferenceFn(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
+            string a = ComputeSoundex(args[0]!.ToString() ?? "");
+            string b = ComputeSoundex(args[1]!.ToString() ?? "");
+            int score = 0;
+            for (int i = 0; i < 4; i++)
+                if (a[i] == b[i]) score++;
+            return (decimal)score;
         }
 
         internal static string ComputeSoundex(string s)

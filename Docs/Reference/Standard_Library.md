@@ -809,6 +809,7 @@ Phonetic functions encode pronunciation rather than spelling. They enable fast e
 | `METAPHONE` | `METAPHONE(s)` | Variable-length code | English; more accurate than Soundex |
 | `DMETAPHONE` | `DMETAPHONE(s)` | Primary code | Multi-origin names; handles European patterns |
 | `DMETAPHONE_ALT` | `DMETAPHONE_ALT(s)` | Alternate code | Join on either primary or alternate for better recall |
+| `DIFFERENCE` | `DIFFERENCE(s1, s2)` | Score `0`–`4` | Quick Soundex similarity rank between two strings (`4` = identical codes) |
 
 ```sql
 -- Fast phonetic blocking before expensive SIMILARITY scoring

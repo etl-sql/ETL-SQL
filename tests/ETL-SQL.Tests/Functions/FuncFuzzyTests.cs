@@ -190,6 +190,38 @@ namespace ETL_SQL.Tests.Functions
             Assert.Null(v);
         }
 
+        // ── Phase 2: DIFFERENCE (Soundex similarity 0-4) ─────────────────────────
+
+        [Fact]
+        public async Task Difference_IdenticalSoundex_Returns4()
+        {
+            // 'Smith' and 'Smythe' both encode to S530, so all four positions match.
+            var v = Convert.ToDecimal(await Eval("DIFFERENCE('Smith', 'Smythe')"));
+            Assert.Equal(4m, v);
+        }
+
+        [Fact]
+        public async Task Difference_SameWord_Returns4()
+        {
+            var v = Convert.ToDecimal(await Eval("DIFFERENCE('Robert', 'Rupert')"));
+            Assert.Equal(4m, v);
+        }
+
+        [Fact]
+        public async Task Difference_DifferentInitial_BelowFour()
+        {
+            // Different first letter (S530 vs J520) can never score a full 4.
+            var v = Convert.ToDecimal(await Eval("DIFFERENCE('Smith', 'Jones')"));
+            Assert.InRange(v, 0m, 3m);
+        }
+
+        [Fact]
+        public async Task Difference_Null_ReturnsNull()
+        {
+            Assert.Null(await Eval("DIFFERENCE('Smith', NULL)"));
+            Assert.Null(await Eval("DIFFERENCE(NULL, 'Smith')"));
+        }
+
         // ── Phase 2: METAPHONE ───────────────────────────────────────────────────
 
         [Fact]
