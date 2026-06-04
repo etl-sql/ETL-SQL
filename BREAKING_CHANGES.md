@@ -15,6 +15,11 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.10.0 — Runtime: Audit log exports are audited
+- **What changed**: Exporting the Portal audit log now records an `EXPORT_AUDIT_LOG` audit event.
+- **Who is affected**: Administrators and integrations that export or count Portal audit records.
+- **Migration**: Account for the additional audit event when filtering or aggregating audit activity.
+
 ### v0.10.0 — Runtime: Subscription creation enforces report visibility
 - **What changed**: Creating a Portal subscription now requires `READ` permission on the report's folder.
 - **Who is affected**: Portal clients that attempted to create subscriptions for reports the current user could not view.

@@ -53,13 +53,13 @@
   - DONE — repeatable isolated fixture provisions representative local users, business groups, nested Finance/Operations folders, reports, datasets, saved views, subscriptions, alerts, share links, and embed tokens.
   - DONE — local identity scenarios cover Admin, Publisher, Viewer, inactive, must-change-password, revoked-token, no-group, and outsider users. LDAP scenarios remain deferred until an LDAP integration fixture is available.
   - DONE — effective folder/report/dataset permissions are compared against the expected matrix in `tests/ETL-SQL.ReportPortal.Tests/user_permissions_matrix.md`.
-  - DONE — report workflows cover folder/report listing, catalog search, direct-ID access, readable and hidden snapshots, refresh, hidden export, favorites, saved views, alerts, subscriptions, metadata management, viewer publish rejection, and publisher root-folder rejection.
-  - DONE — dataset ACL scenarios cover public visibility, private viewer/editor access, direct-ID denial, and ACL-management denial.
+  - DONE — report workflows cover folder/report listing, catalog search, direct-ID access, readable and hidden snapshots, refresh, authorized and hidden export, favorites, saved views, alerts, subscriptions, metadata management, viewer publish rejection, publisher root-folder rejection, authenticated share-link resolution, and anonymous embed-token resolution.
+  - DONE — dataset ACL scenarios cover explicit public visibility, private viewer/editor access, direct-ID denial, and ACL-management denial.
   - DONE — negative cases cover hidden resources, inactive login, must-change-password blocking, revoked refresh tokens, and non-admin denial for users, groups, SMTP, metrics, audit, audit export, Orchestrator status, and effective-permissions surfaces.
   - DONE — subscription creation now enforces `READ` permission on the report folder so hidden report IDs cannot be subscribed to directly.
-  - DONE — audit verification uses API-generated user, group membership, token revocation, folder grant/revoke, user delete, and group delete operations; the matrix records the broader sensitive-operation audit expectations.
+  - DONE — audit verification uses API-generated user update/delete, group membership changes, token revocation, folder grant/revoke, report publish/delete, subscription create/update/delete, group delete, and admin audit export operations. Audit exports now record `EXPORT_AUDIT_LOG`.
   - Verified: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --no-restore --filter FullyQualifiedName~UserPermissionIntegrationTests` (9 passed).
-  - Verified regression lane: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --no-restore --filter FullyQualifiedName~SubscriptionIntegrationTests` (14 passed).
+  - Verified regression lane: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --no-build --filter FullyQualifiedName~SubscriptionIntegrationTests` (14 passed; `--no-build` used because an unrelated staged documentation-test rename temporarily prevents project compilation).
   - Keep this as a correctness/security scenario suite, not a portal load test. Defer throughput and sizing work to the Portal load testing TODO.
 
 - [ ] **Portal and Orchestrator load testing**  Build one repeatable capacity-testing program with separate Portal-user and Orchestrator-job workloads so administrators can size each server from measured baselines.

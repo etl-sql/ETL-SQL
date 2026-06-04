@@ -646,6 +646,10 @@ public class AdminController(
         [FromQuery] string? action = null,
         [FromQuery] int? userId = null)
     {
+        // COMPAT_BREAK: 0.10
+        await audit.LogAsync(CurrentUserId, "EXPORT_AUDIT_LOG", "AuditLog", null,
+            $"action={action ?? "*"};userId={userId?.ToString() ?? "*"}");
+
         var query = db.AuditLogs.AsQueryable();
         if (action  is not null) query = query.Where(a => a.Action == action);
         if (userId.HasValue)    query = query.Where(a => a.UserId == userId);

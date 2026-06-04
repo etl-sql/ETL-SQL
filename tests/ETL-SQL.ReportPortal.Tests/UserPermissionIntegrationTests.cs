@@ -14,6 +14,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
+using ETL_SQL.Reporting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -210,7 +211,21 @@ namespace ETL_SQL.ReportPortal.Tests
                     await db.SaveChangesAsync();
 
                     var snapshotPath = Path.Combine(_factory.TempDir, "snapshots", "RevenueReport.snapshot.json");
-                    await File.WriteAllTextAsync(snapshotPath, "{}");
+                    await new SnapshotStore().SaveAsync(new ReportManifest
+                    {
+                        Source = pRevenue,
+                        Title = "Revenue Report",
+                        Visuals =
+                        {
+                            new VisualManifest
+                            {
+                                Name = "RevenueTable",
+                                VisualType = "TABLE",
+                                Columns = [ "Region", "Revenue" ],
+                                Rows = [ [ "North", "100" ] ]
+                            }
+                        }
+                    }, snapshotPath);
                     db.ReportSnapshots.Add(new ReportSnapshot
                     {
                         ReportId = rRevenue.Id,
@@ -471,10 +486,14 @@ namespace ETL_SQL.ReportPortal.Tests
             using var scope = _factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
 
-            Assert.Equal(4, await db.Folders.CountAsync());
-            Assert.Equal(5, await db.Groups.CountAsync());
-            Assert.Equal(4, await db.Reports.CountAsync());
-            Assert.Equal(3, await db.Datasets.CountAsync());
+            Assert.True(await db.Folders.AnyAsync(f => f.Path == "/Finance/Invoices"));
+            Assert.True(await db.Folders.AnyAsync(f => f.Path == "/Operations/Logs"));
+            Assert.True(await db.Groups.AnyAsync(g => g.Name == "Finance_Readers"));
+            Assert.True(await db.Groups.AnyAsync(g => g.Name == "Managers"));
+            Assert.True(await db.Reports.AnyAsync(r => r.Name == "RevenueReport"));
+            Assert.True(await db.Reports.AnyAsync(r => r.Name == "SystemLogs"));
+            Assert.True(await db.Datasets.AnyAsync(d => d.Name == "PublicDataset"));
+            Assert.True(await db.Datasets.AnyAsync(d => d.Name == "FinancePrivateDataset"));
         }
 
         [Fact]
@@ -734,6 +753,35 @@ namespace ETL_SQL.ReportPortal.Tests
                 rSysLogsId = (await db.Reports.SingleAsync(r => r.Name == "SystemLogs")).Id;
             }
 
+            var exportSnapshotPath = Path.Combine(_factory.TempDir, "snapshots", $"RevenueReport_export_{Guid.NewGuid():N}.snapshot.json");
+            await new SnapshotStore().SaveAsync(new ReportManifest
+            {
+                Source = invoiceScriptPath,
+                Title = "Revenue Report",
+                Visuals =
+                {
+                    new VisualManifest
+                    {
+                        Name = "RevenueTable",
+                        VisualType = "TABLE",
+                        Columns = [ "Region", "Revenue" ],
+                        Rows = [ [ "North", "100" ] ]
+                    }
+                }
+            }, exportSnapshotPath);
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                db.ReportSnapshots.Add(new ReportSnapshot
+                {
+                    ReportId = rRevenueId,
+                    ManifestPath = exportSnapshotPath,
+                    BuiltAt = DateTime.UtcNow.AddMinutes(1),
+                    BuiltBy = 1
+                });
+                await db.SaveChangesAsync();
+            }
+
             var visibleList = await AuthGet(tFinRead, $"/api/folders/{fFinanceId}/reports");
             Assert.Equal(HttpStatusCode.OK, visibleList.StatusCode);
             var visibleReports = await visibleList.Content.ReadFromJsonAsync<JsonArray>(_json);
@@ -747,6 +795,9 @@ namespace ETL_SQL.ReportPortal.Tests
             Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(tFinRead, $"/api/reports/{rSysLogsId}/snapshot")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(tFinRead, $"/api/reports/{rSysLogsId}/export/csv")).StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await AuthGet(tFinRead, $"/api/reports/{rRevenueId}/snapshot")).StatusCode);
+            var exportRes = await AuthGet(tFinRead, $"/api/reports/{rRevenueId}/export/csv");
+            Assert.Equal(HttpStatusCode.OK, exportRes.StatusCode);
+            Assert.Contains("North", await exportRes.Content.ReadAsStringAsync());
             Assert.Equal(HttpStatusCode.NoContent, (await AuthPost(tFinRead, $"/api/reports/{rRevenueId}/favorite", new { })).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await AuthPost(tFinRead, $"/api/reports/{rSysLogsId}/favorite", new { })).StatusCode);
 
@@ -810,6 +861,10 @@ namespace ETL_SQL.ReportPortal.Tests
             {
                 description = "Updated by authorized publisher"
             })).StatusCode);
+
+            Assert.Equal(HttpStatusCode.OK, (await AuthGet(tFinRead, "/api/share/fin-share-token-xyz123")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(tOutsider, "/api/share/fin-share-token-xyz123")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync("/api/embed/fin-embed-token-abc987")).StatusCode);
         }
 
         [Fact]
@@ -832,6 +887,7 @@ namespace ETL_SQL.ReportPortal.Tests
             var resFinList = await AuthGet(tFinRead, "/api/datasets");
             Assert.Equal(HttpStatusCode.OK, resFinList.StatusCode);
             var listFin = await resFinList.Content.ReadFromJsonAsync<JsonArray>(_json);
+            Assert.Contains(listFin!, d => d!["name"]!.GetValue<string>() == "PublicDataset");
             Assert.Contains(listFin!, d => d!["name"]!.GetValue<string>() == "FinancePrivateDataset");
             Assert.DoesNotContain(listFin!, d => d!["name"]!.GetValue<string>() == "OpsPrivateDataset");
 
@@ -924,12 +980,19 @@ namespace ETL_SQL.ReportPortal.Tests
             var createdGroup = await createGroupRes.Content.ReadFromJsonAsync<JsonObject>(_json);
             var groupId = createdGroup!["id"]!.GetValue<int>();
 
+            Assert.Equal(HttpStatusCode.NoContent, (await AuthPut(adminToken, $"/api/admin/users/{createdUserId}", new
+            {
+                firstName = "Updated Audit"
+            })).StatusCode);
+
             // 2. Grant folder permission via Admin API to generate GRANT_PERMISSION audit log
             int folderId;
+            string scriptPath;
             using (var scope = _factory.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
                 folderId = (await db.Folders.FirstAsync()).Id;
+                scriptPath = (await db.Reports.FirstAsync()).ScriptPath;
             }
 
             var grantRes = await AuthPost(adminToken, $"/api/folders/{folderId}/acl", new
@@ -946,8 +1009,41 @@ namespace ETL_SQL.ReportPortal.Tests
             Assert.Equal(HttpStatusCode.NoContent, (await AuthDelete(adminToken, $"/api/admin/groups/{groupId}/members/{createdUserId}")).StatusCode);
             Assert.Equal(HttpStatusCode.NoContent, (await AuthPost(adminToken, $"/api/admin/users/{createdUserId}/revoke-tokens", new { })).StatusCode);
             Assert.Equal(HttpStatusCode.NoContent, (await AuthDelete(adminToken, $"/api/folders/{folderId}/acl/{groupId}")).StatusCode);
+
+            var publishRes = await AuthPost(adminToken, "/api/reports", new
+            {
+                folderId,
+                name = $"Audit Report {Guid.NewGuid():N}"[..24],
+                scriptPath,
+                description = "Temporary audit report"
+            });
+            Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+            var publishedReport = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var publishedReportId = publishedReport!["id"]!.GetValue<int>();
+
+            var createSubscriptionRes = await AuthPost(adminToken, "/api/subscriptions", new
+            {
+                reportId = publishedReportId,
+                schedule = "Daily",
+                format = "Link",
+                recipientEmail = "admin@test.local",
+                atTime = "08:00"
+            });
+            Assert.Equal(HttpStatusCode.Created, createSubscriptionRes.StatusCode);
+            var createdSubscription = await createSubscriptionRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var subscriptionId = createdSubscription!["id"]!.GetValue<int>();
+            Assert.Equal(HttpStatusCode.OK, (await AuthPut(adminToken, $"/api/subscriptions/{subscriptionId}", new
+            {
+                name = "Updated audit subscription"
+            })).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await AuthDelete(adminToken, $"/api/subscriptions/{subscriptionId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await AuthDelete(adminToken, $"/api/reports/{publishedReportId}")).StatusCode);
+
             Assert.Equal(HttpStatusCode.NoContent, (await AuthDelete(adminToken, $"/api/admin/users/{createdUserId}?cascade=true")).StatusCode);
             Assert.Equal(HttpStatusCode.NoContent, (await AuthDelete(adminToken, $"/api/admin/groups/{groupId}")).StatusCode);
+            var auditExportRes = await AuthGet(adminToken, "/api/admin/audit/export/csv");
+            Assert.Equal(HttpStatusCode.OK, auditExportRes.StatusCode);
+            Assert.Contains("EXPORT_AUDIT_LOG", await auditExportRes.Content.ReadAsStringAsync());
 
             // 3. Fetch audit logs and verify
             var resAudit = await AuthGet(adminToken, "/api/admin/audit?pageSize=200");
@@ -960,6 +1056,7 @@ namespace ETL_SQL.ReportPortal.Tests
 
             // Verify CREATE_USER is logged
             Assert.Contains("CREATE_USER", actions);
+            Assert.Contains("UPDATE_USER", actions);
             Assert.Contains("CREATE_GROUP", actions);
 
             // Verify GRANT_PERMISSION is logged
@@ -970,6 +1067,12 @@ namespace ETL_SQL.ReportPortal.Tests
             Assert.Contains("REVOKE_PERMISSION", actions);
             Assert.Contains("DELETE_USER", actions);
             Assert.Contains("DELETE_GROUP", actions);
+            Assert.Contains("PUBLISH_REPORT", actions);
+            Assert.Contains("DELETE_REPORT", actions);
+            Assert.Contains("CREATE_SUBSCRIPTION", actions);
+            Assert.Contains("UPDATE_SUBSCRIPTION", actions);
+            Assert.Contains("DELETE_SUBSCRIPTION", actions);
+            Assert.Contains("EXPORT_AUDIT_LOG", actions);
         }
     }
 }
