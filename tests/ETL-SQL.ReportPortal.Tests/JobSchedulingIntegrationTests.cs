@@ -386,6 +386,47 @@ INTO mail_conn.Email;
         }
 
         [Fact]
+        public async Task Verify_Trigger_And_Disable_While_Running_Drain_Without_Stuck_Work()
+        {
+            using var factory = new OrchestratorWebFactory();
+            using var client = factory.CreateClient();
+
+            var jobName = "ConcurrentControlJob";
+            await CreateJobAsync(client, jobName, "WAITFOR DELAY '00:00:05';");
+            await TriggerJobAsync(client, jobName);
+
+            var store = factory.Services.GetRequiredService<IJobHistoryStore>();
+            JobHistoryEntry? runningEntry = null;
+            var start = DateTime.UtcNow;
+            while ((DateTime.UtcNow - start).TotalSeconds < 10)
+            {
+                var history = (await store.GetHistoryAsync(jobName, 10)).ToList();
+                runningEntry = history.FirstOrDefault(h => h.Status == "RUNNING" && h.EndTime == null);
+                if (runningEntry != null) break;
+                await Task.Delay(200);
+            }
+            Assert.NotNull(runningEntry);
+
+            using var triggerReq = Authorized(HttpMethod.Post, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/trigger");
+            using var disableReq = Authorized(HttpMethod.Put, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}", new { IsEnabled = false });
+            var controlResponses = await Task.WhenAll(client.SendAsync(triggerReq), client.SendAsync(disableReq));
+            Assert.Contains(controlResponses, r => r.StatusCode == HttpStatusCode.Accepted);
+            Assert.Contains(controlResponses, r => r.StatusCode == HttpStatusCode.OK);
+
+            using var killReq = Authorized(HttpMethod.Post, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/kill");
+            var killRes = await client.SendAsync(killReq);
+            Assert.Equal(HttpStatusCode.OK, killRes.StatusCode);
+
+            await PollSchedulerIdleAsync(client, timeoutSeconds: 20);
+
+            var job = await store.GetJobAsync(jobName);
+            Assert.NotNull(job);
+            Assert.False(job.IsEnabled);
+            var finalHistory = (await store.GetHistoryAsync(jobName, 10)).ToList();
+            Assert.DoesNotContain(finalHistory, h => h.Status == "RUNNING" && h.EndTime == null);
+        }
+
+        [Fact]
         public async Task Verify_Email_Notification_Behavior()
         {
             using var factory = new OrchestratorWebFactory();

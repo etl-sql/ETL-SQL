@@ -570,6 +570,68 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
         }
 
         [Fact]
+        public async Task Verify_Subscription_Delete_While_Running_Cleans_Up_Without_Stuck_Work()
+        {
+            using var portalFactory = new PortalWebFactory();
+            using var orchestratorFactory = new OrchestratorWebFactory(portalFactory.TempDir);
+
+            using var portalClient = portalFactory.CreateClient();
+            using var orchClient = orchestratorFactory.CreateClient();
+
+            var token = await GetAdminTokenAsync(portalClient);
+            var reportScript = @"
+SET REPORT TITLE = 'Concurrent Delete Report';
+WAITFOR DELAY '00:00:03';
+SELECT 1 AS Val INTO #data;
+CREATE VISUAL SalesTable AS TABLE (SOURCE = #data, MAPPINGS (Val = Val));
+CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
+";
+            var (_, reportId, smtpAlias, reportName) = await SetupReportAndSmtpAsync(
+                portalClient, token, portalFactory.TempDir, reportScript);
+
+            var subRes = await AuthPost(portalClient, token, "/api/subscriptions", new
+            {
+                reportId,
+                schedule = "Daily",
+                format = "CSV",
+                smtpAlias,
+                recipientEmail = "delete-running@test.local",
+                atTime = "08:00"
+            });
+            Assert.Equal(HttpStatusCode.Created, subRes.StatusCode);
+            var sub = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var subId = sub!["id"]!.GetValue<int>();
+            var jobName = $"SUB:{subId}:{reportName}";
+            var generatedScriptPath = GeneratedSubscriptionScriptPath(portalFactory.TempDir, subId, reportName);
+            var store = orchestratorFactory.Services.GetRequiredService<IJobHistoryStore>() as SQLiteJobHistoryStore;
+            Assert.NotNull(store);
+
+            await TriggerJobAsync(orchClient, jobName);
+            await PollHistoryUntilStatusAsync(store, jobName, "RUNNING");
+
+            var deleteRes = await AuthDelete(portalClient, token, $"/api/subscriptions/{subId}");
+            Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
+
+            var start = DateTime.UtcNow;
+            while ((DateTime.UtcNow - start).TotalSeconds < 10)
+            {
+                var history = (await store.GetHistoryAsync(jobName, 10)).ToList();
+                if (!history.Any(h => h.Status == "RUNNING" && h.EndTime == null))
+                {
+                    break;
+                }
+                await Task.Delay(200);
+            }
+
+            Assert.Null(await store.GetJobAsync(jobName));
+            Assert.DoesNotContain(await store.GetHistoryAsync(jobName, 10), h => h.Status == "RUNNING" && h.EndTime == null);
+            Assert.False(File.Exists(generatedScriptPath));
+
+            var getRes = await AuthGet(portalClient, token, $"/api/subscriptions/{subId}");
+            Assert.Equal(HttpStatusCode.NotFound, getRes.StatusCode);
+        }
+
+        [Fact]
         public async Task Verify_Subscription_Delete_Removes_Row_Script_And_Orchestrator_Job()
         {
             using var portalFactory = new PortalWebFactory();
