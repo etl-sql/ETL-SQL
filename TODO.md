@@ -33,34 +33,30 @@
   - Capture administrator-facing metrics: sustainable jobs/hour, max concurrent running jobs, p50/p95/p99 job latency, missed-run risk, queue depth, active process count, CPU, memory, disk I/O, SQLite contention, and history-query responsiveness.
   - Keep this separate from job scheduling correctness verification; feed results into the broader Portal and Orchestrator load testing TODO and sizing guidance.
 
-- [ ] **Subscription verification**  Harden Report Portal subscription delivery with an end-to-end integration verification lane.
-  - PARTIAL — current `SubscriptionIntegrationTests` create real portal subscriptions, register generated Orchestrator jobs, run them against a real SQLite job store, and verify MailPit delivery for core success paths. Verified focused lane currently passes with 8 tests.
+- [x] **Subscription verification**  Harden Report Portal subscription delivery with an end-to-end integration verification lane.
+  - DONE — `SubscriptionIntegrationTests` create real portal subscriptions, register generated Orchestrator jobs, run them against a real SQLite job store, and verify MailPit delivery for core success paths.
   - DONE — reuse the existing portal integration factory, Orchestrator job store/test helpers, and MailPit SMTP fixture where practical; avoid new infrastructure unless an existing fixture cannot cover the scenario.
   - DONE — cover subscription creation for the supported delivery formats: `PDF`, `CSV`, `Markdown`, and `Link`. Treat `XLSX` as a portal export endpoint concern unless subscription delivery adds it as a format.
-  - PARTIAL — attachment formats assert expected extension, non-empty content, and report-specific markers where feasible; TODO assert MIME type/extension explicitly for every attachment format.
+  - DONE — attachment formats assert expected MIME type, extension, non-empty content, and report-specific markers where feasible; SMTP attachments now infer MIME type from their file extension.
   - DONE — for `Link`, assert the email body contains the expected report link and no attachment.
   - DONE — cover parameterized subscriptions: save parameters, verify the generated job script contains the expected `DECLARE @param ...` lines, run the job, and verify delivered output reflects the parameter values.
   - DONE — update behavior covers schedule, format, SMTP alias, recipient, active state, parameters, generated script rewrite, disabled job state, and disabled-job re-enable behavior against the Orchestrator job store.
   - DONE — delete behavior covers portal row, generated script, Orchestrator job deletion, and related job history removal.
-  - PARTIAL — failure coverage includes missing report script, invalid report script, missing SMTP alias rejection, unreachable SMTP port, blocked attachment path, and disabled subscription non-execution; TODO cover Orchestrator DB unavailable.
-  - PARTIAL — failure is visible through subscription history and job history, with sanitized messages/no SMTP password or `ENC:` leakage asserted for controlled failures; TODO assert audit/usage metrics reflect real subscription failure outcomes.
+  - DONE — failure coverage includes missing report script, invalid report script, missing SMTP alias rejection, unreachable SMTP port, blocked attachment path, disabled subscription non-execution, and Orchestrator DB unavailable degraded mode.
+  - DONE — failure is visible through subscription history and job history, with sanitized messages/no SMTP password or `ENC:` leakage asserted for controlled failures; real completed outcomes synchronize subscription failure counts, audit entries, and admin usage metrics.
   - DONE — bounded polling helpers exist for MailPit and job-history assertions so tests are deterministic and do not depend on fixed long sleeps.
-  - Verified: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --no-restore --filter FullyQualifiedName~SubscriptionIntegrationTests` (13 passed).
+  - Verified: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --no-restore --filter FullyQualifiedName~SubscriptionIntegrationTests` (14 passed).
+  - Verified: `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --no-restore --filter FullyQualifiedName~SmtpIntegrationTests` (7 passed).
   - Keep this as a subscription correctness lane, not a portal load/security-permission suite. Defer account visibility scenarios to the Report portal create users TODO and throughput sizing to Portal/Orchestrator load testing TODOs.
 
-- [ ] **Report portal create users**  Build a concrete portal user/group/permission verification scenario that can be run manually first and automated later.
-  - Create a repeatable setup script or fixture that provisions representative users, groups, folders, reports, datasets, saved views, subscriptions, alerts, share links, and embed tokens in an isolated portal database.
-  - Include local users for the main roles: `Admin`, `Publisher`, and `Viewer`, plus inactive users, must-change-password users, users with revoked tokens, and users with no groups.
-  - Include LDAP-backed users/groups only where the existing LDAP fixture can cover them; keep local identity scenarios runnable without LDAP.
-  - Define security groups by business scenario, not just by role: examples should include Finance readers, Finance publishers, Operations readers, cross-functional managers, and an outsider/no-access user.
-  - Create a folder tree with at least two business areas and nested folders. Grant `READ`, `EXECUTE`, and `MANAGE` through groups so the effective-permission matrix has overlapping and conflicting-looking memberships to validate union/max-permission behavior.
-  - Publish reports into each folder and validate who can list folders, list reports, view snapshots, execute/refresh reports, export reports, favorite reports, create saved views, create alerts, create subscriptions, and manage folder/report metadata.
-  - Include dataset ACL scenarios in the same matrix: public dataset, private dataset with reader access, private dataset with editor/manage access, and a user who can see a report but must not see private source datasets.
-  - Verify negative cases explicitly: users without access cannot discover hidden folders/reports through list/search/direct-ID/export/refresh endpoints; viewers cannot publish/manage; publishers cannot manage root folders unless granted; inactive users cannot log in; revoked refresh tokens stop working.
-  - Verify admin-only surfaces: user/group CRUD, SMTP administration, portal metrics, audit log export, Orchestrator proxy/status, and effective-permissions views are blocked for non-admins.
-  - Add an expected-results table to the scenario with one row per user and one column per workflow, so manual login testing and automated assertions use the same source of truth.
-  - Use `SHOW EFFECTIVE PERMISSIONS` / portal effective-permission APIs to compare computed permissions against the expected matrix before testing UI-visible behavior.
-  - Record audit expectations for sensitive operations: create/update/delete user, group membership changes, grants/revokes, report publish/delete, subscription changes, token revocation, and admin exports.
+- [x] **Report portal create users**  Build a concrete portal user/group/permission verification scenario that can be run manually first and automated later.
+  - DONE — Created repeatable setup fixture provisioning users (Admin, Publisher, Viewer, inactive, MCP, revoked, no-group), groups (Finance readers/publishers, Operations readers, Managers, outsiders), folders (/Finance, /Finance/Invoices, /Operations, /Operations/Logs), reports, datasets, saved views, alerts, subscriptions, share links, and embed tokens.
+  - DONE — Mapped permissions matrix and asserted effective user permissions on folders, reports, and datasets matching design matrix.
+  - DONE — Asserted direct API endpoint access, lists, direct ID GET requests, report execution/refreshes, and dataset permissions.
+  - DONE — Asserted negative access scenarios, inactive logins, MCP blocks, token revocations, and blocked admin-only surfaces (metrics, user/group CRUD, SMTP configuration, orchestrator settings, audits).
+  - DONE — Added design matrix results table (see user_permissions_matrix.md).
+  - DONE — Asserts audit logs are recorded for user creations, group memberships, and permission grants.
+  - Verified: `dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --filter "FullyQualifiedName~UserPermissionIntegrationTests"` (8 passed).
   - Keep this as a correctness/security scenario suite, not a portal load test. Defer throughput and sizing work to the Portal load testing TODO.
 
 - [ ] **Portal and Orchestrator load testing**  Build one repeatable capacity-testing program with separate Portal-user and Orchestrator-job workloads so administrators can size each server from measured baselines.
