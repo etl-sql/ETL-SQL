@@ -2,6 +2,17 @@
 
 All notable changes to ETL-SQL are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions. Version numbers follow [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] — Unreleased
+
+### Added
+
+**Experimental: Specification-Driven Development (Beta)**
+- Added `gen-script` CLI command to compile standardized ETL-SQL script templates from JSON schema specifications. Generates validated casting expressions, inline lineage tags, `EXPECT SCHEMA` check gates, and regex format assertions.
+- Added `extract-spec` CLI command utilizing PDFsharp to automatically trim and extract data dictionary pages from large vendor PDF documents using heuristic keyword scoring.
+- Added workflow guide `Docs/Reference/Spec_Driven_Development.md` and prompt instruction guide `Docs/data_spec_parser_instructions.md` describing how to paste specs into external LLMs to build intermediate JSON models.
+- Added `PipelineGenerator` and `SpecExtractor` test suites under `tests/ETL-SQL.Tests/App/` covering template generation and PDF trimming scoring.
+- *Note on limits*: AI spec parsing and vendor PDF formats are highly variable. These commands act as a baseline template boilerplate generator rather than a complete automated solution, and developers should always review and customize the generated extraction queries.
+
 ---
 
 ## [0.9.0] — 2026-06-01

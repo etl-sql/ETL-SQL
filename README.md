@@ -241,6 +241,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 - Use the terminal IDE for syntax highlighting, autocomplete, live result grids, compare mode, and profiling.
 - Use the VS Code extension for LSP diagnostics, hover docs, schema autocomplete, REPL execution, report preview, and `.etlnb` notebooks.
 - Use `LINT`, `EXPLAIN`, `EXPLAIN ANALYZE`, `SHOW PROFILE`, `SHOW CONNECTIONS`, and `SHOW VERSION` to inspect scripts and sessions.
+- Compile validated script templates from schema JSONs (`gen-script`) and automatically trim vendor PDF fluff to isolate data dictionaries (`extract-spec`) using the experimental specification-driven pipeline workflow.
 
 ---
 
@@ -252,6 +253,8 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | `ETL-SQL-TUI.exe` | Interactive terminal IDE with editor, results, messages, autocomplete, and profiling. |
 | `ETL-SQL-REPORT.exe` | Report-SQL CLI for `build`, `refresh`, and `serve`. |
 | `etl-sql doctor` | Install validation: checks runtime, config, encryption, engine smoke, and asset health. Use `--profile full` for extended checks, `--strict` for CI exit codes, `--json` for machine-readable output. |
+| `etl-sql gen-script` | Compiles a schema JSON specification into an ETL-SQL script template (includes schema validations, types, and lineage tags). |
+| `etl-sql extract-spec` | Trims administrative fluff from large vendor PDF specifications, retaining only schema and dictionary tables. |
 | VS Code extension | Language server, REPL panel, notebook support, schema sidebar, and report preview. |
 | Report Portal | Multi-report hosting, publishing, permissions, subscriptions, alerts, saved views, and usage metrics. |
 | Orchestrator service | Job scheduling, execution history, and always-on automation. |
@@ -280,6 +283,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | [Data Connectors](Docs/Reference/Data_Connectors.md) | Connector types, `WITH()` options, authentication patterns, and examples. |
 | [Specialized Operations](Docs/Reference/Specialized_Operations.md) | File operations, email, transfer, lineage, Docker, jobs, and diagnostics. |
 | [Performance](Docs/Reference/Performance.md) | Spill thresholds, memory model, tuning guidance, and scale certification references. |
+| [Spec-Driven Development](Docs/Reference/Spec_Driven_Development.md) | Guide for generating scripts and extracting data dictionaries from specifications. |
 
 ### Engineering
 
