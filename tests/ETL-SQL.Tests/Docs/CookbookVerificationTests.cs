@@ -36,14 +36,7 @@ namespace ETL_SQL.Tests.Docs
 
         // Recipes that do not yet parse, keyed by content hash (stable across line shifts; changes the
         // moment the recipe is edited). Burn this down — every entry is a known-broken published example.
-        private static readonly Dictionary<string, string> KnownBroken = new()
-        {
-            // PUBLISH BUNDLE / VALIDATE BUNDLE / EXECUTE <orch> BEGIN..END parse fine at top level
-            // (see Grammar.md §15.1) but fail when wrapped in BEGIN TRY here: the parser ends the
-            // statement at the WITH(...) ')' and rejects the trailing ';'. Looks like a real parser
-            // limitation for orchestrator meta-statements inside TRY blocks, not a recipe typo.
-            ["05e4aae5a65affcd"] = "Cookbook.md #20 - PUBLISH BUNDLE inside BEGIN TRY (orchestrator meta-statement in TRY block)",
-        };
+        private static readonly Dictionary<string, string> KnownBroken = new();
 
         public static IEnumerable<object[]> CookbookBlocks()
         {

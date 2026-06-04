@@ -221,6 +221,31 @@ SHOW BUNDLE DEPENDENCIES 'finance-load' VERSION 1;";
         }
 
         [Fact]
+        public void ParsePublishBundleInsideBeginTry_NoDiagnostics()
+        {
+            // Regression: PUBLISH BUNDLE (and other statements that don't consume their own trailing
+            // ';') parsed at top level but failed inside BEGIN TRY, because ParseBlock did not skip
+            // the standalone ';' the way the top-level Parse() loop does.
+            var source = @"
+BEGIN TRY
+    PUBLISH BUNDLE 'finance-load' FROM 'C:\ETL\finance' ENTRY 'main.etlsql' WITH (PASSWORD = '1234', ENCRYPT = MACHINE);
+    VALIDATE BUNDLE 'finance-load' FROM 'C:\ETL\finance' ENTRY 'main.etlsql';
+    PRINT 'done';
+END TRY
+BEGIN CATCH
+    PRINT 'failed: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH;";
+            var script = new Parser(new Lexer(source).Tokenize()).Parse();
+
+            Assert.Empty(script.Diagnostics);
+            var tryCatch = Assert.IsType<TryCatchStatement>(script.Statements[0]);
+            var tryBody = Assert.IsType<BlockStatement>(tryCatch.TryBody);
+            Assert.IsType<PublishBundleStatement>(tryBody.Statements[0]);
+            Assert.IsType<ValidateBundleStatement>(tryBody.Statements[1]);
+        }
+
+        [Fact]
         public void ParseShowBundlesAliasStatement()
         {
             var source = @"

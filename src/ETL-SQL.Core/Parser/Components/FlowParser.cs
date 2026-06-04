@@ -12,7 +12,15 @@ namespace ETL_SQL.Core.Parser.Components
         {
             var stmts = new List<Statement>();
             while (_parser.Current.Type != TokenType.END && _parser.Current.Type != TokenType.EOF)
+            {
+                // Tolerate empty statements, mirroring the top-level Parse() loop. Most statement
+                // parsers consume their own trailing ';', but some (e.g. PUBLISH BUNDLE and other
+                // orchestrator/portal meta-statements) leave it; at top level that ';' is skipped
+                // here, so blocks must skip it too — otherwise it reaches ParseStatement as an
+                // "Unexpected SEMICOLON at start of statement" inside BEGIN/TRY/loop bodies.
+                if (_parser.Match(TokenType.SEMICOLON)) continue;
                 stmts.Add(_parser.ParseStatement());
+            }
             Consume(TokenType.END, "Expected END to close BEGIN block");
             Match(TokenType.SEMICOLON); // optional trailing ; after END (e.g. nested WHILE/IF-ELSE)
             return new BlockStatement(stmts);
