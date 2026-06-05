@@ -1,8 +1,8 @@
 # Specification-Driven Pipeline Development
 
-This guide describes how to use specification files (PDFs, Excel workbooks, Word documents, or CSVs) to generate structured, validated ETL-SQL pipelines. 
+This guide describes how to use specification files (PDFs, Excel workbooks, Word documents, or CSVs) to generate structured ETL-SQL starter scripts.
 
-By leveraging an external AI to parse unstructured documents into a standard JSON schema model, and compiling that model with the `etl-sql gen-script` command, you can dramatically accelerate pipeline creation while enforcing data governance.
+By leveraging an external AI to parse unstructured documents into a standard JSON schema model, and compiling that model with the `etl-sql gen-script` command, you can save the transcription and boilerplate time in pipeline creation while keeping schema validation, governance tagging, validation summaries, and quarantine scaffolding in the generated output. This workflow still expects a developer to review the JSON, complete the source extraction query, and test with real vendor data.
 
 ---
 
@@ -46,7 +46,7 @@ Run the `extract-spec` command:
 etl-sql extract-spec --input ./Specs/large_vendor_spec.pdf --output ./Specs/trimmed_spec.pdf
 ```
 
-The C# extraction engine uses heuristic analysis (scanning for database type keywords and column header terms while penalizing API/connectivity jargon) to automatically slice out only the pages containing schemas and output them to the trimmed PDF.
+The C# extraction engine uses heuristic analysis (scanning for database type keywords and column header terms while penalizing API/connectivity jargon) to isolate likely schema pages and output them to the trimmed PDF.
 
 ### Step 1: Generate the Intermediate JSON
 

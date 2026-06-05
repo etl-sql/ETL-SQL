@@ -11,6 +11,7 @@ Not sure where to start? Pick your goal:
 | Move data like SSIS — connections, transforms, loads | [Cookbook.md](Cookbook.md) → [Reference/Data_Connectors.md](Reference/Data_Connectors.md) |
 | Build reports and dashboards like SSRS / Power BI | [Report_SQL_Guide.md](Report_SQL_Guide.md) → [Report_Cookbook.md](Report_Cookbook.md) |
 | Schedule and orchestrate jobs | [Orchestrators_Guide.md](Orchestrators_Guide.md) → [Pipelines_and_DAGs.md](Pipelines_and_DAGs.md) |
+| Generate a starter ETL script from a vendor data spec | [Reference/Spec_Driven_Development.md](Reference/Spec_Driven_Development.md) → [Cookbook.md](Cookbook.md#25-specification-driven-vendor-feed-build) |
 | Secure scripts for source control (encrypt secrets, hash policy) | [User_Manual.md](User_Manual.md) § Security → [Reference/Grammar.md](Reference/Grammar.md) § USE PASSWORD |
 | Track data lineage and governance tags | [Reference/Lineage.md](Reference/Lineage.md) |
 | Troubleshoot install, connectors, or runtime issues | [FAQ.md](FAQ.md) → run `etl-sql doctor` |
@@ -43,6 +44,7 @@ Reference docs describe the supported product surface. They should stay factual,
 | [Reference/RelativeDate_Parameters.md](Reference/RelativeDate_Parameters.md) | Relative date expressions for reports and subscriptions |
 | [Reference/Spec_Driven_Development.md](Reference/Spec_Driven_Development.md) | Workflow guide for generating scripts from specs |
 | [data_spec_parser_instructions.md](data_spec_parser_instructions.md) | Prompt instructions payload for parsing spec files |
+| [Reference/spec_pipeline.schema.json](Reference/spec_pipeline.schema.json) | JSON contract validated by `etl-sql gen-script` |
 | [Syntax_Index.md](Syntax_Index.md) | Cross-reference from syntax tokens to docs and help files |
 
 Start with [Reference/README.md](Reference/README.md) for ownership and maintenance rules for this section.

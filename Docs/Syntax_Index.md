@@ -1096,8 +1096,8 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql report serve <file>` | Serve a `.rptsql` dashboard |
 | `etl-sql report build <file>` | Export report to PDF/CSV/Markdown |
 | `etl-sql report refresh <file>` | Re-evaluate data and update a snapshot |
-| `etl-sql gen-script -s <json> -o <etlsql>` | Compile a schema JSON specification into a validated ETL-SQL script template |
-| `etl-sql extract-spec -i <pdf> -o <pdf>` | Extract data dictionary / schema pages from a large PDF specification |
+| `etl-sql gen-script -s <json> -o <etlsql>` | Compile a reviewed JSON spec contract into an ETL-SQL starter script with schema checks, lineage tags, validation summaries, and quarantine scaffolding |
+| `etl-sql extract-spec -i <pdf> -o <pdf>` | Trim likely data dictionary / schema pages from a large vendor PDF before LLM review |
 
 See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guide.md) for full option reference.
 

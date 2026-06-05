@@ -7,11 +7,11 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 ### Added
 
 **Experimental: Specification-Driven Development (Beta)**
-- Added `gen-script` CLI command to compile standardized ETL-SQL script templates from JSON schema specifications. Generates validated casting expressions, inline lineage tags, `EXPECT SCHEMA` check gates, and regex format assertions.
+- Added `gen-script` CLI command to compile standardized JSON specification contracts into ETL-SQL starter scripts. Generated templates include source layout review notes, confidence/source-evidence comments, casting expressions, inline lineage tags, `EXPECT SCHEMA` gates, validation issue summaries, optional quarantine tables, and outbound load scaffolding.
 - Added `extract-spec` CLI command utilizing PDFsharp to automatically trim and extract data dictionary pages from large vendor PDF documents using heuristic keyword scoring.
-- Added workflow guide `Docs/Reference/Spec_Driven_Development.md` and prompt instruction guide `Docs/data_spec_parser_instructions.md` describing how to paste specs into external LLMs to build intermediate JSON models.
-- Added `PipelineGenerator` and `SpecExtractor` test suites under `tests/ETL-SQL.Tests/App/` covering template generation and PDF trimming scoring.
-- *Note on limits*: AI spec parsing and vendor PDF formats are highly variable. These commands act as a baseline template boilerplate generator rather than a complete automated solution, and developers should always review and customize the generated extraction queries.
+- Added workflow guide `Docs/Reference/Spec_Driven_Development.md`, prompt instruction guide `Docs/data_spec_parser_instructions.md`, machine-readable contract `Docs/Reference/spec_pipeline.schema.json`, and Cookbook recipe 25 with a runnable customer-feed example.
+- Added `PipelineGenerator` and `SpecExtractor` test suites under `tests/ETL-SQL.Tests/App/` covering contract validation, generated-script parsing, review metadata, validation gates, and PDF trimming scoring.
+- *Note on limits*: This is a developer productivity feature, not an automated production-pipeline generator. LLM spec parsing and vendor formats are variable; generated scripts are intended as reviewed starting points. Developers must verify the JSON, complete the extraction query, review evidence/low-confidence fields, and test against real vendor files.
 
 ---
 

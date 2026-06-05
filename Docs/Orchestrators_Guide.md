@@ -168,7 +168,7 @@ ETL-SQL generate [--estimate <rows>]
 
 ### 2.7 `gen-script` — Compile Spec JSON to Script
 
-Compiles an intermediate JSON specification (schema and metadata) into a validated, security-compliant `.etlsql` script boilerplate.
+Compiles an intermediate JSON specification contract into a validated `.etlsql` starter script. This is intended to save setup time after an LLM or developer extracts a vendor data specification into JSON; it does not replace human review or the source extraction query.
 
 ```
 ETL-SQL gen-script --schema <path-to-json> --output <path-to-etlsql>
@@ -186,9 +186,11 @@ ETL-SQL gen-script --schema <path-to-json> --output <path-to-etlsql>
 ETL-SQL gen-script --schema ./specs/customer_feed.json --output ./scripts/load_customers.etlsql
 ```
 
+Generated scripts include schema gates, casting, lineage tags, AI review/evidence comments when present, validation issue summaries, and optional quarantine scaffolding. Review the JSON, complete the generated `#staging` extraction block, and test with real vendor files before production use. See `Docs/Reference/Spec_Driven_Development.md` and Cookbook recipe 25 for the full workflow.
+
 ### 2.8 `extract-spec` — Trim Schema Pages from Large PDF
 
-Uses heuristic analysis to extract and trim data dictionary / schema pages from large vendor PDF specifications, removing administrative fluff.
+Uses heuristic analysis to extract likely data dictionary / schema pages from large vendor PDF specifications, removing administrative fluff before LLM review.
 
 ```
 ETL-SQL extract-spec --input <path-to-large-pdf> --output <path-to-trimmed-pdf>

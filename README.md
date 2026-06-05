@@ -241,7 +241,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 - Use the terminal IDE for syntax highlighting, autocomplete, live result grids, compare mode, and profiling.
 - Use the VS Code extension for LSP diagnostics, hover docs, schema autocomplete, REPL execution, report preview, and `.etlnb` notebooks.
 - Use `LINT`, `EXPLAIN`, `EXPLAIN ANALYZE`, `SHOW PROFILE`, `SHOW CONNECTIONS`, and `SHOW VERSION` to inspect scripts and sessions.
-- Compile validated script templates from schema JSONs (`gen-script`) and automatically trim vendor PDF fluff to isolate data dictionaries (`extract-spec`) using the experimental specification-driven pipeline workflow.
+- Turn LLM-reviewed vendor data specifications into validated ETL-SQL starter scripts (`gen-script`) with schema gates, review notes, lineage tags, validation summaries, and quarantine scaffolding; optionally trim large vendor PDFs to data-dictionary pages first (`extract-spec`).
 
 ---
 
@@ -253,8 +253,8 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | `ETL-SQL-TUI.exe` | Interactive terminal IDE with editor, results, messages, autocomplete, and profiling. |
 | `ETL-SQL-REPORT.exe` | Report-SQL CLI for `build`, `refresh`, and `serve`. |
 | `etl-sql doctor` | Install validation: checks runtime, config, encryption, engine smoke, and asset health. Use `--profile full` for extended checks, `--strict` for CI exit codes, `--json` for machine-readable output. |
-| `etl-sql gen-script` | Compiles a schema JSON specification into an ETL-SQL script template (includes schema validations, types, and lineage tags). |
-| `etl-sql extract-spec` | Trims administrative fluff from large vendor PDF specifications, retaining only schema and dictionary tables. |
+| `etl-sql gen-script` | Compiles a reviewed JSON specification contract into an ETL-SQL starter script with schema checks, casts, lineage tags, validation summaries, and optional quarantine handling. |
+| `etl-sql extract-spec` | Trims administrative fluff from large vendor PDF specifications, retaining likely schema and dictionary pages for LLM review. |
 | VS Code extension | Language server, REPL panel, notebook support, schema sidebar, and report preview. |
 | Report Portal | Multi-report hosting, publishing, permissions, subscriptions, alerts, saved views, and usage metrics. |
 | Orchestrator service | Job scheduling, execution history, and always-on automation. |
