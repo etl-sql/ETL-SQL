@@ -792,21 +792,35 @@ CREATE CONNECTION cloud_struct AS AZURE_BLOB(ACCOUNT_NAME='myaccount', ACCOUNT_K
 ### 4.4 REST API (`API`)
 Aliases: `REST`, `HTTP`
 
-Universal connector for web services and REST APIs returning JSON data.
+Universal connector for web services and REST APIs. Supports SELECT to call endpoints and parse JSON results, and INSERT to write batches or rows of data to endpoints.
 
 | Option | Description | Mandatory |
 | :--- | :--- | :---: |
 | `URL` | The endpoint URL | Yes |
-| `METHOD` | HTTP method: `GET`, `POST`, `PUT`, `DELETE` (Default: `GET`) | No |
+| `METHOD` | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` (Default: `GET`) | No |
 | `AUTH_TYPE` | Authentication mode: `NONE`, `BASIC`, `BEARER`, `APIKEY` (Default: `NONE`) | No |
 | `USER` | Username (for `BASIC` auth) | No |
 | `PASSWORD` | Password (for `BASIC` auth) | No |
 | `TOKEN` | Secret token (for `BEARER` or `APIKEY` auth) | No |
 | `HEADER_NAME` | Header name for `APIKEY` auth (e.g. `X-API-Key`) | No |
 | `ROOT_PATH` | JSONPath to the data array within the response (e.g. `$.items`) | No |
-| `BODY` | JSON request body for `POST`/`PUT` requests | No |
-| `PAG_TYPE` | Pagination style: `NONE`, `OFFSET` (Default: `NONE`) | No |
-| `PAG_LIMIT` | Batch size / page size for paginated APIs | No |
+| `BODY` | JSON request body for `POST`/`PUT`/`PATCH` request connections | No |
+| `TIMEOUT_SECONDS` | Request timeout in seconds (Default: `30`) | No |
+| `BODY_MODE` | Outbound write format: `ROW_OBJECT`, `ROW_ARRAY`, `WRAPPED_ARRAY`, `TEMPLATE` (Default: `ROW_OBJECT`) | No |
+| `BATCH_SIZE` | Size of batch writes for array modes (Default: `500`) | No |
+| `BATCH_ROOT` | Envelope property name required for `WRAPPED_ARRAY` | No |
+| `RESPONSE_TABLE` | Temp table name (e.g. `#my_results`) to store API response metadata | No |
+| `RESPONSE_CORRELATION_COLUMNS` | Comma-separated list of columns to copy from source row to response table | No |
+| `SUCCESS_STATUS` | Successful status codes (Default: `200,201,202,204`) | No |
+| `ERROR_MODE` | Error policy: `FAIL_FAST` or `CONTINUE` (Default: `FAIL_FAST`) | No |
+| `RETRY_COUNT` | Number of attempts to retry transient failures (Default: `0`) | No |
+| `RETRY_BACKOFF_MS` | Delay before retry in milliseconds (Default: `500`) | No |
+| `RETRY_STATUS` | Status codes triggering retries (Default: `408,429,500,502,503,504`) | No |
+| `IDEMPOTENCY_KEY_COLUMN` | Row column to use as idempotency key header | No |
+| `IDEMPOTENCY_HEADER` | Header name for idempotency key (Default: `Idempotency-Key`) | No |
+| `URL_TEMPLATE` | Dynamic URL template containing `${column_name}` placeholders | No |
+| `BODY_TEMPLATE` | Dynamic body template containing `${column_name}` placeholders | No |
+| `ERROR_BODY_MAX_CHARS` | Maximum character length of response body saved in errors (Default: `4096`) | No |
 
 *Examples:*
 ```sql
@@ -826,19 +840,36 @@ CREATE CONNECTION weather AS API(URL='https://api.weather.com/data',
          TOKEN='my_api_key_value',
          HEADER_NAME='X-API-Key');
 
--- POST with a JSON body
-CREATE CONNECTION submit AS API(URL='https://api.example.com/events',
-         METHOD='POST',
-         AUTH_TYPE='BEARER',
-         TOKEN='tok_live_xyz',
-         BODY='{"type":"etl_run","status":"complete"}');
+-- Outbound Write (Insert) with ROW_OBJECT (default)
+CREATE CONNECTION bed_api AS API(
+    URL = 'https://example.org/api/bed-usage',
+    METHOD = 'POST',
+    AUTH_TYPE = 'BEARER',
+    TOKEN = @api_token,
+    BODY_MODE = 'ROW_OBJECT',
+    RESPONSE_TABLE = '#api_results',
+    RESPONSE_CORRELATION_COLUMNS = 'submission_id,location',
+    RETRY_COUNT = 3
+);
 
--- Paginated API with OFFSET-style paging
-CREATE CONNECTION pages AS API(URL='https://api.example.com/records',
-         ROOT_PATH='$.data',
-         PAG_TYPE='OFFSET',
-         PAG_LIMIT=100);
+INSERT INTO bed_api (submission_id, location, totalBeds, occupiedBeds)
+SELECT id, loc_name, total, occupied FROM #bed_data;
+
+-- Outbound Batch Write with WRAPPED_ARRAY
+CREATE CONNECTION bulk_api AS API(
+    URL = 'https://example.org/api/bulk',
+    METHOD = 'POST',
+    BODY_MODE = 'WRAPPED_ARRAY',
+    BATCH_ROOT = 'submissions',
+    BATCH_SIZE = 100
+);
+
+INSERT INTO bulk_api (location, totalBeds)
+SELECT loc_name, total FROM #bed_data;
 ```
+
+> [!NOTE]
+> `METHOD='DELETE'` is available for direct API requests, but `INSERT INTO api_conn ...` outbound writes support only `POST`, `PUT`, and `PATCH`.
 
 ---
 

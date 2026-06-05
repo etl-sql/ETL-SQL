@@ -9,7 +9,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Rest;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core;
+using ETL_SQL.Engine;
 using ETL_SQL.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Xunit;
 
@@ -150,13 +154,449 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.Equal(true, batches[0].Rows[0]["authorized"]);
         }
 
-        private static IExecutionContext MakeContext()
+        private static IExecutionContext MakeContext(Dictionary<string, IDataSource>? connections = null)
         {
             var security = new SecurityService(NullLogger.Instance);
             var ctx = new Mock<IExecutionContext>();
             ctx.Setup(c => c.SecurityService).Returns(security);
             ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);
+            ctx.Setup(c => c.Connections).Returns(connections ?? new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase));
+            var serviceProvider = new Mock<IServiceProvider>();
+            ctx.Setup(c => c.ServiceProvider).Returns(serviceProvider.Object);
+            ctx.Setup(c => c.TempTableSpillThresholdRows).Returns(1000000);
             return ctx.Object;
+        }
+
+        [Fact]
+        public async Task WriteBatches_RowObject_SendsPostRequests()
+        {
+            var receivedRequests = new List<LocalHttpRequest>();
+            var reqLock = new object();
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                lock (reqLock)
+                {
+                    receivedRequests.Add(request);
+                }
+                return LocalHttpResponse.Json("""{"status":"ok"}""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "ROW_OBJECT"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "id", "name" });
+            var row1 = new Row(table.Schema);
+            row1["id"] = 1;
+            row1["name"] = "Alice";
+            await table.AddRowAsync(row1);
+
+            var row2 = new Row(table.Schema);
+            row2["id"] = 2;
+            row2["name"] = "Bob";
+            await table.AddRowAsync(row2);
+
+            await ds.WriteBatches(ToAsyncEnumerable(table));
+
+            Assert.Equal(2, receivedRequests.Count);
+            Assert.Equal("POST", receivedRequests[0].Method);
+            Assert.Contains("\"id\":1", receivedRequests[0].Body);
+            Assert.Contains("\"name\":\"Alice\"", receivedRequests[0].Body);
+            Assert.Contains("\"id\":2", receivedRequests[1].Body);
+            Assert.Contains("\"name\":\"Bob\"", receivedRequests[1].Body);
+        }
+
+        [Fact]
+        public async Task WriteBatches_RowArray_SendsSingleBatchRequest()
+        {
+            var receivedRequests = new List<LocalHttpRequest>();
+            var reqLock = new object();
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                lock (reqLock)
+                {
+                    receivedRequests.Add(request);
+                }
+                return LocalHttpResponse.Json("""{"status":"ok"}""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "ROW_ARRAY",
+                ["BATCH_SIZE"] = "10"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "id", "name" });
+            var row1 = new Row(table.Schema);
+            row1["id"] = 1;
+            row1["name"] = "Alice";
+            await table.AddRowAsync(row1);
+
+            var row2 = new Row(table.Schema);
+            row2["id"] = 2;
+            row2["name"] = "Bob";
+            await table.AddRowAsync(row2);
+
+            await ds.WriteBatches(ToAsyncEnumerable(table));
+
+            Assert.Single(receivedRequests);
+            Assert.Equal("POST", receivedRequests[0].Method);
+            Assert.StartsWith("[", receivedRequests[0].Body);
+            Assert.Contains("\"id\":1", receivedRequests[0].Body);
+            Assert.Contains("\"id\":2", receivedRequests[0].Body);
+        }
+
+        [Fact]
+        public async Task WriteBatches_WrappedArray_SendsWrappedBatchRequest()
+        {
+            var receivedRequests = new List<LocalHttpRequest>();
+            var reqLock = new object();
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                lock (reqLock)
+                {
+                    receivedRequests.Add(request);
+                }
+                return LocalHttpResponse.Json("""{"status":"ok"}""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "WRAPPED_ARRAY",
+                ["BATCH_ROOT"] = "items",
+                ["BATCH_SIZE"] = "10"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "id", "name" });
+            var row1 = new Row(table.Schema);
+            row1["id"] = 1;
+            row1["name"] = "Alice";
+            await table.AddRowAsync(row1);
+
+            await ds.WriteBatches(ToAsyncEnumerable(table));
+
+            Assert.Single(receivedRequests);
+            Assert.StartsWith("{\"items\":[", receivedRequests[0].Body);
+        }
+
+        [Fact]
+        public async Task WriteBatches_ResponseTable_CapturesMetadataAndCorrelation()
+        {
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                return LocalHttpResponse.Json("""{"status":"created"}""");
+            });
+
+            var connections = new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
+            var context = MakeContext(connections);
+
+            var ds = new RestDataSource(context, server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "ROW_OBJECT",
+                ["RESPONSE_TABLE"] = "#my_api_results",
+                ["RESPONSE_CORRELATION_COLUMNS"] = "id,name"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "id", "name" });
+            var row1 = new Row(table.Schema);
+            row1["id"] = 123;
+            row1["name"] = "Alice";
+            await table.AddRowAsync(row1);
+
+            await ds.WriteBatches(ToAsyncEnumerable(table));
+
+            Assert.True(connections.TryGetValue("#my_api_results", out var responseDs));
+            var respMemDs = Assert.IsType<InMemoryDataSource>(responseDs);
+
+            var resultBatches = await respMemDs.ReadBatches().ToListAsync();
+            Assert.Single(resultBatches);
+            var resultRow = resultBatches[0].Rows[0];
+
+            Assert.Equal(0, Convert.ToInt32(resultRow["request_index"]));
+            Assert.Equal(true, resultRow["success"]);
+            Assert.Equal(200, Convert.ToInt32(resultRow["status_code"]));
+            Assert.Equal("POST", resultRow["method"]);
+            Assert.Equal(1, Convert.ToInt32(resultRow["row_count"]));
+            Assert.Contains("created", (string)resultRow["response_body"]!);
+            Assert.Equal(123, Convert.ToInt32(resultRow["id"]));
+            Assert.Equal("Alice", resultRow["name"]);
+        }
+
+        [Fact]
+        public async Task EngineInsertIntoApi_PostsRowsAndCapturesResponseTable()
+        {
+            var receivedRequests = new List<LocalHttpRequest>();
+            var reqLock = new object();
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                lock (reqLock)
+                {
+                    receivedRequests.Add(request);
+                }
+
+                return new LocalHttpResponse(201, "application/json", """{"accepted":true}""");
+            });
+
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var script = $@"
+CREATE TABLE #bed_usage (
+    submission_id VARCHAR,
+    location VARCHAR,
+    total_beds INT,
+    occupied_beds INT
+);
+
+INSERT INTO #bed_usage VALUES ('sub-001', 'ICU', 24, 19);
+
+CREATE CONNECTION bed_api AS API(
+    URL = '{server.Url}',
+    METHOD = 'POST',
+    BODY_MODE = 'ROW_OBJECT',
+    RESPONSE_TABLE = '#bed_api_results',
+    RESPONSE_CORRELATION_COLUMNS = 'submission_id,location',
+    SUCCESS_STATUS = '201'
+);
+
+INSERT INTO bed_api (submission_id, location, totalBeds, occupiedBeds)
+SELECT submission_id, location, total_beds, occupied_beds
+FROM #bed_usage;
+";
+
+            await eval.Evaluate(new Parser(new Lexer(script).Tokenize(), script).Parse());
+
+            Assert.Single(receivedRequests);
+            Assert.Contains("\"location\":\"ICU\"", receivedRequests[0].Body);
+            Assert.Contains("\"totalBeds\":24", receivedRequests[0].Body);
+
+            Assert.True(eval.Connections.TryGetValue("#bed_api_results", out var responseDs));
+            var responseBatches = await responseDs.ReadBatches().ToListAsync();
+            Assert.Single(responseBatches);
+            var responseRow = responseBatches[0].Rows[0];
+
+            Assert.Equal(true, responseRow["success"]);
+            Assert.Equal(201, Convert.ToInt32(responseRow["status_code"]));
+            Assert.Equal("sub-001", responseRow["submission_id"]);
+            Assert.Equal("ICU", responseRow["location"]);
+        }
+
+        [Fact]
+        public async Task WriteBatches_Template_SubstitutesBodyAndUrl()
+        {
+            var receivedRequests = new List<LocalHttpRequest>();
+            var reqLock = new object();
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                lock (reqLock)
+                {
+                    receivedRequests.Add(request);
+                }
+                return LocalHttpResponse.Json("""{"status":"ok"}""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url + "/${location}", new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "TEMPLATE",
+                ["BODY_TEMPLATE"] = """{"facility":"${location}","occupied":${occupied}}"""
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "location", "occupied" });
+            var row = new Row(table.Schema);
+            row["location"] = "ICU A";
+            row["occupied"] = 15;
+            await table.AddRowAsync(row);
+
+            await ds.WriteBatches(ToAsyncEnumerable(table));
+
+            Assert.Single(receivedRequests);
+            Assert.Equal("/endpoint/ICU%20A", receivedRequests[0].Path);
+            Assert.Contains("\"facility\":\"ICU A\"", receivedRequests[0].Body);
+            Assert.Contains("\"occupied\":15", receivedRequests[0].Body);
+        }
+
+        [Fact]
+        public async Task WriteBatches_Retry_ExponentialBackoff()
+        {
+            int attempts = 0;
+            var reqLock = new object();
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                lock (reqLock)
+                {
+                    attempts++;
+                    if (attempts == 1)
+                    {
+                        return new LocalHttpResponse(429, "application/json", """{"error":"too many requests"}""");
+                    }
+                    return LocalHttpResponse.Json("""{"status":"ok"}""");
+                }
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "ROW_OBJECT",
+                ["RETRY_COUNT"] = "2",
+                ["RETRY_BACKOFF_MS"] = "10",
+                ["RETRY_STATUS"] = "429"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "id" });
+            var row = new Row(table.Schema);
+            row["id"] = 1;
+            await table.AddRowAsync(row);
+
+            await ds.WriteBatches(ToAsyncEnumerable(table));
+
+            Assert.Equal(2, attempts);
+        }
+
+        [Fact]
+        public async Task WriteBatches_WhatIf_DoesNotSendRequests()
+        {
+            int attempts = 0;
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                attempts++;
+                return LocalHttpResponse.Json("""{"status":"ok"}""");
+            });
+
+            var contextMock = new Mock<IExecutionContext>();
+            contextMock.Setup(c => c.IsWhatIf).Returns(true);
+            contextMock.Setup(c => c.Logger).Returns(NullLogger.Instance);
+            contextMock.Setup(c => c.SecurityService).Returns(new SecurityService(NullLogger.Instance));
+
+            var ds = new RestDataSource(contextMock.Object, server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "ROW_OBJECT"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "id" });
+            var row = new Row(table.Schema);
+            row["id"] = 1;
+            await table.AddRowAsync(row);
+
+            await ds.WriteBatches(ToAsyncEnumerable(table));
+
+            Assert.Equal(0, attempts);
+        }
+
+        [Fact]
+        public async Task WriteBatches_DeleteMethod_IsRejectedForOutboundWrites()
+        {
+            await using var server = new LocalHttpApiServer(_ => LocalHttpResponse.Json("""{"status":"ok"}"""));
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "DELETE",
+                ["BODY_MODE"] = "ROW_OBJECT"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "id" });
+            await table.AddRowAsync(new Row(table.Schema) { ["id"] = 1 });
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => ds.WriteBatches(ToAsyncEnumerable(table)));
+            Assert.Contains("not supported for writing", ex.Message);
+        }
+
+        [Fact]
+        public async Task WriteBatches_InvalidErrorMode_Throws()
+        {
+            await using var server = new LocalHttpApiServer(_ => LocalHttpResponse.Json("""{"status":"ok"}"""));
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "ROW_OBJECT",
+                ["ERROR_MODE"] = "IGNORE"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "id" });
+            await table.AddRowAsync(new Row(table.Schema) { ["id"] = 1 });
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => ds.WriteBatches(ToAsyncEnumerable(table)));
+            Assert.Contains("Unsupported ERROR_MODE", ex.Message);
+        }
+
+        [Fact]
+        public async Task WriteBatches_CorrelationColumnMissing_ThrowsSanitizedExecutionException()
+        {
+            await using var server = new LocalHttpApiServer(_ => LocalHttpResponse.Json("""{"status":"ok"}"""));
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "ROW_OBJECT",
+                ["RESPONSE_TABLE"] = "#api_results",
+                ["RESPONSE_CORRELATION_COLUMNS"] = "missing_id"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "id" });
+            await table.AddRowAsync(new Row(table.Schema) { ["id"] = 1 });
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => ds.WriteBatches(ToAsyncEnumerable(table)));
+            Assert.Contains("Correlation column 'missing_id' not found", ex.Message);
+        }
+
+        [Fact]
+        public async Task WriteBatches_IdempotencyColumnInBatchMode_Throws()
+        {
+            await using var server = new LocalHttpApiServer(_ => LocalHttpResponse.Json("""{"status":"ok"}"""));
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "ROW_ARRAY",
+                ["IDEMPOTENCY_KEY_COLUMN"] = "id"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "id" });
+            await table.AddRowAsync(new Row(table.Schema) { ["id"] = 1 });
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => ds.WriteBatches(ToAsyncEnumerable(table)));
+            Assert.Contains("IDEMPOTENCY_KEY_COLUMN is only supported", ex.Message);
+        }
+
+        [Fact]
+        public async Task WriteBatches_ErrorMessage_RedactsSensitiveOptionValues()
+        {
+            await using var server = new LocalHttpApiServer(_ =>
+                new LocalHttpResponse(400, "application/json", """{"error":"bearer-token rejected"}"""));
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "ROW_OBJECT",
+                ["AUTH_TYPE"] = "BEARER",
+                ["TOKEN"] = "bearer-token"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "id" });
+            await table.AddRowAsync(new Row(table.Schema) { ["id"] = 1 });
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => ds.WriteBatches(ToAsyncEnumerable(table)));
+            Assert.DoesNotContain("bearer-token", ex.Message);
+            Assert.Contains("***REDACTED***", ex.Message);
+        }
+
+        private static async IAsyncEnumerable<DataTable> ToAsyncEnumerable(DataTable table)
+        {
+            yield return table;
+            await Task.CompletedTask;
         }
 
         private sealed class LocalHttpApiServer : IAsyncDisposable
@@ -173,7 +613,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 _listener.Start();
                 var port = ((IPEndPoint)_listener.LocalEndpoint).Port;
                 Url = $"http://127.0.0.1:{port}/endpoint";
-                _serverTask = Task.Run(AcceptOneAsync);
+                _serverTask = Task.Run(AcceptLoopAsync);
             }
 
             public string Url { get; }
@@ -195,54 +635,75 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 _cts.Dispose();
             }
 
-            private async Task AcceptOneAsync()
+            private async Task AcceptLoopAsync()
             {
-                using var client = await _listener.AcceptTcpClientAsync(_cts.Token);
-                await using var stream = client.GetStream();
-                using var reader = new StreamReader(stream, Encoding.ASCII, leaveOpen: true);
-
-                var requestLine = await reader.ReadLineAsync(_cts.Token);
-                if (string.IsNullOrWhiteSpace(requestLine))
+                try
                 {
-                    return;
-                }
-
-                var parts = requestLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                string? line;
-                while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync(_cts.Token)))
-                {
-                    var separator = line.IndexOf(':');
-                    if (separator > 0)
+                    while (!_cts.Token.IsCancellationRequested)
                     {
-                        headers[line[..separator]] = line[(separator + 1)..].Trim();
+                        var client = await _listener.AcceptTcpClientAsync(_cts.Token);
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                using (client)
+                                await using (var stream = client.GetStream())
+                                using (var reader = new StreamReader(stream, Encoding.ASCII, leaveOpen: true))
+                                {
+                                    var requestLine = await reader.ReadLineAsync(_cts.Token);
+                                    if (string.IsNullOrWhiteSpace(requestLine)) return;
+
+                                    var parts = requestLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                                    var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                                    string? line;
+                                    while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync(_cts.Token)))
+                                    {
+                                        var separator = line.IndexOf(':');
+                                        if (separator > 0)
+                                        {
+                                            headers[line[..separator]] = line[(separator + 1)..].Trim();
+                                        }
+                                    }
+
+                                    var contentLength = 0;
+                                    if (headers.TryGetValue("Content-Length", out var contentLengthText))
+                                    {
+                                        int.TryParse(contentLengthText, out contentLength);
+                                    }
+
+                                    var body = string.Empty;
+                                    if (contentLength > 0)
+                                    {
+                                        var buffer = new char[contentLength];
+                                        var read = await reader.ReadBlockAsync(buffer, 0, contentLength);
+                                        body = new string(buffer, 0, read);
+                                    }
+
+                                    var response = _handler(new LocalHttpRequest(parts[0], parts.Length > 1 ? parts[1] : "/", headers, body));
+                                    var responseBytes = Encoding.UTF8.GetBytes(response.Body);
+                                    var headerBytes = Encoding.ASCII.GetBytes(
+                                        $"HTTP/1.1 {response.StatusCode} OK\r\n" +
+                                        $"Content-Type: {response.ContentType}\r\n" +
+                                        $"Content-Length: {responseBytes.Length}\r\n" +
+                                        "Connection: close\r\n\r\n");
+
+                                    await stream.WriteAsync(headerBytes, _cts.Token);
+                                    await stream.WriteAsync(responseBytes, _cts.Token);
+                                }
+                            }
+                            catch
+                            {
+                                // Ignore client exceptions
+                            }
+                        });
                     }
                 }
-
-                var contentLength = 0;
-                if (headers.TryGetValue("Content-Length", out var contentLengthText))
+                catch (OperationCanceledException)
                 {
-                    int.TryParse(contentLengthText, out contentLength);
                 }
-
-                var body = string.Empty;
-                if (contentLength > 0)
+                catch (Exception)
                 {
-                    var buffer = new char[contentLength];
-                    var read = await reader.ReadBlockAsync(buffer, 0, contentLength);
-                    body = new string(buffer, 0, read);
                 }
-
-                var response = _handler(new LocalHttpRequest(parts[0], parts.Length > 1 ? parts[1] : "/", headers, body));
-                var responseBytes = Encoding.UTF8.GetBytes(response.Body);
-                var headerBytes = Encoding.ASCII.GetBytes(
-                    $"HTTP/1.1 {response.StatusCode} OK\r\n" +
-                    $"Content-Type: {response.ContentType}\r\n" +
-                    $"Content-Length: {responseBytes.Length}\r\n" +
-                    "Connection: close\r\n\r\n");
-
-                await stream.WriteAsync(headerBytes, _cts.Token);
-                await stream.WriteAsync(responseBytes, _cts.Token);
             }
         }
 
