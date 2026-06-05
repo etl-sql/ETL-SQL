@@ -1,4 +1,4 @@
-﻿# ETL-SQL Cookbook: Production ETL Patterns
+# ETL-SQL Cookbook: Production ETL Patterns
 
 This document provides self-contained, high-fidelity recipes for real-world ETL tasks. These patterns demonstrate the full lifecycle of data movement, from inception to archival. Every recipe is runnable as-is with correctly provisioned connections.
 
@@ -1018,6 +1018,80 @@ Expected result:
 * `#spec_validation_issues` and `#rejected_data` are available for review.
 
 Use this pattern as the handoff between AI extraction and production ETL work: the AI accelerates the first draft, while the script still forces schema validation, governance tagging, and explicit review of rejected rows.
+
+---
+
+## 26. Graph Ingestion & Querying (Neo4j)
+
+This recipe demonstrates how to ingest relational nodes and edges into Neo4j, and query them back using native Cypher pushdown block syntax.
+
+```sql
+-- Connect to relational source and graph target
+CREATE CONNECTION sql_src AS POSTGRES(HOST='localhost', DATABASE='crm', USER='admin', PASSWORD='password');
+CREATE CONNECTION graph AS NEO4J(URI='bolt://localhost:7687', USER='neo4j', PASSWORD='password');
+
+BEGIN TRY
+    -- 1. Extract staging node entities from Postgres
+    SELECT customer_id, name, city, 'Active' AS status
+    INTO #staging_customers
+    FROM sql_src.customers
+    WHERE signup_date >= '2025-01-01';
+
+    -- 2. Ingest Customers as Nodes (using the NODE_ virtual table prefix)
+    -- This executes parameterised UNWIND batches under the hood
+    INSERT INTO graph.NODE_CUSTOMER (customer_id, name, city, status)
+    SELECT customer_id, name, city, status
+    FROM #staging_customers;
+
+    -- 3. Extract staging relationships from Postgres
+    SELECT source_customer_id, target_customer_id, '2025' AS since
+    INTO #staging_relationships
+    FROM sql_src.customer_referrals;
+
+    -- 4. Get the mapped element IDs of the created nodes
+    -- This is required to form edge/relationship connections
+    SELECT _id AS node_id, customer_id
+    INTO #node_ids
+    FROM graph.NODE_CUSTOMER;
+
+    -- 5. Join element IDs onto relationships
+    SELECT 
+        s.node_id AS _from_id,
+        t.node_id AS _to_id,
+        r.since
+    INTO #edges_to_write
+    FROM #staging_relationships AS r
+    INNER JOIN #node_ids AS s ON r.source_customer_id = s.customer_id
+    INNER JOIN #node_ids AS t ON r.target_customer_id = t.customer_id;
+
+    -- 6. Ingest Relationships (using the EDGE_ virtual table prefix)
+    INSERT INTO graph.EDGE_REFERRAL (_from_id, _to_id, since)
+    SELECT _from_id, _to_id, since
+    FROM #edges_to_write;
+
+    -- 7. Query the Graph using native Cypher pass-through (EXECUTE)
+    -- Find customers who referred someone who then referred someone else (2-hop referral chain)
+    DECLARE @minYear INT = 2025;
+
+    EXECUTE graph INTO #referral_chains WITH (@minYear)
+    BEGIN
+        MATCH (a:CUSTOMER)-[:REFERRAL]->(b:CUSTOMER)-[:REFERRAL]->(c:CUSTOMER)
+        WHERE toInteger(b.since) >= ?1
+        RETURN a.name AS initiator, b.name AS intermediary, c.name AS final_recipient
+    END;
+
+    -- 8. Export the results to a CSV report
+    CREATE CONNECTION csv_report AS CSV('C:/exports/referral_chain_report.csv');
+    INSERT INTO csv_report.chains
+    SELECT initiator, intermediary, final_recipient FROM #referral_chains;
+
+    PRINT 'Graph ETL complete.';
+END TRY
+BEGIN CATCH
+    PRINT 'Graph ETL failed: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH
+```
 
 ---
 

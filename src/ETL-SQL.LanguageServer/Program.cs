@@ -79,6 +79,7 @@ namespace ETL_SQL.LSP
                         registry.Register(new ETL_SQL.Connectors.Sqlite.SqliteConnector());
                         registry.Register(new ETL_SQL.Connectors.S3.S3Connector());
                         registry.Register(new ETL_SQL.Connectors.Mongodb.MongodbConnector());
+                        registry.Register(new ETL_SQL.Connectors.Neo4j.Neo4jConnector());
                         registry.Register(new ETL_SQL.Connectors.Kafka.KafkaConnector());
                         registry.Register(new ETL_SQL.Connectors.BigQuery.BigQueryConnector());
                         registry.Register(new ETL_SQL.Connectors.Snowflake.SnowflakeConnector());

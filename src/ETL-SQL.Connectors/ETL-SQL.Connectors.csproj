@@ -17,6 +17,7 @@
     <PackageReference Include="MongoDB.Driver" />
     <PackageReference Include="Confluent.Kafka" />
     <PackageReference Include="MySqlConnector" />
+    <PackageReference Include="Neo4j.Driver" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Oracle.ManagedDataAccess.Core" />
     <PackageReference Include="Parquet.Net" />

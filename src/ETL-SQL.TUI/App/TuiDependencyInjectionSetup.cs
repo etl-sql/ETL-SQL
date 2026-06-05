@@ -30,6 +30,7 @@ using ETL_SQL.Connectors.Orchestrator;
 using ETL_SQL.Connectors.Sqlite;
 using ETL_SQL.Connectors.S3;
 using ETL_SQL.Connectors.Mongodb;
+using ETL_SQL.Connectors.Neo4j;
 using ETL_SQL.Connectors.Kafka;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Orchestrator.Scheduling;
@@ -139,6 +140,7 @@ namespace ETL_SQL.TUI
             services.AddSingleton<IConnector, SqliteConnector>();
             services.AddSingleton<IConnector, S3Connector>();
             services.AddSingleton<IConnector, MongodbConnector>();
+            services.AddSingleton<IConnector, Neo4jConnector>();
             services.AddSingleton<IConnector, KafkaConnector>();
             services.AddSingleton<IConnector, ETL_SQL.Connectors.BigQuery.BigQueryConnector>();
             services.AddSingleton<IConnector, ETL_SQL.Connectors.Snowflake.SnowflakeConnector>();

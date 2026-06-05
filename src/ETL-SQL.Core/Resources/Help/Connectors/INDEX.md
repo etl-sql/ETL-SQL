@@ -22,6 +22,7 @@ Connections link ETL-SQL to external data sources — databases, files, APIs, an
 
 - `MONGODB` / `MONGO`: MongoDB document store
 - `KAFKA`: Apache Kafka event streams
+- `NEO4J` / `NEO`: Neo4j graph database
 
 **File formats**
 

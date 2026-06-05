@@ -33,6 +33,7 @@ using ETL_SQL.Connectors.Orchestrator;
 using ETL_SQL.Connectors.Sqlite;
 using ETL_SQL.Connectors.S3;
 using ETL_SQL.Connectors.Mongodb;
+using ETL_SQL.Connectors.Neo4j;
 using ETL_SQL.Connectors.Kafka;
 using ETL_SQL.Connectors;
 
@@ -106,6 +107,7 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IConnector, SqliteConnector>();
             services.AddSingleton<IConnector, S3Connector>();
             services.AddSingleton<IConnector, MongodbConnector>();
+            services.AddSingleton<IConnector, Neo4jConnector>();
             services.AddSingleton<IConnector, KafkaConnector>();
             
             services.AddSingleton<IConnector>(sp => new FtpConnector(

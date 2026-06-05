@@ -405,6 +405,47 @@ T-SQL keywords `TOP`, `NOLOCK`, `ISNULL`, `GETDATE`, and `SYSDATE` are excluded.
 
 **Write behavior:** `COPY INTO` uses BigQuery streaming inserts (low latency, no staging). `COPY INTO … APPEND=FALSE` truncates via `TRUNCATE TABLE` before inserting.
 
+### 2.8 Neo4j (`NEO4J`)
+Aliases: `NEO`
+
+Graph database connector supporting property graph ingestion and Cypher pass-through querying.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `CONNECTION_STRING` / `URI` | Bolt/Neo4j connection URI (e.g. `bolt://localhost:7687`) | Yes (structured) |
+| `USER` | Authentication username | No |
+| `PASSWORD` | Authentication password | No |
+| `DATABASE` | Target database name (Default: `neo4j`) | No |
+| `TIMEOUT_SECONDS` | Connection and query timeout limit in seconds (Default: `30`) | No |
+| `HOST` | Server host name (alternative to connection string) | No |
+| `PORT` | Server port (Default: `7687`) | No |
+
+**Virtual Schema Mapping:**
+Graph entities are mapped to virtual tables:
+- **`NODE_<LABEL>`**: Virtual node table for the specified node label. Includes system columns `_id` (element ID) and `_labels` (comma-separated labels).
+- **`EDGE_<TYPE>`**: Virtual relationship table for the specified relationship type. Includes system columns `_id` (relationship ID), `_from_id` (source element ID), `_to_id` (target element ID), `_from_label`, and `_to_label`.
+
+**Write Behavior:**
+- Ingesting into `NODE_<LABEL>` or `EDGE_<TYPE>` uses parameterised `UNWIND` Cypher templates.
+- If `APPEND=FALSE` (the default), the target node label or relationship type is dropped (via `DETACH DELETE` or `DELETE`) prior to bulk insert.
+
+*Examples:*
+```sql
+-- Ingest customers as graph nodes
+CREATE CONNECTION graph AS NEO4J(URI='bolt://localhost:7687', USER='neo4j', PASSWORD='password');
+INSERT INTO graph.NODE_CUSTOMER (customer_id, name, city)
+SELECT customer_id, name, city FROM #staging;
+
+-- Native Cypher pass-through
+DECLARE @minAge INT = 21;
+EXECUTE graph INTO #fof_network WITH (@minAge)
+BEGIN
+    MATCH (p:Person)-[:FRIEND_OF]->()-[:FRIEND_OF]->(fof:Person)
+    WHERE p.age >= ?1
+    RETURN p.name AS source_name, fof.name AS fof_name
+END;
+```
+
 ---
 
 ## 3. Flat File & Document Connectors
@@ -1104,6 +1145,25 @@ CREATE CONNECTION ad_corp AS ACTIVE_DIRECTORY(
          HOST       = 'ldap.corp.example.com',
          BASE_DN    = 'DC=corp,DC=example,DC=com',
          AUTH_MODE  = 'NEGOTIATE',
+| `AUTH_MODE` | Authentication mode: `INTEGRATED`, `SIMPLE` (Basic auth over SSL), `NEGOTIATE` (negotiate credentials) (Default: `INTEGRATED`) | No |
+| `USER` | Login username / Bind Distinguished Name (DN) | No |
+| `PASSWORD` | Login password (use `ENC:` prefix) | No |
+| `DOMAIN` | Domain name | No |
+| `BASE_DN` | LDAP Search Base Distinguished Name (e.g. `OU=Users,DC=corp,DC=com`) | No |
+| `FILTER_CONTEXT` | Scope context: `users`, `groups`, or `computers` (Default: `users`) | No |
+| `FILTER` | Raw LDAP query filter (overrides `FILTER_CONTEXT` and standard AD parsing) | No |
+| `ATTRIBUTES` | Comma-separated list of attributes to query | No |
+
+> [!CAUTION]
+> `AUTH_MODE = 'SIMPLE'` transmits credentials in plaintext unless `USE_SSL=TRUE` (LDAPS) is active. It is highly recommended to use `USE_SSL=TRUE` with simple binding.
+
+*Examples:*
+```sql
+-- Search users with Negotiate auth over standard LDAP
+CREATE CONNECTION ad_corp AS ACTIVE_DIRECTORY(
+         HOST       = 'ldap.corp.example.com',
+         BASE_DN    = 'DC=corp,DC=example,DC=com',
+         AUTH_MODE  = 'NEGOTIATE',
          USER       = 'domain_service',
          PASSWORD   = ENC:U2FsdGVkX1+...,
          DOMAIN     = 'CORP');
@@ -1124,6 +1184,7 @@ WHERE sAMAccountName = 'jdoe';
 | `POSTGRES` | `NPSQL`, `PG` | Relational | ✓ | ✓ |
 | `ORACLE` | — | Relational | ✓ | ✓ |
 | `ODBC` | — | Relational | Varies | — |
+| `NEO4J` | `NEO` | Graph | ✓ | ✓ |
 | `MOCKDB` | — | In-memory | — | — |
 | `FLATFILE` | `CSV`, `TSV` | File | — | — |
 | `EXCEL` | `XLSX`, `XLS` | File | — | — |

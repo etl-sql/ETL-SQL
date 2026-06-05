@@ -167,6 +167,7 @@ Connectors define how to communicate with external data sources.
 | `SNOWFLAKE` | SQL | [SNOWFLAKE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SNOWFLAKE.md) | HOST, DATABASE, SCHEMA, WAREHOUSE, USERNAME, PASSWORD, PRIVATE_KEY_FILE, ... |
 | `BIGQUERY` | SQL | [BIGQUERY.md](../src/ETL-SQL.Core/Resources/Help/Connectors/BIGQUERY.md) | PROJECT_ID, DATASET_ID, KEY_FILE, ... |
 | `MONGODB` | NoSQL Document | [MONGODB.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MONGODB.md) | CONNECTION_STRING, DATABASE, COLLECTION, HOST, PORT, USER, PASSWORD, TIMEOUT_SECONDS |
+| `NEO4J` | Graph Database | [NEO4J.md](../src/ETL-SQL.Core/Resources/Help/Connectors/NEO4J.md) | CONNECTION_STRING, URI, DATABASE, USER, PASSWORD, TIMEOUT_SECONDS, HOST, PORT |
 | `FLATFILE` | File | [FLATFILE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/FLATFILE.md) | PATH, FORMAT, DELIMITER, HEADER, ENCODING, ... |
 | `EXCEL` | File | [EXCEL.md](../src/ETL-SQL.Core/Resources/Help/Connectors/EXCEL.md) | PATH, SHEET, RANGE, HEADER, ... |
 | `JSON` | File | [JSON.md](../src/ETL-SQL.Core/Resources/Help/Connectors/JSON.md) | PATH, ROOT_PATH, ENCODING, ... |
@@ -638,9 +639,11 @@ CREATE CONNECTION name AS <Provider>( ... )
 | :--- | :--- | :--- |
 | `HOST` / `SERVER` | Server hostname or IP | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `PORT` | Network port | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
+| `CONNECTION_STRING` / `URI` | Connection URI / string | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `DATABASE` | Database name | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `USER` / `UID` | Username | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `PASSWORD` | Password (can be 'ENC:...') | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
+| `TIMEOUT_SECONDS` | Connection and query timeout limit | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `TRUSTED_CONNECTION`| Use Windows Auth (MSSQL only) | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `ENCRYPT` | Enable SSL/TLS encryption | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `PATH` | Root path for file-based connectors | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
@@ -1750,6 +1753,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `KAFKA` | Connector | Canonical connector token |
 | `MOCKDB` | Connector | Canonical connector token |
 | `MONGODB` | Connector | Canonical connector token |
+| `NEO4J` | Connector | Canonical connector token |
 | `MSSQL` | Connector | Canonical connector token |
 | `ODBC` | Connector | Canonical connector token |
 | `ORACLE` | Connector | Canonical connector token |
