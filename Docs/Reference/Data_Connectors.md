@@ -798,7 +798,7 @@ Universal connector for web services and REST APIs. Supports SELECT to call endp
 | :--- | :--- | :---: |
 | `URL` | The endpoint URL | Yes |
 | `METHOD` | HTTP method: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` (Default: `GET`) | No |
-| `AUTH_TYPE` | Authentication mode: `NONE`, `BASIC`, `BEARER`, `APIKEY` (Default: `NONE`) | No |
+| `AUTH_TYPE` | Authentication mode: `NONE`, `BASIC`, `BEARER`, `APIKEY`, `OAUTH2_CLIENT_CREDENTIALS` (Default: `NONE`) | No |
 | `USER` | Username (for `BASIC` auth) | No |
 | `PASSWORD` | Password (for `BASIC` auth) | No |
 | `TOKEN` | Secret token (for `BEARER` or `APIKEY` auth) | No |
@@ -806,11 +806,29 @@ Universal connector for web services and REST APIs. Supports SELECT to call endp
 | `ROOT_PATH` | JSONPath to the data array within the response (e.g. `$.items`) | No |
 | `BODY` | JSON request body for `POST`/`PUT`/`PATCH` request connections | No |
 | `TIMEOUT_SECONDS` | Request timeout in seconds (Default: `30`) | No |
+| `VALIDATE_JSON_BODY` | Validate template JSON body before sending (Default: `TRUE`) | No |
+| `MAX_RETRY_AFTER_SECONDS` | Cap on Retry-After header delay in seconds (Default: `60`) | No |
+| `TOKEN_URL` | OAuth2 token endpoint URL | No |
+| `CLIENT_ID` | OAuth2 client id | No |
+| `CLIENT_SECRET` | OAuth2 client secret | No |
+| `SCOPE` | Optional OAuth2 scope | No |
+| `TOKEN_CACHE_SECONDS` | Token cache duration override in seconds | No |
+| `PAGINATION_MODE` | Pagination strategy: `NONE`, `PAGE`, `OFFSET`, `CURSOR`, `LINK_HEADER` (Default: `NONE`) | No |
+| `PAGE_PARAM` | Query parameter for page number (Default: `page`) | No |
+| `PAGE_START` | First page number (Default: `1`) | No |
+| `OFFSET_PARAM` | Query parameter for offset (Default: `offset`) | No |
+| `LIMIT_PARAM` | Query parameter for page size/limit (Default: `limit`) | No |
+| `PAGE_SIZE` | Requested page size | No |
+| `CURSOR_PARAM` | Query parameter for cursor token | No |
+| `CURSOR_PATH` | JSONPath to next cursor in response body | No |
+| `NEXT_URL_PATH` | JSONPath to next-page URL in response body | No |
+| `MAX_PAGES` | Safety cap on total retrieved pages (Default: `1000`) | No |
 | `BODY_MODE` | Outbound write format: `ROW_OBJECT`, `ROW_ARRAY`, `WRAPPED_ARRAY`, `TEMPLATE` (Default: `ROW_OBJECT`) | No |
 | `BATCH_SIZE` | Size of batch writes for array modes (Default: `500`) | No |
 | `BATCH_ROOT` | Envelope property name required for `WRAPPED_ARRAY` | No |
 | `RESPONSE_TABLE` | Temp table name (e.g. `#my_results`) to store API response metadata | No |
 | `RESPONSE_CORRELATION_COLUMNS` | Comma-separated list of columns to copy from source row to response table | No |
+| `RESPONSE_ITEM_PATH` | JSONPath to response array for per-item correlation mapping | No |
 | `SUCCESS_STATUS` | Successful status codes (Default: `200,201,202,204`) | No |
 | `ERROR_MODE` | Error policy: `FAIL_FAST` or `CONTINUE` (Default: `FAIL_FAST`) | No |
 | `RETRY_COUNT` | Number of attempts to retry transient failures (Default: `0`) | No |

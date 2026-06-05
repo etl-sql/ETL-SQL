@@ -26,6 +26,10 @@ namespace ETL_SQL.Connectors.Rest
         private readonly int _timeoutSeconds;
         private static readonly HttpClient _httpClient = new HttpClient();
 
+        private string? _cachedToken;
+        private DateTime? _tokenExpiry;
+        private readonly System.Threading.SemaphoreSlim _tokenSemaphore = new(1, 1);
+
         public RestDataSource(IExecutionContext context, string url, Dictionary<string, string>? options = null)
         {
             _context = context;
@@ -56,26 +60,573 @@ namespace ETL_SQL.Connectors.Rest
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
             ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "REST", ShouldWrapProviderException);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        private static string UpdateQueryParameter(string url, string key, string value)
         {
-            var request = BuildRequest();
-            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
-            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
-            
-            if (!response.IsSuccessStatusCode)
+            var uri = new Uri(url);
+            var query = uri.Query;
+            var path = url;
+            int queryIdx = url.IndexOf('?');
+            if (queryIdx >= 0)
             {
-                var error = await response.Content.ReadAsStringAsync();
-                throw new ExecutionException($"API request failed with status {response.StatusCode}: {error}");
+                path = url.Substring(0, queryIdx);
             }
 
-            using var stream = await response.Content.ReadAsStreamAsync();
-            
-            string? rootPath = null;
-            _options?.TryGetValue("ROOT_PATH", out rootPath);
-
-            await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, rootPath, batchSize))
+            var queryParams = new List<KeyValuePair<string, string>>();
+            if (!string.IsNullOrEmpty(query))
             {
-                yield return batch;
+                var parts = query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var part in parts)
+                {
+                    var eqIdx = part.IndexOf('=');
+                    if (eqIdx >= 0)
+                    {
+                        var k = Uri.UnescapeDataString(part.Substring(0, eqIdx));
+                        var v = Uri.UnescapeDataString(part.Substring(eqIdx + 1));
+                        queryParams.Add(new KeyValuePair<string, string>(k, v));
+                    }
+                    else
+                    {
+                        var k = Uri.UnescapeDataString(part);
+                        queryParams.Add(new KeyValuePair<string, string>(k, string.Empty));
+                    }
+                }
+            }
+
+            queryParams.RemoveAll(kvp => kvp.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
+            queryParams.Add(new KeyValuePair<string, string>(key, value));
+
+            var newQuery = string.Join("&", queryParams.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
+            return path + "?" + newQuery;
+        }
+
+        private static string? ParseLinkHeaderNextUrl(HttpResponseMessage response)
+        {
+            if (response.Headers.TryGetValues("Link", out var linkValues))
+            {
+                foreach (var linkVal in linkValues)
+                {
+                    var parts = linkVal.Split(',');
+                    foreach (var part in parts)
+                    {
+                        var match = System.Text.RegularExpressions.Regex.Match(part, @"<([^>]+)>;\s*rel=""next""", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (match.Success)
+                        {
+                            return match.Groups[1].Value;
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        private static JsonElement? ResolveJsonElement(JsonElement root, string? path)
+        {
+            if (string.IsNullOrEmpty(path) || path == "$")
+            {
+                return root;
+            }
+
+            var cleanPath = path;
+            if (cleanPath.StartsWith("$."))
+            {
+                cleanPath = cleanPath.Substring(2);
+            }
+            else if (cleanPath.StartsWith("$"))
+            {
+                cleanPath = cleanPath.Substring(1);
+            }
+
+            var parts = cleanPath.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            var current = root;
+            foreach (var part in parts)
+            {
+                if (current.ValueKind == JsonValueKind.Object && current.TryGetProperty(part, out var next))
+                {
+                    current = next;
+                }
+                else if (current.ValueKind == JsonValueKind.Array && int.TryParse(part, out var idx) && idx >= 0 && idx < current.GetArrayLength())
+                {
+                    current = current[idx];
+                }
+                else
+                {
+                    return null;
+                }
+            }
+            return current;
+        }
+
+        private static object? GetJsonValueForElement(JsonElement element) => element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString(),
+            JsonValueKind.Number => element.TryGetDecimal(out var d) ? d : (object?)element.GetDouble(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
+            _ => element.GetRawText()
+        };
+
+        private int CalculateRetryDelay(HttpResponseMessage? response, int baseBackoffMs, int attempt)
+        {
+            int maxRetryAfterSeconds = 60;
+            if (_options != null && _options.TryGetValue("MAX_RETRY_AFTER_SECONDS", out var mrasStr) && int.TryParse(mrasStr, out var mras) && mras >= 0)
+            {
+                maxRetryAfterSeconds = mras;
+            }
+
+            int delayMs = baseBackoffMs * (int)Math.Pow(2, attempt - 1);
+
+            if (response != null && response.Headers.TryGetValues("Retry-After", out var values))
+            {
+                var val = values.FirstOrDefault();
+                if (!string.IsNullOrEmpty(val))
+                {
+                    if (int.TryParse(val, out var seconds))
+                    {
+                        if (seconds >= 0)
+                        {
+                            int sleepMs = Math.Min(seconds, maxRetryAfterSeconds) * 1000;
+                            return sleepMs;
+                        }
+                    }
+                    else if (DateTime.TryParse(val, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var date))
+                    {
+                        var sleepSpan = date.ToUniversalTime() - DateTime.UtcNow;
+                        if (sleepSpan.TotalMilliseconds > 0)
+                        {
+                            int sleepMs = (int)Math.Min(sleepSpan.TotalMilliseconds, maxRetryAfterSeconds * 1000);
+                            return sleepMs;
+                        }
+                    }
+                }
+            }
+
+            return delayMs;
+        }
+
+        private async Task<string> GetOAuthTokenAsync()
+        {
+            if (_cachedToken != null && _tokenExpiry.HasValue && _tokenExpiry.Value > DateTime.UtcNow.AddSeconds(5))
+            {
+                return _cachedToken;
+            }
+
+            await _tokenSemaphore.WaitAsync();
+            try
+            {
+                if (_cachedToken != null && _tokenExpiry.HasValue && _tokenExpiry.Value > DateTime.UtcNow.AddSeconds(5))
+                {
+                    return _cachedToken;
+                }
+
+                if (_options == null ||
+                    !_options.TryGetValue("TOKEN_URL", out var tokenUrl) ||
+                    !_options.TryGetValue("CLIENT_ID", out var clientId) ||
+                    !_options.TryGetValue("CLIENT_SECRET", out var clientSecret))
+                {
+                    throw new ExecutionException("OAuth2 Client Credentials requires TOKEN_URL, CLIENT_ID, and CLIENT_SECRET options.");
+                }
+
+                if (!Uri.TryCreate(tokenUrl, UriKind.Absolute, out var uri))
+                {
+                    throw new ExecutionException("OAuth2 TOKEN_URL is not a valid absolute URI.");
+                }
+                _context?.SecurityService.ValidateHost(uri.Host);
+
+                _options.TryGetValue("SCOPE", out var scope);
+
+                var postParams = new List<KeyValuePair<string, string>>
+                {
+                    new("grant_type", "client_credentials"),
+                    new("client_id", clientId),
+                    new("client_secret", clientSecret)
+                };
+                if (!string.IsNullOrEmpty(scope))
+                {
+                    postParams.Add(new("scope", scope));
+                }
+
+                using var request = new HttpRequestMessage(HttpMethod.Post, tokenUrl)
+                {
+                    Content = new FormUrlEncodedContent(postParams)
+                };
+
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
+                using var response = await _httpClient.SendAsync(request, cts.Token);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    errorContent = SanitizeForDiagnostics(errorContent);
+                    throw new ExecutionException($"OAuth2 token request failed with status {response.StatusCode}: {errorContent}");
+                }
+
+                var responseBody = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(responseBody);
+                var root = doc.RootElement;
+
+                if (!root.TryGetProperty("access_token", out var tokenProp))
+                {
+                    throw new ExecutionException("OAuth2 token response did not contain 'access_token'.");
+                }
+
+                var accessToken = tokenProp.GetString();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    throw new ExecutionException("OAuth2 token response contained an empty 'access_token'.");
+                }
+
+                int expiresIn = 3600;
+                if (root.TryGetProperty("expires_in", out var expiresProp) && expiresProp.TryGetInt32(out var exp))
+                {
+                    expiresIn = exp;
+                }
+
+                if (_options.TryGetValue("TOKEN_CACHE_SECONDS", out var tcsStr) && int.TryParse(tcsStr, out var tcs) && tcs > 0)
+                {
+                    expiresIn = tcs;
+                }
+
+                _cachedToken = accessToken;
+                _tokenExpiry = DateTime.UtcNow.AddSeconds(expiresIn);
+
+                return accessToken;
+            }
+            catch (Exception ex) when (ex is not ExecutionException)
+            {
+                throw new ExecutionException($"OAuth2 token acquisition failed: {SanitizeForDiagnostics(ex.Message)}", ex);
+            }
+            finally
+            {
+                _tokenSemaphore.Release();
+            }
+        }
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        {
+            string paginationMode = "NONE";
+            if (_options != null && _options.TryGetValue("PAGINATION_MODE", out var pm))
+            {
+                paginationMode = pm.ToUpperInvariant();
+            }
+            if (paginationMode != "NONE" &&
+                paginationMode != "PAGE" &&
+                paginationMode != "OFFSET" &&
+                paginationMode != "CURSOR" &&
+                paginationMode != "LINK_HEADER")
+            {
+                throw new ExecutionException($"Unsupported PAGINATION_MODE: '{paginationMode}'. Supported values are NONE, PAGE, OFFSET, CURSOR, and LINK_HEADER.");
+            }
+
+            int maxPages = 1000;
+            if (_options != null && _options.TryGetValue("MAX_PAGES", out var mpStr) && int.TryParse(mpStr, out var mp) && mp > 0)
+            {
+                maxPages = mp;
+            }
+
+            string pageParam = "page";
+            if (_options != null && _options.TryGetValue("PAGE_PARAM", out var pp) && !string.IsNullOrWhiteSpace(pp))
+            {
+                pageParam = pp;
+            }
+
+            int pageStart = 1;
+            if (_options != null && _options.TryGetValue("PAGE_START", out var psStr) && int.TryParse(psStr, out var ps))
+            {
+                pageStart = ps;
+            }
+
+            string offsetParam = "offset";
+            if (_options != null && _options.TryGetValue("OFFSET_PARAM", out var op) && !string.IsNullOrWhiteSpace(op))
+            {
+                offsetParam = op;
+            }
+
+            string limitParam = "limit";
+            if (_options != null && _options.TryGetValue("LIMIT_PARAM", out var lp) && !string.IsNullOrWhiteSpace(lp))
+            {
+                limitParam = lp;
+            }
+
+            int? pageSize = null;
+            if (_options != null && _options.TryGetValue("PAGE_SIZE", out var pSizeStr) && int.TryParse(pSizeStr, out var pSize) && pSize > 0)
+            {
+                pageSize = pSize;
+            }
+
+            string? cursorParam = null;
+            _options?.TryGetValue("CURSOR_PARAM", out cursorParam);
+
+            string? cursorPath = null;
+            _options?.TryGetValue("CURSOR_PATH", out cursorPath);
+
+            string? nextUrlPath = null;
+            _options?.TryGetValue("NEXT_URL_PATH", out nextUrlPath);
+            if (paginationMode == "CURSOR" && string.IsNullOrWhiteSpace(cursorParam) && string.IsNullOrWhiteSpace(nextUrlPath))
+            {
+                throw new ExecutionException("CURSOR pagination requires CURSOR_PARAM or NEXT_URL_PATH.");
+            }
+
+            string? rootPath = null;
+            if (_options != null && _options.TryGetValue("ROOT_PATH", out rootPath))
+            {
+                if (rootPath.StartsWith("$.")) rootPath = rootPath.Substring(2);
+                else if (rootPath.StartsWith("$") && rootPath.Length > 1) rootPath = rootPath.Substring(1);
+            }
+
+            int retryCount = 0;
+            if (_options != null && _options.TryGetValue("RETRY_COUNT", out var rcStr) && int.TryParse(rcStr, out var rc) && rc >= 0)
+            {
+                retryCount = rc;
+            }
+
+            int retryBackoffMs = 500;
+            if (_options != null && _options.TryGetValue("RETRY_BACKOFF_MS", out var rbStr) && int.TryParse(rbStr, out var rb) && rb >= 0)
+            {
+                retryBackoffMs = rb;
+            }
+
+            var retryStatuses = new HashSet<int> { 408, 429, 500, 502, 503, 504 };
+            if (_options != null && _options.TryGetValue("RETRY_STATUS", out var rsStr) && !string.IsNullOrWhiteSpace(rsStr))
+            {
+                retryStatuses = new HashSet<int>(rsStr.Split(',').Select(s => int.TryParse(s.Trim(), out var code) ? code : -1).Where(code => code != -1));
+            }
+
+            if (paginationMode == "NONE")
+            {
+                HttpResponseMessage? response = null;
+                int attempts = 0;
+                while (true)
+                {
+                    var request = await BuildRequestAsync();
+                    try
+                    {
+                        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
+                        response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            break;
+                        }
+
+                        int statusCode = (int)response.StatusCode;
+                        if (attempts < retryCount && retryStatuses.Contains(statusCode))
+                        {
+                            attempts++;
+                            int delayMs = CalculateRetryDelay(response, retryBackoffMs, attempts);
+                            await Task.Delay(delayMs);
+                            continue;
+                        }
+
+                        var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync());
+                        throw new HttpRequestException($"API request failed with status {response.StatusCode}: {error}");
+                    }
+                    catch (Exception ex) when (ex is not HttpRequestException)
+                    {
+                        if (attempts < retryCount)
+                        {
+                            attempts++;
+                            int delayMs = CalculateRetryDelay(null, retryBackoffMs, attempts);
+                            await Task.Delay(delayMs);
+                            continue;
+                        }
+                        throw new HttpRequestException($"API request failed with exception: {SanitizeForDiagnostics(ex.Message)}", ex);
+                    }
+                }
+
+                using var stream = await response.Content.ReadAsStreamAsync();
+                await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, rootPath, batchSize))
+                {
+                    yield return batch;
+                }
+                yield break;
+            }
+
+            int pageCount = 0;
+            string currentUrl = _url;
+            int currentPage = pageStart;
+            int currentOffset = 0;
+            string? currentCursor = null;
+            bool hasMore = true;
+
+            while (hasMore && pageCount < maxPages)
+            {
+                string requestUrl = currentUrl;
+                if (paginationMode == "PAGE")
+                {
+                    requestUrl = UpdateQueryParameter(requestUrl, pageParam, currentPage.ToString());
+                    if (pageSize.HasValue)
+                    {
+                        requestUrl = UpdateQueryParameter(requestUrl, limitParam, pageSize.Value.ToString());
+                    }
+                }
+                else if (paginationMode == "OFFSET")
+                {
+                    requestUrl = UpdateQueryParameter(requestUrl, offsetParam, currentOffset.ToString());
+                    if (pageSize.HasValue)
+                    {
+                        requestUrl = UpdateQueryParameter(requestUrl, limitParam, pageSize.Value.ToString());
+                    }
+                }
+                else if (paginationMode == "CURSOR")
+                {
+                    if (currentCursor != null && !string.IsNullOrWhiteSpace(cursorParam))
+                    {
+                        requestUrl = UpdateQueryParameter(requestUrl, cursorParam, currentCursor);
+                    }
+                    if (pageSize.HasValue)
+                    {
+                        requestUrl = UpdateQueryParameter(requestUrl, limitParam, pageSize.Value.ToString());
+                    }
+                }
+
+                HttpResponseMessage? response = null;
+                int attempts = 0;
+                string responseBodyText;
+
+                while (true)
+                {
+                    var request = await BuildRequestAsync(requestUrl);
+                    try
+                    {
+                        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
+                        response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
+
+                        int statusCode = (int)response.StatusCode;
+                        if (response.IsSuccessStatusCode)
+                        {
+                            responseBodyText = await response.Content.ReadAsStringAsync();
+                            break;
+                        }
+
+                        if (attempts < retryCount && retryStatuses.Contains(statusCode))
+                        {
+                            attempts++;
+                            int delayMs = CalculateRetryDelay(response, retryBackoffMs, attempts);
+                            await Task.Delay(delayMs);
+                            continue;
+                        }
+
+                        var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync());
+                        throw new HttpRequestException($"API request failed with status {response.StatusCode}: {error}");
+                    }
+                    catch (Exception ex) when (ex is not HttpRequestException)
+                    {
+                        if (attempts < retryCount)
+                        {
+                            attempts++;
+                            int delayMs = CalculateRetryDelay(null, retryBackoffMs, attempts);
+                            await Task.Delay(delayMs);
+                            continue;
+                        }
+                        throw new HttpRequestException($"API request failed with exception: {SanitizeForDiagnostics(ex.Message)}", ex);
+                    }
+                }
+
+                int rowsInPage = 0;
+                using (var doc = JsonDocument.Parse(responseBodyText))
+                {
+                    await foreach (var batch in JsonExtractor.ExtractBatches(doc, rootPath, batchSize))
+                    {
+                        rowsInPage += batch.Rows.Count;
+                        yield return batch;
+                    }
+
+                    if (rowsInPage == 0)
+                    {
+                        hasMore = false;
+                        break;
+                    }
+
+                    if (paginationMode == "CURSOR" && !string.IsNullOrEmpty(cursorPath))
+                    {
+                        var cursorElem = ResolveJsonElement(doc.RootElement, cursorPath);
+                        if (cursorElem.HasValue && cursorElem.Value.ValueKind != JsonValueKind.Null && cursorElem.Value.ValueKind != JsonValueKind.Undefined)
+                        {
+                            string? nextCursor = cursorElem.Value.ValueKind == JsonValueKind.String ? cursorElem.Value.GetString() : cursorElem.Value.GetRawText();
+                            if (!string.IsNullOrWhiteSpace(nextCursor) && nextCursor != currentCursor)
+                            {
+                                currentCursor = nextCursor;
+                            }
+                            else
+                            {
+                                hasMore = false;
+                            }
+                        }
+                        else
+                        {
+                            hasMore = false;
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(nextUrlPath))
+                    {
+                        var nextUrlElem = ResolveJsonElement(doc.RootElement, nextUrlPath);
+                        if (nextUrlElem.HasValue && nextUrlElem.Value.ValueKind == JsonValueKind.String)
+                        {
+                            var nextUrl = nextUrlElem.Value.GetString();
+                            if (!string.IsNullOrEmpty(nextUrl))
+                            {
+                                if (Uri.TryCreate(nextUrl, UriKind.Absolute, out var nextUri))
+                                {
+                                    currentUrl = nextUrl;
+                                }
+                                else if (Uri.TryCreate(new Uri(currentUrl), nextUrl, out var absoluteNextUri))
+                                {
+                                    currentUrl = absoluteNextUri.AbsoluteUri;
+                                }
+                                else
+                                {
+                                    throw new ExecutionException($"Invalid next URL returned by API: '{nextUrl}'");
+                                }
+                                ValidateRequestUrl(currentUrl);
+                            }
+                            else
+                            {
+                                hasMore = false;
+                            }
+                        }
+                        else
+                        {
+                            hasMore = false;
+                        }
+                    }
+                }
+
+                if (paginationMode == "PAGE")
+                {
+                    currentPage++;
+                }
+                else if (paginationMode == "OFFSET")
+                {
+                    int increment = pageSize ?? rowsInPage;
+                    currentOffset += increment;
+                }
+                else if (paginationMode == "LINK_HEADER")
+                {
+                    var nextUrl = ParseLinkHeaderNextUrl(response);
+                    if (!string.IsNullOrEmpty(nextUrl))
+                    {
+                        if (Uri.TryCreate(nextUrl, UriKind.Absolute, out var nextUri))
+                        {
+                            currentUrl = nextUrl;
+                        }
+                        else if (Uri.TryCreate(new Uri(currentUrl), nextUrl, out var absoluteNextUri))
+                        {
+                            currentUrl = absoluteNextUri.AbsoluteUri;
+                        }
+                        else
+                        {
+                            throw new ExecutionException($"Invalid next URL returned by API: '{nextUrl}'");
+                        }
+                        ValidateRequestUrl(currentUrl);
+                    }
+                    else
+                    {
+                        hasMore = false;
+                    }
+                }
+
+                pageCount++;
             }
         }
 
@@ -379,7 +930,7 @@ namespace ETL_SQL.Connectors.Rest
                         url,
                         method,
                         bodyText,
-                        row,
+                        new List<Row> { row },
                         sourceRowStartIndex + rowIdx,
                         batchIndex,
                         stats,
@@ -434,7 +985,7 @@ namespace ETL_SQL.Connectors.Rest
                     url,
                     method,
                     bodyText,
-                    null,
+                    rows,
                     null,
                     batchIndex,
                     stats,
@@ -457,7 +1008,7 @@ namespace ETL_SQL.Connectors.Rest
             string url,
             string method,
             string? content,
-            Row? singleRow,
+            List<Row>? rows,
             int? sourceRowIndex,
             int batchIndex,
             WriteStats stats,
@@ -474,6 +1025,26 @@ namespace ETL_SQL.Connectors.Rest
             InMemoryDataSource? respTableDs,
             string[] correlationCols)
         {
+            bool validateJsonBody = true;
+            if (_options != null && _options.TryGetValue("VALIDATE_JSON_BODY", out var vjbStr) && bool.TryParse(vjbStr, out var vjb))
+            {
+                validateJsonBody = vjb;
+            }
+
+            var contentType = GetBodyContentType().Trim().ToLowerInvariant();
+            bool isJsonContentType = contentType.StartsWith("application/json") || contentType.EndsWith("+json");
+            if (content != null && isJsonContentType && validateJsonBody)
+            {
+                try
+                {
+                    using var tempDoc = JsonDocument.Parse(content);
+                }
+                catch (JsonException ex)
+                {
+                    throw new ExecutionException($"Generated JSON body is invalid: {ex.Message}");
+                }
+            }
+
             int attempts = 0;
             HttpResponseMessage? response = null;
             string? errorMessage = null;
@@ -483,6 +1054,8 @@ namespace ETL_SQL.Connectors.Rest
             int currentRequestIndex = stats.RequestIndex++;
             ValidateRequestUrl(url);
 
+            var singleRow = rows != null && rows.Count == 1 ? rows[0] : null;
+
             while (true)
             {
                 using var request = new HttpRequestMessage(new HttpMethod(method), url);
@@ -491,7 +1064,7 @@ namespace ETL_SQL.Connectors.Rest
                     request.Content = new StringContent(content, System.Text.Encoding.UTF8, GetBodyContentType());
                 }
 
-                ApplyHeaders(request, singleRow, idempotencyKeyCol, idempotencyHeader, columnNames);
+                await ApplyHeadersAsync(request, singleRow, idempotencyKeyCol, idempotencyHeader, columnNames);
 
                 try
                 {
@@ -509,7 +1082,8 @@ namespace ETL_SQL.Connectors.Rest
                     if (attempts < retryCount && retryStatuses.Contains(statusCode.Value))
                     {
                         attempts++;
-                        await Task.Delay(retryBackoffMs * (int)Math.Pow(2, attempts - 1));
+                        int delayMs = CalculateRetryDelay(response, retryBackoffMs, attempts);
+                        await Task.Delay(delayMs);
                         continue;
                     }
 
@@ -527,7 +1101,8 @@ namespace ETL_SQL.Connectors.Rest
                     if (attempts < retryCount)
                     {
                         attempts++;
-                        await Task.Delay(retryBackoffMs * (int)Math.Pow(2, attempts - 1));
+                        int delayMs = CalculateRetryDelay(null, retryBackoffMs, attempts);
+                        await Task.Delay(delayMs);
                         continue;
                     }
 
@@ -552,33 +1127,123 @@ namespace ETL_SQL.Connectors.Rest
                 var responseBatch = new DataTable();
                 responseBatch.SetColumns(respTableDs.Schema.Keys);
 
-                var respRow = new Row(responseBatch.Schema);
-                respRow["request_index"] = currentRequestIndex;
-                respRow["batch_index"] = batchIndex;
-                respRow["source_row_index"] = sourceRowIndex;
-                respRow["success"] = success;
-                respRow["status_code"] = statusCode;
-                respRow["method"] = method;
-                respRow["url"] = RedactUrl(url);
-                respRow["retry_count"] = attempts;
-                respRow["duration_ms"] = (int)stopwatch.ElapsedMilliseconds;
-                respRow["row_count"] = rowCount;
-                respRow["response_body"] = responseBodyText;
-                respRow["error_message"] = errorMessage;
+                string? responseItemPath = null;
+                _options?.TryGetValue("RESPONSE_ITEM_PATH", out responseItemPath);
 
-                foreach (var col in correlationCols)
+                bool processedItems = false;
+                if (!string.IsNullOrEmpty(responseItemPath) && !string.IsNullOrEmpty(responseBodyText))
                 {
-                    if (singleRow != null)
+                    try
                     {
-                        respRow[col] = singleRow[col];
+                        using var doc = JsonDocument.Parse(responseBodyText);
+                        var itemsElement = ResolveJsonElement(doc.RootElement, responseItemPath);
+                        if (itemsElement.HasValue && itemsElement.Value.ValueKind == JsonValueKind.Array)
+                        {
+                            var array = itemsElement.Value;
+                            int itemIdx = 0;
+                            foreach (var item in array.EnumerateArray())
+                            {
+                                Row? correspondingSourceRow = (rows != null && itemIdx >= 0 && itemIdx < rows.Count) ? rows[itemIdx] : null;
+
+                                var respRow = new Row(responseBatch.Schema);
+                                respRow["request_index"] = currentRequestIndex;
+                                respRow["batch_index"] = batchIndex;
+                                respRow["source_row_index"] = sourceRowIndex.HasValue ? sourceRowIndex.Value + itemIdx : (int?)null;
+
+                                bool itemSuccess = success;
+                                if (item.ValueKind == JsonValueKind.Object)
+                                {
+                                    if (item.TryGetProperty("success", out var succProp) && succProp.ValueKind == JsonValueKind.False)
+                                    {
+                                        itemSuccess = false;
+                                    }
+                                    if (item.TryGetProperty("status", out var statusProp) && statusProp.ValueKind == JsonValueKind.False)
+                                    {
+                                        itemSuccess = false;
+                                    }
+                                }
+                                respRow["success"] = itemSuccess;
+                                respRow["status_code"] = statusCode;
+                                respRow["method"] = method;
+                                respRow["url"] = RedactUrl(url);
+                                respRow["retry_count"] = attempts;
+                                respRow["duration_ms"] = (int)stopwatch.ElapsedMilliseconds;
+                                respRow["row_count"] = 1;
+                                respRow["response_body"] = item.GetRawText();
+
+                                string? itemError = errorMessage;
+                                if (!itemSuccess && item.ValueKind == JsonValueKind.Object)
+                                {
+                                    if (item.TryGetProperty("error", out var errProp))
+                                    {
+                                        itemError = errProp.ValueKind == JsonValueKind.String ? errProp.GetString() : errProp.GetRawText();
+                                    }
+                                    else if (item.TryGetProperty("message", out var msgProp))
+                                    {
+                                        itemError = msgProp.ValueKind == JsonValueKind.String ? msgProp.GetString() : msgProp.GetRawText();
+                                    }
+                                }
+                                respRow["error_message"] = itemError;
+
+                                foreach (var col in correlationCols)
+                                {
+                                    if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty(col, out var itemProp))
+                                    {
+                                        respRow[col] = GetJsonValueForElement(itemProp);
+                                    }
+                                    else if (correspondingSourceRow != null)
+                                    {
+                                        respRow[col] = correspondingSourceRow[col];
+                                    }
+                                    else
+                                    {
+                                        respRow[col] = null;
+                                    }
+                                }
+
+                                await responseBatch.AddRowAsync(respRow);
+                                itemIdx++;
+                            }
+                            processedItems = true;
+                        }
                     }
-                    else
+                    catch (JsonException)
                     {
-                        respRow[col] = null;
+                        // Non-JSON response body: keep the original one-row response capture.
                     }
                 }
 
-                await responseBatch.AddRowAsync(respRow);
+                if (!processedItems)
+                {
+                    var respRow = new Row(responseBatch.Schema);
+                    respRow["request_index"] = currentRequestIndex;
+                    respRow["batch_index"] = batchIndex;
+                    respRow["source_row_index"] = sourceRowIndex;
+                    respRow["success"] = success;
+                    respRow["status_code"] = statusCode;
+                    respRow["method"] = method;
+                    respRow["url"] = RedactUrl(url);
+                    respRow["retry_count"] = attempts;
+                    respRow["duration_ms"] = (int)stopwatch.ElapsedMilliseconds;
+                    respRow["row_count"] = rowCount;
+                    respRow["response_body"] = responseBodyText;
+                    respRow["error_message"] = errorMessage;
+
+                    foreach (var col in correlationCols)
+                    {
+                        if (singleRow != null)
+                        {
+                            respRow[col] = singleRow[col];
+                        }
+                        else
+                        {
+                            respRow[col] = null;
+                        }
+                    }
+
+                    await responseBatch.AddRowAsync(respRow);
+                }
+
                 await respTableDs.WriteBatches(ToAsyncEnumerable(responseBatch), append: true);
             }
 
@@ -691,7 +1356,7 @@ namespace ETL_SQL.Connectors.Rest
             }
         }
 
-        private void ApplyHeaders(HttpRequestMessage request, Row? row, string? idempotencyKeyCol, string idempotencyHeader, List<string>? columnNames)
+        private async Task ApplyHeadersAsync(HttpRequestMessage request, Row? row, string? idempotencyKeyCol, string idempotencyHeader, List<string>? columnNames)
         {
             if (_options != null && _options.TryGetValue("AUTH_TYPE", out var authType))
             {
@@ -718,6 +1383,10 @@ namespace ETL_SQL.Connectors.Rest
                                 request.Headers.Add(header, apiToken);
                             }
                         }
+                        break;
+                    case "OAUTH2_CLIENT_CREDENTIALS":
+                        var oauthToken = await GetOAuthTokenAsync();
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
                         break;
                 }
             }
@@ -814,20 +1483,28 @@ namespace ETL_SQL.Connectors.Rest
 
         private string SanitizeForDiagnostics(string? value)
         {
-            if (string.IsNullOrEmpty(value) || _options == null)
+            if (string.IsNullOrEmpty(value))
             {
                 return value ?? string.Empty;
             }
 
             var sanitized = value;
-            foreach (var opt in _options)
+            if (_options != null)
             {
-                if (!IsSensitiveHeader(opt.Key) || string.IsNullOrEmpty(opt.Value))
+                foreach (var opt in _options)
                 {
-                    continue;
-                }
+                    if (!IsSensitiveHeader(opt.Key) || string.IsNullOrEmpty(opt.Value))
+                    {
+                        continue;
+                    }
 
-                sanitized = sanitized.Replace(opt.Value, "***REDACTED***", StringComparison.Ordinal);
+                    sanitized = sanitized.Replace(opt.Value, "***REDACTED***", StringComparison.Ordinal);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(_cachedToken))
+            {
+                sanitized = sanitized.Replace(_cachedToken, "***REDACTED***", StringComparison.Ordinal);
             }
 
             return sanitized;
@@ -889,14 +1566,18 @@ namespace ETL_SQL.Connectors.Rest
                     return Enumerable.Empty<string>();
                 }
 
-                var request = BuildRequest();
+                var request = await BuildRequestAsync();
                 var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
                 if (!response.IsSuccessStatusCode) return Enumerable.Empty<string>();
 
                 using var stream = await response.Content.ReadAsStreamAsync();
-            
+
                 string? rootPath = null;
-                _options?.TryGetValue("ROOT_PATH", out rootPath);
+                if (_options != null && _options.TryGetValue("ROOT_PATH", out rootPath))
+                {
+                    if (rootPath.StartsWith("$.")) rootPath = rootPath.Substring(2);
+                    else if (rootPath.StartsWith("$") && rootPath.Length > 1) rootPath = rootPath.Substring(1);
+                }
 
                 return await JsonExtractor.GetColumnsAsync(stream, rootPath);
             }
@@ -940,15 +1621,15 @@ namespace ETL_SQL.Connectors.Rest
 
         public async ValueTask DisposeAsync() => await Task.CompletedTask;
 
-        private HttpRequestMessage BuildRequest()
+        private async Task<HttpRequestMessage> BuildRequestAsync(string? url = null)
         {
             string? methodStr = "GET";
             _options?.TryGetValue("METHOD", out methodStr);
             var method = new HttpMethod(methodStr ?? "GET");
 
-            var request = new HttpRequestMessage(method, _url);
+            var targetUrl = url ?? _url;
+            var request = new HttpRequestMessage(method, targetUrl);
 
-            // Authentication
             if (_options != null && _options.TryGetValue("AUTH_TYPE", out var authType))
             {
                 switch (authType.ToUpperInvariant())
@@ -972,10 +1653,13 @@ namespace ETL_SQL.Connectors.Rest
                             request.Headers.Add(header, apiToken);
                         }
                         break;
+                    case "OAUTH2_CLIENT_CREDENTIALS":
+                        var oauthToken = await GetOAuthTokenAsync();
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthToken);
+                        break;
                 }
             }
 
-            // Custom Headers (Any property starting with HEADER_)
             if (_options != null)
             {
                 foreach (var opt in _options.Where(o => o.Key.StartsWith("HEADER_", StringComparison.OrdinalIgnoreCase)))
@@ -990,8 +1674,7 @@ namespace ETL_SQL.Connectors.Rest
                 }
             }
 
-            // Body for request methods that support JSON payloads.
-            if ((method == HttpMethod.Post || method == HttpMethod.Put) &&
+            if ((method == HttpMethod.Post || method == HttpMethod.Put || method.Method.Equals("PATCH", StringComparison.OrdinalIgnoreCase)) &&
                 _options != null &&
                 _options.TryGetValue("BODY", out var body))
             {

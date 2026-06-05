@@ -582,8 +582,8 @@ CREATE CONNECTION github AS API(
         AUTH_TYPE = 'Bearer',
         TOKEN     = 'ENC:U2FsdGVk...',    -- GitHub Personal Access Token (encrypted)
         ROOT_PATH = '$',                   -- the response IS the array
-        PAG_TYPE  = 'page',               -- GitHub uses ?page=N pagination
-        PAG_LIMIT = 100
+        PAGINATION_MODE = 'PAGE',         -- GitHub uses page pagination
+        PAGE_SIZE       = 100
     );
 
 CREATE CONNECTION dest AS MSSQL(SERVER='tracker-db', DATABASE='Issues', TRUSTED_CONNECTION=TRUE);

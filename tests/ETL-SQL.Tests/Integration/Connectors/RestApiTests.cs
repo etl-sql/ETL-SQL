@@ -124,6 +124,28 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.Equal(true, batches[0].Rows[0]["deleted"]);
         }
 
+        [Fact]
+        public async Task Patch_WithJsonBody_SendsBodyAndParsesResponse()
+        {
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                Assert.Equal("PATCH", request.Method);
+                Assert.Contains("\"name\":\"patched\"", request.Body);
+                return LocalHttpResponse.Json("""[{"status":"patched"}]""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "PATCH",
+                ["BODY"] = """{"name":"patched"}"""
+            });
+
+            var batches = await ds.ReadBatches().ToListAsync();
+
+            Assert.Single(batches);
+            Assert.Equal("patched", batches[0].Rows[0]["status"]);
+        }
+
         [Theory]
         [InlineData("BASIC", "Authorization", "Basic YXBpdXNlcjphcGlwYXNz")]
         [InlineData("BEARER", "Authorization", "Bearer bearer-token")]
@@ -681,11 +703,19 @@ FROM #bed_usage;
 
                                     var response = _handler(new LocalHttpRequest(parts[0], parts.Length > 1 ? parts[1] : "/", headers, body));
                                     var responseBytes = Encoding.UTF8.GetBytes(response.Body);
-                                    var headerBytes = Encoding.ASCII.GetBytes(
-                                        $"HTTP/1.1 {response.StatusCode} OK\r\n" +
-                                        $"Content-Type: {response.ContentType}\r\n" +
-                                        $"Content-Length: {responseBytes.Length}\r\n" +
-                                        "Connection: close\r\n\r\n");
+                                    var headersBuilder = new StringBuilder();
+                                    headersBuilder.Append($"HTTP/1.1 {response.StatusCode} OK\r\n");
+                                    headersBuilder.Append($"Content-Type: {response.ContentType}\r\n");
+                                    headersBuilder.Append($"Content-Length: {responseBytes.Length}\r\n");
+                                    if (response.Headers != null)
+                                    {
+                                        foreach (var kvp in response.Headers)
+                                        {
+                                            headersBuilder.Append($"{kvp.Key}: {kvp.Value}\r\n");
+                                        }
+                                    }
+                                    headersBuilder.Append("Connection: close\r\n\r\n");
+                                    var headerBytes = Encoding.ASCII.GetBytes(headersBuilder.ToString());
 
                                     await stream.WriteAsync(headerBytes, _cts.Token);
                                     await stream.WriteAsync(responseBytes, _cts.Token);
@@ -713,9 +743,398 @@ FROM #bed_usage;
             Dictionary<string, string> Headers,
             string Body);
 
-        private sealed record LocalHttpResponse(int StatusCode, string ContentType, string Body)
+        private sealed record LocalHttpResponse(int StatusCode, string ContentType, string Body, Dictionary<string, string>? Headers = null)
         {
             public static LocalHttpResponse Json(string body) => new(200, "application/json", body);
+        }
+
+        [Fact]
+        public async Task ReadBatches_PagePagination_IteratesAndStops()
+        {
+            int requestCount = 0;
+            var paths = new List<string>();
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                requestCount++;
+                paths.Add(request.Path);
+                if (requestCount == 1)
+                {
+                    return LocalHttpResponse.Json("""[{"id":1,"name":"first"}]""");
+                }
+                if (requestCount == 2)
+                {
+                    return LocalHttpResponse.Json("""[{"id":2,"name":"second"}]""");
+                }
+                return LocalHttpResponse.Json("[]");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["PAGINATION_MODE"] = "PAGE",
+                ["PAGE_PARAM"] = "page",
+                ["PAGE_START"] = "1",
+                ["MAX_PAGES"] = "5"
+            });
+
+            var batches = await ds.ReadBatches().ToListAsync();
+            Assert.Equal(2, batches.Count);
+            Assert.Equal("first", batches[0].Rows[0]["name"]);
+            Assert.Equal("second", batches[1].Rows[0]["name"]);
+            Assert.Equal(3, requestCount);
+            Assert.Contains("page=1", paths[0]);
+            Assert.Contains("page=2", paths[1]);
+            Assert.Contains("page=3", paths[2]);
+        }
+
+        [Fact]
+        public async Task ReadBatches_OffsetPagination_IncrementsByPageSize()
+        {
+            var paths = new List<string>();
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                paths.Add(request.Path);
+                if (paths.Count == 1)
+                {
+                    return LocalHttpResponse.Json("""[{"id":1},{"id":2}]""");
+                }
+                return LocalHttpResponse.Json("[]");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["PAGINATION_MODE"] = "OFFSET",
+                ["OFFSET_PARAM"] = "offset",
+                ["PAGE_SIZE"] = "2",
+                ["LIMIT_PARAM"] = "limit"
+            });
+
+            var batches = await ds.ReadBatches().ToListAsync();
+            Assert.Single(batches);
+            Assert.Equal(2, paths.Count);
+            Assert.Contains("offset=0", paths[0]);
+            Assert.Contains("limit=2", paths[0]);
+            Assert.Contains("offset=2", paths[1]);
+        }
+
+        [Fact]
+        public async Task ReadBatches_CursorPagination_ReadsCursorFromBody()
+        {
+            var paths = new List<string>();
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                paths.Add(request.Path);
+                if (paths.Count == 1)
+                {
+                    return LocalHttpResponse.Json("""{"data":[{"id":1}],"next_cursor":"token-abc"}""");
+                }
+                return LocalHttpResponse.Json("""{"data":[],"next_cursor":null}""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["PAGINATION_MODE"] = "CURSOR",
+                ["CURSOR_PARAM"] = "cursor",
+                ["CURSOR_PATH"] = "$.next_cursor",
+                ["ROOT_PATH"] = "$.data"
+            });
+
+            var batches = await ds.ReadBatches().ToListAsync();
+            Assert.Single(batches);
+            Assert.Equal(2, paths.Count);
+            Assert.DoesNotContain("cursor=", paths[0]);
+            Assert.Contains("cursor=token-abc", paths[1]);
+        }
+
+        [Fact]
+        public async Task ReadBatches_LinkHeaderPagination_FollowsNext()
+        {
+            var paths = new List<string>();
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                paths.Add(request.Path);
+                if (paths.Count == 1)
+                {
+                    var response = LocalHttpResponse.Json("""[{"id":1}]""");
+                    var host = request.Headers["Host"];
+                    var nextUrl = $"http://{host}/endpoint?page=2";
+                    return response with { Headers = new Dictionary<string, string> { { "Link", $"<{nextUrl}>; rel=\"next\"" } } };
+                }
+                return LocalHttpResponse.Json("[]");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["PAGINATION_MODE"] = "LINK_HEADER"
+            });
+
+            var batches = await ds.ReadBatches().ToListAsync();
+            Assert.Single(batches);
+            Assert.Equal(2, paths.Count);
+            Assert.Contains("page=2", paths[1]);
+        }
+
+        [Fact]
+        public async Task ReadBatches_MaxPagesCap_StopsIngestion()
+        {
+            int requestCount = 0;
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                requestCount++;
+                return LocalHttpResponse.Json("""[{"id":1}]""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["PAGINATION_MODE"] = "PAGE",
+                ["MAX_PAGES"] = "3"
+            });
+
+            var batches = await ds.ReadBatches().ToListAsync();
+            Assert.Equal(3, requestCount);
+        }
+
+        [Fact]
+        public async Task ReadBatches_InvalidPaginationMode_ThrowsBeforeSending()
+        {
+            int requestCount = 0;
+            await using var server = new LocalHttpApiServer(_ =>
+            {
+                requestCount++;
+                return LocalHttpResponse.Json("""[{"id":1}]""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["PAGINATION_MODE"] = "LOOP_FOREVER"
+            });
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () => await ds.ReadBatches().ToListAsync());
+            Assert.Contains("Unsupported PAGINATION_MODE", ex.Message);
+            Assert.Equal(0, requestCount);
+        }
+
+        [Fact]
+        public async Task ReadBatches_CursorPaginationWithoutCursorOrNextUrl_ThrowsBeforeSending()
+        {
+            int requestCount = 0;
+            await using var server = new LocalHttpApiServer(_ =>
+            {
+                requestCount++;
+                return LocalHttpResponse.Json("""{"data":[{"id":1}],"next_cursor":"abc"}""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["PAGINATION_MODE"] = "CURSOR",
+                ["CURSOR_PATH"] = "$.next_cursor",
+                ["ROOT_PATH"] = "$.data"
+            });
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () => await ds.ReadBatches().ToListAsync());
+            Assert.Contains("CURSOR pagination requires", ex.Message);
+            Assert.Equal(0, requestCount);
+        }
+
+        [Fact]
+        public async Task ReadBatches_ErrorMessage_RedactsSensitiveOptionValues()
+        {
+            await using var server = new LocalHttpApiServer(_ =>
+                new LocalHttpResponse(400, "application/json", """{"error":"bearer-token denied"}"""));
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["AUTH_TYPE"] = "BEARER",
+                ["TOKEN"] = "bearer-token"
+            });
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () => await ds.ReadBatches().ToListAsync());
+            Assert.DoesNotContain("bearer-token", ex.Message);
+            Assert.Contains("***REDACTED***", ex.Message);
+        }
+
+        [Fact]
+        public async Task WriteBatches_InvalidJsonTemplate_ThrowsBeforeSending()
+        {
+            int serverHits = 0;
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                serverHits++;
+                return LocalHttpResponse.Json("""{"status":"ok"}""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "TEMPLATE",
+                ["BODY_TEMPLATE"] = """{"name": ${invalid_json}"""
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "invalid_json" });
+            var row = new Row(table.Schema);
+            row["invalid_json"] = "val";
+            await table.AddRowAsync(row);
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => ds.WriteBatches(ToAsyncEnumerable(table)));
+            Assert.Contains("invalid", ex.Message.ToLowerInvariant());
+            Assert.Equal(0, serverHits);
+        }
+
+        [Fact]
+        public async Task WriteBatches_NonJsonContentType_DoesNotValidate()
+        {
+            int serverHits = 0;
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                serverHits++;
+                return LocalHttpResponse.Json("""{"status":"ok"}""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "TEMPLATE",
+                ["BODY_TEMPLATE"] = """this is text, not json""",
+                ["BODY_CONTENT_TYPE"] = "text/plain"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "dummy" });
+            var row = new Row(table.Schema);
+            row["dummy"] = "val";
+            await table.AddRowAsync(row);
+
+            await ds.WriteBatches(ToAsyncEnumerable(table));
+            Assert.Equal(1, serverHits);
+        }
+
+        [Fact]
+        public async Task WriteBatches_RetryAfterHeader_DelaysRequest()
+        {
+            int attempts = 0;
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                attempts++;
+                if (attempts == 1)
+                {
+                    return new LocalHttpResponse(429, "application/json", """{"error":"rate_limited"}""", 
+                        new Dictionary<string, string> { { "Retry-After", "1" } });
+                }
+                return LocalHttpResponse.Json("""{"status":"ok"}""");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "ROW_OBJECT",
+                ["RETRY_COUNT"] = "1",
+                ["RETRY_STATUS"] = "429"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "id" });
+            await table.AddRowAsync(new Row(table.Schema) { ["id"] = 1 });
+
+            await ds.WriteBatches(ToAsyncEnumerable(table));
+            stopwatch.Stop();
+
+            Assert.Equal(2, attempts);
+            Assert.True(stopwatch.ElapsedMilliseconds >= 1000, $"Expected delay of >= 1000ms, got {stopwatch.ElapsedMilliseconds}ms");
+        }
+
+        [Fact]
+        public async Task Auth_OAuth2ClientCredentials_AcquiresAndUsesToken()
+        {
+            int tokenHits = 0;
+            int apiHits = 0;
+            string? receivedToken = null;
+
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                if (request.Path == "/oauth/token")
+                {
+                    tokenHits++;
+                    Assert.Contains("grant_type=client_credentials", request.Body);
+                    Assert.Contains("client_id=my-id", request.Body);
+                    Assert.Contains("client_secret=my-secret", request.Body);
+                    Assert.Contains("scope=read", request.Body);
+                    return LocalHttpResponse.Json("""{"access_token":"token-123","expires_in":3600}""");
+                }
+                if (request.Path == "/endpoint")
+                {
+                    apiHits++;
+                    request.Headers.TryGetValue("Authorization", out receivedToken);
+                    return LocalHttpResponse.Json("""[{"authorized":true}]""");
+                }
+                return new LocalHttpResponse(404, "text/plain", "Not Found");
+            });
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["AUTH_TYPE"] = "OAUTH2_CLIENT_CREDENTIALS",
+                ["TOKEN_URL"] = server.Url.Replace("/endpoint", "/oauth/token"),
+                ["CLIENT_ID"] = "my-id",
+                ["CLIENT_SECRET"] = "my-secret",
+                ["SCOPE"] = "read"
+            });
+
+            var batches = await ds.ReadBatches().ToListAsync();
+            Assert.Single(batches);
+            Assert.Equal(1, tokenHits);
+            Assert.Equal(1, apiHits);
+            Assert.Equal("Bearer token-123", receivedToken);
+        }
+
+        [Fact]
+        public async Task WriteBatches_ResponseItemPath_CorrelatesItems()
+        {
+            await using var server = new LocalHttpApiServer(request =>
+            {
+                return LocalHttpResponse.Json("""
+                {
+                    "results": [
+                        { "submission_id": "sub-001", "success": true },
+                        { "submission_id": "sub-002", "success": false, "error": "invalid location" }
+                    ]
+                }
+                """);
+            });
+
+            var connections = new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
+            var context = MakeContext(connections);
+
+            var ds = new RestDataSource(context, server.Url, new Dictionary<string, string>
+            {
+                ["METHOD"] = "POST",
+                ["BODY_MODE"] = "ROW_ARRAY",
+                ["BATCH_SIZE"] = "2",
+                ["RESPONSE_TABLE"] = "#my_api_results",
+                ["RESPONSE_CORRELATION_COLUMNS"] = "submission_id",
+                ["RESPONSE_ITEM_PATH"] = "$.results"
+            });
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "submission_id" });
+            await table.AddRowAsync(new Row(table.Schema) { ["submission_id"] = "sub-001" });
+            await table.AddRowAsync(new Row(table.Schema) { ["submission_id"] = "sub-002" });
+
+            await ds.WriteBatches(ToAsyncEnumerable(table));
+
+            Assert.True(connections.TryGetValue("#my_api_results", out var responseDs));
+            var respMemDs = Assert.IsType<InMemoryDataSource>(responseDs);
+
+            var resultBatches = await respMemDs.ReadBatches().ToListAsync();
+            Assert.Single(resultBatches);
+            var rows = resultBatches[0].Rows;
+            Assert.Equal(2, rows.Count);
+
+            Assert.Equal("sub-001", rows[0]["submission_id"]);
+            Assert.Equal(true, rows[0]["success"]);
+
+            Assert.Equal("sub-002", rows[1]["submission_id"]);
+            Assert.Equal(false, rows[1]["success"]);
+            Assert.Contains("invalid location", (string)rows[1]["error_message"]!);
         }
     }
 }
