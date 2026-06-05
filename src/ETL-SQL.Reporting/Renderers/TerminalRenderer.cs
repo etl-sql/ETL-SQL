@@ -46,15 +46,88 @@ namespace ETL_SQL.Reporting.Renderers
 
             foreach (var vName in visualNames)
             {
-                var visual = manifest.Visuals.FirstOrDefault(v => v.Name == vName);
-                if (visual != null)
+                var item = RenderSlotItem(vName, manifest);
+                if (item != null)
                 {
-                    content.Add(RenderVisual(visual, manifest));
+                    content.Add(item);
                     content.Add(new Text("\n")); // Spacer
                 }
             }
 
             return new Rows(content);
+        }
+
+        private static IRenderable? RenderSlotItem(string name, ReportManifest manifest)
+        {
+            // 1. Check if it's a visual
+            var visual = manifest.Visuals?.FirstOrDefault(v => string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (visual != null)
+            {
+                return RenderVisual(visual, manifest);
+            }
+
+            // 2. Check if it's a container
+            var container = manifest.Containers?.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (container != null)
+            {
+                return RenderContainer(container, manifest);
+            }
+
+            // 3. Check if it's a button
+            var button = manifest.Buttons?.FirstOrDefault(b => string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (button != null)
+            {
+                return RenderButton(button);
+            }
+
+            return null;
+        }
+
+        private static IRenderable RenderContainer(ContainerManifest container, ReportManifest manifest)
+        {
+            var content = new List<IRenderable>();
+
+            // Container Title
+            var title = string.IsNullOrEmpty(container.Title) ? container.Name : container.Title;
+            if (!string.IsNullOrEmpty(title))
+            {
+                content.Add(new Rule($"[bold cyan]▪ {Markup.Escape(title)} ▪[/]") { Justification = Justify.Left });
+                content.Add(new Text("\n"));
+            }
+
+            if (container.SlotMap != null)
+            {
+                var sortedSlots = container.SlotMap.OrderBy(kv => kv.Key).Select(kv => kv.Value).Distinct();
+                foreach (var childName in sortedSlots)
+                {
+                    var childRenderable = RenderSlotItem(childName, manifest);
+                    if (childRenderable != null)
+                    {
+                        content.Add(childRenderable);
+                        content.Add(new Text("\n"));
+                    }
+                }
+            }
+
+            var borderColor = Color.Cyan;
+            return new Panel(new Rows(content))
+            {
+                Header = new PanelHeader($"[cyan]{Markup.Escape(container.ContainerType)}: {Markup.Escape(title)}[/]"),
+                Border = BoxBorder.Rounded,
+                BorderStyle = new Style(borderColor)
+            };
+        }
+
+        private static IRenderable RenderButton(ButtonManifest button)
+        {
+            var title = string.IsNullOrEmpty(button.Title) ? button.Name : button.Title;
+            return new Panel(Align.Center(new Markup($"[bold white]{Markup.Escape(title)}[/]")))
+            {
+                Width = Math.Min(35, title.Length + 8),
+                Height = 3,
+                Border = BoxBorder.Rounded,
+                BorderStyle = new Style(Color.Blue)
+            };
         }
 
         /// <summary>
@@ -78,7 +151,7 @@ namespace ETL_SQL.Reporting.Renderers
                     "LINE" => RenderLineChart(visual),
                     "SCATTER" => RenderScatterPlot(visual),
                     "HEATMAP" => RenderHeatMap(visual),
-                    "SLICER" or "DATEPICKER" or "RELDATEPICKER" or "SLIDER" or "MULTISELECT" or "SEARCH" => RenderSlicer(visual, manifest),
+                    "SLICER" or "DATEPICKER" or "RELDATEPICKER" or "REDATEPICKER" or "SLIDER" or "MULTISELECT" or "SEARCH" => RenderSlicer(visual, manifest),
                     "BUBBLE" => RenderBubbleChart(visual),
                     "FUNNEL" => RenderFunnelChart(visual),
                     "GANTT" => RenderGanttChart(visual),

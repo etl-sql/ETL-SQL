@@ -85,6 +85,45 @@ namespace ETL_SQL.Tests.Reporting
             Assert.NotNull(result);
         }
 
+        [Fact]
+        public void RenderPage_WithButton_ReturnsNonNull()
+        {
+            var manifest = new ReportManifest();
+            var button = new ButtonManifest { Name = "MyBtn", Title = "Click Me" };
+            manifest.Buttons = new List<ButtonManifest> { button };
+
+            var page = new PageManifest();
+            page.SlotMap["A"] = "MyBtn";
+
+            var result = TerminalRenderer.RenderPage(page, manifest);
+
+            Assert.NotNull(result);
+        }
+
+        [Fact]
+        public void RenderPage_WithContainer_ReturnsNonNull()
+        {
+            var manifest = new ReportManifest();
+            var container = new ContainerManifest 
+            { 
+                Name = "MyContainer", 
+                Title = "Sub-Layout",
+                ContainerType = "GRID",
+                SlotMap = new Dictionary<string, string> { ["slot1"] = "MyBtn2" }
+            };
+            var button = new ButtonManifest { Name = "MyBtn2", Title = "Nested Button" };
+            
+            manifest.Containers = new List<ContainerManifest> { container };
+            manifest.Buttons = new List<ButtonManifest> { button };
+
+            var page = new PageManifest();
+            page.SlotMap["A"] = "MyContainer";
+
+            var result = TerminalRenderer.RenderPage(page, manifest);
+
+            Assert.NotNull(result);
+        }
+
         // ── RenderVisual – BAR ────────────────────────────────────────────────
 
         [Fact]
@@ -399,6 +438,13 @@ namespace ETL_SQL.Tests.Reporting
         public void RenderVisual_Search_ReturnsNonNull()
         {
             var v = V("Sr", "SEARCH", new[] { "Term" }, new[] { new[] { "hello" } });
+            Assert.NotNull(TerminalRenderer.RenderVisual(v));
+        }
+
+        [Fact]
+        public void RenderVisual_ReDatePicker_ReturnsNonNull()
+        {
+            var v = V("Rd", "REDATEPICKER", new[] { "Date" }, new[] { new[] { "2026-06-05" } });
             Assert.NotNull(TerminalRenderer.RenderVisual(v));
         }
 
