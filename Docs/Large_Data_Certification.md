@@ -42,6 +42,7 @@ Reports are written to `./certification-results/`.
 | Scalar Subquery Cache | 50k × scale | Correlated scalar subquery | LRU subquery cache | Row count, checksum, exact hit/miss counts |
 | Spill Cleanup Success | 50k × scale | Non-persistent `SELECT INTO #temp` spill | Temp-table spill files | Spill files exist before dispose; spill directory removed after dispose |
 | Spill Cleanup Failure | 50k × scale | Non-persistent `SELECT INTO #temp` with forced source failure | Temp-table spill files | Spill files exist after failure; spill directory removed after dispose |
+| Neo4j Batched Graph Load | `NEO4J_SCALE_ROWS` nodes + relationships | `NEO4J` Docker connector `WriteBatches` | Keyed node `MERGE`, keyed endpoint relationship `MERGE` | Node count, edge count, score checksum, relationship checksum |
 
 ---
 
@@ -89,6 +90,11 @@ dotnet test ETL-SQL.slnx --filter "Category=ScaleCertification"
 
 # Provider-backed local connector lane
 .\scripts\Test-ScaleCertification.ps1 -Tier Provider
+
+# Neo4j Docker graph-load certification
+$env:NEO4J_SCALE_ROWS='50000'
+dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter "Connector=NEO4J&Category=ScaleCertification" --no-restore -m:1 --logger "console;verbosity=detailed"
+Remove-Item Env:\NEO4J_SCALE_ROWS
 
 # Full report with all tiers
 .\scripts\Test-ScaleCertification.ps1 -Tier All

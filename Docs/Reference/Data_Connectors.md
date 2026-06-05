@@ -423,8 +423,15 @@ Graph database connector supporting property graph ingestion and Cypher pass-thr
 | `KEY_COLUMNS` | Comma-separated properties used to `MERGE` nodes or relationships instead of always `CREATE` | No |
 | `FROM_LABEL` / `TO_LABEL` | Source/target node labels for `EDGE_<TYPE>` writes that use `_from_key` and `_to_key` | No |
 | `FROM_KEY_COLUMN` / `TO_KEY_COLUMN` | Source/target node property names matched against `_from_key` and `_to_key` (Default: `id`) | No |
+| `SKIP_MISSING_ENDPOINTS` | `TRUE` to skip edge rows with missing or unmatched endpoints instead of failing (Default: `FALSE`) | No |
+| `SCHEMA_SAMPLE_SIZE` | Rows sampled for virtual table schema discovery; `0` scans all rows (Default: `1000`) | No |
 
 `USER` and `PASSWORD` are passed to the Neo4j driver as an auth token and are not embedded in the stored connection URI.
+
+Regular `SELECT` statements against `graph.NODE_*` and `graph.EDGE_*` read through the connector's virtual table layer. Use `EXECUTE graph BEGIN ... END` when you want native Cypher pass-through.
+Truncating a table-scoped source such as `graph.NODE_CUSTOMER` deletes only that label; truncating the root connection deletes the whole graph.
+`BEGIN TRANSACTION` enlists the Neo4j connection for graph writes, table-scoped truncates, and native Cypher executed through the connection. `COMMIT` persists those graph changes; `ROLLBACK` discards them.
+Set `SCHEMA_SAMPLE_SIZE=0` only when complete sparse-property discovery matters more than the cost of scanning every node or relationship of the requested virtual table.
 
 **Virtual Schema Mapping:**
 Graph entities are mapped to virtual tables:
@@ -434,7 +441,10 @@ Graph entities are mapped to virtual tables:
 **Write Behavior:**
 - Ingesting into `NODE_<LABEL>` or `EDGE_<TYPE>` uses parameterized `UNWIND` Cypher templates.
 - If `KEY_COLUMNS` is set, writes use `MERGE` for idempotent upserts; otherwise writes use `CREATE`.
+- Edge writes fail by default when endpoint columns are missing or endpoint matches are not found. Set `SKIP_MISSING_ENDPOINTS=TRUE` only when intentionally dropping those edge rows.
+- `DBNull.Value` is written as `NULL`; dates/times and GUIDs are stored as strings; nested maps/rows are stored as JSON text.
 - If `APPEND=FALSE` (the default), the delete-and-load operation runs inside a single Neo4j write transaction so failures roll back the replacement.
+- Inside an engine `BEGIN TRANSACTION`, writes/truncates/native Cypher use the enlisted Neo4j transaction instead of their own per-operation transaction.
 - In `SET WHAT_IF ON`, raw mutating Cypher in `EXECUTE` is skipped.
 
 *Examples:*
@@ -1197,7 +1207,7 @@ WHERE sAMAccountName = 'jdoe';
 | `POSTGRES` | `NPSQL`, `PG` | Relational | ✓ | ✓ |
 | `ORACLE` | — | Relational | ✓ | ✓ |
 | `ODBC` | — | Relational | Varies | — |
-| `NEO4J` | `NEO` | Graph | ✓ | ✓ |
+| `NEO4J` | `NEO` | Graph | ✓ | ✗ |
 | `MOCKDB` | — | In-memory | — | — |
 | `FLATFILE` | `CSV`, `TSV` | File | — | — |
 | `EXCEL` | `XLSX`, `XLS` | File | — | — |

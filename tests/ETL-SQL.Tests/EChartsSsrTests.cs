@@ -54,7 +54,7 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
-        public void RenderSvg_Concurrently_RendersCorrectly()
+        public async System.Threading.Tasks.Task RenderSvg_Concurrently_RendersCorrectly()
         {
             var config = "{\"xAxis\":{\"type\":\"category\",\"data\":[\"A\",\"B\",\"C\"]},\"yAxis\":{\"type\":\"value\"},\"series\":[{\"type\":\"bar\",\"data\":[5,20,36]}]}";
             var visual = new VisualManifest { Name = "BAR", VisualType = "BAR", ChartConfig = config };
@@ -65,11 +65,10 @@ namespace ETL_SQL.Tests
                 tasks.Add(System.Threading.Tasks.Task.Run(() => EChartsSsrRenderer.Shared.RenderSvg(visual)));
             }
 
-            System.Threading.Tasks.Task.WaitAll(tasks.ToArray());
+            var svgs = await System.Threading.Tasks.Task.WhenAll(tasks);
 
-            foreach (var task in tasks)
+            foreach (var svg in svgs)
             {
-                var svg = task.Result;
                 Assert.False(string.IsNullOrWhiteSpace(svg));
                 Assert.Contains("<svg", svg);
             }

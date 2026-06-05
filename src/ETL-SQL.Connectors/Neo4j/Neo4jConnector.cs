@@ -89,6 +89,8 @@ namespace ETL_SQL.Connectors.Neo4j
             "  KEY_COLUMNS: Comma-separated node properties used with MERGE instead of CREATE\n" +
             "  FROM_LABEL / TO_LABEL: Edge endpoint labels when loading edges by keys\n" +
             "  FROM_KEY_COLUMN / TO_KEY_COLUMN: Endpoint key property names (default: id)\n" +
+            "  SKIP_MISSING_ENDPOINTS: TRUE to skip edge rows with missing/unmatched endpoints (default: FALSE)\n" +
+            "  SCHEMA_SAMPLE_SIZE: Rows sampled for virtual table schema discovery; 0 scans all rows (default: 1000)\n" +
             "  USER: User identifier\n" +
             "  PASSWORD: Connection password\n";
 
@@ -106,6 +108,8 @@ namespace ETL_SQL.Connectors.Neo4j
             { "TO_LABEL", Array.Empty<string>() },
             { "FROM_KEY_COLUMN", Array.Empty<string>() },
             { "TO_KEY_COLUMN", Array.Empty<string>() },
+            { "SKIP_MISSING_ENDPOINTS", new[] { "TRUE", "FALSE" } },
+            { "SCHEMA_SAMPLE_SIZE", Array.Empty<string>() },
             { "USER", Array.Empty<string>() },
             { "PASSWORD", Array.Empty<string>() }
         };

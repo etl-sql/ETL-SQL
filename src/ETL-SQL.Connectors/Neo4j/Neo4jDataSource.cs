@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Neo4j.Driver;
@@ -11,7 +13,7 @@ using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors.Neo4j
 {
-    public class Neo4jDataSource : IDatabaseSource
+    public class Neo4jDataSource : IDatabaseSource, ITransactionalDataSource
     {
         private readonly string _connectionString;
         private readonly string? _tableName;
@@ -21,9 +23,21 @@ namespace ETL_SQL.Connectors.Neo4j
         private readonly string? _uriUser;
         private readonly string? _uriPassword;
         private readonly bool _ownsDriver;
+        private readonly bool _ownsTransaction;
         private IDriver? _driver;
+        private IAsyncSession? _transactionSession;
+        private IAsyncTransaction? _activeTransaction;
 
-        public Neo4jDataSource(IExecutionContext context, string connectionString, string? tableName = null, Dictionary<string, string>? options = null, IDriver? driver = null, bool ownsDriver = false)
+        public Neo4jDataSource(
+            IExecutionContext context,
+            string connectionString,
+            string? tableName = null,
+            Dictionary<string, string>? options = null,
+            IDriver? driver = null,
+            bool ownsDriver = false,
+            IAsyncSession? transactionSession = null,
+            IAsyncTransaction? activeTransaction = null,
+            bool ownsTransaction = true)
         {
             _context = context;
             _logger = context.Logger;
@@ -31,6 +45,9 @@ namespace ETL_SQL.Connectors.Neo4j
             _options = options;
             _driver = driver;
             _ownsDriver = driver == null || ownsDriver;
+            _transactionSession = transactionSession;
+            _activeTransaction = activeTransaction;
+            _ownsTransaction = ownsTransaction;
 
             string connStr = connectionString;
             if (options != null && string.IsNullOrEmpty(connStr))
@@ -162,6 +179,7 @@ namespace ETL_SQL.Connectors.Neo4j
 
             var driver = GetDriver();
             var database = _options?.GetValueOrDefault("DATABASE", "neo4j") ?? "neo4j";
+            var schemaSampleSize = GetNonNegativeIntOption("SCHEMA_SAMPLE_SIZE", 1000);
 
             var columns = new List<string>();
 
@@ -179,21 +197,18 @@ namespace ETL_SQL.Connectors.Neo4j
                     await using (session)
                     {
                         var labelIdentifier = QuoteCypherIdentifier(actualLabel);
-                        var query = $"MATCH (n:{labelIdentifier}) RETURN keys(n) AS props LIMIT 1";
-                        var result = await session.RunAsync(query);
-                        if (await result.FetchAsync())
+                        var query = schemaSampleSize == 0
+                            ? $"MATCH (n:{labelIdentifier}) UNWIND keys(n) AS prop RETURN DISTINCT prop ORDER BY prop"
+                            : $"MATCH (n:{labelIdentifier}) WITH n LIMIT $sampleSize UNWIND keys(n) AS prop RETURN DISTINCT prop ORDER BY prop";
+                        var result = schemaSampleSize == 0
+                            ? await session.RunAsync(query)
+                            : await session.RunAsync(query, new { sampleSize = schemaSampleSize });
+                        while (await result.FetchAsync())
                         {
-                            var props = result.Current["props"] as IEnumerable<object>;
-                            if (props != null)
+                            var propName = result.Current["prop"]?.ToString();
+                            if (propName != null && !columns.Contains(propName))
                             {
-                                foreach (var p in props)
-                                {
-                                    var propName = p.ToString();
-                                    if (propName != null && !columns.Contains(propName))
-                                    {
-                                        columns.Add(propName);
-                                    }
-                                }
+                                columns.Add(propName);
                             }
                         }
                     }
@@ -220,21 +235,18 @@ namespace ETL_SQL.Connectors.Neo4j
                     await using (session)
                     {
                         var typeIdentifier = QuoteCypherIdentifier(actualType);
-                        var query = $"MATCH ()-[r:{typeIdentifier}]->() RETURN keys(r) AS props LIMIT 1";
-                        var result = await session.RunAsync(query);
-                        if (await result.FetchAsync())
+                        var query = schemaSampleSize == 0
+                            ? $"MATCH ()-[r:{typeIdentifier}]->() UNWIND keys(r) AS prop RETURN DISTINCT prop ORDER BY prop"
+                            : $"MATCH ()-[r:{typeIdentifier}]->() WITH r LIMIT $sampleSize UNWIND keys(r) AS prop RETURN DISTINCT prop ORDER BY prop";
+                        var result = schemaSampleSize == 0
+                            ? await session.RunAsync(query)
+                            : await session.RunAsync(query, new { sampleSize = schemaSampleSize });
+                        while (await result.FetchAsync())
                         {
-                            var props = result.Current["props"] as IEnumerable<object>;
-                            if (props != null)
+                            var propName = result.Current["prop"]?.ToString();
+                            if (propName != null && !columns.Contains(propName))
                             {
-                                foreach (var p in props)
-                                {
-                                    var propName = p.ToString();
-                                    if (propName != null && !columns.Contains(propName))
-                                    {
-                                        columns.Add(propName);
-                                    }
-                                }
+                                columns.Add(propName);
                             }
                         }
                     }
@@ -418,143 +430,178 @@ namespace ETL_SQL.Connectors.Neo4j
 
             try
             {
-                var session = driver.AsyncSession(o => o.WithDatabase(database));
-                await using (session)
+                if (_tableName.StartsWith("NODE_", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (_tableName.StartsWith("NODE_", StringComparison.OrdinalIgnoreCase))
+                    var label = _tableName.Substring(5);
+                    var actualLabel = await ResolveActualLabelOrTypeAsync(label, isNode: true);
+                    var labelIdentifier = QuoteCypherIdentifier(actualLabel);
+                    var keyColumns = GetOptionList("KEY_COLUMNS");
+                    var mergeKey = keyColumns.Count > 0
+                        ? "{ " + string.Join(", ", keyColumns.Select(c => $"{QuoteCypherIdentifier(c)}: row.{QuoteCypherIdentifier(c)}")) + " }"
+                        : "";
+                    var writeCypher = keyColumns.Count > 0
+                        ? $"UNWIND $rows AS row MERGE (n:{labelIdentifier} {mergeKey}) SET n += row"
+                        : $"UNWIND $rows AS row CREATE (n:{labelIdentifier}) SET n += row";
+
+                    async Task WriteNodesAsync(IAsyncQueryRunner tx)
                     {
-                        var label = _tableName.Substring(5);
-                        var actualLabel = await ResolveActualLabelOrTypeAsync(label, isNode: true);
-                        var labelIdentifier = QuoteCypherIdentifier(actualLabel);
-                        var keyColumns = GetOptionList("KEY_COLUMNS");
-                        var mergeKey = keyColumns.Count > 0
-                            ? "{ " + string.Join(", ", keyColumns.Select(c => $"{QuoteCypherIdentifier(c)}: row.{QuoteCypherIdentifier(c)}")) + " }"
-                            : "";
-                        var writeCypher = keyColumns.Count > 0
-                            ? $"UNWIND $rows AS row MERGE (n:{labelIdentifier} {mergeKey}) SET n += row"
-                            : $"UNWIND $rows AS row CREATE (n:{labelIdentifier}) SET n += row";
-
-                        await session.ExecuteWriteAsync(async tx =>
+                        if (!append)
                         {
-                            if (!append)
-                            {
-                                await tx.RunAsync($"MATCH (n:{labelIdentifier}) DETACH DELETE n");
-                            }
+                            await tx.RunAsync($"MATCH (n:{labelIdentifier}) DETACH DELETE n");
+                        }
 
-                            await foreach (var batch in batches)
-                            {
-                                if (batch.Rows.Count == 0) continue;
+                        await foreach (var batch in batches)
+                        {
+                            if (batch.Rows.Count == 0) continue;
 
-                                var rowsList = new List<Dictionary<string, object?>>();
-                                foreach (var row in batch.Rows)
+                            var rowsList = new List<Dictionary<string, object?>>();
+                            foreach (var row in batch.Rows)
+                            {
+                                var propDict = new Dictionary<string, object?>();
+                                foreach (var col in batch.ColumnNames)
                                 {
-                                    var propDict = new Dictionary<string, object?>();
-                                    foreach (var col in batch.ColumnNames)
-                                    {
-                                        if (col == "_id" || col == "_labels") continue;
-                                        propDict[col] = row[col];
-                                    }
-                                    foreach (var keyColumn in keyColumns)
-                                    {
-                                        if (!propDict.ContainsKey(keyColumn) || propDict[keyColumn] == null)
-                                        {
-                                            throw new ExecutionException($"Neo4j NODE write requires non-null KEY_COLUMNS value '{keyColumn}'.");
-                                        }
-                                    }
-                                    rowsList.Add(propDict);
+                                    if (col == "_id" || col == "_labels") continue;
+                                    propDict[col] = NormalizePropertyValue(row[col], col);
                                 }
-
-                                await tx.RunAsync(writeCypher, new { rows = rowsList });
+                                foreach (var keyColumn in keyColumns)
+                                {
+                                    if (!propDict.ContainsKey(keyColumn) || propDict[keyColumn] == null)
+                                    {
+                                        throw new ExecutionException($"Neo4j NODE write requires non-null KEY_COLUMNS value '{keyColumn}'.");
+                                    }
+                                }
+                                rowsList.Add(propDict);
                             }
-                        });
+
+                            await tx.RunAsync(writeCypher, new { rows = rowsList });
+                        }
                     }
-                    else if (_tableName.StartsWith("EDGE_", StringComparison.OrdinalIgnoreCase))
+
+                    if (_activeTransaction != null)
                     {
-                        var relType = _tableName.Substring(5);
-                        var actualType = await ResolveActualLabelOrTypeAsync(relType, isNode: false);
-                        var typeIdentifier = QuoteCypherIdentifier(actualType);
-                        var edgeKeyColumns = GetOptionList("KEY_COLUMNS");
-                        var fromLabel = GetOption("FROM_LABEL");
-                        var toLabel = GetOption("TO_LABEL");
-                        var fromKeyColumn = GetOption("FROM_KEY_COLUMN") ?? "id";
-                        var toKeyColumn = GetOption("TO_KEY_COLUMN") ?? "id";
-                        var canResolveByKey = !string.IsNullOrEmpty(fromLabel) && !string.IsNullOrEmpty(toLabel);
-                        var edgeMergeCypher = edgeKeyColumns.Count > 0
-                            ? "MERGE (from)-[r:" + typeIdentifier + " { " + string.Join(", ", edgeKeyColumns.Select(c => $"{QuoteCypherIdentifier(c)}: row.properties.{QuoteCypherIdentifier(c)}")) + " }]->(to)"
-                            : $"CREATE (from)-[r:{typeIdentifier}]->(to)";
-
-                        await session.ExecuteWriteAsync(async tx =>
-                        {
-                            if (!append)
-                            {
-                                await tx.RunAsync($"MATCH ()-[r:{typeIdentifier}]->() DELETE r");
-                            }
-
-                            await foreach (var batch in batches)
-                            {
-                                if (batch.Rows.Count == 0) continue;
-
-                                var rowsList = new List<object>();
-                                foreach (var row in batch.Rows)
-                                {
-                                    var fromId = row["_from_id"]?.ToString();
-                                    var toId = row["_to_id"]?.ToString();
-                                    var fromKey = row["_from_key"]?.ToString();
-                                    var toKey = row["_to_key"]?.ToString();
-                                    if (!canResolveByKey && (string.IsNullOrEmpty(fromId) || string.IsNullOrEmpty(toId))) continue;
-                                    if (canResolveByKey && (string.IsNullOrEmpty(fromKey) || string.IsNullOrEmpty(toKey))) continue;
-
-                                    var propDict = new Dictionary<string, object?>();
-                                    foreach (var col in batch.ColumnNames)
-                                    {
-                                        if (col == "_id" || col == "_from_id" || col == "_to_id" || col == "_from_key" || col == "_to_key" || col == "_from_label" || col == "_to_label") continue;
-                                        propDict[col] = row[col];
-                                    }
-                                    foreach (var keyColumn in edgeKeyColumns)
-                                    {
-                                        if (!propDict.ContainsKey(keyColumn) || propDict[keyColumn] == null)
-                                        {
-                                            throw new ExecutionException($"Neo4j EDGE write requires non-null KEY_COLUMNS value '{keyColumn}'.");
-                                        }
-                                    }
-
-                                    rowsList.Add(new
-                                    {
-                                        fromId = fromId,
-                                        toId = toId,
-                                        fromKey = fromKey,
-                                        toKey = toKey,
-                                        properties = propDict
-                                    });
-                                }
-
-                                if (rowsList.Count == 0) continue;
-
-                                if (canResolveByKey)
-                                {
-                                    await tx.RunAsync($@"
-                                    UNWIND $rows AS row
-                                    MATCH (from:{QuoteCypherIdentifier(fromLabel!)}) WHERE from.{QuoteCypherIdentifier(fromKeyColumn)} = row.fromKey
-                                    MATCH (to:{QuoteCypherIdentifier(toLabel!)}) WHERE to.{QuoteCypherIdentifier(toKeyColumn)} = row.toKey
-                                    {edgeMergeCypher}
-                                    SET r += row.properties", new { rows = rowsList });
-                                }
-                                else
-                                {
-                                    await tx.RunAsync($@"
-                                    UNWIND $rows AS row
-                                    MATCH (from) WHERE elementId(from) = row.fromId
-                                    MATCH (to) WHERE elementId(to) = row.toId
-                                    {edgeMergeCypher}
-                                    SET r += row.properties", new { rows = rowsList });
-                                }
-                            }
-                        });
+                        await WriteNodesAsync(_activeTransaction);
                     }
                     else
                     {
-                        throw new ExecutionException("Neo4j writes require a virtual table named NODE_<LABEL> or EDGE_<TYPE>.");
+                        var session = driver.AsyncSession(o => o.WithDatabase(database));
+                        await using (session)
+                        {
+                            await session.ExecuteWriteAsync(WriteNodesAsync);
+                        }
                     }
+                }
+                else if (_tableName.StartsWith("EDGE_", StringComparison.OrdinalIgnoreCase))
+                {
+                    var relType = _tableName.Substring(5);
+                    var actualType = await ResolveActualLabelOrTypeAsync(relType, isNode: false);
+                    var typeIdentifier = QuoteCypherIdentifier(actualType);
+                    var edgeKeyColumns = GetOptionList("KEY_COLUMNS");
+                    var fromLabel = GetOption("FROM_LABEL");
+                    var toLabel = GetOption("TO_LABEL");
+                    var fromKeyColumn = GetOption("FROM_KEY_COLUMN") ?? "id";
+                    var toKeyColumn = GetOption("TO_KEY_COLUMN") ?? "id";
+                    var canResolveByKey = !string.IsNullOrEmpty(fromLabel) && !string.IsNullOrEmpty(toLabel);
+                    var skipMissingEndpoints = GetBooleanOption("SKIP_MISSING_ENDPOINTS", defaultValue: false);
+                    var edgeMergeCypher = edgeKeyColumns.Count > 0
+                        ? "MERGE (from)-[r:" + typeIdentifier + " { " + string.Join(", ", edgeKeyColumns.Select(c => $"{QuoteCypherIdentifier(c)}: row.properties.{QuoteCypherIdentifier(c)}")) + " }]->(to)"
+                        : $"CREATE (from)-[r:{typeIdentifier}]->(to)";
+
+                    async Task WriteEdgesAsync(IAsyncQueryRunner tx)
+                    {
+                        if (!append)
+                        {
+                            await tx.RunAsync($"MATCH ()-[r:{typeIdentifier}]->() DELETE r");
+                        }
+
+                        await foreach (var batch in batches)
+                        {
+                            if (batch.Rows.Count == 0) continue;
+
+                            var rowsList = new List<object>();
+                            foreach (var row in batch.Rows)
+                            {
+                                var fromId = row["_from_id"]?.ToString();
+                                var toId = row["_to_id"]?.ToString();
+                                var fromKey = row["_from_key"]?.ToString();
+                                var toKey = row["_to_key"]?.ToString();
+                                if (!canResolveByKey && (string.IsNullOrEmpty(fromId) || string.IsNullOrEmpty(toId)))
+                                {
+                                    if (skipMissingEndpoints) continue;
+                                    throw new ExecutionException("Neo4j EDGE write requires non-null _from_id and _to_id values when FROM_LABEL and TO_LABEL are not set.");
+                                }
+                                if (canResolveByKey && (string.IsNullOrEmpty(fromKey) || string.IsNullOrEmpty(toKey)))
+                                {
+                                    if (skipMissingEndpoints) continue;
+                                    throw new ExecutionException("Neo4j EDGE write requires non-null _from_key and _to_key values when FROM_LABEL and TO_LABEL are set.");
+                                }
+
+                                var propDict = new Dictionary<string, object?>();
+                                foreach (var col in batch.ColumnNames)
+                                {
+                                    if (col == "_id" || col == "_from_id" || col == "_to_id" || col == "_from_key" || col == "_to_key" || col == "_from_label" || col == "_to_label") continue;
+                                    propDict[col] = NormalizePropertyValue(row[col], col);
+                                }
+                                foreach (var keyColumn in edgeKeyColumns)
+                                {
+                                    if (!propDict.ContainsKey(keyColumn) || propDict[keyColumn] == null)
+                                    {
+                                        throw new ExecutionException($"Neo4j EDGE write requires non-null KEY_COLUMNS value '{keyColumn}'.");
+                                    }
+                                }
+
+                                rowsList.Add(new
+                                {
+                                    fromId = fromId,
+                                    toId = toId,
+                                    fromKey = fromKey,
+                                    toKey = toKey,
+                                    properties = propDict
+                                });
+                            }
+
+                            if (rowsList.Count == 0) continue;
+
+                            if (canResolveByKey)
+                            {
+                                var cursor = await tx.RunAsync($@"
+                                UNWIND $rows AS row
+                                MATCH (from:{QuoteCypherIdentifier(fromLabel!)}) WHERE from.{QuoteCypherIdentifier(fromKeyColumn)} = row.fromKey
+                                MATCH (to:{QuoteCypherIdentifier(toLabel!)}) WHERE to.{QuoteCypherIdentifier(toKeyColumn)} = row.toKey
+                                {edgeMergeCypher}
+                                SET r += row.properties
+                                RETURN count(r) AS written", new { rows = rowsList });
+                                await ValidateEdgeWriteCountAsync(cursor, rowsList.Count, skipMissingEndpoints);
+                            }
+                            else
+                            {
+                                var cursor = await tx.RunAsync($@"
+                                UNWIND $rows AS row
+                                MATCH (from) WHERE elementId(from) = row.fromId
+                                MATCH (to) WHERE elementId(to) = row.toId
+                                {edgeMergeCypher}
+                                SET r += row.properties
+                                RETURN count(r) AS written", new { rows = rowsList });
+                                await ValidateEdgeWriteCountAsync(cursor, rowsList.Count, skipMissingEndpoints);
+                            }
+                        }
+                    }
+
+                    if (_activeTransaction != null)
+                    {
+                        await WriteEdgesAsync(_activeTransaction);
+                    }
+                    else
+                    {
+                        var session = driver.AsyncSession(o => o.WithDatabase(database));
+                        await using (session)
+                        {
+                            await session.ExecuteWriteAsync(WriteEdgesAsync);
+                        }
+                    }
+                }
+                else
+                {
+                    throw new ExecutionException("Neo4j writes require a virtual table named NODE_<LABEL> or EDGE_<TYPE>.");
                 }
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -572,14 +619,39 @@ namespace ETL_SQL.Connectors.Neo4j
 
             try
             {
-                var session = driver.AsyncSession(o => o.WithDatabase(database));
-                await using (session)
+                if (!string.IsNullOrEmpty(_tableName) && _tableName.StartsWith("NODE_", StringComparison.OrdinalIgnoreCase))
                 {
-                    await session.ExecuteWriteAsync(async tx =>
+                    var label = _tableName.Substring(5);
+                    var actualLabel = await ResolveActualLabelOrTypeAsync(label, isNode: true);
+                    var labelIdentifier = QuoteCypherIdentifier(actualLabel);
+                    await RunWriteAsync(driver, database, async tx =>
                     {
-                        await tx.RunAsync("MATCH (n) DETACH DELETE n");
+                        await tx.RunAsync($"MATCH (n:{labelIdentifier}) DETACH DELETE n");
                     });
+                    return;
                 }
+
+                if (!string.IsNullOrEmpty(_tableName) && _tableName.StartsWith("EDGE_", StringComparison.OrdinalIgnoreCase))
+                {
+                    var relType = _tableName.Substring(5);
+                    var actualType = await ResolveActualLabelOrTypeAsync(relType, isNode: false);
+                    var typeIdentifier = QuoteCypherIdentifier(actualType);
+                    await RunWriteAsync(driver, database, async tx =>
+                    {
+                        await tx.RunAsync($"MATCH ()-[r:{typeIdentifier}]->() DELETE r");
+                    });
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(_tableName))
+                {
+                    throw new ExecutionException("Neo4j truncate requires a virtual table named NODE_<LABEL> or EDGE_<TYPE>.");
+                }
+
+                await RunWriteAsync(driver, database, async tx =>
+                {
+                    await tx.RunAsync("MATCH (n) DETACH DELETE n");
+                });
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -640,36 +712,53 @@ namespace ETL_SQL.Connectors.Neo4j
                 }
             }
 
+            if (_activeTransaction != null)
+            {
+                var resultCursor = await _activeTransaction.RunAsync(cypherQuery, paramDict);
+                await foreach (var batch in ReadResultCursorAsync(resultCursor))
+                {
+                    yield return batch;
+                }
+                yield break;
+            }
+
             var session = driver.AsyncSession(o => o.WithDatabase(database));
             await using (session)
             {
                 var resultCursor = await session.RunAsync(cypherQuery, paramDict);
-
-                var keys = (await resultCursor.KeysAsync()).ToList();
-                var currentBatch = new DataTable();
-                currentBatch.SetColumns(keys);
-
-                while (await resultCursor.FetchAsync())
+                await foreach (var batch in ReadResultCursorAsync(resultCursor))
                 {
-                    var row = currentBatch.NewRow();
-                    foreach (var key in keys)
-                    {
-                        row[key] = ConvertNeo4jValue(resultCursor.Current[key]);
-                    }
-                    await currentBatch.AddRowAsync(row);
-
-                    if (currentBatch.Rows.Count >= 10000)
-                    {
-                        yield return currentBatch;
-                        currentBatch = new DataTable();
-                        currentBatch.SetColumns(keys);
-                    }
+                    yield return batch;
                 }
+            }
+        }
 
-                if (currentBatch.Rows.Count > 0)
+        private async IAsyncEnumerable<DataTable> ReadResultCursorAsync(IResultCursor resultCursor)
+        {
+            var keys = (await resultCursor.KeysAsync()).ToList();
+            var currentBatch = new DataTable();
+            currentBatch.SetColumns(keys);
+
+            while (await resultCursor.FetchAsync())
+            {
+                var row = currentBatch.NewRow();
+                foreach (var key in keys)
+                {
+                    row[key] = ConvertNeo4jValue(resultCursor.Current[key]);
+                }
+                await currentBatch.AddRowAsync(row);
+
+                if (currentBatch.Rows.Count >= 10000)
                 {
                     yield return currentBatch;
+                    currentBatch = new DataTable();
+                    currentBatch.SetColumns(keys);
                 }
+            }
+
+            if (currentBatch.Rows.Count > 0)
+            {
+                yield return currentBatch;
             }
         }
 
@@ -701,6 +790,76 @@ namespace ETL_SQL.Connectors.Neo4j
                 return System.Text.Json.JsonSerializer.Serialize(listVal);
             }
             return val;
+        }
+
+        private static async Task ValidateEdgeWriteCountAsync(IResultCursor cursor, int expectedRows, bool skipMissingEndpoints)
+        {
+            if (!await cursor.FetchAsync()) return;
+
+            var written = Convert.ToInt64(cursor.Current["written"]);
+            if (!skipMissingEndpoints && written != expectedRows)
+            {
+                throw new ExecutionException($"Neo4j EDGE write matched {written} relationship endpoint pair(s) for {expectedRows} input row(s). Verify endpoint IDs or endpoint key labels/columns.");
+            }
+        }
+
+        private static object? NormalizePropertyValue(object? value, string columnName)
+        {
+            if (value == null || value == DBNull.Value) return null;
+            if (value is string or bool or int or long or float or double) return value;
+            if (value is short or byte or sbyte or uint or ushort) return Convert.ToInt64(value);
+            if (value is ulong ulongValue)
+            {
+                if (ulongValue > long.MaxValue)
+                {
+                    throw new ExecutionException($"Neo4j property '{columnName}' contains an unsigned integer larger than Neo4j signed integer storage supports.");
+                }
+                return Convert.ToInt64(ulongValue);
+            }
+            if (value is decimal decimalValue) return Convert.ToDouble(decimalValue);
+            if (value is char charValue) return charValue.ToString();
+            if (value is Guid guidValue) return guidValue.ToString();
+            if (value is DateTime dateTimeValue) return dateTimeValue.ToString("O");
+            if (value is DateTimeOffset dateTimeOffsetValue) return dateTimeOffsetValue.ToString("O");
+            if (value is TimeSpan timeSpanValue) return timeSpanValue.ToString("c");
+            if (value is Row rowValue) return SerializePropertyValue(rowValue.Columns, columnName);
+            if (value is JsonElement jsonValue) return jsonValue.GetRawText();
+            if (value is IDictionary dictionaryValue) return SerializePropertyValue(DictionaryToObject(dictionaryValue), columnName);
+            if (value is IEnumerable enumerableValue && value is not byte[])
+            {
+                var list = new List<object?>();
+                foreach (var item in enumerableValue)
+                {
+                    list.Add(NormalizePropertyValue(item, columnName));
+                }
+                return list;
+            }
+            if (value.GetType().IsEnum) return value.ToString();
+
+            return SerializePropertyValue(value, columnName);
+        }
+
+        private static Dictionary<string, object?> DictionaryToObject(IDictionary dictionary)
+        {
+            var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (DictionaryEntry entry in dictionary)
+            {
+                var key = entry.Key?.ToString() ?? "";
+                result[key] = NormalizePropertyValue(entry.Value, key);
+            }
+            return result;
+        }
+
+        private static string SerializePropertyValue(object value, string columnName)
+        {
+            try
+            {
+                return JsonSerializer.Serialize(value);
+            }
+            catch (Exception ex) when (ex is NotSupportedException or JsonException)
+            {
+                throw new ExecutionException($"Neo4j property '{columnName}' contains a value type that cannot be serialized for graph storage.");
+            }
         }
 
         private static string StripUserInfo(string connectionString, out string? user, out string? password)
@@ -756,6 +915,12 @@ namespace ETL_SQL.Connectors.Neo4j
             if (string.IsNullOrWhiteSpace(cypher)) return false;
 
             var scrubbed = Regex.Replace(cypher, @"(?s)/\*.*?\*/|//.*?$|'(?:\\.|''|[^'])*'|""(?:\\.|""""|[^""])*""", " ", RegexOptions.Multiline);
+            if (Regex.IsMatch(scrubbed, @"^\s*CALL\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                && !Regex.IsMatch(scrubbed, @"^\s*CALL\s+(db\.labels|db\.relationshipTypes|dbms\.components)\s*\(", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            {
+                return true;
+            }
+
             return Regex.IsMatch(
                 scrubbed,
                 @"\b(CREATE|MERGE|DELETE|DETACH|SET|REMOVE|DROP|LOAD|FOREACH)\b",
@@ -780,16 +945,132 @@ namespace ETL_SQL.Connectors.Neo4j
                 .ToList();
         }
 
+        private int GetNonNegativeIntOption(string key, int defaultValue)
+        {
+            var value = GetOption(key);
+            return int.TryParse(value, out var parsed) && parsed >= 0 ? parsed : defaultValue;
+        }
+
+        private bool GetBooleanOption(string key, bool defaultValue)
+        {
+            var value = GetOption(key);
+            if (value == null) return defaultValue;
+            if (value.Equals("TRUE", StringComparison.OrdinalIgnoreCase)) return true;
+            if (value.Equals("FALSE", StringComparison.OrdinalIgnoreCase)) return false;
+            throw new ExecutionException($"Neo4j option {key} must be TRUE or FALSE.");
+        }
+
+        private async Task RunWriteAsync(IDriver driver, string database, Func<IAsyncQueryRunner, Task> action)
+        {
+            if (_activeTransaction != null)
+            {
+                await action(_activeTransaction);
+                return;
+            }
+
+            var session = driver.AsyncSession(o => o.WithDatabase(database));
+            await using (session)
+            {
+                await session.ExecuteWriteAsync(action);
+            }
+        }
+
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
 
+        public async Task BeginTransactionAsync()
+        {
+            if (_activeTransaction != null) return;
+
+            var driver = GetDriver();
+            var database = _options?.GetValueOrDefault("DATABASE", "neo4j") ?? "neo4j";
+            var session = driver.AsyncSession(o => o.WithDatabase(database));
+            try
+            {
+                _transactionSession = session;
+                _activeTransaction = await session.BeginTransactionAsync();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                await session.DisposeAsync();
+                _transactionSession = null;
+                _activeTransaction = null;
+                throw ConnectorExceptionWrapper.Wrap("Neo4j", ex);
+            }
+        }
+
+        public async Task CommitAsync()
+        {
+            if (_activeTransaction == null) return;
+
+            try
+            {
+                await _activeTransaction.CommitAsync();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Neo4j", ex);
+            }
+            finally
+            {
+                await DisposeTransactionAsync();
+            }
+        }
+
+        public async Task RollbackAsync()
+        {
+            if (_activeTransaction == null) return;
+
+            try
+            {
+                await _activeTransaction.RollbackAsync();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Neo4j", ex);
+            }
+            finally
+            {
+                await DisposeTransactionAsync();
+            }
+        }
+
+        private async Task DisposeTransactionAsync()
+        {
+            if (_activeTransaction != null)
+            {
+                await _activeTransaction.DisposeAsync();
+                _activeTransaction = null;
+            }
+
+            if (_transactionSession != null)
+            {
+                await _transactionSession.DisposeAsync();
+                _transactionSession = null;
+            }
+        }
+
         public IDataSource WithTable(string tableName)
         {
-            return new Neo4jDataSource(_context!, _connectionString, tableName, _options, _driver, ownsDriver: _driver == null);
+            return new Neo4jDataSource(
+                _context!,
+                _connectionString,
+                tableName,
+                _options,
+                _driver,
+                ownsDriver: _driver == null,
+                transactionSession: _transactionSession,
+                activeTransaction: _activeTransaction,
+                ownsTransaction: false);
         }
 
         public async ValueTask DisposeAsync()
         {
+            if (_ownsTransaction && _activeTransaction != null)
+            {
+                await RollbackAsync();
+            }
+
             if (_driver != null && _ownsDriver)
             {
                 await _driver.DisposeAsync();

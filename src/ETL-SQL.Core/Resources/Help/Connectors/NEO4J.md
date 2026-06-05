@@ -27,10 +27,17 @@ Options:
   TO_LABEL               — Target node label for EDGE_<TYPE> writes that use _to_key
   FROM_KEY_COLUMN        — Source node property matched against _from_key (default: id)
   TO_KEY_COLUMN          — Target node property matched against _to_key (default: id)
+  SKIP_MISSING_ENDPOINTS — TRUE to skip edge rows with missing/unmatched endpoints (default: FALSE)
+  SCHEMA_SAMPLE_SIZE     — Rows sampled for virtual table schema discovery; 0 scans all rows (default: 1000)
   USER                   — Database username
   PASSWORD               — Database password
 
 Credentials supplied with USER/PASSWORD are passed to the Neo4j driver as an auth token and are not embedded in the stored connection URI.
+
+Regular `SELECT` statements against `graph.NODE_*` and `graph.EDGE_*` use the virtual table reader. Use `EXECUTE graph BEGIN ... END` for native Cypher pass-through.
+Truncating a table-scoped source such as `graph.NODE_CUSTOMER` deletes only that label; truncating the root connection deletes the whole graph.
+`BEGIN TRANSACTION` enlists the Neo4j connection for graph writes, table-scoped truncates, and native Cypher executed through the connection. `COMMIT` persists those graph changes; `ROLLBACK` discards them.
+Set `SCHEMA_SAMPLE_SIZE = 0` only when complete sparse-property discovery matters more than the cost of scanning every node or relationship of the requested virtual table.
 
 ### Virtual Tabular Schema Mapping
 To fit property graphs into the tabular `DataTable` model, the connector maps graph entities to "Virtual Tables":
@@ -45,7 +52,10 @@ To fit property graphs into the tabular `DataTable` model, the connector maps gr
    - Every relationship type (e.g., `FRIEND_OF`, `WORKS_FOR`) represents a virtual table.
    - **System Columns**: `_id` (relationship ID), `_from_id` (source node ID), `_to_id` (target node ID), `_from_label` (source node label), and `_to_label` (target node label).
    - **Keyed endpoints**: For portable ETL loads, provide `_from_key` and `_to_key` columns plus `FROM_LABEL`/`TO_LABEL` and optional `FROM_KEY_COLUMN`/`TO_KEY_COLUMN`; this avoids depending on Neo4j element IDs.
+   - **Endpoint validation**: Edge writes fail by default when endpoint identifiers are missing or no endpoint pair matches. Set `SKIP_MISSING_ENDPOINTS = TRUE` only when intentionally dropping those edge rows.
    - **Properties**: All relationship properties map directly to columns.
+
+Write-side property values are normalized before they are sent to Neo4j: `DBNull.Value` becomes `NULL`, dates/times and GUIDs are stored as strings, and nested maps/rows are stored as JSON text because Neo4j node and relationship properties do not support nested map values.
 
 ### Examples
 
