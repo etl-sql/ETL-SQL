@@ -152,7 +152,8 @@ namespace ETL_SQL.Core.Parser
                     next.Type == TokenType.APPLY || next.Type == TokenType.OUTER ||
                     next.Type == TokenType.INNER || next.Type == TokenType.LEFT ||
                     next.Type == TokenType.RIGHT || next.Type == TokenType.FULL ||
-                    next.Type == TokenType.CROSS ||
+                    next.Type == TokenType.CROSS || next.Type == TokenType.SEMI ||
+                    next.Type == TokenType.ANTI ||
                     IsJoinStarterWord(next.Value))
                     return false;
 
@@ -216,7 +217,9 @@ namespace ETL_SQL.Core.Parser
             || value.Equals("APPLY", StringComparison.OrdinalIgnoreCase)
             || value.Equals("HASH", StringComparison.OrdinalIgnoreCase)
             || value.Equals("LOOP", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("MERGE", StringComparison.OrdinalIgnoreCase);
+            || value.Equals("MERGE", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("SEMI", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("ANTI", StringComparison.OrdinalIgnoreCase);
 
         public bool IsDataType(TokenType type) => DataTypeTokens.Contains(type);
 

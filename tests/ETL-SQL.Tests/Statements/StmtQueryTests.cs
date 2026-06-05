@@ -1,4 +1,4 @@
-﻿using Xunit;
+using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -140,10 +140,19 @@ namespace ETL_SQL.Tests.Statements
             var resSemi = await ev.ExecuteQuery(Parse("SELECT #T1.ID AS ID FROM #T1 SEMI JOIN #T2 ON #T1.ID = #T2.ID;").Statements[0]).FirstAsync();
             Assert.Equal(2, resSemi.Rows.Count);
             
+            // LEFT SEMI JOIN
+            var resLeftSemi = await ev.ExecuteQuery(Parse("SELECT #T1.ID AS ID FROM #T1 LEFT SEMI JOIN #T2 ON #T1.ID = #T2.ID;").Statements[0]).FirstAsync();
+            Assert.Equal(2, resLeftSemi.Rows.Count);
+            
             // ANTI JOIN
             var resAnti = await ev.ExecuteQuery(Parse("SELECT #T1.ID AS ID FROM #T1 ANTI JOIN #T2 ON #T1.ID = #T2.ID;").Statements[0]).FirstAsync();
             Assert.Single(resAnti.Rows);
             Assert.Equal(3m, resAnti.Rows[0]["ID"]);
+
+            // LEFT ANTI JOIN
+            var resLeftAnti = await ev.ExecuteQuery(Parse("SELECT #T1.ID AS ID FROM #T1 LEFT ANTI JOIN #T2 ON #T1.ID = #T2.ID;").Statements[0]).FirstAsync();
+            Assert.Single(resLeftAnti.Rows);
+            Assert.Equal(3m, resLeftAnti.Rows[0]["ID"]);
         }
 
         [Fact]
