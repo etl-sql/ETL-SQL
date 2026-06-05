@@ -60,3 +60,38 @@ john smith
 robert
 mcdonalds
 apple inc.
+
+# FUZZY JOIN on SIMILARITY
+query ITI
+SELECT a.id, b.alias, CASE WHEN __score IS NULL THEN NULL WHEN __score > 0.8 THEN 1 ELSE 0 END
+FROM fuzzy a FUZZY JOIN fuzzy b ON SIMILARITY(a.name, b.alias) > 0.8
+KEEP BEST 1
+ORDER BY a.id;
+----
+1
+Jon Smythe
+1
+3
+MacDonalds
+1
+
+# LEFT FUZZY JOIN on SIMILARITY
+query ITI
+SELECT a.id, b.alias, CASE WHEN __score IS NULL THEN NULL WHEN __score > 0.8 THEN 1 ELSE 0 END
+FROM fuzzy a LEFT FUZZY JOIN fuzzy b ON SIMILARITY(a.name, b.alias) > 0.8
+KEEP BEST 1
+ORDER BY a.id;
+----
+1
+Jon Smythe
+1
+2
+NULL
+NULL
+3
+MacDonalds
+1
+4
+NULL
+NULL
+

@@ -59,3 +59,38 @@ ORDER BY e.id, s.value;
 1
 2
 2
+
+# Outer Apply with generated series (returns NULL for unmatched right)
+query II
+SELECT e.id, s.value
+FROM events e
+OUTER APPLY (SELECT value FROM GENERATE_SERIES(1, e.num_tickets) WHERE value > 2) s
+ORDER BY e.id, s.value;
+----
+1
+3
+2
+NULL
+
+# GENERATE statement
+statement ok
+CREATE TABLE #gen_data (id INT, label STRING);
+
+statement ok
+GENERATE 3 ROWS INTO #gen_data
+WITH (SEED = 42)
+AS (
+  id = 'SEQUENCE(1, 1)',
+  label = 'RANDOM(A, B)'
+);
+
+query II
+SELECT id, CASE WHEN label IN ('A', 'B') THEN 1 ELSE 0 END FROM #gen_data ORDER BY id;
+----
+1
+1
+2
+1
+3
+1
+

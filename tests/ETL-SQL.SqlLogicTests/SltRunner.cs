@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Runtime;
 using System.Linq;
@@ -459,7 +459,10 @@ SET TELEMETRY = OFF;";
                 new CreateViewStatementHandler(),
                 new DropViewStatementHandler(l),
                 new ShowViewsStatementHandler(),
-                new MergeStatementHandler(l)
+                new MergeStatementHandler(l),
+                new AlterTableStatementHandler(l),
+                new GenerateStatementHandler(l),
+                new TruncateTableStatementHandler(l)
             };
 
             var evaluator = new Evaluator(handlers, serviceProvider, registry, tracker.Object, docker.Object, connectors, sessions.Object, security, l, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());

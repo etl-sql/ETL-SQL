@@ -147,3 +147,21 @@ query I nosort
 SELECT COUNT(*) FROM staff
 ----
 0
+
+# TRUNCATE TABLE
+statement ok
+INSERT INTO staff VALUES (1, 'Alice', 'Eng', 100000);
+
+query I nosort
+SELECT COUNT(*) FROM staff;
+----
+1
+
+statement ok
+TRUNCATE TABLE staff;
+
+query I nosort
+SELECT COUNT(*) FROM staff;
+----
+0
+

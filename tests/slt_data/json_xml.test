@@ -60,3 +60,45 @@ query T
 SELECT XMLVALUE(doc, '/root/item[@id="1"]') FROM xml_docs;
 ----
 First
+
+statement ok
+CREATE TABLE users_for_format(id INT, name STRING);
+
+statement ok
+INSERT INTO users_for_format VALUES (1, 'Alice'), (2, 'Bob');
+
+# FOR JSON PATH
+query T
+SELECT id, name FROM users_for_format WHERE id <= 2 ORDER BY id FOR JSON PATH, ROOT('Users');
+----
+1 values hashing to 39ec8e19050b0ac4c86d6b89dd560e06
+
+# FOR XML PATH
+query T
+SELECT id, name FROM users_for_format WHERE id <= 2 ORDER BY id FOR XML PATH, ROOT('Users');
+----
+1 values hashing to e8b597f45ee2f4e4ef176b48d72da616
+
+# JSON_TABLE
+query T
+SELECT * FROM JSON_TABLE('["A","B"]', '$') ORDER BY Value;
+----
+A
+B
+
+# OPENJSON
+query TT
+SELECT "key", "value" FROM OPENJSON('{"name":"Alice","age":30}') ORDER BY "key";
+----
+age
+30
+name
+Alice
+
+# XMLTABLE
+query T
+SELECT * FROM XMLTABLE('<catalog><book>A</book><book>B</book></catalog>', '/catalog/book') ORDER BY Value;
+----
+A
+B
+
