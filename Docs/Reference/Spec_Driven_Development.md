@@ -103,6 +103,8 @@ FROM src_db.public.customers c;
 
 If the JSON includes `confidence` or `source_evidence`, the generated placeholder includes AI extraction review notes. Treat low-confidence fields and evidence comments as a review checklist before running the pipeline. If the JSON includes `source` metadata, the generated placeholder also includes the inferred source connection and comments for the vendor layout. Confirm header rows, skipped rows, null tokens, fixed-width positions, date formats, allowed values, and duplicate rules before running the pipeline.
 
+For a complete worked example, see [Cookbook recipe 25](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md#25-specification-driven-vendor-feed-build) and the runnable sample [realworld_12_spec_driven_customer_feed.etlsql](file:///C:/Users/chuck/scratch/ETL-SQL/samples/07_Real_World/realworld_12_spec_driven_customer_feed.etlsql).
+
 ---
 
 ## Validation Gates

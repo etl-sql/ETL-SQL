@@ -1,0 +1,100 @@
+{
+  "pipeline_name": "vendor_customer_feed",
+  "metadata": {
+    "description": "Load a vendor customer file into the outbound customer extract.",
+    "classification": "confidential",
+    "owner": "Customer Data Team"
+  },
+  "confidence": 0.92,
+  "source_evidence": [
+    {
+      "document": "vendor_customer_spec.pdf",
+      "page": 2,
+      "section": "Customer Feed Overview",
+      "text": "Daily customer file delivered as CSV with one header row."
+    }
+  ],
+  "source": {
+    "connector_type": "FLATFILE",
+    "format": "CSV",
+    "path": "C:/Inbound/vendor/customer_feed.csv",
+    "delimiter": "comma",
+    "text_qualifier": "doublequote",
+    "encoding": "UTF8",
+    "has_header": true,
+    "header_rows": 1,
+    "skip_rows": 0,
+    "null_tokens": ["", "NULL", "N/A"],
+    "primary_keys": ["CustomerId"],
+    "duplicate_policy": "reject",
+    "reject_policy": "quarantine",
+    "confidence": 0.9,
+    "source_evidence": [
+      {
+        "page": 4,
+        "section": "File Layout",
+        "text": "Comma-delimited CSV, header row present."
+      }
+    ]
+  },
+  "destination": {
+    "connector_type": "FLATFILE",
+    "format": "CSV",
+    "path": "C:/Outbound/CustomerFeeds",
+    "naming_pattern": "customers_{yyyyMMdd}.csv",
+    "delimiter": "comma",
+    "has_header": true,
+    "encoding": "UTF8"
+  },
+  "schema": [
+    {
+      "column_name": "CustomerId",
+      "source_name": "customer_id",
+      "type_family": "INT",
+      "nullable": false,
+      "description": "Vendor customer identifier.",
+      "is_key": true,
+      "tags": ["pii"],
+      "confidence": 0.98,
+      "source_evidence": [
+        {
+          "page": 5,
+          "section": "Data Dictionary",
+          "original_field_name": "customer_id",
+          "text": "Unique customer ID."
+        }
+      ]
+    },
+    {
+      "column_name": "Email",
+      "source_name": "email_address",
+      "type_family": "VARCHAR",
+      "max_length": 150,
+      "nullable": true,
+      "description": "Customer email address.",
+      "validation_regex": "^[^@]+@[^@]+\\.[^@]+$",
+      "null_tokens": ["", "N/A"],
+      "tags": ["pii"],
+      "confidence": 0.96
+    },
+    {
+      "column_name": "Status",
+      "source_name": "customer_status",
+      "type_family": "VARCHAR",
+      "max_length": 20,
+      "nullable": false,
+      "description": "Customer lifecycle status.",
+      "allowed_values": ["ACTIVE", "INACTIVE", "PENDING"],
+      "confidence": 0.94
+    },
+    {
+      "column_name": "SignupDate",
+      "source_name": "signup_date",
+      "type_family": "DATE",
+      "nullable": true,
+      "description": "Date the customer first registered.",
+      "date_format": "yyyy-MM-dd",
+      "confidence": 0.88
+    }
+  ]
+}

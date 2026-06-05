@@ -246,6 +246,9 @@ These advanced scripts demonstrate complex, production-grade business requiremen
 ### 38. [realworld_11_customer_entity_resolution.etlsql](../samples/07_Real_World/realworld_11_customer_entity_resolution.etlsql)
 **Customer Entity Resolution**: Blends normalized company-name and city similarity scores, automatically accepts strong matches, and creates a review queue for weak or unmatched rows.
 
+### 39. [realworld_12_spec_driven_customer_feed.etlsql](../samples/07_Real_World/realworld_12_spec_driven_customer_feed.etlsql)
+**Specification-Driven Vendor Feed**: Shows the completed script from a matching JSON spec contract, including schema validation, validation issue summaries, quarantine rows, valid-row export, and lineage tagging.
+
 ---
 
 *Refer to [User_Manual.md](User_Manual.md) for the pipeline mental model, [Cookbook.md](Cookbook.md) for production recipes, [Reference/Grammar.md](Reference/Grammar.md) for full syntax, and [Reference/Data_Connectors.md](Reference/Data_Connectors.md) for connector options.*
