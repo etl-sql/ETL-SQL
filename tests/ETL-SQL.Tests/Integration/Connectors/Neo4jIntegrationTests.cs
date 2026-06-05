@@ -9,6 +9,9 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Neo4j;
 using ETL_SQL.Services;
 using ETL_SQL.Data;
+using ETL_SQL.App;
+using ETL_SQL.Core;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
@@ -201,6 +204,48 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.Equal("Alice", rawTable.Rows[0]["fromName"]?.ToString());
             Assert.Equal("Bob", rawTable.Rows[0]["toName"]?.ToString());
             Assert.Equal("best friends", rawTable.Rows[0]["closeness"]?.ToString());
+        }
+
+        [Fact]
+        public async Task Neo4jEngine_CreateConnectionWithOptions_LoadsKeyedNodes()
+        {
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var script = $@"
+CREATE CONNECTION graph AS NEO4J(
+    HOST = '127.0.0.1',
+    PORT = {_fixture.Port},
+    USER = '{_fixture.Username}',
+    PASSWORD = '{_fixture.Password}',
+    DATABASE = 'neo4j',
+    KEY_COLUMNS = 'customer_id'
+);
+
+EXECUTE graph
+BEGIN
+    MATCH (n:ENGINE_CUSTOMER) DETACH DELETE n
+END;
+
+CREATE TABLE #stage (customer_id VARCHAR, name VARCHAR);
+INSERT INTO #stage VALUES ('E001', 'Engine Alice');
+INSERT INTO graph.NODE_ENGINE_CUSTOMER (customer_id, name)
+SELECT customer_id, name FROM #stage;
+
+CREATE TABLE #stage2 (customer_id VARCHAR, name VARCHAR);
+INSERT INTO #stage2 VALUES ('E001', 'Engine Alice Updated');
+INSERT INTO graph.NODE_ENGINE_CUSTOMER (customer_id, name)
+SELECT customer_id, name FROM #stage2;
+
+SELECT customer_id, name
+FROM graph.NODE_ENGINE_CUSTOMER
+WHERE customer_id = 'E001';
+";
+
+            await eval.Evaluate(new Parser(new Lexer(script).Tokenize()).Parse());
+
+            Assert.NotNull(eval.LastResult);
+            Assert.Single(eval.LastResult.Rows);
+            Assert.Equal("E001", eval.LastResult.Rows[0]["customer_id"]?.ToString());
+            Assert.Equal("Engine Alice Updated", eval.LastResult.Rows[0]["name"]?.ToString());
         }
 
         [Fact]

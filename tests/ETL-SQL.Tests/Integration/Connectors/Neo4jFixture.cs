@@ -18,7 +18,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task InitializeAsync()
         {
             _container = new ContainerBuilder("neo4j:5-community")
-                .WithName("etl-sql-neo4j")
+                .WithName($"etl-sql-neo4j-{Guid.NewGuid():N}")
                 .WithLabel("test-suite", "ETL-SQL.Integration")
                 .WithEnvironment("NEO4J_AUTH", "neo4j/password")
                 .WithPortBinding(7687, true)

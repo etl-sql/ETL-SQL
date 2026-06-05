@@ -46,7 +46,7 @@ namespace ETL_SQL.Connectors.Neo4j
         public string ConnectorType => "NEO4J";
         public string ConnectionString => _connectionString;
         public string Dialect => "NEO4J";
-        public bool SupportsSqlPushdown => true;
+        public bool SupportsSqlPushdown => false;
 
         private IDriver GetDriver()
         {
