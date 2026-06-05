@@ -27,7 +27,19 @@ Single-dataset shape:
     "classification": "string (public | internal | confidential | restricted)",
     "owner": "string (steward, team, or email responsible for the feed, if mentioned)"
   },
+  "confidence": "number (optional, 0.0 to 1.0 confidence in the overall extraction)",
+  "source_evidence": [
+    {
+      "document": "string (optional, source document name)",
+      "page": "integer (optional, 1-based page number)",
+      "section": "string (optional, heading/table/worksheet name)",
+      "original_field_name": "string (optional, exact source label)",
+      "text": "string (optional, short quote or paraphrased source evidence)"
+    }
+  ],
   "source": {
+    "confidence": "number (optional, 0.0 to 1.0)",
+    "source_evidence": ["array of evidence objects (optional)"],
     "connector_type": "string (optional: FLATFILE | MSSQL | POSTGRES | MYSQL | ORACLE | SNOWFLAKE | BIGQUERY)",
     "format": "string (optional: CSV | TSV | PIPE | EXCEL | JSON | XML | PARQUET | AVRO | DB_TABLE)",
     "path": "string (optional: inbound file path, folder, table name, or source alias if mentioned)",
@@ -56,6 +68,8 @@ Single-dataset shape:
   "schema": [
     {
       "column_name": "string (snake_case column name)",
+      "confidence": "number (optional, 0.0 to 1.0 confidence in this column extraction)",
+      "source_evidence": ["array of evidence objects (optional)"],
       "source_name": "string (optional, exact vendor/source field name if different)",
       "start_position": "integer (optional, 1-based fixed-width start position)",
       "width": "integer (optional, fixed-width field width)",
@@ -88,10 +102,16 @@ Multi-dataset shape:
     "classification": "string (public | internal | confidential | restricted)",
     "owner": "string (steward, team, or email responsible for the feed, if mentioned)"
   },
+  "confidence": "number (optional, 0.0 to 1.0 confidence in the overall extraction)",
+  "source_evidence": ["array of evidence objects (optional)"],
   "datasets": [
     {
       "name": "string (snake_case name of the sub-file or sheet)",
+      "confidence": "number (optional, 0.0 to 1.0 confidence in this dataset extraction)",
+      "source_evidence": ["array of evidence objects (optional)"],
       "source": {
+        "confidence": "number (optional, 0.0 to 1.0)",
+        "source_evidence": ["array of evidence objects (optional)"],
         "connector_type": "string (optional: FLATFILE | MSSQL | ...)",
         "format": "string (optional: CSV | TSV | EXCEL | ...)",
         "path": "string (optional: inbound path, sheet, table, or alias)",
@@ -115,6 +135,8 @@ Multi-dataset shape:
       "schema": [
         {
           "column_name": "string (snake_case column name)",
+          "confidence": "number",
+          "source_evidence": ["evidence objects"],
           "source_name": "string",
           "start_position": "integer",
           "width": "integer",
@@ -160,6 +182,15 @@ Extract source layout fields only when the specification states or strongly impl
 *   For enum/domain constraints such as "Y/N", "A/I", or a listed set of status codes, populate `allowed_values`.
 *   For primary keys, unique identifiers, natural keys, or duplicate handling instructions, populate `is_key`, `source.primary_keys`, and `source.duplicate_policy`.
 *   For reject/error handling instructions, populate `source.reject_policy`.
+
+### 2.2 EVIDENCE & CONFIDENCE RULES
+
+Use `confidence` and `source_evidence` to make the extraction auditable:
+
+*   `confidence` must be a number from `0.0` to `1.0`. Use lower values when the source text is ambiguous or inferred.
+*   Add `source_evidence` for the overall pipeline, each dataset, source layout, destination, and any column where the mapping, type, nullability, or validation rule came from a specific part of the document.
+*   Keep evidence concise. Include page, section, original field name, and a short source phrase when available.
+*   Do not invent page numbers or quotes. If only a worksheet/table name is available, use `section`.
 
 ### 3. GOVERNANCE & SENSITIVITY TAGGING RULES
 

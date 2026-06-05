@@ -40,6 +40,7 @@ namespace ETL_SQL.App
                     logger.WriteLine("Failed to deserialize the JSON schema specification.", ConsoleColor.Red);
                     return 1;
                 }
+                HydrateReviewMetadata(spec, jsonContent);
 
                 var validationErrors = SpecPipelineValidator.Validate(spec);
                 if (validationErrors.Count > 0)
@@ -116,6 +117,123 @@ namespace ETL_SQL.App
                 return 1;
             }
         }
+
+        private static void HydrateReviewMetadata(SpecPipeline spec, string jsonContent)
+        {
+            using var document = JsonDocument.Parse(jsonContent, new JsonDocumentOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip
+            });
+
+            var root = document.RootElement;
+            HydrateReviewMetadata(spec, root);
+
+            if (root.TryGetProperty("source", out var sourceElement) && spec.Source != null)
+                HydrateReviewMetadata(spec.Source, sourceElement);
+
+            if (root.TryGetProperty("destination", out var destinationElement) && spec.Destination != null)
+                HydrateReviewMetadata(spec.Destination, destinationElement);
+
+            if (root.TryGetProperty("schema", out var schemaElement) && schemaElement.ValueKind == JsonValueKind.Array && spec.Schema != null)
+                HydrateColumnReviewMetadata(spec.Schema, schemaElement);
+
+            if (root.TryGetProperty("datasets", out var datasetsElement) && datasetsElement.ValueKind == JsonValueKind.Array && spec.Datasets != null)
+            {
+                var count = Math.Min(spec.Datasets.Count, datasetsElement.GetArrayLength());
+                for (var i = 0; i < count; i++)
+                {
+                    var dataset = spec.Datasets[i];
+                    var datasetElement = datasetsElement[i];
+                    HydrateReviewMetadata(dataset, datasetElement);
+
+                    if (datasetElement.TryGetProperty("source", out var datasetSourceElement) && dataset.Source != null)
+                        HydrateReviewMetadata(dataset.Source, datasetSourceElement);
+
+                    if (datasetElement.TryGetProperty("destination", out var datasetDestinationElement) && dataset.Destination != null)
+                        HydrateReviewMetadata(dataset.Destination, datasetDestinationElement);
+
+                    if (datasetElement.TryGetProperty("schema", out var datasetSchemaElement) && datasetSchemaElement.ValueKind == JsonValueKind.Array && dataset.Schema != null)
+                        HydrateColumnReviewMetadata(dataset.Schema, datasetSchemaElement);
+                }
+            }
+        }
+
+        private static void HydrateReviewMetadata(SpecPipeline spec, JsonElement element)
+        {
+            spec.Confidence = ReadConfidence(element);
+            spec.SourceEvidence = ReadEvidence(element);
+        }
+
+        private static void HydrateReviewMetadata(SpecDataset spec, JsonElement element)
+        {
+            spec.Confidence = ReadConfidence(element);
+            spec.SourceEvidence = ReadEvidence(element);
+        }
+
+        private static void HydrateReviewMetadata(SpecSource spec, JsonElement element)
+        {
+            spec.Confidence = ReadConfidence(element);
+            spec.SourceEvidence = ReadEvidence(element);
+        }
+
+        private static void HydrateReviewMetadata(SpecDestination spec, JsonElement element)
+        {
+            spec.Confidence = ReadConfidence(element);
+            spec.SourceEvidence = ReadEvidence(element);
+        }
+
+        private static void HydrateColumnReviewMetadata(List<SpecColumn> columns, JsonElement schemaElement)
+        {
+            var count = Math.Min(columns.Count, schemaElement.GetArrayLength());
+            for (var i = 0; i < count; i++)
+            {
+                var column = columns[i];
+                var columnElement = schemaElement[i];
+                column.Confidence = ReadConfidence(columnElement);
+                column.SourceEvidence = ReadEvidence(columnElement);
+            }
+        }
+
+        private static double? ReadConfidence(JsonElement element)
+        {
+            if (element.TryGetProperty("confidence", out var confidenceElement) && confidenceElement.ValueKind == JsonValueKind.Number)
+                return confidenceElement.GetDouble();
+
+            return null;
+        }
+
+        private static List<SpecEvidence>? ReadEvidence(JsonElement element)
+        {
+            if (!element.TryGetProperty("source_evidence", out var evidenceElement) || evidenceElement.ValueKind != JsonValueKind.Array)
+                return null;
+
+            var evidence = new List<SpecEvidence>();
+            foreach (var item in evidenceElement.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                evidence.Add(new SpecEvidence
+                {
+                    Document = ReadString(item, "document"),
+                    Page = ReadInt(item, "page"),
+                    Section = ReadString(item, "section"),
+                    OriginalFieldName = ReadString(item, "original_field_name"),
+                    Text = ReadString(item, "text")
+                });
+            }
+
+            return evidence;
+        }
+
+        private static string? ReadString(JsonElement element, string propertyName)
+            => element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+
+        private static int? ReadInt(JsonElement element, string propertyName)
+            => element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number)
+                ? number
+                : null;
 
         private static string CompileMasterPipeline(SpecPipeline spec, string modulesDirName, string specFileName)
         {
@@ -254,6 +372,7 @@ namespace ETL_SQL.App
             sb.AppendLine("-- =========================================================================");
             sb.AppendLine("-- [USER TODO]: Define your source connection and query into #staging below.");
             sb.AppendLine("-- All columns must match the names defined in the schema validation below.");
+            WriteEvidenceComments(sb, spec);
             WriteSourceContractComments(sb, spec);
             sb.AppendLine("/*");
             WriteSourceConnectionTemplate(sb, spec.Source);
@@ -405,6 +524,58 @@ namespace ETL_SQL.App
                         sb.AppendLine($"--   column {column.ColumnName}: {string.Join("; ", details)}");
                     }
                 }
+            }
+        }
+
+        private static void WriteEvidenceComments(StringBuilder sb, SpecPipeline spec)
+        {
+            var hasEvidence = spec.Confidence.HasValue
+                              || spec.SourceEvidence is { Count: > 0 }
+                              || spec.Source?.Confidence.HasValue == true
+                              || spec.Source?.SourceEvidence is { Count: > 0 }
+                              || spec.Destination?.Confidence.HasValue == true
+                              || spec.Destination?.SourceEvidence is { Count: > 0 }
+                              || spec.Schema?.Any(c => c.Confidence.HasValue || c.SourceEvidence is { Count: > 0 }) == true;
+            if (!hasEvidence) return;
+
+            sb.AppendLine("-- AI extraction review notes:");
+            AppendConfidence(sb, "pipeline", spec.Confidence);
+            AppendEvidence(sb, "pipeline", spec.SourceEvidence);
+            AppendConfidence(sb, "source", spec.Source?.Confidence);
+            AppendEvidence(sb, "source", spec.Source?.SourceEvidence);
+            AppendConfidence(sb, "destination", spec.Destination?.Confidence);
+            AppendEvidence(sb, "destination", spec.Destination?.SourceEvidence);
+
+            if (spec.Schema != null)
+            {
+                foreach (var column in spec.Schema.Where(c => c.Confidence.HasValue || c.SourceEvidence is { Count: > 0 }))
+                {
+                    AppendConfidence(sb, $"column {column.ColumnName}", column.Confidence);
+                    AppendEvidence(sb, $"column {column.ColumnName}", column.SourceEvidence);
+                }
+            }
+        }
+
+        private static void AppendConfidence(StringBuilder sb, string label, double? confidence)
+        {
+            if (confidence.HasValue)
+                sb.AppendLine($"--   {label} confidence: {confidence.Value:0.###}");
+        }
+
+        private static void AppendEvidence(StringBuilder sb, string label, List<SpecEvidence>? evidence)
+        {
+            if (evidence == null) return;
+
+            foreach (var item in evidence)
+            {
+                var parts = new List<string>();
+                AddDetail(parts, "doc", item.Document);
+                AddDetail(parts, "page", item.Page?.ToString());
+                AddDetail(parts, "section", item.Section);
+                AddDetail(parts, "field", item.OriginalFieldName);
+                AddDetail(parts, "text", item.Text);
+                if (parts.Count > 0)
+                    sb.AppendLine($"--   {label} evidence: {string.Join("; ", parts)}");
             }
         }
 
@@ -621,6 +792,7 @@ namespace ETL_SQL.App
             var errors = new List<string>();
 
             RequireText(spec.PipelineName, "pipeline_name", errors);
+            ValidateReviewMetadata("root", spec.Confidence, spec.SourceEvidence, errors);
             if (spec.Metadata == null)
             {
                 errors.Add("metadata is required.");
@@ -662,6 +834,7 @@ namespace ETL_SQL.App
                 var dataset = datasets[i];
                 var path = $"datasets[{i}]";
                 RequireText(dataset.Name, $"{path}.name", errors);
+                ValidateReviewMetadata(path, dataset.Confidence, dataset.SourceEvidence, errors);
                 if (!string.IsNullOrWhiteSpace(dataset.Name) && !names.Add(dataset.Name))
                 {
                     errors.Add($"{path}.name duplicates another dataset name.");
@@ -699,6 +872,8 @@ namespace ETL_SQL.App
 
         private static void ValidateSource(string path, SpecSource source, List<string> errors)
         {
+            ValidateReviewMetadata(path, source.Confidence, source.SourceEvidence, errors);
+
             if (!string.IsNullOrWhiteSpace(source.ConnectorType))
                 RequireEnum(source.ConnectorType, $"{path}.connector_type", errors, ConnectorTypes);
 
@@ -732,6 +907,8 @@ namespace ETL_SQL.App
 
         private static void ValidateDestination(string path, SpecDestination destination, List<string> errors)
         {
+            ValidateReviewMetadata(path, destination.Confidence, destination.SourceEvidence, errors);
+
             RequireEnum(destination.ConnectorType, $"{path}.connector_type", errors, ConnectorTypes);
             RequireEnum(destination.Format, $"{path}.format", errors, Formats);
             RequireText(destination.Path, $"{path}.path", errors);
@@ -753,6 +930,7 @@ namespace ETL_SQL.App
             {
                 var column = columns[i];
                 var columnPath = $"{path}[{i}]";
+                ValidateReviewMetadata(columnPath, column.Confidence, column.SourceEvidence, errors);
                 RequireText(column.ColumnName, $"{columnPath}.column_name", errors);
                 if (!string.IsNullOrWhiteSpace(column.ColumnName) && !names.Add(column.ColumnName))
                 {
@@ -802,6 +980,29 @@ namespace ETL_SQL.App
             }
         }
 
+        private static void ValidateReviewMetadata(string path, double? confidence, List<SpecEvidence>? evidence, List<string> errors)
+        {
+            if (confidence.HasValue && (confidence < 0 || confidence > 1))
+                errors.Add($"{path}.confidence must be between 0 and 1.");
+
+            if (evidence == null) return;
+
+            for (var i = 0; i < evidence.Count; i++)
+            {
+                var item = evidence[i];
+                var evidencePath = $"{path}.source_evidence[{i}]";
+                if (item.Page.HasValue && item.Page <= 0)
+                    errors.Add($"{evidencePath}.page must be greater than zero.");
+
+                if (string.IsNullOrWhiteSpace(item.Text)
+                    && string.IsNullOrWhiteSpace(item.Section)
+                    && string.IsNullOrWhiteSpace(item.OriginalFieldName))
+                {
+                    errors.Add($"{evidencePath} must include text, section, or original_field_name.");
+                }
+            }
+        }
+
         private static void RequireText(string? value, string path, List<string> errors)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -839,6 +1040,12 @@ namespace ETL_SQL.App
         [JsonPropertyName("metadata")]
         public SpecMetadata? Metadata { get; set; }
 
+        [JsonPropertyName("confidence")]
+        public double? Confidence { get; set; }
+
+        [JsonPropertyName("source_evidence")]
+        public List<SpecEvidence>? SourceEvidence { get; set; }
+
         [JsonPropertyName("source")]
         public SpecSource? Source { get; set; }
 
@@ -856,6 +1063,12 @@ namespace ETL_SQL.App
     {
         [JsonPropertyName("name")]
         public string? Name { get; set; }
+
+        [JsonPropertyName("confidence")]
+        public double? Confidence { get; set; }
+
+        [JsonPropertyName("source_evidence")]
+        public List<SpecEvidence>? SourceEvidence { get; set; }
 
         [JsonPropertyName("source")]
         public SpecSource? Source { get; set; }
@@ -879,8 +1092,32 @@ namespace ETL_SQL.App
         public string? Owner { get; set; }
     }
 
+    public class SpecEvidence
+    {
+        [JsonPropertyName("document")]
+        public string? Document { get; set; }
+
+        [JsonPropertyName("page")]
+        public int? Page { get; set; }
+
+        [JsonPropertyName("section")]
+        public string? Section { get; set; }
+
+        [JsonPropertyName("original_field_name")]
+        public string? OriginalFieldName { get; set; }
+
+        [JsonPropertyName("text")]
+        public string? Text { get; set; }
+    }
+
     public class SpecSource
     {
+        [JsonPropertyName("confidence")]
+        public double? Confidence { get; set; }
+
+        [JsonPropertyName("source_evidence")]
+        public List<SpecEvidence>? SourceEvidence { get; set; }
+
         [JsonPropertyName("connector_type")]
         public string? ConnectorType { get; set; }
 
@@ -929,6 +1166,12 @@ namespace ETL_SQL.App
 
     public class SpecDestination
     {
+        [JsonPropertyName("confidence")]
+        public double? Confidence { get; set; }
+
+        [JsonPropertyName("source_evidence")]
+        public List<SpecEvidence>? SourceEvidence { get; set; }
+
         [JsonPropertyName("connector_type")]
         public string? ConnectorType { get; set; }
 
@@ -958,6 +1201,12 @@ namespace ETL_SQL.App
     {
         [JsonPropertyName("column_name")]
         public string? ColumnName { get; set; }
+
+        [JsonPropertyName("confidence")]
+        public double? Confidence { get; set; }
+
+        [JsonPropertyName("source_evidence")]
+        public List<SpecEvidence>? SourceEvidence { get; set; }
 
         [JsonPropertyName("source_name")]
         public string? SourceName { get; set; }

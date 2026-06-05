@@ -82,7 +82,24 @@ namespace ETL_SQL.Tests.App
     ""owner"": ""Sales Team"",
     ""classification"": ""confidential""
   },
+  ""confidence"": 0.91,
+  ""source_evidence"": [
+    {
+      ""document"": ""customer_spec.pdf"",
+      ""page"": 2,
+      ""section"": ""Customer Feed Overview"",
+      ""text"": ""Daily customer feed""
+    }
+  ],
   ""source"": {
+    ""confidence"": 0.86,
+    ""source_evidence"": [
+      {
+        ""page"": 4,
+        ""section"": ""Inbound File Layout"",
+        ""text"": ""CSV with header row""
+      }
+    ],
     ""connector_type"": ""FLATFILE"",
     ""format"": ""CSV"",
     ""path"": ""C:/Inbound/customers.csv"",
@@ -99,6 +116,14 @@ namespace ETL_SQL.Tests.App
   },
   ""destination"": {
     ""connector_type"": ""FLATFILE"",
+    ""confidence"": 0.83,
+    ""source_evidence"": [
+      {
+        ""page"": 5,
+        ""section"": ""Outbound Delivery"",
+        ""text"": ""CustomerFeeds folder""
+      }
+    ],
     ""format"": ""CSV"",
     ""path"": ""target_folder"",
     ""naming_pattern"": ""customers_{yyyyMMdd}.csv"",
@@ -109,6 +134,15 @@ namespace ETL_SQL.Tests.App
   ""schema"": [
     {
       ""column_name"": ""CustomerId"",
+      ""confidence"": 0.98,
+      ""source_evidence"": [
+        {
+          ""page"": 6,
+          ""section"": ""Data Dictionary"",
+          ""original_field_name"": ""customer_id"",
+          ""text"": ""Unique customer ID""
+        }
+      ],
       ""source_name"": ""customer_id"",
       ""type_family"": ""INT"",
       ""nullable"": false,
@@ -154,6 +188,14 @@ namespace ETL_SQL.Tests.App
             Assert.Contains("CREATE CONNECTION target_dir AS DIRECTORY('target_folder');", code);
             Assert.Contains("CREATE CONNECTION outbound_dest AS FLATFILE", code);
 
+            // Assert AI Review Evidence
+            Assert.Contains("--   pipeline confidence: 0.91", code);
+            Assert.Contains("--   pipeline evidence: doc=customer_spec.pdf; page=2; section=Customer Feed Overview; text=Daily customer feed", code);
+            Assert.Contains("--   source confidence: 0.86", code);
+            Assert.Contains("--   destination confidence: 0.83", code);
+            Assert.Contains("--   column CustomerId confidence: 0.98", code);
+            Assert.Contains("--   column CustomerId evidence: page=6; section=Data Dictionary; field=customer_id; text=Unique customer ID", code);
+
             // Assert Source Layout Contract
             Assert.Contains("--   source connector: FLATFILE", code);
             Assert.Contains("--   header rows: 1", code);
@@ -185,6 +227,47 @@ namespace ETL_SQL.Tests.App
 
             var script = new Parser(new Lexer(code).Tokenize(), code).Parse();
             Assert.Empty(script.Diagnostics);
+        }
+
+        [Fact]
+        public async Task Generate_InvalidEvidenceMetadata_ReturnsError()
+        {
+            var schemaPath = Path.Combine(_tempDir, "invalid_evidence_schema.json");
+            var outputPath = Path.Combine(_tempDir, "invalid_evidence_output.etlsql");
+
+            var jsonContent = @"
+{
+  ""pipeline_name"": ""bad_evidence"",
+  ""metadata"": {
+    ""description"": ""Invalid evidence metadata"",
+    ""classification"": ""internal"",
+    ""owner"": ""Data Team""
+  },
+  ""confidence"": 1.5,
+  ""source_evidence"": [
+    {
+      ""page"": 0
+    }
+  ],
+  ""destination"": {
+    ""connector_type"": ""FLATFILE"",
+    ""format"": ""CSV"",
+    ""path"": ""outbound""
+  },
+  ""schema"": [
+    {
+      ""column_name"": ""CustomerId"",
+      ""type_family"": ""INT"",
+      ""nullable"": false
+    }
+  ]
+}";
+            await File.WriteAllTextAsync(schemaPath, jsonContent);
+
+            var result = await PipelineGenerator.Generate(schemaPath, outputPath, NullLogger.Instance);
+
+            Assert.Equal(1, result);
+            Assert.False(File.Exists(outputPath));
         }
 
         [Fact]
