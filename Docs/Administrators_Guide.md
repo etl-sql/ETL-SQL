@@ -43,6 +43,31 @@ sudo systemctl start etl-sql-portal
 
 For RPM-based systems, use the matching `.rpm` package and the same `systemctl` service names.
 
+### Docker / Containerized
+
+ETL-SQL provides pre-configured Docker Compose configurations to run containerized instances of the Orchestrator and Report Portal services.
+
+1. **Pull-Based Deployments (Operator Workflow)**:
+   The central [docker-compose.yml](../docker-compose.yml) file is structured for container registry pulls. It references pre-built images:
+   - `etl-sql/orchestrator:latest` (runs on port `5001`)
+   - `etl-sql/report-portal:latest` (runs on port `5000`)
+
+   Deploying this configuration only requires copying `docker-compose.yml` to your host server and running:
+   ```bash
+   docker compose up -d
+   ```
+   *Note: This workflow does not require the C# source tree or SDK tooling to be installed on the host.*
+
+2. **Persistence and Volumes**:
+   The compose file exposes volume binds to preserve runtime data on the host machine:
+   - `./data` — Holds the portal's SQLite catalog database (`portal.db`)
+   - `./Reports` — Directory for uploaded ETL scripts and report queries
+   - `./Snapshots` — Storage for generated report extracts and snapshots
+   - `./logs/orchestrator` — Background execution log output
+
+3. **Development Builds (Source Override)**:
+   If you have the source tree cloned locally and need to test code modifications inside the containers, use the [docker-compose.override.yml](../docker-compose.override.yml) file. When Docker Compose finds this file alongside the main compose config, it automatically overrides the registry images and compiles the local C# code via multi-stage builds.
+
 ### First-Run Checklist
 
 Before exposing the services to users:
