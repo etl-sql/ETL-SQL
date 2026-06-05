@@ -20,15 +20,17 @@ namespace ETL_SQL.Connectors.Neo4j
         private readonly IExecutionContext? _context;
         private readonly string? _uriUser;
         private readonly string? _uriPassword;
+        private readonly bool _ownsDriver;
         private IDriver? _driver;
 
-        public Neo4jDataSource(IExecutionContext context, string connectionString, string? tableName = null, Dictionary<string, string>? options = null, IDriver? driver = null)
+        public Neo4jDataSource(IExecutionContext context, string connectionString, string? tableName = null, Dictionary<string, string>? options = null, IDriver? driver = null, bool ownsDriver = false)
         {
             _context = context;
             _logger = context.Logger;
             _tableName = tableName;
             _options = options;
             _driver = driver;
+            _ownsDriver = driver == null || ownsDriver;
 
             string connStr = connectionString;
             if (options != null && string.IsNullOrEmpty(connStr))
@@ -783,12 +785,12 @@ namespace ETL_SQL.Connectors.Neo4j
 
         public IDataSource WithTable(string tableName)
         {
-            return new Neo4jDataSource(_context!, _connectionString, tableName, _options, _driver);
+            return new Neo4jDataSource(_context!, _connectionString, tableName, _options, _driver, ownsDriver: _driver == null);
         }
 
         public async ValueTask DisposeAsync()
         {
-            if (_driver != null)
+            if (_driver != null && _ownsDriver)
             {
                 await _driver.DisposeAsync();
                 _driver = null;

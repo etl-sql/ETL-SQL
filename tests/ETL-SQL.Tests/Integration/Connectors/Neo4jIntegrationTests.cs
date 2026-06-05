@@ -218,6 +218,23 @@ namespace ETL_SQL.Tests.Integration.Connectors
         }
 
         [Fact]
+        public async Task Neo4jDataSource_WithTable_DisposeScopedSourceDoesNotCloseSharedDriver()
+        {
+            var ctx = MakeContext();
+            var options = MakeOptions();
+            var root = new Neo4jDataSource(ctx, _fixture.ConnectionString, null, options);
+            await root.GetTablesAsync();
+
+            var scoped = root.WithTable("NODE_DISPOSE_SCOPE");
+            await scoped.DisposeAsync();
+
+            var version = await root.GetVersionAsync();
+            Assert.Contains("Connected", version);
+
+            await root.DisposeAsync();
+        }
+
+        [Fact]
         public async Task Neo4jDataSource_ExecuteRawSql_WhenWhatIfSkipsMutatingCypher()
         {
             var normalCtx = MakeContext();
