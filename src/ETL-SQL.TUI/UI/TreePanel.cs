@@ -24,14 +24,15 @@ namespace ETL_SQL.TUI.UI
             // Generate the Spectre.Console Table renderable with scrolling
             var treeWidget = visualizer.CreateRenderable(_renderer.ResultScrollRow, height - 3);
             
-            var borderColor = _renderer.ResultsFocus ? Color.Yellow : Color.Cyan;
+            var borderStyleStr = _renderer.ResultsFocus ? TuiTheme.Instance.Ui.ResultsFocusedBorder : TuiTheme.Instance.Ui.ResultsUnfocusedBorder;
+            var borderStyle = TuiTheme.Instance.GetStyle(borderStyleStr, new Style(_renderer.ResultsFocus ? Color.Yellow : Color.Cyan));
             
             // Wrap in a panel to provide a border and header
             var panel = new Panel(treeWidget)
             {
                 Header = new PanelHeader("[bold cyan] Execution Pipeline [/]"),
                 Border = BoxBorder.Rounded,
-                BorderStyle = new Style(borderColor),
+                BorderStyle = borderStyle,
                 Height = height,
                 Width = width
             };

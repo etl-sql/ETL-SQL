@@ -52,7 +52,7 @@ namespace ETL_SQL.TUI.UI
                     _renderer.SetLinePhysicalShift(lineIdx, 0);
 
                     console.SetCursorPosition(x, row);
-                    console.Markup($"[grey]{(lineIdx + 1).ToString().PadLeft(gutterWidth - 1)} [/]");
+                    console.Markup($"[{TuiTheme.Instance.Editor.Gutter}]{(lineIdx + 1).ToString().PadLeft(gutterWidth - 1)} [/]");
                     console.Markup(highlighted);
                 }
             }
@@ -88,7 +88,7 @@ namespace ETL_SQL.TUI.UI
 
                 bool dummy;
                 string hb = ETLSuggestEngine.HighlightLine(b, _renderer.ScrollCol, editorWidth, startsInComment, out dummy);
-                string hc = "[reverse]" + Markup.Escape(c) + "[/]";
+                string hc = $"[{TuiTheme.Instance.Editor.SecondaryCursor}]" + Markup.Escape(c) + "[/]";
                 string ha = ETLSuggestEngine.HighlightLine(a, Math.Max(0, _renderer.ScrollCol - secondary.Col - 1), editorWidth, dummy, out _);
 
                 return hb + hc + ha;
@@ -121,7 +121,7 @@ namespace ETL_SQL.TUI.UI
 
             bool d1, d2;
             return ETLSuggestEngine.HighlightLine(fullLine.Substring(0, lineStart), _renderer.ScrollCol, editorWidth, startsInComment, out d1)
-                 + "[black on white]" + Markup.Escape(vSelectedS) + "[/]"
+                 + $"[{TuiTheme.Instance.Editor.Selection}]" + Markup.Escape(vSelectedS) + "[/]"
                  + ETLSuggestEngine.HighlightLine(fullLine.Substring(lineEnd), 0, editorWidth, d1, out d2);
         }
     }

@@ -220,13 +220,13 @@ namespace ETL_SQL.TUI.UI
                 _console.ClearLine(0, 0, totalWidth);
                 string fileLabel = string.IsNullOrEmpty(filePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(filePath);
                 string headerBase = $" ETL-SQL IDE | {fileLabel}{(isDirty ? "*" : "")}";
-                string focusInfo = Focus == EditorFocus.Editor ? " [bold yellow](FOCUSED)[/]" : " [grey](F6 to focus)[/]";
+                string focusInfo = Focus == EditorFocus.Editor ? $" [bold {TuiTheme.Instance.Ui.EditorFocusedBorder}](FOCUSED)[/]" : $" [{TuiTheme.Instance.Ui.EditorUnfocusedBorder}](F6 to focus)[/]";
                 
-                _console.Markup($"[white on grey15]{Markup.Escape(headerBase)} [/]{focusInfo}");
+                _console.Markup($"[{TuiTheme.Instance.Ui.StatusBackground}]{Markup.Escape(headerBase)} [/]{focusInfo}");
                 
                 int plainLen = headerBase.Length + 1 + (Focus == EditorFocus.Editor ? 9 : 13);
                 if (totalWidth > plainLen)
-                    _console.Markup($"[white on grey15]{new string(' ', totalWidth - plainLen)}[/]");
+                    _console.Markup($"[{TuiTheme.Instance.Ui.StatusBackground}]{new string(' ', totalWidth - plainLen)}[/]");
             }
 
             // 2. Main Panels
@@ -256,7 +256,7 @@ namespace ETL_SQL.TUI.UI
                 string helpText = " F1:Help  F5:Run  F6:Focus  F4:Panel  Alt+R:Report  F2:Save  F12:Format  ^Q:Exit ";
                 _console.ClearLine(0, helpRow, totalWidth);
                 _console.SetCursorPosition(0, helpRow);
-                _console.Markup($"[white on grey23]{Markup.Escape(helpText.PadRight(totalWidth - 1))}[/]");
+                _console.Markup($"[{TuiTheme.Instance.Ui.HelpBackground}]{Markup.Escape(helpText.PadRight(totalWidth - 1))}[/]");
 
                 // ── Row 2: Status Bar (Dynamic Info) ─────────────────────────
                 string fileLabel2 = string.IsNullOrEmpty(filePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(filePath);
@@ -312,12 +312,12 @@ namespace ETL_SQL.TUI.UI
                 if (statusMsg.Length > availForStatus && availForStatus > 5)
                     statusMsg = statusMsg[..Math.Max(0, availForStatus - 3)] + "...";
 
-                string sep = "[grey]│[/]";
+                string sep = $"[{TuiTheme.Instance.Ui.PanelUnfocusedBorder}]│[/]";
                 string statusMarkup = 
-                    $"[white on grey15]{Markup.Escape(leftZone)}[/]" + sep +
+                    $"[{TuiTheme.Instance.Ui.StatusBackground}]{Markup.Escape(leftZone)}[/]" + sep +
                     midZone + sep +
-                    $"[white on grey15]{Markup.Escape(rightZone)}[/]" + sep +
-                    $"[white on grey15] {Markup.Escape(statusMsg).PadRight(Math.Max(0, availForStatus))} [/]";
+                    $"[{TuiTheme.Instance.Ui.StatusBackground}]{Markup.Escape(rightZone)}[/]" + sep +
+                    $"[{TuiTheme.Instance.Ui.StatusBackground}] {Markup.Escape(statusMsg).PadRight(Math.Max(0, availForStatus))} [/]";
 
                 _console.ClearLine(0, statusRow, totalWidth);
                 _console.SetCursorPosition(0, statusRow);

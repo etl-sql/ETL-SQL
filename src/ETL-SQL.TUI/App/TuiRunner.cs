@@ -18,6 +18,7 @@ namespace ETL_SQL.TUI
             {
                 // Enforce UTF-8 for consistent symbol rendering
                 Console.OutputEncoding = System.Text.Encoding.UTF8;
+                TuiTheme.Load();
 
                 // Disable Ctrl+C interrupt so we can use it for Copy
                 if (OperatingSystem.IsWindows())

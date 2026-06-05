@@ -43,7 +43,10 @@ namespace ETL_SQL.TUI.UI
                 .AddItem("Mem Delta", Math.Abs(lastMetrics?.MemoryDeltaBytes ?? 0) / 1024, Color.Blue);
 
             // 2. Telemetry Table
-            var statsTable = new Table().Border(TableBorder.Rounded).BorderColor(_renderer.Focus == EditorFocus.Performance ? Color.Grey37 : Color.Grey);
+            var statsTableColor = TuiTheme.Instance.GetColor(
+                _renderer.Focus == EditorFocus.Performance ? TuiTheme.Instance.Ui.PanelFocusedBorder : TuiTheme.Instance.Ui.PanelUnfocusedBorder, 
+                _renderer.Focus == EditorFocus.Performance ? Color.Grey37 : Color.Grey);
+            var statsTable = new Table().Border(TableBorder.Rounded).BorderColor(statsTableColor);
             statsTable.AddColumn("Metric");
             statsTable.AddColumn("Value");
             
@@ -113,12 +116,16 @@ namespace ETL_SQL.TUI.UI
             rootTable.AddRow(new Rule("[grey]Detailed Execution Profile[/]"));
             rootTable.AddRow(profileTable);
 
+            var panelStyle = TuiTheme.Instance.GetStyle(
+                _renderer.Focus == EditorFocus.Performance ? TuiTheme.Instance.Ui.PanelFocusedBorder : TuiTheme.Instance.Ui.PanelUnfocusedBorder,
+                new Style(_renderer.Focus == EditorFocus.Performance ? Color.Grey37 : Color.Grey));
             var panel = new Panel(rootTable)
             {
                 Header = new PanelHeader("[yellow] Performance Dashboard [/]", Justify.Left),
                 Height = height,
                 Width = width,
-                Border = BoxBorder.Rounded
+                Border = BoxBorder.Rounded,
+                BorderStyle = panelStyle
             };
 
             console.SetCursorPosition(x, y);

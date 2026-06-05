@@ -46,7 +46,10 @@ namespace ETL_SQL.TUI.UI
                 : "";
             string stats = $"[cyan]Set {_renderer.ActiveResultSetIndex + 1}/{_evaluator.LastResultSets.Count} | {res.ExecutionTimeMs}ms | {res.TotalRowsMatched}{(res.TotalRowsMatched >= 1000 ? "+" : "")} rows[/]{filterInfo}";
 
-            var table = new Table().Border(TableBorder.Rounded).BorderColor(_renderer.ResultsFocus ? Color.Grey37 : Color.Grey).Expand();
+            var tableColor = TuiTheme.Instance.GetColor(
+                _renderer.ResultsFocus ? TuiTheme.Instance.Ui.PanelFocusedBorder : TuiTheme.Instance.Ui.PanelUnfocusedBorder, 
+                _renderer.ResultsFocus ? Color.Grey37 : Color.Grey);
+            var table = new Table().Border(TableBorder.Rounded).BorderColor(tableColor).Expand();
             var visibleColumns = res.ColumnNames.Skip(_renderer.ResultScrollCol).Take(10).ToList();
             foreach (var col in visibleColumns) table.AddColumn($"[bold cyan]{Markup.Escape(col)}[/]");
 
@@ -62,8 +65,11 @@ namespace ETL_SQL.TUI.UI
                 }
             }
 
-            var borderColor = hasFilter ? Color.Yellow : (_renderer.ResultsFocus ? Color.Yellow : Color.Cyan);
-            var panel = new Panel(table) { Header = new PanelHeader(stats), Height = height, Width = width, Border = BoxBorder.Rounded, BorderStyle = new Style(borderColor), Padding = new Padding(0, 0, 0, 0) };
+            var borderStyleStr = hasFilter 
+                ? TuiTheme.Instance.Ui.ResultsFocusedBorder 
+                : (_renderer.ResultsFocus ? TuiTheme.Instance.Ui.ResultsFocusedBorder : TuiTheme.Instance.Ui.ResultsUnfocusedBorder);
+            var borderStyle = TuiTheme.Instance.GetStyle(borderStyleStr, new Style(hasFilter ? Color.Yellow : (_renderer.ResultsFocus ? Color.Yellow : Color.Cyan)));
+            var panel = new Panel(table) { Header = new PanelHeader(stats), Height = height, Width = width, Border = BoxBorder.Rounded, BorderStyle = borderStyle, Padding = new Padding(0, 0, 0, 0) };
             console.SetCursorPosition(x, y);
             console.WriteWidget(panel);
         }
@@ -119,7 +125,7 @@ namespace ETL_SQL.TUI.UI
             string focusTag   = focused ? " [bold magenta]◀[/]" : "";
             string header     = $"[cyan]Set {setIndex + 1} | {res.ExecutionTimeMs}ms | {res.TotalRowsMatched}{(res.TotalRowsMatched >= 1000 ? "+" : "")} rows[/]{filterInfo}{focusTag}";
 
-            var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey).Expand();
+            var table = new Table().Border(TableBorder.Rounded).BorderColor(TuiTheme.Instance.GetColor(TuiTheme.Instance.Ui.PanelUnfocusedBorder, Color.Grey)).Expand();
             var visibleColumns = res.ColumnNames.Take(10).ToList();
             foreach (var col in visibleColumns)
                 table.AddColumn($"[bold cyan]{Markup.Escape(col)}[/]");
@@ -133,14 +139,16 @@ namespace ETL_SQL.TUI.UI
                 table.AddRow(visibleColumns.Select(c => Markup.Escape(row[c]?.ToString() ?? "")).ToArray());
             }
 
-            var borderColor = focused ? Color.Magenta : Color.Grey23;
+            var borderStyle = TuiTheme.Instance.GetStyle(
+                focused ? TuiTheme.Instance.Ui.CompareFocusedBorder : TuiTheme.Instance.Ui.CompareUnfocusedBorder,
+                new Style(focused ? Color.Magenta : Color.Grey23));
             var panel = new Panel(table)
             {
                 Header = new PanelHeader(header),
                 Height = height,
                 Width  = width,
                 Border = BoxBorder.Rounded,
-                BorderStyle = new Style(borderColor),
+                BorderStyle = borderStyle,
                 Padding = new Padding(0, 0, 0, 0)
             };
 

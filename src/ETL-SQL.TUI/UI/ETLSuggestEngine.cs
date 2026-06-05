@@ -82,6 +82,7 @@ namespace ETL_SQL.TUI.UI
             endsInMultiline = startsInMultiline;
             if (string.IsNullOrEmpty(fullLine)) return "";
 
+            var theme = TuiTheme.Instance.Syntax;
             var tokens = new List<(int Start, int Length, string MarkupPrefix, bool IsSecret)>();
             int pos = 0;
             string lastWord = "";
@@ -132,40 +133,40 @@ namespace ETL_SQL.TUI.UI
                     {
                         isSecret = true;
                     }
-                    tokens.Add((pos, word.Length, "darkorange3", isSecret));
+                    tokens.Add((pos, word.Length, theme.String, isSecret));
                 }
                 else if (word.StartsWith("["))
                 {
-                    tokens.Add((pos, word.Length, "cyan", false));
+                    tokens.Add((pos, word.Length, theme.Bracket, false));
                 }
                 else if (word.Equals("DOCKER", StringComparison.OrdinalIgnoreCase) || word.Contains("CONNECTION_STRING", StringComparison.OrdinalIgnoreCase))
                 {
-                    tokens.Add((pos, word.Length, "orange1", false));
+                    tokens.Add((pos, word.Length, theme.Docker, false));
                 }
                 else if (LanguageMetadata.DmlKeywords.Contains(word.ToUpper()))
-                    tokens.Add((pos, word.Length, "bold blue", false));
+                    tokens.Add((pos, word.Length, theme.DmlKeyword, false));
                 else if (LanguageMetadata.DdlKeywords.Contains(word.ToUpper()))
-                    tokens.Add((pos, word.Length, "bold plum1", false));
+                    tokens.Add((pos, word.Length, theme.DdlKeyword, false));
                 else if (LanguageMetadata.ControlFlowKeywords.Contains(word.ToUpper()))
-                    tokens.Add((pos, word.Length, "bold gold1", false));
+                    tokens.Add((pos, word.Length, theme.ControlFlow, false));
                 else if (LanguageMetadata.JoinKeywords.Contains(word.ToUpper()))
-                    tokens.Add((pos, word.Length, "bold springgreen3", false));
+                    tokens.Add((pos, word.Length, theme.JoinKeyword, false));
                 else if (LanguageMetadata.OperatorKeywords.Contains(word.ToUpper()))
-                    tokens.Add((pos, word.Length, "bold plum3", false));
+                    tokens.Add((pos, word.Length, theme.OperatorKeyword, false));
                 else if (LanguageMetadata.Keywords.Contains(word.ToUpper()))
-                    tokens.Add((pos, word.Length, "blue", false));
+                    tokens.Add((pos, word.Length, theme.OtherKeyword, false));
                 else if (LanguageMetadata.IsDataType(word))
-                    tokens.Add((pos, word.Length, "mediumpurple", false));
+                    tokens.Add((pos, word.Length, theme.DataType, false));
                 else if (LanguageMetadata.IsFunction(word))
-                    tokens.Add((pos, word.Length, "yellow", false));
+                    tokens.Add((pos, word.Length, theme.Function, false));
                 else if (word.StartsWith("@"))
-                    tokens.Add((pos, word.Length, "green", false));
+                    tokens.Add((pos, word.Length, theme.Variable, false));
                 else if (aliases != null && aliases.TryGetValue(word, out var info))
                 {
                     if (info.HasExplicitAlias && word.Equals(info.Alias, StringComparison.OrdinalIgnoreCase))
-                        tokens.Add((pos, word.Length, "purple", false));
+                        tokens.Add((pos, word.Length, theme.Alias, false));
                     else if (!info.HasExplicitAlias || word.Equals(info.TableName, StringComparison.OrdinalIgnoreCase))
-                        tokens.Add((pos, word.Length, "cyan", false));
+                        tokens.Add((pos, word.Length, theme.Table, false));
                     else
                         tokens.Add((pos, word.Length, "", false));
                 }
@@ -229,10 +230,11 @@ namespace ETL_SQL.TUI.UI
         {
             var tagRegex = new Regex(@"(@\w+):\s*([^;*]+)(;)?", RegexOptions.Compiled);
             var matches = tagRegex.Matches(text);
+            var theme = TuiTheme.Instance.Syntax;
 
             if (matches.Count == 0)
             {
-                tokens.Add((offset, text.Length, "grey70", false));
+                tokens.Add((offset, text.Length, theme.Comment, false));
                 return;
             }
 
@@ -240,27 +242,27 @@ namespace ETL_SQL.TUI.UI
             foreach (Match m in matches)
             {
                 if (m.Index > lastPos)
-                    tokens.Add((offset + lastPos, m.Index - lastPos, "grey70", false));
+                    tokens.Add((offset + lastPos, m.Index - lastPos, theme.Comment, false));
 
-                // @tag (Purple)
-                tokens.Add((offset + m.Index, m.Groups[1].Length, "mediumpurple", false));
+                // @tag
+                tokens.Add((offset + m.Index, m.Groups[1].Length, theme.CommentTag, false));
                 
-                // : (Gray)
-                tokens.Add((offset + m.Index + m.Groups[1].Length, 1, "grey70", false));
+                // :
+                tokens.Add((offset + m.Index + m.Groups[1].Length, 1, theme.Comment, false));
 
-                // value (Orange)
+                // value
                 int valueStart = m.Groups[2].Index;
-                tokens.Add((offset + valueStart, m.Groups[2].Length, "darkorange3", false));
+                tokens.Add((offset + valueStart, m.Groups[2].Length, theme.CommentValue, false));
 
-                // ; (Gray)
+                // ;
                 if (m.Groups[3].Success)
-                    tokens.Add((offset + m.Groups[3].Index, 1, "grey70", false));
+                    tokens.Add((offset + m.Groups[3].Index, 1, theme.Comment, false));
 
                 lastPos = m.Index + m.Length;
             }
 
             if (lastPos < text.Length)
-                tokens.Add((offset + lastPos, text.Length - lastPos, "grey70", false));
+                tokens.Add((offset + lastPos, text.Length - lastPos, theme.Comment, false));
         }
 
 

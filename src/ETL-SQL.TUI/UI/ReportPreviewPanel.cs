@@ -83,7 +83,8 @@ namespace ETL_SQL.TUI.UI
             }
 
             string pageInfo = $"[cyan]Page {activePageIndex + 1}/{manifest.Pages.Count}: {page.Name} (Line {_renderer.ReportScrollRow + 1}/{lines.Count})[/]";
-            var borderColor = _renderer.ResultsFocus ? Color.Yellow : Color.Blue; 
+            var borderStyleStr = _renderer.ResultsFocus ? TuiTheme.Instance.Ui.ResultsFocusedBorder : TuiTheme.Instance.Ui.ResultsUnfocusedBorder;
+            var borderStyle = TuiTheme.Instance.GetStyle(borderStyleStr, new Style(_renderer.ResultsFocus ? Color.Yellow : Color.Blue));
 
             var panel = new Panel(new Rows(visibleContent))
             {
@@ -91,7 +92,7 @@ namespace ETL_SQL.TUI.UI
                 Height = height,
                 Width = width,
                 Border = BoxBorder.Rounded,
-                BorderStyle = new Style(borderColor),
+                BorderStyle = borderStyle,
                 Padding = new Padding(1, 0, 1, 0)
             };
 
