@@ -158,6 +158,10 @@ namespace ETL_SQL.Connectors.Email
 
                 if (_options.TryGetValue("USERNAME", out var user) && _options.TryGetValue("PASSWORD", out var pass))
                 {
+                    if (pass.StartsWith("ENC:") && _context != null)
+                    {
+                        pass = _context.DecryptValue(pass) ?? "";
+                    }
                     await client.AuthenticateAsync(user, pass);
                 }
 

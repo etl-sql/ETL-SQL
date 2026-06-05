@@ -28,6 +28,18 @@ namespace ETL_SQL.Connectors.Directory
             context.SecurityService.ValidatePath(_directoryPath);
 
             Options = options;
+
+            bool create = true;
+            if (options != null && options.TryGetValue("CREATE", out var createStr))
+            {
+                create = createStr.Equals("ON", StringComparison.OrdinalIgnoreCase) || 
+                         createStr.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (create && !System.IO.Directory.Exists(_directoryPath) && context != null && !context.IsWhatIf)
+            {
+                System.IO.Directory.CreateDirectory(_directoryPath);
+            }
         }
 
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "FileName", "Path", "Extension", "Size", "LastModified", "IsReadOnly", "CreationTime" });

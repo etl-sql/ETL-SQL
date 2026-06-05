@@ -66,7 +66,13 @@ namespace ETL_SQL.Connectors
 
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
-            { "CONTAINER", Array.Empty<string>() }
+            { "CONTAINER", Array.Empty<string>() },
+            { "CONNECTION_STRING", Array.Empty<string>() },
+            { "ACCOUNT_NAME", Array.Empty<string>() },
+            { "ACCOUNT_KEY", Array.Empty<string>() },
+            { "SAS_TOKEN", Array.Empty<string>() },
+            { "ENDPOINT_SUFFIX", Array.Empty<string>() },
+            { "BLOB_ENDPOINT", Array.Empty<string>() }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new();
@@ -75,13 +81,44 @@ namespace ETL_SQL.Connectors
             "AZURE_BLOB Connector: Connects to Azure Blob Storage containers.\n" +
             "Supports listing blobs as a table and performing file transfers (GET_FILE, PUT_FILE).\n\n" +
             "Options:\n" +
-            "  CONTAINER: The name of the storage container to use.";
+            "  CONTAINER: The name of the storage container to use.\n" +
+            "  CONNECTION_STRING: Full connection string (optional).\n" +
+            "  ACCOUNT_NAME: Storage account name.\n" +
+            "  ACCOUNT_KEY: Storage account access key (supports ENC: prefix).\n" +
+            "  SAS_TOKEN: Shared Access Signature token (supports ENC: prefix).\n" +
+            "  ENDPOINT_SUFFIX: Custom endpoint suffix (default: core.windows.net).\n" +
+            "  BLOB_ENDPOINT: Explicit blob service endpoint URL.";
 
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
             string? container = null;
             options?.TryGetValue("CONTAINER", out container);
-            return new AzureBlobConnector(context, connectionString, container ?? "default");
+
+            string connStr = connectionString;
+            if (options != null && string.IsNullOrEmpty(connStr))
+            {
+                var decryptedOptions = new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase);
+                if (decryptedOptions.TryGetValue("ACCOUNT_KEY", out var key) && key.StartsWith("ENC:"))
+                {
+                    decryptedOptions["ACCOUNT_KEY"] = context.DecryptValue(key) ?? "";
+                }
+                if (decryptedOptions.TryGetValue("SAS_TOKEN", out var sas) && sas.StartsWith("ENC:"))
+                {
+                    decryptedOptions["SAS_TOKEN"] = context.DecryptValue(sas) ?? "";
+                }
+                if (decryptedOptions.TryGetValue("CONNECTION_STRING", out var cs) && cs.StartsWith("ENC:"))
+                {
+                    decryptedOptions["CONNECTION_STRING"] = context.DecryptValue(cs) ?? "";
+                }
+
+                connStr = BuildConnectionString(decryptedOptions);
+            }
+            else if (connStr.StartsWith("ENC:"))
+            {
+                connStr = context.DecryptValue(connStr) ?? "";
+            }
+
+            return new AzureBlobConnector(context, connStr, container ?? "default");
         }
 
         public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null)
@@ -93,8 +130,42 @@ namespace ETL_SQL.Connectors
         public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => Task.FromResult(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
-        public string BuildConnectionString(Dictionary<string, string> properties) => 
-            ConnectionStringBuilder.Build(Name, properties);
+        public string BuildConnectionString(Dictionary<string, string> properties)
+        {
+            if (properties.TryGetValue("CONNECTION_STRING", out var connStr) && !string.IsNullOrEmpty(connStr))
+            {
+                return connStr;
+            }
+
+            if (properties.TryGetValue("ACCOUNT_NAME", out var accountName) && !string.IsNullOrEmpty(accountName))
+            {
+                var suffix = properties.GetValueOrDefault("ENDPOINT_SUFFIX", "core.windows.net");
+                var builder = new System.Text.StringBuilder();
+                builder.Append($"DefaultEndpointsProtocol=https;AccountName={accountName};");
+
+                if (properties.TryGetValue("ACCOUNT_KEY", out var accountKey) && !string.IsNullOrEmpty(accountKey))
+                {
+                    builder.Append($"AccountKey={accountKey};");
+                }
+                else if (properties.TryGetValue("SAS_TOKEN", out var sasToken) && !string.IsNullOrEmpty(sasToken))
+                {
+                    builder.Append($"SharedAccessSignature={sasToken};");
+                }
+
+                if (properties.TryGetValue("BLOB_ENDPOINT", out var blobEndpoint) && !string.IsNullOrEmpty(blobEndpoint))
+                {
+                    builder.Append($"BlobEndpoint={blobEndpoint};");
+                }
+                else
+                {
+                    builder.Append($"EndpointSuffix={suffix};");
+                }
+
+                return builder.ToString();
+            }
+
+            return string.Empty;
+        }
 
         private BlobContainerClient GetContainer() 
         {

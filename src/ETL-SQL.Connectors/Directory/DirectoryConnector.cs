@@ -19,7 +19,11 @@ namespace ETL_SQL.Connectors.Directory
         public HashSet<string> GetSupportedFunctions() => new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> GetSupportedKeywords() => new(StringComparer.OrdinalIgnoreCase);
 
-        public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "PATH", Array.Empty<string>() },
+            { "CREATE", new[] { "ON", "OFF", "TRUE", "FALSE" } }
+        };
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);
 

@@ -222,6 +222,11 @@ namespace ETL_SQL.Connectors.Kafka
             string username = _options.GetValueOrDefault("SASL_USERNAME", "");
             string password = _options.GetValueOrDefault("SASL_PASSWORD", "");
 
+            if (password.StartsWith("ENC:") && _context != null)
+            {
+                password = _context.DecryptValue(password) ?? "";
+            }
+
             if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
             {
                 config.SaslUsername = username;

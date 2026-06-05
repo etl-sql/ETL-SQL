@@ -18,6 +18,7 @@ namespace ETL_SQL.Connectors
         private SftpClient? _client;
         private int _disposed;
         private readonly string? _host;
+        private readonly int _port = 22;
         private readonly string? _username;
         private readonly string? _password;
         private readonly string? _keyFilePath;
@@ -37,25 +38,34 @@ namespace ETL_SQL.Connectors
         }
 
         public SftpConnector(string host, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, int timeoutSeconds = 30)
-             : this(null!, host, username, password, keyFilePath, passphrase, timeoutSeconds,
+             : this(host, 22, username, password, keyFilePath, passphrase, timeoutSeconds)
+        {
+        }
+
+        public SftpConnector(string host, int port, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, int timeoutSeconds = 30)
+             : this(null!, host, port, username, password, keyFilePath, passphrase, timeoutSeconds,
                    (h, u, p, k, pp) => {
                        var info = !string.IsNullOrEmpty(k)
-                           ? new Renci.SshNet.ConnectionInfo(h, u, new PrivateKeyAuthenticationMethod(u, new PrivateKeyFile(k, pp)))
-                           : new Renci.SshNet.ConnectionInfo(h, u, new PasswordAuthenticationMethod(u, p ?? ""));
+                           ? new Renci.SshNet.ConnectionInfo(h, port, u, new PrivateKeyAuthenticationMethod(u, new PrivateKeyFile(k, pp)))
+                           : new Renci.SshNet.ConnectionInfo(h, port, u, new PasswordAuthenticationMethod(u, p ?? ""));
                        info.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
                        return new SftpClient(info);
                    })
         {
             _logger = NullLogger.Instance;
-            // Note: _context will be null here, so path resolution and security validation are deferred.
         }
 
         public SftpConnector(IExecutionContext context, string host, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, int timeoutSeconds = 30)
-            : this(context, host, username, password, keyFilePath, passphrase, timeoutSeconds,
+            : this(context, host, 22, username, password, keyFilePath, passphrase, timeoutSeconds)
+        {
+        }
+
+        public SftpConnector(IExecutionContext context, string host, int port, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, int timeoutSeconds = 30)
+            : this(context, host, port, username, password, keyFilePath, passphrase, timeoutSeconds,
                   (h, u, p, k, pp) => {
                       var info = !string.IsNullOrEmpty(k)
-                          ? new Renci.SshNet.ConnectionInfo(h, u, new PrivateKeyAuthenticationMethod(u, new PrivateKeyFile(k, pp)))
-                          : new Renci.SshNet.ConnectionInfo(h, u, new PasswordAuthenticationMethod(u, p ?? ""));
+                          ? new Renci.SshNet.ConnectionInfo(h, port, u, new PrivateKeyAuthenticationMethod(u, new PrivateKeyFile(k, pp)))
+                          : new Renci.SshNet.ConnectionInfo(h, port, u, new PasswordAuthenticationMethod(u, p ?? ""));
                       info.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
                       return new SftpClient(info);
                   })
@@ -64,15 +74,22 @@ namespace ETL_SQL.Connectors
 
         internal SftpConnector(IExecutionContext? context, string host, string username, string? password, string? keyFilePath, string? passphrase,
             Func<string, string, string?, string?, string?, SftpClient> clientFactory)
-            : this(context, host, username, password, keyFilePath, passphrase, 30, clientFactory)
+            : this(context, host, 22, username, password, keyFilePath, passphrase, 30, clientFactory)
         {
         }
 
         internal SftpConnector(IExecutionContext? context, string host, string username, string? password, string? keyFilePath, string? passphrase, int timeoutSeconds,
             Func<string, string, string?, string?, string?, SftpClient> clientFactory)
+            : this(context, host, 22, username, password, keyFilePath, passphrase, timeoutSeconds, clientFactory)
+        {
+        }
+
+        internal SftpConnector(IExecutionContext? context, string host, int port, string username, string? password, string? keyFilePath, string? passphrase, int timeoutSeconds,
+            Func<string, string, string?, string?, string?, SftpClient> clientFactory)
         {
             _context = context;
             _host = host;
+            _port = port;
             _username = username;
             _password = password;
             _keyFilePath = (string.IsNullOrEmpty(keyFilePath) || context == null) ? keyFilePath : context.ResolvePath(keyFilePath);
@@ -108,7 +125,7 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        public string Path => $"sftp://{_host}";
+        public string Path => _port == 22 ? $"sftp://{_host}" : $"sftp://{_host}:{_port}";
         public Dictionary<string, string>? Options => null;
         public string ConnectorType => "SFTP";
 
@@ -127,6 +144,7 @@ namespace ETL_SQL.Connectors
             ["PASSWORD"] = new[] { "Password for SSH" },
             ["KEYFILE"] = new[] { "Path to the private key file" },
             ["PASSPHRASE"] = new[] { "Passphrase for the private key" },
+            ["PORT"] = new[] { "SSH/SFTP Port (default 22)" },
             ["TIMEOUT_SECONDS"] = new[] { "Connection timeout in seconds (default 30)" }
         };
         public Dictionary<string, string[]> GetOptionValues() => new();
@@ -138,6 +156,15 @@ namespace ETL_SQL.Connectors
             string? pass = options?.GetValueOrDefault("PASSWORD");
             string? keyFile = options?.GetValueOrDefault("KEYFILE");
             string? passphrase = options?.GetValueOrDefault("PASSPHRASE");
+
+            if (pass != null && pass.StartsWith("ENC:"))
+            {
+                pass = context.DecryptValue(pass);
+            }
+            if (passphrase != null && passphrase.StartsWith("ENC:"))
+            {
+                passphrase = context.DecryptValue(passphrase);
+            }
             
             int timeoutSeconds = 30;
             if (options != null && options.TryGetValue("TIMEOUT_SECONDS", out var timeoutStr) && int.TryParse(timeoutStr, out var parsedTimeout))
@@ -145,7 +172,27 @@ namespace ETL_SQL.Connectors
                 timeoutSeconds = parsedTimeout;
             }
 
-            return new SftpConnector(context, connectionString, user, pass, keyFile, passphrase, timeoutSeconds);
+            string host = connectionString;
+            int port = 22;
+            if (options != null && options.TryGetValue("PORT", out var portStr) && int.TryParse(portStr, out var parsedPort))
+            {
+                port = parsedPort;
+            }
+            else if (!string.IsNullOrEmpty(connectionString))
+            {
+                int colonIdx = connectionString.IndexOf(':');
+                if (colonIdx >= 0)
+                {
+                    host = connectionString.Substring(0, colonIdx);
+                    var portPart = connectionString.Substring(colonIdx + 1);
+                    if (int.TryParse(portPart, out var parsedPortFromConnStr))
+                    {
+                        port = parsedPortFromConnStr;
+                    }
+                }
+            }
+
+            return new SftpConnector(context, host, port, user, pass, keyFile, passphrase, timeoutSeconds);
         }
 
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");

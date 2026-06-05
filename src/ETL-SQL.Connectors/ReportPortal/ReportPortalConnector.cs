@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
@@ -63,6 +63,11 @@ namespace ETL_SQL.Connectors.ReportPortal
             string host = GetOption(options, "HOST", connectionString);
             string user = GetOption(options, "USER", "admin");
             string pass = GetOption(options, "PASSWORD", "");
+
+            if (pass.StartsWith("ENC:") && context != null)
+            {
+                pass = context.DecryptValue(pass) ?? "";
+            }
 
             // If HOST doesn't include a port but PORT is specified, append it
             if (options.TryGetValue("PORT", out var port) &&

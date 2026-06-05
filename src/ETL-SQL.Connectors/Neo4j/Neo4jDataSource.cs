@@ -84,6 +84,11 @@ namespace ETL_SQL.Connectors.Neo4j
             user ??= _uriUser;
             password ??= _uriPassword;
 
+            if (password != null && password.StartsWith("ENC:") && _context != null)
+            {
+                password = _context.DecryptValue(password);
+            }
+
             IAuthToken authToken = AuthTokens.None;
             if (!string.IsNullOrEmpty(user) || !string.IsNullOrEmpty(password))
             {

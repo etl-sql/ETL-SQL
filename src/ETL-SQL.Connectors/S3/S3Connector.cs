@@ -98,9 +98,15 @@ namespace ETL_SQL.Connectors.S3
                 secret = _context.DecryptValue(secret) ?? "";
             }
 
+            string sessionToken = _options.GetValueOrDefault("SESSION_TOKEN", "");
+
             if (string.IsNullOrEmpty(_accessKey) || string.IsNullOrEmpty(secret))
             {
                 _client = new AmazonS3Client(new AnonymousAWSCredentials(), config);
+            }
+            else if (!string.IsNullOrEmpty(sessionToken))
+            {
+                _client = new AmazonS3Client(_accessKey, secret, sessionToken, config);
             }
             else
             {
@@ -151,6 +157,7 @@ namespace ETL_SQL.Connectors.S3
             { "ENDPOINT", Array.Empty<string>() },
             { "ACCESS_KEY", Array.Empty<string>() },
             { "SECRET_KEY", Array.Empty<string>() },
+            { "SESSION_TOKEN", Array.Empty<string>() },
             { "REGION", Array.Empty<string>() },
             { "FORCE_PATH_STYLE", new[] { "TRUE", "FALSE" } }
         };

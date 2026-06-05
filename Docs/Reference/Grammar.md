@@ -1500,6 +1500,13 @@ OUTPUT DELETED.id INTO #deleted_ids
 WHERE imported_at < DATEADD(DAY, -7, GETDATE());
 ```
 
+> [!IMPORTANT]
+> **Execution Strategy & Directives**:
+> - **SQL Pushdown (Database Connections)**: If the target is a database connector supporting SQL pushdown (e.g., PostgreSQL, SQL Server), the engine compiles the statement into native target SQL and runs it directly on the remote server.
+> - **Engine-Side Streaming (Flat Files, Local Temp Tables)**: If the target does not support pushdown (e.g., CSV, Excel, in-memory `#temp` tables), the engine reads the entire target source into memory, filters out the deleted rows, and overwrites the target via a batch write (`append = false`).
+> - **API Connector Restriction**: Because the API connector maps batch writes (`WriteBatches`) to HTTP `POST`, `PUT`, or `PATCH` requests, using the DML `DELETE` statement on an API connection would cause the engine to rewrite the surviving rows by submitting them again. Therefore, the API connector does not support direct DML `DELETE` statements. To perform deletions on an API target, configure the connection with `METHOD = 'DELETE'` and execute it directly or via a query block.
+
+
 ### 9.4 `MERGE` (Upsert)
 ```sql
 MERGE INTO target_db.Customers AS T

@@ -89,6 +89,10 @@ namespace ETL_SQL.Connectors
         {
             string user = options?.GetValueOrDefault("USER") ?? "";
             string pass = options?.GetValueOrDefault("PASSWORD") ?? "";
+            if (pass.StartsWith("ENC:"))
+            {
+                pass = context.DecryptValue(pass) ?? "";
+            }
             var port = 21;
             if (options?.TryGetValue("PORT", out var portText) == true && int.TryParse(portText, out var parsedPort))
                 port = parsedPort;

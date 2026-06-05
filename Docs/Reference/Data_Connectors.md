@@ -772,11 +772,15 @@ Cloud storage connector for reading and writing files in Azure Blob Storage cont
 | Option | Description | Mandatory |
 | :--- | :--- | :---: |
 | `CONTAINER` | Target blob container name | Yes |
+| `CONNECTION_STRING` | Full Azure Storage connection string | No |
 | `ACCOUNT_NAME` | Azure storage account name | No |
-| `ACCOUNT_KEY` | Azure storage account key | No |
+| `ACCOUNT_KEY` | Azure storage account access key (supports `ENC:` prefix) | No |
+| `SAS_TOKEN` | Shared Access Signature token (supports `ENC:` prefix) | No |
+| `ENDPOINT_SUFFIX` | Custom endpoint suffix (Default: `core.windows.net`) | No |
+| `BLOB_ENDPOINT` | Explicit blob service endpoint URL | No |
 
 > [!NOTE]
-> You can provide a full SAS connection string in the traditional syntax, or use `ACCOUNT_NAME` + `ACCOUNT_KEY` in structured syntax.
+> You can provide a full connection string in the traditional syntax, or use property-based structured syntax with `ACCOUNT_NAME` and `ACCOUNT_KEY` / `SAS_TOKEN`.
 
 *Examples:*
 ```sql
@@ -784,8 +788,48 @@ Cloud storage connector for reading and writing files in Azure Blob Storage cont
 CREATE CONNECTION cloud AS AZURE_BLOB('DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=abc...', CONTAINER='backup-archive');
 
 -- Structured with account credentials
-CREATE CONNECTION cloud_struct AS AZURE_BLOB(ACCOUNT_NAME='myaccount', ACCOUNT_KEY='abc...', CONTAINER='raw-data');
+CREATE CONNECTION cloud_struct AS AZURE_BLOB(ACCOUNT_NAME='myaccount', ACCOUNT_KEY='ENC:U2FsdGVk...', CONTAINER='raw-data');
 ```
+
+---
+
+### 4.3b Amazon S3 (`S3`)
+Aliases: `AWS_S3`
+
+Cloud storage connector for reading and writing files in Amazon S3 or S3-compatible cloud object storage providers (e.g. Cloudflare R2, MinIO, Google Cloud Storage, Wasabi).
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `BUCKET` | S3 bucket name context | Yes |
+| `ACCESS_KEY` | AWS connection access key ID (omit for public read) | No |
+| `SECRET_KEY` | AWS connection secret access key (supports `ENC:` prefix) | No |
+| `SESSION_TOKEN` | Temporary IAM security session token (supports `ENC:` prefix) | No |
+| `REGION` | AWS region context (Default: `us-east-1`) | No |
+| `ENDPOINT` | Custom endpoint URL for S3-compatible vendors | No |
+| `FORCE_PATH_STYLE` | Force path-style addressing (`TRUE`/`FALSE`, Default: `FALSE`) | No |
+
+*Examples:*
+```sql
+-- Standard S3 authentication with temporary session token
+CREATE CONNECTION my_s3 AS S3(
+  BUCKET        = 'corp-data-dump',
+  ACCESS_KEY    = 'AKIAIOSFODNN7EXAMPLE',
+  SECRET_KEY    = 'ENC:U2FsdGVk...',
+  SESSION_TOKEN = 'ENC:U2FsdGVk...',
+  REGION        = 'us-west-2'
+);
+
+-- Custom endpoint for S3-compatible storage (e.g., MinIO)
+CREATE CONNECTION minio AS S3(
+  BUCKET           = 'backups',
+  ENDPOINT         = 'http://127.0.0.1:9000',
+  ACCESS_KEY       = 'minioadmin',
+  SECRET_KEY       = 'minioadmin',
+  FORCE_PATH_STYLE = TRUE
+);
+```
+
+---
 
 ---
 
@@ -886,8 +930,11 @@ INSERT INTO bulk_api (location, totalBeds)
 SELECT loc_name, total FROM #bed_data;
 ```
 
-> [!NOTE]
-> `METHOD='DELETE'` is available for direct API requests, but `INSERT INTO api_conn ...` outbound writes support only `POST`, `PUT`, and `PATCH`.
+> [!IMPORTANT]
+> **DELETE Support & Behavior**:
+> - `METHOD='DELETE'` is supported for direct API connection queries (which sends a single HTTP `DELETE` request).
+> - However, the API connector does **not** support direct DML `DELETE FROM api_conn ...` statements. Because the engine implements a streaming-based delete for non-database connections (which reads the dataset, filters deleted rows, and writes the remaining rows back via `WriteBatches`), running a `DELETE` statement on an API connection would trigger HTTP write requests (`POST`/`PUT`/`PATCH`) for all surviving rows. 
+> - To delete resources via the API, configure a connection with `METHOD='DELETE'` (e.g. referencing dynamic template params) and execute it directly or via a query block.
 
 ---
 
@@ -1268,6 +1315,7 @@ WHERE sAMAccountName = 'jdoe';
 | `SFTP` | `SSH` | Protocol | — | — |
 | `FTP` | `FTP_CONN`, `FTPS` | Protocol | — | — |
 | `AZURE_BLOB` | `BLOB` | Protocol | — | — |
+| `S3` | `AWS_S3` | Protocol | — | — |
 | `SMTP` | `EMAIL` | Protocol | — | — |
 | `SHAREPOINT` | `SP` | Protocol | — | — |
 | `REPORTPORTAL` | `REPORT_PORTAL` | Admin Service | — | — |
