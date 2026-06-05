@@ -71,6 +71,7 @@ The command generates a pre-formatted ETL-SQL script containing:
 *   Source layout notes for file format, headers, skipped rows, null tokens, keys, duplicate policy, fixed-width positions, date formats, and allowed values when the vendor spec provides them.
 *   Outbound connection declarations (e.g. `CREATE CONNECTION ... AS FLATFILE`) mapped from the spec.
 *   Cleansing and casting statements (e.g. `TRY_CAST`, `SUBSTRING`) for every target column.
+*   Validation review tables for regex and allowed-value checks, with optional quarantine behavior when `source.reject_policy` is `quarantine`.
 *   Lineage tagging declarations using `TAG` (see [Lineage.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Lineage.md)).
 *   An `EXPECT SCHEMA` constraint validator (see [Grammar.md](file:///C:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L994-L1016)).
 
@@ -109,5 +110,6 @@ If the JSON includes `confidence` or `source_evidence`, the generated placeholde
 At runtime, the script executes safety assertions before uploading data:
 
 1.  **Type & Alignment Gate:** The `EXPECT SCHEMA` check ensures the extraction query output `#staging` is structured exactly as the target spec expects, preventing unexpected upstream shifts from crashing database inserts.
-2.  **Length & Format Check:** The cleansing query automatically truncates long strings using `SUBSTRING` and filters malformed values with `TRY_CAST` or regex mappings.
-3.  **Governance Tagging:** The derived columns automatically inherit classification properties like `@pii` or `@confidential` and push them downstream to trace data lineage.
+2.  **Length & Format Check:** The cleansing query automatically truncates long strings using `SUBSTRING` and records regex or allowed-value failures in `#spec_validation_issues`.
+3.  **Reject Handling:** With `source.reject_policy = "quarantine"`, invalid rows are written to `#rejected_data` and only `#valid_data` is uploaded. With `fail_batch`, the script throws after writing validation counts. With `warn`, it prints a warning and continues.
+4.  **Governance Tagging:** The derived columns automatically inherit classification properties like `@pii` or `@confidential` and push them downstream to trace data lineage.

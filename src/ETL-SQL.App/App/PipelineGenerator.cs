@@ -448,17 +448,42 @@ namespace ETL_SQL.App
             sb.Indent(1).Append(";").AppendLine();
             sb.AppendLine();
 
-            // 7. Regex Formatting Checks
-            var hasRegex = spec.Schema != null && spec.Schema.Any(c => !string.IsNullOrEmpty(c.ValidationRegex));
-            if (hasRegex)
+            // 7. Validation review gates
+            var validationRules = BuildValidationRules(spec.Schema);
+            var outputTable = "#cleaned_data";
+            var rejectPolicy = spec.Source?.RejectPolicy?.ToLowerInvariant() ?? "fail_batch";
+            if (validationRules.Count > 0)
             {
-                sb.Indent(1).AppendLine("-- 7. FORMAT VALIDATION GATES (REGULAR EXPRESSIONS)");
-                foreach (var col in spec.Schema!.Where(c => !string.IsNullOrEmpty(c.ValidationRegex)))
+                sb.Indent(1).AppendLine("-- 7. SPECIFICATION VALIDATION REVIEW GATES");
+                sb.Indent(1).AppendLine("CREATE TABLE #spec_validation_issues (column_name VARCHAR(128), issue_type VARCHAR(40), issue_count INT);");
+                foreach (var rule in validationRules)
                 {
-                    var escapedRegex = col.ValidationRegex!.Replace("'", "''");
-                    sb.Indent(1).AppendLine($"IF EXISTS (SELECT 1 FROM #cleaned_data WHERE {col.ColumnName} IS NOT NULL AND REGEXP_LIKE({col.ColumnName}, '{escapedRegex}') = 0)");
+                    sb.Indent(1).AppendLine($"INSERT INTO #spec_validation_issues");
+                    sb.Indent(1).AppendLine($"SELECT '{EscapeSqlString(rule.ColumnName)}', '{rule.IssueType}', COUNT(*) FROM #cleaned_data WHERE {rule.Predicate};");
+                }
+
+                if (rejectPolicy == "quarantine")
+                {
+                    var combinedPredicate = string.Join(" OR ", validationRules.Select(r => $"({r.Predicate})"));
+                    sb.Indent(1).AppendLine("SELECT * INTO #rejected_data FROM #cleaned_data");
+                    sb.Indent(1).AppendLine($"WHERE {combinedPredicate};");
+                    sb.Indent(1).AppendLine("SELECT * INTO #valid_data FROM #cleaned_data");
+                    sb.Indent(1).AppendLine($"WHERE NOT ({combinedPredicate});");
+                    sb.Indent(1).AppendLine("PRINT 'Specification validation completed. Review #spec_validation_issues and #rejected_data before release.';");
+                    outputTable = "#valid_data";
+                }
+                else if (rejectPolicy == "warn")
+                {
+                    sb.Indent(1).AppendLine("IF EXISTS (SELECT 1 FROM #spec_validation_issues WHERE issue_count > 0)");
                     sb.Indent(1).AppendLine("BEGIN");
-                    sb.Indent(2).AppendLine($"THROW 50002, 'Specification format violation: column [{col.ColumnName}] contains values that fail validation pattern.', 16;");
+                    sb.Indent(2).AppendLine("PRINT 'Specification validation warnings found. Review #spec_validation_issues.';");
+                    sb.Indent(1).AppendLine("END");
+                }
+                else
+                {
+                    sb.Indent(1).AppendLine("IF EXISTS (SELECT 1 FROM #spec_validation_issues WHERE issue_count > 0)");
+                    sb.Indent(1).AppendLine("BEGIN");
+                    sb.Indent(2).AppendLine("THROW 50002, 'Specification validation failed. Review #spec_validation_issues for failed columns and counts.', 16;");
                     sb.Indent(1).AppendLine("END");
                 }
                 sb.AppendLine();
@@ -474,7 +499,7 @@ namespace ETL_SQL.App
             sb.AppendLine();
 
             sb.Indent(1).AppendLine("-- 9. OUTBOUND UPLOAD");
-            sb.Indent(1).AppendLine("SELECT * INTO outbound_dest FROM #cleaned_data;");
+            sb.Indent(1).AppendLine($"SELECT * INTO outbound_dest FROM {outputTable};");
             sb.AppendLine();
 
             sb.Indent(1).AppendLine("PRINT 'Pipeline execution completed successfully.';");
@@ -485,6 +510,35 @@ namespace ETL_SQL.App
             sb.AppendLine("END CATCH");
 
             return sb.ToString();
+        }
+
+        private static List<ValidationRule> BuildValidationRules(List<SpecColumn>? schema)
+        {
+            var rules = new List<ValidationRule>();
+            if (schema == null) return rules;
+
+            foreach (var column in schema)
+            {
+                if (!string.IsNullOrWhiteSpace(column.ValidationRegex))
+                {
+                    var escapedRegex = EscapeSqlString(column.ValidationRegex);
+                    rules.Add(new ValidationRule(
+                        column.ColumnName ?? "",
+                        "REGEX_FORMAT",
+                        $"{column.ColumnName} IS NOT NULL AND REGEXP_LIKE({column.ColumnName}, '{escapedRegex}') = 0"));
+                }
+
+                if (column.AllowedValues is { Count: > 0 })
+                {
+                    var allowedValues = string.Join(", ", column.AllowedValues.Select(v => $"'{EscapeSqlString(v)}'"));
+                    rules.Add(new ValidationRule(
+                        column.ColumnName ?? "",
+                        "ALLOWED_VALUES",
+                        $"{column.ColumnName} IS NOT NULL AND {column.ColumnName} NOT IN ({allowedValues})"));
+                }
+            }
+
+            return rules;
         }
 
         private static void WriteSourceContractComments(StringBuilder sb, SpecPipeline spec)
@@ -739,6 +793,8 @@ namespace ETL_SQL.App
             return $"/*{string.Join("; ", tagsList)}*/";
         }
     }
+
+    internal record ValidationRule(string ColumnName, string IssueType, string Predicate);
 
     internal static class SpecPipelineValidator
     {

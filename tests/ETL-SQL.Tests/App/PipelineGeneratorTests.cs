@@ -217,9 +217,14 @@ namespace ETL_SQL.Tests.App
             Assert.Contains("CustomerId                /*@d: Unique customer ID; @pii*/", code);
             Assert.Contains("Email                     /*@d: Email address; @pii*/", code);
 
-            // Assert Regular Expression Validation Gate
+            // Assert Validation Review and Quarantine Gates
             Assert.Contains("REGEXP_LIKE(Email, '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$') = 0", code);
-            Assert.Contains("THROW 50002", code);
+            Assert.Contains("CREATE TABLE #spec_validation_issues", code);
+            Assert.Contains("'REGEX_FORMAT'", code);
+            Assert.Contains("'ALLOWED_VALUES'", code);
+            Assert.Contains("SELECT * INTO #rejected_data FROM #cleaned_data", code);
+            Assert.Contains("SELECT * INTO #valid_data FROM #cleaned_data", code);
+            Assert.Contains("SELECT * INTO outbound_dest FROM #valid_data;", code);
 
             // Assert Final Tag statement
             Assert.Contains("TAG #cleaned_data WITH (", code);
