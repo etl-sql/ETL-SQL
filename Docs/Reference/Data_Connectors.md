@@ -419,20 +419,33 @@ Graph database connector supporting property graph ingestion and Cypher pass-thr
 | `TIMEOUT_SECONDS` | Connection and query timeout limit in seconds (Default: `30`) | No |
 | `HOST` | Server host name (alternative to connection string) | No |
 | `PORT` | Server port (Default: `7687`) | No |
+| `PROTOCOL` | URI scheme when `HOST`/`PORT` are used (Default: `bolt`) | No |
+| `KEY_COLUMNS` | Comma-separated properties used to `MERGE` nodes or relationships instead of always `CREATE` | No |
+| `FROM_LABEL` / `TO_LABEL` | Source/target node labels for `EDGE_<TYPE>` writes that use `_from_key` and `_to_key` | No |
+| `FROM_KEY_COLUMN` / `TO_KEY_COLUMN` | Source/target node property names matched against `_from_key` and `_to_key` (Default: `id`) | No |
+
+`USER` and `PASSWORD` are passed to the Neo4j driver as an auth token and are not embedded in the stored connection URI.
 
 **Virtual Schema Mapping:**
 Graph entities are mapped to virtual tables:
-- **`NODE_<LABEL>`**: Virtual node table for the specified node label. Includes system columns `_id` (element ID) and `_labels` (comma-separated labels).
-- **`EDGE_<TYPE>`**: Virtual relationship table for the specified relationship type. Includes system columns `_id` (relationship ID), `_from_id` (source element ID), `_to_id` (target element ID), `_from_label`, and `_to_label`.
+- **`NODE_<LABEL>`**: Virtual node table for the specified node label. Includes system columns `_id` (element ID) and `_labels` (comma-separated labels). Set `KEY_COLUMNS` for stable upserts via Cypher `MERGE`.
+- **`EDGE_<TYPE>`**: Virtual relationship table for the specified relationship type. Includes system columns `_id` (relationship ID), `_from_id` (source element ID), `_to_id` (target element ID), `_from_label`, and `_to_label`. For portable ETL loads, provide `_from_key` and `_to_key` plus `FROM_LABEL`/`TO_LABEL` and optional key column options.
 
 **Write Behavior:**
-- Ingesting into `NODE_<LABEL>` or `EDGE_<TYPE>` uses parameterised `UNWIND` Cypher templates.
-- If `APPEND=FALSE` (the default), the target node label or relationship type is dropped (via `DETACH DELETE` or `DELETE`) prior to bulk insert.
+- Ingesting into `NODE_<LABEL>` or `EDGE_<TYPE>` uses parameterized `UNWIND` Cypher templates.
+- If `KEY_COLUMNS` is set, writes use `MERGE` for idempotent upserts; otherwise writes use `CREATE`.
+- If `APPEND=FALSE` (the default), the delete-and-load operation runs inside a single Neo4j write transaction so failures roll back the replacement.
+- In `SET WHAT_IF ON`, raw mutating Cypher in `EXECUTE` is skipped.
 
 *Examples:*
 ```sql
 -- Ingest customers as graph nodes
-CREATE CONNECTION graph AS NEO4J(URI='bolt://localhost:7687', USER='neo4j', PASSWORD='password');
+CREATE CONNECTION graph AS NEO4J(
+    URI='bolt://localhost:7687',
+    USER='neo4j',
+    PASSWORD='password',
+    KEY_COLUMNS='customer_id'
+);
 INSERT INTO graph.NODE_CUSTOMER (customer_id, name, city)
 SELECT customer_id, name, city FROM #staging;
 

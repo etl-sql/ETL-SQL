@@ -7,7 +7,8 @@ Syntax:
     USER              = 'neo4j',
     PASSWORD          = 'password',
     DATABASE          = 'neo4j',
-    TIMEOUT_SECONDS   = 30
+    TIMEOUT_SECONDS   = 30,
+    KEY_COLUMNS       = 'customer_id'
   );
 
 Aliases:
@@ -20,8 +21,16 @@ Options:
   TIMEOUT_SECONDS        — Connection and query timeout limit in seconds (default: 30)
   HOST                   — Hostname for the Neo4j instance (alternative to CONNECTION_STRING)
   PORT                   — Port for the Neo4j instance (default: 7687)
+  PROTOCOL               — URI scheme when HOST/PORT are used (default: bolt)
+  KEY_COLUMNS            — Comma-separated properties used to MERGE nodes or relationships instead of always CREATE
+  FROM_LABEL             — Source node label for EDGE_<TYPE> writes that use _from_key
+  TO_LABEL               — Target node label for EDGE_<TYPE> writes that use _to_key
+  FROM_KEY_COLUMN        — Source node property matched against _from_key (default: id)
+  TO_KEY_COLUMN          — Target node property matched against _to_key (default: id)
   USER                   — Database username
   PASSWORD               — Database password
+
+Credentials supplied with USER/PASSWORD are passed to the Neo4j driver as an auth token and are not embedded in the stored connection URI.
 
 ### Virtual Tabular Schema Mapping
 To fit property graphs into the tabular `DataTable` model, the connector maps graph entities to "Virtual Tables":
@@ -30,10 +39,12 @@ To fit property graphs into the tabular `DataTable` model, the connector maps gr
    - Every node label (e.g., `Person`, `Company`) represents a virtual table.
    - **System Columns**: `_id` (Neo4j element ID) and `_labels` (comma-separated labels on the node).
    - **Properties**: All node properties (e.g., `name`, `age`) map directly to columns.
+   - **Keyed writes**: Set `KEY_COLUMNS` on the connection to use Cypher `MERGE` for stable upserts instead of duplicate `CREATE` operations.
 
 2. **Virtual Relationship Tables (`EDGE_<TYPE>`)**:
    - Every relationship type (e.g., `FRIEND_OF`, `WORKS_FOR`) represents a virtual table.
    - **System Columns**: `_id` (relationship ID), `_from_id` (source node ID), `_to_id` (target node ID), `_from_label` (source node label), and `_to_label` (target node label).
+   - **Keyed endpoints**: For portable ETL loads, provide `_from_key` and `_to_key` columns plus `FROM_LABEL`/`TO_LABEL` and optional `FROM_KEY_COLUMN`/`TO_KEY_COLUMN`; this avoids depending on Neo4j element IDs.
    - **Properties**: All relationship properties map directly to columns.
 
 ### Examples
@@ -44,7 +55,8 @@ CREATE CONNECTION graph AS NEO4J(
   HOST     = 'localhost',
   PORT     = 7687,
   USER     = 'neo4j',
-  PASSWORD = 'password'
+  PASSWORD = 'password',
+  KEY_COLUMNS = 'customer_id'
 );
 
 -- Extract active customers to flat table
@@ -53,13 +65,25 @@ SELECT _id, name, email
   FROM graph.NODE_CUSTOMER
   WHERE status = 'Active';
 
--- Ingest customers back into the graph as nodes
-INSERT INTO graph.NODE_CUSTOMER (name, email, status)
-SELECT name, email, status FROM #staging;
+-- Ingest customers back into the graph as keyed nodes (MERGE on customer_id)
+INSERT INTO graph.NODE_CUSTOMER (customer_id, name, email, status)
+SELECT customer_id, name, email, status FROM #staging;
 
--- Ingest relationships between customers
-INSERT INTO graph.EDGE_FRIEND_OF (_from_id, _to_id, since)
-SELECT customer_a_id, customer_b_id, '2025' FROM #friends;
+-- Ingest relationships between customers by stable endpoint keys
+CREATE CONNECTION graph_edges AS NEO4J(
+  HOST = 'localhost',
+  PORT = 7687,
+  USER = 'neo4j',
+  PASSWORD = 'password',
+  FROM_LABEL = 'CUSTOMER',
+  TO_LABEL = 'CUSTOMER',
+  FROM_KEY_COLUMN = 'customer_id',
+  TO_KEY_COLUMN = 'customer_id',
+  KEY_COLUMNS = 'friendship_id'
+);
+
+INSERT INTO graph_edges.EDGE_FRIEND_OF (_from_key, _to_key, friendship_id, since)
+SELECT customer_a_id, customer_b_id, friendship_id, '2025' FROM #friends;
 
 -- Native Cypher Pass-Through using EXECUTE
 DECLARE @minAge INT = 21;

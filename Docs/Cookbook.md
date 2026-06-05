@@ -1028,7 +1028,22 @@ This recipe demonstrates how to ingest relational nodes and edges into Neo4j, an
 ```sql
 -- Connect to relational source and graph target
 CREATE CONNECTION sql_src AS POSTGRES(HOST='localhost', DATABASE='crm', USER='admin', PASSWORD='password');
-CREATE CONNECTION graph AS NEO4J(URI='bolt://localhost:7687', USER='neo4j', PASSWORD='password');
+CREATE CONNECTION graph AS NEO4J(
+    URI='bolt://localhost:7687',
+    USER='neo4j',
+    PASSWORD='password',
+    KEY_COLUMNS='customer_id'
+);
+CREATE CONNECTION graph_edges AS NEO4J(
+    URI='bolt://localhost:7687',
+    USER='neo4j',
+    PASSWORD='password',
+    FROM_LABEL='CUSTOMER',
+    TO_LABEL='CUSTOMER',
+    FROM_KEY_COLUMN='customer_id',
+    TO_KEY_COLUMN='customer_id',
+    KEY_COLUMNS='referral_id'
+);
 
 BEGIN TRY
     -- 1. Extract staging node entities from Postgres
@@ -1037,39 +1052,31 @@ BEGIN TRY
     FROM sql_src.customers
     WHERE signup_date >= '2025-01-01';
 
-    -- 2. Ingest Customers as Nodes (using the NODE_ virtual table prefix)
-    -- This executes parameterised UNWIND batches under the hood
+    -- 2. Ingest Customers as Nodes (MERGE on customer_id via KEY_COLUMNS)
     INSERT INTO graph.NODE_CUSTOMER (customer_id, name, city, status)
     SELECT customer_id, name, city, status
     FROM #staging_customers;
 
     -- 3. Extract staging relationships from Postgres
-    SELECT source_customer_id, target_customer_id, '2025' AS since
+    SELECT referral_id, source_customer_id, target_customer_id, '2025' AS since
     INTO #staging_relationships
     FROM sql_src.customer_referrals;
 
-    -- 4. Get the mapped element IDs of the created nodes
-    -- This is required to form edge/relationship connections
-    SELECT _id AS node_id, customer_id
-    INTO #node_ids
-    FROM graph.NODE_CUSTOMER;
-
-    -- 5. Join element IDs onto relationships
+    -- 4. Use stable endpoint keys instead of Neo4j element IDs
     SELECT 
-        s.node_id AS _from_id,
-        t.node_id AS _to_id,
+        source_customer_id AS _from_key,
+        target_customer_id AS _to_key,
+        referral_id,
         r.since
     INTO #edges_to_write
-    FROM #staging_relationships AS r
-    INNER JOIN #node_ids AS s ON r.source_customer_id = s.customer_id
-    INNER JOIN #node_ids AS t ON r.target_customer_id = t.customer_id;
+    FROM #staging_relationships AS r;
 
-    -- 6. Ingest Relationships (using the EDGE_ virtual table prefix)
-    INSERT INTO graph.EDGE_REFERRAL (_from_id, _to_id, since)
-    SELECT _from_id, _to_id, since
+    -- 5. Ingest Relationships (MERGE on referral_id via KEY_COLUMNS)
+    INSERT INTO graph_edges.EDGE_REFERRAL (_from_key, _to_key, referral_id, since)
+    SELECT _from_key, _to_key, referral_id, since
     FROM #edges_to_write;
 
-    -- 7. Query the Graph using native Cypher pass-through (EXECUTE)
+    -- 6. Query the Graph using native Cypher pass-through (EXECUTE)
     -- Find customers who referred someone who then referred someone else (2-hop referral chain)
     DECLARE @minYear INT = 2025;
 
@@ -1080,7 +1087,7 @@ BEGIN TRY
         RETURN a.name AS initiator, b.name AS intermediary, c.name AS final_recipient
     END;
 
-    -- 8. Export the results to a CSV report
+    -- 7. Export the results to a CSV report
     CREATE CONNECTION csv_report AS CSV('C:/exports/referral_chain_report.csv');
     INSERT INTO csv_report.chains
     SELECT initiator, intermediary, final_recipient FROM #referral_chains;

@@ -1,0 +1,14 @@
+# Developer Override Configuration
+# This file is automatically merged with docker-compose.yml for local development.
+# It overrides the pre-built registry images to compile and run local C# source code.
+
+services:
+  orchestrator-srv:
+    build:
+      context: .
+      dockerfile: src/ETL-SQL.Orchestrator.Service/Dockerfile
+
+  portal-srv:
+    build:
+      context: .
+      dockerfile: src/ETL-SQL.ReportPortal/Dockerfile

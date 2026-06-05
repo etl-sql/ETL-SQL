@@ -86,6 +86,9 @@ namespace ETL_SQL.Connectors.Neo4j
             "  TIMEOUT_SECONDS: Timeout limit in seconds (default: 30)\n" +
             "  HOST: Server hostname\n" +
             "  PORT: Server port (default: 7687)\n" +
+            "  KEY_COLUMNS: Comma-separated node properties used with MERGE instead of CREATE\n" +
+            "  FROM_LABEL / TO_LABEL: Edge endpoint labels when loading edges by keys\n" +
+            "  FROM_KEY_COLUMN / TO_KEY_COLUMN: Endpoint key property names (default: id)\n" +
             "  USER: User identifier\n" +
             "  PASSWORD: Connection password\n";
 
@@ -97,6 +100,12 @@ namespace ETL_SQL.Connectors.Neo4j
             { "TIMEOUT_SECONDS", Array.Empty<string>() },
             { "HOST", Array.Empty<string>() },
             { "PORT", Array.Empty<string>() },
+            { "PROTOCOL", Array.Empty<string>() },
+            { "KEY_COLUMNS", Array.Empty<string>() },
+            { "FROM_LABEL", Array.Empty<string>() },
+            { "TO_LABEL", Array.Empty<string>() },
+            { "FROM_KEY_COLUMN", Array.Empty<string>() },
+            { "TO_KEY_COLUMN", Array.Empty<string>() },
             { "USER", Array.Empty<string>() },
             { "PASSWORD", Array.Empty<string>() }
         };
@@ -134,8 +143,6 @@ namespace ETL_SQL.Connectors.Neo4j
 
             string host = properties.GetValueOrDefault("HOST", "localhost");
             string portStr = properties.GetValueOrDefault("PORT", "7687");
-            string user = properties.GetValueOrDefault("USER", "");
-            string password = properties.GetValueOrDefault("PASSWORD", "");
 
             string protocol = "bolt";
             if (properties.TryGetValue("PROTOCOL", out var prot))
@@ -145,13 +152,6 @@ namespace ETL_SQL.Connectors.Neo4j
 
             var builder = new System.Text.StringBuilder();
             builder.Append(protocol).Append("://");
-            if (!string.IsNullOrEmpty(user) && !string.IsNullOrEmpty(password))
-            {
-                builder.Append(Uri.EscapeDataString(user))
-                       .Append(':')
-                       .Append(Uri.EscapeDataString(password))
-                       .Append('@');
-            }
             builder.Append(host);
             if (!string.IsNullOrEmpty(portStr))
             {
