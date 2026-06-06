@@ -584,6 +584,16 @@ namespace ETL_SQL.Tests.UI
             editor._renderer.HandleMouseClick(0, 31, 1, false, editor);
             // Since we closed it, we should have 2 tabs left
             Assert.Equal(2, editor._tabs.Count);
+
+            // 7. Test that switching tabs clears results
+            var dummyTable = new ETL_SQL.Data.DataTable();
+            editor._evaluator.LastResultSets.Add(dummyTable);
+            Assert.Single(editor._evaluator.LastResultSets);
+
+            // Switch tab (Alt+LeftArrow)
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.LeftArrow, false, true, false));
+            // Results should now be cleared
+            Assert.Empty(editor._evaluator.LastResultSets);
         }
     }
 }

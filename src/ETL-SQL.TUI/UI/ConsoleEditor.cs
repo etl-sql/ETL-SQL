@@ -799,6 +799,15 @@ namespace ETL_SQL.TUI.UI
                 _renderer.ScrollCol = tab.ScrollCol;
                 _diagnostics.Clear();
                 _diagnostics.AddRange(tab.Diagnostics);
+                
+                // Clear query results and display states when switching tabs
+                _evaluator.ClearResults();
+                _evaluator.LastResultSets.Clear();
+                _renderer.ResultScrollRow = 0;
+                _renderer.ResultScrollCol = 0;
+                _renderer.ActiveResultSetIndex = 0;
+                _renderer.FilterText = "";
+
                 _renderer.ForceFullRepaint();
                 _renderer.ShowStatus($"Switched to: {Path.GetFileName(_filePath)}");
             }
