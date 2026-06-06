@@ -260,21 +260,25 @@ namespace ETL_SQL.TUI.UI
                     var tab = editor._tabs[i];
                     string name = string.IsNullOrEmpty(tab.FilePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(tab.FilePath);
                     string marker = tab.IsDirty ? "*" : "";
-                    string tabText = $" {name}{marker} ";
 
                     if (i == editor._activeTabIndex)
                     {
-                        tabBuilder.Append($"[bold black on yellow]{Markup.Escape(tabText)}[/]");
+                        tabBuilder.Append($"[bold black on yellow] {Markup.Escape(name)}{Markup.Escape(marker)} [/][bold red on yellow]x[/][bold black on yellow] [/]");
                     }
                     else
                     {
-                        tabBuilder.Append($"[white on grey23]{Markup.Escape(tabText)}[/]");
+                        tabBuilder.Append($"[white on grey23] {Markup.Escape(name)}{Markup.Escape(marker)} [/][red on grey23]x[/][white on grey23] [/]");
                     }
                     if (i < editor._tabs.Count - 1)
                     {
                         tabBuilder.Append("[grey37]│[/]");
                     }
                 }
+                if (editor._tabs.Count > 0)
+                {
+                    tabBuilder.Append("[grey37]│[/]");
+                }
+                tabBuilder.Append("[white on grey23] + [/]");
                 _console.Markup(tabBuilder.ToString());
             }
 
@@ -763,6 +767,57 @@ namespace ETL_SQL.TUI.UI
             }
 
             if (button != 0) return;
+
+            if (y == 1)
+            {
+                int currentX = 0;
+                for (int i = 0; i < editor._tabs.Count; i++)
+                {
+                    var tab = editor._tabs[i];
+                    string name = string.IsNullOrEmpty(tab.FilePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(tab.FilePath);
+                    string marker = tab.IsDirty ? "*" : "";
+                    int tabLen = 3 + name.Length + marker.Length;
+                    if (x >= currentX && x < currentX + tabLen)
+                    {
+                        if (x >= currentX + tabLen - 3 && x < currentX + tabLen - 1)
+                        {
+                            if (i == editor._activeTabIndex)
+                            {
+                                _ = editor.CloseActiveTab();
+                            }
+                            else
+                            {
+                                editor.SaveActiveTabState();
+                                editor.LoadTabState(i);
+                                _ = editor.CloseActiveTab();
+                            }
+                        }
+                        else
+                        {
+                            editor.SaveActiveTabState();
+                            editor.LoadTabState(i);
+                        }
+                        ForceFullRepaint();
+                        return;
+                    }
+                    currentX += tabLen;
+                    if (i < editor._tabs.Count - 1)
+                    {
+                        currentX += 1; // separator │
+                    }
+                }
+
+                if (editor._tabs.Count > 0)
+                {
+                    currentX += 1; // separator │
+                }
+                if (x >= currentX && x < currentX + 3)
+                {
+                    _ = editor.NewTab();
+                    ForceFullRepaint();
+                    return;
+                }
+            }
 
             int editorAreaTop = 2;
             int statusHeight  = 2;

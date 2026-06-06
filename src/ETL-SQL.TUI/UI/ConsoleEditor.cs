@@ -828,6 +828,21 @@ namespace ETL_SQL.TUI.UI
             await LoadFile(filePath);
         }
 
+        public async Task NewTab()
+        {
+            SaveActiveTabState();
+            var tab = new TabState { FilePath = "untitled.etlsql" };
+            _tabs.Add(tab);
+            _activeTabIndex = _tabs.Count - 1;
+            await _evaluator.ResetSessionAsync();
+            _buffer.Load(new[] { "" });
+            _filePath = "untitled.etlsql";
+            _isDirty = false;
+            _undo.Clear();
+            _renderer.ShowStatus("New tab started.");
+            _renderer.ForceFullRepaint();
+        }
+
         public async Task CloseActiveTab()
         {
             if (_tabs.Count <= 1)

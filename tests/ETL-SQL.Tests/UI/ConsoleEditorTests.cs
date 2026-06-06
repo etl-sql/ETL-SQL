@@ -537,5 +537,53 @@ namespace ETL_SQL.Tests.UI
             await editor.HandleKey(new ConsoleKeyInfo('B', ConsoleKey.B, false, false, true)); // Ctrl+B
             Assert.False(editor._renderer.SidebarVisible);
         }
+
+        [Fact]
+        public async Task TestMultiFileTabsMouseAndKeyControls()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._renderer.Headless = true;
+            editor._renderer.Render(editor, 80, 24);
+
+            // Initially, we have 1 tab: "test.etlsql"
+            Assert.Single(editor._tabs);
+            Assert.Equal(0, editor._activeTabIndex);
+            Assert.Equal("test.etlsql", editor._filePath);
+
+            // 1. Create a new tab via keyboard shortcut Ctrl+T
+            await editor.HandleKey(new ConsoleKeyInfo('T', ConsoleKey.T, false, false, true));
+            Assert.Equal(2, editor._tabs.Count);
+            Assert.Equal(1, editor._activeTabIndex);
+            Assert.Equal("untitled.etlsql", editor._filePath);
+
+            // 2. Switch back to tab 0 via keyboard shortcut Alt+LeftArrow
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.LeftArrow, false, true, false));
+            Assert.Equal(0, editor._activeTabIndex);
+            Assert.Equal("test.etlsql", editor._filePath);
+
+            // 3. Switch forward to tab 1 via keyboard shortcut Alt+RightArrow
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.RightArrow, false, true, false));
+            Assert.Equal(1, editor._activeTabIndex);
+            Assert.Equal("untitled.etlsql", editor._filePath);
+
+            // 4. Test Mouse clicking on the first tab
+            // Tab 0 starts at currentX=0. tabLen=14. Click at x=5, y=1 (inside first tab body)
+            editor._renderer.HandleMouseClick(0, 5, 1, false, editor);
+            Assert.Equal(0, editor._activeTabIndex);
+            Assert.Equal("test.etlsql", editor._filePath);
+
+            // 5. Test Mouse clicking on the '+' button
+            // Tab 0 (len 14) + separator (1) + Tab 1 (len 18) + separator (1) = currentX starts at 34 for '+'
+            // Let's click at x=35, y=1 (which is the '+' button)
+            editor._renderer.HandleMouseClick(0, 35, 1, false, editor);
+            Assert.Equal(3, editor._tabs.Count);
+            Assert.Equal(2, editor._activeTabIndex);
+
+            // 6. Test Mouse clicking on 'x' close button of tab index 1 (the second tab)
+            // Tab index 1 starts at currentX=15. tabLen=18. Close button is at [30, 31], so x=31 is close button.
+            editor._renderer.HandleMouseClick(0, 31, 1, false, editor);
+            // Since we closed it, we should have 2 tabs left
+            Assert.Equal(2, editor._tabs.Count);
+        }
     }
 }
