@@ -568,20 +568,20 @@ namespace ETL_SQL.Tests.UI
 
             // 4. Test Mouse clicking on the first tab
             // Tab 0 starts at currentX=0. tabLen=14. Click at x=5, y=1 (inside first tab body)
-            editor._renderer.HandleMouseClick(0, 5, 1, false, editor);
+            await editor._renderer.HandleMouseClick(0, 5, 1, false, editor);
             Assert.Equal(0, editor._activeTabIndex);
             Assert.Equal("test.etlsql", editor._filePath);
 
             // 5. Test Mouse clicking on the '+' button
             // Tab 0 (len 14) + separator (1) + Tab 1 (len 18) + separator (1) = currentX starts at 34 for '+'
             // Let's click at x=35, y=1 (which is the '+' button)
-            editor._renderer.HandleMouseClick(0, 35, 1, false, editor);
+            await editor._renderer.HandleMouseClick(0, 35, 1, false, editor);
             Assert.Equal(3, editor._tabs.Count);
             Assert.Equal(2, editor._activeTabIndex);
 
             // 6. Test Mouse clicking on 'x' close button of tab index 1 (the second tab)
             // Tab index 1 starts at currentX=15. tabLen=18. Close button is at [30, 31], so x=31 is close button.
-            editor._renderer.HandleMouseClick(0, 31, 1, false, editor);
+            await editor._renderer.HandleMouseClick(0, 31, 1, false, editor);
             // Since we closed it, we should have 2 tabs left
             Assert.Equal(2, editor._tabs.Count);
 

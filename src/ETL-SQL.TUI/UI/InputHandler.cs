@@ -135,7 +135,7 @@ namespace ETL_SQL.TUI.UI
             // F1 - Help
             if (key.Key == ConsoleKey.F1)
             {
-                _editor.ShowHelp();
+                await _editor.ShowHelp();
                 return;
             }
 

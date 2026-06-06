@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Spectre.Console;
+using Spectre.Console.Rendering;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Metadata;
 using ETL_SQL.Core.Services;
@@ -540,101 +541,48 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            // Live state annotations
-            string focusState  = Focus switch {
-                EditorFocus.Editor => "[grey]EDITOR[/]",
-                EditorFocus.Results => "[bold yellow]RESULTS[/]",
-                EditorFocus.Performance => "[bold magenta]PERF[/]",
-                EditorFocus.Messages => "[bold yellow]MESSAGES[/]",
-                EditorFocus.ExecutionTree => "[bold cyan]PIPELINE[/]",
-                _ => "[grey]EDITOR[/]"
-            };
-            string panelState  = PerformanceVisible ? "[bold cyan]PERF[/]"
-                               : ResultsVisible     ? "[bold yellow]RESULTS[/]"
-                               :                      "[grey]PIPELINE[/]";
-
-            var table = new Table()
-                .Border(TableBorder.None)
-                .HideHeaders()
-                .AddColumn(new TableColumn("").Width(16))
-                .AddColumn(new TableColumn(""));
-
-            void Section(string title)
-            {
-                table.AddRow(new Markup(""), new Markup($"[bold grey] ── {title} ──[/]"));
-            }
-
-            void Row(string key, string desc)
-            {
-                table.AddRow(new Markup($"[yellow]{Markup.Escape(key)}[/]"), new Markup(Markup.Escape(desc)));
-            }
-
-            void RowAnnotated(string key, string desc, string annotation)
-            {
-                table.AddRow(new Markup($"[yellow]{Markup.Escape(key)}[/]"), new Markup($"{Markup.Escape(desc)}  {annotation}"));
-            }
-
-            Section("View");
-            RowAnnotated("F6",             "Toggle focus: Editor / Active panel", $"now: {focusState}");
-            RowAnnotated("F4",             "Cycle lower panel",              $"now: {panelState}");
-            Row("F3",                      "Cycle theme (default, dracula, gruvbox, nord, light)");
-            Row("Ctrl+M",                  "Maximize / Restore lower panel");
-            Row("F7",                      "Enter / exit Compare mode (2+ result sets)");
-            Row("F8",                      "Cycle active pane  [grey](Compare mode)[/]");
-            Row("F8 / Shift+F8",           "Next / previous parser or linter diagnostic");
-            Row("F1",                      "Close this help screen");
-            Row("Escape",                  "Clear filter / Exit focus or Compare mode");
-
-            Section("Execution");
-            Row("F5",                      "Run entire script");
-            Row("Shift+F5",               "Run current statement only");
-            Row("Ctrl+R",                  "Clear all results and output");
-
-            Section("About");
-            Row("Notices",                 "Terminal UI powered by Spectre.Console. See THIRD-PARTY-NOTICES.md.");
-
-            Section("File");
-            Row("Ctrl+S",                  "Save");
-            Row("Ctrl+Shift+S",            "Save As");
-            Row("Ctrl+O",                  "Open (with file autocomplete)");
-            Row("Ctrl+N",                  "New script");
-            Row("Ctrl+T",                  "New tab");
-            Row("Ctrl+W",                  "Close active tab");
-            Row("Alt+Left / Right",        "Switch active tab");
-            Row("Ctrl+P",                  "Export active result set to CSV");
-
-            Section("Editing");
-            Row("Ctrl+Z / Ctrl+Y",        "Undo / Redo");
-            Row("Ctrl+C / Ctrl+V",        "Copy / Paste");
-            Row("Ctrl+X",                  "Cut selection");
-            Row("Ctrl+A",                  "Select all");
-            Row("Ctrl+Q",                  "Exit");
-            Row("Ctrl+D / Ctrl+K",        "Duplicate / Delete line");
-            Row("Ctrl+/",                  "Toggle line comment (--)");
-            Row("Tab / Shift+Tab",        "Indent / Outdent (selection-aware)");
-            Row("Ctrl+I  / Alt+F",        "Format SQL (Beautifier)");
-            Row("Ctrl+Space",              "Autocomplete suggestions");
-            Row("Alt+Up / Down",           "Add cursor above / below");
-            Row("Escape",                  "Clear multi-cursors");
-
-            Section("Navigation");
-            Row("Ctrl+F",                  "Find text  [grey](Filter rows when Results focused)[/]");
-            Row("Ctrl+H",                  "Replace text");
-            Row("Ctrl+G",                  "Go to line");
-            Row("Ctrl+Home / Ctrl+End",   "Start / End of script");
-            Row("Ctrl+Left / Right",       "Jump word left / right");
-            Row("Ctrl+Shift+Left / Right", "Select word left / right");
-            Row("Shift+Arrows",            "Select text");
-            Row("Ctrl+Up / Down",          "Scroll panel (line)");
-            Row("Ctrl+PgUp / PgDn",       "Scroll panel (page)");
-
-            int panelWidth  = Math.Min(72, totalWidth  - 4);
+            int panelWidth  = Math.Min(92, totalWidth  - 4);
             int panelHeight = Math.Min(32, totalHeight - 4);
 
+            // Build one renderable column of categories from the keybinding catalog.
+            IRenderable BuildColumn(IEnumerable<KeyCategory> categories)
+            {
+                var blocks = new List<IRenderable>();
+                foreach (var category in categories)
+                {
+                    blocks.Add(new Markup($"[bold grey] ── {Markup.Escape(KeyBindings.CategoryTitles[category])} ──[/]"));
+
+                    var section = new Table()
+                        .Border(TableBorder.None)
+                        .HideHeaders()
+                        .AddColumn(new TableColumn("").Width(16))
+                        .AddColumn(new TableColumn(""));
+
+                    foreach (var binding in KeyBindings.InCategory(category))
+                    {
+                        string desc = Markup.Escape(binding.Description);
+                        if (binding.LiveAnnotation != null)
+                            desc += $"  [grey]{Markup.Escape(binding.LiveAnnotation(this))}[/]";
+
+                        section.AddRow(
+                            new Markup($"[yellow]{Markup.Escape(binding.Keys)}[/]"),
+                            new Markup(desc));
+                    }
+
+                    blocks.Add(section);
+                }
+                return new Rows(blocks);
+            }
+
+            var columns = KeyBindings.HelpColumnLayout();
+            var grid = new Table().Border(TableBorder.None).HideHeaders();
+            foreach (var _ in columns) grid.AddColumn(new TableColumn(""));
+            grid.AddRow(columns.Select(BuildColumn).ToArray());
+
             var inner = new Rows(
-                table,
+                grid,
                 new Markup("[grey] ─────────────────────────────────────────────[/]"),
-                new Markup("[yellow]F2[/][grey]: Snippet Reference   Press any other key to close[/]")
+                new Markup("[yellow]F2[/][grey]: Snippet Reference   ·   any other key to close[/]")
             );
 
             var panel = new Panel(inner)
@@ -754,7 +702,7 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
-        public void HandleMouseClick(int button, int x, int y, bool isRelease, ConsoleEditor editor)
+        public async Task HandleMouseClick(int button, int x, int y, bool isRelease, ConsoleEditor editor)
         {
             if (isRelease) return;
 
@@ -786,13 +734,13 @@ namespace ETL_SQL.TUI.UI
                         {
                             if (i == editor._activeTabIndex)
                             {
-                                _ = editor.CloseActiveTab();
+                                await editor.CloseActiveTab();
                             }
                             else
                             {
                                 editor.SaveActiveTabState();
                                 editor.LoadTabState(i);
-                                _ = editor.CloseActiveTab();
+                                await editor.CloseActiveTab();
                             }
                         }
                         else
@@ -816,7 +764,7 @@ namespace ETL_SQL.TUI.UI
                 }
                 if (x >= currentX && x < currentX + 3)
                 {
-                    _ = editor.NewTab();
+                    await editor.NewTab();
                     ForceFullRepaint();
                     return;
                 }
@@ -843,7 +791,7 @@ namespace ETL_SQL.TUI.UI
                     SidebarSelectedIndex = clickedIndex;
                     if (wasSelected)
                     {
-                        _ = _sidebarPanel.HandleEnter(editor);
+                        await _sidebarPanel.HandleEnter(editor);
                     }
                     else
                     {

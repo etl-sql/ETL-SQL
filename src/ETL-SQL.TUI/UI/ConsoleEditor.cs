@@ -122,63 +122,60 @@ namespace ETL_SQL.TUI.UI
         public async Task Run()
         {
             Console.OutputEncoding = Encoding.UTF8;
-            // Perform a robust full-screen clear to purge artifacts from previous CLI statements
-            try 
-            { 
-                if (OperatingSystem.IsWindows() && !Console.IsOutputRedirected)
-                {
-                    Console.BufferHeight = Console.WindowHeight;
-                }
-                AnsiConsole.Console.Cursor.Hide();
-                AnsiConsole.Console.Write("\x1b[?1049h\x1b[?1000h\x1b[?1006h"); // Switch to alternative buffer and enable mouse tracking
-                AnsiConsole.Console.Write("\x1b[H\x1b[2J\x1b[3J");
-                AnsiConsole.Console.Clear(); 
-                AnsiConsole.Console.Cursor.SetPosition(1, 1);
-                _renderer.ForceFullRepaint();
-            } 
-            catch { }
-
-            _metadata.RefreshConnections(_buffer.GetText(), force: true);
-
-            while (!_isExiting)
+            EnableWindowsMouseSupport();
+            try
             {
-                _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
-                var key = Console.ReadKey(true);
-
-                if (key.Key == ConsoleKey.Escape && Console.KeyAvailable)
-                {
-                    var sb = new System.Text.StringBuilder();
-                    while (Console.KeyAvailable)
+                // Perform a robust full-screen clear to purge artifacts from previous CLI statements
+                try 
+                { 
+                    if (OperatingSystem.IsWindows() && !Console.IsOutputRedirected)
                     {
-                        sb.Append(Console.ReadKey(true).KeyChar);
+                        Console.BufferHeight = Console.WindowHeight;
                     }
-                    string seq = sb.ToString();
-                    if (seq.StartsWith("[<"))
-                    {
-                        var match = System.Text.RegularExpressions.Regex.Match(seq, @"^\[<(\d+);(\d+);(\d+)([Mm])");
-                        if (match.Success)
-                        {
-                            int button = int.Parse(match.Groups[1].Value);
-                            int mouseX = int.Parse(match.Groups[2].Value) - 1;
-                            int mouseY = int.Parse(match.Groups[3].Value) - 1;
-                            bool isRelease = match.Groups[4].Value == "m";
+                    AnsiConsole.Console.Cursor.Hide();
+                    // Alternative screen buffer on every platform. VT mouse tracking
+                    // (?1000h/?1006h) is requested only off-Windows; on Windows the mouse
+                    // is read via Win32 ReadConsoleInput (see EnableWindowsMouseSupport), so
+                    // we must NOT also request VT mouse or the terminal would inject raw
+                    // ESC[< byte sequences into the input stream.
+                    AnsiConsole.Console.Write("\x1b[?1049h");
+                    if (!OperatingSystem.IsWindows())
+                        AnsiConsole.Console.Write("\x1b[?1000h\x1b[?1006h");
+                    AnsiConsole.Console.Write("\x1b[H\x1b[2J\x1b[3J");
+                    AnsiConsole.Console.Clear(); 
+                    AnsiConsole.Console.Cursor.SetPosition(1, 1);
+                    _renderer.ForceFullRepaint();
+                } 
+                catch { }
 
-                            _renderer.HandleMouseClick(button, mouseX, mouseY, isRelease, this);
-                            continue;
+                _metadata.RefreshConnections(_buffer.GetText(), force: true);
+
+                while (!_isExiting)
+                {
+                    _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
+                    var keyOpt = await ReadKeyOrHandleMouse();
+
+                    if (keyOpt.HasValue)
+                    {
+                        var key = keyOpt.Value;
+                        if (!_renderer.PromptVisible)
+                        {
+                            await _input.HandleKey(key);
                         }
                     }
                 }
-
-                if (!_renderer.PromptVisible)
-                {
-                    await _input.HandleKey(key);
-                }
             }
-            AnsiConsole.Console.Write("\x1b[?1049l\x1b[?1000l\x1b[?1006l"); // Exit alternative buffer and disable mouse tracking
-            AnsiConsole.Console.Cursor.Show();
-            Console.Clear();
-            Console.SetCursorPosition(0, 0);
-            Console.CursorVisible = true;
+            finally
+            {
+                if (!OperatingSystem.IsWindows())
+                    AnsiConsole.Console.Write("\x1b[?1000l\x1b[?1006l"); // Disable VT mouse tracking
+                AnsiConsole.Console.Write("\x1b[?1049l"); // Exit alternative buffer
+                AnsiConsole.Console.Cursor.Show();
+                try { Console.Clear(); } catch { }
+                try { Console.SetCursorPosition(0, 0); } catch { }
+                try { Console.CursorVisible = true; } catch { }
+                RestoreWindowsConsoleMode();
+            }
         }
 
         public async Task HandleExit()
@@ -211,8 +208,11 @@ namespace ETL_SQL.TUI.UI
             while (!_promptResolved && !_isExiting)
             {
                 RenderCurrent();
-                var key = Console.ReadKey(true);
-                await _input.HandlePromptKey(key);
+                var keyOpt = await ReadKeyOrHandleMouse();
+                if (keyOpt.HasValue)
+                {
+                    await _input.HandlePromptKey(keyOpt.Value);
+                }
             }
 
             var result = _promptResult;
@@ -236,12 +236,304 @@ namespace ETL_SQL.TUI.UI
         }
 
         /// <summary>Displays a full-screen help overlay.</summary>
-        public void ShowHelp()
+        public async Task ShowHelp()
         {
             _renderer.HelpVisible = true;
             _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
-            Console.ReadKey(true);
+            
+            while (true)
+            {
+                var keyOpt = await ReadKeyOrHandleMouse();
+                if (keyOpt.HasValue)
+                {
+                    break;
+                }
+            }
+            
             _renderer.HelpVisible = false;
+        }
+
+        private readonly Queue<ConsoleKeyInfo> _pendingKeys = new();
+
+        private async Task<ConsoleKeyInfo?> ReadKeyOrHandleMouse()
+        {
+            if (_pendingKeys.Count > 0)
+            {
+                return _pendingKeys.Dequeue();
+            }
+
+            // On Windows we read raw INPUT_RECORDs so we get both proper key decoding and
+            // mouse events without ENABLE_VIRTUAL_TERMINAL_INPUT (which breaks special keys).
+            if (OperatingSystem.IsWindows() && _consoleModeModified)
+            {
+                return await ReadInputWindows();
+            }
+
+            ConsoleKeyInfo key;
+            try
+            {
+                key = Console.ReadKey(true);
+            }
+            catch (InvalidOperationException)
+            {
+                await Task.Delay(100);
+                return null;
+            }
+
+            if (key.Key == ConsoleKey.Escape || key.KeyChar == '\x1b')
+            {
+                var sequenceKeys = new List<ConsoleKeyInfo>();
+                var sb = new System.Text.StringBuilder();
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+
+                while (true)
+                {
+                    try
+                    {
+                        if (Console.KeyAvailable)
+                        {
+                            var nextKey = Console.ReadKey(true);
+                            sequenceKeys.Add(nextKey);
+                            sb.Append(nextKey.KeyChar);
+                            sw.Restart();
+                        }
+                        else
+                        {
+                            if (sw.ElapsedMilliseconds >= 30)
+                            {
+                                break;
+                            }
+                            System.Threading.Thread.Sleep(1);
+                        }
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        break;
+                    }
+                }
+
+                string seq = sb.ToString();
+                if (!string.IsNullOrEmpty(seq))
+                {
+                    if (seq.StartsWith("[<"))
+                    {
+                        var match = System.Text.RegularExpressions.Regex.Match(seq, @"^\[<(\d+);(\d+);(\d+)([Mm])");
+                        if (match.Success)
+                        {
+                            int button = int.Parse(match.Groups[1].Value);
+                            int mouseX = int.Parse(match.Groups[2].Value) - 1;
+                            int mouseY = int.Parse(match.Groups[3].Value) - 1;
+                            bool isRelease = match.Groups[4].Value == "m";
+
+                            await _renderer.HandleMouseClick(button, mouseX, mouseY, isRelease, this);
+                            return null;
+                        }
+                    }
+
+                    if (!seq.StartsWith("[") && !seq.StartsWith("O"))
+                    {
+                        foreach (var k in sequenceKeys)
+                        {
+                            _pendingKeys.Enqueue(k);
+                        }
+                        return key;
+                    }
+                    return null;
+                }
+            }
+
+            return key;
+        }
+
+        // ── Windows raw input (ReadConsoleInputW) ──────────────────────────────
+        // Decodes keys exactly as Console.ReadKey would (from KEY_EVENT records) and
+        // dispatches mouse clicks/wheel from MOUSE_EVENT records. Mouse movement and
+        // button-up events are consumed silently to avoid needless re-renders.
+        private readonly INPUT_RECORD[] _inputRecordBuffer = new INPUT_RECORD[1];
+        private uint _prevMouseButtons = 0;
+
+        private async Task<ConsoleKeyInfo?> ReadInputWindows()
+        {
+            IntPtr hStdin = GetStdHandle(STD_INPUT_HANDLE);
+
+            while (true)
+            {
+                if (!ReadConsoleInputW(hStdin, _inputRecordBuffer, 1, out uint read) || read == 0)
+                {
+                    await Task.Delay(10);
+                    return null;
+                }
+
+                var record = _inputRecordBuffer[0];
+
+                if (record.EventType == KEY_EVENT)
+                {
+                    var k = record.KeyEvent;
+                    if (k.bKeyDown == 0) continue;            // ignore key-up
+                    ushort vk = k.wVirtualKeyCode;
+                    if (IsModifierKey(vk)) continue;          // ignore lone modifier presses
+
+                    bool shift = (k.dwControlKeyState & SHIFT_PRESSED) != 0;
+                    bool alt   = (k.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED)) != 0;
+                    bool ctrl  = (k.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) != 0;
+
+                    return new ConsoleKeyInfo((char)k.UnicodeChar, (ConsoleKey)vk, shift, alt, ctrl);
+                }
+
+                if (record.EventType == MOUSE_EVENT)
+                {
+                    var m = record.MouseEvent;
+
+                    if ((m.dwEventFlags & MOUSE_WHEELED) != 0)
+                    {
+                        short delta = (short)(m.dwButtonState >> 16);
+                        await _renderer.HandleMouseClick(delta > 0 ? 64 : 65, m.MousePositionX, m.MousePositionY, false, this);
+                        return null; // allow a redraw after scrolling
+                    }
+
+                    if (m.dwEventFlags == 0) // button state change (not movement)
+                    {
+                        uint left = m.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED;
+                        uint prevLeft = _prevMouseButtons & FROM_LEFT_1ST_BUTTON_PRESSED;
+                        _prevMouseButtons = m.dwButtonState;
+
+                        if (left != 0 && prevLeft == 0)
+                        {
+                            await _renderer.HandleMouseClick(0, m.MousePositionX, m.MousePositionY, false, this);
+                            return null; // press handled — allow a redraw
+                        }
+                    }
+
+                    continue; // movement / button-up — keep reading without re-rendering
+                }
+
+                if (record.EventType == WINDOW_BUFFER_SIZE_EVENT)
+                {
+                    _renderer.ForceFullRepaint();
+                    return null; // let the main loop re-render at the new size
+                }
+
+                // Focus / menu / other events — ignore and keep reading.
+            }
+        }
+
+        private static bool IsModifierKey(ushort vk)
+        {
+            // VK_SHIFT 0x10, VK_CONTROL 0x11, VK_MENU 0x12, VK_CAPITAL 0x14,
+            // VK_LWIN 0x5B, VK_RWIN 0x5C, VK_NUMLOCK 0x90, VK_SCROLL 0x91
+            return vk == 0x10 || vk == 0x11 || vk == 0x12 || vk == 0x14
+                || vk == 0x5B || vk == 0x5C || vk == 0x90 || vk == 0x91;
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+        private static extern bool ReadConsoleInputW(IntPtr hConsoleInput, [System.Runtime.InteropServices.Out] INPUT_RECORD[] lpBuffer, uint nLength, out uint lpNumberOfEventsRead);
+
+        private const ushort KEY_EVENT = 0x0001;
+        private const ushort MOUSE_EVENT = 0x0002;
+        private const ushort WINDOW_BUFFER_SIZE_EVENT = 0x0004;
+        private const uint FROM_LEFT_1ST_BUTTON_PRESSED = 0x0001;
+        private const uint MOUSE_WHEELED = 0x0004;
+        private const uint RIGHT_ALT_PRESSED = 0x0001;
+        private const uint LEFT_ALT_PRESSED = 0x0002;
+        private const uint RIGHT_CTRL_PRESSED = 0x0004;
+        private const uint LEFT_CTRL_PRESSED = 0x0008;
+        private const uint SHIFT_PRESSED = 0x0010;
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Explicit)]
+        private struct INPUT_RECORD
+        {
+            [System.Runtime.InteropServices.FieldOffset(0)] public ushort EventType;
+            [System.Runtime.InteropServices.FieldOffset(4)] public KEY_EVENT_RECORD KeyEvent;
+            [System.Runtime.InteropServices.FieldOffset(4)] public MOUSE_EVENT_RECORD MouseEvent;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct KEY_EVENT_RECORD
+        {
+            public int bKeyDown;
+            public ushort wRepeatCount;
+            public ushort wVirtualKeyCode;
+            public ushort wVirtualScanCode;
+            public ushort UnicodeChar;
+            public uint dwControlKeyState;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct MOUSE_EVENT_RECORD
+        {
+            public short MousePositionX;
+            public short MousePositionY;
+            public uint dwButtonState;
+            public uint dwControlKeyState;
+            public uint dwEventFlags;
+        }
+
+        private uint _originalInputMode;
+        private bool _consoleModeModified = false;
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GetStdHandle(int nStdHandle);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+
+        private const int STD_INPUT_HANDLE = -10;
+        private const uint ENABLE_MOUSE_INPUT = 0x0010;
+        private const uint ENABLE_QUICK_EDIT_MODE = 0x0040;
+        private const uint ENABLE_EXTENDED_FLAGS = 0x0080;
+        private const uint ENABLE_VIRTUAL_TERMINAL_INPUT = 0x0200;
+
+        private void EnableWindowsMouseSupport()
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            try
+            {
+                IntPtr hStdin = GetStdHandle(STD_INPUT_HANDLE);
+                if (hStdin == IntPtr.Zero || hStdin == new IntPtr(-1)) return;
+
+                if (GetConsoleMode(hStdin, out uint mode))
+                {
+                    _originalInputMode = mode;
+                    _consoleModeModified = true;
+
+                    // Enable Win32 mouse INPUT_RECORDs; keep raw key decoding intact.
+                    // Critically, leave ENABLE_VIRTUAL_TERMINAL_INPUT OFF: with it on, special
+                    // and control keys (Backspace, Tab, Ctrl+Q, arrows) arrive as raw VT bytes
+                    // that .NET's ReadKey cannot turn back into ConsoleKey values, which silently
+                    // breaks those shortcuts. We read input via ReadConsoleInputW instead.
+                    uint newMode = mode;
+                    newMode |= ENABLE_MOUSE_INPUT;
+                    newMode |= ENABLE_EXTENDED_FLAGS;
+                    newMode &= ~ENABLE_QUICK_EDIT_MODE;
+                    newMode &= ~ENABLE_VIRTUAL_TERMINAL_INPUT;
+
+                    SetConsoleMode(hStdin, newMode);
+                }
+            }
+            catch
+            {
+                // Ignore errors in environments where console handle is not accessible
+            }
+        }
+
+        private void RestoreWindowsConsoleMode()
+        {
+            if (!OperatingSystem.IsWindows() || !_consoleModeModified) return;
+            try
+            {
+                IntPtr hStdin = GetStdHandle(STD_INPUT_HANDLE);
+                if (hStdin != IntPtr.Zero && hStdin != new IntPtr(-1))
+                {
+                    SetConsoleMode(hStdin, _originalInputMode);
+                }
+            }
+            catch
+            {
+                // Ignore errors
+            }
         }
 
         /// <summary>Saves the current buffer state for undo.</summary>
