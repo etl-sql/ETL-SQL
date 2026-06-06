@@ -253,7 +253,7 @@ namespace ETL_SQL.TUI.UI
                 int statusRow = totalHeight - 1;
 
                 // ── Row 1: Help Bar (Static Shortcuts) ───────────────────────
-                string helpText = " F1:Help  F5:Run  F6:Focus  F4:Panel  Alt+R:Report  F2:Save  F12:Format  ^Q:Exit ";
+                string helpText = " F1:Help  F5:Run  F3:Theme  F6:Focus  F4:Panel  Alt+R:Report  F2:Save  F12:Format  ^Q:Exit ";
                 _console.ClearLine(0, helpRow, totalWidth);
                 _console.SetCursorPosition(0, helpRow);
                 _console.Markup($"[{TuiTheme.Instance.Ui.HelpBackground}]{Markup.Escape(helpText.PadRight(totalWidth - 1))}[/]");
@@ -512,6 +512,7 @@ namespace ETL_SQL.TUI.UI
             Section("View");
             RowAnnotated("F6",             "Toggle focus: Editor / Active panel", $"now: {focusState}");
             RowAnnotated("F4",             "Cycle lower panel",              $"now: {panelState}");
+            Row("F3",                      "Cycle theme (default, dracula, gruvbox, nord, light)");
             Row("Ctrl+M",                  "Maximize / Restore lower panel");
             Row("F7",                      "Enter / exit Compare mode (2+ result sets)");
             Row("F8",                      "Cycle active pane  [grey](Compare mode)[/]");

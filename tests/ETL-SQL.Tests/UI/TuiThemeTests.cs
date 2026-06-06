@@ -48,5 +48,16 @@ namespace ETL_SQL.Tests.UI
             var parsedStyle = theme.GetStyle("invalid-style-string", new Style(Color.Blue));
             Assert.Equal(Color.Blue, parsedStyle.Foreground);
         }
+
+        [Fact]
+        public void CycleTheme_CyclesToNextTheme()
+        {
+            TuiTheme.Load();
+            string theme1 = TuiTheme.CycleTheme();
+            Assert.False(string.IsNullOrEmpty(theme1));
+            string theme2 = TuiTheme.CycleTheme();
+            Assert.False(string.IsNullOrEmpty(theme2));
+            Assert.NotEqual(theme1, theme2);
+        }
     }
 }

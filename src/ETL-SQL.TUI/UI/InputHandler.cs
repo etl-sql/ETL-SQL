@@ -277,6 +277,15 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
+            // F3 - Cycle Theme
+            if (key.Key == ConsoleKey.F3)
+            {
+                string newTheme = TuiTheme.CycleTheme();
+                _renderer.ShowStatus($"Theme: {newTheme}");
+                _renderer.ForceFullRepaint();
+                return;
+            }
+
             // F4 - Cycle lower panel: Pipeline+Messages → Results → Performance → (repeat)
             if (key.Key == ConsoleKey.F4)
             {
