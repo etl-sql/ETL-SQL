@@ -585,15 +585,20 @@ namespace ETL_SQL.Tests.UI
             // Since we closed it, we should have 2 tabs left
             Assert.Equal(2, editor._tabs.Count);
 
-            // 7. Test that switching tabs clears results
+            // 7. Test that switching tabs saves and restores the bottom panel results state
             var dummyTable = new ETL_SQL.Data.DataTable();
             editor._evaluator.LastResultSets.Add(dummyTable);
             Assert.Single(editor._evaluator.LastResultSets);
 
-            // Switch tab (Alt+LeftArrow)
+            // Switch tab (Alt+LeftArrow) to tab 0 (which has no results)
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.LeftArrow, false, true, false));
-            // Results should now be cleared
+            // Tab 0 should have empty results
             Assert.Empty(editor._evaluator.LastResultSets);
+
+            // Switch forward (Alt+RightArrow) back to tab 1 (which had the results)
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.RightArrow, false, true, false));
+            // Tab 1's results should be restored!
+            Assert.Single(editor._evaluator.LastResultSets);
         }
     }
 }

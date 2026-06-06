@@ -779,6 +779,22 @@ namespace ETL_SQL.TUI.UI
                 tab.ScrollLine = _renderer.ScrollLine;
                 tab.ScrollCol = _renderer.ScrollCol;
                 tab.Diagnostics = _diagnostics.ToList();
+
+                // Save results & telemetry state
+                tab.LastResultSets = _evaluator.LastResultSets.ToList();
+                tab.LastResult = _evaluator.LastResult;
+                tab.Messages = _evaluator.Messages.ToList();
+                tab.ProfileMetrics = _evaluator.Telemetry.ProfileMetrics.ToList();
+                tab.ExecutionTreeNodes = _evaluator.Telemetry.ExecutionTree.GetAllNodes().ToList();
+
+                // Save lower panel display states
+                tab.ResultScrollRow = _renderer.ResultScrollRow;
+                tab.ResultScrollCol = _renderer.ResultScrollCol;
+                tab.ActiveResultSetIndex = _renderer.ActiveResultSetIndex;
+                tab.FilterText = _renderer.FilterText;
+                tab.TreeScrollRow = _renderer.TreeScrollRow;
+                tab.MessageScrollRow = _renderer.MessageScrollRow;
+                tab.ActiveLowerTab = _renderer.ActiveLowerTab;
             }
         }
 
@@ -800,13 +816,28 @@ namespace ETL_SQL.TUI.UI
                 _diagnostics.Clear();
                 _diagnostics.AddRange(tab.Diagnostics);
                 
-                // Clear query results and display states when switching tabs
-                _evaluator.ClearResults();
+                // Restore results & telemetry state
                 _evaluator.LastResultSets.Clear();
-                _renderer.ResultScrollRow = 0;
-                _renderer.ResultScrollCol = 0;
-                _renderer.ActiveResultSetIndex = 0;
-                _renderer.FilterText = "";
+                _evaluator.LastResultSets.AddRange(tab.LastResultSets);
+                _evaluator.LastResult = tab.LastResult;
+                _evaluator.Messages.Clear();
+                _evaluator.Messages.AddRange(tab.Messages);
+                _evaluator.Telemetry.ProfileMetrics.Clear();
+                _evaluator.Telemetry.ProfileMetrics.AddRange(tab.ProfileMetrics);
+                _evaluator.Telemetry.ExecutionTree.Clear();
+                foreach (var node in tab.ExecutionTreeNodes)
+                {
+                    _evaluator.Telemetry.ExecutionTree.AddNode(node);
+                }
+
+                // Restore lower panel display states
+                _renderer.ResultScrollRow = tab.ResultScrollRow;
+                _renderer.ResultScrollCol = tab.ResultScrollCol;
+                _renderer.ActiveResultSetIndex = tab.ActiveResultSetIndex;
+                _renderer.FilterText = tab.FilterText;
+                _renderer.TreeScrollRow = tab.TreeScrollRow;
+                _renderer.MessageScrollRow = tab.MessageScrollRow;
+                _renderer.ActiveLowerTab = tab.ActiveLowerTab;
 
                 _renderer.ForceFullRepaint();
                 _renderer.ShowStatus($"Switched to: {Path.GetFileName(_filePath)}");
@@ -891,5 +922,21 @@ namespace ETL_SQL.TUI.UI
         public int ScrollLine { get; set; }
         public int ScrollCol { get; set; }
         public List<EditorDiagnostic> Diagnostics { get; set; } = new();
+
+        // Cached Bottom Pane State
+        public List<DataTable> LastResultSets { get; set; } = new();
+        public DataTable? LastResult { get; set; }
+        public List<LogEntry> Messages { get; set; } = new();
+        public List<ExecutionMetrics> ProfileMetrics { get; set; } = new();
+        public List<ExecutionNode> ExecutionTreeNodes { get; set; } = new();
+
+        // Lower panel display & scroll states
+        public int ResultScrollRow { get; set; }
+        public int ResultScrollCol { get; set; }
+        public int ActiveResultSetIndex { get; set; }
+        public string FilterText { get; set; } = "";
+        public int TreeScrollRow { get; set; }
+        public int MessageScrollRow { get; set; }
+        public EditorFocus ActiveLowerTab { get; set; } = EditorFocus.Messages;
     }
 }
