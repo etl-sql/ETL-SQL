@@ -180,11 +180,16 @@ namespace ETL_SQL.TUI.UI
 
         public async Task HandleExit()
         {
-            if (_isDirty)
+            SaveActiveTabState();
+            int dirty = CountDirtyTabs();
+            if (dirty > 0)
             {
-                var choice = await ShowPrompt("Save changes before exiting? (y/n/c)", "");
-                if (string.IsNullOrEmpty(choice) || choice.Equals("c", StringComparison.OrdinalIgnoreCase)) return;
-                if (choice.Equals("y", StringComparison.OrdinalIgnoreCase)) { if (!await SaveScript()) return; }
+                string label = dirty == 1 ? "1 tab has" : $"{dirty} tabs have";
+                var choice = await ShowPrompt($"{label} unsaved changes. [S]ave all  [D]iscard all  [C]ancel", "");
+                if (string.IsNullOrWhiteSpace(choice)) return; // cancel on empty/Esc
+                char c = char.ToLowerInvariant(choice.Trim()[0]);
+                if (c == 's') { if (!await SaveAllTabs()) return; }
+                else if (c != 'd') return; // 'c' or anything unrecognized → cancel (safe default)
             }
             _isExiting = true;
         }
@@ -1087,6 +1092,10 @@ namespace ETL_SQL.TUI.UI
                 tab.TreeScrollRow = _renderer.TreeScrollRow;
                 tab.MessageScrollRow = _renderer.MessageScrollRow;
                 tab.ActiveLowerTab = _renderer.ActiveLowerTab;
+                tab.ResultsVisible = _renderer.ResultsVisible;
+                tab.PerformanceVisible = _renderer.PerformanceVisible;
+                tab.CompareMode = _renderer.CompareMode;
+                tab.IsBottomMaximized = _renderer.IsBottomMaximized;
             }
         }
 
@@ -1130,6 +1139,10 @@ namespace ETL_SQL.TUI.UI
                 _renderer.TreeScrollRow = tab.TreeScrollRow;
                 _renderer.MessageScrollRow = tab.MessageScrollRow;
                 _renderer.ActiveLowerTab = tab.ActiveLowerTab;
+                _renderer.ResultsVisible = tab.ResultsVisible;
+                _renderer.PerformanceVisible = tab.PerformanceVisible;
+                _renderer.CompareMode = tab.CompareMode;
+                _renderer.IsBottomMaximized = tab.IsBottomMaximized;
 
                 _renderer.ForceFullRepaint();
                 _renderer.ShowStatus($"Switched to: {Path.GetFileName(_filePath)}");
@@ -1163,16 +1176,53 @@ namespace ETL_SQL.TUI.UI
         public async Task NewTab()
         {
             SaveActiveTabState();
-            var tab = new TabState { FilePath = "untitled.etlsql" };
-            _tabs.Add(tab);
-            _activeTabIndex = _tabs.Count - 1;
+            _tabs.Add(new TabState { FilePath = "untitled.etlsql" });
             await _evaluator.ResetSessionAsync();
-            _buffer.Load(new[] { "" });
-            _filePath = "untitled.etlsql";
-            _isDirty = false;
             _undo.Clear();
+            // Load the (empty) new tab through the normal pipeline so the buffer AND
+            // the bottom pane (results, messages, telemetry, view mode) all reset to
+            // empty rather than inheriting the previous tab's session.
+            LoadTabState(_tabs.Count - 1);
             _renderer.ShowStatus("New tab started.");
-            _renderer.ForceFullRepaint();
+        }
+
+        /// <summary>Saves the current tab's session and switches to another tab.</summary>
+        public void SwitchToTab(int index)
+        {
+            if (index < 0 || index >= _tabs.Count) return;
+            SaveActiveTabState();
+            LoadTabState(index);
+        }
+
+        /// <summary>
+        /// Counts tabs with unsaved changes, using the live dirty flag for the active
+        /// tab and the cached flag for the rest.
+        /// </summary>
+        public int CountDirtyTabs()
+        {
+            int count = 0;
+            for (int i = 0; i < _tabs.Count; i++)
+            {
+                bool dirty = (i == _activeTabIndex) ? _isDirty : _tabs[i].IsDirty;
+                if (dirty) count++;
+            }
+            return count;
+        }
+
+        /// <summary>Saves every dirty tab. Returns false if the user cancels any save.</summary>
+        private async Task<bool> SaveAllTabs()
+        {
+            SaveActiveTabState();
+            int original = _activeTabIndex;
+            for (int i = 0; i < _tabs.Count; i++)
+            {
+                if (!_tabs[i].IsDirty) continue;
+                if (i != _activeTabIndex) LoadTabState(i);
+                if (!await SaveScript()) return false; // user cancelled Save As
+                SaveActiveTabState();
+            }
+            if (original >= 0 && original < _tabs.Count) LoadTabState(original);
+            return true;
         }
 
         public async Task CloseActiveTab()
@@ -1230,5 +1280,12 @@ namespace ETL_SQL.TUI.UI
         public int TreeScrollRow { get; set; }
         public int MessageScrollRow { get; set; }
         public EditorFocus ActiveLowerTab { get; set; } = EditorFocus.Messages;
+
+        // Which bottom view is active for this tab. Defaults give a fresh tab the
+        // empty "Pipeline & Messages" view rather than inheriting the prior tab's.
+        public bool ResultsVisible { get; set; }
+        public bool PerformanceVisible { get; set; }
+        public bool CompareMode { get; set; }
+        public bool IsBottomMaximized { get; set; }
     }
 }

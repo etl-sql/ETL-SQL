@@ -738,15 +738,13 @@ namespace ETL_SQL.TUI.UI
                             }
                             else
                             {
-                                editor.SaveActiveTabState();
-                                editor.LoadTabState(i);
+                                editor.SwitchToTab(i);
                                 await editor.CloseActiveTab();
                             }
                         }
                         else
                         {
-                            editor.SaveActiveTabState();
-                            editor.LoadTabState(i);
+                            editor.SwitchToTab(i);
                         }
                         ForceFullRepaint();
                         return;

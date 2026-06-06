@@ -179,16 +179,14 @@ namespace ETL_SQL.TUI.UI
             if (key.Key == ConsoleKey.W && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.CloseActiveTab(); return; }
             if (key.Key == ConsoleKey.LeftArrow && key.Modifiers.HasFlag(ConsoleModifiers.Alt))
             {
-                _editor.SaveActiveTabState();
                 int prevIndex = (_editor._activeTabIndex - 1 + _editor._tabs.Count) % _editor._tabs.Count;
-                _editor.LoadTabState(prevIndex);
+                _editor.SwitchToTab(prevIndex);
                 return;
             }
             if (key.Key == ConsoleKey.RightArrow && key.Modifiers.HasFlag(ConsoleModifiers.Alt))
             {
-                _editor.SaveActiveTabState();
                 int nextIndex = (_editor._activeTabIndex + 1) % _editor._tabs.Count;
-                _editor.LoadTabState(nextIndex);
+                _editor.SwitchToTab(nextIndex);
                 return;
             }
             if (key.Key == ConsoleKey.P && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.ExportResults(); return; }
