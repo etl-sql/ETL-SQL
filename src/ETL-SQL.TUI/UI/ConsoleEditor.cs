@@ -46,8 +46,8 @@ namespace ETL_SQL.TUI.UI
         private readonly EditorFileHandler _fileHandler;
         private string? _promptResult;
         private bool _promptResolved;
-        private string _filePath;
-        private bool _isDirty = false;
+        internal string _filePath;
+        internal bool _isDirty = false;
         private bool _isExiting = false;
 
         /// <summary>Dispatches a key press to the input handler.</summary>
@@ -76,8 +76,7 @@ namespace ETL_SQL.TUI.UI
             _languageService = Program.ServiceProvider.GetRequiredService<ILanguageService>();
             _autocomplete = new AutocompleteController(_buffer, _renderer, _metadata, _connections, _logger, helpRegistry);
             _input = new InputHandler(this, _buffer, _renderer, _autocomplete);
-            
-
+            _tabs.Add(new TabState { FilePath = filePath });
 
             if (_logger is LoggerService ls)
             {
@@ -89,6 +88,7 @@ namespace ETL_SQL.TUI.UI
         public async Task InitializeAsync()
         {
             await LoadFile(_filePath);
+            _renderer._sidebarPanel.Initialize(_filePath);
         }
 
         /// <summary>Loads a script file into the editor buffer.</summary>
@@ -102,6 +102,7 @@ namespace ETL_SQL.TUI.UI
             _isDirty = false;
             _undo.Clear();
             _metadata.RefreshConnections(_buffer.GetText(), force: true);
+            _renderer._sidebarPanel.Initialize(filePath);
         }
 
         /// <summary>Clears the buffer and starts a new file.</summary>
@@ -114,6 +115,7 @@ namespace ETL_SQL.TUI.UI
             _isDirty = false;
             _undo.Clear();
             _renderer.ShowStatus("New file started.");
+            _renderer._sidebarPanel.Initialize(_filePath);
         }
 
         /// <summary>Starts the main editor loop, handling rendering and input.</summary>
@@ -128,7 +130,7 @@ namespace ETL_SQL.TUI.UI
                     Console.BufferHeight = Console.WindowHeight;
                 }
                 AnsiConsole.Console.Cursor.Hide();
-                AnsiConsole.Console.Write("\x1b[?1049h"); // Switch to alternative buffer if supported
+                AnsiConsole.Console.Write("\x1b[?1049h\x1b[?1000h\x1b[?1006h"); // Switch to alternative buffer and enable mouse tracking
                 AnsiConsole.Console.Write("\x1b[H\x1b[2J\x1b[3J");
                 AnsiConsole.Console.Clear(); 
                 AnsiConsole.Console.Cursor.SetPosition(1, 1);
@@ -140,15 +142,39 @@ namespace ETL_SQL.TUI.UI
 
             while (!_isExiting)
             {
-                _renderer.Render(_buffer, _evaluator, _filePath, _isDirty, Console.WindowWidth, Console.WindowHeight);
+                _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
                 var key = Console.ReadKey(true);
+
+                if (key.Key == ConsoleKey.Escape && Console.KeyAvailable)
+                {
+                    var sb = new System.Text.StringBuilder();
+                    while (Console.KeyAvailable)
+                    {
+                        sb.Append(Console.ReadKey(true).KeyChar);
+                    }
+                    string seq = sb.ToString();
+                    if (seq.StartsWith("[<"))
+                    {
+                        var match = System.Text.RegularExpressions.Regex.Match(seq, @"^\[<(\d+);(\d+);(\d+)([Mm])");
+                        if (match.Success)
+                        {
+                            int button = int.Parse(match.Groups[1].Value);
+                            int mouseX = int.Parse(match.Groups[2].Value) - 1;
+                            int mouseY = int.Parse(match.Groups[3].Value) - 1;
+                            bool isRelease = match.Groups[4].Value == "m";
+
+                            _renderer.HandleMouseClick(button, mouseX, mouseY, isRelease, this);
+                            continue;
+                        }
+                    }
+                }
 
                 if (!_renderer.PromptVisible)
                 {
                     await _input.HandleKey(key);
                 }
             }
-            AnsiConsole.Console.Write("\x1b[?1049l"); // Exit alternative buffer
+            AnsiConsole.Console.Write("\x1b[?1049l\x1b[?1000l\x1b[?1006l"); // Exit alternative buffer and disable mouse tracking
             AnsiConsole.Console.Cursor.Show();
             Console.Clear();
             Console.SetCursorPosition(0, 0);
@@ -213,7 +239,7 @@ namespace ETL_SQL.TUI.UI
         public void ShowHelp()
         {
             _renderer.HelpVisible = true;
-            _renderer.Render(_buffer, _evaluator, _filePath, _isDirty, Console.WindowWidth, Console.WindowHeight);
+            _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
             Console.ReadKey(true);
             _renderer.HelpVisible = false;
         }
@@ -503,11 +529,11 @@ namespace ETL_SQL.TUI.UI
         {
             if (_renderer.Headless)
             {
-                _renderer.Render(_buffer, _evaluator, _filePath, _isDirty, 100, 30);
+                _renderer.Render(this, 100, 30);
                 return;
             }
 
-            _renderer.Render(_buffer, _evaluator, _filePath, _isDirty, Console.WindowWidth, Console.WindowHeight);
+            _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
         }
 
         private void AddDiagnostic(string source, string severity, string message, int line, int column)
@@ -562,6 +588,7 @@ namespace ETL_SQL.TUI.UI
             {
                 _isDirty = false;
                 _renderer.ShowStatus($"Saved to {_filePath}");
+                _renderer._sidebarPanel.Initialize(_filePath);
                 return true;
             }
             else
@@ -733,5 +760,112 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>Moves the cursor to the bottom of the document.</summary>
         public void GoToBottom() { _buffer.Bottom(); }
+
+        internal readonly List<TabState> _tabs = new();
+        internal int _activeTabIndex = 0;
+
+        public void SaveActiveTabState()
+        {
+            if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
+            {
+                var tab = _tabs[_activeTabIndex];
+                tab.FilePath = _filePath;
+                tab.Lines = _buffer.Lines.ToList();
+                tab.CursorLine = _buffer.CursorLine;
+                tab.CursorColumn = _buffer.CursorColumn;
+                tab.SelectionStartLine = _buffer.SelectionStartLine;
+                tab.SelectionStartCol = _buffer.SelectionStartCol;
+                tab.IsDirty = _isDirty;
+                tab.ScrollLine = _renderer.ScrollLine;
+                tab.ScrollCol = _renderer.ScrollCol;
+                tab.Diagnostics = _diagnostics.ToList();
+            }
+        }
+
+        public void LoadTabState(int index)
+        {
+            if (index >= 0 && index < _tabs.Count)
+            {
+                _activeTabIndex = index;
+                var tab = _tabs[index];
+                _filePath = tab.FilePath;
+                _buffer.Load(tab.Lines);
+                _buffer.CursorLine = tab.CursorLine;
+                _buffer.CursorColumn = tab.CursorColumn;
+                _buffer.SelectionStartLine = tab.SelectionStartLine;
+                _buffer.SelectionStartCol = tab.SelectionStartCol;
+                _isDirty = tab.IsDirty;
+                _renderer.ScrollLine = tab.ScrollLine;
+                _renderer.ScrollCol = tab.ScrollCol;
+                _diagnostics.Clear();
+                _diagnostics.AddRange(tab.Diagnostics);
+                _renderer.ForceFullRepaint();
+                _renderer.ShowStatus($"Switched to: {Path.GetFileName(_filePath)}");
+            }
+        }
+
+        public async Task OpenFileInTab(string filePath)
+        {
+            SaveActiveTabState();
+
+            string fullPath = Path.GetFullPath(filePath);
+            for (int i = 0; i < _tabs.Count; i++)
+            {
+                try
+                {
+                    if (Path.GetFullPath(_tabs[i].FilePath) == fullPath)
+                    {
+                        LoadTabState(i);
+                        return;
+                    }
+                }
+                catch {}
+            }
+
+            var tab = new TabState { FilePath = filePath };
+            _tabs.Add(tab);
+            _activeTabIndex = _tabs.Count - 1;
+            await LoadFile(filePath);
+        }
+
+        public async Task CloseActiveTab()
+        {
+            if (_tabs.Count <= 1)
+            {
+                if (_isDirty)
+                {
+                    var choice = await ShowPrompt("Save changes before closing? (y/n/c)", "");
+                    if (string.IsNullOrEmpty(choice) || choice.Equals("c", StringComparison.OrdinalIgnoreCase)) return;
+                    if (choice.Equals("y", StringComparison.OrdinalIgnoreCase)) { if (!await SaveScript()) return; }
+                }
+                await NewFile();
+                return;
+            }
+
+            if (_isDirty)
+            {
+                var choice = await ShowPrompt("Save changes before closing tab? (y/n/c)", "");
+                if (string.IsNullOrEmpty(choice) || choice.Equals("c", StringComparison.OrdinalIgnoreCase)) return;
+                if (choice.Equals("y", StringComparison.OrdinalIgnoreCase)) { if (!await SaveScript()) return; }
+            }
+
+            _tabs.RemoveAt(_activeTabIndex);
+            _activeTabIndex = Math.Clamp(_activeTabIndex - 1, 0, _tabs.Count - 1);
+            LoadTabState(_activeTabIndex);
+        }
+    }
+
+    public class TabState
+    {
+        public string FilePath { get; set; } = "untitled.etlsql";
+        public List<string> Lines { get; set; } = new() { "" };
+        public int CursorLine { get; set; }
+        public int CursorColumn { get; set; }
+        public int? SelectionStartLine { get; set; }
+        public int? SelectionStartCol { get; set; }
+        public bool IsDirty { get; set; }
+        public int ScrollLine { get; set; }
+        public int ScrollCol { get; set; }
+        public List<EditorDiagnostic> Diagnostics { get; set; } = new();
     }
 }

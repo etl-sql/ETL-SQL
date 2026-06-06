@@ -1,4 +1,4 @@
-﻿using Xunit;
+using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -216,11 +216,11 @@ namespace ETL_SQL.Tests.UI
             editor._renderer.Headless = true;
             
             // Re-render with a specific height (assume editor height is 10)
-            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 80, 20); // resultAreaHeight=8, editorAreaHeight=10
+            editor._renderer.Render(editor, 80, 20); // resultAreaHeight=8, editorAreaHeight=10
             
             // Move cursor to line 50
             editor._buffer.CursorLine = 50;
-            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 80, 20);
+            editor._renderer.Render(editor, 80, 20);
             
             // ScrollLine should have updated to include line 50
             Assert.InRange(editor._renderer.ScrollLine, 40, 50);
@@ -246,14 +246,14 @@ namespace ETL_SQL.Tests.UI
             // Attempt to scroll to 3 (index of 4th row)
             editor._renderer.ResultScrollRow = 3;
             // Render should perform the clamp
-            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 80, 20);
+            editor._renderer.Render(editor, 80, 20);
 
             // It should be clamped to 3 (rowCount - 1), NOT to 0 as previously
             Assert.Equal(3, editor._renderer.ResultScrollRow);
 
             // Attempt to scroll past the limit (e.g., 5)
             editor._renderer.ResultScrollRow = 5;
-            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 80, 20);
+            editor._renderer.Render(editor, 80, 20);
 
             // It should clamp to 3
             Assert.Equal(3, editor._renderer.ResultScrollRow);
@@ -267,13 +267,13 @@ namespace ETL_SQL.Tests.UI
             editor._renderer.Headless = true;
 
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.End, false, false, true));
-            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 100, 24);
+            editor._renderer.Render(editor, 100, 24);
 
             Assert.Equal(499, editor._buffer.CursorLine);
             Assert.True(editor._renderer.ScrollLine <= editor._buffer.CursorLine);
 
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.Home, false, false, true));
-            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 100, 24);
+            editor._renderer.Render(editor, 100, 24);
 
             Assert.Equal(0, editor._buffer.CursorLine);
             Assert.Equal(0, editor._renderer.ScrollLine);
@@ -394,7 +394,7 @@ namespace ETL_SQL.Tests.UI
             }
 
             editor._renderer.MessageScrollRow = int.MaxValue;
-            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 100, 24);
+            editor._renderer.Render(editor, 100, 24);
             Assert.InRange(editor._renderer.MessageScrollRow, 0, 500 * 8);
 
             var table = new DataTable();
@@ -410,7 +410,7 @@ namespace ETL_SQL.Tests.UI
             editor._renderer.MessageScrollRow = 0;
             editor._renderer.ResultScrollRow = int.MaxValue;
 
-            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 100, 24);
+            editor._renderer.Render(editor, 100, 24);
             Assert.InRange(editor._renderer.ResultScrollRow, 0, table.Rows.Count);
         }
 
@@ -454,6 +454,88 @@ namespace ETL_SQL.Tests.UI
             Assert.Equal(4, editor._buffer.CursorColumn);
             Assert.False(editor._buffer.IsMultiLineMode);
             Assert.Empty(editor._buffer.SecondaryCursors);
+        }
+
+        [Fact]
+        public void TestMouseClickAndScroll()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._buffer.Load(new[]
+            {
+                "SELECT 1;",
+                "SELECT 222;",
+                "SELECT 33333;"
+            });
+            editor._renderer.Headless = true;
+            
+            // Set terminal size (width=80, height=24)
+            editor._renderer.Render(editor, 80, 24);
+
+            // Left Click (button 0) at x=6, y=3
+            // Line count is 3, so gutter is "3".Length + 2 = 3 characters.
+            // clickLine = y - editorAreaTop (2) = 1 (second line: "SELECT 222;")
+            // clickCol = x - gutter (3) = 3 (character position 3, i.e., 'E' in "SELECT")
+            editor._renderer.HandleMouseClick(0, 6, 3, false, editor);
+
+            Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
+            Assert.Equal(1, editor._buffer.CursorLine);
+            Assert.Equal(3, editor._buffer.CursorColumn);
+
+            // Scroll Up (button 64) in editor area (y=4)
+            editor._renderer.ScrollLine = 10;
+            editor._renderer.HandleMouseClick(64, 10, 4, false, editor);
+            Assert.Equal(7, editor._renderer.ScrollLine); // scrollUp delta is -3
+
+            // Scroll Down (button 65) in editor area (y=4)
+            editor._renderer.HandleMouseClick(65, 10, 4, false, editor);
+            Assert.Equal(10, editor._renderer.ScrollLine); // scrollDown delta is +3
+        }
+
+        [Fact]
+        public async Task TestSidebarToggleAndNavigation()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._renderer.Headless = true;
+
+            // Sidebar starts closed, focus starts at Editor
+            Assert.False(editor._renderer.SidebarVisible);
+            Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
+
+            // Press F9 to toggle sidebar
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F9, false, false, false));
+            Assert.True(editor._renderer.SidebarVisible);
+            Assert.Equal(EditorFocus.Sidebar, editor._renderer.Focus);
+
+            // Verify the root node is loaded
+            Assert.NotEmpty(editor._renderer._sidebarPanel.RootNodes);
+            var root = editor._renderer._sidebarPanel.RootNodes[0];
+            Assert.True(root.IsDirectory);
+            Assert.True(root.IsExpanded);
+
+            // Get flat items count
+            var items = editor._renderer._sidebarPanel.GetFlatVisibleItems();
+            Assert.NotEmpty(items);
+
+            // Move selection down
+            editor._renderer._sidebarPanel.SelectedIndex = 0;
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.DownArrow, false, false, false));
+            Assert.Equal(1, editor._renderer._sidebarPanel.SelectedIndex);
+
+            // Press Escape to return focus to Editor
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.Escape, false, false, false));
+            Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
+
+            // Focus cycle via F6 (since sidebar is visible, should cycle Editor -> Sidebar)
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false));
+            Assert.Equal(EditorFocus.Sidebar, editor._renderer.Focus);
+
+            // Cycle again via F6 (Sidebar -> active lower tab, which defaults to Messages)
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false));
+            Assert.Equal(EditorFocus.Messages, editor._renderer.Focus);
+
+            // Toggle sidebar off using Ctrl+B
+            await editor.HandleKey(new ConsoleKeyInfo('B', ConsoleKey.B, false, false, true)); // Ctrl+B
+            Assert.False(editor._renderer.SidebarVisible);
         }
     }
 }

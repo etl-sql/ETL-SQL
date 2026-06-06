@@ -34,6 +34,72 @@ namespace ETL_SQL.TUI.UI
         /// <param name="key">The key information from the console.</param>
         public async Task HandleKey(ConsoleKeyInfo key)
         {
+            if (_renderer.Focus == EditorFocus.Sidebar)
+            {
+                if (key.Key == ConsoleKey.UpArrow)
+                {
+                    var items = _renderer._sidebarPanel.GetFlatVisibleItems();
+                    if (items.Count > 0)
+                    {
+                        _renderer._sidebarPanel.SelectedIndex = Math.Max(0, _renderer._sidebarPanel.SelectedIndex - 1);
+                        if (_renderer._sidebarPanel.SelectedIndex < _renderer.SidebarScrollRow)
+                        {
+                            _renderer.SidebarScrollRow = _renderer._sidebarPanel.SelectedIndex;
+                        }
+                    }
+                    _renderer.ForceFullRepaint();
+                    return;
+                }
+                if (key.Key == ConsoleKey.DownArrow)
+                {
+                    var items = _renderer._sidebarPanel.GetFlatVisibleItems();
+                    if (items.Count > 0)
+                    {
+                        _renderer._sidebarPanel.SelectedIndex = Math.Min(items.Count - 1, _renderer._sidebarPanel.SelectedIndex + 1);
+                        int currentHeight = _renderer.LastHeight > 0 ? _renderer.LastHeight : 24;
+                        int maxVisible = Math.Max(3, currentHeight - 1 - 2 - 2);
+                        if (_renderer._sidebarPanel.SelectedIndex >= _renderer.SidebarScrollRow + maxVisible)
+                        {
+                            _renderer.SidebarScrollRow = _renderer._sidebarPanel.SelectedIndex - maxVisible + 1;
+                        }
+                    }
+                    _renderer.ForceFullRepaint();
+                    return;
+                }
+                if (key.Key == ConsoleKey.LeftArrow)
+                {
+                    _renderer._sidebarPanel.HandleLeft();
+                    return;
+                }
+                if (key.Key == ConsoleKey.RightArrow)
+                {
+                    _renderer._sidebarPanel.HandleRight();
+                    return;
+                }
+                if (key.Key == ConsoleKey.Enter)
+                {
+                    await _renderer._sidebarPanel.HandleEnter(_editor);
+                    return;
+                }
+                if (key.Key == ConsoleKey.Spacebar && key.Modifiers == 0)
+                {
+                    await _renderer._sidebarPanel.HandleEnter(_editor);
+                    return;
+                }
+                if (key.Key == ConsoleKey.Escape)
+                {
+                    _renderer.Focus = EditorFocus.Editor;
+                    _renderer.ForceFullRepaint();
+                    return;
+                }
+                
+                // If it's a character typing key with no modifiers, ignore it
+                if (key.KeyChar != '\0' && !char.IsControl(key.KeyChar) && key.Modifiers == 0)
+                {
+                    return;
+                }
+            }
+
             if (key.Key == ConsoleKey.Spacebar && key.Modifiers == 0)
             {
                 _editor.MarkDirty();
@@ -182,10 +248,29 @@ namespace ETL_SQL.TUI.UI
             }
 
 
-            // F6 - Focus Toggle (Switches between Editor and the active lower panel)
+            // F6 - Focus Toggle (Switches between Editor, Sidebar, and the active lower panel)
             if (key.Key == ConsoleKey.F6)
             {
                 if (_renderer.Focus == EditorFocus.Editor)
+                {
+                    if (_renderer.SidebarVisible)
+                    {
+                        _renderer.Focus = EditorFocus.Sidebar;
+                    }
+                    else if (_renderer.ResultsVisible)
+                    {
+                        _renderer.Focus = EditorFocus.Results;
+                    }
+                    else if (_renderer.PerformanceVisible)
+                    {
+                        _renderer.Focus = EditorFocus.Performance;
+                    }
+                    else
+                    {
+                        _renderer.Focus = _renderer.ActiveLowerTab;
+                    }
+                }
+                else if (_renderer.Focus == EditorFocus.Sidebar)
                 {
                     if (_renderer.ResultsVisible)
                     {
@@ -212,6 +297,7 @@ namespace ETL_SQL.TUI.UI
                 
                 string focusName = _renderer.Focus switch {
                     EditorFocus.Editor => "Editor",
+                    EditorFocus.Sidebar => "File Explorer",
                     EditorFocus.ExecutionTree => "Pipeline Tree",
                     EditorFocus.Messages => "Messages",
                     EditorFocus.Results => "Query Results",
@@ -219,6 +305,24 @@ namespace ETL_SQL.TUI.UI
                     _ => "Editor"
                 };
                 _renderer.ShowStatus($"Focus: {focusName}");
+                return;
+            }
+
+            // F9 or Ctrl+B - Toggle Sidebar/Explorer
+            if (key.Key == ConsoleKey.F9 || (key.Key == ConsoleKey.B && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
+            {
+                _renderer.SidebarVisible = !_renderer.SidebarVisible;
+                if (_renderer.SidebarVisible)
+                {
+                    _renderer.Focus = EditorFocus.Sidebar;
+                    _renderer._sidebarPanel.Initialize(_editor._filePath);
+                }
+                else if (_renderer.Focus == EditorFocus.Sidebar)
+                {
+                    _renderer.Focus = EditorFocus.Editor;
+                }
+                _renderer.ForceFullRepaint();
+                _renderer.ShowStatus(_renderer.SidebarVisible ? "Sidebar opened" : "Sidebar closed");
                 return;
             }
 

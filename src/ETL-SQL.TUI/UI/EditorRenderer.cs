@@ -15,7 +15,8 @@ namespace ETL_SQL.TUI.UI
         ExecutionTree,
         Messages,
         Results,
-        Performance
+        Performance,
+        Sidebar
     }
 
     /// <summary>
@@ -78,12 +79,20 @@ namespace ETL_SQL.TUI.UI
         public void SetLinePhysicalShift(int lineIdx, int shift) => _linePhysicalShifts[lineIdx] = shift;
         public int GetLinePhysicalShift(int lineIdx) => _linePhysicalShifts.TryGetValue(lineIdx, out var s) ? s : 0;
 
+        public bool SidebarVisible { get; set; } = false;
+        public int SidebarWidth { get; set; } = 24;
+        public int SidebarScrollRow { get; set; } = 0;
+        public int SidebarSelectedIndex { get => _sidebarPanel.SelectedIndex; set => _sidebarPanel.SelectedIndex = value; }
+        public int LastHeight => _lastHeight;
+        public int LastWidth => _lastWidth;
+
         private readonly IConsoleInterface _console;
         private readonly EditorPanel _editorPanel;
         private readonly MessageTreePanel _messageTreePanel;
         private readonly ResultsPanel _resultsPanel;
         private readonly PerformancePanel _performancePanel;
         private readonly ReportPreviewPanel _reportPreviewPanel;
+        public readonly SidebarPanel _sidebarPanel;
 
         /// <summary>Initializes a new instance of the <see cref="EditorRenderer"/> class.</summary>
         /// <param name="buffer">The editor text buffer.</param>
@@ -97,6 +106,7 @@ namespace ETL_SQL.TUI.UI
             _resultsPanel = new ResultsPanel(evaluator, this);
             _performancePanel = new PerformancePanel(evaluator, this);
             _reportPreviewPanel = new ReportPreviewPanel(this);
+            _sidebarPanel = new SidebarPanel(this, evaluator);
         }
 
         /// <summary>Renders the entire editor UI to the console.</summary>
@@ -106,8 +116,13 @@ namespace ETL_SQL.TUI.UI
         /// <param name="isDirty">Whether the document has unsaved changes.</param>
         /// <param name="totalWidth">The width of the console window.</param>
         /// <param name="totalHeight">The height of the console window.</param>
-        public void Render(EditorBuffer buffer, Evaluator evaluator, string filePath, bool isDirty, int totalWidth, int totalHeight)
+        public void Render(ConsoleEditor editor, int totalWidth, int totalHeight)
         {
+            var buffer = editor._buffer;
+            var evaluator = editor._evaluator;
+            var filePath = editor._filePath;
+            var isDirty = editor._isDirty;
+
             if (totalWidth != _lastWidth || totalHeight != _lastHeight)
             {
                 _forceFullRepaintPending = true;
@@ -129,7 +144,7 @@ namespace ETL_SQL.TUI.UI
             }
 
             // ── Layout Definitions ──────────────────────────────────────────
-            int editorAreaTop = 1;
+            int editorAreaTop = 2;
             int statusHeight  = 2; // Two lines for status/help bar
             int reservedBottom = statusHeight; // reduced from statusHeight + 1 for tighter layout
 
@@ -207,7 +222,8 @@ namespace ETL_SQL.TUI.UI
                     CompareFocusIndex = Math.Max(0, evaluator.LastResultSets.Count - 1);
             }
 
-            int editorWidth = totalWidth - gutterWidth - 1;
+            int activeWidth = SidebarVisible ? totalWidth - SidebarWidth : totalWidth;
+            int editorWidth = activeWidth - gutterWidth - 1;
             if (buffer.CursorColumn < ScrollCol) ScrollCol = buffer.CursorColumn;
             if (buffer.CursorColumn >= ScrollCol + editorWidth) ScrollCol = buffer.CursorColumn - editorWidth + 1;
 
@@ -221,19 +237,59 @@ namespace ETL_SQL.TUI.UI
                 string fileLabel = string.IsNullOrEmpty(filePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(filePath);
                 string headerBase = $" ETL-SQL IDE | {fileLabel}{(isDirty ? "*" : "")}";
                 string focusInfo = Focus == EditorFocus.Editor ? $" [bold {TuiTheme.Instance.Ui.EditorFocusedBorder}](FOCUSED)[/]" : $" [{TuiTheme.Instance.Ui.EditorUnfocusedBorder}](F6 to focus)[/]";
+                if (Focus == EditorFocus.Sidebar)
+                {
+                    focusInfo = " [bold yellow](EXPLORER FOCUS)[/]";
+                }
                 
                 _console.Markup($"[{TuiTheme.Instance.Ui.StatusBackground}]{Markup.Escape(headerBase)} [/]{focusInfo}");
                 
-                int plainLen = headerBase.Length + 1 + (Focus == EditorFocus.Editor ? 9 : 13);
+                int plainLen = headerBase.Length + 1 + (Focus == EditorFocus.Editor ? 9 : Focus == EditorFocus.Sidebar ? 16 : 13);
                 if (totalWidth > plainLen)
                     _console.Markup($"[{TuiTheme.Instance.Ui.StatusBackground}]{new string(' ', totalWidth - plainLen)}[/]");
+            }
+
+            // 1b. Tab Bar
+            if (!Headless)
+            {
+                _console.ClearLine(0, 1, totalWidth);
+                _console.SetCursorPosition(0, 1);
+                var tabBuilder = new System.Text.StringBuilder();
+                for (int i = 0; i < editor._tabs.Count; i++)
+                {
+                    var tab = editor._tabs[i];
+                    string name = string.IsNullOrEmpty(tab.FilePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(tab.FilePath);
+                    string marker = tab.IsDirty ? "*" : "";
+                    string tabText = $" {name}{marker} ";
+
+                    if (i == editor._activeTabIndex)
+                    {
+                        tabBuilder.Append($"[bold black on yellow]{Markup.Escape(tabText)}[/]");
+                    }
+                    else
+                    {
+                        tabBuilder.Append($"[white on grey23]{Markup.Escape(tabText)}[/]");
+                    }
+                    if (i < editor._tabs.Count - 1)
+                    {
+                        tabBuilder.Append("[grey37]│[/]");
+                    }
+                }
+                _console.Markup(tabBuilder.ToString());
             }
 
             // 2. Main Panels
             if (!Headless)
             {
                 int lowerY = editorAreaTop + editorAreaHeight;
-                _editorPanel.Render(_console, 0, editorAreaTop, totalWidth, editorAreaHeight);
+                int sidebarW = SidebarVisible ? SidebarWidth : 0;
+
+                if (SidebarVisible)
+                {
+                    _sidebarPanel.Render(_console, 0, editorAreaTop, sidebarW, editorAreaHeight, SidebarScrollRow);
+                }
+
+                _editorPanel.Render(_console, sidebarW, editorAreaTop, totalWidth - sidebarW, editorAreaHeight);
 
                 if (CompareMode)
                     _resultsPanel.RenderCompare(_console, 0, lowerY, totalWidth, lowerAreaHeight, evaluator, this);
@@ -253,7 +309,7 @@ namespace ETL_SQL.TUI.UI
                 int statusRow = totalHeight - 1;
 
                 // ── Row 1: Help Bar (Static Shortcuts) ───────────────────────
-                string helpText = " F1:Help  F5:Run  F3:Theme  F6:Focus  F4:Panel  Alt+R:Report  F2:Save  F12:Format  ^Q:Exit ";
+                string helpText = " F1:Help  F5:Run  F3:Theme  F6:Focus  F9:Explorer  F4:Panel  Alt+R:Report  F2:Save  ^Q:Exit ";
                 _console.ClearLine(0, helpRow, totalWidth);
                 _console.SetCursorPosition(0, helpRow);
                 _console.Markup($"[{TuiTheme.Instance.Ui.HelpBackground}]{Markup.Escape(helpText.PadRight(totalWidth - 1))}[/]");
@@ -266,6 +322,8 @@ namespace ETL_SQL.TUI.UI
                 bool hasError = evaluator.LastError != null;
                 if (CompareMode)
                     panelPill = $"[bold magenta] COMPARE {CompareFocusIndex + 1}/{Math.Max(1, evaluator.LastResultSets.Count)} [/]";
+                else if (Focus == EditorFocus.Sidebar)
+                    panelPill = "[bold yellow] ▶ EXPLORER [/]";
                 else if (Focus == EditorFocus.Results)
                     panelPill = "[bold yellow] ▶ RESULTS FOCUS [/]";
                 else if (Focus == EditorFocus.ExecutionTree)
@@ -385,7 +443,8 @@ namespace ETL_SQL.TUI.UI
 
                     int screenRow = popupRow + i;
                     if (screenRow < 0 || screenRow >= totalHeight) continue;
-                    int physicalX = (buffer.CursorColumn - ScrollCol) + gutterWidth + GetLinePhysicalShift(buffer.CursorLine);
+                    int sidebarW = SidebarVisible ? SidebarWidth : 0;
+                    int physicalX = (buffer.CursorColumn - ScrollCol) + gutterWidth + GetLinePhysicalShift(buffer.CursorLine) + sidebarW;
                     _console.SetCursorPosition(physicalX, screenRow);
                     
                     var suggestion = AutocompleteOptions[optionIndex];
@@ -412,7 +471,8 @@ namespace ETL_SQL.TUI.UI
                 var currentSugg = AutocompleteOptions[AutocompleteIndex];
                 if (!string.IsNullOrEmpty(currentSugg.Documentation))
                 {
-                    RenderAutocompleteDocumentation(currentSugg.Documentation, popupRow, (buffer.CursorColumn - ScrollCol) + gutterWidth + 21, totalWidth, totalHeight);
+                    int sidebarW = SidebarVisible ? SidebarWidth : 0;
+                    RenderAutocompleteDocumentation(currentSugg.Documentation, popupRow, (buffer.CursorColumn - ScrollCol) + gutterWidth + 21 + sidebarW, totalWidth, totalHeight);
                 }
             }
 
@@ -420,9 +480,10 @@ namespace ETL_SQL.TUI.UI
             if (HelpVisible) RenderHelpOverlay(totalWidth, totalHeight);
 
             // 8. Restore absolute cursor
-            if (!ResultsFocus && !Headless && !HelpVisible && !PromptVisible)
+            if (!ResultsFocus && Focus != EditorFocus.Sidebar && !Headless && !HelpVisible && !PromptVisible)
             {
-                int physicalX = (buffer.CursorColumn - ScrollCol) + gutterWidth + GetLinePhysicalShift(buffer.CursorLine);
+                int sidebarW = SidebarVisible ? SidebarWidth : 0;
+                int physicalX = (buffer.CursorColumn - ScrollCol) + gutterWidth + GetLinePhysicalShift(buffer.CursorLine) + sidebarW;
                 _console.SetCursorPosition(physicalX, (buffer.CursorLine - ScrollLine) + editorAreaTop);
                 _console.CursorVisible = true;
             }
@@ -623,5 +684,160 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>Displays a temporary status message in the status bar.</summary>
         public void ShowStatus(string message) { StatusMessage = message; StatusMessageExpiry = DateTime.Now.AddSeconds(3); }
+
+        public void ScrollRegion(int x, int y, int delta)
+        {
+            int editorAreaTop = 2;
+            int statusHeight  = 2;
+            int reservedBottom = statusHeight;
+            int available = _lastHeight - editorAreaTop - reservedBottom;
+            int lowerAreaHeight = 14; 
+            if (IsBottomMaximized || CompareMode) lowerAreaHeight = Math.Max(5, available - 5);
+            else if (lowerAreaHeight > available - 8) lowerAreaHeight = Math.Max(5, available - 8);
+            int editorAreaHeight = Math.Max(3, _lastHeight - lowerAreaHeight - reservedBottom - editorAreaTop);
+            int lowerY = editorAreaTop + editorAreaHeight;
+
+            if (y >= editorAreaTop && y < editorAreaTop + editorAreaHeight)
+            {
+                if (SidebarVisible && x < SidebarWidth)
+                {
+                    SidebarScrollRow = Math.Max(0, SidebarScrollRow + delta);
+                }
+                else if (ReportVisible)
+                {
+                    ReportScrollRow = Math.Max(0, ReportScrollRow + delta);
+                }
+                else
+                {
+                    ScrollLine = Math.Max(0, ScrollLine + delta);
+                }
+            }
+            else if (y >= lowerY && y < lowerY + lowerAreaHeight)
+            {
+                if (PerformanceVisible)
+                {
+                    ResultScrollRow = Math.Max(0, ResultScrollRow + delta);
+                }
+                else if (ResultsVisible)
+                {
+                    if (CompareMode && CompareScrollRows.Count > 0)
+                    {
+                        int clickedPaneIndex = Math.Clamp((y - lowerY) / Math.Max(4, lowerAreaHeight / Math.Max(1, CompareScrollRows.Count)), 0, CompareScrollRows.Count - 1);
+                        if (clickedPaneIndex >= 0 && clickedPaneIndex < CompareScrollRows.Count)
+                        {
+                            CompareScrollRows[clickedPaneIndex] = Math.Max(0, CompareScrollRows[clickedPaneIndex] + delta);
+                        }
+                    }
+                    else
+                    {
+                        ResultScrollRow = Math.Max(0, ResultScrollRow + delta);
+                    }
+                }
+                else
+                {
+                    if (x < _lastWidth * 0.35)
+                    {
+                        TreeScrollRow = Math.Max(0, TreeScrollRow + delta);
+                    }
+                    else
+                    {
+                        MessageScrollRow = Math.Max(0, MessageScrollRow + delta);
+                    }
+                }
+            }
+        }
+
+        public void HandleMouseClick(int button, int x, int y, bool isRelease, ConsoleEditor editor)
+        {
+            if (isRelease) return;
+
+            if (button == 64)
+            {
+                ScrollRegion(x, y, -3);
+                return;
+            }
+            if (button == 65)
+            {
+                ScrollRegion(x, y, 3);
+                return;
+            }
+
+            if (button != 0) return;
+
+            int editorAreaTop = 2;
+            int statusHeight  = 2;
+            int reservedBottom = statusHeight;
+            int available = _lastHeight - editorAreaTop - reservedBottom;
+            int lowerAreaHeight = 14; 
+            if (IsBottomMaximized || CompareMode) lowerAreaHeight = Math.Max(5, available - 5);
+            else if (lowerAreaHeight > available - 8) lowerAreaHeight = Math.Max(5, available - 8);
+            int editorAreaHeight = Math.Max(3, _lastHeight - lowerAreaHeight - reservedBottom - editorAreaTop);
+            int lowerY = editorAreaTop + editorAreaHeight;
+
+            if (SidebarVisible && x < SidebarWidth && y >= editorAreaTop && y < editorAreaTop + editorAreaHeight && !ReportVisible)
+            {
+                Focus = EditorFocus.Sidebar;
+                int clickedIndex = (y - editorAreaTop) + SidebarScrollRow;
+                var items = _sidebarPanel.GetFlatVisibleItems();
+                if (clickedIndex >= 0 && clickedIndex < items.Count)
+                {
+                    bool wasSelected = SidebarSelectedIndex == clickedIndex;
+                    SidebarSelectedIndex = clickedIndex;
+                    if (wasSelected)
+                    {
+                        _ = _sidebarPanel.HandleEnter(editor);
+                    }
+                    else
+                    {
+                        ForceFullRepaint();
+                    }
+                }
+            }
+            else if (y >= editorAreaTop && y < editorAreaTop + editorAreaHeight && !ReportVisible)
+            {
+                Focus = EditorFocus.Editor;
+                
+                int clickLine = (y - editorAreaTop) + ScrollLine;
+                int gutterWidth = (editor._buffer.Lines.Count).ToString().Length + 2;
+                int sidebarW = SidebarVisible ? SidebarWidth : 0;
+                int clickCol = (x - sidebarW - gutterWidth) + ScrollCol;
+
+                if (clickLine >= 0 && clickLine < editor._buffer.Lines.Count)
+                {
+                    editor._buffer.CursorLine = clickLine;
+                    editor._buffer.CursorColumn = Math.Clamp(clickCol, 0, editor._buffer.Lines[clickLine].Length);
+                    editor._buffer.SelectionStartLine = null;
+                }
+            }
+            else if (y >= lowerY && y < lowerY + lowerAreaHeight)
+            {
+                if (PerformanceVisible)
+                {
+                    Focus = EditorFocus.Performance;
+                }
+                else if (ResultsVisible)
+                {
+                    Focus = EditorFocus.Results;
+                    if (CompareMode && CompareScrollRows.Count > 0)
+                    {
+                        int paneCount = editor._evaluator.LastResultSets.Count;
+                        int paneHeight = Math.Max(4, lowerAreaHeight / Math.Max(1, paneCount));
+                        int clickedPaneIndex = Math.Clamp((y - lowerY) / paneHeight, 0, paneCount - 1);
+                        CompareFocusIndex = clickedPaneIndex;
+                    }
+                }
+                else
+                {
+                    if (x < _lastWidth * 0.35)
+                    {
+                        Focus = EditorFocus.ExecutionTree;
+                    }
+                    else
+                    {
+                        Focus = EditorFocus.Messages;
+                    }
+                }
+            }
+        }
     }
 }
