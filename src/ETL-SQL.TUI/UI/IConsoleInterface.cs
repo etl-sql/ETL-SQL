@@ -45,9 +45,9 @@ namespace ETL_SQL.TUI.UI
             try
             {
                 SetCursorPosition(left, top);
-                // Use ANSI Escape Sequence to clear the line without moving the cursor or wrapping.
-                // \x1b[2K clears the entire line.
-                AnsiConsole.Console.Write("\x1b[2K");
+                // Clear exactly the specified width using spaces to prevent full-line wipe
+                // sequences (\x1b[2K) from destroying adjacent side-by-side panels.
+                AnsiConsole.Console.Write(new string(' ', width));
                 SetCursorPosition(left, top);
             }
             catch { /* Ignore terminal out-of-bounds */ }
