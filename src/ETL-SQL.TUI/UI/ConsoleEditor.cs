@@ -276,7 +276,8 @@ namespace ETL_SQL.TUI.UI
         public Task ShowLineageAtCursor()
         {
             string? lineage = InfoAtCursor.BuildLineage(_evaluator.LineageTracker, CurrentLineText(), _buffer.CursorLine, _buffer.CursorColumn, out string title);
-            return ShowInfoOverlay(title, lineage, "No lineage at cursor (run the script first).");
+            return ShowInfoOverlay(title, lineage,
+                "No lineage captured. Lineage is tracked when a script writes to a target (SELECT … INTO, INSERT INTO, CREATE TABLE).");
         }
 
         /// <summary>Shows a scrollable, dismiss-on-key overlay; status-only when content is empty.</summary>

@@ -46,37 +46,61 @@ namespace ETL_SQL.TUI.UI
             return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
         }
 
-        /// <summary>
-        /// Lineage for the identifier at the cursor: by source span first, else by matching
-        /// the word to a target table/column. Returns null when no entry matches.
-        /// </summary>
-        public static string? BuildLineageFromEntries(IEnumerable<LineageEntry> entries,
-            string lineText, int cursorLine0, int cursorCol0, out string title)
+        /// <summary>Matches the cursor to a lineage entry by source span, else by identifier.</summary>
+        private static LineageEntry? MatchEntry(IList<LineageEntry> list, string lineText, int cursorLine0, int cursorCol0)
         {
-            title = "Lineage";
-            var list = entries as IList<LineageEntry> ?? entries.ToList();
-
             int line1 = cursorLine0 + 1;
             int col1 = cursorCol0 + 1;
             var entry = list.FirstOrDefault(e =>
                 (line1 > e.Line || (line1 == e.Line && col1 >= e.Column)) &&
                 (line1 < e.EndLine || (line1 == e.EndLine && col1 <= e.EndColumn)));
+            if (entry != null) return entry;
 
-            if (entry == null)
-            {
-                string? word = WordAt(lineText, cursorCol0);
-                if (!string.IsNullOrEmpty(word))
-                    entry = list.FirstOrDefault(e =>
-                        string.Equals(e.TargetColumn, word, StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(e.TargetTable, word, StringComparison.OrdinalIgnoreCase));
-            }
+            string? word = WordAt(lineText, cursorCol0);
+            if (string.IsNullOrEmpty(word)) return null;
+            bool Eq(string? a) => string.Equals(a, word, StringComparison.OrdinalIgnoreCase);
+            return list.FirstOrDefault(e =>
+                Eq(e.TargetColumn) || Eq(e.TargetTable) || e.SourceColumns.Any(Eq) || e.SourceTables.Any(Eq));
+        }
 
+        /// <summary>Lineage text for the matched entry, or null when nothing matches the cursor.</summary>
+        public static string? BuildLineageFromEntries(IEnumerable<LineageEntry> entries,
+            string lineText, int cursorLine0, int cursorCol0, out string title)
+        {
+            title = "Lineage";
+            var list = entries as IList<LineageEntry> ?? entries.ToList();
+            var entry = MatchEntry(list, lineText, cursorLine0, cursorCol0);
             if (entry == null) return null;
             title = !string.IsNullOrEmpty(entry.TargetColumn) ? entry.TargetColumn! : entry.TargetTable;
             return BuildLineageText(entry);
         }
 
-        /// <summary>Lineage text plus the ASCII lineage graph (needs the live tracker).</summary>
+        /// <summary>A "what has lineage" listing, shown when the cursor doesn't match an entry.</summary>
+        public static string BuildAvailableList(IEnumerable<LineageEntry> entries, string? word)
+        {
+            var list = entries as IList<LineageEntry> ?? entries.ToList();
+            var targets = list.Where(e => !string.IsNullOrEmpty(e.TargetColumn))
+                .Select(e => $"{e.TargetTable}.{e.TargetColumn}")
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+            if (targets.Count == 0)
+                targets = list.Select(e => e.TargetTable).Where(t => !string.IsNullOrEmpty(t))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+
+            var sb = new StringBuilder();
+            if (!string.IsNullOrEmpty(word)) sb.AppendLine($"No lineage for **{word}**.");
+            sb.AppendLine("#### Identifiers with lineage");
+            sb.AppendLine("Put the cursor on one of these in the script, then press Ctrl+L:");
+            foreach (var t in targets.Take(60)) sb.AppendLine($"- `{t}`");
+            return sb.ToString().TrimEnd();
+        }
+
+        /// <summary>
+        /// Lineage for the cursor identifier plus the ASCII graph. When the cursor doesn't
+        /// match an entry but lineage exists, returns the available-identifiers list so the
+        /// user knows where to point. Returns null only when no lineage was captured at all.
+        /// </summary>
         public static string? BuildLineage(ILineageTracker? tracker,
             string lineText, int cursorLine0, int cursorCol0, out string title)
         {
@@ -84,13 +108,18 @@ namespace ETL_SQL.TUI.UI
             if (tracker == null) return null;
 
             var entries = tracker.GetFullLineage().ToList();
+            if (entries.Count == 0) return null; // nothing captured -> status message
+
             string? text = BuildLineageFromEntries(entries, lineText, cursorLine0, cursorCol0, out title);
-            if (text == null) return null;
+            if (text == null)
+            {
+                title = "Lineage";
+                return BuildAvailableList(entries, WordAt(lineText, cursorCol0));
+            }
 
             var sb = new StringBuilder(text);
             try
             {
-                // Title is the target column (or table) we matched.
                 string matched = title;
                 var entry = entries.FirstOrDefault(e =>
                     string.Equals(e.TargetColumn, matched, StringComparison.OrdinalIgnoreCase) ||
@@ -101,11 +130,9 @@ namespace ETL_SQL.TUI.UI
                     sb.AppendLine();
                     sb.AppendLine();
                     sb.AppendLine("#### Graph");
-                    sb.Append("```text");
-                    sb.Append('\n');
+                    sb.Append("```text\n");
                     sb.Append(graph.TrimEnd());
-                    sb.Append('\n');
-                    sb.Append("```");
+                    sb.Append("\n```");
                 }
             }
             catch { /* graph is best-effort */ }

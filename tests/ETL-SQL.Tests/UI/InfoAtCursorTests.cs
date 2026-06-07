@@ -97,6 +97,40 @@ namespace ETL_SQL.Tests.UI
         }
 
         [Fact]
+        public void BuildLineageFromEntries_MatchesSourceColumn()
+        {
+            var entries = new List<LineageEntry>
+            {
+                new LineageEntry("Orders", "SELECT INTO")
+                {
+                    TargetColumn = "Total",
+                    Line = 9, Column = 1, EndLine = 9, EndColumn = 5,
+                    SourceColumns = new List<string> { "Qty", "Price" }
+                }
+            };
+
+            // Cursor on the source column "Qty" -> should still resolve the lineage entry.
+            var result = InfoAtCursor.BuildLineageFromEntries(entries, "SELECT Qty", 0, 8, out _);
+            Assert.NotNull(result);
+            Assert.Contains("Orders.Total", result);
+        }
+
+        [Fact]
+        public void BuildAvailableList_ListsTargets()
+        {
+            var entries = new List<LineageEntry>
+            {
+                new LineageEntry("Orders", "SELECT INTO") { TargetColumn = "Total" },
+                new LineageEntry("Orders", "SELECT INTO") { TargetColumn = "Qty" }
+            };
+
+            var list = InfoAtCursor.BuildAvailableList(entries, "nope");
+            Assert.Contains("No lineage for **nope**", list);
+            Assert.Contains("Orders.Total", list);
+            Assert.Contains("Orders.Qty", list);
+        }
+
+        [Fact]
         public void Build_NoLineage_WhenCursorOutsideEntry()
         {
             var entries = new List<LineageEntry>
