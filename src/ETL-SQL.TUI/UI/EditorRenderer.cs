@@ -81,7 +81,7 @@ namespace ETL_SQL.TUI.UI
         public int GetLinePhysicalShift(int lineIdx) => _linePhysicalShifts.TryGetValue(lineIdx, out var s) ? s : 0;
 
         public bool SidebarVisible { get; set; } = false;
-        public int SidebarWidth { get; set; } = 24;
+        public int SidebarWidth { get; set; } = 30;
         public int SidebarScrollRow { get; set; } = 0;
         public int SidebarSelectedIndex { get => _sidebarPanel.SelectedIndex; set => _sidebarPanel.SelectedIndex = value; }
         public int LastHeight => _lastHeight;
@@ -254,25 +254,19 @@ namespace ETL_SQL.TUI.UI
                 for (int i = 0; i < editor._tabs.Count; i++)
                 {
                     var tab = editor._tabs[i];
-                    string name = string.IsNullOrEmpty(tab.FilePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(tab.FilePath);
-                    string marker = tab.IsDirty ? "*" : "";
+                    // Label and per-tab width are shared with the mouse hit-test via TabBarLayout
+                    // so the close "x" and "+" land exactly where they are drawn.
+                    string label = TabBarLayout.Label(tab.FilePath, tab.IsDirty);
 
                     if (i == editor._activeTabIndex)
                     {
-                        tabBuilder.Append($"[bold black on yellow] {Markup.Escape(name)}{Markup.Escape(marker)} [/][bold red on yellow]x[/][bold black on yellow] [/]");
+                        tabBuilder.Append($"[bold black on yellow] {Markup.Escape(label)} [/][bold red on yellow]x[/][bold black on yellow] [/]");
                     }
                     else
                     {
-                        tabBuilder.Append($"[white on grey23] {Markup.Escape(name)}{Markup.Escape(marker)} [/][red on grey23]x[/][white on grey23] [/]");
+                        tabBuilder.Append($"[white on grey23] {Markup.Escape(label)} [/][red on grey23]x[/][white on grey23] [/]");
                     }
-                    if (i < editor._tabs.Count - 1)
-                    {
-                        tabBuilder.Append("[grey37]│[/]");
-                    }
-                }
-                if (editor._tabs.Count > 0)
-                {
-                    tabBuilder.Append("[grey37]│[/]");
+                    tabBuilder.Append("[grey37]│[/]"); // separator after every tab
                 }
                 tabBuilder.Append("[white on grey23] + [/]");
                 _console.Markup(tabBuilder.ToString());
@@ -782,51 +776,40 @@ namespace ETL_SQL.TUI.UI
 
             if (y == 1)
             {
-                int currentX = 0;
-                for (int i = 0; i < editor._tabs.Count; i++)
+                var labels = editor._tabs.Select(t => TabBarLayout.Label(t.FilePath, t.IsDirty)).ToList();
+                foreach (var seg in TabBarLayout.Tabs(labels))
                 {
-                    var tab = editor._tabs[i];
-                    string name = string.IsNullOrEmpty(tab.FilePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(tab.FilePath);
-                    string marker = tab.IsDirty ? "*" : "";
-                    int tabLen = 3 + name.Length + marker.Length;
-                    if (x >= currentX && x < currentX + tabLen)
+                    if (x >= seg.StartX && x < seg.StartX + seg.Width)
                     {
-                        if (x >= currentX + tabLen - 3 && x < currentX + tabLen - 1)
+                        if (x >= seg.CloseX) // the "x" and the column after it close the tab
                         {
-                            if (i == editor._activeTabIndex)
+                            if (seg.Index == editor._activeTabIndex)
                             {
                                 await editor.CloseActiveTab();
                             }
                             else
                             {
-                                editor.SwitchToTab(i);
+                                editor.SwitchToTab(seg.Index);
                                 await editor.CloseActiveTab();
                             }
                         }
                         else
                         {
-                            editor.SwitchToTab(i);
+                            editor.SwitchToTab(seg.Index);
                         }
                         ForceFullRepaint();
                         return;
                     }
-                    currentX += tabLen;
-                    if (i < editor._tabs.Count - 1)
-                    {
-                        currentX += 1; // separator │
-                    }
                 }
 
-                if (editor._tabs.Count > 0)
-                {
-                    currentX += 1; // separator │
-                }
-                if (x >= currentX && x < currentX + 3)
+                int plusX = TabBarLayout.PlusStartX(labels);
+                if (x >= plusX && x < plusX + TabBarLayout.PlusWidth)
                 {
                     await editor.NewTab();
                     ForceFullRepaint();
                     return;
                 }
+                return;
             }
 
             var layout = LayoutCalculator.Compute(_lastWidth, _lastHeight, editor._buffer.Lines.Count,

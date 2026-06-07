@@ -21,6 +21,9 @@ namespace ETL_SQL.Tests.UI
             ETL_SQL.TUI.Program.ServiceProvider = sp;
         }
 
+        private static List<string> TabLabels(ConsoleEditor editor) =>
+            editor._tabs.Select(t => TabBarLayout.Label(t.FilePath, t.IsDirty)).ToList();
+
         [Fact]
         public async Task TestTyping()
         {
@@ -566,23 +569,22 @@ namespace ETL_SQL.Tests.UI
             Assert.Equal(1, editor._activeTabIndex);
             Assert.Equal("untitled.etlsql", editor._filePath);
 
-            // 4. Test Mouse clicking on the first tab
-            // Tab 0 starts at currentX=0. tabLen=14. Click at x=5, y=1 (inside first tab body)
-            await editor._renderer.HandleMouseClick(0, 5, 1, false, editor);
+            // 4. Mouse-click the first tab body (select). Coordinates derive from the shared
+            //    TabBarLayout so the test tracks the real rendered geometry.
+            var segs = TabBarLayout.Tabs(TabLabels(editor)).ToList();
+            await editor._renderer.HandleMouseClick(0, segs[0].StartX + 2, 1, false, editor);
             Assert.Equal(0, editor._activeTabIndex);
             Assert.Equal("test.etlsql", editor._filePath);
 
-            // 5. Test Mouse clicking on the '+' button
-            // Tab 0 (len 14) + separator (1) + Tab 1 (len 18) + separator (1) = currentX starts at 34 for '+'
-            // Let's click at x=35, y=1 (which is the '+' button)
-            await editor._renderer.HandleMouseClick(0, 35, 1, false, editor);
+            // 5. Mouse-click the '+' button to create a new tab.
+            int plusX = TabBarLayout.PlusStartX(TabLabels(editor));
+            await editor._renderer.HandleMouseClick(0, plusX + 1, 1, false, editor);
             Assert.Equal(3, editor._tabs.Count);
             Assert.Equal(2, editor._activeTabIndex);
 
-            // 6. Test Mouse clicking on 'x' close button of tab index 1 (the second tab)
-            // Tab index 1 starts at currentX=15. tabLen=18. Close button is at [30, 31], so x=31 is close button.
-            await editor._renderer.HandleMouseClick(0, 31, 1, false, editor);
-            // Since we closed it, we should have 2 tabs left
+            // 6. Mouse-click the 'x' close button of tab index 1.
+            var segs2 = TabBarLayout.Tabs(TabLabels(editor)).ToList();
+            await editor._renderer.HandleMouseClick(0, segs2[1].CloseX, 1, false, editor);
             Assert.Equal(2, editor._tabs.Count);
 
             // 7. Test that switching tabs saves and restores the bottom panel results state

@@ -15,6 +15,7 @@ namespace ETL_SQL.TUI.UI
         public bool IsDirectory { get; set; }
         public bool IsExpanded { get; set; }
         public bool IsLoaded { get; set; }
+        public bool IsParentNav { get; set; } // synthetic ".." entry that re-roots one level up
         public List<SidebarNode> Children { get; set; } = new();
     }
 
@@ -124,11 +125,59 @@ namespace ETL_SQL.TUI.UI
         public List<FlatItem> GetFlatVisibleItems()
         {
             var list = new List<FlatItem>();
-            foreach (var root in RootNodes)
+
+            // Traditional ".." entry at the top so a tree rooted on a file's directory can
+            // still navigate upward.
+            var root = RootNodes.FirstOrDefault();
+            string? parent = root != null ? TryGetParent(root.Path) : null;
+            if (parent != null)
             {
-                AddFlatItem(root, 0, list);
+                list.Add(new FlatItem
+                {
+                    Node = new SidebarNode { Name = "..", Path = parent, IsDirectory = true, IsParentNav = true },
+                    Depth = 0
+                });
+            }
+
+            foreach (var r in RootNodes)
+            {
+                AddFlatItem(r, 0, list);
             }
             return list;
+        }
+
+        private static string? TryGetParent(string path)
+        {
+            try
+            {
+                var parent = Directory.GetParent(path);
+                if (parent != null && parent.Exists) return parent.FullName;
+            }
+            catch { }
+            return null;
+        }
+
+        /// <summary>Re-roots the tree one directory up (the ".." action).</summary>
+        public void NavigateUp()
+        {
+            var root = RootNodes.FirstOrDefault();
+            if (root == null) return;
+            string? parent = TryGetParent(root.Path);
+            if (parent == null) return;
+
+            _lastRootPath = parent;
+            RootNodes.Clear();
+            string name = Path.GetFileName(parent);
+            var node = new SidebarNode
+            {
+                Path = parent,
+                Name = string.IsNullOrEmpty(name) ? parent : name,
+                IsDirectory = true,
+                IsExpanded = true
+            };
+            LoadChildren(node);
+            RootNodes.Add(node);
+            SelectedIndex = 0;
         }
 
         private void AddFlatItem(SidebarNode node, int depth, List<FlatItem> list)
@@ -145,6 +194,28 @@ namespace ETL_SQL.TUI.UI
                     AddFlatItem(child, depth + 1, list);
                 }
             }
+        }
+
+        /// <summary>
+        /// Shortens a name to <paramref name="maxLen"/> columns. For files it keeps the
+        /// extension (e.g. "really_long_repo…sql") so the file type stays visible.
+        /// </summary>
+        public static string TruncateName(string name, int maxLen, bool isDirectory)
+        {
+            if (maxLen <= 0 || name.Length <= maxLen) return name;
+            if (maxLen <= 1) return name.Substring(0, maxLen);
+
+            if (!isDirectory)
+            {
+                int dot = name.LastIndexOf('.');
+                if (dot > 0 && dot < name.Length - 1)
+                {
+                    string ext = name.Substring(dot); // ".sql"
+                    int head = maxLen - 1 - ext.Length; // room for at least one head char + ellipsis
+                    if (head >= 1) return name.Substring(0, head) + "…" + ext;
+                }
+            }
+            return name.Substring(0, maxLen - 1) + "…";
         }
 
         public void Render(IConsoleInterface console, int x, int y, int width, int height, int scrollRow = 0)
@@ -167,16 +238,17 @@ namespace ETL_SQL.TUI.UI
             for (int i = startIdx; i < endIdx; i++)
             {
                 var item = items[i];
-                string indent = new string(' ', item.Depth * 2);
-                string prefix = item.Node.IsDirectory ? (item.Node.IsExpanded ? "▼ 📁 " : "▶ 📁 ") : "  📄 ";
-                string displayName = item.Node.Name;
+                // One column of indent per level (was two) so deep trees keep more room
+                // for the name.
+                string indent = new string(' ', item.Depth);
+                string prefix = item.Node.IsParentNav ? "↑ .. "
+                              : item.Node.IsDirectory ? (item.Node.IsExpanded ? "▼ 📁 " : "▶ 📁 ")
+                              : "  📄 ";
+                string displayName = item.Node.IsParentNav ? "" : item.Node.Name;
 
-                // Truncate to fit width
-                int maxTextLen = width - 4 - (item.Depth * 2) - prefix.Length;
-                if (maxTextLen > 0 && displayName.Length > maxTextLen)
-                {
-                    displayName = displayName.Substring(0, maxTextLen - 3) + "...";
-                }
+                // Truncate to fit width, preserving the file extension when possible.
+                int maxTextLen = width - 4 - item.Depth - prefix.Length;
+                displayName = TruncateName(displayName, maxTextLen, item.Node.IsDirectory);
 
                 string lineContent = indent + prefix + displayName;
                 // Pad to full width to ensure selection highlight stretches
@@ -229,6 +301,12 @@ namespace ETL_SQL.TUI.UI
             if (SelectedIndex >= 0 && SelectedIndex < items.Count)
             {
                 var item = items[SelectedIndex];
+                if (item.Node.IsParentNav)
+                {
+                    NavigateUp();
+                    _renderer.ForceFullRepaint();
+                    return;
+                }
                 if (item.Node.IsDirectory)
                 {
                     item.Node.IsExpanded = !item.Node.IsExpanded;
@@ -268,7 +346,7 @@ namespace ETL_SQL.TUI.UI
             if (SelectedIndex >= 0 && SelectedIndex < items.Count)
             {
                 var item = items[SelectedIndex];
-                if (item.Node.IsDirectory && !item.Node.IsExpanded)
+                if (item.Node.IsDirectory && !item.Node.IsExpanded && !item.Node.IsParentNav)
                 {
                     item.Node.IsExpanded = true;
                     if (!item.Node.IsLoaded)
