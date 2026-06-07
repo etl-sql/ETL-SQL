@@ -5,7 +5,7 @@ using Spectre.Console.Rendering;
 
 namespace ETL_SQL.TUI.UI
 {
-    public enum OutputKind { Server, Pdf, Markdown, Csv, File }
+    public enum OutputKind { Server, Pdf, Markdown, Csv, File, Portal }
 
     /// <summary>A durable location the TUI produced (a served URL or an exported file path).</summary>
     public sealed record OutputEntry(OutputKind Kind, string Location, DateTime Time)
@@ -20,6 +20,7 @@ namespace ETL_SQL.TUI.UI
             OutputKind.Pdf      => "PDF",
             OutputKind.Markdown => "Markdown",
             OutputKind.Csv      => "CSV",
+            OutputKind.Portal   => "Portal",
             _                   => "File"
         };
     }

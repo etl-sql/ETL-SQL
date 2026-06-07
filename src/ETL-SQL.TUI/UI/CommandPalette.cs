@@ -26,6 +26,8 @@ namespace ETL_SQL.TUI.UI
             new PaletteCommand("Serve folder (all reports)", null, e => e.ServeFolderInBrowser()),
             new PaletteCommand("Export report to Markdown", null, e => e.ExportReportMarkdown()),
             new PaletteCommand("Export report to PDF", null, e => e.ExportReportPdf()),
+            new PaletteCommand("Publish to Portal", null, e => e.PublishToPortal()),
+            new PaletteCommand("Reset portal connection", null, e => { e.ResetPortalConnection(); return Task.CompletedTask; }),
 
             // ── Run / format ──
             new PaletteCommand("Run script", "F5", e => e.HandleKey(Key(ConsoleKey.F5))),

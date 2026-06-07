@@ -39,6 +39,7 @@ namespace ETL_SQL.TUI.UI
         private readonly ILanguageService _languageService;
         private readonly Core.Functions.IFunctionRegistry? _functionRegistry;
         private readonly Core.Interfaces.ILanguageHelpRegistry? _helpRegistry;
+        private readonly PortalClient _portal = new();
         private readonly Dictionary<string, IDataSource> _connections;
         private readonly List<EditorDiagnostic> _diagnostics = new();
         private int _activeDiagnosticIndex = -1;
@@ -371,6 +372,122 @@ namespace ETL_SQL.TUI.UI
                 await ShowInfoOverlay("Export failed",
                     $"Could not export the report.\n\n{ex.Message}\n\nPress any key to close.", "");
             }
+        }
+
+        /// <summary>Publishes the current report to the Report Portal (mirrors the VS Code flow).</summary>
+        public async Task PublishToPortal()
+        {
+            if (string.IsNullOrEmpty(_filePath) || _filePath == "untitled.etlsql")
+            {
+                if (!await SaveScript()) { _renderer.ShowStatus("Save the report before publishing."); return; }
+            }
+            string full = Path.GetFullPath(_filePath);
+            var cfg = PortalConfig.Load();
+
+            // 1. Portal URL (first-time setup; stored thereafter).
+            string? url = cfg.Url;
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                url = await ShowPrompt("Report Portal URL (e.g. http://localhost:5001)", "");
+                if (string.IsNullOrWhiteSpace(url)) { _renderer.ShowStatus("Publish cancelled."); return; }
+                url = url.Trim().TrimEnd('/');
+                cfg.Url = url; cfg.Save();
+            }
+
+            // 2. Token (cached until expiry, else username/password login).
+            string? token = cfg.HasValidToken ? cfg.Token : null;
+            if (token == null)
+            {
+                var user = await ShowPrompt("Portal username", "");
+                if (user == null) return;
+                var pass = await ShowPrompt("Portal password", "", isSecret: true);
+                if (pass == null) return;
+                token = await _portal.LoginAsync(url, user, pass);
+                if (string.IsNullOrEmpty(token)) { await PublishError("Login failed — check the URL and credentials."); return; }
+                cfg.Token = token; cfg.Expiry = DateTime.UtcNow.AddMinutes(55); cfg.Save();
+            }
+
+            _renderer.ShowStatus("Uploading to portal…");
+            _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
+
+            // 3. Upload the script.
+            string base64 = Convert.ToBase64String(await File.ReadAllBytesAsync(full));
+            var (ok, scriptPath, upErr) = await _portal.UploadScriptAsync(url, token, Path.GetFileName(full), base64);
+            if (!ok) { await PublishError($"Upload failed: {upErr}"); return; }
+
+            // 4. Report name.
+            var name = await ShowPrompt("Report name", Path.GetFileNameWithoutExtension(full));
+            if (string.IsNullOrWhiteSpace(name)) return;
+
+            // 5. Destination folder.
+            var folders = await _portal.GetFoldersAsync(url, token);
+            if (folders.Count == 0) { await PublishError("No folders available. You need Manage permission on at least one folder."); return; }
+            int pick = await ShowChooser("Destination folder", folders.ConvertAll(f => f.path));
+            if (pick < 0) return;
+
+            // 6. Description (optional).
+            var description = await ShowPrompt("Description (optional)", "") ?? "";
+
+            // 7. Register the report.
+            var (status, msg) = await _portal.CreateReportAsync(url, token, folders[pick].id, name.Trim(), scriptPath!, description);
+            if (status == 200 || status == 201)
+            {
+                _renderer.AddOutput(OutputKind.Portal, url);
+                _renderer.ShowStatus($"Published '{name.Trim()}' to the portal — see Output (F4).");
+            }
+            else if (status == 401)
+            {
+                cfg.Token = null; cfg.Save();
+                await PublishError("Session expired. Run Publish again to sign in.");
+            }
+            else if (status == 403)
+                await PublishError("Insufficient permissions on the selected folder.");
+            else
+                await PublishError(msg ?? $"HTTP {status}");
+        }
+
+        /// <summary>Forgets the stored portal URL and token so Publish re-runs first-time setup.</summary>
+        public void ResetPortalConnection()
+        {
+            PortalConfig.Clear();
+            _renderer.ShowStatus("Portal connection reset — Publish will ask for the URL and login again.");
+        }
+
+        private Task PublishError(string detail) =>
+            ShowInfoOverlay("Publish failed", $"{detail}\n\nPress any key to close.", "");
+
+        /// <summary>A modal, filterable single-choice list (reuses the palette overlay). Returns the chosen index or -1.</summary>
+        private async Task<int> ShowChooser(string title, IReadOnlyList<string> items)
+        {
+            string filter = "";
+            int selected = 0;
+            _renderer.PaletteVisible = true;
+            try
+            {
+                while (true)
+                {
+                    var matches = new List<(string s, int i)>();
+                    for (int i = 0; i < items.Count; i++)
+                        if (filter.Length == 0 || items[i].ToLowerInvariant().Contains(filter.ToLowerInvariant()))
+                            matches.Add((items[i], i));
+                    selected = Math.Clamp(selected, 0, Math.Max(0, matches.Count - 1));
+                    _renderer.PaletteFilter = $"{title}: {filter}";
+                    _renderer.PaletteItems = matches.ConvertAll(m => (m.s, ""));
+                    _renderer.PaletteIndex = selected;
+                    _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
+
+                    var keyOpt = await ReadKeyOrHandleMouse();
+                    if (!keyOpt.HasValue) continue;
+                    var key = keyOpt.Value;
+                    if (key.Key == ConsoleKey.Escape) return -1;
+                    if (key.Key == ConsoleKey.Enter) return matches.Count > 0 ? matches[selected].i : -1;
+                    if (key.Key == ConsoleKey.UpArrow) { selected = Math.Max(0, selected - 1); continue; }
+                    if (key.Key == ConsoleKey.DownArrow) { selected = Math.Min(Math.Max(0, matches.Count - 1), selected + 1); continue; }
+                    if (key.Key == ConsoleKey.Backspace) { if (filter.Length > 0) filter = filter.Substring(0, filter.Length - 1); selected = 0; continue; }
+                    if (!char.IsControl(key.KeyChar) && key.KeyChar != '\0') { filter += key.KeyChar; selected = 0; continue; }
+                }
+            }
+            finally { _renderer.PaletteVisible = false; }
         }
 
         private OutputEntry? SelectedOutput()
