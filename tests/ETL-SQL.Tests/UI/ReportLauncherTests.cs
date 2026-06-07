@@ -11,12 +11,12 @@ namespace ETL_SQL.Tests.UI
     public class ReportLauncherTests
     {
         [Fact]
-        public void BuildServeProcess_InvokesServe_OutputRedirected()
+        public void BuildServeProcess_RunsPlayerWithScript_OutputRedirected()
         {
-            var psi = ReportLauncher.BuildServeProcess("etl-sql.exe", System.Array.Empty<string>(), "C:\\reports\\sales.rptsql");
+            var psi = ReportLauncher.BuildServeProcess("ETL-SQL.ReportPlayer.exe", System.Array.Empty<string>(), "C:\\reports\\sales.rptsql");
 
-            Assert.Equal("etl-sql.exe", psi.FileName);
-            Assert.Equal(new[] { "serve", "C:\\reports\\sales.rptsql", "--no-browser" }, psi.ArgumentList.ToArray());
+            Assert.Equal("ETL-SQL.ReportPlayer.exe", psi.FileName);
+            Assert.Equal(new[] { "C:\\reports\\sales.rptsql", "--no-browser" }, psi.ArgumentList.ToArray());
             Assert.False(psi.UseShellExecute);
             Assert.True(psi.RedirectStandardOutput);
             Assert.True(psi.RedirectStandardError);
@@ -24,22 +24,24 @@ namespace ETL_SQL.Tests.UI
         }
 
         [Fact]
-        public void BuildServeProcess_PrependsDotnetDll_WhenHostedByDotnet()
+        public void BuildServeProcess_SupportsDotnetRunPrefix()
         {
-            var psi = ReportLauncher.BuildServeProcess("dotnet", new[] { "/app/ETL-SQL.App.dll" }, "/r/sales.rptsql");
-            Assert.Equal(new[] { "/app/ETL-SQL.App.dll", "serve", "/r/sales.rptsql", "--no-browser" }, psi.ArgumentList.ToArray());
+            var psi = ReportLauncher.BuildServeProcess("dotnet", new[] { "run", "--project", "P", "--" }, "/r/sales.rptsql");
+            Assert.Equal(new[] { "run", "--project", "P", "--", "/r/sales.rptsql", "--no-browser" }, psi.ArgumentList.ToArray());
         }
 
         [Fact]
-        public void ResolveSelfInvocation_ReturnsAnExecutable()
+        public void FindReportPlayer_ResolvesFromTheRepo()
         {
-            var (exe, _) = ReportLauncher.ResolveSelfInvocation();
-            Assert.False(string.IsNullOrEmpty(exe));
+            // The test runs inside the repo, so the dev fallback should resolve the project.
+            var found = ReportLauncher.FindReportPlayer();
+            Assert.NotNull(found);
+            Assert.False(string.IsNullOrEmpty(found!.Value.exe));
         }
 
         [Theory]
-        [InlineData("Failed to start the ReportPlayer process.", "Failed to start the ReportPlayer process.")]
-        [InlineData("Starting report preview server...\nReal error here", "Real error here")]
+        [InlineData("Unhandled exception: boom", "Unhandled exception: boom")]
+        [InlineData("ReportPlayer: serving sales.rptsql\nReal error here", "Real error here")]
         [InlineData("   \n  \n", null)]
         public void FirstMeaningfulLine_SkipsBoilerplate(string text, string? expected)
         {

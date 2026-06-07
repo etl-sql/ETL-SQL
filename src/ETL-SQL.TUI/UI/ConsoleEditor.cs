@@ -191,7 +191,13 @@ namespace ETL_SQL.TUI.UI
             }
 
             string full = Path.GetFullPath(_filePath);
-            var (exe, prefixArgs) = ReportLauncher.ResolveSelfInvocation();
+            var found = ReportLauncher.FindReportPlayer();
+            if (found == null)
+            {
+                await ShowServeError("Could not locate ETL-SQL.ReportPlayer. Build the solution (dotnet build ETL-SQL.slnx), then try again.");
+                return;
+            }
+            var (exe, prefixArgs) = found.Value;
 
             System.Diagnostics.Process? proc;
             try { proc = System.Diagnostics.Process.Start(ReportLauncher.BuildServeProcess(exe, prefixArgs, full)); }
@@ -219,10 +225,10 @@ namespace ETL_SQL.TUI.UI
             });
             var stderrTask = proc.StandardError.ReadToEndAsync();
 
-            _renderer.ShowStatus("Starting report server…");
+            _renderer.ShowStatus("Starting report server… (first run may build)");
             _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
 
-            var finished = await Task.WhenAny(urlTcs.Task, Task.Delay(TimeSpan.FromSeconds(25)));
+            var finished = await Task.WhenAny(urlTcs.Task, Task.Delay(TimeSpan.FromSeconds(90)));
             string? url = finished == urlTcs.Task ? urlTcs.Task.Result : null;
 
             if (!string.IsNullOrEmpty(url))
