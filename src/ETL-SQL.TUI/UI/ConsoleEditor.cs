@@ -37,6 +37,8 @@ namespace ETL_SQL.TUI.UI
         internal readonly AutocompleteController _autocomplete;
         internal readonly InputHandler _input;
         private readonly ILanguageService _languageService;
+        private readonly Core.Functions.IFunctionRegistry? _functionRegistry;
+        private readonly Core.Interfaces.ILanguageHelpRegistry? _helpRegistry;
         private readonly Dictionary<string, IDataSource> _connections;
         private readonly List<EditorDiagnostic> _diagnostics = new();
         private int _activeDiagnosticIndex = -1;
@@ -73,6 +75,8 @@ namespace ETL_SQL.TUI.UI
             _fileHandler = new EditorFileHandler(new PhysicalFileSystem(), _security);
             _metadata = new MetadataManager(_evaluator, _connections);
             var helpRegistry = Program.ServiceProvider.GetService<Core.Interfaces.ILanguageHelpRegistry>();
+            _helpRegistry = helpRegistry;
+            _functionRegistry = Program.ServiceProvider.GetService<Core.Functions.IFunctionRegistry>();
             _languageService = Program.ServiceProvider.GetRequiredService<ILanguageService>();
             _autocomplete = new AutocompleteController(_buffer, _renderer, _metadata, _connections, _logger, helpRegistry);
             _input = new InputHandler(this, _buffer, _renderer, _autocomplete);
@@ -254,8 +258,42 @@ namespace ETL_SQL.TUI.UI
                     break;
                 }
             }
-            
+
             _renderer.HelpVisible = false;
+        }
+
+        /// <summary>Builds the help/lineage info for the word under the cursor (null if none).</summary>
+        public string? BuildCursorInfo(out string title)
+        {
+            string lineText = (_buffer.CursorLine >= 0 && _buffer.CursorLine < _buffer.Lines.Count)
+                ? _buffer.Lines[_buffer.CursorLine]
+                : "";
+            return InfoAtCursor.Build(lineText, _buffer.CursorLine, _buffer.CursorColumn,
+                _functionRegistry, _helpRegistry, _evaluator.LineageTracker?.GetFullLineage(), out title);
+        }
+
+        /// <summary>Shows function/keyword help and lineage for the word at the cursor (Shift+F1).</summary>
+        public async Task ShowInfoAtCursor()
+        {
+            string? info = BuildCursorInfo(out string title);
+            if (string.IsNullOrWhiteSpace(info))
+            {
+                _renderer.ShowStatus("No info at cursor.");
+                return;
+            }
+
+            _renderer.InfoTitle = title;
+            _renderer.InfoContent = info;
+            _renderer.InfoVisible = true;
+            _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
+
+            while (true)
+            {
+                var keyOpt = await ReadKeyOrHandleMouse();
+                if (keyOpt.HasValue) break;
+            }
+
+            _renderer.InfoVisible = false;
         }
 
         private readonly Queue<ConsoleKeyInfo> _pendingKeys = new();
@@ -330,9 +368,9 @@ namespace ETL_SQL.TUI.UI
                             int mouseY = int.Parse(match.Groups[3].Value) - 1;
                             bool isRelease = match.Groups[4].Value == "m";
 
-                            if (_renderer.HelpVisible)
+                            if (_renderer.ModalOverlayVisible)
                             {
-                                // Any click dismisses the help overlay.
+                                // Any click dismisses the help/info overlay.
                                 if (!isRelease) return new ConsoleKeyInfo('\0', ConsoleKey.Escape, false, false, false);
                                 return null;
                             }
@@ -402,7 +440,7 @@ namespace ETL_SQL.TUI.UI
 
                     if ((m.dwEventFlags & MOUSE_WHEELED) != 0)
                     {
-                        if (_renderer.HelpVisible) return null; // ignore wheel while help is open
+                        if (_renderer.ModalOverlayVisible) return null; // ignore wheel while an overlay is open
                         short delta = (short)(m.dwButtonState >> 16);
                         await _renderer.HandleMouseClick(delta > 0 ? 64 : 65, m.MousePositionX, m.MousePositionY, false, this);
                         return null;
@@ -426,8 +464,8 @@ namespace ETL_SQL.TUI.UI
 
                     if (left != 0 && prevLeft == 0) // left pressed
                     {
-                        if (_renderer.HelpVisible)
-                            return new ConsoleKeyInfo('\0', ConsoleKey.Escape, false, false, false); // any click dismisses help
+                        if (_renderer.ModalOverlayVisible)
+                            return new ConsoleKeyInfo('\0', ConsoleKey.Escape, false, false, false); // any click dismisses the overlay
                         await _renderer.HandleMouseClick(0, m.MousePositionX, m.MousePositionY, false, this);
                         if (_renderer.Focus == EditorFocus.Editor)
                         {

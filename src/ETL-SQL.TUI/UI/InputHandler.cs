@@ -132,6 +132,13 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
+            // Shift+F1 - Info at cursor (context help + lineage)
+            if (key.Key == ConsoleKey.F1 && key.Modifiers.HasFlag(ConsoleModifiers.Shift))
+            {
+                await _editor.ShowInfoAtCursor();
+                return;
+            }
+
             // F1 - Help
             if (key.Key == ConsoleKey.F1)
             {

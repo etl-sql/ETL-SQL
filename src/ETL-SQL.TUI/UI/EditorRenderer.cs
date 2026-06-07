@@ -59,6 +59,11 @@ namespace ETL_SQL.TUI.UI
         public bool HelpVisible { get; set; } = false;
         public bool SnippetModeActive { get; set; } = false;
         public int HelpPageIndex { get; set; } = 0;
+        public bool InfoVisible { get; set; } = false;
+        public string InfoContent { get; set; } = "";
+        public string InfoTitle { get; set; } = "Info";
+        /// <summary>True when a "press any key to dismiss" overlay (help or info) is showing.</summary>
+        public bool ModalOverlayVisible => HelpVisible || InfoVisible;
         public string FilterText { get; set; } = "";
         public bool PerformanceVisible { get; set; } = false;
         public bool ResultsVisible { get; set; } = false;
@@ -497,11 +502,12 @@ namespace ETL_SQL.TUI.UI
                 }
             }
 
-            // 7. Help Overlay
+            // 7. Help / Info Overlay
             if (HelpVisible) RenderHelpOverlay(totalWidth, totalHeight);
+            if (InfoVisible) RenderInfoOverlay(totalWidth, totalHeight);
 
             // 8. Restore absolute cursor
-            if (!ResultsFocus && Focus != EditorFocus.Sidebar && !Headless && !HelpVisible && !PromptVisible)
+            if (!ResultsFocus && Focus != EditorFocus.Sidebar && !Headless && !HelpVisible && !InfoVisible && !PromptVisible)
             {
                 int sidebarW = SidebarVisible ? SidebarWidth : 0;
                 int physicalX = (buffer.CursorColumn - ScrollCol) + gutterWidth + GetLinePhysicalShift(buffer.CursorLine) + sidebarW;
@@ -547,6 +553,32 @@ namespace ETL_SQL.TUI.UI
                 if (content.Length > maxWidth) content = content.Substring(0, maxWidth);
                 _console.Markup($"[white on grey15] {Markup.Escape(content)} [/]");
             }
+        }
+
+        private void RenderInfoOverlay(int totalWidth, int totalHeight)
+        {
+            int panelWidth = Math.Min(84, totalWidth - 4);
+            var lines = InfoContent.Replace("\r", "").Split('\n');
+
+            var rows = new List<IRenderable>();
+            foreach (var line in lines) rows.Add(new Markup(Markup.Escape(line)));
+            rows.Add(new Markup("[grey]── Press any key to close ──[/]"));
+
+            int panelHeight = Math.Clamp(lines.Length + 3, 5, totalHeight - 4);
+
+            var panel = new Panel(new Rows(rows))
+            {
+                Header = new PanelHeader($"[bold yellow] {Markup.Escape(InfoTitle)} [/]", Justify.Left),
+                Width = panelWidth,
+                Height = panelHeight,
+                Border = BoxBorder.Double,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+
+            int startRow = Math.Max(0, (totalHeight - panelHeight) / 2);
+            int startCol = Math.Max(0, (totalWidth - panelWidth) / 2);
+            _console.SetCursorPosition(startCol, startRow);
+            _console.WriteWidget(panel);
         }
 
         private void RenderHelpOverlay(int totalWidth, int totalHeight)
