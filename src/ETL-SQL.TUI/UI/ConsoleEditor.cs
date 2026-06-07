@@ -284,16 +284,32 @@ namespace ETL_SQL.TUI.UI
 
             _renderer.InfoTitle = title;
             _renderer.InfoContent = info;
+            _renderer.InfoScrollRow = 0;
             _renderer.InfoVisible = true;
-            _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
-
-            while (true)
+            try
             {
-                var keyOpt = await ReadKeyOrHandleMouse();
-                if (keyOpt.HasValue) break;
-            }
+                while (true)
+                {
+                    _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
+                    var keyOpt = await ReadKeyOrHandleMouse();
+                    if (!keyOpt.HasValue) continue; // mouse wheel scrolled — re-render
 
-            _renderer.InfoVisible = false;
+                    switch (keyOpt.Value.Key)
+                    {
+                        case ConsoleKey.UpArrow:   _renderer.InfoScrollRow--; continue;
+                        case ConsoleKey.DownArrow: _renderer.InfoScrollRow++; continue;
+                        case ConsoleKey.PageUp:    _renderer.InfoScrollRow -= 10; continue;
+                        case ConsoleKey.PageDown:  _renderer.InfoScrollRow += 10; continue;
+                        case ConsoleKey.Home:      _renderer.InfoScrollRow = 0; continue;
+                        case ConsoleKey.End:       _renderer.InfoScrollRow = int.MaxValue; continue;
+                    }
+                    break; // any other key closes
+                }
+            }
+            finally
+            {
+                _renderer.InfoVisible = false;
+            }
         }
 
         private readonly Queue<ConsoleKeyInfo> _pendingKeys = new();
@@ -440,8 +456,13 @@ namespace ETL_SQL.TUI.UI
 
                     if ((m.dwEventFlags & MOUSE_WHEELED) != 0)
                     {
-                        if (_renderer.ModalOverlayVisible) return null; // ignore wheel while an overlay is open
                         short delta = (short)(m.dwButtonState >> 16);
+                        if (_renderer.InfoVisible)
+                        {
+                            _renderer.InfoScrollRow += delta > 0 ? -3 : 3; // wheel scrolls the info overlay
+                            return null;
+                        }
+                        if (_renderer.HelpVisible) return null; // ignore wheel while help is open
                         await _renderer.HandleMouseClick(delta > 0 ? 64 : 65, m.MousePositionX, m.MousePositionY, false, this);
                         return null;
                     }

@@ -62,6 +62,7 @@ namespace ETL_SQL.TUI.UI
         public bool InfoVisible { get; set; } = false;
         public string InfoContent { get; set; } = "";
         public string InfoTitle { get; set; } = "Info";
+        public int InfoScrollRow { get; set; } = 0;
         /// <summary>True when a "press any key to dismiss" overlay (help or info) is showing.</summary>
         public bool ModalOverlayVisible => HelpVisible || InfoVisible;
         public string FilterText { get; set; } = "";
@@ -557,14 +558,25 @@ namespace ETL_SQL.TUI.UI
 
         private void RenderInfoOverlay(int totalWidth, int totalHeight)
         {
-            int panelWidth = Math.Min(84, totalWidth - 4);
+            int panelWidth = Math.Min(84, totalWidth - 6);
             var lines = InfoContent.Replace("\r", "").Split('\n');
 
-            var rows = new List<IRenderable>();
-            foreach (var line in lines) rows.Add(new Markup(Markup.Escape(line)));
-            rows.Add(new Markup("[grey]── Press any key to close ──[/]"));
+            // Compact, scrollable panel rather than a full-screen wall of text.
+            int maxPanelHeight = Math.Min(20, Math.Max(7, totalHeight - 6));
+            int panelHeight = Math.Min(maxPanelHeight, lines.Length + 3);
+            int visibleRows = Math.Max(1, panelHeight - 3); // minus 2 borders and the footer line
 
-            int panelHeight = Math.Clamp(lines.Length + 3, 5, totalHeight - 4);
+            int maxScroll = Math.Max(0, lines.Length - visibleRows);
+            InfoScrollRow = Math.Clamp(InfoScrollRow, 0, maxScroll);
+
+            var rows = new List<IRenderable>();
+            int last = Math.Min(lines.Length, InfoScrollRow + visibleRows);
+            for (int i = InfoScrollRow; i < last; i++) rows.Add(new Markup(Markup.Escape(lines[i])));
+
+            string footer = maxScroll > 0
+                ? $"[grey]{InfoScrollRow + 1}-{last}/{lines.Length}  ↑↓ PgUp/PgDn scroll · any other key closes[/]"
+                : "[grey]any key closes[/]";
+            rows.Add(new Markup(footer));
 
             var panel = new Panel(new Rows(rows))
             {
@@ -575,7 +587,8 @@ namespace ETL_SQL.TUI.UI
                 Padding = new Padding(1, 0, 1, 0)
             };
 
-            int startRow = Math.Max(0, (totalHeight - panelHeight) / 2);
+            // Start a couple rows below the top so it never collides with the tab/header bar.
+            int startRow = Math.Max(2, (totalHeight - panelHeight) / 2);
             int startCol = Math.Max(0, (totalWidth - panelWidth) / 2);
             _console.SetCursorPosition(startCol, startRow);
             _console.WriteWidget(panel);
