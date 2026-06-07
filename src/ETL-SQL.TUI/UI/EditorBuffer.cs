@@ -29,8 +29,9 @@ namespace ETL_SQL.TUI.UI
 
         public void InsertChar(char ch)
         {
-            // Overtype check for closing characters
-            if (CursorColumn < Lines[CursorLine].Length && Lines[CursorLine][CursorColumn] == ch)
+            // Overtype check for closing characters (single-caret only — overtyping for the
+            // primary alone would desync the secondary carets, so skip it in multi-cursor mode).
+            if (!IsMultiLineMode && CursorColumn < Lines[CursorLine].Length && Lines[CursorLine][CursorColumn] == ch)
             {
                 if (ch == ')' || ch == ']' || ch == '"' || ch == '\'')
                 {
@@ -116,12 +117,22 @@ namespace ETL_SQL.TUI.UI
         {
             if (SelectionStartLine.HasValue) { DeleteSelection(); return; }
 
+            if (IsMultiLineMode)
+            {
+                foreach (var c in SecondaryCursors)
+                {
+                    if (c.Line < 0 || c.Line >= Lines.Count || c.Line == CursorLine) continue;
+                    if (c.Col < Lines[c.Line].Length) Lines[c.Line] = Lines[c.Line].Remove(c.Col, 1);
+                }
+            }
+
             if (CursorColumn < Lines[CursorLine].Length)
             {
                 Lines[CursorLine] = Lines[CursorLine].Remove(CursorColumn, 1);
             }
-            else if (CursorLine < Lines.Count - 1)
+            else if (CursorLine < Lines.Count - 1 && !IsMultiLineMode)
             {
+                // Joining lines would invalidate secondary caret indices, so only when single-caret.
                 var nextLine = Lines[CursorLine + 1];
                 Lines.RemoveAt(CursorLine + 1);
                 Lines[CursorLine] += nextLine;
@@ -130,6 +141,9 @@ namespace ETL_SQL.TUI.UI
 
         public void NewLine()
         {
+            // Splitting a line shifts every line below it, which would leave secondary carets
+            // pointing at the wrong rows — collapse to a single caret first.
+            if (IsMultiLineMode) ClearMultiCursors();
             if (SelectionStartLine.HasValue) DeleteSelection();
             var remaining = Lines[CursorLine].Substring(CursorColumn);
             Lines[CursorLine] = Lines[CursorLine].Substring(0, CursorColumn);
@@ -289,6 +303,7 @@ namespace ETL_SQL.TUI.UI
 
         public void Paste(string text)
         {
+            if (IsMultiLineMode) ClearMultiCursors();
             if (SelectionStartLine.HasValue) DeleteSelection();
 
             var pasteLines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
@@ -313,6 +328,7 @@ namespace ETL_SQL.TUI.UI
 
         public void DeleteLine()
         {
+            if (IsMultiLineMode) ClearMultiCursors();
             if (Lines.Count > 1)
             {
                 Lines.RemoveAt(CursorLine);
@@ -328,6 +344,7 @@ namespace ETL_SQL.TUI.UI
 
         public void DuplicateLine()
         {
+            if (IsMultiLineMode) ClearMultiCursors();
             Lines.Insert(CursorLine + 1, Lines[CursorLine]);
             CursorLine++;
         }
