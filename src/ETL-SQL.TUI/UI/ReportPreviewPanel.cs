@@ -50,8 +50,11 @@ namespace ETL_SQL.TUI.UI
 
             // ── Scrolling Implementation ──
             // We render to segments and then slice by line.
-            var renderOptions = new RenderOptions(console.Capabilities, new Size(width, 5000));
-            var segments = reportContent.Render(renderOptions, width).ToList();
+            // Render to the panel's INNER width (border 2 + horizontal padding 2), otherwise
+            // each line overflows the panel and wraps back to the left edge.
+            int contentWidth = Math.Max(1, width - 4);
+            var renderOptions = new RenderOptions(console.Capabilities, new Size(contentWidth, 5000));
+            var segments = reportContent.Render(renderOptions, contentWidth).ToList();
             
             // Group segments into lines
             var lines = new List<List<Segment>>();
@@ -82,7 +85,7 @@ namespace ETL_SQL.TUI.UI
                 visibleContent.Add(new RawLine(line));
             }
 
-            string pageInfo = $"[cyan]Page {activePageIndex + 1}/{manifest.Pages.Count}: {page.Name} (Line {_renderer.ReportScrollRow + 1}/{lines.Count})[/]";
+            string pageInfo = $"[cyan]Page {activePageIndex + 1}/{manifest.Pages.Count}: {Markup.Escape(page.Name)}[/] [grey](Line {_renderer.ReportScrollRow + 1}/{lines.Count} · ←→ pages · ↑↓ scroll · Esc exit)[/]";
             var borderStyleStr = _renderer.ResultsFocus ? TuiTheme.Instance.Ui.ResultsFocusedBorder : TuiTheme.Instance.Ui.ResultsUnfocusedBorder;
             var borderStyle = TuiTheme.Instance.GetStyle(borderStyleStr, new Style(_renderer.ResultsFocus ? Color.Yellow : Color.Blue));
 
@@ -100,6 +103,13 @@ namespace ETL_SQL.TUI.UI
             {
                 console.SetCursorPosition(x, y);
                 console.WriteWidget(panel);
+
+                // Clickable page arrows on the top border row (right side).
+                if (manifest.Pages.Count > 1 && width > 10)
+                {
+                    console.SetCursorPosition(x + width - 8, y);
+                    console.Markup("[black on yellow] ◀ [/][black on yellow] ▶ [/]");
+                }
             }
             catch (Exception ex)
             {

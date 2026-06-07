@@ -100,6 +100,22 @@ namespace ETL_SQL.TUI.UI
         public ReportManifest? CurrentReportManifest { get; set; }
         private Dictionary<int, int> _linePhysicalShifts = new();
 
+        public void ReportPrevPage()
+        {
+            if (CurrentReportManifest == null) return;
+            ActiveReportPageIndex = Math.Max(0, ActiveReportPageIndex - 1);
+            ReportScrollRow = 0;
+            ForceFullRepaint();
+        }
+
+        public void ReportNextPage()
+        {
+            if (CurrentReportManifest == null || CurrentReportManifest.Pages.Count == 0) return;
+            ActiveReportPageIndex = Math.Min(CurrentReportManifest.Pages.Count - 1, ActiveReportPageIndex + 1);
+            ReportScrollRow = 0;
+            ForceFullRepaint();
+        }
+
         public void SetLinePhysicalShift(int lineIdx, int shift) => _linePhysicalShifts[lineIdx] = shift;
         public int GetLinePhysicalShift(int lineIdx) => _linePhysicalShifts.TryGetValue(lineIdx, out var s) ? s : 0;
 
@@ -972,6 +988,17 @@ namespace ETL_SQL.TUI.UI
             }
 
             if (button != 0) return;
+
+            // Report preview: click the page arrows on the top border row; ignore other clicks.
+            if (ReportVisible)
+            {
+                if (y == LayoutCalculator.EditorAreaTopRows)
+                {
+                    if (x >= _lastWidth - 8 && x < _lastWidth - 5) ReportPrevPage();
+                    else if (x >= _lastWidth - 5 && x < _lastWidth - 2) ReportNextPage();
+                }
+                return;
+            }
 
             // Help bar (second-to-last row): clicking a shortcut runs it via its key.
             if (y == _lastHeight - 2)

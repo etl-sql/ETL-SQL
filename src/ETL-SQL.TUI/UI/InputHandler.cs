@@ -941,6 +941,10 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
+            // Left / Right arrows switch pages.
+            if (key.Key == ConsoleKey.LeftArrow) { _renderer.ReportPrevPage(); return; }
+            if (key.Key == ConsoleKey.RightArrow) { _renderer.ReportNextPage(); return; }
+
             // Scrolling (Arrows / PgUp / PgDn)
             if (key.Key == ConsoleKey.UpArrow) { _renderer.ReportScrollRow = Math.Max(0, _renderer.ReportScrollRow - 1); }
             else if (key.Key == ConsoleKey.DownArrow) { _renderer.ReportScrollRow++; }
