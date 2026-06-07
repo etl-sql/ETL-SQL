@@ -330,6 +330,13 @@ namespace ETL_SQL.TUI.UI
                             int mouseY = int.Parse(match.Groups[3].Value) - 1;
                             bool isRelease = match.Groups[4].Value == "m";
 
+                            if (_renderer.HelpVisible)
+                            {
+                                // Any click dismisses the help overlay.
+                                if (!isRelease) return new ConsoleKeyInfo('\0', ConsoleKey.Escape, false, false, false);
+                                return null;
+                            }
+
                             await _renderer.HandleMouseClick(button, mouseX, mouseY, isRelease, this);
                             return null;
                         }
@@ -356,6 +363,9 @@ namespace ETL_SQL.TUI.UI
         // button-up events are consumed silently to avoid needless re-renders.
         private readonly INPUT_RECORD[] _inputRecordBuffer = new INPUT_RECORD[1];
         private uint _prevMouseButtons = 0;
+        private bool _mouseDragging = false;
+        private int _dragAnchorLine = 0;
+        private int _dragAnchorCol = 0;
 
         private async Task<ConsoleKeyInfo?> ReadInputWindows()
         {
@@ -388,28 +398,52 @@ namespace ETL_SQL.TUI.UI
                 if (record.EventType == MOUSE_EVENT)
                 {
                     var m = record.MouseEvent;
+                    uint left = m.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED;
 
                     if ((m.dwEventFlags & MOUSE_WHEELED) != 0)
                     {
+                        if (_renderer.HelpVisible) return null; // ignore wheel while help is open
                         short delta = (short)(m.dwButtonState >> 16);
                         await _renderer.HandleMouseClick(delta > 0 ? 64 : 65, m.MousePositionX, m.MousePositionY, false, this);
-                        return null; // allow a redraw after scrolling
+                        return null;
                     }
 
-                    if (m.dwEventFlags == 0) // button state change (not movement)
+                    if ((m.dwEventFlags & MOUSE_MOVED) != 0)
                     {
-                        uint left = m.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED;
-                        uint prevLeft = _prevMouseButtons & FROM_LEFT_1ST_BUTTON_PRESSED;
                         _prevMouseButtons = m.dwButtonState;
-
-                        if (left != 0 && prevLeft == 0)
+                        if (_mouseDragging && left != 0)
                         {
-                            await _renderer.HandleMouseClick(0, m.MousePositionX, m.MousePositionY, false, this);
-                            return null; // press handled — allow a redraw
+                            // Extend the editor selection from the press anchor to the cursor.
+                            _renderer.DragExtendSelection(m.MousePositionX, m.MousePositionY, this, _dragAnchorLine, _dragAnchorCol);
+                            return null; // re-render the growing selection
                         }
+                        continue; // plain movement — no redraw
                     }
 
-                    continue; // movement / button-up — keep reading without re-rendering
+                    // Button press / release.
+                    uint prevLeft = _prevMouseButtons & FROM_LEFT_1ST_BUTTON_PRESSED;
+                    _prevMouseButtons = m.dwButtonState;
+
+                    if (left != 0 && prevLeft == 0) // left pressed
+                    {
+                        if (_renderer.HelpVisible)
+                            return new ConsoleKeyInfo('\0', ConsoleKey.Escape, false, false, false); // any click dismisses help
+                        await _renderer.HandleMouseClick(0, m.MousePositionX, m.MousePositionY, false, this);
+                        if (_renderer.Focus == EditorFocus.Editor)
+                        {
+                            _mouseDragging = true;
+                            _dragAnchorLine = _buffer.CursorLine;
+                            _dragAnchorCol = _buffer.CursorColumn;
+                        }
+                        return null;
+                    }
+                    if (left == 0 && prevLeft != 0) // left released
+                    {
+                        _mouseDragging = false;
+                        return null;
+                    }
+
+                    continue;
                 }
 
                 if (record.EventType == WINDOW_BUFFER_SIZE_EVENT)
@@ -437,6 +471,7 @@ namespace ETL_SQL.TUI.UI
         private const ushort MOUSE_EVENT = 0x0002;
         private const ushort WINDOW_BUFFER_SIZE_EVENT = 0x0004;
         private const uint FROM_LEFT_1ST_BUTTON_PRESSED = 0x0001;
+        private const uint MOUSE_MOVED = 0x0001;
         private const uint MOUSE_WHEELED = 0x0004;
         private const uint RIGHT_ALT_PRESSED = 0x0001;
         private const uint LEFT_ALT_PRESSED = 0x0002;

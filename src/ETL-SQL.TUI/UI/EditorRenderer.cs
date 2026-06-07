@@ -711,6 +711,29 @@ namespace ETL_SQL.TUI.UI
             _console.Markup($"[black on cyan] ◀ [/][grey85 on grey23]{Markup.Escape(label)}[/][black on cyan] ▶ [/]");
         }
 
+        /// <summary>
+        /// Extends the editor text selection from a drag anchor to the screen point (x, y).
+        /// The point is clamped into the editor band and the line length, so dragging past
+        /// the edges extends to the nearest valid position.
+        /// </summary>
+        public void DragExtendSelection(int x, int y, ConsoleEditor editor, int anchorLine, int anchorCol)
+        {
+            var buffer = editor._buffer;
+            if (buffer.Lines.Count == 0) return;
+
+            var layout = LayoutCalculator.Compute(_lastWidth, _lastHeight, buffer.Lines.Count,
+                SidebarVisible, SidebarWidth, IsBottomMaximized, CompareMode);
+
+            int clampedY = Math.Clamp(y, layout.EditorAreaTop, layout.EditorAreaTop + layout.EditorAreaHeight - 1);
+            int line = Math.Clamp(layout.EditorLineAt(clampedY, ScrollLine), 0, buffer.Lines.Count - 1);
+            int col = Math.Clamp(layout.EditorColumnAt(x, ScrollCol), 0, buffer.Lines[line].Length);
+
+            buffer.SelectionStartLine = anchorLine;
+            buffer.SelectionStartCol = anchorCol;
+            buffer.CursorLine = line;
+            buffer.CursorColumn = col;
+        }
+
         /// <summary>Switches the active result set by <paramref name="delta"/> (clamped), resetting scroll/filter.</summary>
         public void CycleResultSet(int delta, int setCount)
         {
