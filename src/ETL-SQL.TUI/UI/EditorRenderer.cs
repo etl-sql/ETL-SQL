@@ -312,11 +312,28 @@ namespace ETL_SQL.TUI.UI
                 int helpRow = totalHeight - 2;
                 int statusRow = totalHeight - 1;
 
-                // ── Row 1: Help Bar (Static Shortcuts) ───────────────────────
-                string helpText = " F1:Help  F5:Run  F3:Theme  F6:Focus  F9:Explorer  F4:Panel  Alt+R:Report  F2:Save  ^Q:Exit ";
+                // ── Row 1: Help Bar (clickable shortcuts; geometry in StatusBar) ─
+                string helpBg = TuiTheme.Instance.Ui.HelpBackground;
+                int helpPad = Math.Max(0, (totalWidth - 1) - StatusBar.PlainText().Length);
+                var help = new System.Text.StringBuilder();
+                help.Append($"[{helpBg}] ");
+                bool firstBtn = true;
+                foreach (var b in StatusBar.Buttons)
+                {
+                    if (!firstBtn) help.Append("  ");
+                    firstBtn = false;
+                    int colon = b.Label.IndexOf(':');
+                    if (colon > 0)
+                        help.Append($"[bold yellow]{Markup.Escape(b.Label.Substring(0, colon))}[/]{Markup.Escape(b.Label.Substring(colon))}");
+                    else
+                        help.Append(Markup.Escape(b.Label));
+                }
+                help.Append(' ');
+                help.Append(new string(' ', helpPad));
+                help.Append("[/]");
                 _console.ClearLine(0, helpRow, totalWidth);
                 _console.SetCursorPosition(0, helpRow);
-                _console.Markup($"[{TuiTheme.Instance.Ui.HelpBackground}]{Markup.Escape(helpText.PadRight(totalWidth - 1))}[/]");
+                _console.Markup(help.ToString());
 
                 // ── Row 2: Status Bar (Dynamic Info) ─────────────────────────
                 string fileLabel2 = string.IsNullOrEmpty(filePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(filePath);
@@ -773,6 +790,18 @@ namespace ETL_SQL.TUI.UI
             }
 
             if (button != 0) return;
+
+            // Help bar (second-to-last row): clicking a shortcut runs it via its key.
+            if (y == _lastHeight - 2)
+            {
+                var btn = StatusBar.HitTest(x);
+                if (btn != null)
+                {
+                    await editor.HandleKey(btn.ToKeyInfo());
+                    ForceFullRepaint();
+                }
+                return;
+            }
 
             if (y == 1)
             {
