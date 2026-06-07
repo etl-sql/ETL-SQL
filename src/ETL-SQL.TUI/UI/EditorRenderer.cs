@@ -63,6 +63,11 @@ namespace ETL_SQL.TUI.UI
         public string InfoContent { get; set; } = "";
         public string InfoTitle { get; set; } = "Info";
         public int InfoScrollRow { get; set; } = 0;
+
+        public bool PaletteVisible { get; set; } = false;
+        public string PaletteFilter { get; set; } = "";
+        public int PaletteIndex { get; set; } = 0;
+        public List<(string Title, string Shortcut)> PaletteItems { get; set; } = new();
         /// <summary>True when a "press any key to dismiss" overlay (help or info) is showing.</summary>
         public bool ModalOverlayVisible => HelpVisible || InfoVisible;
         public string FilterText { get; set; } = "";
@@ -503,12 +508,13 @@ namespace ETL_SQL.TUI.UI
                 }
             }
 
-            // 7. Help / Info Overlay
+            // 7. Help / Info / Palette Overlay
             if (HelpVisible) RenderHelpOverlay(totalWidth, totalHeight);
             if (InfoVisible) RenderInfoOverlay(totalWidth, totalHeight);
+            if (PaletteVisible) RenderCommandPalette(totalWidth, totalHeight);
 
             // 8. Restore absolute cursor
-            if (!ResultsFocus && Focus != EditorFocus.Sidebar && !Headless && !HelpVisible && !InfoVisible && !PromptVisible)
+            if (!ResultsFocus && Focus != EditorFocus.Sidebar && !Headless && !HelpVisible && !InfoVisible && !PaletteVisible && !PromptVisible)
             {
                 int sidebarW = SidebarVisible ? SidebarWidth : 0;
                 int physicalX = (buffer.CursorColumn - ScrollCol) + gutterWidth + GetLinePhysicalShift(buffer.CursorLine) + sidebarW;
@@ -554,6 +560,58 @@ namespace ETL_SQL.TUI.UI
                 if (content.Length > maxWidth) content = content.Substring(0, maxWidth);
                 _console.Markup($"[white on grey15] {Markup.Escape(content)} [/]");
             }
+        }
+
+        private void RenderCommandPalette(int totalWidth, int totalHeight)
+        {
+            int panelWidth = Math.Min(72, totalWidth - 6);
+            int listCap = Math.Clamp(totalHeight - 10, 5, 14);
+
+            // Keep the selected item visible.
+            int start = 0;
+            if (PaletteItems.Count > listCap)
+            {
+                start = Math.Clamp(PaletteIndex - listCap / 2, 0, PaletteItems.Count - listCap);
+                if (PaletteIndex < start) start = PaletteIndex;
+            }
+            int end = Math.Min(PaletteItems.Count, start + listCap);
+
+            var list = new Table().Border(TableBorder.None).HideHeaders()
+                .AddColumn(new TableColumn("").Width(panelWidth - 20))
+                .AddColumn(new TableColumn(""));
+
+            if (PaletteItems.Count == 0)
+            {
+                list.AddRow(new Markup("[grey]No matching commands[/]"), new Markup(""));
+            }
+            for (int i = start; i < end; i++)
+            {
+                var (title, shortcut) = PaletteItems[i];
+                var titleCell = i == PaletteIndex
+                    ? new Markup($"[black on yellow] {Markup.Escape(title)} [/]")
+                    : new Markup($" {Markup.Escape(title)}");
+                var shortcutCell = new Markup(string.IsNullOrEmpty(shortcut) ? "" : $"[grey]{Markup.Escape(shortcut)}[/]");
+                list.AddRow(titleCell, shortcutCell);
+            }
+
+            var inner = new Rows(
+                new Markup($"[yellow]›[/] {Markup.Escape(PaletteFilter)}[grey]▏[/]"),
+                new Markup("[grey]" + new string('─', Math.Max(1, panelWidth - 4)) + "[/]"),
+                list);
+
+            int panelHeight = Math.Min(totalHeight - 4, (end - start) + 5);
+            var panel = new Panel(inner)
+            {
+                Header = new PanelHeader("[bold yellow] Command Palette [/]", Justify.Left),
+                Width = panelWidth,
+                Height = panelHeight,
+                Border = BoxBorder.Double,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+
+            int startRow = Math.Max(1, (totalHeight - panelHeight) / 3);
+            _console.SetCursorPosition(0, startRow); // column 0: multi-line widgets only honor the first line's column
+            _console.WriteWidget(panel);
         }
 
         private void RenderInfoOverlay(int totalWidth, int totalHeight)

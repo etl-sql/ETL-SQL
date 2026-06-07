@@ -264,6 +264,80 @@ namespace ETL_SQL.TUI.UI
                 "Press any key to close.",
                 "");
 
+        /// <summary>Opens the searchable command palette (Ctrl+Shift+P).</summary>
+        public async Task ShowCommandPalette()
+        {
+            string filter = "";
+            int selected = 0;
+            _renderer.PaletteVisible = true;
+            try
+            {
+                while (true)
+                {
+                    var matches = CommandPalette.Filter(filter);
+                    selected = Math.Clamp(selected, 0, Math.Max(0, matches.Count - 1));
+                    _renderer.PaletteFilter = filter;
+                    _renderer.PaletteItems = matches.Select(c => (c.Title, c.Shortcut ?? "")).ToList();
+                    _renderer.PaletteIndex = selected;
+                    _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
+
+                    var keyOpt = await ReadKeyOrHandleMouse();
+                    if (!keyOpt.HasValue) continue;
+                    var key = keyOpt.Value;
+
+                    if (key.Key == ConsoleKey.Escape) break;
+                    if (key.Key == ConsoleKey.Enter)
+                    {
+                        _renderer.PaletteVisible = false;
+                        if (matches.Count > 0 && selected >= 0 && selected < matches.Count)
+                            await matches[selected].Run(this);
+                        return;
+                    }
+                    if (key.Key == ConsoleKey.UpArrow) { selected = Math.Max(0, selected - 1); continue; }
+                    if (key.Key == ConsoleKey.DownArrow) { selected = Math.Min(Math.Max(0, matches.Count - 1), selected + 1); continue; }
+                    if (key.Key == ConsoleKey.Backspace) { if (filter.Length > 0) filter = filter.Substring(0, filter.Length - 1); selected = 0; continue; }
+                    if (!char.IsControl(key.KeyChar) && key.KeyChar != '\0') { filter += key.KeyChar; selected = 0; continue; }
+                }
+            }
+            finally { _renderer.PaletteVisible = false; }
+        }
+
+        /// <summary>Exports the current report to Markdown next to the script.</summary>
+        public Task ExportReportMarkdown() => ExportReport(pdf: false);
+
+        /// <summary>Exports the current report to PDF next to the script.</summary>
+        public Task ExportReportPdf() => ExportReport(pdf: true);
+
+        private async Task ExportReport(bool pdf)
+        {
+            if (string.IsNullOrEmpty(_filePath) || _filePath == "untitled.etlsql")
+            {
+                if (!await SaveScript()) { _renderer.ShowStatus("Save the report before exporting."); return; }
+            }
+
+            try
+            {
+                _renderer.ShowStatus("Building report…");
+                _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
+
+                await RunScript(); // populate the report context for the manifest
+                var manifest = await new ETL_SQL.Reporting.ManifestBuilder(_evaluator).BuildAsync(_buffer.GetText());
+                string outPath = Path.ChangeExtension(Path.GetFullPath(_filePath), pdf ? ".pdf" : ".md");
+
+                if (pdf)
+                    await File.WriteAllBytesAsync(outPath, new ETL_SQL.Reporting.PdfExporter().Export(manifest));
+                else
+                    await File.WriteAllTextAsync(outPath, new ETL_SQL.Reporting.MarkdownRenderer().Render(manifest));
+
+                _renderer.ShowStatus($"Exported: {outPath}");
+            }
+            catch (Exception ex)
+            {
+                await ShowInfoOverlay("Export failed",
+                    $"Could not export the report.\n\n{ex.Message}\n\nPress any key to close.", "");
+            }
+        }
+
         public async Task HandleExit()
         {
             SaveActiveTabState();
