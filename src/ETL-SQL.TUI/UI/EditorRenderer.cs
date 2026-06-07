@@ -90,6 +90,7 @@ namespace ETL_SQL.TUI.UI
         public EditorFocus ActiveLowerTab { get; set; } = EditorFocus.Messages;
         private int _lastMessageCount = 0;
         public List<int> CompareScrollRows { get; set; } = new();
+        public List<int> CompareScrollCols { get; set; } = new();
         public List<string> CompareFilters { get; set; } = new();
         public bool PromptVisible => !string.IsNullOrEmpty(PromptTitle);
 
@@ -259,6 +260,7 @@ namespace ETL_SQL.TUI.UI
             if (CompareMode)
             {
                 while (CompareScrollRows.Count < evaluator.LastResultSets.Count) CompareScrollRows.Add(0);
+                while (CompareScrollCols.Count < evaluator.LastResultSets.Count) CompareScrollCols.Add(0);
                 while (CompareFilters.Count  < evaluator.LastResultSets.Count) CompareFilters.Add("");
                 if (CompareFocusIndex >= evaluator.LastResultSets.Count)
                     CompareFocusIndex = Math.Max(0, evaluator.LastResultSets.Count - 1);

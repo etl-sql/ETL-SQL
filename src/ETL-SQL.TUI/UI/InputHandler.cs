@@ -418,12 +418,13 @@ namespace ETL_SQL.TUI.UI
                         _renderer.CompareMode = true;
                         _renderer.CompareFocusIndex = 0;
                         _renderer.CompareScrollRows = _editor._evaluator.LastResultSets.Select(_ => 0).ToList();
+                        _renderer.CompareScrollCols = _editor._evaluator.LastResultSets.Select(_ => 0).ToList();
                         _renderer.CompareFilters    = _editor._evaluator.LastResultSets.Select(_ => "").ToList();
                         _renderer.ResultsVisible    = false;
                         _renderer.PerformanceVisible = false;
                         _renderer.IsBottomMaximized = true;
                         _renderer.ForceFullRepaint();
-                        _renderer.ShowStatus($"Compare mode — {_editor._evaluator.LastResultSets.Count} sets. F7: next pane  Ctrl+F: filter  Escape: exit");
+                        _renderer.ShowStatus($"Compare mode — {_editor._evaluator.LastResultSets.Count} sets. F7: next pane  ←/→: scroll cols  Ctrl+F: filter  Escape: exit");
                     }
                 }
                 return;
@@ -611,7 +612,13 @@ namespace ETL_SQL.TUI.UI
         {
             int idx = _renderer.CompareFocusIndex;
             while (_renderer.CompareScrollRows.Count <= idx) _renderer.CompareScrollRows.Add(0);
+            while (_renderer.CompareScrollCols.Count <= idx) _renderer.CompareScrollCols.Add(0);
             while (_renderer.CompareFilters.Count    <= idx) _renderer.CompareFilters.Add("");
+
+            // Largest column offset that still leaves at least one column visible in the focused pane.
+            int maxCol = idx < _editor._evaluator.LastResultSets.Count
+                ? ResultsPanel.MaxColumnOffset(_editor._evaluator.LastResultSets[idx].ColumnNames.Count)
+                : 0;
 
             switch (key.Key)
             {
@@ -634,12 +641,17 @@ namespace ETL_SQL.TUI.UI
                     _renderer.CompareScrollRows[idx] = Math.Max(0, _renderer.CompareScrollRows[idx] - 1); break;
                 case ConsoleKey.DownArrow:
                     _renderer.CompareScrollRows[idx]++; break;
+                case ConsoleKey.LeftArrow:
+                    _renderer.CompareScrollCols[idx] = Math.Max(0, _renderer.CompareScrollCols[idx] - 1); break;
+                case ConsoleKey.RightArrow:
+                    _renderer.CompareScrollCols[idx] = Math.Min(maxCol, _renderer.CompareScrollCols[idx] + 1); break;
                 case ConsoleKey.PageUp:
                     _renderer.CompareScrollRows[idx] = Math.Max(0, _renderer.CompareScrollRows[idx] - 10); break;
                 case ConsoleKey.PageDown:
                     _renderer.CompareScrollRows[idx] += 10; break;
                 case ConsoleKey.Home:
-                    _renderer.CompareScrollRows[idx] = 0; break;
+                    _renderer.CompareScrollRows[idx] = 0;
+                    _renderer.CompareScrollCols[idx] = 0; break;
             }
         }
 

@@ -103,15 +103,26 @@ namespace ETL_SQL.TUI.UI
                 bool isFocused = i == renderer.CompareFocusIndex;
                 string filter  = renderer.CompareFilters.Count  > i ? renderer.CompareFilters[i]  : "";
                 int    scroll  = renderer.CompareScrollRows.Count > i ? renderer.CompareScrollRows[i] : 0;
+                int    colScroll = renderer.CompareScrollCols.Count > i ? renderer.CompareScrollCols[i] : 0;
 
-                RenderSingleComparePane(console, x, currentY, width, availableHeight, evaluator, i, isFocused, scroll, filter);
+                RenderSingleComparePane(console, x, currentY, width, availableHeight, evaluator, i, isFocused, scroll, colScroll, filter);
                 currentY += availableHeight;
                 if (currentY >= y + height) break;
             }
         }
 
+        /// <summary>Number of columns shown at once in a compare pane.</summary>
+        public const int ComparePaneColumns = 10;
+
+        /// <summary>Largest horizontal-scroll offset that still leaves one column visible.</summary>
+        public static int MaxColumnOffset(int columnCount) => Math.Max(0, columnCount - 1);
+
+        /// <summary>Clamps a desired horizontal-scroll offset to the valid range for a column count.</summary>
+        public static int ClampColumnOffset(int scrollCol, int columnCount) =>
+            Math.Clamp(scrollCol, 0, MaxColumnOffset(columnCount));
+
         private static void RenderSingleComparePane(IConsoleInterface console, int x, int y, int width, int height,
-            Evaluator evaluator, int setIndex, bool focused, int scrollRow, string filter)
+            Evaluator evaluator, int setIndex, bool focused, int scrollRow, int scrollCol, string filter)
         {
             var res = evaluator.LastResultSets[setIndex];
 
@@ -121,12 +132,19 @@ namespace ETL_SQL.TUI.UI
                     (row[c]?.ToString() ?? "").Contains(filter, StringComparison.OrdinalIgnoreCase))).ToList()
                 : res.Rows;
 
+            // Horizontal scroll: clamp the offset so at least one column stays visible.
+            int colOffset = ClampColumnOffset(scrollCol, res.ColumnNames.Count);
+            var visibleColumns = res.ColumnNames.Skip(colOffset).Take(ComparePaneColumns).ToList();
+            int lastCol = colOffset + visibleColumns.Count;
+            string colInfo = res.ColumnNames.Count > ComparePaneColumns
+                ? $" | [grey]cols {colOffset + 1}-{lastCol}/{res.ColumnNames.Count}[/]"
+                : "";
+
             string filterInfo = hasFilter ? $" | [yellow]Filter: {Markup.Escape(filter)}  {rows.Count}/{res.Rows.Count}[/]" : "";
             string focusTag   = focused ? " [bold magenta]◀[/]" : "";
-            string header     = $"[cyan]Set {setIndex + 1} | {res.ExecutionTimeMs}ms | {res.TotalRowsMatched}{(res.TotalRowsMatched >= 1000 ? "+" : "")} rows[/]{filterInfo}{focusTag}";
+            string header     = $"[cyan]Set {setIndex + 1} | {res.ExecutionTimeMs}ms | {res.TotalRowsMatched}{(res.TotalRowsMatched >= 1000 ? "+" : "")} rows[/]{colInfo}{filterInfo}{focusTag}";
 
             var table = new Table().Border(TableBorder.Rounded).BorderColor(TuiTheme.Instance.GetColor(TuiTheme.Instance.Ui.PanelUnfocusedBorder, Color.Grey)).Expand();
-            var visibleColumns = res.ColumnNames.Take(10).ToList();
             foreach (var col in visibleColumns)
                 table.AddColumn($"[bold cyan]{Markup.Escape(col)}[/]");
 
