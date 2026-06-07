@@ -291,14 +291,22 @@ namespace ETL_SQL.TUI.UI
 
                 _editorPanel.Render(_console, sidebarW, editorAreaTop, totalWidth - sidebarW, editorAreaHeight);
 
+                // Clickable tab strip on the first row of the lower pane; panels render below it.
+                int lowerContentTop = layout.LowerContentTop;
+                int lowerContentHeight = layout.LowerContentHeight;
+                BottomTab activeBottom = PerformanceVisible ? BottomTab.Performance
+                                       : (ResultsVisible || CompareMode) ? BottomTab.Results
+                                       : BottomTab.Pipeline;
+                RenderBottomTabStrip(lowerY, totalWidth, activeBottom);
+
                 if (CompareMode)
-                    _resultsPanel.RenderCompare(_console, 0, lowerY, totalWidth, lowerAreaHeight, evaluator, this);
+                    _resultsPanel.RenderCompare(_console, 0, lowerContentTop, totalWidth, lowerContentHeight, evaluator, this);
                 else if (PerformanceVisible)
-                    _performancePanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight);
+                    _performancePanel.Render(_console, 0, lowerContentTop, totalWidth, lowerContentHeight);
                 else if (ResultsVisible)
-                    _resultsPanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight, ResultScrollRow);
+                    _resultsPanel.Render(_console, 0, lowerContentTop, totalWidth, lowerContentHeight, ResultScrollRow);
                 else
-                    _messageTreePanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight, TreeScrollRow, MessageScrollRow, ActiveLowerTab);
+                    _messageTreePanel.Render(_console, 0, lowerContentTop, totalWidth, lowerContentHeight, TreeScrollRow, MessageScrollRow, ActiveLowerTab);
             }
         }
 
@@ -643,12 +651,48 @@ namespace ETL_SQL.TUI.UI
         public static string BuildPromptMarkup(string? title, string displayValue)
             => $" [yellow]{Markup.Escape(title ?? string.Empty)}:[/] {Markup.Escape(displayValue ?? string.Empty)}";
 
+        /// <summary>Draws the clickable bottom-pane tab strip; widths match BottomTabStrip.Segments.</summary>
+        private void RenderBottomTabStrip(int row, int totalWidth, BottomTab active)
+        {
+            _console.ClearLine(0, row, totalWidth);
+            _console.SetCursorPosition(0, row);
+
+            var sb = new System.Text.StringBuilder();
+            bool first = true;
+            foreach (var seg in BottomTabStrip.Segments())
+            {
+                if (!first) sb.Append("[grey15] [/]"); // one separator column
+                first = false;
+                string style = seg.Tab == active ? "black on yellow" : "grey85 on grey23";
+                sb.Append($"[{style}] {Markup.Escape(seg.Label)} [/]");
+            }
+            _console.Markup(sb.ToString());
+        }
+
+        /// <summary>Switches the bottom pane to the given view (the F4 targets, click-addressable).</summary>
+        public void ShowBottomTab(BottomTab tab)
+        {
+            switch (tab)
+            {
+                case BottomTab.Results:
+                    ResultsVisible = true; PerformanceVisible = false;
+                    ShowStatus("View: Query Results");
+                    break;
+                case BottomTab.Performance:
+                    PerformanceVisible = true; ResultsVisible = false; CompareMode = false;
+                    ShowStatus("View: Performance Metrics");
+                    break;
+                default: // Pipeline & Messages
+                    ResultsVisible = false; PerformanceVisible = false; CompareMode = false;
+                    ShowStatus("View: Pipeline & Messages");
+                    break;
+            }
+        }
+
         public void ScrollRegion(int x, int y, int delta)
         {
             var layout = LayoutCalculator.Compute(_lastWidth, _lastHeight, 1,
                 SidebarVisible, SidebarWidth, IsBottomMaximized, CompareMode);
-            int lowerAreaHeight = layout.LowerAreaHeight;
-            int lowerY = layout.LowerY;
 
             if (layout.InEditorBand(y))
             {
@@ -665,7 +709,7 @@ namespace ETL_SQL.TUI.UI
                     ScrollLine = Math.Max(0, ScrollLine + delta);
                 }
             }
-            else if (y >= lowerY && y < lowerY + lowerAreaHeight)
+            else if (layout.InLowerContent(y))
             {
                 if (PerformanceVisible)
                 {
@@ -675,7 +719,7 @@ namespace ETL_SQL.TUI.UI
                 {
                     if (CompareMode && CompareScrollRows.Count > 0)
                     {
-                        int clickedPaneIndex = Math.Clamp((y - lowerY) / Math.Max(4, lowerAreaHeight / Math.Max(1, CompareScrollRows.Count)), 0, CompareScrollRows.Count - 1);
+                        int clickedPaneIndex = Math.Clamp((y - layout.LowerContentTop) / Math.Max(4, layout.LowerContentHeight / Math.Max(1, CompareScrollRows.Count)), 0, CompareScrollRows.Count - 1);
                         if (clickedPaneIndex >= 0 && clickedPaneIndex < CompareScrollRows.Count)
                         {
                             CompareScrollRows[clickedPaneIndex] = Math.Max(0, CompareScrollRows[clickedPaneIndex] + delta);
@@ -768,8 +812,6 @@ namespace ETL_SQL.TUI.UI
 
             var layout = LayoutCalculator.Compute(_lastWidth, _lastHeight, editor._buffer.Lines.Count,
                 SidebarVisible, SidebarWidth, IsBottomMaximized, CompareMode);
-            int lowerAreaHeight = layout.LowerAreaHeight;
-            int lowerY = layout.LowerY;
 
             if (layout.InSidebar(x, y) && !ReportVisible)
             {
@@ -806,7 +848,16 @@ namespace ETL_SQL.TUI.UI
             }
             else if (layout.InLowerPane(y))
             {
-                if (PerformanceVisible)
+                if (layout.OnBottomTabStrip(y))
+                {
+                    var clicked = BottomTabStrip.HitTest(x);
+                    if (clicked.HasValue)
+                    {
+                        ShowBottomTab(clicked.Value);
+                        ForceFullRepaint();
+                    }
+                }
+                else if (PerformanceVisible)
                 {
                     Focus = EditorFocus.Performance;
                 }
@@ -816,8 +867,8 @@ namespace ETL_SQL.TUI.UI
                     if (CompareMode && CompareScrollRows.Count > 0)
                     {
                         int paneCount = editor._evaluator.LastResultSets.Count;
-                        int paneHeight = Math.Max(4, lowerAreaHeight / Math.Max(1, paneCount));
-                        int clickedPaneIndex = Math.Clamp((y - lowerY) / paneHeight, 0, paneCount - 1);
+                        int paneHeight = Math.Max(4, layout.LowerContentHeight / Math.Max(1, paneCount));
+                        int clickedPaneIndex = Math.Clamp((y - layout.LowerContentTop) / paneHeight, 0, paneCount - 1);
                         CompareFocusIndex = clickedPaneIndex;
                     }
                 }

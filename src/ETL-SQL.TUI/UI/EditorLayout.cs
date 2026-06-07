@@ -57,6 +57,14 @@ namespace ETL_SQL.TUI.UI
         public bool InSidebar(int x, int y) => SidebarVisible && x >= 0 && x < SidebarWidth && InEditorBand(y);
         public bool InLowerPane(int y) => y >= LowerY && y < LowerY + LowerAreaHeight;
 
+        // The lower pane reserves its first row for the clickable bottom tab strip; the
+        // result/message/performance panels are drawn in the rows below it.
+        public int BottomTabStripY => LowerY;
+        public int LowerContentTop => LowerY + 1;
+        public int LowerContentHeight => Math.Max(1, LowerAreaHeight - 1);
+        public bool OnBottomTabStrip(int y) => y == BottomTabStripY;
+        public bool InLowerContent(int y) => y >= LowerContentTop && y < LowerY + LowerAreaHeight;
+
         /// <summary>Flat tree index for a sidebar click, or -1 if the row is a border/empty line.</summary>
         public int SidebarItemIndexAt(int y, int scrollRow)
         {
