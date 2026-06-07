@@ -70,7 +70,7 @@ namespace ETL_SQL.TUI.UI
             new KeyBinding("Alt+← / →", KeyCategory.FileTabs, "Switch active tab"),
             new KeyBinding("Ctrl+P",            KeyCategory.FileTabs, "Export result set to CSV"),
             new KeyBinding("Ctrl+Q",            KeyCategory.FileTabs, "Exit editor"),
-            new KeyBinding("Ctrl+Shift+P",      KeyCategory.FileTabs, "Command palette"),
+            new KeyBinding("Alt+P",             KeyCategory.FileTabs, "Command palette"),
 
             // ── Edit ──
             new KeyBinding("Ctrl+Z / Ctrl+Y",   KeyCategory.Edit, "Undo / Redo"),
