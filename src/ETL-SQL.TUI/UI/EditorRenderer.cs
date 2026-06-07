@@ -126,6 +126,9 @@ namespace ETL_SQL.TUI.UI
         public int LastHeight => _lastHeight;
         public int LastWidth => _lastWidth;
 
+        /// <summary>Worst diagnostic severity per 1-based source line, for the gutter marker. Rebuilt each frame in <see cref="Render"/>.</summary>
+        public IReadOnlyDictionary<int, DiagnosticLevel> DiagnosticLines { get; private set; } = new Dictionary<int, DiagnosticLevel>();
+
         private readonly IConsoleInterface _console;
         private readonly EditorPanel _editorPanel;
         private readonly MessageTreePanel _messageTreePanel;
@@ -163,6 +166,9 @@ namespace ETL_SQL.TUI.UI
             var evaluator = editor._evaluator;
             var filePath = editor._filePath;
             var isDirty = editor._isDirty;
+
+            // Gutter diagnostic markers reflect the most recent run/lint pass.
+            DiagnosticLines = DiagnosticGutter.BuildLineMap(editor.Diagnostics);
 
             if (totalWidth != _lastWidth || totalHeight != _lastHeight)
             {
