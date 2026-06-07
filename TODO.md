@@ -18,7 +18,7 @@
 - [ ] **Compare mode horizontal scroll** — `ResultsPanel.RenderSingleComparePane()` is hardcoded to `.Take(10)` columns with no scroll, unlike the main Results panel which supports `ResultScrollCol`. Columns beyond position 10 are inaccessible.
 - [ ] **Variables panel (feature parity with VS Code)** — `ReplUi` emits a `variables` packet so VS Code can show a Variable Explorer. The TUI IDE has no equivalent view. Add a Variables lower-panel tab (or Results sub-view) rendering `evaluator.VarContext.GetVariablesWithMetadata()`. Required by `Presentation_Standards.md` Rule C1.
 - [ ] **In-editor Find** — `Ctrl+F` in editor focus redirects to the results-row filter, not a text search within the script. Add a proper search overlay with match highlighting and N/Shift+N navigation.
-- [ ] **Undo does not restore cursor position** — `UndoManager.SaveState()` snapshots only the line array. Include `(CursorLine, CursorCol)` in the state and restore on Undo/Redo.
+- [x] **Undo does not restore cursor position** — `UndoManager` now snapshots `(Lines, CursorLine, CursorColumn)` as an `EditorSnapshot`; `ConsoleEditor.ApplySnapshot` reloads the text and restores the caret (clamped to the restored buffer) on Undo/Redo. Tests added.
 - [ ] **REPL export supports only CSV** — `ReplUi.HandleExport()` rejects all non-CSV formats. Add `markdown` and `json` cases to match the IDE command palette export options.
 
 ### TUI — Code Quality / Cleanup

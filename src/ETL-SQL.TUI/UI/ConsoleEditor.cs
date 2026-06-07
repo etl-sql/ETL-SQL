@@ -988,14 +988,23 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
-        /// <summary>Saves the current buffer state for undo.</summary>
-        public void SaveUndoState() => _undo.SaveState(_buffer.Lines);
+        /// <summary>Saves the current buffer state (text + cursor) for undo.</summary>
+        public void SaveUndoState() => _undo.SaveState(_buffer.Lines, _buffer.CursorLine, _buffer.CursorColumn);
 
-        /// <summary>Restores the previous buffer state.</summary>
-        public void Undo() { var lines = _undo.Undo(_buffer.Lines); if (lines != null) _buffer.Load(lines); }
+        /// <summary>Restores the previous buffer state, including the cursor position.</summary>
+        public void Undo() => ApplySnapshot(_undo.Undo(_buffer.Lines, _buffer.CursorLine, _buffer.CursorColumn));
 
-        /// <summary>Restores the state that was undone.</summary>
-        public void Redo() { var lines = _undo.Redo(_buffer.Lines); if (lines != null) _buffer.Load(lines); }
+        /// <summary>Restores the state that was undone, including the cursor position.</summary>
+        public void Redo() => ApplySnapshot(_undo.Redo(_buffer.Lines, _buffer.CursorLine, _buffer.CursorColumn));
+
+        /// <summary>Loads a snapshot's text and restores its cursor, clamped to the restored buffer.</summary>
+        private void ApplySnapshot(EditorSnapshot? snap)
+        {
+            if (snap == null) return;
+            _buffer.Load(snap.Lines); // resets cursor to 0,0 — reposition below
+            _buffer.CursorLine = Math.Clamp(snap.CursorLine, 0, _buffer.Lines.Count - 1);
+            _buffer.CursorColumn = Math.Clamp(snap.CursorColumn, 0, _buffer.Lines[_buffer.CursorLine].Length);
+        }
 
         /// <summary>Marks the current document as modified.</summary>
         public void MarkDirty() => _isDirty = true;
