@@ -111,7 +111,7 @@ namespace ETL_SQL.TUI.UI
             new KeyBinding("F9 / Ctrl+B",       KeyCategory.ViewPanels, "Toggle file explorer", Essential: true),
             new KeyBinding("Alt+R",             KeyCategory.ViewPanels, "Toggle report preview", Essential: true),
             new KeyBinding("F1",                KeyCategory.ViewPanels, "Help (this screen)", Essential: true),
-            new KeyBinding("Shift+F1",          KeyCategory.ViewPanels, "Info at cursor (help + lineage)"),
+            new KeyBinding("Shift+F1 / F2",     KeyCategory.ViewPanels, "Help / lineage at cursor"),
 
             // ── File Explorer (sidebar focus) ──
             new KeyBinding("↑ / ↓",   KeyCategory.Explorer, "Move selection"),

@@ -571,7 +571,7 @@ namespace ETL_SQL.TUI.UI
 
             var rows = new List<IRenderable>();
             int last = Math.Min(lines.Length, InfoScrollRow + visibleRows);
-            for (int i = InfoScrollRow; i < last; i++) rows.Add(new Markup(Markup.Escape(lines[i])));
+            for (int i = InfoScrollRow; i < last; i++) rows.Add(new Markup(MarkdownToMarkup(lines[i])));
 
             string footer = maxScroll > 0
                 ? $"[grey]{InfoScrollRow + 1}-{last}/{lines.Length}  ↑↓ PgUp/PgDn scroll · any other key closes[/]"
@@ -588,10 +588,41 @@ namespace ETL_SQL.TUI.UI
             };
 
             // Start a couple rows below the top so it never collides with the tab/header bar.
+            // Drawn at column 0: a multi-line widget written after a single SetCursorPosition
+            // only honors the column on its first line, so a non-zero column offsets the header.
             int startRow = Math.Max(2, (totalHeight - panelHeight) / 2);
-            int startCol = Math.Max(0, (totalWidth - panelWidth) / 2);
-            _console.SetCursorPosition(startCol, startRow);
+            _console.SetCursorPosition(0, startRow);
             _console.WriteWidget(panel);
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex _mdHeader =
+            new(@"^(#{1,6})\s+(.*)$", System.Text.RegularExpressions.RegexOptions.Compiled);
+        private static readonly System.Text.RegularExpressions.Regex _mdBold =
+            new(@"\*\*(.+?)\*\*", System.Text.RegularExpressions.RegexOptions.Compiled);
+        private static readonly System.Text.RegularExpressions.Regex _mdCode =
+            new(@"`([^`]+)`", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        /// <summary>
+        /// Converts a single line of lightweight markdown (headers, **bold**, `code`, code
+        /// fences) into Spectre markup. The text is escaped first so brackets in the content
+        /// can never be parsed as markup.
+        /// </summary>
+        public static string MarkdownToMarkup(string raw)
+        {
+            if (raw.TrimStart().StartsWith("```")) return "[grey]────────[/]"; // code fence marker
+
+            string escaped = Markup.Escape(raw);
+
+            var header = _mdHeader.Match(escaped);
+            if (header.Success)
+            {
+                string inner = _mdCode.Replace(header.Groups[2].Value, "[cyan]$1[/]");
+                return $"[bold yellow]{inner}[/]";
+            }
+
+            escaped = _mdBold.Replace(escaped, "[bold]$1[/]");
+            escaped = _mdCode.Replace(escaped, "[cyan]$1[/]");
+            return escaped;
         }
 
         private void RenderHelpOverlay(int totalWidth, int totalHeight)

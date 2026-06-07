@@ -262,28 +262,34 @@ namespace ETL_SQL.TUI.UI
             _renderer.HelpVisible = false;
         }
 
-        /// <summary>Builds the help/lineage info for the word under the cursor (null if none).</summary>
-        public string? BuildCursorInfo(out string title)
+        private string CurrentLineText() =>
+            (_buffer.CursorLine >= 0 && _buffer.CursorLine < _buffer.Lines.Count) ? _buffer.Lines[_buffer.CursorLine] : "";
+
+        /// <summary>Shows function/keyword help for the word at the cursor (Shift+F1).</summary>
+        public Task ShowHelpAtCursor()
         {
-            string lineText = (_buffer.CursorLine >= 0 && _buffer.CursorLine < _buffer.Lines.Count)
-                ? _buffer.Lines[_buffer.CursorLine]
-                : "";
-            return InfoAtCursor.Build(lineText, _buffer.CursorLine, _buffer.CursorColumn,
-                _functionRegistry, _helpRegistry, _evaluator.LineageTracker?.GetFullLineage(), out title);
+            string? help = InfoAtCursor.BuildHelp(CurrentLineText(), _buffer.CursorColumn, _functionRegistry, _helpRegistry, out string title);
+            return ShowInfoOverlay(title, help, "No help at cursor.");
         }
 
-        /// <summary>Shows function/keyword help and lineage for the word at the cursor (Shift+F1).</summary>
-        public async Task ShowInfoAtCursor()
+        /// <summary>Shows lineage (and graph) for the identifier at the cursor (Shift+F2).</summary>
+        public Task ShowLineageAtCursor()
         {
-            string? info = BuildCursorInfo(out string title);
-            if (string.IsNullOrWhiteSpace(info))
+            string? lineage = InfoAtCursor.BuildLineage(_evaluator.LineageTracker, CurrentLineText(), _buffer.CursorLine, _buffer.CursorColumn, out string title);
+            return ShowInfoOverlay(title, lineage, "No lineage at cursor (run the script first).");
+        }
+
+        /// <summary>Shows a scrollable, dismiss-on-key overlay; status-only when content is empty.</summary>
+        private async Task ShowInfoOverlay(string title, string? content, string emptyMessage)
+        {
+            if (string.IsNullOrWhiteSpace(content))
             {
-                _renderer.ShowStatus("No info at cursor.");
+                _renderer.ShowStatus(emptyMessage);
                 return;
             }
 
             _renderer.InfoTitle = title;
-            _renderer.InfoContent = info;
+            _renderer.InfoContent = content;
             _renderer.InfoScrollRow = 0;
             _renderer.InfoVisible = true;
             try

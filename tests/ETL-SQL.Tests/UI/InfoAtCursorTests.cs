@@ -76,6 +76,27 @@ namespace ETL_SQL.Tests.UI
         }
 
         [Fact]
+        public void BuildLineageFromEntries_FallsBackToWordMatch()
+        {
+            var entries = new List<LineageEntry>
+            {
+                new LineageEntry("Orders", "SELECT")
+                {
+                    TargetColumn = "Total",
+                    Line = 9, Column = 1, EndLine = 9, EndColumn = 5, // span far from the cursor
+                    DerivedFromDescriptions = "qty * price"
+                }
+            };
+
+            // Cursor on the word "Total" (col 8) on line 0 — not in the span, matched by name.
+            var result = InfoAtCursor.BuildLineageFromEntries(entries, "SELECT Total", 0, 8, out var title);
+
+            Assert.NotNull(result);
+            Assert.Equal("Total", title);
+            Assert.Contains("Orders.Total", result);
+        }
+
+        [Fact]
         public void Build_NoLineage_WhenCursorOutsideEntry()
         {
             var entries = new List<LineageEntry>

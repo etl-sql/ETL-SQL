@@ -132,10 +132,10 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            // Shift+F1 - Info at cursor (context help + lineage)
+            // Shift+F1 - Help at cursor (function/keyword help)
             if (key.Key == ConsoleKey.F1 && key.Modifiers.HasFlag(ConsoleModifiers.Shift))
             {
-                await _editor.ShowInfoAtCursor();
+                await _editor.ShowHelpAtCursor();
                 return;
             }
 
@@ -160,6 +160,13 @@ namespace ETL_SQL.TUI.UI
                 if (key.Modifiers.HasFlag(ConsoleModifiers.Shift)) await _editor.RunStatementAtCursor(); 
                 else if (key.Modifiers.HasFlag(ConsoleModifiers.Control)) await _editor.RunSelectedText();
                 else await _editor.RunScript();
+                return;
+            }
+
+            // Shift+F2 - Lineage at cursor (Save As remains on Ctrl+Shift+S)
+            if (key.Key == ConsoleKey.F2 && key.Modifiers.HasFlag(ConsoleModifiers.Shift))
+            {
+                await _editor.ShowLineageAtCursor();
                 return;
             }
 
