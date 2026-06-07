@@ -298,6 +298,8 @@ namespace ETL_SQL.TUI.UI
                                        : (ResultsVisible || CompareMode) ? BottomTab.Results
                                        : BottomTab.Pipeline;
                 RenderBottomTabStrip(lowerY, totalWidth, activeBottom);
+                if (ResultsVisible && !CompareMode && evaluator.LastResultSets.Count > 1)
+                    RenderResultSetNav(lowerY, totalWidth, ActiveResultSetIndex, evaluator.LastResultSets.Count);
 
                 if (CompareMode)
                     _resultsPanel.RenderCompare(_console, 0, lowerContentTop, totalWidth, lowerContentHeight, evaluator, this);
@@ -689,6 +691,28 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
+        /// <summary>Draws the right-aligned "◀ i/N ▶" result-set navigator on the strip row.</summary>
+        private void RenderResultSetNav(int row, int totalWidth, int index, int count)
+        {
+            int start = ResultSetNav.StartX(totalWidth, index, count);
+            string label = ResultSetNav.FormatLabel(index, count);
+            _console.SetCursorPosition(start, row);
+            _console.Markup($"[black on cyan] ◀ [/][grey85 on grey23]{Markup.Escape(label)}[/][black on cyan] ▶ [/]");
+        }
+
+        /// <summary>Switches the active result set by <paramref name="delta"/> (clamped), resetting scroll/filter.</summary>
+        public void CycleResultSet(int delta, int setCount)
+        {
+            if (setCount <= 1) return;
+            int next = Math.Clamp(ActiveResultSetIndex + delta, 0, setCount - 1);
+            if (next == ActiveResultSetIndex) return;
+            ActiveResultSetIndex = next;
+            ResultScrollRow = 0;
+            ResultScrollCol = 0;
+            FilterText = "";
+            ShowStatus($"View: Result Set {next + 1}/{setCount}");
+        }
+
         public void ScrollRegion(int x, int y, int delta)
         {
             var layout = LayoutCalculator.Compute(_lastWidth, _lastHeight, 1,
@@ -711,24 +735,19 @@ namespace ETL_SQL.TUI.UI
             }
             else if (layout.InLowerContent(y))
             {
-                if (PerformanceVisible)
+                if (CompareMode && CompareScrollRows.Count > 0)
+                {
+                    // Wheel scrolls whichever compare pane the cursor is over.
+                    int clickedPaneIndex = Math.Clamp((y - layout.LowerContentTop) / Math.Max(4, layout.LowerContentHeight / Math.Max(1, CompareScrollRows.Count)), 0, CompareScrollRows.Count - 1);
+                    CompareScrollRows[clickedPaneIndex] = Math.Max(0, CompareScrollRows[clickedPaneIndex] + delta);
+                }
+                else if (PerformanceVisible)
                 {
                     ResultScrollRow = Math.Max(0, ResultScrollRow + delta);
                 }
                 else if (ResultsVisible)
                 {
-                    if (CompareMode && CompareScrollRows.Count > 0)
-                    {
-                        int clickedPaneIndex = Math.Clamp((y - layout.LowerContentTop) / Math.Max(4, layout.LowerContentHeight / Math.Max(1, CompareScrollRows.Count)), 0, CompareScrollRows.Count - 1);
-                        if (clickedPaneIndex >= 0 && clickedPaneIndex < CompareScrollRows.Count)
-                        {
-                            CompareScrollRows[clickedPaneIndex] = Math.Max(0, CompareScrollRows[clickedPaneIndex] + delta);
-                        }
-                    }
-                    else
-                    {
-                        ResultScrollRow = Math.Max(0, ResultScrollRow + delta);
-                    }
+                    ResultScrollRow = Math.Max(0, ResultScrollRow + delta);
                 }
                 else
                 {
@@ -850,10 +869,35 @@ namespace ETL_SQL.TUI.UI
             {
                 if (layout.OnBottomTabStrip(y))
                 {
-                    var clicked = BottomTabStrip.HitTest(x);
-                    if (clicked.HasValue)
+                    // Result-set arrows (right side) take precedence over the tabs in Results view.
+                    int navDelta = (ResultsVisible && !CompareMode)
+                        ? ResultSetNav.HitTest(x, _lastWidth, ActiveResultSetIndex, editor._evaluator.LastResultSets.Count)
+                        : 0;
+                    if (navDelta != 0)
                     {
-                        ShowBottomTab(clicked.Value);
+                        CycleResultSet(navDelta, editor._evaluator.LastResultSets.Count);
+                        ForceFullRepaint();
+                    }
+                    else
+                    {
+                        var clicked = BottomTabStrip.HitTest(x);
+                        if (clicked.HasValue)
+                        {
+                            ShowBottomTab(clicked.Value);
+                            ForceFullRepaint();
+                        }
+                    }
+                }
+                else if (CompareMode)
+                {
+                    // Click selects the compare pane to scroll (F7 leaves ResultsVisible false).
+                    Focus = EditorFocus.Results;
+                    int paneCount = editor._evaluator.LastResultSets.Count;
+                    if (paneCount > 0)
+                    {
+                        int paneHeight = Math.Max(4, layout.LowerContentHeight / Math.Max(1, paneCount));
+                        int clickedPaneIndex = Math.Clamp((y - layout.LowerContentTop) / paneHeight, 0, paneCount - 1);
+                        CompareFocusIndex = clickedPaneIndex;
                         ForceFullRepaint();
                     }
                 }
@@ -864,13 +908,6 @@ namespace ETL_SQL.TUI.UI
                 else if (ResultsVisible)
                 {
                     Focus = EditorFocus.Results;
-                    if (CompareMode && CompareScrollRows.Count > 0)
-                    {
-                        int paneCount = editor._evaluator.LastResultSets.Count;
-                        int paneHeight = Math.Max(4, layout.LowerContentHeight / Math.Max(1, paneCount));
-                        int clickedPaneIndex = Math.Clamp((y - layout.LowerContentTop) / paneHeight, 0, paneCount - 1);
-                        CompareFocusIndex = clickedPaneIndex;
-                    }
                 }
                 else
                 {
