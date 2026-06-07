@@ -54,6 +54,13 @@ namespace ETL_SQL.TUI.UI
         }
 
         public static ProcessStartInfo BuildServeProcess(string exePath, string[] prefixArgs, string scriptFullPath)
+            => BuildPlayerProcess(exePath, prefixArgs, scriptFullPath);
+
+        /// <summary>Multi-report mode: serve every report listed in a reports.json manifest.</summary>
+        public static ProcessStartInfo BuildManifestProcess(string exePath, string[] prefixArgs, string manifestPath)
+            => BuildPlayerProcess(exePath, prefixArgs, "--manifest", manifestPath);
+
+        private static ProcessStartInfo BuildPlayerProcess(string exePath, string[] prefixArgs, params string[] playerArgs)
         {
             var psi = new ProcessStartInfo
             {
@@ -64,7 +71,7 @@ namespace ETL_SQL.TUI.UI
                 CreateNoWindow = true,
             };
             foreach (var p in prefixArgs) psi.ArgumentList.Add(p);
-            psi.ArgumentList.Add(scriptFullPath);
+            foreach (var a in playerArgs) psi.ArgumentList.Add(a);
             psi.ArgumentList.Add("--no-browser"); // the TUI opens the browser itself, at the reported URL
             return psi;
         }

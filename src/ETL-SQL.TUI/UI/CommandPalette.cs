@@ -23,6 +23,7 @@ namespace ETL_SQL.TUI.UI
         {
             // ── Report ──
             new PaletteCommand("Serve report in browser", "Ctrl+Shift+R", e => e.ServeInBrowser()),
+            new PaletteCommand("Serve folder (all reports)", null, e => e.ServeFolderInBrowser()),
             new PaletteCommand("Export report to Markdown", null, e => e.ExportReportMarkdown()),
             new PaletteCommand("Export report to PDF", null, e => e.ExportReportPdf()),
 

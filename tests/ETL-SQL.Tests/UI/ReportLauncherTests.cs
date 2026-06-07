@@ -31,6 +31,13 @@ namespace ETL_SQL.Tests.UI
         }
 
         [Fact]
+        public void BuildManifestProcess_PassesManifestFlag()
+        {
+            var psi = ReportLauncher.BuildManifestProcess("ETL-SQL.ReportPlayer.exe", System.Array.Empty<string>(), "C:\\r\\.etlsql-reports.json");
+            Assert.Equal(new[] { "--manifest", "C:\\r\\.etlsql-reports.json", "--no-browser" }, psi.ArgumentList.ToArray());
+        }
+
+        [Fact]
         public void FindReportPlayer_ResolvesFromTheRepo()
         {
             // The test runs inside the repo, so the dev fallback should resolve the project.

@@ -639,10 +639,11 @@ namespace ETL_SQL.Reporting.Renderers
 
         private static IRenderable RenderCard(VisualManifest visual)
         {
-            var value = visual.Rows.FirstOrDefault()?.FirstOrDefault() ?? "N/A";
+            var raw = visual.Rows.FirstOrDefault()?.FirstOrDefault();
+            var value = string.IsNullOrEmpty(raw) ? "N/A" : FormatNumericCell(raw);
             var label = GetVisualTitle(visual);
 
-            var panel = new Panel(Align.Center(new Markup($"[bold yellow]{value}[/]"), VerticalAlignment.Middle))
+            var panel = new Panel(Align.Center(new Markup($"[bold yellow]{Markup.Escape(value)}[/]"), VerticalAlignment.Middle))
             {
                 Header = new PanelHeader(Markup.Escape(label)),
                 Border = BoxBorder.Double,
@@ -667,7 +668,7 @@ namespace ETL_SQL.Reporting.Renderers
 
             foreach (var row in visual.Rows)
             {
-                table.AddRow(row.Select(c => c ?? "").ToArray());
+                table.AddRow(row.Select(c => Markup.Escape(FormatNumericCell(c))).ToArray());
             }
 
             return table;
@@ -755,6 +756,15 @@ namespace ETL_SQL.Reporting.Renderers
 
         private static string FormatNum(double v) =>
             Math.Abs(v) >= 1000 ? v.ToString("N0", CultureInfo.InvariantCulture) : v.ToString("0.##", CultureInfo.InvariantCulture);
+
+        /// <summary>Rounds a numeric cell to thousands-separated, ≤2 decimals; passes non-numbers through.</summary>
+        public static string FormatNumericCell(string? raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return raw ?? "";
+            if (double.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var v))
+                return v.ToString("#,##0.##", CultureInfo.InvariantCulture);
+            return raw;
+        }
 
         private static string GetVisualTitle(VisualManifest visual)
         {

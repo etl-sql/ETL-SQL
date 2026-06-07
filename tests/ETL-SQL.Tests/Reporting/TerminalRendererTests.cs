@@ -639,6 +639,20 @@ namespace ETL_SQL.Tests.Reporting
             var v = V("MyVisualName", "CARD", new[] { "Val" }, new[] { new[] { "300" } });
             Assert.NotNull(TerminalRenderer.RenderVisual(v));
         }
+
+        // ── Numeric cell formatting (Card / Table rounding) ──────────────────
+
+        [Theory]
+        [InlineData("3360526.32035216541905800064004", "3,360,526.32")]
+        [InlineData("582261.86565057459434199359880", "582,261.87")]
+        [InlineData("12356", "12,356")]
+        [InlineData("12356.5", "12,356.5")]
+        [InlineData("hello", "hello")]   // non-numeric passes through
+        [InlineData("", "")]
+        public void FormatNumericCell_RoundsNumbers_PassesTextThrough(string raw, string expected)
+        {
+            Assert.Equal(expected, TerminalRenderer.FormatNumericCell(raw));
+        }
     }
 }
 

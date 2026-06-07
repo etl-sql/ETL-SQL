@@ -45,6 +45,13 @@ namespace ETL_SQL.Tests.UI
         }
 
         [Fact]
+        public void Includes_ReportActions()
+        {
+            Assert.Contains(CommandPalette.Commands, c => c.Title == "Serve folder (all reports)");
+            Assert.Contains(CommandPalette.Commands, c => c.Title == "Serve report in browser");
+        }
+
+        [Fact]
         public void EveryCommand_HasTitleAndAction()
         {
             Assert.All(CommandPalette.Commands, c =>

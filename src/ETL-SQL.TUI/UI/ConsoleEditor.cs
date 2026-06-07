@@ -190,22 +190,56 @@ namespace ETL_SQL.TUI.UI
                 if (!await SaveScript()) { _renderer.ShowStatus("Save the report before serving."); return; }
             }
 
-            string full = Path.GetFullPath(_filePath);
             var found = ReportLauncher.FindReportPlayer();
-            if (found == null)
-            {
-                await ShowServeError("Could not locate ETL-SQL.ReportPlayer. Build the solution (dotnet build ETL-SQL.slnx), then try again.");
-                return;
-            }
-            var (exe, prefixArgs) = found.Value;
+            if (found == null) { await ShowServeError(PlayerNotFound); return; }
+            var (exe, prefix) = found.Value;
+            await LaunchReportServer(ReportLauncher.BuildServeProcess(exe, prefix, Path.GetFullPath(_filePath)), "Report preview");
+        }
 
+        /// <summary>Serves every report in the current file's folder (multi-report mode).</summary>
+        public async Task ServeFolderInBrowser()
+        {
+            if (string.IsNullOrEmpty(_filePath) || _filePath == "untitled.etlsql")
+            {
+                if (!await SaveScript()) { _renderer.ShowStatus("Save the file first."); return; }
+            }
+
+            string folder = Path.GetDirectoryName(Path.GetFullPath(_filePath)) ?? ".";
+            var files = Directory.EnumerateFiles(folder, "*.rptsql")
+                .Concat(Directory.EnumerateFiles(folder, "*.etlsql"))
+                .Select(Path.GetFileName).Where(n => !string.IsNullOrEmpty(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (files.Count == 0) { await ShowServeError($"No .rptsql or .etlsql reports found in {folder}."); return; }
+
+            // A generated manifest beside the reports (paths must resolve within its directory).
+            string manifestPath = Path.Combine(folder, ".etlsql-reports.json");
+            var reports = files.Select(f => new { name = Path.GetFileNameWithoutExtension(f), path = f });
+            await File.WriteAllTextAsync(manifestPath,
+                System.Text.Json.JsonSerializer.Serialize(new { reports }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+
+            var found = ReportLauncher.FindReportPlayer();
+            if (found == null) { await ShowServeError(PlayerNotFound); return; }
+            var (exe, prefix) = found.Value;
+            await LaunchReportServer(ReportLauncher.BuildManifestProcess(exe, prefix, manifestPath),
+                $"Serving {files.Count} report(s) from {Path.GetFileName(folder)}");
+        }
+
+        private const string PlayerNotFound =
+            "Could not locate ETL-SQL.ReportPlayer. Build the solution (dotnet build ETL-SQL.slnx), then try again.";
+
+        /// <summary>
+        /// Starts the ReportPlayer process, reads its REPORT_URL line, opens the browser,
+        /// records the location in Output, and surfaces any startup failure.
+        /// </summary>
+        private async Task LaunchReportServer(System.Diagnostics.ProcessStartInfo psi, string label)
+        {
             System.Diagnostics.Process? proc;
-            try { proc = System.Diagnostics.Process.Start(ReportLauncher.BuildServeProcess(exe, prefixArgs, full)); }
+            try { proc = System.Diagnostics.Process.Start(psi); }
             catch (Exception ex) { await ShowServeError($"Could not start the server process: {ex.Message}"); return; }
             if (proc == null) { await ShowServeError("Could not start the server process."); return; }
 
-            // The player binds an OS-assigned port and prints REPORT_URL=<actual url>; read it
-            // so we open/show the URL the server really bound. Keep all output for diagnostics.
             var output = new System.Text.StringBuilder();
             var urlTcs = new TaskCompletionSource<string?>();
             _ = Task.Run(async () =>
@@ -221,7 +255,7 @@ namespace ETL_SQL.TUI.UI
                     }
                 }
                 catch { }
-                urlTcs.TrySetResult(null); // stdout ended without a URL
+                urlTcs.TrySetResult(null);
             });
             var stderrTask = proc.StandardError.ReadToEndAsync();
 
@@ -236,7 +270,7 @@ namespace ETL_SQL.TUI.UI
                 ReportLauncher.OpenBrowser(url);
                 _renderer.AddOutput(OutputKind.Server, url);
                 await ShowInfoOverlay("Serving report",
-                    $"Report preview is live:\n\n{url}\n\n" +
+                    $"{label} is live:\n\n{url}\n\n" +
                     "Your browser should have opened. If not, Ctrl+click the link above.\n" +
                     "The server keeps running after you close this message.\n\n" +
                     "Press any key to close.",
@@ -244,13 +278,12 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            // No URL — surface the real reason from the child's output.
             string err = "";
             try { if (await Task.WhenAny(stderrTask, Task.Delay(2000)) == stderrTask) err = stderrTask.Result; } catch { }
             string captured; lock (output) captured = output.ToString();
             string detail = ReportLauncher.FirstMeaningfulLine(err)
                           ?? ReportLauncher.FirstMeaningfulLine(captured)
-                          ?? (proc.HasExited ? $"The server process exited with code {proc.ExitCode}." : "No URL was reported within 25 seconds.");
+                          ?? (proc.HasExited ? $"The server process exited with code {proc.ExitCode}." : "No URL was reported within 90 seconds.");
             await ShowServeError(detail);
         }
 
