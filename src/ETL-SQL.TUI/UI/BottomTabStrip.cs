@@ -2,8 +2,8 @@ using System.Collections.Generic;
 
 namespace ETL_SQL.TUI.UI
 {
-    /// <summary>The three bottom-pane views, mirroring the F4 cycle.</summary>
-    public enum BottomTab { Pipeline, Results, Performance }
+    /// <summary>The bottom-pane views, mirroring the F4 cycle.</summary>
+    public enum BottomTab { Pipeline, Results, Performance, Output }
 
     /// <summary>
     /// The clickable tab strip drawn above the bottom pane. The same segment widths drive
@@ -18,6 +18,7 @@ namespace ETL_SQL.TUI.UI
             (BottomTab.Pipeline, "Pipeline"),
             (BottomTab.Results, "Results"),
             (BottomTab.Performance, "Performance"),
+            (BottomTab.Output, "Output"),
         };
 
         /// <summary>Yields each tab's screen segment (start column and width) in render order.</summary>

@@ -234,6 +234,7 @@ namespace ETL_SQL.TUI.UI
             if (!string.IsNullOrEmpty(url))
             {
                 ReportLauncher.OpenBrowser(url);
+                _renderer.AddOutput(OutputKind.Server, url);
                 await ShowInfoOverlay("Serving report",
                     $"Report preview is live:\n\n{url}\n\n" +
                     "Your browser should have opened. If not, Ctrl+click the link above.\n" +
@@ -329,13 +330,52 @@ namespace ETL_SQL.TUI.UI
                 else
                     await File.WriteAllTextAsync(outPath, new ETL_SQL.Reporting.MarkdownRenderer().Render(manifest));
 
-                _renderer.ShowStatus($"Exported: {outPath}");
+                _renderer.AddOutput(pdf ? OutputKind.Pdf : OutputKind.Markdown, outPath);
+                _renderer.ShowStatus($"Exported: {outPath} — see the Output tab (F4)");
             }
             catch (Exception ex)
             {
                 await ShowInfoOverlay("Export failed",
                     $"Could not export the report.\n\n{ex.Message}\n\nPress any key to close.", "");
             }
+        }
+
+        private OutputEntry? SelectedOutput()
+        {
+            var list = _renderer.OutputEntries;
+            int i = _renderer.OutputSelectedIndex;
+            return (i >= 0 && i < list.Count) ? list[i] : null;
+        }
+
+        /// <summary>Opens the selected Output entry: a URL in the browser, a file in the OS file manager.</summary>
+        public Task OpenSelectedOutput()
+        {
+            var e = SelectedOutput();
+            if (e == null) return Task.CompletedTask;
+            if (e.IsUrl) ReportLauncher.OpenBrowser(e.Location);
+            else RevealInFileManager(e.Location);
+            return Task.CompletedTask;
+        }
+
+        /// <summary>Copies the selected Output location to the clipboard.</summary>
+        public async Task CopySelectedOutput()
+        {
+            var e = SelectedOutput();
+            if (e == null) return;
+            try { await _clipboard.SetTextAsync(e.Location); _renderer.ShowStatus("Copied location to clipboard."); }
+            catch { _renderer.ShowStatus("Copy failed."); }
+        }
+
+        private static void RevealInFileManager(string path)
+        {
+            try
+            {
+                if (OperatingSystem.IsWindows())
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+                else
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = System.IO.Path.GetDirectoryName(path) ?? path, UseShellExecute = true });
+            }
+            catch { }
         }
 
         public async Task HandleExit()
@@ -1351,6 +1391,7 @@ namespace ETL_SQL.TUI.UI
                 tab.ActiveLowerTab = _renderer.ActiveLowerTab;
                 tab.ResultsVisible = _renderer.ResultsVisible;
                 tab.PerformanceVisible = _renderer.PerformanceVisible;
+                tab.OutputVisible = _renderer.OutputVisible;
                 tab.CompareMode = _renderer.CompareMode;
                 tab.IsBottomMaximized = _renderer.IsBottomMaximized;
             }
@@ -1398,6 +1439,7 @@ namespace ETL_SQL.TUI.UI
                 _renderer.ActiveLowerTab = tab.ActiveLowerTab;
                 _renderer.ResultsVisible = tab.ResultsVisible;
                 _renderer.PerformanceVisible = tab.PerformanceVisible;
+                _renderer.OutputVisible = tab.OutputVisible;
                 _renderer.CompareMode = tab.CompareMode;
                 _renderer.IsBottomMaximized = tab.IsBottomMaximized;
 
@@ -1542,6 +1584,7 @@ namespace ETL_SQL.TUI.UI
         // empty "Pipeline & Messages" view rather than inheriting the prior tab's.
         public bool ResultsVisible { get; set; }
         public bool PerformanceVisible { get; set; }
+        public bool OutputVisible { get; set; }
         public bool CompareMode { get; set; }
         public bool IsBottomMaximized { get; set; }
     }

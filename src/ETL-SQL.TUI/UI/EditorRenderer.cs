@@ -17,7 +17,8 @@ namespace ETL_SQL.TUI.UI
         Messages,
         Results,
         Performance,
-        Sidebar
+        Sidebar,
+        Output
     }
 
     /// <summary>
@@ -73,7 +74,18 @@ namespace ETL_SQL.TUI.UI
         public string FilterText { get; set; } = "";
         public bool PerformanceVisible { get; set; } = false;
         public bool ResultsVisible { get; set; } = false;
+        public bool OutputVisible { get; set; } = false;
         public bool CompareMode { get; set; } = false;
+
+        // Durable list of locations the TUI produced (served URLs, export paths).
+        public List<OutputEntry> OutputEntries { get; } = new();
+        public int OutputSelectedIndex { get; set; } = 0;
+        public int OutputScrollRow { get; set; } = 0;
+        public void AddOutput(OutputKind kind, string location)
+        {
+            OutputEntries.Add(new OutputEntry(kind, location, DateTime.Now));
+            OutputSelectedIndex = OutputEntries.Count - 1;
+        }
         public int CompareFocusIndex { get; set; } = 0;
         public EditorFocus ActiveLowerTab { get; set; } = EditorFocus.Messages;
         private int _lastMessageCount = 0;
@@ -104,6 +116,7 @@ namespace ETL_SQL.TUI.UI
         private readonly ResultsPanel _resultsPanel;
         private readonly PerformancePanel _performancePanel;
         private readonly ReportPreviewPanel _reportPreviewPanel;
+        private readonly OutputPanel _outputPanel = new();
         public readonly SidebarPanel _sidebarPanel;
 
         /// <summary>Initializes a new instance of the <see cref="EditorRenderer"/> class.</summary>
@@ -299,7 +312,8 @@ namespace ETL_SQL.TUI.UI
                 // Clickable tab strip on the first row of the lower pane; panels render below it.
                 int lowerContentTop = layout.LowerContentTop;
                 int lowerContentHeight = layout.LowerContentHeight;
-                BottomTab activeBottom = PerformanceVisible ? BottomTab.Performance
+                BottomTab activeBottom = OutputVisible ? BottomTab.Output
+                                       : PerformanceVisible ? BottomTab.Performance
                                        : (ResultsVisible || CompareMode) ? BottomTab.Results
                                        : BottomTab.Pipeline;
                 RenderBottomTabStrip(lowerY, totalWidth, activeBottom);
@@ -308,6 +322,8 @@ namespace ETL_SQL.TUI.UI
 
                 if (CompareMode)
                     _resultsPanel.RenderCompare(_console, 0, lowerContentTop, totalWidth, lowerContentHeight, evaluator, this);
+                else if (OutputVisible)
+                    _outputPanel.Render(_console, 0, lowerContentTop, totalWidth, lowerContentHeight, OutputEntries, OutputSelectedIndex, OutputScrollRow, Focus == EditorFocus.Output);
                 else if (PerformanceVisible)
                     _performancePanel.Render(_console, 0, lowerContentTop, totalWidth, lowerContentHeight);
                 else if (ResultsVisible)
@@ -827,15 +843,19 @@ namespace ETL_SQL.TUI.UI
             switch (tab)
             {
                 case BottomTab.Results:
-                    ResultsVisible = true; PerformanceVisible = false;
+                    ResultsVisible = true; PerformanceVisible = false; OutputVisible = false;
                     ShowStatus("View: Query Results");
                     break;
                 case BottomTab.Performance:
-                    PerformanceVisible = true; ResultsVisible = false; CompareMode = false;
+                    PerformanceVisible = true; ResultsVisible = false; OutputVisible = false; CompareMode = false;
                     ShowStatus("View: Performance Metrics");
                     break;
+                case BottomTab.Output:
+                    OutputVisible = true; ResultsVisible = false; PerformanceVisible = false; CompareMode = false;
+                    ShowStatus("View: Output");
+                    break;
                 default: // Pipeline & Messages
-                    ResultsVisible = false; PerformanceVisible = false; CompareMode = false;
+                    ResultsVisible = false; PerformanceVisible = false; OutputVisible = false; CompareMode = false;
                     ShowStatus("View: Pipeline & Messages");
                     break;
             }
@@ -1074,6 +1094,13 @@ namespace ETL_SQL.TUI.UI
                         CompareFocusIndex = clickedPaneIndex;
                         ForceFullRepaint();
                     }
+                }
+                else if (OutputVisible)
+                {
+                    Focus = EditorFocus.Output;
+                    int row = (y - layout.LowerContentTop - 1) + OutputScrollRow; // -1 for the panel border
+                    if (row >= 0 && row < OutputEntries.Count) OutputSelectedIndex = row;
+                    ForceFullRepaint();
                 }
                 else if (PerformanceVisible)
                 {

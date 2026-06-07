@@ -100,6 +100,27 @@ namespace ETL_SQL.TUI.UI
                 }
             }
 
+            if (_renderer.Focus == EditorFocus.Output)
+            {
+                int count = _renderer.OutputEntries.Count;
+                if (key.Key == ConsoleKey.UpArrow)
+                {
+                    _renderer.OutputSelectedIndex = Math.Max(0, _renderer.OutputSelectedIndex - 1);
+                    if (_renderer.OutputSelectedIndex < _renderer.OutputScrollRow) _renderer.OutputScrollRow = _renderer.OutputSelectedIndex;
+                    _renderer.ForceFullRepaint(); return;
+                }
+                if (key.Key == ConsoleKey.DownArrow)
+                {
+                    _renderer.OutputSelectedIndex = Math.Min(Math.Max(0, count - 1), _renderer.OutputSelectedIndex + 1);
+                    _renderer.ForceFullRepaint(); return;
+                }
+                if (key.Key == ConsoleKey.Enter) { await _editor.OpenSelectedOutput(); return; }
+                if (key.Key == ConsoleKey.C && key.Modifiers == 0) { await _editor.CopySelectedOutput(); return; }
+                if (key.Key == ConsoleKey.Escape) { _renderer.Focus = EditorFocus.Editor; _renderer.ForceFullRepaint(); return; }
+                // Swallow plain typing while the Output list is focused.
+                if (key.KeyChar != '\0' && !char.IsControl(key.KeyChar) && key.Modifiers == 0) return;
+            }
+
             if (key.Key == ConsoleKey.Spacebar && key.Modifiers == 0)
             {
                 _editor.MarkDirty();
@@ -289,6 +310,10 @@ namespace ETL_SQL.TUI.UI
                     {
                         _renderer.Focus = EditorFocus.Sidebar;
                     }
+                    else if (_renderer.OutputVisible)
+                    {
+                        _renderer.Focus = EditorFocus.Output;
+                    }
                     else if (_renderer.ResultsVisible)
                     {
                         _renderer.Focus = EditorFocus.Results;
@@ -304,7 +329,11 @@ namespace ETL_SQL.TUI.UI
                 }
                 else if (_renderer.Focus == EditorFocus.Sidebar)
                 {
-                    if (_renderer.ResultsVisible)
+                    if (_renderer.OutputVisible)
+                    {
+                        _renderer.Focus = EditorFocus.Output;
+                    }
+                    else if (_renderer.ResultsVisible)
                     {
                         _renderer.Focus = EditorFocus.Results;
                     }
@@ -334,6 +363,7 @@ namespace ETL_SQL.TUI.UI
                     EditorFocus.Messages => "Messages",
                     EditorFocus.Results => "Query Results",
                     EditorFocus.Performance => "Performance Metrics",
+                    EditorFocus.Output => "Output",
                     _ => "Editor"
                 };
                 _renderer.ShowStatus($"Focus: {focusName}");
@@ -425,16 +455,19 @@ namespace ETL_SQL.TUI.UI
             // F4 - Cycle lower panel: Pipeline+Messages → Results → Performance → (repeat)
             if (key.Key == ConsoleKey.F4)
             {
-                if (!_renderer.ResultsVisible && !_renderer.PerformanceVisible)
-                    { _renderer.ResultsVisible = true; _renderer.ShowStatus("View: Query Results"); }
-                else if (_renderer.ResultsVisible)
+                // Cycle: Pipeline+Messages → Results → Performance → Output → (repeat)
+                if (_renderer.ResultsVisible)
                     { _renderer.ResultsVisible = false; _renderer.PerformanceVisible = true; _renderer.ShowStatus("View: Performance Metrics"); }
+                else if (_renderer.PerformanceVisible)
+                    { _renderer.PerformanceVisible = false; _renderer.OutputVisible = true; _renderer.ShowStatus("View: Output"); }
+                else if (_renderer.OutputVisible)
+                    { _renderer.OutputVisible = false; _renderer.ShowStatus("View: Pipeline & Messages"); }
                 else
-                    { _renderer.PerformanceVisible = false; _renderer.ShowStatus("View: Pipeline & Messages"); }
+                    { _renderer.ResultsVisible = true; _renderer.ShowStatus("View: Query Results"); }
                 _renderer.Focus = EditorFocus.Editor;
                 _renderer.ForceFullRepaint();
                 return;
-        }
+            }
 
         // Alt+R - Toggle Report Preview (Phase 5)
         if (key.Key == ConsoleKey.R && key.Modifiers.HasFlag(ConsoleModifiers.Alt))
