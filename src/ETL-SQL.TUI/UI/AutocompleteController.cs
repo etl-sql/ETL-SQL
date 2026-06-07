@@ -241,6 +241,11 @@ namespace ETL_SQL.TUI.UI
                         ds = foundTab;
                     }
 
+                    // Fallback to the live context: temp tables (#t) created by SELECT … INTO
+                    // during the last run live in the evaluator's connections, not the static scan.
+                    ds ??= _metadata.GetRuntimeSource(info.TableName)
+                         ?? (string.IsNullOrEmpty(info.ConnectionName) ? null : _metadata.GetRuntimeSource(info.ConnectionName));
+
                     if (ds != null)
                     {
                         var cols = (ds is IDatabaseSource db && !string.IsNullOrEmpty(info.BaseTableName))

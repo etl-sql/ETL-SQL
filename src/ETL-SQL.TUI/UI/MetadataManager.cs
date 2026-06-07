@@ -82,6 +82,19 @@ namespace ETL_SQL.TUI.UI
             return await ds.GetColumnsAsync();
         }
 
+        /// <summary>
+        /// Looks up a data source in the live execution context (e.g. a #temp table
+        /// materialized by SELECT … INTO during the last run), which the static script
+        /// scan in <see cref="RefreshConnections"/> cannot know about.
+        /// </summary>
+        public IDataSource? GetRuntimeSource(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            if (_context.Connections.TryGetValue(name, out var ds)) return ds;
+            if (!name.StartsWith("#") && _context.Connections.TryGetValue("#" + name, out var temp)) return temp;
+            return null;
+        }
+
         public IEnumerable<string> GetConnections() => _connections.Keys;
 
         public string? GetConnectionType(string connectionName)

@@ -76,6 +76,31 @@ namespace ETL_SQL.Tests.UI
         }
 
         [Fact]
+        public async Task TestStarExpansionForTempTableAfterRun()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._renderer.Headless = true;
+            editor._buffer.Load(new[]
+            {
+                "CREATE CONNECTION m AS MOCKDB();",
+                "SELECT * INTO #temp FROM m.Users;",
+                "SELECT * FROM #temp"
+            });
+
+            // Run so #temp is materialized in the evaluator's connections.
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F5, false, false, false));
+
+            // Cursor just after the '*' on the last line ("SELECT *").
+            editor._buffer.CursorLine = 2;
+            editor._buffer.CursorColumn = 8;
+            await editor.HandleKey(new ConsoleKeyInfo(' ', ConsoleKey.Spacebar, false, false, true)); // Ctrl+Space
+
+            var text = editor._buffer.Lines[2];
+            Assert.Contains("UserID", text);
+            Assert.Contains("UserName", text);
+        }
+
+        [Fact]
         public async Task TestPathAutocomplete()
         {
             var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
