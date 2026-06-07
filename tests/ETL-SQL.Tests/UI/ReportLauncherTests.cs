@@ -13,7 +13,7 @@ namespace ETL_SQL.Tests.UI
         [Fact]
         public void BuildServeProcess_InvokesServe_OutputRedirected()
         {
-            var psi = ReportLauncher.BuildServeProcess("etl-sql.exe", "C:\\reports\\sales.rptsql");
+            var psi = ReportLauncher.BuildServeProcess("etl-sql.exe", System.Array.Empty<string>(), "C:\\reports\\sales.rptsql");
 
             Assert.Equal("etl-sql.exe", psi.FileName);
             Assert.Equal(new[] { "serve", "C:\\reports\\sales.rptsql", "--no-browser" }, psi.ArgumentList.ToArray());
@@ -21,6 +21,29 @@ namespace ETL_SQL.Tests.UI
             Assert.True(psi.RedirectStandardOutput);
             Assert.True(psi.RedirectStandardError);
             Assert.True(psi.CreateNoWindow);
+        }
+
+        [Fact]
+        public void BuildServeProcess_PrependsDotnetDll_WhenHostedByDotnet()
+        {
+            var psi = ReportLauncher.BuildServeProcess("dotnet", new[] { "/app/ETL-SQL.App.dll" }, "/r/sales.rptsql");
+            Assert.Equal(new[] { "/app/ETL-SQL.App.dll", "serve", "/r/sales.rptsql", "--no-browser" }, psi.ArgumentList.ToArray());
+        }
+
+        [Fact]
+        public void ResolveSelfInvocation_ReturnsAnExecutable()
+        {
+            var (exe, _) = ReportLauncher.ResolveSelfInvocation();
+            Assert.False(string.IsNullOrEmpty(exe));
+        }
+
+        [Theory]
+        [InlineData("Failed to start the ReportPlayer process.", "Failed to start the ReportPlayer process.")]
+        [InlineData("Starting report preview server...\nReal error here", "Real error here")]
+        [InlineData("   \n  \n", null)]
+        public void FirstMeaningfulLine_SkipsBoilerplate(string text, string? expected)
+        {
+            Assert.Equal(expected, ReportLauncher.FirstMeaningfulLine(text));
         }
 
         [Theory]

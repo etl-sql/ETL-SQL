@@ -190,22 +190,17 @@ namespace ETL_SQL.TUI.UI
                 if (!await SaveScript()) { _renderer.ShowStatus("Save the report before serving."); return; }
             }
 
-            string exe = Environment.ProcessPath ?? "";
-            if (string.IsNullOrEmpty(exe))
-            {
-                _renderer.ShowStatus("Could not locate the ETL-SQL executable to serve.");
-                return;
-            }
-
             string full = Path.GetFullPath(_filePath);
+            var (exe, prefixArgs) = ReportLauncher.ResolveSelfInvocation();
 
             System.Diagnostics.Process? proc;
-            try { proc = System.Diagnostics.Process.Start(ReportLauncher.BuildServeProcess(exe, full)); }
-            catch (Exception ex) { _renderer.ShowStatus($"Serve failed: {ex.Message}"); return; }
-            if (proc == null) { _renderer.ShowStatus("Serve failed to start."); return; }
+            try { proc = System.Diagnostics.Process.Start(ReportLauncher.BuildServeProcess(exe, prefixArgs, full)); }
+            catch (Exception ex) { await ShowServeError($"Could not start the server process: {ex.Message}"); return; }
+            if (proc == null) { await ShowServeError("Could not start the server process."); return; }
 
             // The player binds an OS-assigned port and prints REPORT_URL=<actual url>; read it
-            // so we open/show the URL the server really bound (not a guessed one).
+            // so we open/show the URL the server really bound. Keep all output for diagnostics.
+            var output = new System.Text.StringBuilder();
             var urlTcs = new TaskCompletionSource<string?>();
             _ = Task.Run(async () =>
             {
@@ -214,35 +209,54 @@ namespace ETL_SQL.TUI.UI
                     string? line;
                     while ((line = await proc.StandardOutput.ReadLineAsync()) != null)
                     {
+                        lock (output) output.AppendLine(line);
                         var u = ReportLauncher.ParseReportUrl(line);
                         if (u != null) urlTcs.TrySetResult(u);
                     }
                 }
                 catch { }
-                urlTcs.TrySetResult(null); // stream ended without a URL
+                urlTcs.TrySetResult(null); // stdout ended without a URL
             });
-            _ = Task.Run(async () => { try { await proc.StandardError.ReadToEndAsync(); } catch { } });
+            var stderrTask = proc.StandardError.ReadToEndAsync();
 
             _renderer.ShowStatus("Starting report server…");
             _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
 
             var finished = await Task.WhenAny(urlTcs.Task, Task.Delay(TimeSpan.FromSeconds(25)));
             string? url = finished == urlTcs.Task ? urlTcs.Task.Result : null;
-            if (string.IsNullOrEmpty(url))
+
+            if (!string.IsNullOrEmpty(url))
             {
-                _renderer.ShowStatus("Report server did not report a URL — it may have failed to start.");
+                ReportLauncher.OpenBrowser(url);
+                await ShowInfoOverlay("Serving report",
+                    $"Report preview is live:\n\n{url}\n\n" +
+                    "Your browser should have opened. If not, Ctrl+click the link above.\n" +
+                    "The server keeps running after you close this message.\n\n" +
+                    "Press any key to close.",
+                    "");
                 return;
             }
 
-            ReportLauncher.OpenBrowser(url);
+            // No URL — surface the real reason from the child's output.
+            string err = "";
+            try { if (await Task.WhenAny(stderrTask, Task.Delay(2000)) == stderrTask) err = stderrTask.Result; } catch { }
+            string captured; lock (output) captured = output.ToString();
+            string detail = ReportLauncher.FirstMeaningfulLine(err)
+                          ?? ReportLauncher.FirstMeaningfulLine(captured)
+                          ?? (proc.HasExited ? $"The server process exited with code {proc.ExitCode}." : "No URL was reported within 25 seconds.");
+            await ShowServeError(detail);
+        }
 
-            await ShowInfoOverlay("Serving report",
-                $"Report preview is live:\n\n{url}\n\n" +
-                "Your browser should have opened. If not, Ctrl+click the link above.\n" +
-                "The server keeps running after you close this message.\n\n" +
+        private Task ShowServeError(string detail) =>
+            ShowInfoOverlay("Serve failed",
+                "The report preview server did not start.\n\n" +
+                $"{detail}\n\n" +
+                "Things to check:\n" +
+                "- The file is a Report-SQL (.rptsql) report.\n" +
+                "- The ReportPlayer is built (build the whole solution).\n" +
+                "- Run `etl-sql serve <file>` in a terminal to see full output.\n\n" +
                 "Press any key to close.",
                 "");
-        }
 
         public async Task HandleExit()
         {
