@@ -185,7 +185,7 @@ namespace ETL_SQL.TUI.UI
             if (dirty > 0)
             {
                 string label = dirty == 1 ? "1 tab has" : $"{dirty} tabs have";
-                var choice = await ShowPrompt($"{label} unsaved changes. [S]ave all  [D]iscard all  [C]ancel", "");
+                var choice = await ShowPrompt($"{label} unsaved changes. Save all / Discard / Cancel? (s/d/c)", "");
                 if (string.IsNullOrWhiteSpace(choice)) return; // cancel on empty/Esc
                 char c = char.ToLowerInvariant(choice.Trim()[0]);
                 if (c == 's') { if (!await SaveAllTabs()) return; }

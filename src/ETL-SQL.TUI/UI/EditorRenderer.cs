@@ -409,7 +409,7 @@ namespace ETL_SQL.TUI.UI
 
                 _console.SetCursorPosition(0, promptRow);
                 string displayValue = PromptIsSecret ? new string('*', PromptValue.Length) : PromptValue;
-                string promptText = $" [yellow]{PromptTitle}:[/] {displayValue}";
+                string promptText = BuildPromptMarkup(PromptTitle, displayValue);
                 
                 // Ensure prompt doesn't wrap
                 string renderedPrompt = promptText.PadRight(totalWidth);
@@ -639,6 +639,14 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>Displays a temporary status message in the status bar.</summary>
         public void ShowStatus(string message) { StatusMessage = message; StatusMessageExpiry = DateTime.Now.AddSeconds(3); }
+
+        /// <summary>
+        /// Builds the markup for the prompt line. The title and value are user/caller
+        /// supplied (file paths, search terms, prompt captions) and must be escaped so a
+        /// literal '[' or ']' cannot be parsed as Spectre markup and crash the editor.
+        /// </summary>
+        public static string BuildPromptMarkup(string? title, string displayValue)
+            => $" [yellow]{Markup.Escape(title ?? string.Empty)}:[/] {Markup.Escape(displayValue ?? string.Empty)}";
 
         public void ScrollRegion(int x, int y, int delta)
         {
