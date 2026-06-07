@@ -39,8 +39,19 @@ namespace ETL_SQL.TUI.UI
             try
             {
                 var dir = Path.GetDirectoryName(ConfigPath);
-                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                if (!string.IsNullOrEmpty(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                    // Restrict the containing dir to the owner (0700) on Unix; on Windows the
+                    // per-user %APPDATA% root is already ACL'd to the current user.
+                    if (!OperatingSystem.IsWindows())
+                        File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                }
                 File.WriteAllText(ConfigPath, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+                // The file holds a (short-lived) bearer token — lock it to the owner (0600) on Unix
+                // so other local accounts can't read it. Windows inherits the per-user AppData ACL.
+                if (!OperatingSystem.IsWindows())
+                    File.SetUnixFileMode(ConfigPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             }
             catch { }
         }
