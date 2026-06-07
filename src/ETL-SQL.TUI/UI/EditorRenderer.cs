@@ -144,19 +144,14 @@ namespace ETL_SQL.TUI.UI
                 _forceFullRepaintPending = false;
             }
 
-            // ── Layout Definitions ──────────────────────────────────────────
-            int editorAreaTop = 2;
-            int statusHeight  = 2; // Two lines for status/help bar
-            int reservedBottom = statusHeight; // reduced from statusHeight + 1 for tighter layout
-
-            // Prioritize 14 lines for the lower area to show 10 messages + rounded borders correctly
-            int lowerAreaHeight = 14; 
-            int available = totalHeight - editorAreaTop - reservedBottom;
-            if (IsBottomMaximized || CompareMode) lowerAreaHeight = Math.Max(5, available - 5);
-            else if (lowerAreaHeight > available - 8) lowerAreaHeight = Math.Max(5, available - 8);
-
-            int editorAreaHeight = Math.Max(3, totalHeight - lowerAreaHeight - reservedBottom - editorAreaTop);
-            int gutterWidth = (buffer.Lines.Count).ToString().Length + 2;
+            // ── Layout Definitions (single source of truth — see LayoutCalculator) ──
+            var layout = LayoutCalculator.Compute(totalWidth, totalHeight, buffer.Lines.Count,
+                SidebarVisible, SidebarWidth, IsBottomMaximized, CompareMode);
+            int editorAreaTop = layout.EditorAreaTop;
+            int statusHeight  = layout.StatusHeight;
+            int lowerAreaHeight = layout.LowerAreaHeight;
+            int editorAreaHeight = layout.EditorAreaHeight;
+            int gutterWidth = layout.GutterWidth;
 
             // Report Preview takes over the entire central area if enabled
             if (ReportVisible)
@@ -650,17 +645,12 @@ namespace ETL_SQL.TUI.UI
 
         public void ScrollRegion(int x, int y, int delta)
         {
-            int editorAreaTop = 2;
-            int statusHeight  = 2;
-            int reservedBottom = statusHeight;
-            int available = _lastHeight - editorAreaTop - reservedBottom;
-            int lowerAreaHeight = 14; 
-            if (IsBottomMaximized || CompareMode) lowerAreaHeight = Math.Max(5, available - 5);
-            else if (lowerAreaHeight > available - 8) lowerAreaHeight = Math.Max(5, available - 8);
-            int editorAreaHeight = Math.Max(3, _lastHeight - lowerAreaHeight - reservedBottom - editorAreaTop);
-            int lowerY = editorAreaTop + editorAreaHeight;
+            var layout = LayoutCalculator.Compute(_lastWidth, _lastHeight, 1,
+                SidebarVisible, SidebarWidth, IsBottomMaximized, CompareMode);
+            int lowerAreaHeight = layout.LowerAreaHeight;
+            int lowerY = layout.LowerY;
 
-            if (y >= editorAreaTop && y < editorAreaTop + editorAreaHeight)
+            if (layout.InEditorBand(y))
             {
                 if (SidebarVisible && x < SidebarWidth)
                 {
@@ -776,20 +766,15 @@ namespace ETL_SQL.TUI.UI
                 }
             }
 
-            int editorAreaTop = 2;
-            int statusHeight  = 2;
-            int reservedBottom = statusHeight;
-            int available = _lastHeight - editorAreaTop - reservedBottom;
-            int lowerAreaHeight = 14; 
-            if (IsBottomMaximized || CompareMode) lowerAreaHeight = Math.Max(5, available - 5);
-            else if (lowerAreaHeight > available - 8) lowerAreaHeight = Math.Max(5, available - 8);
-            int editorAreaHeight = Math.Max(3, _lastHeight - lowerAreaHeight - reservedBottom - editorAreaTop);
-            int lowerY = editorAreaTop + editorAreaHeight;
+            var layout = LayoutCalculator.Compute(_lastWidth, _lastHeight, editor._buffer.Lines.Count,
+                SidebarVisible, SidebarWidth, IsBottomMaximized, CompareMode);
+            int lowerAreaHeight = layout.LowerAreaHeight;
+            int lowerY = layout.LowerY;
 
-            if (SidebarVisible && x < SidebarWidth && y >= editorAreaTop && y < editorAreaTop + editorAreaHeight && !ReportVisible)
+            if (layout.InSidebar(x, y) && !ReportVisible)
             {
                 Focus = EditorFocus.Sidebar;
-                int clickedIndex = (y - editorAreaTop) + SidebarScrollRow;
+                int clickedIndex = layout.SidebarItemIndexAt(y, SidebarScrollRow);
                 var items = _sidebarPanel.GetFlatVisibleItems();
                 if (clickedIndex >= 0 && clickedIndex < items.Count)
                 {
@@ -805,14 +790,12 @@ namespace ETL_SQL.TUI.UI
                     }
                 }
             }
-            else if (y >= editorAreaTop && y < editorAreaTop + editorAreaHeight && !ReportVisible)
+            else if (layout.InEditorBand(y) && !ReportVisible)
             {
                 Focus = EditorFocus.Editor;
-                
-                int clickLine = (y - editorAreaTop) + ScrollLine;
-                int gutterWidth = (editor._buffer.Lines.Count).ToString().Length + 2;
-                int sidebarW = SidebarVisible ? SidebarWidth : 0;
-                int clickCol = (x - sidebarW - gutterWidth) + ScrollCol;
+
+                int clickLine = layout.EditorLineAt(y, ScrollLine);
+                int clickCol = layout.EditorColumnAt(x, ScrollCol);
 
                 if (clickLine >= 0 && clickLine < editor._buffer.Lines.Count)
                 {
@@ -821,7 +804,7 @@ namespace ETL_SQL.TUI.UI
                     editor._buffer.SelectionStartLine = null;
                 }
             }
-            else if (y >= lowerY && y < lowerY + lowerAreaHeight)
+            else if (layout.InLowerPane(y))
             {
                 if (PerformanceVisible)
                 {
