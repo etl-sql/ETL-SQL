@@ -95,6 +95,54 @@ namespace ETL_SQL.TUI.UI
             return null;
         }
 
+        /// <summary>
+        /// Resolves the columns of a #temp table for autocomplete: from the live run if
+        /// available, otherwise statically from the `SELECT … INTO #temp` that defines it
+        /// (expanding `SELECT *` to the source table's columns).
+        /// </summary>
+        public async Task<IEnumerable<string>> GetTempColumnsAsync(string script, string tempName)
+        {
+            var runtime = GetRuntimeSource(tempName);
+            if (runtime != null)
+            {
+                var rc = (await runtime.GetColumnsAsync()).ToList();
+                if (rc.Count > 0) return rc;
+            }
+
+            var into = Regex.Match(script,
+                $@"SELECT\s+(.+?)\s+INTO\s+{Regex.Escape(tempName)}\b(.*?)(?:;|$)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            if (!into.Success) return Enumerable.Empty<string>();
+
+            var colsPart = into.Groups[1].Value.Trim();
+            if (colsPart == "*")
+            {
+                var from = Regex.Match(into.Groups[2].Value, @"\bFROM\s+([#\w]+)(?:\.([#\w]+))?", RegexOptions.IgnoreCase);
+                if (from.Success)
+                {
+                    string a = from.Groups[1].Value;   // connection or table
+                    string b = from.Groups[2].Value;   // table (when conn.table)
+                    if (!string.IsNullOrEmpty(b)) return await GetColumnsAsync(a, b);
+                    if (_connections.ContainsKey(a)) return await GetColumnsAsync(a, a);
+                    if (a.StartsWith("#")) return await GetTempColumnsAsync(script, a);
+                }
+                return Enumerable.Empty<string>();
+            }
+
+            // Explicit projection list: take the alias, else the trailing identifier.
+            var cols = new List<string>();
+            foreach (var spec in Regex.Split(colsPart, @",(?![^(]*\))"))
+            {
+                var t = spec.Trim();
+                if (t.Length == 0) continue;
+                var asMatch = Regex.Match(t, @"\bAS\s+([#\w]+)$", RegexOptions.IgnoreCase);
+                if (asMatch.Success) { cols.Add(asMatch.Groups[1].Value); continue; }
+                var idMatch = Regex.Match(t, @"(?:[#\w]+\.)?([#\w]+)$");
+                if (idMatch.Success) cols.Add(idMatch.Groups[1].Value);
+            }
+            return cols;
+        }
+
         public IEnumerable<string> GetConnections() => _connections.Keys;
 
         public string? GetConnectionType(string connectionName)

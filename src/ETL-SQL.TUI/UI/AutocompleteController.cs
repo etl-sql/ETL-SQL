@@ -213,20 +213,23 @@ namespace ETL_SQL.TUI.UI
             var text = _buffer.GetText();
             _metadata.RefreshConnections(text, force: true);
             var line = _buffer.Lines[_buffer.CursorLine];
-            var currentLinePrefix = line.Substring(0, _buffer.CursorColumn);
-            
+            // Allow the caret to sit on the '*' as well as just after it.
+            int caret = _buffer.CursorColumn;
+            if (caret < line.Length && line[caret] == '*') caret++;
+            var currentLinePrefix = line.Substring(0, Math.Min(caret, line.Length));
+
             // Matches ' *' or 'alias.*' (case insensitive)
             var starMatch = Regex.Match(currentLinePrefix, @"(?<=\s|^)(?:(\w+)\.)?\*$", RegexOptions.IgnoreCase);
             if (starMatch.Success)
             {
                 var specificAlias = starMatch.Groups[1].Value;
-                var cursorOffset = _buffer.Lines.Take(_buffer.CursorLine).Sum(l => l.Length + 1) + _buffer.CursorColumn;
+                var cursorOffset = _buffer.Lines.Take(_buffer.CursorLine).Sum(l => l.Length + 1) + caret;
                 var aliases = ETLSuggestEngine.ParseAliases(text, cursorOffset);
                 var allCols = new List<string>();
-                
-                var tablesToExpand = string.IsNullOrEmpty(specificAlias) 
-                    ? aliases.Values.Distinct().ToList() 
-                    : aliases.Values.Where(a => (a.Alias?.Equals(specificAlias, StringComparison.OrdinalIgnoreCase) == true) || 
+
+                var tablesToExpand = string.IsNullOrEmpty(specificAlias)
+                    ? aliases.Values.Distinct().ToList()
+                    : aliases.Values.Where(a => (a.Alias?.Equals(specificAlias, StringComparison.OrdinalIgnoreCase) == true) ||
                                               (string.IsNullOrEmpty(a.Alias) && a.TableName.Equals(specificAlias, StringComparison.OrdinalIgnoreCase))).Distinct().ToList();
 
                 foreach (var info in tablesToExpand)
@@ -246,22 +249,32 @@ namespace ETL_SQL.TUI.UI
                     ds ??= _metadata.GetRuntimeSource(info.TableName)
                          ?? (string.IsNullOrEmpty(info.ConnectionName) ? null : _metadata.GetRuntimeSource(info.ConnectionName));
 
+                    List<string> cols;
                     if (ds != null)
                     {
-                        var cols = (ds is IDatabaseSource db && !string.IsNullOrEmpty(info.BaseTableName))
+                        cols = ((ds is IDatabaseSource db && !string.IsNullOrEmpty(info.BaseTableName))
                             ? await db.GetColumnsAsync(info.BaseTableName)
-                            : await ds.GetColumnsAsync();
-
-                        if (!string.IsNullOrEmpty(info.Alias))
-                             allCols.AddRange(cols.Select(c => $"{info.Alias}.{c}"));
-                        else allCols.AddRange(cols);
+                            : await ds.GetColumnsAsync()).ToList();
                     }
+                    else if (info.TableName.StartsWith("#"))
+                    {
+                        // Temp table not yet run: resolve from the SELECT … INTO that defines it.
+                        cols = (await _metadata.GetTempColumnsAsync(text, info.TableName)).ToList();
+                    }
+                    else
+                    {
+                        continue;
+                    }
+
+                    if (!string.IsNullOrEmpty(info.Alias))
+                         allCols.AddRange(cols.Select(c => $"{info.Alias}.{c}"));
+                    else allCols.AddRange(cols);
                 }
 
                 if (allCols.Any())
                 {
                     var expansion = string.Join(", ", allCols.Distinct());
-                    var start = _buffer.CursorColumn - starMatch.Length;
+                    var start = caret - starMatch.Length;
                     _buffer.Lines[_buffer.CursorLine] = line.Remove(start, starMatch.Length).Insert(start, expansion);
                     _buffer.CursorColumn = start + expansion.Length;
                     return;

@@ -609,7 +609,12 @@ namespace ETL_SQL.TUI.UI
         /// </summary>
         public static string MarkdownToMarkup(string raw)
         {
-            if (raw.TrimStart().StartsWith("```")) return "[grey]────────[/]"; // code fence marker
+            string trimmed = raw.Trim();
+            if (trimmed.StartsWith("```")) return "[grey]────────[/]"; // code fence marker
+
+            // A bare URL becomes a real clickable hyperlink (OSC 8) where the terminal supports it.
+            if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^https?://\S+$"))
+                return $"[link={trimmed}][underline blue]{Markup.Escape(trimmed)}[/][/]";
 
             string escaped = Markup.Escape(raw);
 

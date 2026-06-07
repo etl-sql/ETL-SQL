@@ -101,6 +101,28 @@ namespace ETL_SQL.Tests.UI
         }
 
         [Fact]
+        public async Task TestStarExpansionForTempTable_NoRun_CursorOnStar()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._renderer.Headless = true;
+            editor._buffer.Load(new[]
+            {
+                "CREATE CONNECTION m AS MOCKDB();",
+                "SELECT * INTO #temp FROM m.Users;",
+                "SELECT * FROM #temp"
+            });
+
+            // No run this time, and the caret is ON the '*' (col 7) rather than after it.
+            editor._buffer.CursorLine = 2;
+            editor._buffer.CursorColumn = 7;
+            await editor.HandleKey(new ConsoleKeyInfo(' ', ConsoleKey.Spacebar, false, false, true)); // Ctrl+Space
+
+            var text = editor._buffer.Lines[2];
+            Assert.Contains("UserID", text);
+            Assert.Contains("UserName", text);
+        }
+
+        [Fact]
         public async Task TestPathAutocomplete()
         {
             var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());

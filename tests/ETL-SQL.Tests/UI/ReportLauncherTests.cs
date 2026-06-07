@@ -11,16 +11,23 @@ namespace ETL_SQL.Tests.UI
     public class ReportLauncherTests
     {
         [Fact]
-        public void BuildServeProcess_InvokesServeWithScript_OutputRedirected()
+        public void BuildServeProcess_InvokesServeWithPort_OutputRedirected()
         {
-            var psi = ReportLauncher.BuildServeProcess("etl-sql.exe", "C:\\reports\\sales.rptsql");
+            var psi = ReportLauncher.BuildServeProcess("etl-sql.exe", "C:\\reports\\sales.rptsql", 5050);
 
             Assert.Equal("etl-sql.exe", psi.FileName);
-            Assert.Equal(new[] { "serve", "C:\\reports\\sales.rptsql" }, psi.ArgumentList.ToArray());
+            Assert.Equal(new[] { "serve", "C:\\reports\\sales.rptsql", "--port", "5050", "--no-browser" }, psi.ArgumentList.ToArray());
             Assert.False(psi.UseShellExecute);
             Assert.True(psi.RedirectStandardOutput);
             Assert.True(psi.RedirectStandardError);
             Assert.True(psi.CreateNoWindow);
+        }
+
+        [Fact]
+        public void FindFreePort_ReturnsUsablePort()
+        {
+            int port = ReportLauncher.FindFreePort();
+            Assert.InRange(port, 1, 65535);
         }
     }
 }

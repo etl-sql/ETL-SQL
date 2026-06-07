@@ -32,5 +32,14 @@ namespace ETL_SQL.Tests.UI
             Assert.Contains("[cyan]", EditorRenderer.MarkdownToMarkup("use `CODE` here"));
             Assert.Equal("[grey]────────[/]", EditorRenderer.MarkdownToMarkup("```sql"));
         }
+
+        [Fact]
+        public void MarkdownToMarkup_MakesBareUrlsClickable()
+        {
+            string markup = EditorRenderer.MarkdownToMarkup("http://localhost:5050/");
+            Assert.Contains("[link=http://localhost:5050/]", markup);
+            var ex = Record.Exception(() => new Markup(markup));
+            Assert.Null(ex);
+        }
     }
 }

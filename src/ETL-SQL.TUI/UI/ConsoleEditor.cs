@@ -197,22 +197,49 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
+            string full = Path.GetFullPath(_filePath);
+            int port = ReportLauncher.FindFreePort();
+            string url = $"http://localhost:{port}/";
+
             try
             {
-                string full = Path.GetFullPath(_filePath);
-                var proc = System.Diagnostics.Process.Start(ReportLauncher.BuildServeProcess(exe, full));
+                var proc = System.Diagnostics.Process.Start(ReportLauncher.BuildServeProcess(exe, full, port));
                 if (proc != null)
                 {
-                    // Drain output so the child never blocks and the TUI terminal stays clean.
-                    _ = Task.Run(async () => { try { await proc.StandardOutput.ReadToEndAsync(); } catch { } });
-                    _ = Task.Run(async () => { try { await proc.StandardError.ReadToEndAsync(); } catch { } });
+                    // Drain output (keeps the child from blocking) and surface an early failure
+                    // such as the ReportPlayer not being found. A healthy server keeps running,
+                    // so these reads simply never complete.
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            string err = await proc.StandardError.ReadToEndAsync();
+                            string outp = await proc.StandardOutput.ReadToEndAsync();
+                            if (proc.HasExited && proc.ExitCode != 0)
+                            {
+                                var msg = (err + "\n" + outp).Split('\n').FirstOrDefault(l => !string.IsNullOrWhiteSpace(l))?.Trim();
+                                _renderer.ShowStatus($"Serve failed: {msg}");
+                            }
+                        }
+                        catch { }
+                    });
+                    _ = ReportLauncher.OpenWhenReadyAsync(url, port);
                 }
-                _renderer.ShowStatus($"Serving {Path.GetFileName(full)} in your browser…");
             }
             catch (Exception ex)
             {
                 _renderer.ShowStatus($"Serve failed: {ex.Message}");
+                return;
             }
+
+            await ShowInfoOverlay("Serving report",
+                $"Starting the report preview server on port {port}.\n\n" +
+                $"{url}\n\n" +
+                "Your browser should open automatically once the server is ready.\n" +
+                "If it doesn't, Ctrl+click the link above (or copy it).\n\n" +
+                "The server keeps running after you close this message.\n" +
+                "Press any key to close.",
+                "");
         }
 
         public async Task HandleExit()
