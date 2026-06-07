@@ -186,44 +186,55 @@ namespace ETL_SQL.Reporting.Renderers
             var rows = visual.Rows;
             if (rows.Count < 2) return RenderPlaceholder(visual);
 
-            // X is categorical or numeric; Y is numeric
-            // For now, treat X as indices if not easily numeric
-            var points = new List<(double x, double y)>();
+            // Column 0 is X (numeric or index); columns 1..n are numeric Y series.
+            int seriesCount = Math.Max(0, rows.Max(r => r.Count) - 1);
+            if (seriesCount < 1) return RenderPlaceholder(visual);
+
+            var series = new List<List<(double x, double y)>>();
+            for (int s = 0; s < seriesCount; s++) series.Add(new List<(double, double)>());
             for (int i = 0; i < rows.Count; i++)
             {
-                double x = i;
                 var row = rows[i];
-                if (row.Count > 0 && double.TryParse(row[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var xVal)) x = xVal;
-                if (row.Count > 1 && double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out var yVal))
+                double x = i;
+                if (row.Count > 0 && double.TryParse(row[0], NumberStyles.Any, CultureInfo.InvariantCulture, out var xv)) x = xv;
+                for (int s = 0; s < seriesCount; s++)
                 {
-                    points.Add((x, yVal));
+                    int col = s + 1;
+                    if (col < row.Count && double.TryParse(row[col], NumberStyles.Any, CultureInfo.InvariantCulture, out var yv))
+                        series[s].Add((x, yv));
                 }
             }
 
-            if (points.Count < 2) return RenderPlaceholder(visual);
+            var all = series.SelectMany(p => p).ToList();
+            if (all.Count < 2) return RenderPlaceholder(visual);
 
-            double minX = points.Min(p => p.x);
-            double maxX = points.Max(p => p.x);
-            double minY = points.Min(p => p.y);
-            double maxY = points.Max(p => p.y);
+            double minX = all.Min(p => p.x), maxX = all.Max(p => p.x);
+            double minY = all.Min(p => p.y), maxY = all.Max(p => p.y);
             if (maxX == minX) maxX += 1;
             if (maxY == minY) maxY += 1;
 
-            int width = 50;
-            int height = 12;
-            var canvas = new Canvas(width, height);
-
-            for (int i = 0; i < points.Count - 1; i++)
+            var canvas = new BrailleCanvas(50, 12);
+            int dw = canvas.DotWidth, dh = canvas.DotHeight;
+            for (int s = 0; s < series.Count; s++)
             {
-                int x0 = (int)((points[i].x - minX) / (maxX - minX) * (width - 1));
-                int y0 = (int)((points[i].y - minY) / (maxY - minY) * (height - 1));
-                int x1 = (int)((points[i + 1].x - minX) / (maxX - minX) * (width - 1));
-                int y1 = (int)((points[i + 1].y - minY) / (maxY - minY) * (height - 1));
-
-                // Invert Y for terminal (0 is top)
-                DrawLine(canvas, x0, height - 1 - y0, x1, height - 1 - y1, Color.Blue);
+                var pts = series[s];
+                string color = ColorNameForIndex(s);
+                for (int i = 0; i < pts.Count - 1; i++)
+                {
+                    int x0 = (int)((pts[i].x - minX) / (maxX - minX) * (dw - 1));
+                    int y0 = (int)((pts[i].y - minY) / (maxY - minY) * (dh - 1));
+                    int x1 = (int)((pts[i + 1].x - minX) / (maxX - minX) * (dw - 1));
+                    int y1 = (int)((pts[i + 1].y - minY) / (maxY - minY) * (dh - 1));
+                    canvas.Line(x0, dh - 1 - y0, x1, dh - 1 - y1, color); // invert Y (0 = top)
+                }
             }
-            return new Panel(canvas)
+
+            var body = new Rows(
+                new Markup($"[grey]{Markup.Escape(FormatNum(maxY))}[/]"),
+                canvas.ToRenderable(),
+                new Markup($"[grey]{Markup.Escape(FormatNum(minY))}   x: {Markup.Escape(FormatNum(minX))}…{Markup.Escape(FormatNum(maxX))}[/]"));
+
+            return new Panel(body)
             {
                 Header = new PanelHeader(Markup.Escape(title)),
                 Border = BoxBorder.Rounded,
@@ -519,15 +530,23 @@ namespace ETL_SQL.Reporting.Renderers
             var table = new Table().Border(TableBorder.None).HideHeaders();
             for (int i = 0; i < data.Count; i++) table.AddColumn(new TableColumn("").Padding(0, 0, 1, 0));
 
+            // One-eighth block elements give the bar tops fractional resolution.
+            string[] eighthBlocks = { "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█" };
             for (int h = height; h >= 1; h--)
             {
                 var displayRow = new List<IRenderable>();
                 for (int i = 0; i < data.Count; i++)
                 {
-                    double pct = data[i].value / maxVal;
-                    int barHeight = (int)(pct * height);
-                    if (h <= barHeight)
-                        displayRow.Add(new Text("██", new Style(GetColorForIndex(i))));
+                    double eighths = data[i].value / maxVal * height * 8.0; // total filled eighths
+                    double cellBottom = (h - 1) * 8.0;
+                    var style = new Style(GetColorForIndex(i));
+                    if (eighths >= h * 8.0)
+                        displayRow.Add(new Text("██", style));
+                    else if (eighths > cellBottom)
+                    {
+                        int e = Math.Clamp((int)Math.Ceiling(eighths - cellBottom), 1, 8);
+                        displayRow.Add(new Text(eighthBlocks[e - 1] + eighthBlocks[e - 1], style));
+                    }
                     else
                         displayRow.Add(new Text("  "));
                 }
@@ -728,6 +747,14 @@ namespace ETL_SQL.Reporting.Renderers
         {
             return ChartColors[index % ChartColors.Length];
         }
+
+        // Markup-token names parallel to ChartColors, for braille rendering.
+        private static readonly string[] ChartColorNames =
+            { "blue", "green", "yellow", "red", "purple", "cyan", "orange1", "teal" };
+        private static string ColorNameForIndex(int index) => ChartColorNames[index % ChartColorNames.Length];
+
+        private static string FormatNum(double v) =>
+            Math.Abs(v) >= 1000 ? v.ToString("N0", CultureInfo.InvariantCulture) : v.ToString("0.##", CultureInfo.InvariantCulture);
 
         private static string GetVisualTitle(VisualManifest visual)
         {
