@@ -1,0 +1,38 @@
+{
+  "editor": {
+    "gutter": "grey",
+    "selection": "white on black",
+    "secondaryCursor": "reverse"
+  },
+  "syntax": {
+    "string": "darkgreen",
+    "bracket": "blue",
+    "variable": "darkviolet",
+    "docker": "red",
+    "dmlKeyword": "bold darkblue",
+    "ddlKeyword": "bold purple",
+    "controlFlow": "bold darkorange",
+    "joinKeyword": "bold teal",
+    "operatorKeyword": "bold darkblue",
+    "otherKeyword": "darkblue",
+    "dataType": "blue",
+    "function": "darkcyan",
+    "comment": "grey",
+    "commentTag": "purple",
+    "commentValue": "darkgreen",
+    "alias": "purple",
+    "table": "blue"
+  },
+  "ui": {
+    "statusBackground": "white on grey37",
+    "helpBackground": "black on white",
+    "editorFocusedBorder": "black",
+    "editorUnfocusedBorder": "grey",
+    "panelFocusedBorder": "black",
+    "panelUnfocusedBorder": "grey",
+    "compareFocusedBorder": "darkblue",
+    "compareUnfocusedBorder": "grey",
+    "resultsFocusedBorder": "darkgreen",
+    "resultsUnfocusedBorder": "blue"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "editor": {
+    "gutter": "#928374",
+    "selection": "black on #a89984",
+    "secondaryCursor": "reverse"
+  },
+  "syntax": {
+    "string": "#b8bb26",
+    "bracket": "#83a598",
+    "variable": "#fe8019",
+    "docker": "#fb4934",
+    "dmlKeyword": "bold #fb4934",
+    "ddlKeyword": "bold #b16286",
+    "controlFlow": "bold #fe8019",
+    "joinKeyword": "bold #8ec07c",
+    "operatorKeyword": "bold #fe8019",
+    "otherKeyword": "#fb4934",
+    "dataType": "#fabd2f",
+    "function": "#fabd2f",
+    "comment": "#928374",
+    "commentTag": "#b16286",
+    "commentValue": "#b8bb26",
+    "alias": "#b16286",
+    "table": "#83a598"
+  },
+  "ui": {
+    "statusBackground": "white on #3c3836",
+    "helpBackground": "white on #282828",
+    "editorFocusedBorder": "#fabd2f",
+    "editorUnfocusedBorder": "#504945",
+    "panelFocusedBorder": "#fe8019",
+    "panelUnfocusedBorder": "#504945",
+    "compareFocusedBorder": "#b16286",
+    "compareUnfocusedBorder": "#504945",
+    "resultsFocusedBorder": "#b8bb26",
+    "resultsUnfocusedBorder": "#8ec07c"
+  }
+}
