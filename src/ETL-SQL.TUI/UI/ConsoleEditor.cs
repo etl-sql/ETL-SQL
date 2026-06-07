@@ -182,6 +182,39 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
+        /// <summary>Saves the script and serves it in the browser via the ETL-SQL `serve` command.</summary>
+        public async Task ServeInBrowser()
+        {
+            if (_isDirty || string.IsNullOrEmpty(_filePath) || _filePath == "untitled.etlsql")
+            {
+                if (!await SaveScript()) { _renderer.ShowStatus("Save the report before serving."); return; }
+            }
+
+            string exe = Environment.ProcessPath ?? "";
+            if (string.IsNullOrEmpty(exe))
+            {
+                _renderer.ShowStatus("Could not locate the ETL-SQL executable to serve.");
+                return;
+            }
+
+            try
+            {
+                string full = Path.GetFullPath(_filePath);
+                var proc = System.Diagnostics.Process.Start(ReportLauncher.BuildServeProcess(exe, full));
+                if (proc != null)
+                {
+                    // Drain output so the child never blocks and the TUI terminal stays clean.
+                    _ = Task.Run(async () => { try { await proc.StandardOutput.ReadToEndAsync(); } catch { } });
+                    _ = Task.Run(async () => { try { await proc.StandardError.ReadToEndAsync(); } catch { } });
+                }
+                _renderer.ShowStatus($"Serving {Path.GetFileName(full)} in your browser…");
+            }
+            catch (Exception ex)
+            {
+                _renderer.ShowStatus($"Serve failed: {ex.Message}");
+            }
+        }
+
         public async Task HandleExit()
         {
             SaveActiveTabState();

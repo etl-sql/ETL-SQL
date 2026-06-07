@@ -100,14 +100,14 @@ namespace ETL_SQL.TUI.UI
             new KeyBinding("Shift+F5",          KeyCategory.Run, "Run current statement"),
             new KeyBinding("Ctrl+F5",           KeyCategory.Run, "Run selected text"),
             new KeyBinding("Ctrl+R",            KeyCategory.Run, "Clear results & output"),
+            new KeyBinding("Ctrl+Shift+R",      KeyCategory.Run, "Serve report in browser"),
 
             // ── View & Panels ──
             new KeyBinding("F6",                KeyCategory.ViewPanels, "Toggle focus", FocusAnnotation, Essential: true),
             new KeyBinding("F4",                KeyCategory.ViewPanels, "Cycle lower panel", PanelAnnotation, Essential: true),
             new KeyBinding("F3",                KeyCategory.ViewPanels, "Cycle theme", Essential: true),
             new KeyBinding("Ctrl+M",            KeyCategory.ViewPanels, "Maximize / restore panel"),
-            new KeyBinding("F7 / F8",           KeyCategory.ViewPanels, "Compare mode / cycle pane"),
-            new KeyBinding("F8 / Shift+F8",     KeyCategory.ViewPanels, "Next / prev diagnostic"),
+            new KeyBinding("F7 / F8",           KeyCategory.ViewPanels, "Compare mode / cycle pane / diagnostic"),
             new KeyBinding("F9 / Ctrl+B",       KeyCategory.ViewPanels, "Toggle file explorer", Essential: true),
             new KeyBinding("Alt+R",             KeyCategory.ViewPanels, "Toggle report preview", Essential: true),
             new KeyBinding("F1",                KeyCategory.ViewPanels, "Help (this screen)", Essential: true),
