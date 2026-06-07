@@ -11,23 +11,26 @@ namespace ETL_SQL.Tests.UI
     public class ReportLauncherTests
     {
         [Fact]
-        public void BuildServeProcess_InvokesServeWithPort_OutputRedirected()
+        public void BuildServeProcess_InvokesServe_OutputRedirected()
         {
-            var psi = ReportLauncher.BuildServeProcess("etl-sql.exe", "C:\\reports\\sales.rptsql", 5050);
+            var psi = ReportLauncher.BuildServeProcess("etl-sql.exe", "C:\\reports\\sales.rptsql");
 
             Assert.Equal("etl-sql.exe", psi.FileName);
-            Assert.Equal(new[] { "serve", "C:\\reports\\sales.rptsql", "--port", "5050", "--no-browser" }, psi.ArgumentList.ToArray());
+            Assert.Equal(new[] { "serve", "C:\\reports\\sales.rptsql", "--no-browser" }, psi.ArgumentList.ToArray());
             Assert.False(psi.UseShellExecute);
             Assert.True(psi.RedirectStandardOutput);
             Assert.True(psi.RedirectStandardError);
             Assert.True(psi.CreateNoWindow);
         }
 
-        [Fact]
-        public void FindFreePort_ReturnsUsablePort()
+        [Theory]
+        [InlineData("REPORT_URL=http://localhost:5173", "http://localhost:5173")]
+        [InlineData("  REPORT_URL=http://127.0.0.1:8080/  ", "http://127.0.0.1:8080/")]
+        [InlineData("Dashboard: http://localhost:1", null)]
+        [InlineData("REPORT_URL=", null)]
+        public void ParseReportUrl_ExtractsTheBoundUrl(string line, string? expected)
         {
-            int port = ReportLauncher.FindFreePort();
-            Assert.InRange(port, 1, 65535);
+            Assert.Equal(expected, ReportLauncher.ParseReportUrl(line));
         }
     }
 }

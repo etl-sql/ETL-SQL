@@ -198,46 +198,48 @@ namespace ETL_SQL.TUI.UI
             }
 
             string full = Path.GetFullPath(_filePath);
-            int port = ReportLauncher.FindFreePort();
-            string url = $"http://localhost:{port}/";
 
-            try
+            System.Diagnostics.Process? proc;
+            try { proc = System.Diagnostics.Process.Start(ReportLauncher.BuildServeProcess(exe, full)); }
+            catch (Exception ex) { _renderer.ShowStatus($"Serve failed: {ex.Message}"); return; }
+            if (proc == null) { _renderer.ShowStatus("Serve failed to start."); return; }
+
+            // The player binds an OS-assigned port and prints REPORT_URL=<actual url>; read it
+            // so we open/show the URL the server really bound (not a guessed one).
+            var urlTcs = new TaskCompletionSource<string?>();
+            _ = Task.Run(async () =>
             {
-                var proc = System.Diagnostics.Process.Start(ReportLauncher.BuildServeProcess(exe, full, port));
-                if (proc != null)
+                try
                 {
-                    // Drain output (keeps the child from blocking) and surface an early failure
-                    // such as the ReportPlayer not being found. A healthy server keeps running,
-                    // so these reads simply never complete.
-                    _ = Task.Run(async () =>
+                    string? line;
+                    while ((line = await proc.StandardOutput.ReadLineAsync()) != null)
                     {
-                        try
-                        {
-                            string err = await proc.StandardError.ReadToEndAsync();
-                            string outp = await proc.StandardOutput.ReadToEndAsync();
-                            if (proc.HasExited && proc.ExitCode != 0)
-                            {
-                                var msg = (err + "\n" + outp).Split('\n').FirstOrDefault(l => !string.IsNullOrWhiteSpace(l))?.Trim();
-                                _renderer.ShowStatus($"Serve failed: {msg}");
-                            }
-                        }
-                        catch { }
-                    });
-                    _ = ReportLauncher.OpenWhenReadyAsync(url, port);
+                        var u = ReportLauncher.ParseReportUrl(line);
+                        if (u != null) urlTcs.TrySetResult(u);
+                    }
                 }
-            }
-            catch (Exception ex)
+                catch { }
+                urlTcs.TrySetResult(null); // stream ended without a URL
+            });
+            _ = Task.Run(async () => { try { await proc.StandardError.ReadToEndAsync(); } catch { } });
+
+            _renderer.ShowStatus("Starting report server…");
+            _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
+
+            var finished = await Task.WhenAny(urlTcs.Task, Task.Delay(TimeSpan.FromSeconds(25)));
+            string? url = finished == urlTcs.Task ? urlTcs.Task.Result : null;
+            if (string.IsNullOrEmpty(url))
             {
-                _renderer.ShowStatus($"Serve failed: {ex.Message}");
+                _renderer.ShowStatus("Report server did not report a URL — it may have failed to start.");
                 return;
             }
 
+            ReportLauncher.OpenBrowser(url);
+
             await ShowInfoOverlay("Serving report",
-                $"Starting the report preview server on port {port}.\n\n" +
-                $"{url}\n\n" +
-                "Your browser should open automatically once the server is ready.\n" +
-                "If it doesn't, Ctrl+click the link above (or copy it).\n\n" +
-                "The server keeps running after you close this message.\n" +
+                $"Report preview is live:\n\n{url}\n\n" +
+                "Your browser should have opened. If not, Ctrl+click the link above.\n" +
+                "The server keeps running after you close this message.\n\n" +
                 "Press any key to close.",
                 "");
         }
