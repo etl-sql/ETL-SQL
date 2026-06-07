@@ -83,10 +83,10 @@ namespace ETL_SQL.TUI.UI
                 };
 
                 // Signal ready — the IDE will now send run commands on stdin.
-                WriteJson(new { 
-                    type = "status", 
-                    status = "ready", 
-                    buildId = "DIAGNOSTIC-2026-04-10-03-00",
+                WriteJson(new {
+                    type = "status",
+                    status = "ready",
+                    buildId = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "dev",
                     pid = System.Diagnostics.Process.GetCurrentProcess().Id
                 });
 
@@ -94,19 +94,9 @@ namespace ETL_SQL.TUI.UI
 
                 while (true)
                 {
-                    Console.Error.WriteLine("[TRACE] Engine about to ReadLine (sync)...");
                     var line = Console.In.ReadLine();
-                    Console.Error.WriteLine($"[TRACE] Engine ReadLine returned ({line?.Length ?? -1} chars): {line ?? "NULL"}");
-                    
-                    if (line == null) 
-                    {
-                        Console.Error.WriteLine("[TRACE] stdin reached end of stream (null).");
-                        break;
-                    }
-
+                    if (line == null) break;
                     if (string.IsNullOrWhiteSpace(line)) continue;
-                    
-                    Console.Error.WriteLine($"[TRACE] Received REPL line ({line.Length} chars): {line}");
 
                     try
                     {
@@ -170,7 +160,6 @@ namespace ETL_SQL.TUI.UI
                             
                             _evaluator!.InteractiveMode = cmd.InteractiveMode;
 
-                            Console.Error.WriteLine($"[TRACE] Starting execution of script ({cmd.Script?.Length} chars) - Interactive: {cmd.InteractiveMode}");
                             activeExecutionTask = ExecuteScript(cmd.Script ?? "");
                             await activeExecutionTask;
                         }
@@ -285,9 +274,7 @@ namespace ETL_SQL.TUI.UI
 
                 try 
                 {
-                    Console.Error.WriteLine("[TRACE] Evaluator.Evaluate START");
                     await _evaluator.Evaluate(script, _currentCts.Token);
-                    Console.Error.WriteLine("[TRACE] Evaluator.Evaluate END");
                 }
                 finally
                 {

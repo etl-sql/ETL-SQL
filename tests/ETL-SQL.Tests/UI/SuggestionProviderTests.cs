@@ -108,5 +108,25 @@ namespace ETL_SQL.Tests.UI
             Assert.Contains(results, s => s.Text == "Conn.Users");
             Assert.Equal(SuggestionType.Table, results.First(s => s.Text == "Conn.Users").Type);
         }
+
+        [Fact]
+        public void TuiMetadataManager_GetConnectionType_ReturnsDialect()
+        {
+            var connections = new Dictionary<string, IDataSource>
+            {
+                { "Pg", new MockSqlDataSource(SystemExecutionContext.Instance, "dummy", "POSTGRES") }
+            };
+            var mgr = new TuiMetadataManager(connections);
+
+            Assert.Equal("POSTGRES", mgr.GetConnectionType("Pg"));
+            Assert.Equal("POSTGRES", mgr.GetConnections().Single(c => c.Name == "Pg").Type);
+        }
+
+        [Fact]
+        public void TuiMetadataManager_GetConnectionType_UnknownName_ReturnsNull()
+        {
+            var mgr = new TuiMetadataManager(new Dictionary<string, IDataSource>());
+            Assert.Null(mgr.GetConnectionType("nope"));
+        }
     }
 }

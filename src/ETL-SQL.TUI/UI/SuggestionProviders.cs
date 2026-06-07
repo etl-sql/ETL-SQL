@@ -140,10 +140,16 @@ namespace ETL_SQL.TUI.UI
 
         public List<ConnectionInfo> GetConnections(string? uri = null)
         {
-            return _connections.Select(kvp => new ConnectionInfo(kvp.Key, "UNKNOWN", "", false)).ToList();
+            return _connections.Select(kvp => new ConnectionInfo(
+                kvp.Key, TypeOf(kvp.Value), "", false)).ToList();
         }
 
-        public string? GetConnectionType(string connectionName, string? uri = null) => "UNKNOWN";
+        public string? GetConnectionType(string connectionName, string? uri = null)
+            => _connections.TryGetValue(connectionName, out var ds) ? TypeOf(ds) : null;
+
+        // Dialect for database sources (SQLSERVER, POSTGRES, …); flat-file sources report FLATFILE.
+        private static string TypeOf(IDataSource ds) =>
+            ds is IDatabaseSource db ? (db.Dialect ?? "UNKNOWN") : "FLATFILE";
         public void RegisterConnection(string name, string type, string connectionString) { }
         public void RegisterDocumentConnection(string uri, string name, string type, string connectionString) { }
         public void ClearDocumentConnections(string uri) { }
