@@ -103,6 +103,42 @@ public class AutocompleteControllerTests
         Assert.Null(AutocompleteController.FindPrevPlaceholder(buf, 0, 5));
     }
 
+    // ── ToDisplayLabel (popup list label) ─────────────────────────────────────
+
+    [Fact]
+    public void ToDisplayLabel_CollapsesMultiLineSnippetToFirstLine()
+    {
+        var label = AutocompleteController.ToDisplayLabel("CREATE CONNECTION «c» AS X(\n  KEY = 'v'\n);", 40);
+        Assert.DoesNotContain("\n", label);
+        Assert.StartsWith("CREATE CONNECTION", label);
+    }
+
+    [Fact]
+    public void ToDisplayLabel_CollapsesInteriorWhitespace()
+    {
+        Assert.Equal("a b c", AutocompleteController.ToDisplayLabel("a    b\tc", 40));
+    }
+
+    [Fact]
+    public void ToDisplayLabel_TruncatesWithEllipsisAtWidth()
+    {
+        var label = AutocompleteController.ToDisplayLabel("CREATE CONNECTION «ConnName» AS AVRO", 20);
+        Assert.Equal(20, label.Length);
+        Assert.EndsWith("…", label);
+    }
+
+    [Fact]
+    public void ToDisplayLabel_ShortTextUnchanged()
+    {
+        Assert.Equal("SELECT", AutocompleteController.ToDisplayLabel("SELECT", 20));
+    }
+
+    [Fact]
+    public void ToDisplayLabel_NonPositiveWidthIsEmpty()
+    {
+        Assert.Equal("", AutocompleteController.ToDisplayLabel("anything", 0));
+    }
+
     // ── EditorBuffer.SelectRange ──────────────────────────────────────────────
 
     [Fact]

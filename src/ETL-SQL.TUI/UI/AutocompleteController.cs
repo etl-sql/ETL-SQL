@@ -175,6 +175,24 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
+        /// <summary>
+        /// The single-line label shown for a suggestion in the popup list. Multi-line snippet
+        /// bodies are collapsed to their first line with whitespace squeezed, then truncated to
+        /// <paramref name="width"/> (with an ellipsis) so the list can't wrap or overrun the
+        /// documentation sidecar.
+        /// </summary>
+        public static string ToDisplayLabel(string text, int width)
+        {
+            if (width <= 0) return string.Empty;
+            text ??= string.Empty;
+            int nl = text.IndexOfAny(new[] { '\n', '\r' });
+            string firstLine = nl >= 0 ? text.Substring(0, nl) : text;
+            firstLine = Regex.Replace(firstLine, @"\s+", " ").Trim();
+            if (firstLine.Length > width)
+                firstLine = width == 1 ? firstLine.Substring(0, 1) : firstLine.Substring(0, width - 1) + "…";
+            return firstLine;
+        }
+
         /// <summary>Scans forward from (fromLine, fromCol) for the next «placeholder» marker.</summary>
         public static (int Line, int StartCol, int EndCol)? FindNextPlaceholder(EditorBuffer buffer, int fromLine, int fromCol)
         {
