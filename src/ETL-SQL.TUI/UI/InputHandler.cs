@@ -811,9 +811,11 @@ namespace ETL_SQL.TUI.UI
 
         private void ExitSnippetMode()
         {
+            bool wasActive = _renderer.SnippetModeActive;
             _renderer.SnippetModeActive = false;
             _buffer.SelectionStartLine = null;
             _buffer.SelectionStartCol = null;
+            if (wasActive) _renderer.ShowStatus("Snippet mode exited.");
         }
 
         private async Task ShowOpenPrompt()

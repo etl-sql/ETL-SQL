@@ -171,6 +171,7 @@ namespace ETL_SQL.TUI.UI
             {
                 _buffer.SelectRange(firstPlaceholder.Value.Line, firstPlaceholder.Value.StartCol, firstPlaceholder.Value.EndCol);
                 _renderer.SnippetModeActive = true;
+                _renderer.ShowStatus("Snippet mode — Tab: next · Shift+Tab: prev · Esc: exit");
             }
         }
 

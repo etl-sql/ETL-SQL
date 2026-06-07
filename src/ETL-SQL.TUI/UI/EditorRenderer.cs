@@ -392,7 +392,9 @@ namespace ETL_SQL.TUI.UI
 
                 string panelPill;
                 bool hasError = evaluator.LastError != null;
-                if (CompareMode)
+                if (SnippetModeActive)
+                    panelPill = "[bold black on green] SNIPPET [/]";
+                else if (CompareMode)
                     panelPill = $"[bold magenta] COMPARE {CompareFocusIndex + 1}/{Math.Max(1, evaluator.LastResultSets.Count)} [/]";
                 else if (Focus == EditorFocus.Sidebar)
                     panelPill = "[bold yellow] ▶ EXPLORER [/]";
@@ -435,7 +437,7 @@ namespace ETL_SQL.TUI.UI
                 string rightZone = $" {cursor3} ";
                 
                 int leftWidth = leftZone.Length;
-                int midWidth = PerformanceVisible ? 8 : ResultsVisible ? 11 : hasError ? 9 : ResultsFocus ? 18 : 11;
+                int midWidth = SnippetModeActive ? 9 : PerformanceVisible ? 8 : ResultsVisible ? 11 : hasError ? 9 : ResultsFocus ? 18 : 11;
                 int rightWidth = rightZone.Length;
                 
                 int availForStatus = totalWidth - leftWidth - midWidth - rightWidth - 6; // separators
