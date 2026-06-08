@@ -340,6 +340,6 @@ To report a security vulnerability in ETL-SQL, open a confidential issue or cont
 
 ---
 
-**Policy Version**: 0.9.0
+**Policy Version**: 0.10.0
 **Last Review Date**: 2026-05-18
 **Reference Standards**: NIST SP 800-132 for PBKDF2 parameter guidance, OWASP secure logging principles, and least-privilege service deployment practices.

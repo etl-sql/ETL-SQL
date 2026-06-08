@@ -22,7 +22,7 @@ The Orchestrator and Report Portal may run on the same host or on separate hosts
 
 ### Windows
 
-1. Run the `ETL-SQL-Enterprise-v0.9.0.msi` installer.
+1. Run the `ETL-SQL-Enterprise-v0.10.0.msi` installer.
 2. Select the workstation and server features required for the host.
 3. The installer registers these Windows services when the server features are selected:
    - `ETL-SQL-Orchestrator`
@@ -34,7 +34,7 @@ The Orchestrator and Report Portal may run on the same host or on separate hosts
 Install the package for your distribution, then enable the services you intend to run:
 
 ```bash
-sudo dpkg -i etl-sql_0.9.0_amd64.deb
+sudo dpkg -i etl-sql_0.10.0_amd64.deb
 sudo systemctl enable etl-sql-orchestrator
 sudo systemctl start etl-sql-orchestrator
 sudo systemctl enable etl-sql-portal

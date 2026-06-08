@@ -10,11 +10,11 @@
     4. Orchestrates platform-specific builds via publish_release.ps1.
 
 .EXAMPLE
-    .\Master-Release.ps1 -Version "0.9.0"
+    .\Master-Release.ps1 -Version "0.10.0"
 #>
 
 param(
-    [string]$Version = "0.9.0",
+    [string]$Version = "0.10.0",
     [switch]$SkipTests,
     [switch]$SkipUI,
     [switch]$IncludeSampleValidation
