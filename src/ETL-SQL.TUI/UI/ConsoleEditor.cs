@@ -251,6 +251,8 @@ namespace ETL_SQL.TUI.UI
                         }
                         else if (!_renderer.PromptVisible)
                         {
+                            // Pick up an external change to a clean buffer before handling the key.
+                            if (!IsRunning) await MaybeAutoReloadAsync();
                             await _input.HandleKey(key);
                         }
                     }
@@ -1173,6 +1175,47 @@ namespace ETL_SQL.TUI.UI
         /// <summary>The current buffer text (used by the schema explorer to re-scan connections).</summary>
         public string CurrentScriptText => _buffer.GetText();
 
+        /// <summary>
+        /// If the active file was changed on disk and the buffer is clean (no unsaved edits to
+        /// lose), silently reload it. Called at interaction time from the editor loop.
+        /// </summary>
+        public async Task MaybeAutoReloadAsync()
+        {
+            if (_isDirty || string.IsNullOrEmpty(_filePath) || _filePath == "untitled.etlsql") return;
+            if (!_fileTracker.HasChangedExternally(_filePath)) return;
+
+            await LoadFile(_filePath); // LoadFile re-records the new mtime via _fileTracker
+            _renderer.ShowStatus($"Reloaded {Path.GetFileName(_filePath)} — changed on disk.");
+        }
+
+        /// <summary>Shows a scrollable side-by-side of the in-editor buffer vs. the on-disk file.</summary>
+        private async Task ShowDiskComparison()
+        {
+            string[] disk;
+            try { disk = File.Exists(_filePath) ? File.ReadAllLines(_filePath) : System.Array.Empty<string>(); }
+            catch { _renderer.ShowStatus("Could not read the on-disk version."); return; }
+
+            await ShowInfoOverlay($"Compare: {Path.GetFileName(_filePath)}",
+                BuildSideBySide(_buffer.Lines, disk), "Nothing to compare.");
+        }
+
+        /// <summary>Renders two line sets as an escaped side-by-side, marking lines that differ.</summary>
+        internal static string BuildSideBySide(IReadOnlyList<string> editor, IReadOnlyList<string> disk, int col = 34)
+        {
+            string Cell(string s) => Markup.Escape(s.Length > col ? s.Substring(0, col - 1) + "…" : s).PadRight(col);
+            var sb = new StringBuilder();
+            sb.Append("  ").Append("EDITOR (unsaved)".PadRight(col)).Append(" | ").AppendLine("ON DISK");
+            int max = System.Math.Max(editor.Count, disk.Count);
+            for (int i = 0; i < max; i++)
+            {
+                string e = i < editor.Count ? editor[i] : "";
+                string d = i < disk.Count ? disk[i] : "";
+                string marker = e == d ? "  " : "[yellow]≠[/] ";
+                sb.Append(marker).Append(Cell(e)).Append(" | ").AppendLine(Markup.Escape(d.Length > col ? d.Substring(0, col - 1) + "…" : d));
+            }
+            return sb.ToString();
+        }
+
         /// <summary>Inserts text at the cursor (used by the schema explorer's insert-at-cursor action).</summary>
         public void InsertAtCursor(string text)
         {
@@ -1581,11 +1624,16 @@ namespace ETL_SQL.TUI.UI
             }
 
             // Guard against clobbering changes another program made since we loaded/saved.
-            if (_fileTracker.HasChangedExternally(_filePath))
+            while (_fileTracker.HasChangedExternally(_filePath))
             {
                 var choice = (await ShowPrompt(
-                    $"{Path.GetFileName(_filePath)} changed on disk. Overwrite / Reload / Cancel? (o/r/c)", ""))
+                    $"{Path.GetFileName(_filePath)} changed on disk. Overwrite / Reload / Compare / Cancel? (o/r/d/c)", ""))
                     ?.Trim().ToLowerInvariant();
+                if (choice == "d")
+                {
+                    await ShowDiskComparison();
+                    continue; // re-prompt after the user reviews the side-by-side
+                }
                 if (choice == "r")
                 {
                     await LoadFile(_filePath);
@@ -1597,6 +1645,7 @@ namespace ETL_SQL.TUI.UI
                     _renderer.ShowStatus("Save cancelled.");
                     return false;
                 }
+                break; // overwrite
             }
 
             var text = _buffer.GetText();
