@@ -29,12 +29,12 @@ namespace ETL_SQL.Orchestrator.Service
     /// <summary>
     /// Minimal-API endpoints exposed by the Orchestrator Service over HTTP.
     ///
-    /// Ad-hoc execution routes (existing):
+    /// Ad-hoc execution routes (all require X-Orchestrator-Key header):
     ///   POST   /jobs          — submit a script for ad-hoc execution
     ///   DELETE /jobs/{id}     — cancel a running or queued ad-hoc job
     ///   GET    /jobs/{id}     — get the status of an ad-hoc job
-    ///   GET    /health        — liveness probe (always 200 OK)
-    ///   GET    /metrics       — concurrency metrics
+    ///   GET    /health        — liveness probe (always 200 OK, no auth)
+    ///   GET    /metrics       — concurrency metrics (no auth)
     ///
     /// Scheduled job management (all require X-Orchestrator-Key header):
     ///   GET    /api/scheduled-jobs              — list all jobs (enabled + disabled)
@@ -75,9 +75,11 @@ namespace ETL_SQL.Orchestrator.Service
                 });
             }).WithName("getMetrics");
 
-            // ── Ad-hoc job execution (existing, no auth required for backwards compat) ──
-            app.MapPost("/jobs", (JobSubmitRequest request, IServiceScopeFactory scopeFactory, ILogger<Program> logger) =>
+            // ── Ad-hoc job execution (authenticated — see ApiKeyDenied) ──────────
+            app.MapPost("/jobs", (HttpContext ctx, IConfiguration cfg, JobSubmitRequest request, IServiceScopeFactory scopeFactory, ILogger<Program> logger) =>
             {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+
                 var jobId = Guid.NewGuid().ToString("N")[..8];
                 var cts   = new CancellationTokenSource();
                 var entry = new JobEntry(jobId, cts);
@@ -89,8 +91,10 @@ namespace ETL_SQL.Orchestrator.Service
                 return Results.Accepted($"/jobs/{jobId}", new { JobId = jobId });
             }).WithName("submitJob");
 
-            app.MapDelete("/jobs/{id}", (string id, ILogger<Program> logger) =>
+            app.MapDelete("/jobs/{id}", (string id, HttpContext ctx, IConfiguration cfg, ILogger<Program> logger) =>
             {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+
                 if (!_jobs.TryGetValue(id, out var entry))
                     return Results.NotFound(new { Error = $"Job '{id}' not found." });
 
@@ -102,6 +106,8 @@ namespace ETL_SQL.Orchestrator.Service
 
             app.MapGet("/jobs/{id}", (string id, HttpContext ctx, IConfiguration cfg) =>
             {
+                if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+
                 if (!_jobs.TryGetValue(id, out var entry))
                     return Results.NotFound(new { Error = $"Job '{id}' not found." });
 

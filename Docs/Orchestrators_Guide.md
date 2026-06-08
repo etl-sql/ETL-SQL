@@ -418,10 +418,11 @@ curl -X POST http://localhost:5001/api/scheduled-jobs/{name}/kill \
   -H "X-Orchestrator-Key: your-shared-secret"
 ```
 
-For ad-hoc jobs submitted directly to `POST /jobs`, cancel by job id:
+For ad-hoc jobs submitted directly to `POST /jobs`, cancel by job id. Like submission, the ad-hoc job routes require the `X-Orchestrator-Key` header when an API key is configured:
 
 ```bash
-curl -X DELETE http://localhost:5001/jobs/{id}
+curl -X DELETE http://localhost:5001/jobs/{id} \
+  -H "X-Orchestrator-Key: your-shared-secret"
 ```
 
 From within a script or TUI session, the in-engine scheduler will also automatically stop a job's execution if its `CancellationToken` is triggered (e.g. via `Ctrl+C` or process shutdown).

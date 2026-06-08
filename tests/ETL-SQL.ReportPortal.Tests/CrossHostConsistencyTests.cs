@@ -257,10 +257,11 @@ public class CrossHostConsistencyTests : IClassFixture<PortalWebFactory>
         Assert.Equal(JobRunStatus.Completed, authenticatedStatus.Status);
         Assert.False(string.IsNullOrWhiteSpace(authenticatedStatus.ReportManifestJson));
 
+        // The ad-hoc job status route now requires a valid API key outright: the manifest — and all
+        // job status — is withheld behind 401, not merely redacted from a 200 response.
         using var unauthenticatedClient = orchestratorFactory.CreateClient();
-        var unauthenticatedStatus = await unauthenticatedClient.GetFromJsonAsync<ETL_SQL.Orchestrator.Channels.JobStatusResponse>(
-            $"/jobs/{jobId}", _json);
-        Assert.Null(unauthenticatedStatus?.ReportManifestJson);
+        var unauthenticatedResponse = await unauthenticatedClient.GetAsync($"/jobs/{jobId}");
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthenticatedResponse.StatusCode);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

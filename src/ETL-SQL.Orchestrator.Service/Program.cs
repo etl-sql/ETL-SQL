@@ -134,6 +134,11 @@ try
 
     var app = builder.Build();
 
+    // ── Security guard: never serve the ad-hoc job API unauthenticated on a ──
+    //    network-reachable address. Fails fast when no API key is configured
+    //    and the service is bound to a non-loopback endpoint.
+    OrchestratorStartup.ValidateApiKeyBinding(cfg);
+
     // ── Orphan PID cleanup on startup ────────────────────────────────────
     var tracker = app.Services.GetRequiredService<ETL_SQL.Orchestrator.Execution.ChildProcessTracker>();
     tracker.CleanupOrphans();

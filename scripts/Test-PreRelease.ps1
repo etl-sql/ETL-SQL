@@ -52,6 +52,9 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot = Resolve-Path (Join-Path $ScriptRoot "..")
+
+# Shared NuGet dependency-audit helpers (reliable deprecated/vulnerable audit under SDK 10.0.300 + CPM).
+. (Join-Path $ScriptRoot "lib/DependencyAudit.ps1")
 $ValidationRoot = Join-Path $RepoRoot $OutDir
 $LatestDir = Join-Path $ValidationRoot "latest"
 $StatePath = Join-Path $LatestDir "state.json"
@@ -87,6 +90,7 @@ function Get-PlannedPreReleasePhases {
 
     $phases.Add([ordered]@{ Phase = "Asset drift check"; Command = "node .\scripts\sync-assets.js -Check"; Reason = "Shared report runtime files must match generated host copies." })
     $phases.Add([ordered]@{ Phase = "Dotnet restore"; Command = "dotnet restore ETL-SQL.slnx"; Reason = "Package graph resolves before build and tests." })
+    $phases.Add([ordered]@{ Phase = "Dependency-audit self-test"; Command = ".\scripts\Test-DependencyAudit.ps1"; Reason = "The dependency-audit helpers behave correctly (reliable fallback + hard failure)." })
     $phases.Add([ordered]@{ Phase = "NuGet dependency audit"; Command = "dotnet list package --outdated/--deprecated/--vulnerable"; Reason = "Release should not ship known vulnerable or deprecated packages." })
     $phases.Add([ordered]@{ Phase = "Dotnet build"; Command = "dotnet build ETL-SQL.slnx --configuration $Configuration --no-restore"; Reason = "All projects compile in the release configuration." })
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
@@ -196,184 +200,6 @@ function Convert-PhaseMap {
         }
     }
     return $map
-}
-
-function Invoke-NuGetPackageAudit {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Mode
-    )
-
-    $args = @(
-        "list",
-        "ETL-SQL.slnx",
-        "package",
-        $Mode,
-        "--include-transitive",
-        "--format",
-        "json",
-        "--no-restore"
-    )
-
-    $oldPreference = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        $output = & dotnet @args 2>&1
-    }
-    finally {
-        $ErrorActionPreference = $oldPreference
-    }
-    $exitCode = if ($LASTEXITCODE -ne $null) { $LASTEXITCODE } else { 0 }
-    if ($exitCode -ne 0) {
-        if ($Mode -eq "--outdated") {
-            Write-Warning "dotnet list package --outdated failed (often due to SDK bugs with CPM). Skipping outdated package check."
-            return [PSCustomObject]@{ projects = @() }
-        }
-        throw "dotnet list package $Mode failed with exit code $exitCode"
-    }
-
-    $jsonText = ($output -join "`n").Trim()
-    if ([string]::IsNullOrWhiteSpace($jsonText)) {
-        throw "dotnet list package $Mode returned no output."
-    }
-
-    return $jsonText | ConvertFrom-Json
-}
-
-function Get-NuGetAuditFindings {
-    param(
-        [Parameter(Mandatory = $true)]
-        $AuditResult,
-
-        [Parameter(Mandatory = $true)]
-        [ValidateSet("outdated", "deprecated", "vulnerable")]
-        [string]$Kind
-    )
-
-    $findings = New-Object System.Collections.Generic.List[object]
-    if (-not $AuditResult.projects) {
-        return $findings
-    }
-
-    foreach ($project in $AuditResult.projects) {
-        if (-not $project.frameworks) {
-            continue
-        }
-
-        foreach ($framework in $project.frameworks) {
-            foreach ($bucketName in @("topLevelPackages", "transitivePackages")) {
-                $packages = $framework.$bucketName
-                if (-not $packages) {
-                    continue
-                }
-
-                foreach ($package in $packages) {
-                    switch ($Kind) {
-                        "outdated" {
-                            if ($package.latestVersion) {
-                                $findings.Add([ordered]@{
-                                    project = $project.path
-                                    framework = $framework.framework
-                                    bucket = $bucketName
-                                    id = $package.id
-                                    requestedVersion = $package.requestedVersion
-                                    resolvedVersion = $package.resolvedVersion
-                                    latestVersion = $package.latestVersion
-                                })
-                            }
-                        }
-                        "deprecated" {
-                            if ($package.deprecationReasons) {
-                                $findings.Add([ordered]@{
-                                    project = $project.path
-                                    framework = $framework.framework
-                                    bucket = $bucketName
-                                    id = $package.id
-                                    resolvedVersion = $package.resolvedVersion
-                                    deprecationReasons = @($package.deprecationReasons)
-                                    alternativePackage = $package.alternativePackage
-                                })
-                            }
-                        }
-                        "vulnerable" {
-                            if ($package.vulnerabilities -or $package.severity -or $package.advisoryUrl -or $package.advisoryTitle) {
-                                $entry = [ordered]@{
-                                    project = $project.path
-                                    framework = $framework.framework
-                                    bucket = $bucketName
-                                    id = $package.id
-                                    resolvedVersion = $package.resolvedVersion
-                                }
-
-                                if ($package.vulnerabilities) {
-                                    $entry.vulnerabilities = @($package.vulnerabilities)
-                                }
-                                if ($package.severity) {
-                                    $entry.severity = $package.severity
-                                }
-                                if ($package.advisoryUrl) {
-                                    $entry.advisoryUrl = $package.advisoryUrl
-                                }
-                                if ($package.advisoryTitle) {
-                                    $entry.advisoryTitle = $package.advisoryTitle
-                                }
-
-                                $findings.Add($entry)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    return $findings
-}
-
-function Format-NuGetFinding {
-    param(
-        [Parameter(Mandatory = $true)]
-        $Finding
-    )
-
-    $projectPath = [string]$Finding.project
-    if ($projectPath.StartsWith($RepoRoot)) {
-        $projectPath = $projectPath.Substring($RepoRoot.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar)
-    }
-    $scope = if ($Finding.bucket -eq "topLevelPackages") { "top-level" } else { "transitive" }
-
-    switch ($true) {
-        { $Finding.latestVersion } {
-            return ("{0} [{1}] {2} {3} -> {4}" -f $Finding.id, $scope, $projectPath, $Finding.resolvedVersion, $Finding.latestVersion)
-        }
-        { $Finding.deprecationReasons } {
-            $reasons = ($Finding.deprecationReasons -join ", ")
-            return ("{0} [{1}] {2} {3} ({4})" -f $Finding.id, $scope, $projectPath, $Finding.resolvedVersion, $reasons)
-        }
-        { $Finding.vulnerabilities } {
-            $severities = @($Finding.vulnerabilities | ForEach-Object { $_.severity }) -join ", "
-            if ([string]::IsNullOrWhiteSpace($severities)) {
-                $severities = "unknown severity"
-            }
-            return ("{0} [{1}] {2} {3} ({4})" -f $Finding.id, $scope, $projectPath, $Finding.resolvedVersion, $severities)
-        }
-        { $Finding.severity -or $Finding.advisoryUrl -or $Finding.advisoryTitle } {
-            $details = @()
-            if ($Finding.severity) {
-                $details += $Finding.severity
-            }
-            if ($Finding.advisoryTitle) {
-                $details += $Finding.advisoryTitle
-            }
-            if ($Finding.advisoryUrl) {
-                $details += $Finding.advisoryUrl
-            }
-            return ("{0} [{1}] {2} {3} ({4})" -f $Finding.id, $scope, $projectPath, $Finding.resolvedVersion, ($details -join ", "))
-        }
-        default {
-            return ("{0} [{1}] {2}" -f $Finding.id, $scope, $projectPath)
-        }
-    }
 }
 
 function Invoke-NpmJsonCommand {
@@ -724,57 +550,19 @@ try {
         { & dotnet restore "ETL-SQL.slnx" } `
         $previousPhaseMap $fingerprint $results
 
+    Invoke-LoggedPhase "Dependency-audit self-test" `
+        ".\scripts\Test-DependencyAudit.ps1" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-DependencyAudit.ps1" } `
+        $previousPhaseMap $fingerprint $results
+
     Invoke-LoggedPhase "NuGet dependency audit" `
         "dotnet list ETL-SQL.slnx package --outdated/--deprecated/--vulnerable --include-transitive --format json --no-restore" `
         {
-            $outdatedAudit = Invoke-NuGetPackageAudit -Mode "--outdated"
-            $deprecatedAudit = Invoke-NuGetPackageAudit -Mode "--deprecated"
-            $vulnerableAudit = Invoke-NuGetPackageAudit -Mode "--vulnerable"
-
-            $outdatedFindings = @(Get-NuGetAuditFindings -AuditResult $outdatedAudit -Kind "outdated")
-            $deprecatedFindings = @(Get-NuGetAuditFindings -AuditResult $deprecatedAudit -Kind "deprecated")
-            $vulnerableFindings = @(Get-NuGetAuditFindings -AuditResult $vulnerableAudit -Kind "vulnerable")
-
-            Write-Output ("Outdated packages: {0}" -f $outdatedFindings.Count)
-            if ($outdatedFindings.Count -gt 0) {
-                Write-Output "Recent package updates are available:"
-                foreach ($finding in ($outdatedFindings | Select-Object -First 20)) {
-                    Write-Output ("  - {0}" -f (Format-NuGetFinding $finding))
-                }
-                if ($outdatedFindings.Count -gt 20) {
-                    Write-Output ("  - ... and {0} more" -f ($outdatedFindings.Count - 20))
-                }
-            }
-
-            Write-Output ("Deprecated packages: {0}" -f $deprecatedFindings.Count)
-            if ($deprecatedFindings.Count -gt 0) {
-                foreach ($finding in ($deprecatedFindings | Select-Object -First 20)) {
-                    Write-Output ("  - {0}" -f (Format-NuGetFinding $finding))
-                }
-                if ($deprecatedFindings.Count -gt 20) {
-                    Write-Output ("  - ... and {0} more" -f ($deprecatedFindings.Count - 20))
-                }
-            }
-
-            Write-Output ("Vulnerable packages: {0}" -f $vulnerableFindings.Count)
-            if ($vulnerableFindings.Count -gt 0) {
-                foreach ($finding in ($vulnerableFindings | Select-Object -First 20)) {
-                    Write-Output ("  - {0}" -f (Format-NuGetFinding $finding))
-                }
-                if ($vulnerableFindings.Count -gt 20) {
-                    Write-Output ("  - ... and {0} more" -f ($vulnerableFindings.Count - 20))
-                }
-            }
-
-            $blockingDeprecated = @($deprecatedFindings | Where-Object {
-                $reasons = $_.deprecationReasons
-                $nonLegacy = $reasons | Where-Object { $_ -ne "Legacy" }
-                $nonLegacy.Count -gt 0
-            })
-
-            if ($blockingDeprecated.Count -gt 0 -or $vulnerableFindings.Count -gt 0) {
-                throw "NuGet audit found deprecated or vulnerable packages. Update or replace them before shipping."
-            }
+            # Reliable under SDK 10.0.300 + CPM: solution-level audit with per-project fallback for
+            # deprecated/vulnerable, and a hard, actionable failure if no authoritative audit can run.
+            # Keep the diagnostic lines in the phase log; drop only the returned summary object.
+            Invoke-NuGetDependencyAudit -RepoRoot $RepoRoot -Solution "ETL-SQL.slnx" |
+                Where-Object { $_ -is [string] }
         } `
         $previousPhaseMap $fingerprint $results
 

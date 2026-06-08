@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Snowflake;
@@ -460,6 +461,96 @@ namespace ETL_SQL.Tests.Connectors
 
             Assert.DoesNotContain("authenticator=snowflake_jwt", cs, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("password=mysecret", cs, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // ── PRIVATE_KEY_FILE (.p8) zero-trust validation ──────────────────────
+
+        // Builds a context whose ResolvePath echoes the input so the constructor's
+        // ValidatePath/ValidateFileType run against the literal key path we pass in.
+        private static IExecutionContext MakeKeyFileContext()
+        {
+            var security = new SecurityService(NullLogger.Instance) { IsTestMode = true };
+            var ctx = new Mock<IExecutionContext>();
+            ctx.Setup(c => c.SecurityService).Returns(security);
+            ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);
+            ctx.Setup(c => c.ResolvePath(It.IsAny<string>())).Returns<string>(p => p);
+            return ctx.Object;
+        }
+
+        [Fact]
+        public void PrivateKeyFile_DocumentedP8Extension_IsAccepted()
+        {
+            // '.p8' is not in the global connector whitelist but is allowed for Snowflake key-pair auth.
+            // A temp-dir path is an approved safe zone under test mode, so ValidatePath passes and the
+            // only thing under test is the file-type override.
+            var keyPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"rsa_key_{Guid.NewGuid():N}.p8");
+
+            // Construction succeeding proves ValidateFileType accepted the '.p8' key path
+            // (a disallowed extension would have thrown a SecurityException here).
+            var ds = new SnowflakeDataSource(MakeKeyFileContext(),
+                "account=myorg-myaccount;user=alice;",
+                null,
+                new Dictionary<string, string> { ["PRIVATE_KEY_FILE"] = keyPath });
+
+            Assert.NotNull(ds);
+        }
+
+        [Fact]
+        public void PrivateKeyFile_FromConnectionString_P8Accepted()
+        {
+            var keyPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"rsa_key_{Guid.NewGuid():N}.p8");
+
+            var ds = new SnowflakeDataSource(MakeKeyFileContext(),
+                $"account=myorg-myaccount;user=alice;private_key_file={keyPath};",
+                null,
+                null);
+
+            Assert.NotNull(ds);
+        }
+
+        [Fact]
+        public void PrivateKeyFile_BlockedExtension_StillRejected()
+        {
+            // The .p8 override must not weaken the blacklist: an executable extension is still denied.
+            var keyPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"rsa_key_{Guid.NewGuid():N}.exe");
+
+            Assert.Throws<SecurityException>(() =>
+                new SnowflakeDataSource(MakeKeyFileContext(),
+                    "account=myorg-myaccount;user=alice;",
+                    null,
+                    new Dictionary<string, string> { ["PRIVATE_KEY_FILE"] = keyPath }));
+        }
+
+        [Fact]
+        public void PrivateKeyFile_TraversalPath_StillRejected()
+        {
+            // Path traversal is blocked before file-type checks, even for a .p8 key.
+            Assert.Throws<SecurityException>(() =>
+                new SnowflakeDataSource(MakeKeyFileContext(),
+                    "account=myorg-myaccount;user=alice;",
+                    null,
+                    new Dictionary<string, string> { ["PRIVATE_KEY_FILE"] = "../../etc/rsa_key.p8" }));
+        }
+
+        [Fact]
+        public void PrivateKeyFile_SystemPath_StillRejected()
+        {
+            // A .p8 key under a protected system directory is still denied by ValidatePath.
+            var sysKey = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? @"C:\Windows\System32\rsa_key.p8"
+                : "/etc/rsa_key.p8";
+
+            var security = new SecurityService(NullLogger.Instance) { IsTestMode = false, ProtectionMode = PathProtectionMode.Restricted };
+            var ctx = new Mock<IExecutionContext>();
+            ctx.Setup(c => c.SecurityService).Returns(security);
+            ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);
+            ctx.Setup(c => c.ResolvePath(It.IsAny<string>())).Returns<string>(p => p);
+
+            Assert.Throws<SecurityException>(() =>
+                new SnowflakeDataSource(ctx.Object,
+                    "account=myorg-myaccount;user=alice;",
+                    null,
+                    new Dictionary<string, string> { ["PRIVATE_KEY_FILE"] = sysKey }));
         }
     }
 }

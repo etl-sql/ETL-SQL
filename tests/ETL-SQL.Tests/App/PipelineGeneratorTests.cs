@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Xunit;
@@ -469,6 +471,116 @@ namespace ETL_SQL.Tests.App
             Assert.Contains("LEFT JOIN target_db.dbo.LookupTable AS L ON #staging.SourceKey = L.SourceKey", code);
             Assert.Contains("Group by non-aggregated columns for calculations", code);
             Assert.Contains("GROUP BY ItemId, ItemName, SystemSource", code);
+        }
+
+        // ── Dataset-name injection / traversal hardening ──────────────────────
+
+        private static string BuildMultiDatasetSpecJson(params string[] datasetNames)
+        {
+            var datasets = datasetNames.Select(n => new Dictionary<string, object?>
+            {
+                ["name"] = n,
+                ["destination"] = new Dictionary<string, object?>
+                {
+                    ["connector_type"] = "FLATFILE",
+                    ["format"] = "CSV",
+                    ["path"] = "out_folder",
+                    ["naming_pattern"] = "out.csv"
+                },
+                ["schema"] = new object[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["column_name"] = "Id",
+                        ["type_family"] = "INT",
+                        ["nullable"] = false
+                    }
+                }
+            }).ToArray();
+
+            var spec = new Dictionary<string, object?>
+            {
+                ["pipeline_name"] = "multi",
+                ["metadata"] = new Dictionary<string, object?>
+                {
+                    ["description"] = "Injection hardening fixture",
+                    ["owner"] = "Data Team",
+                    ["classification"] = "internal"
+                },
+                ["datasets"] = datasets
+            };
+
+            return JsonSerializer.Serialize(spec);
+        }
+
+        private async Task<int> GenerateWithDatasetNamesAsync(string fileTag, params string[] datasetNames)
+        {
+            var schemaPath = Path.Combine(_tempDir, $"inj_{fileTag}.json");
+            var outputPath = Path.Combine(_tempDir, $"inj_{fileTag}.etlsql");
+            await File.WriteAllTextAsync(schemaPath, BuildMultiDatasetSpecJson(datasetNames));
+            return await PipelineGenerator.Generate(schemaPath, outputPath, NullLogger.Instance);
+        }
+
+        [Theory]
+        [InlineData("traversal", "../evil")]
+        [InlineData("traversal_deep", "../../../etc/cron.d/evil")]
+        [InlineData("fwd_slash", "sub/dir")]
+        [InlineData("back_slash", "sub\\dir")]
+        [InlineData("single_quote", "a'; PRINT 'pwned")]
+        [InlineData("newline", "a\nPRINT 'pwned'")]
+        [InlineData("reserved_con", "CON")]
+        [InlineData("reserved_lpt1", "LPT1")]
+        [InlineData("leading_dot", ".hidden")]
+        [InlineData("space", "bad name")]
+        public async Task Generate_UnsafeDatasetName_IsRejected(string tag, string datasetName)
+        {
+            var before = Directory.GetFiles(_tempDir, "*", SearchOption.AllDirectories).Length;
+
+            var result = await GenerateWithDatasetNamesAsync(tag, datasetName);
+
+            Assert.Equal(1, result);
+            // No master script and no module files should be written when validation rejects the spec.
+            Assert.False(File.Exists(Path.Combine(_tempDir, $"inj_{tag}.etlsql")));
+            var etlsqlFiles = Directory.GetFiles(_tempDir, "*.etlsql", SearchOption.AllDirectories);
+            Assert.Empty(etlsqlFiles);
+            // The only new file is the schema JSON we wrote.
+            var after = Directory.GetFiles(_tempDir, "*", SearchOption.AllDirectories).Length;
+            Assert.Equal(before + 1, after);
+        }
+
+        [Fact]
+        public async Task Generate_DuplicateNormalizedDatasetNames_IsRejected()
+        {
+            // "Sales" and "sales" collide to the same module filename on case-insensitive filesystems.
+            var result = await GenerateWithDatasetNamesAsync("dupe", "Sales", "sales");
+
+            Assert.Equal(1, result);
+            Assert.Empty(Directory.GetFiles(_tempDir, "*.etlsql", SearchOption.AllDirectories));
+        }
+
+        [Fact]
+        public async Task Generate_SafeDatasetNames_ProduceContainedModules()
+        {
+            var schemaPath = Path.Combine(_tempDir, "inj_ok.json");
+            var outputPath = Path.Combine(_tempDir, "inj_ok.etlsql");
+            await File.WriteAllTextAsync(schemaPath, BuildMultiDatasetSpecJson("sales_feed", "inv-2"));
+
+            var result = await PipelineGenerator.Generate(schemaPath, outputPath, NullLogger.Instance);
+
+            Assert.Equal(0, result);
+            var masterCode = await File.ReadAllTextAsync(outputPath);
+            Assert.Contains("RUN SCRIPT './inj_ok_modules/sales_feed.etlsql';", masterCode);
+            Assert.Contains("RUN SCRIPT './inj_ok_modules/inv-2.etlsql';", masterCode);
+
+            var modulesDir = Path.Combine(_tempDir, "inj_ok_modules");
+            Assert.True(File.Exists(Path.Combine(modulesDir, "sales_feed.etlsql")));
+            Assert.True(File.Exists(Path.Combine(modulesDir, "inv-2.etlsql")));
+
+            // Every generated module path stays under the modules directory.
+            foreach (var file in Directory.GetFiles(modulesDir))
+            {
+                Assert.StartsWith(Path.GetFullPath(modulesDir), Path.GetFullPath(file));
+            }
         }
     }
 }

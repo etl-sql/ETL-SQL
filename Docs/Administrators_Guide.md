@@ -135,7 +135,7 @@ ETL-SQL config setup-jwt --update
 
 ### 4.3 Orchestrator API Key
 
-Protect the Orchestrator management endpoints with a shared API key whenever the endpoint is reachable outside a tightly controlled internal network. The portal sends the key in the `X-Orchestrator-Key` request header.
+A shared API key protects every Orchestrator route that submits, cancels, inspects, schedules, or manages jobs — including the ad-hoc execution routes `POST /jobs`, `DELETE /jobs/{id}`, and `GET /jobs/{id}`. Only the unauthenticated probes `GET /health` and `GET /metrics` are exempt. The portal sends the key in the `X-Orchestrator-Key` request header.
 
 ```json
 {
@@ -146,7 +146,10 @@ Protect the Orchestrator management endpoints with a shared API key whenever the
 }
 ```
 
-If `Orchestrator:ApiKey` is empty, the management endpoints are open. Treat that as development-only or isolated-network behavior.
+The installers (MSI custom action and Linux `postinst`) generate a random `Orchestrator:ApiKey` on first install and mirror it to `Portal:Orchestrator:ApiKey` so the two halves match out of the box.
+
+> [!IMPORTANT]
+> **The Orchestrator refuses to start unauthenticated on a network-reachable address.** If `Orchestrator:ApiKey` is empty *and* the service binds to a non-loopback address (for example `http://*:5001` or `http://0.0.0.0:5001`), startup fails fast with an actionable error. Configure a key, or bind the service to loopback only (`http://127.0.0.1:5001`). An empty key is permitted **only** for loopback-only bindings, which is development/isolated-host behavior.
 
 ---
 

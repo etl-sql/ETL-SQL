@@ -27,6 +27,11 @@ namespace ETL_SQL.Connectors.Snowflake
         private SnowflakeDbConnection? _transactionalConnection;
         private DbTransaction? _activeTransaction;
 
+        // PKCS#8 private-key extension Snowflake documents for key-pair auth. Scoped to this connector's
+        // PRIVATE_KEY_FILE validation so other file connectors keep their default whitelist.
+        private static readonly HashSet<string> SnowflakePrivateKeyExtensions =
+            new(StringComparer.OrdinalIgnoreCase) { ".p8" };
+
         public SnowflakeDataSource(IExecutionContext context, string connectionString, string? tableName, Dictionary<string, string>? options)
         {
             _context = context;
@@ -57,7 +62,9 @@ namespace ETL_SQL.Connectors.Snowflake
             {
                 var resolvedKeyPath = context.ResolvePath(pkFile);
                 context.SecurityService.ValidatePath(resolvedKeyPath);
-                context.SecurityService.ValidateFileType(resolvedKeyPath);
+                // '.p8' is the documented Snowflake PKCS#8 private-key extension. Allow it only here,
+                // via the per-call override, so the global connector whitelist stays unchanged.
+                context.SecurityService.ValidateFileType(resolvedKeyPath, overrides: SnowflakePrivateKeyExtensions);
                 _connectionString = ReplaceConnectionStringValue(connectionString, "private_key_file", resolvedKeyPath);
             }
         }

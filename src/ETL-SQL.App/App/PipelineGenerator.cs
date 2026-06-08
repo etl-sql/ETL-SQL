@@ -89,6 +89,10 @@ namespace ETL_SQL.App
 
                         var subEtlSql = CompilePipeline(subSpec, Path.GetFileName(schemaPath));
                         var subOutputPath = Path.Combine(modulesDirPath, $"{dsName}.etlsql");
+                        // Defense in depth: even though dataset names are validated to a safe identifier
+                        // format, confirm the normalized module path cannot escape the modules directory
+                        // before writing.
+                        EnsureWithinDirectory(modulesDirPath, subOutputPath);
                         await File.WriteAllTextAsync(subOutputPath, subEtlSql, Encoding.UTF8);
                     }
 
@@ -257,8 +261,10 @@ namespace ETL_SQL.App
             foreach (var ds in spec.Datasets!)
             {
                 var dsName = ds.Name ?? "unnamed";
-                sb.Indent(1).AppendLine($"PRINT 'Running specification module: {dsName}...';");
-                sb.Indent(1).AppendLine($"RUN SCRIPT './{modulesDirName}/{dsName}.etlsql';");
+                // Escape every generated ETL-SQL string literal. Dataset names are already validated to a
+                // safe identifier, so this is belt-and-suspenders against any future relaxation.
+                sb.Indent(1).AppendLine($"PRINT 'Running specification module: {EscapeSqlString(dsName)}...';");
+                sb.Indent(1).AppendLine($"RUN SCRIPT '{EscapeSqlString($"./{modulesDirName}/{dsName}.etlsql")}';");
                 sb.Indent(1).AppendLine();
             }
 
@@ -713,6 +719,24 @@ namespace ETL_SQL.App
 
         private static string EscapeSqlString(string value) => value.Replace("'", "''");
 
+        // Verifies that a candidate output path, once normalized, stays under the given directory.
+        // Throws if it would escape (e.g. via traversal or an absolute path), so the caller's
+        // try/catch turns it into a clean non-zero exit instead of an out-of-tree write.
+        private static void EnsureWithinDirectory(string directory, string candidatePath)
+        {
+            var root = Path.GetFullPath(directory);
+            var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+                ? root
+                : root + Path.DirectorySeparatorChar;
+            var full = Path.GetFullPath(candidatePath);
+
+            if (!full.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Generated module path '{candidatePath}' resolves outside the modules directory '{directory}'.");
+            }
+        }
+
         private static string GetSqlTypeString(SpecColumn col)
         {
             var type = col.TypeFamily?.ToUpper() ?? "VARCHAR";
@@ -798,6 +822,21 @@ namespace ETL_SQL.App
 
     internal static class SpecPipelineValidator
     {
+        // Documented safe identifier for dataset names: must start with a letter, then letters,
+        // digits, underscore, or hyphen, up to 64 chars. This is the only character set that may
+        // appear in a generated module filename, RUN SCRIPT path, or PRINT literal, so it forbids
+        // path separators ('/' '\'), traversal ('.'), quotes, and newlines by construction.
+        internal static readonly Regex DatasetNameRegex =
+            new(@"^[A-Za-z][A-Za-z0-9_-]{0,63}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        // Windows reserved device names cannot be used as bare filenames even with a safe charset.
+        private static readonly HashSet<string> ReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "CON", "PRN", "AUX", "NUL",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        };
+
         private static readonly HashSet<string> ConnectorTypes = new(StringComparer.OrdinalIgnoreCase)
         {
             "FLATFILE", "MSSQL", "POSTGRES", "MYSQL", "ORACLE", "SNOWFLAKE", "BIGQUERY"
@@ -891,12 +930,32 @@ namespace ETL_SQL.App
                 var path = $"datasets[{i}]";
                 RequireText(dataset.Name, $"{path}.name", errors);
                 ValidateReviewMetadata(path, dataset.Confidence, dataset.SourceEvidence, errors);
-                if (!string.IsNullOrWhiteSpace(dataset.Name) && !names.Add(dataset.Name))
+                if (!string.IsNullOrWhiteSpace(dataset.Name))
                 {
-                    errors.Add($"{path}.name duplicates another dataset name.");
+                    ValidateDatasetName(dataset.Name, $"{path}.name", errors);
+                    // Duplicate check is case-insensitive, so two names that collide to the same
+                    // generated module filename (e.g. "Sales" / "sales") are rejected here.
+                    if (!names.Add(dataset.Name))
+                    {
+                        errors.Add($"{path}.name duplicates another dataset name (names are compared case-insensitively).");
+                    }
                 }
 
                 ValidateDatasetBody(path, dataset.Source, dataset.Destination, dataset.Schema, errors);
+            }
+        }
+
+        private static void ValidateDatasetName(string name, string path, List<string> errors)
+        {
+            if (!DatasetNameRegex.IsMatch(name))
+            {
+                errors.Add($"{path} '{name}' is not a valid dataset identifier. Use a letter followed by letters, digits, '_' or '-' (max 64 chars); path separators, quotes, and whitespace are not allowed.");
+                return;
+            }
+
+            if (ReservedDeviceNames.Contains(name))
+            {
+                errors.Add($"{path} '{name}' is a reserved device name and cannot be used as a module name.");
             }
         }
 

@@ -62,9 +62,9 @@ cp "$BASE_DIR/etl-sql-portal.service" "$BUILD_ROOT/etc/systemd/system/"
 
 # 5. Maintainer scripts (quoted heredocs so nothing expands at build time).
 
-# postinst: create the service user, generate a JWT secret + approve the install folder as a
-# security safe zone (so the portal starts and may write data under /usr/lib/etl-sql/bin), then
-# enable and start the services.
+# postinst: create the service user, generate a JWT secret + a matching Orchestrator/Portal API key,
+# approve the install folder as a security safe zone (so the portal starts and may write data under
+# /usr/lib/etl-sql/bin), then enable and start the services.
 cat <<'POSTINST' > "$BUILD_ROOT/DEBIAN/postinst"
 #!/bin/bash
 set -e
@@ -83,6 +83,23 @@ jwt = data.get("Portal", {}).get("Jwt")
 if isinstance(jwt, dict) and not (jwt.get("Secret") or "").strip():
     jwt["Secret"] = base64.b64encode(os.urandom(32)).decode("ascii")
     changed = True
+# Orchestrator API key: the service binds to a network address and refuses to start without a key.
+# Generate one and mirror it to the Portal's client config so the two halves match out of the box.
+orch = data.get("Orchestrator")
+portal_orch = data.get("Portal", {}).get("Orchestrator")
+api_key = None
+if isinstance(orch, dict) and (orch.get("ApiKey") or "").strip():
+    api_key = orch["ApiKey"]
+elif isinstance(portal_orch, dict) and (portal_orch.get("ApiKey") or "").strip():
+    api_key = portal_orch["ApiKey"]
+if api_key is None:
+    api_key = base64.b64encode(os.urandom(32)).decode("ascii")
+if isinstance(orch, dict) and not (orch.get("ApiKey") or "").strip():
+    orch["ApiKey"] = api_key
+    changed = True
+if isinstance(portal_orch, dict) and not (portal_orch.get("ApiKey") or "").strip():
+    portal_orch["ApiKey"] = api_key
+    changed = True
 sec = data.get("Security")
 if isinstance(sec, dict) and sec.get("ApprovedSafeZones") != ["/usr/lib/etl-sql/bin"]:
     sec["ApprovedSafeZones"] = ["/usr/lib/etl-sql/bin"]
@@ -92,7 +109,8 @@ if changed:
         json.dump(data, f, indent=2)
 PY
 else
-    echo "[ETL-SQL] python3 or appsettings.json missing; set Portal:Jwt:Secret and Security:ApprovedSafeZones manually." >&2
+    echo "[ETL-SQL] python3 or appsettings.json missing; set Portal:Jwt:Secret, Orchestrator:ApiKey (and the matching Portal:Orchestrator:ApiKey), and Security:ApprovedSafeZones manually." >&2
+    echo "[ETL-SQL] NOTE: the Orchestrator binds to a network address and will NOT start without Orchestrator:ApiKey set." >&2
 fi
 
 chown -R etlsql:etlsql /usr/lib/etl-sql

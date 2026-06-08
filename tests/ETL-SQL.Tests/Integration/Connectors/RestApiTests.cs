@@ -189,6 +189,103 @@ namespace ETL_SQL.Tests.Integration.Connectors
             return ctx.Object;
         }
 
+        // Context with strict egress control: test-mode bypass off and the '*' wildcard removed, so
+        // ValidateHost enforces the allowlist (loopback is still always permitted).
+        private static IExecutionContext MakeEgressRestrictedContext()
+        {
+            var security = new SecurityService(NullLogger.Instance) { IsTestMode = false };
+            security.AllowedHosts.Clear();
+            var ctx = new Mock<IExecutionContext>();
+            ctx.Setup(c => c.SecurityService).Returns(security);
+            ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);
+            ctx.Setup(c => c.Connections).Returns(new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase));
+            var serviceProvider = new Mock<IServiceProvider>();
+            ctx.Setup(c => c.ServiceProvider).Returns(serviceProvider.Object);
+            ctx.Setup(c => c.TempTableSpillThresholdRows).Returns(1000000);
+            return ctx.Object;
+        }
+
+        private static LocalHttpResponse Redirect(int status, string location) =>
+            new(status, "text/plain", string.Empty, new Dictionary<string, string> { ["Location"] = location });
+
+        [Fact]
+        public async Task ReadBatches_RedirectToBlockedHost_IsRejected()
+        {
+            // An allowed (loopback) endpoint redirects to a blocked internal host. The connector must
+            // re-validate the redirect target and refuse to follow it.
+            await using var server = new LocalHttpApiServer(_ =>
+                Redirect(302, "http://169.254.169.254/latest/meta-data/iam/security-credentials/"));
+
+            var ds = new RestDataSource(MakeEgressRestrictedContext(), server.Url);
+
+            await Assert.ThrowsAsync<SecurityException>(async () => await ds.ReadBatches().ToListAsync());
+        }
+
+        [Fact]
+        public async Task ReadBatches_RedirectLoop_IsBoundedAndThrows()
+        {
+            // A server that always redirects to itself must not loop forever — the bounded redirect
+            // count trips and surfaces a clear error.
+            LocalHttpApiServer? server = null;
+            server = new LocalHttpApiServer(_ => Redirect(302, server!.Url));
+            await using var _disposeServer = server;
+
+            var ds = new RestDataSource(MakeContext(), server.Url, new Dictionary<string, string>
+            {
+                ["MAX_REDIRECTS"] = "2"
+            });
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () => await ds.ReadBatches().ToListAsync());
+            Assert.Contains("redirect", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task ReadBatches_CrossHostRedirect_StripsAuthorizationHeader()
+        {
+            // The final origin records what headers it received.
+            string? observedAuth = "unset";
+            await using var target = new LocalHttpApiServer(request =>
+            {
+                observedAuth = request.Headers.TryGetValue("Authorization", out var a) ? a : null;
+                return LocalHttpResponse.Json("""[{"ok":true}]""");
+            });
+
+            // Redirect to the SAME loopback target but via a different host name ("localhost" vs the
+            // origin's "127.0.0.1"), which counts as cross-host so the Authorization header is dropped.
+            var crossHostTarget = target.Url.Replace("127.0.0.1", "localhost");
+            await using var entry = new LocalHttpApiServer(_ => Redirect(307, crossHostTarget));
+
+            var ds = new RestDataSource(MakeContext(), entry.Url, new Dictionary<string, string>
+            {
+                ["AUTH_TYPE"] = "BEARER",
+                ["TOKEN"] = "super-secret-token"
+            });
+
+            var batches = await ds.ReadBatches().ToListAsync();
+
+            Assert.Single(batches);
+            Assert.Equal(true, batches[0].Rows[0]["ok"]);
+            // The credential must not have leaked to the cross-host redirect target.
+            Assert.True(string.IsNullOrEmpty(observedAuth), $"Authorization header leaked across hosts: '{observedAuth}'");
+        }
+
+        [Theory]
+        // Same host, same scheme → keep credentials.
+        [InlineData("https://api.example.com/a", "https://api.example.com/b", false)]
+        [InlineData("http://api.example.com/a", "http://api.example.com/b", false)]
+        // Same host, HTTPS → HTTP downgrade → strip (cleartext exposure).
+        [InlineData("https://api.example.com/a", "http://api.example.com/b", true)]
+        // Cross host → strip regardless of scheme.
+        [InlineData("https://api.example.com/a", "https://evil.example.com/b", true)]
+        [InlineData("https://api.example.com/a", "http://evil.example.com/b", true)]
+        // Host comparison is case-insensitive; an HTTP → HTTPS upgrade on the same host keeps credentials.
+        [InlineData("https://API.Example.com/a", "https://api.example.com/b", false)]
+        [InlineData("http://api.example.com/a", "https://api.example.com/b", false)]
+        public void ShouldStripCredentialsOnRedirect_CrossHostOrSchemeDowngrade(string from, string to, bool expected)
+        {
+            Assert.Equal(expected, RestDataSource.ShouldStripCredentialsOnRedirect(new Uri(from), new Uri(to)));
+        }
+
         [Fact]
         public async Task WriteBatches_RowObject_SendsPostRequests()
         {

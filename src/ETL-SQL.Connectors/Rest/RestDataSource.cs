@@ -4,12 +4,14 @@ using System.Net.Http.Headers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Connectors.Rest
 {
@@ -24,7 +26,10 @@ namespace ETL_SQL.Connectors.Rest
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private readonly int _timeoutSeconds;
-        private static readonly HttpClient _httpClient = new HttpClient();
+        // Auto-redirect is disabled so the connector follows redirects explicitly and re-validates every
+        // target host against the egress allowlist (SSRF hardening). See SendWithRedirectsAsync.
+        private static readonly HttpClient _httpClient = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+        private const int DefaultMaxRedirects = 5;
 
         private string? _cachedToken;
         private DateTime? _tokenExpiry;
@@ -252,7 +257,7 @@ namespace ETL_SQL.Connectors.Rest
                 };
 
                 using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
-                using var response = await _httpClient.SendAsync(request, cts.Token);
+                using var response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -402,7 +407,7 @@ namespace ETL_SQL.Connectors.Rest
                     try
                     {
                         using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
-                        response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+                        response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
 
                         if (response.IsSuccessStatusCode)
                         {
@@ -421,7 +426,9 @@ namespace ETL_SQL.Connectors.Rest
                         var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync());
                         throw new HttpRequestException($"API request failed with status {response.StatusCode}: {error}");
                     }
-                    catch (Exception ex) when (ex is not HttpRequestException)
+                    // A blocked redirect target (SecurityException) or redirect loop (ExecutionException)
+                    // must fail fast and keep its message — never get swallowed into the retry/HTTP wrapper.
+                    catch (Exception ex) when (ex is not HttpRequestException && ex is not SecurityException && ex is not ExecutionException)
                     {
                         if (attempts < retryCount)
                         {
@@ -490,7 +497,7 @@ namespace ETL_SQL.Connectors.Rest
                     try
                     {
                         using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
-                        response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
+                        response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
 
                         int statusCode = (int)response.StatusCode;
                         if (response.IsSuccessStatusCode)
@@ -510,7 +517,7 @@ namespace ETL_SQL.Connectors.Rest
                         var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync());
                         throw new HttpRequestException($"API request failed with status {response.StatusCode}: {error}");
                     }
-                    catch (Exception ex) when (ex is not HttpRequestException)
+                    catch (Exception ex) when (ex is not HttpRequestException && ex is not SecurityException && ex is not ExecutionException)
                     {
                         if (attempts < retryCount)
                         {
@@ -1069,7 +1076,7 @@ namespace ETL_SQL.Connectors.Rest
                 try
                 {
                     using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
-                    response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
+                    response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
                     statusCode = (int)response.StatusCode;
 
                     if (successStatuses.Contains(statusCode.Value))
@@ -1095,6 +1102,12 @@ namespace ETL_SQL.Connectors.Rest
                     }
                     errorMessage = $"API request failed with status {response.StatusCode}: {errorContent}";
                     break;
+                }
+                catch (Exception ex) when (ex is SecurityException or ExecutionException)
+                {
+                    // Blocked redirect target or redirect loop: surface immediately with its own
+                    // message instead of retrying or masking it as a generic request failure.
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -1279,6 +1292,158 @@ namespace ETL_SQL.Connectors.Rest
 
             _context?.SecurityService.ValidateHost(uri.Host);
         }
+
+        private int GetMaxRedirects()
+        {
+            if (_options != null && _options.TryGetValue("MAX_REDIRECTS", out var mrStr) && int.TryParse(mrStr, out var mr) && mr >= 0)
+            {
+                return mr;
+            }
+            return DefaultMaxRedirects;
+        }
+
+        /// <summary>
+        /// Sends <paramref name="request"/> with automatic redirects disabled, then follows any
+        /// redirect responses manually up to a bounded count. Every redirect target is re-validated
+        /// against the egress allowlist (<see cref="SecurityService.ValidateHost"/>) so an allowed
+        /// endpoint cannot bounce the request to a blocked internal host. Authorization and other
+        /// sensitive headers are dropped on cross-host redirects so credentials never leak to a
+        /// different origin.
+        /// </summary>
+        private async Task<HttpResponseMessage> SendWithRedirectsAsync(
+            HttpRequestMessage request, HttpCompletionOption completion, CancellationToken ct)
+        {
+            int maxRedirects = GetMaxRedirects();
+
+            // Buffer the body once so it can be replayed for 307/308 redirects (the original
+            // HttpContent cannot be re-sent after the first SendAsync).
+            byte[]? bodyBytes = null;
+            string? contentType = null;
+            if (request.Content != null)
+            {
+                bodyBytes = await request.Content.ReadAsByteArrayAsync();
+                contentType = request.Content.Headers.ContentType?.ToString();
+            }
+
+            var current = request;
+            int redirects = 0;
+
+            while (true)
+            {
+                var response = await _httpClient.SendAsync(current, completion, ct);
+                if (!IsRedirectStatus(response.StatusCode))
+                {
+                    return response;
+                }
+
+                if (redirects >= maxRedirects)
+                {
+                    response.Dispose();
+                    if (current != request) current.Dispose();
+                    throw new ExecutionException(
+                        $"REST request exceeded the maximum of {maxRedirects} redirect(s) (possible redirect loop).");
+                }
+
+                var location = response.Headers.Location;
+                if (location == null)
+                {
+                    // Redirect status without a Location header — nothing to follow; hand it back.
+                    return response;
+                }
+
+                var target = location.IsAbsoluteUri ? location : new Uri(current.RequestUri!, location);
+                if (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps)
+                {
+                    response.Dispose();
+                    if (current != request) current.Dispose();
+                    throw new ExecutionException($"REST redirect to unsupported scheme '{target.Scheme}' was blocked.");
+                }
+
+                // Re-validate every hop against the egress policy before following it.
+                _context?.SecurityService.ValidateHost(target.Host);
+
+                // Strip credentials when the redirect crosses to a different host OR downgrades the
+                // transport (HTTPS -> HTTP). A same-host downgrade would otherwise leak the bearer
+                // token / cookies over cleartext.
+                bool stripCredentials = ShouldStripCredentialsOnRedirect(current.RequestUri!, target);
+                var next = CloneForRedirect(current, target, response.StatusCode, bodyBytes, contentType, stripCredentials);
+
+                response.Dispose();
+                if (current != request) current.Dispose();
+                current = next;
+                redirects++;
+            }
+        }
+
+        private static bool IsRedirectStatus(System.Net.HttpStatusCode status) =>
+            status is System.Net.HttpStatusCode.MovedPermanently      // 301
+                   or System.Net.HttpStatusCode.Found                 // 302
+                   or System.Net.HttpStatusCode.SeeOther              // 303
+                   or System.Net.HttpStatusCode.TemporaryRedirect     // 307
+                   or System.Net.HttpStatusCode.PermanentRedirect;    // 308
+
+        private static HttpRequestMessage CloneForRedirect(
+            HttpRequestMessage original, Uri target, System.Net.HttpStatusCode status,
+            byte[]? bodyBytes, string? contentType, bool stripSensitiveHeaders)
+        {
+            // 307/308 preserve the method and body; 301/302/303 downgrade non-idempotent verbs to GET
+            // (the long-standing browser/curl convention) and drop the body.
+            bool preserveMethodAndBody =
+                status is System.Net.HttpStatusCode.TemporaryRedirect or System.Net.HttpStatusCode.PermanentRedirect;
+
+            var method = preserveMethodAndBody
+                ? original.Method
+                : (original.Method == HttpMethod.Get || original.Method == HttpMethod.Head ? original.Method : HttpMethod.Get);
+
+            var clone = new HttpRequestMessage(method, target);
+
+            bool methodHasBody = method == HttpMethod.Post || method == HttpMethod.Put
+                || method.Method.Equals("PATCH", StringComparison.OrdinalIgnoreCase);
+            if (preserveMethodAndBody && bodyBytes != null && methodHasBody)
+            {
+                var content = new ByteArrayContent(bodyBytes);
+                if (!string.IsNullOrEmpty(contentType))
+                {
+                    content.Headers.TryAddWithoutValidation("Content-Type", contentType);
+                }
+                clone.Content = content;
+            }
+
+            foreach (var header in original.Headers)
+            {
+                if (stripSensitiveHeaders && IsSensitiveRequestHeader(header.Key))
+                {
+                    continue;
+                }
+                clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+
+            return clone;
+        }
+
+        /// <summary>
+        /// Decides whether credential-bearing headers must be dropped when following a redirect from
+        /// <paramref name="from"/> to <paramref name="to"/>. True when the host changes (cross-origin)
+        /// or the transport is downgraded HTTPS -> HTTP (which would expose the credential over
+        /// cleartext even on the same host).
+        /// </summary>
+        internal static bool ShouldStripCredentialsOnRedirect(Uri from, Uri to)
+        {
+            bool crossHost = !string.Equals(to.Host, from.Host, StringComparison.OrdinalIgnoreCase);
+            bool schemeDowngrade =
+                string.Equals(from.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(to.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase);
+            return crossHost || schemeDowngrade;
+        }
+
+        // Headers that must never be forwarded to a different origin on a cross-host redirect.
+        private static bool IsSensitiveRequestHeader(string headerName) =>
+            headerName.Equals("Authorization", StringComparison.OrdinalIgnoreCase)
+            || headerName.Equals("Cookie", StringComparison.OrdinalIgnoreCase)
+            || headerName.Equals("Proxy-Authorization", StringComparison.OrdinalIgnoreCase)
+            || headerName.Contains("KEY", StringComparison.OrdinalIgnoreCase)
+            || headerName.Contains("TOKEN", StringComparison.OrdinalIgnoreCase)
+            || headerName.Contains("SECRET", StringComparison.OrdinalIgnoreCase);
 
         private InMemoryDataSource GetOrCreateResponseTable(string name, DataTable firstBatch, string[] correlationCols)
         {
@@ -1567,7 +1732,7 @@ namespace ETL_SQL.Connectors.Rest
                 }
 
                 var request = await BuildRequestAsync();
-                var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+                var response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseHeadersRead, CancellationToken.None);
                 if (!response.IsSuccessStatusCode) return Enumerable.Empty<string>();
 
                 using var stream = await response.Content.ReadAsStreamAsync();
