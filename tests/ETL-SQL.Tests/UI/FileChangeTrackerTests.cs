@@ -60,6 +60,18 @@ namespace ETL_SQL.Tests.UI
         }
 
         [Fact]
+        public void DeletedFile_AfterRecord_IsReportedChanged()
+        {
+            var fs = new FakeFs { Times = { ["a.etlsql"] = new DateTime(2026, 1, 1) } };
+            var t = new FileChangeTracker(fs);
+            t.Record("a.etlsql");
+
+            fs.Times.Remove("a.etlsql");
+
+            Assert.True(t.HasChangedExternally("a.etlsql"));
+        }
+
+        [Fact]
         public void Record_AfterChange_ResetsBaseline()
         {
             var fs = new FakeFs { Times = { ["a.etlsql"] = new DateTime(2026, 1, 1) } };

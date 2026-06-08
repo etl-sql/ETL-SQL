@@ -1,6 +1,7 @@
 using Xunit;
 using System.Collections.Generic;
 using System.Linq;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
@@ -87,6 +88,25 @@ namespace ETL_SQL.Tests.UI
             var e = NewEditor();
             e.ScheduleLiveAnalysis();
             Assert.False(e._renderer.LiveAnalysisPending);
+        }
+
+        [Fact]
+        public async Task EditDuringRun_DefersAnalysisUntilRunCompletes()
+        {
+            var e = NewEditor();
+            e._buffer.Load(new[] { "WAITFOR DELAY '00:00:30';" });
+            var run = e.RunScript();
+
+            var sw = Stopwatch.StartNew();
+            while (!e.IsRunning && sw.ElapsedMilliseconds < 3000) await Task.Delay(10);
+            Assert.True(e.IsRunning);
+
+            e.MarkDirty();
+            Assert.True(e.LiveAnalysisDeferred);
+
+            e.CancelRun();
+            await run;
+            Assert.False(e.LiveAnalysisDeferred);
         }
     }
 }

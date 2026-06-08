@@ -391,7 +391,7 @@ The TUI supports interactive mouse actions across all layout regions:
 - **Tab Bar**: Clicking a tab switches the active editor tab. Clicking the `x` on a tab closes it. Clicking the `+` button opens a new blank tab.
 - **Sidebar**: Clicking sidebar items selects/highlights them; double-clicking (or pressing Enter on selected) performs context actions like loading a file/folder.
 - **Status Bar / Help Bar**: Clicking any of the buttons (e.g., `F1:Help`, `F5:Run`) triggers their corresponding key binding action.
-- **Bottom Tab Strip**: Clicking a tab (Pipeline, Results, Performance, Output) switches the lower panel view. In Results view, clicking the right-aligned `◀` or `▶` arrows cycles the active result set.
+- **Bottom Tab Strip**: Clicking a tab (Pipeline, Results, Performance, Output, Variables) switches the lower panel view. In Results view, clicking the right-aligned `◀` or `▶` arrows cycles the active result set.
 - **Compare Mode**: Clicking inside any stacked result pane selects it, shifting focus to that pane for keyboard scrolling.
 
 ---
@@ -437,7 +437,7 @@ Defines layout buttons for the bottom status/help bar (e.g. `F1:Help`, `F5:Run`,
 **File:** [BottomTabStrip.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/BottomTabStrip.cs)
 **Class:** [BottomTabStrip](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/BottomTabStrip.cs#L14)
 
-Coordinates tab selection drawn immediately above the lower panel, defining bounds for hitting tab options (Pipeline, Results, Performance, Output).
+Coordinates tab selection drawn immediately above the lower panel, defining bounds for hitting tab options (Pipeline, Results, Performance, Output, Variables).
 
 ### `ResultSetNav`
 **File:** [ResultSetNav.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ResultSetNav.cs)

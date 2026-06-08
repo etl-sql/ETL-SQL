@@ -23,13 +23,12 @@ namespace ETL_SQL.TUI.UI
         }
 
         /// <summary>
-        /// True only when the file exists, we have a recorded time for it, and the on-disk time
-        /// now differs — i.e. it was modified externally since we last loaded or saved it.
+        /// True when a tracked file's timestamp changes or the file is deleted.
         /// </summary>
         public bool HasChangedExternally(string? path)
         {
-            if (string.IsNullOrEmpty(path) || !_fs.Exists(path)) return false;
-            return _times.TryGetValue(path, out var recorded) && _fs.GetLastWriteTimeUtc(path) != recorded;
+            if (string.IsNullOrEmpty(path) || !_times.TryGetValue(path, out var recorded)) return false;
+            return !_fs.Exists(path) || _fs.GetLastWriteTimeUtc(path) != recorded;
         }
 
         public void Forget(string? path)

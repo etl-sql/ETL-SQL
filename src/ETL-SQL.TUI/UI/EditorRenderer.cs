@@ -661,6 +661,7 @@ namespace ETL_SQL.TUI.UI
 
         private void RenderCommandPalette(int totalWidth, int totalHeight)
         {
+            var cap = TerminalCapabilities.Current;
             int panelWidth = Math.Min(72, totalWidth - 6);
             int listCap = Math.Clamp(totalHeight - 10, 5, 14);
 
@@ -692,8 +693,8 @@ namespace ETL_SQL.TUI.UI
             }
 
             var inner = new Rows(
-                new Markup($"[yellow]›[/] {Markup.Escape(PaletteFilter)}[grey]▏[/]"),
-                new Markup("[grey]" + new string('─', Math.Max(1, panelWidth - 4)) + "[/]"),
+                new Markup($"[yellow]{cap.Glyph("›", ">")}[/] {Markup.Escape(PaletteFilter)}[grey]{cap.Glyph("▏", "|")}[/]"),
+                new Markup("[grey]" + new string(cap.Unicode ? '─' : '-', Math.Max(1, panelWidth - 4)) + "[/]"),
                 list);
 
             int panelHeight = Math.Min(totalHeight - 4, (end - start) + 5);
@@ -702,7 +703,7 @@ namespace ETL_SQL.TUI.UI
                 Header = new PanelHeader("[bold yellow] Command Palette [/]", Justify.Left),
                 Width = panelWidth,
                 Height = panelHeight,
-                Border = BoxBorder.Double,
+                Border = cap.Box(),
                 Padding = new Padding(1, 0, 1, 0)
             };
 
@@ -738,7 +739,7 @@ namespace ETL_SQL.TUI.UI
                 Header = new PanelHeader($"[bold yellow] {Markup.Escape(InfoTitle)} [/]", Justify.Left),
                 Width = panelWidth,
                 Height = panelHeight,
-                Border = BoxBorder.Double,
+                Border = TerminalCapabilities.Current.Box(),
                 Padding = new Padding(1, 0, 1, 0)
             };
 
@@ -765,7 +766,8 @@ namespace ETL_SQL.TUI.UI
         public static string MarkdownToMarkup(string raw)
         {
             string trimmed = raw.Trim();
-            if (trimmed.StartsWith("```")) return "[grey]────────[/]"; // code fence marker
+            if (trimmed.StartsWith("```"))
+                return $"[grey]{new string(TerminalCapabilities.Current.Unicode ? '─' : '-', 8)}[/]"; // code fence marker
 
             // A bare URL becomes a real clickable hyperlink (OSC 8) where the terminal supports it.
             if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^https?://\S+$"))
@@ -802,7 +804,8 @@ namespace ETL_SQL.TUI.UI
                 var blocks = new List<IRenderable>();
                 foreach (var category in categories)
                 {
-                    blocks.Add(new Markup($"[bold grey] ── {Markup.Escape(KeyBindings.CategoryTitles[category])} ──[/]"));
+                    string rule = TerminalCapabilities.Current.Glyph("──", "--");
+                    blocks.Add(new Markup($"[bold grey] {rule} {Markup.Escape(KeyBindings.CategoryTitles[category])} {rule}[/]"));
 
                     var section = new Table()
                         .Border(TableBorder.None)
@@ -833,7 +836,7 @@ namespace ETL_SQL.TUI.UI
 
             var inner = new Rows(
                 grid,
-                new Markup("[grey] ─────────────────────────────────────────────[/]"),
+                new Markup("[grey] " + new string(TerminalCapabilities.Current.Unicode ? '─' : '-', 45) + "[/]"),
                 new Markup("[yellow]F2[/][grey]: Snippet Reference   ·   any other key to close[/]")
             );
 
@@ -842,7 +845,7 @@ namespace ETL_SQL.TUI.UI
                 Header = new PanelHeader("[bold yellow] ETL-SQL Keyboard Reference [/]", Justify.Left),
                 Height = panelHeight,
                 Width  = panelWidth,
-                Border = BoxBorder.Double
+                Border = TerminalCapabilities.Current.Box()
             };
 
             int startRow = Math.Max(0, (totalHeight - panelHeight) / 2);
@@ -871,7 +874,7 @@ namespace ETL_SQL.TUI.UI
 
             var inner = new Rows(
                 snippetTable,
-                new Markup("[grey] ─────────────────────────────────────────────[/]"),
+                new Markup("[grey] " + new string(TerminalCapabilities.Current.Unicode ? '─' : '-', 45) + "[/]"),
                 new Markup("[yellow]F2[/][grey]: Keyboard Reference   Press any other key to close[/]")
             );
 
@@ -880,7 +883,7 @@ namespace ETL_SQL.TUI.UI
                 Header = new PanelHeader("[bold yellow] ETL-SQL Snippet Reference [/]", Justify.Left),
                 Height = panelHeight,
                 Width  = panelWidth,
-                Border = BoxBorder.Double
+                Border = TerminalCapabilities.Current.Box()
             };
 
             int startRow = Math.Max(0, (totalHeight - panelHeight) / 2);
@@ -962,7 +965,8 @@ namespace ETL_SQL.TUI.UI
             int start = ResultSetNav.StartX(totalWidth, index, count);
             string label = ResultSetNav.FormatLabel(index, count);
             _console.SetCursorPosition(start, row);
-            _console.Markup($"[black on cyan] ◀ [/][grey85 on grey23]{Markup.Escape(label)}[/][black on cyan] ▶ [/]");
+            var cap = TerminalCapabilities.Current;
+            _console.Markup($"[black on cyan] {cap.Glyph("◀", "<")} [/][grey85 on grey23]{Markup.Escape(label)}[/][black on cyan] {cap.Glyph("▶", ">")} [/]");
         }
 
         /// <summary>

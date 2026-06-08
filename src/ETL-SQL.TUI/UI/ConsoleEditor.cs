@@ -48,6 +48,7 @@ namespace ETL_SQL.TUI.UI
 
         private System.Threading.CancellationTokenSource? _analysisCts;
         private volatile int _analysisGen;
+        private volatile bool _liveAnalysisDeferred;
 
         private readonly Services.IClipboardService _clipboard;
         private readonly SecurityService _security;
@@ -62,6 +63,8 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>True while a script execution is in flight on a background task.</summary>
         public bool IsRunning => _runningTask is { IsCompleted: false };
+
+        internal bool LiveAnalysisDeferred => _liveAnalysisDeferred;
 
         /// <summary>Awaits the current background run (used by tests); completes immediately if idle.</summary>
         public Task WaitForRunAsync() => _runningTask ?? Task.CompletedTask;
@@ -91,7 +94,15 @@ namespace ETL_SQL.TUI.UI
             _runningTask = Task.Run(async () =>
             {
                 try { await ExecuteSource(source, ct); }
-                finally { _renderer.ExecutionRunning = false; }
+                finally
+                {
+                    _renderer.ExecutionRunning = false;
+                    if (_liveAnalysisDeferred)
+                    {
+                        _liveAnalysisDeferred = false;
+                        ScheduleLiveAnalysis(afterRun: true);
+                    }
+                }
             });
             return _runningTask;
         }
@@ -567,11 +578,11 @@ namespace ETL_SQL.TUI.UI
                 _evaluator.Log($"[ROLLBACK] Rolled back {count} open transaction(s).", ConsoleColor.Yellow);
                 _renderer.ShowStatus($"Rolled back {count} transaction(s).");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Surface failure without leaking provider-specific detail.
                 _evaluator.Log("[ROLLBACK ERROR] Failed to roll back all transactions.", ConsoleColor.Red);
-                _renderer.ShowStatus($"Rollback failed: {ex.Message}");
+                _renderer.ShowStatus("Failed to roll back all transactions.");
             }
         }
 
@@ -1183,6 +1194,11 @@ namespace ETL_SQL.TUI.UI
         {
             if (_isDirty || string.IsNullOrEmpty(_filePath) || _filePath == "untitled.etlsql") return;
             if (!_fileTracker.HasChangedExternally(_filePath)) return;
+            if (!File.Exists(_filePath))
+            {
+                _renderer.ShowStatus($"{Path.GetFileName(_filePath)} was deleted on disk.");
+                return;
+            }
 
             await LoadFile(_filePath); // LoadFile re-records the new mtime via _fileTracker
             _renderer.ShowStatus($"Reloaded {Path.GetFileName(_filePath)} — changed on disk.");
@@ -1568,9 +1584,14 @@ namespace ETL_SQL.TUI.UI
         /// markers without running the script. Each edit cancels the pending pass. Skipped while
         /// headless (tests) or a run is in flight.
         /// </summary>
-        public void ScheduleLiveAnalysis()
+        public void ScheduleLiveAnalysis(bool afterRun = false)
         {
-            if (_renderer.Headless || IsRunning) return;
+            if (!afterRun && IsRunning)
+            {
+                _liveAnalysisDeferred = true;
+                return;
+            }
+            if (_renderer.Headless) return;
 
             _analysisCts?.Cancel();
             _analysisCts = new System.Threading.CancellationTokenSource();
@@ -1976,6 +1997,7 @@ namespace ETL_SQL.TUI.UI
                 else if (File.Exists(launched))
                 {
                     _tabs.Add(new TabState { FilePath = launched, Lines = (await _fileHandler.LoadAsync(launched, ShowPrompt)).lines.ToList() });
+                    _fileTracker.Record(launched);
                     _activeTabIndex = _tabs.Count - 1;
                 }
             }
@@ -2013,6 +2035,7 @@ namespace ETL_SQL.TUI.UI
 
             int cursorLine = Math.Clamp(wt.CursorLine, 0, Math.Max(0, lines.Length - 1));
             int cursorCol = lines.Length > 0 ? Math.Clamp(wt.CursorColumn, 0, lines[cursorLine].Length) : 0;
+            _fileTracker.Record(wt.FilePath);
             return new TabState
             {
                 FilePath = string.IsNullOrEmpty(wt.FilePath) ? "untitled.etlsql" : wt.FilePath,
