@@ -8,6 +8,9 @@ using ETL_SQL.Core;
 
 namespace ETL_SQL.TUI.UI
 {
+    /// <summary>What a sidebar row represents — drives its icon, expand behaviour, and action.</summary>
+    public enum SidebarNodeKind { Directory, File, ModeToggle, Refresh, Connection, Table, Column, TempTable }
+
     public class SidebarNode
     {
         public string Path { get; set; } = "";
@@ -16,8 +19,17 @@ namespace ETL_SQL.TUI.UI
         public bool IsExpanded { get; set; }
         public bool IsLoaded { get; set; }
         public bool IsParentNav { get; set; } // synthetic ".." entry that re-roots one level up
+        public SidebarNodeKind Kind { get; set; } = SidebarNodeKind.Directory;
+        /// <summary>For metadata leaves: the text inserted at the cursor when activated.</summary>
+        public string? InsertText { get; set; }
         public List<SidebarNode> Children { get; set; } = new();
+
+        /// <summary>Metadata branches (connection/table) and directories expand; leaves don't.</summary>
+        public bool IsExpandable => IsDirectory || Kind is SidebarNodeKind.Connection or SidebarNodeKind.Table or SidebarNodeKind.TempTable;
     }
+
+    /// <summary>The sidebar's two browsing modes.</summary>
+    public enum SidebarMode { Files, Metadata }
 
     public class FlatItem
     {
@@ -34,10 +46,83 @@ namespace ETL_SQL.TUI.UI
         public int SelectedIndex { get; set; } = 0;
         private string _lastRootPath = "";
 
+        public SidebarMode Mode { get; private set; } = SidebarMode.Files;
+        public List<SidebarNode> MetadataRoots { get; } = new();
+        private MetadataManager? _metadata;
+
         public SidebarPanel(EditorRenderer renderer, Evaluator evaluator)
         {
             _renderer = renderer;
             _evaluator = evaluator;
+        }
+
+        /// <summary>Supplies the metadata source for the schema-explorer mode (set once at startup).</summary>
+        public void SetMetadata(MetadataManager metadata) => _metadata = metadata;
+
+        /// <summary>Switches between the file explorer and the schema explorer, loading metadata on demand.</summary>
+        public async Task ToggleModeAsync(string scriptText)
+        {
+            Mode = Mode == SidebarMode.Files ? SidebarMode.Metadata : SidebarMode.Files;
+            SelectedIndex = 0;
+            if (Mode == SidebarMode.Metadata) await BuildMetadataRootsAsync(scriptText);
+            _renderer.ForceFullRepaint();
+        }
+
+        /// <summary>Reloads the schema tree from the current script's connections.</summary>
+        public async Task RefreshMetadataAsync(string scriptText)
+        {
+            await BuildMetadataRootsAsync(scriptText);
+            _renderer.ForceFullRepaint();
+        }
+
+        // Eagerly builds Connection → Table → Column (one network pass) so navigation stays
+        // synchronous afterwards. Triggered only by an explicit toggle/refresh, not per keystroke.
+        private async Task BuildMetadataRootsAsync(string scriptText)
+        {
+            MetadataRoots.Clear();
+            if (_metadata == null) return;
+
+            _metadata.RefreshConnections(scriptText, force: true);
+            _renderer.ShowStatus("Loading schema…");
+
+            foreach (var conn in _metadata.GetConnections().OrderBy(c => c, StringComparer.OrdinalIgnoreCase))
+            {
+                bool isTemp = conn.StartsWith("#");
+                var connNode = new SidebarNode
+                {
+                    Name = conn,
+                    Kind = isTemp ? SidebarNodeKind.TempTable : SidebarNodeKind.Connection,
+                    InsertText = conn,
+                    IsLoaded = true
+                };
+
+                try
+                {
+                    var tables = (await _metadata.GetTablesAsync(conn)).OrderBy(t => t, StringComparer.OrdinalIgnoreCase);
+                    foreach (var table in tables)
+                    {
+                        var tableNode = new SidebarNode
+                        {
+                            Name = table,
+                            Kind = SidebarNodeKind.Table,
+                            InsertText = isTemp ? table : $"{conn}.{table}",
+                            IsLoaded = true
+                        };
+                        try
+                        {
+                            foreach (var col in await _metadata.GetColumnsAsync(conn, table))
+                                tableNode.Children.Add(new SidebarNode { Name = col, Kind = SidebarNodeKind.Column, InsertText = col });
+                        }
+                        catch { }
+                        connNode.Children.Add(tableNode);
+                    }
+                }
+                catch { }
+
+                MetadataRoots.Add(connNode);
+            }
+
+            _renderer.ShowStatus($"Schema: {MetadataRoots.Count} connection(s).");
         }
 
         public void Initialize(string? currentFilePath)
@@ -126,8 +211,25 @@ namespace ETL_SQL.TUI.UI
         {
             var list = new List<FlatItem>();
 
-            // Traditional ".." entry at the top so a tree rooted on a file's directory can
-            // still navigate upward.
+            // A clickable mode toggle is always the first row (mouse- and keyboard-addressable).
+            list.Add(new FlatItem
+            {
+                Node = new SidebarNode { Name = Mode == SidebarMode.Files ? "⇄ Switch to Schema" : "⇄ Switch to Files", Kind = SidebarNodeKind.ModeToggle },
+                Depth = 0
+            });
+
+            if (Mode == SidebarMode.Metadata)
+            {
+                list.Add(new FlatItem
+                {
+                    Node = new SidebarNode { Name = "⟳ Refresh schema", Kind = SidebarNodeKind.Refresh },
+                    Depth = 0
+                });
+                foreach (var r in MetadataRoots) AddFlatItem(r, 0, list);
+                return list;
+            }
+
+            // Files mode: a ".." entry so a tree rooted on a file's directory can navigate upward.
             var root = RootNodes.FirstOrDefault();
             string? parent = root != null ? TryGetParent(root.Path) : null;
             if (parent != null)
@@ -183,11 +285,11 @@ namespace ETL_SQL.TUI.UI
         private void AddFlatItem(SidebarNode node, int depth, List<FlatItem> list)
         {
             list.Add(new FlatItem { Node = node, Depth = depth });
-            if (node.IsDirectory && node.IsExpanded)
+            if (node.IsExpandable && node.IsExpanded)
             {
                 if (!node.IsLoaded)
                 {
-                    LoadChildren(node);
+                    LoadChildren(node); // filesystem-only; metadata nodes load eagerly
                 }
                 foreach (var child in node.Children)
                 {
@@ -241,9 +343,18 @@ namespace ETL_SQL.TUI.UI
                 // One column of indent per level (was two) so deep trees keep more room
                 // for the name.
                 string indent = new string(' ', item.Depth);
-                string prefix = item.Node.IsParentNav ? "↑ .. "
-                              : item.Node.IsDirectory ? (item.Node.IsExpanded ? "▼ 📁 " : "▶ 📁 ")
-                              : "  📄 ";
+                string prefix = item.Node.Kind switch
+                {
+                    SidebarNodeKind.ModeToggle => "",
+                    SidebarNodeKind.Refresh    => "",
+                    SidebarNodeKind.Connection => item.Node.IsExpanded ? "▼ 🔌 " : "▶ 🔌 ",
+                    SidebarNodeKind.TempTable  => item.Node.IsExpanded ? "▼ 🧪 " : "▶ 🧪 ",
+                    SidebarNodeKind.Table      => item.Node.IsExpanded ? "▼ ▤ " : "▶ ▤ ",
+                    SidebarNodeKind.Column     => "  • ",
+                    _ when item.Node.IsParentNav => "↑ .. ",
+                    _ when item.Node.IsDirectory => item.Node.IsExpanded ? "▼ 📁 " : "▶ 📁 ",
+                    _ => "  📄 "
+                };
                 string displayName = item.Node.IsParentNav ? "" : item.Node.Name;
 
                 // Truncate to fit width, preserving the file extension when possible.
@@ -265,7 +376,16 @@ namespace ETL_SQL.TUI.UI
                 }
                 else
                 {
-                    string colorStyle = item.Node.IsDirectory ? "yellow" : "white";
+                    string colorStyle = item.Node.Kind switch
+                    {
+                        SidebarNodeKind.ModeToggle => "bold cyan",
+                        SidebarNodeKind.Refresh    => "cyan",
+                        SidebarNodeKind.Connection => "bold blue",
+                        SidebarNodeKind.TempTable  => "magenta",
+                        SidebarNodeKind.Table      => "yellow",
+                        SidebarNodeKind.Column     => "white",
+                        _ => item.Node.IsDirectory ? "yellow" : "white"
+                    };
                     contentBuilder.AppendLine($"[{colorStyle}]{Markup.Escape(lineContent)}[/]");
                 }
             }
@@ -283,7 +403,7 @@ namespace ETL_SQL.TUI.UI
 
             var panel = new Panel(contentBuilder.ToString().TrimEnd())
             {
-                Header = new PanelHeader($"[bold]Explorer[/]"),
+                Header = new PanelHeader(Mode == SidebarMode.Metadata ? "[bold]Schema[/]" : "[bold]Explorer[/]"),
                 Height = height,
                 Width = width,
                 Border = BoxBorder.Rounded,
@@ -298,32 +418,60 @@ namespace ETL_SQL.TUI.UI
         public async Task HandleEnter(ConsoleEditor editor)
         {
             var items = GetFlatVisibleItems();
-            if (SelectedIndex >= 0 && SelectedIndex < items.Count)
+            if (SelectedIndex < 0 || SelectedIndex >= items.Count) return;
+            var node = items[SelectedIndex].Node;
+
+            switch (node.Kind)
             {
-                var item = items[SelectedIndex];
-                if (item.Node.IsParentNav)
-                {
-                    NavigateUp();
+                case SidebarNodeKind.ModeToggle:
+                    await ToggleModeAsync(editor.CurrentScriptText);
+                    return;
+                case SidebarNodeKind.Refresh:
+                    await RefreshMetadataAsync(editor.CurrentScriptText);
+                    return;
+                case SidebarNodeKind.Column:
+                    // Leaf — insert its name at the cursor.
+                    editor.InsertAtCursor(node.InsertText ?? node.Name);
+                    _renderer.Focus = EditorFocus.Editor;
+                    _renderer.ShowStatus($"Inserted: {node.Name}");
                     _renderer.ForceFullRepaint();
                     return;
-                }
-                if (item.Node.IsDirectory)
-                {
-                    item.Node.IsExpanded = !item.Node.IsExpanded;
-                    if (item.Node.IsExpanded && !item.Node.IsLoaded)
-                    {
-                        LoadChildren(item.Node);
-                    }
-                    _renderer.ForceFullRepaint();
-                }
-                else
-                {
-                    await editor.OpenFileInTab(item.Node.Path);
-                    _renderer.Focus = EditorFocus.Editor;
-                    _renderer.ShowStatus($"Opened: {Path.GetFileName(item.Node.Path)}");
-                    _renderer.ForceFullRepaint();
-                }
             }
+
+            if (node.IsParentNav)
+            {
+                NavigateUp();
+                _renderer.ForceFullRepaint();
+                return;
+            }
+
+            if (node.IsExpandable)
+            {
+                node.IsExpanded = !node.IsExpanded;
+                if (node.IsExpanded && !node.IsLoaded) LoadChildren(node);
+                _renderer.ForceFullRepaint();
+                return;
+            }
+
+            // Files-mode leaf: open the file.
+            await editor.OpenFileInTab(node.Path);
+            _renderer.Focus = EditorFocus.Editor;
+            _renderer.ShowStatus($"Opened: {Path.GetFileName(node.Path)}");
+            _renderer.ForceFullRepaint();
+        }
+
+        /// <summary>Inserts the selected metadata node's name at the cursor (no-op for non-leaf rows).</summary>
+        public void InsertSelected(ConsoleEditor editor)
+        {
+            var items = GetFlatVisibleItems();
+            if (SelectedIndex < 0 || SelectedIndex >= items.Count) return;
+            var node = items[SelectedIndex].Node;
+            if (string.IsNullOrEmpty(node.InsertText)) return;
+
+            editor.InsertAtCursor(node.InsertText);
+            _renderer.Focus = EditorFocus.Editor;
+            _renderer.ShowStatus($"Inserted: {node.InsertText}");
+            _renderer.ForceFullRepaint();
         }
 
         public void HandleLeft()
@@ -332,7 +480,7 @@ namespace ETL_SQL.TUI.UI
             if (SelectedIndex >= 0 && SelectedIndex < items.Count)
             {
                 var item = items[SelectedIndex];
-                if (item.Node.IsDirectory && item.Node.IsExpanded)
+                if (item.Node.IsExpandable && item.Node.IsExpanded)
                 {
                     item.Node.IsExpanded = false;
                     _renderer.ForceFullRepaint();
@@ -346,7 +494,7 @@ namespace ETL_SQL.TUI.UI
             if (SelectedIndex >= 0 && SelectedIndex < items.Count)
             {
                 var item = items[SelectedIndex];
-                if (item.Node.IsDirectory && !item.Node.IsExpanded && !item.Node.IsParentNav)
+                if (item.Node.IsExpandable && !item.Node.IsExpanded && !item.Node.IsParentNav)
                 {
                     item.Node.IsExpanded = true;
                     if (!item.Node.IsLoaded)

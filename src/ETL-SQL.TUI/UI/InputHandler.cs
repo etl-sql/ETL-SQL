@@ -86,13 +86,23 @@ namespace ETL_SQL.TUI.UI
                     await _renderer._sidebarPanel.HandleEnter(_editor);
                     return;
                 }
+                if (key.Key == ConsoleKey.Tab)
+                {
+                    await _renderer._sidebarPanel.ToggleModeAsync(_editor.CurrentScriptText);
+                    return;
+                }
+                if (key.Key == ConsoleKey.I && key.Modifiers == 0)
+                {
+                    _renderer._sidebarPanel.InsertSelected(_editor);
+                    return;
+                }
                 if (key.Key == ConsoleKey.Escape)
                 {
                     _renderer.Focus = EditorFocus.Editor;
                     _renderer.ForceFullRepaint();
                     return;
                 }
-                
+
                 // If it's a character typing key with no modifiers, ignore it
                 if (key.KeyChar != '\0' && !char.IsControl(key.KeyChar) && key.Modifiers == 0)
                 {

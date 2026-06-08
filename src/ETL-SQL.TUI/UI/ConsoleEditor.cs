@@ -77,6 +77,7 @@ namespace ETL_SQL.TUI.UI
             _fileHandler = new EditorFileHandler(new PhysicalFileSystem(), _security);
             _fileTracker = new FileChangeTracker(new PhysicalFileSystem());
             _metadata = new MetadataManager(_evaluator, _connections);
+            _renderer._sidebarPanel.SetMetadata(_metadata);
             var helpRegistry = Program.ServiceProvider.GetService<Core.Interfaces.ILanguageHelpRegistry>();
             _helpRegistry = helpRegistry;
             _functionRegistry = Program.ServiceProvider.GetService<Core.Functions.IFunctionRegistry>();
@@ -1042,6 +1043,18 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>Marks the current document as modified.</summary>
         public void MarkDirty() => _isDirty = true;
+
+        /// <summary>The current buffer text (used by the schema explorer to re-scan connections).</summary>
+        public string CurrentScriptText => _buffer.GetText();
+
+        /// <summary>Inserts text at the cursor (used by the schema explorer's insert-at-cursor action).</summary>
+        public void InsertAtCursor(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            SaveUndoState();
+            _buffer.Paste(text);
+            MarkDirty();
+        }
 
         /// <summary>Automatically formats the current script buffer.</summary>
         public void FormatScript()

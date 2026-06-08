@@ -51,8 +51,9 @@ namespace ETL_SQL.Tests.UI
             panel.Initialize(Path.Combine(temp.Child, "x.etlsql")); // root = temp.Child (has parent temp.Root)
 
             var items = panel.GetFlatVisibleItems();
-            Assert.True(items[0].Node.IsParentNav);
-            Assert.Equal("..", items[0].Node.Name);
+            // Row 0 is the mode toggle; the ".." parent entry follows in Files mode.
+            Assert.Equal(SidebarNodeKind.ModeToggle, items[0].Node.Kind);
+            Assert.Contains(items, i => i.Node.IsParentNav && i.Node.Name == "..");
         }
 
         [Fact]
