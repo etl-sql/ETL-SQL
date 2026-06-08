@@ -60,7 +60,7 @@ namespace ETL_SQL.TUI.UI
             {
                 var snippetSuggestions = SnippetLibrary.Instance
                     .GetByPrefix(lastWord)
-                    .Select(s => new Suggestion(s.TuiBody, SuggestionType.Snippet, 1, s.Description))
+                    .Select(s => new Suggestion(s.TuiBody, SuggestionType.Snippet, 1, s.Description, Label: s.Trigger))
                     .ToList();
                 suggestions.InsertRange(0, snippetSuggestions);
             }

@@ -522,9 +522,10 @@ namespace ETL_SQL.TUI.UI
                     _console.SetCursorPosition(physicalX, screenRow);
                     
                     var suggestion = AutocompleteOptions[optionIndex];
-                    // Show a single-line, width-bounded label — snippet bodies are multi-line and
-                    // would otherwise wrap across rows and overlap the documentation sidecar.
-                    var text = Markup.Escape(AutocompleteController.ToDisplayLabel(suggestion.Text, 20));
+                    // Prefer the short display Label (e.g. a snippet's "$mssql" trigger) over the
+                    // insert Text, which for snippets is the full multi-line body. Single-line and
+                    // width-bounded so the list can't wrap or overlap the documentation sidecar.
+                    var text = Markup.Escape(AutocompleteController.ToDisplayLabel(suggestion.Label ?? suggestion.Text, 20));
                     string color = suggestion.Type switch
                     {
                         SuggestionType.OptionName => "yellow",

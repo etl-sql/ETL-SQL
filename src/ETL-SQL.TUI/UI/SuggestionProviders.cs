@@ -25,7 +25,9 @@ namespace ETL_SQL.TUI.UI
         Snippet
     }
 
-    public record Suggestion(string Text, SuggestionType Type, int Priority = 100, string? Documentation = null);
+    // Text is what gets inserted on accept; Label (when set) is the short string shown in the
+    // popup list — e.g. a snippet's "$mssql" trigger rather than its full multi-line body.
+    public record Suggestion(string Text, SuggestionType Type, int Priority = 100, string? Documentation = null, string? Label = null);
 
     /// <summary>Contains the full script context required for generating suggestions.</summary>
     public class SuggestionContext

@@ -1,5 +1,6 @@
 using Xunit;
 using System.Collections.Generic;
+using System.Linq;
 using ETL_SQL.TUI.UI;
 using ETL_SQL.Core;
 
@@ -51,6 +52,23 @@ namespace ETL_SQL.Tests.UI
             AcceptSuggestion(editor, "SELECT");
 
             Assert.False(editor._renderer.SnippetModeActive);
+        }
+
+        [Fact]
+        public async System.Threading.Tasks.Task SnippetSuggestion_ShowsTriggerLabel_InsertsBody()
+        {
+            var editor = NewEditor();
+            editor._buffer.Load(new[] { "$mssql" });
+            editor._buffer.CursorLine = 0;
+            editor._buffer.CursorColumn = 6;
+
+            await editor._autocomplete.UpdateAsync();
+
+            var opt = editor._renderer.AutocompleteOptions
+                .FirstOrDefault(o => o.Label == "$mssql");
+            Assert.NotNull(opt);                              // list shows the trigger, not the body
+            Assert.Contains("MSSQL", opt!.Text);              // but the body is what gets inserted
+            Assert.Equal("$mssql", AutocompleteController.ToDisplayLabel(opt.Label!, 20));
         }
     }
 }
