@@ -46,6 +46,45 @@ namespace ETL_SQL.Connectors.Snowflake
                     : host.Contains('.') ? host : host + ".snowflakecomputing.com";
                 context.SecurityService.ValidateHost(validationHost);
             }
+
+            // Zero-Trust Path Resolution for PRIVATE_KEY_FILE
+            string? pkFile = options?.GetValueOrDefault("PRIVATE_KEY_FILE");
+            if (string.IsNullOrEmpty(pkFile))
+            {
+                pkFile = ParseValueFromConnectionString(connectionString, "private_key_file");
+            }
+            if (!string.IsNullOrEmpty(pkFile) && context != null)
+            {
+                var resolvedKeyPath = context.ResolvePath(pkFile);
+                context.SecurityService.ValidatePath(resolvedKeyPath);
+                context.SecurityService.ValidateFileType(resolvedKeyPath);
+                _connectionString = ReplaceConnectionStringValue(connectionString, "private_key_file", resolvedKeyPath);
+            }
+        }
+
+        private static string? ParseValueFromConnectionString(string cs, string key)
+        {
+            foreach (var part in cs.Split(';'))
+            {
+                var kv = part.Trim().Split('=', 2);
+                if (kv.Length == 2 && kv[0].Equals(key, StringComparison.OrdinalIgnoreCase))
+                    return kv[1];
+            }
+            return null;
+        }
+
+        private static string ReplaceConnectionStringValue(string cs, string key, string newValue)
+        {
+            var parts = cs.Split(';');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                var kv = parts[i].Trim().Split('=', 2);
+                if (kv.Length == 2 && kv[0].Equals(key, StringComparison.OrdinalIgnoreCase))
+                {
+                    parts[i] = $"{kv[0]}={newValue}";
+                }
+            }
+            return string.Join(";", parts);
         }
 
         public string ConnectionString => _connectionString;
