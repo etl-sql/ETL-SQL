@@ -139,6 +139,9 @@ namespace ETL_SQL.TUI.UI
         /// <summary>True while a script is executing on a background task — drives the RUNNING indicator and the input heartbeat.</summary>
         public volatile bool ExecutionRunning = false;
 
+        /// <summary>True while a debounced live-analysis pass is pending — wakes the input loop so new gutter markers paint.</summary>
+        public volatile bool LiveAnalysisPending = false;
+
         private readonly IConsoleInterface _console;
         private readonly EditorPanel _editorPanel;
         private readonly MessageTreePanel _messageTreePanel;

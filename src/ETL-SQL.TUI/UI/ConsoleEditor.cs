@@ -41,8 +41,13 @@ namespace ETL_SQL.TUI.UI
         private readonly Core.Interfaces.ILanguageHelpRegistry? _helpRegistry;
         private readonly PortalClient _portal = new();
         private readonly Dictionary<string, IDataSource> _connections;
-        private readonly List<EditorDiagnostic> _diagnostics = new();
+        // Swapped (not mutated) so a background analysis can replace the set atomically while the
+        // render thread enumerates the old one — see AnalyzeAsync / ScheduleLiveAnalysis.
+        private volatile List<EditorDiagnostic> _diagnostics = new();
         private int _activeDiagnosticIndex = -1;
+
+        private System.Threading.CancellationTokenSource? _analysisCts;
+        private volatile int _analysisGen;
 
         private readonly Services.IClipboardService _clipboard;
         private readonly SecurityService _security;
@@ -764,8 +769,9 @@ namespace ETL_SQL.TUI.UI
                 return await ReadInputWindows();
             }
 
-            // Heartbeat while a script runs so the loop repaints live updates without blocking.
-            if (_renderer.ExecutionRunning)
+            // Heartbeat while a run or a live-analysis pass is in flight so the loop repaints
+            // updates without blocking on input.
+            if (_renderer.ExecutionRunning || _renderer.LiveAnalysisPending)
             {
                 try { if (!Console.KeyAvailable) { await Task.Delay(80); return null; } }
                 catch (InvalidOperationException) { await Task.Delay(80); return null; }
@@ -870,9 +876,11 @@ namespace ETL_SQL.TUI.UI
 
             while (true)
             {
-                // While a script runs, wake periodically (even with no input) so the loop can
-                // repaint live execution/message updates; otherwise block until input arrives.
-                if (WaitForSingleObject(hStdin, _renderer.ExecutionRunning ? 80u : INFINITE) == WAIT_TIMEOUT)
+                // While a script runs or a live-analysis pass is pending, wake periodically (even
+                // with no input) so the loop repaints execution/message/diagnostic updates;
+                // otherwise block until input arrives.
+                bool tick = _renderer.ExecutionRunning || _renderer.LiveAnalysisPending;
+                if (WaitForSingleObject(hStdin, tick ? 80u : INFINITE) == WAIT_TIMEOUT)
                 {
                     return null;
                 }
@@ -1108,8 +1116,12 @@ namespace ETL_SQL.TUI.UI
             _buffer.CursorColumn = Math.Clamp(snap.CursorColumn, 0, _buffer.Lines[_buffer.CursorLine].Length);
         }
 
-        /// <summary>Marks the current document as modified.</summary>
-        public void MarkDirty() => _isDirty = true;
+        /// <summary>Marks the current document as modified and re-runs live diagnostics (debounced).</summary>
+        public void MarkDirty()
+        {
+            _isDirty = true;
+            ScheduleLiveAnalysis();
+        }
 
         /// <summary>The current buffer text (used by the schema explorer to re-scan connections).</summary>
         public string CurrentScriptText => _buffer.GetText();
@@ -1276,54 +1288,15 @@ namespace ETL_SQL.TUI.UI
         {
             try
             {
-                _diagnostics.Clear();
                 _activeDiagnosticIndex = -1;
                 _renderer.IsBottomMaximized = false;
                 var totalSw = System.Diagnostics.Stopwatch.StartNew();
 
-                var lexSw = System.Diagnostics.Stopwatch.StartNew();
-                var tokens = new Lexer(source).Tokenize();
-                lexSw.Stop();
-                _evaluator.LastLexTimeMs = lexSw.ElapsedMilliseconds;
+                // Lex/parse/lint, logging diagnostics to Messages, and publish them for the gutter.
+                var (script, diags) = await AnalyzeAsync(source, logToMessages: true, ct);
+                _diagnostics = diags;
 
-                var parseSw = System.Diagnostics.Stopwatch.StartNew();
-                var script = new Parser(tokens).Parse();
-                parseSw.Stop();
-                _evaluator.LastParseTimeMs = parseSw.ElapsedMilliseconds;
-
-                // 1. Show Parser Diagnostics
-                foreach (var diag in script.Diagnostics)
-                {
-                    AddDiagnostic("PARSER", diag.Severity.ToString(), diag.Message, diag.Line, diag.Column);
-                    _evaluator.Log($"[PARSER {diag.Severity}] {diag.Message} at line {diag.Line}, col {diag.Column}", diag.Severity == DiagnosticSeverity.Error ? ConsoleColor.Red : ConsoleColor.Yellow);
-                }
-
-                // 2. Run Linter
-                var lintContext = new DefaultLintContext
-                {
-                    Metadata = new ConsoleMetadataProvider(_metadata),
-                    DocumentUri = _filePath
-                };
-
-                var linter = new Linter();
-                foreach (var type in typeof(ILintRule).Assembly.GetTypes()
-                    .Where(t => typeof(ILintRule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract))
-                {
-                    if (Activator.CreateInstance(type) is ILintRule rule)
-                        linter.AddRule(rule);
-                }
-
-                var lintResults = await linter.AnalyzeAsync(script, lintContext);
-                foreach (var res in lintResults)
-                {
-                    ConsoleColor color = res.Severity == LintSeverity.Error ? ConsoleColor.Red : ConsoleColor.Yellow;
-                    AddDiagnostic("LINT", res.Severity.ToString(), res.Message, res.LineNumber, res.ColumnNumber);
-                    _evaluator.Log($"[LINT {res.Severity}] {res.Message} at line {res.LineNumber}, col {res.ColumnNumber}", color);
-                }
-
-                SortDiagnostics();
-
-                // 3. Execute only if no critical syntax errors? 
+                // 3. Execute only if no critical syntax errors?
                 // Or try to execute what we can? 
                 // Let's stop on parser errors for safety.
                 if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
@@ -1435,25 +1408,103 @@ namespace ETL_SQL.TUI.UI
             _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
         }
 
-        private void AddDiagnostic(string source, string severity, string message, int line, int column)
+        /// <summary>
+        /// Lexes, parses and lints <paramref name="source"/> into a sorted diagnostics list — no
+        /// evaluator, no execution. Shared by F5 (logs to Messages) and the live debounced pass
+        /// (silent). Returns the parsed script so the caller can decide whether to execute.
+        /// </summary>
+        internal async Task<(Script script, List<EditorDiagnostic> diagnostics)> AnalyzeAsync(
+            string source, bool logToMessages, System.Threading.CancellationToken ct = default)
         {
-            _diagnostics.Add(new EditorDiagnostic(
-                source,
-                severity,
-                message,
-                Math.Max(1, line),
-                Math.Max(1, column)));
+            var diagnostics = new List<EditorDiagnostic>();
+
+            var lexSw = System.Diagnostics.Stopwatch.StartNew();
+            var tokens = new Lexer(source).Tokenize();
+            lexSw.Stop();
+            _evaluator.LastLexTimeMs = lexSw.ElapsedMilliseconds;
+
+            var parseSw = System.Diagnostics.Stopwatch.StartNew();
+            var script = new Parser(tokens).Parse();
+            parseSw.Stop();
+            _evaluator.LastParseTimeMs = parseSw.ElapsedMilliseconds;
+
+            foreach (var diag in script.Diagnostics)
+            {
+                diagnostics.Add(new EditorDiagnostic("PARSER", diag.Severity.ToString(), diag.Message, Math.Max(1, diag.Line), Math.Max(1, diag.Column)));
+                if (logToMessages)
+                    _evaluator.Log($"[PARSER {diag.Severity}] {diag.Message} at line {diag.Line}, col {diag.Column}", diag.Severity == DiagnosticSeverity.Error ? ConsoleColor.Red : ConsoleColor.Yellow);
+            }
+
+            var lintContext = new DefaultLintContext
+            {
+                Metadata = new ConsoleMetadataProvider(_metadata),
+                DocumentUri = _filePath
+            };
+            var linter = new Linter();
+            foreach (var type in typeof(ILintRule).Assembly.GetTypes()
+                .Where(t => typeof(ILintRule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract))
+            {
+                if (Activator.CreateInstance(type) is ILintRule rule)
+                    linter.AddRule(rule);
+            }
+
+            var lintResults = await linter.AnalyzeAsync(script, lintContext);
+            ct.ThrowIfCancellationRequested();
+
+            foreach (var res in lintResults)
+            {
+                diagnostics.Add(new EditorDiagnostic("LINT", res.Severity.ToString(), res.Message, Math.Max(1, res.LineNumber), Math.Max(1, res.ColumnNumber)));
+                if (logToMessages)
+                    _evaluator.Log($"[LINT {res.Severity}] {res.Message} at line {res.LineNumber}, col {res.ColumnNumber}", res.Severity == LintSeverity.Error ? ConsoleColor.Red : ConsoleColor.Yellow);
+            }
+
+            diagnostics.Sort(CompareDiagnostics);
+            return (script, diagnostics);
         }
 
-        private void SortDiagnostics()
+        private static int CompareDiagnostics(EditorDiagnostic left, EditorDiagnostic right)
         {
-            _diagnostics.Sort((left, right) =>
+            int line = left.Line.CompareTo(right.Line);
+            if (line != 0) return line;
+            int col = left.Column.CompareTo(right.Column);
+            if (col != 0) return col;
+            return string.Compare(left.Source, right.Source, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Debounced, cancellable static analysis after an edit: refreshes diagnostics/gutter
+        /// markers without running the script. Each edit cancels the pending pass. Skipped while
+        /// headless (tests) or a run is in flight.
+        /// </summary>
+        public void ScheduleLiveAnalysis()
+        {
+            if (_renderer.Headless || IsRunning) return;
+
+            _analysisCts?.Cancel();
+            _analysisCts = new System.Threading.CancellationTokenSource();
+            var ct = _analysisCts.Token;
+            int gen = ++_analysisGen;
+            var text = _buffer.GetText();
+            _renderer.LiveAnalysisPending = true; // wakes the input loop so new markers paint
+
+            _ = Task.Run(async () =>
             {
-                int line = left.Line.CompareTo(right.Line);
-                if (line != 0) return line;
-                int col = left.Column.CompareTo(right.Column);
-                if (col != 0) return col;
-                return string.Compare(left.Source, right.Source, StringComparison.Ordinal);
+                try
+                {
+                    await Task.Delay(350, ct); // debounce a burst of keystrokes
+                    var (_, diags) = await AnalyzeAsync(text, logToMessages: false, ct);
+                    ct.ThrowIfCancellationRequested();
+                    _diagnostics = diags;        // atomic reference swap
+                    _activeDiagnosticIndex = -1;
+                }
+                catch (OperationCanceledException) { }
+                catch { /* never let a background analysis crash the app */ }
+                finally
+                {
+                    // Only the latest scheduled pass clears the wake flag (a cancelled earlier pass
+                    // must not stop the loop from repainting the newest results).
+                    if (gen == _analysisGen) _renderer.LiveAnalysisPending = false;
+                }
             });
         }
 
@@ -1738,8 +1789,8 @@ namespace ETL_SQL.TUI.UI
                 _isDirty = tab.IsDirty;
                 _renderer.ScrollLine = tab.ScrollLine;
                 _renderer.ScrollCol = tab.ScrollCol;
-                _diagnostics.Clear();
-                _diagnostics.AddRange(tab.Diagnostics);
+                _analysisCts?.Cancel(); // drop any pending analysis from the previous tab
+                _diagnostics = new List<EditorDiagnostic>(tab.Diagnostics);
                 
                 // Restore results & telemetry state
                 _evaluator.LastResultSets.Clear();
