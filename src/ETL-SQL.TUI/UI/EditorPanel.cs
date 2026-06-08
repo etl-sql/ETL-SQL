@@ -52,13 +52,18 @@ namespace ETL_SQL.TUI.UI
                     _renderer.SetLinePhysicalShift(lineIdx, 0);
 
                     console.SetCursorPosition(x, row);
-                    // Gutter: right-aligned line number, then a marker glyph (or a space) in the
-                    // trailing cell so a diagnostic line shows ✗/⚠/• without shifting the text.
-                    string num = (lineIdx + 1).ToString().PadLeft(gutterWidth - 1);
+                    // Gutter layout: [marker][right-aligned number][space]. The diagnostic marker
+                    // sits in the far-left cell so it can never overlap the code, and a trailing
+                    // space always separates the number from the text.
+                    string num = (lineIdx + 1).ToString().PadLeft(Math.Max(1, gutterWidth - 2));
                     if (_renderer.DiagnosticLines.TryGetValue(lineIdx + 1, out var level))
-                        console.Markup($"[{TuiTheme.Instance.Editor.Gutter}]{num}[/][{DiagnosticGutter.Color(level)}]{DiagnosticGutter.Glyph(level)}[/]");
+                    {
+                        // U+FE0E forces narrow (text) presentation so an emoji-width icon can't shift the number.
+                        string glyph = DiagnosticGutter.Glyph(level) + "︎";
+                        console.Markup($"[{DiagnosticGutter.Color(level)}]{glyph}[/][{TuiTheme.Instance.Editor.Gutter}]{num} [/]");
+                    }
                     else
-                        console.Markup($"[{TuiTheme.Instance.Editor.Gutter}]{num} [/]");
+                        console.Markup($"[{TuiTheme.Instance.Editor.Gutter}] {num} [/]");
                     console.Markup(highlighted);
                 }
             }
