@@ -35,13 +35,17 @@ namespace ETL_SQL.TUI.UI
                 _connections.Clear();
             }
 
-            // Regex: captures name, type, and paren content for AS TYPE(...) syntax
-            var matches = Regex.Matches(script, @"CREATE\s+CONNECTION\s+(\w+)\s+AS\s+(\w+)\s*\(([^)]*)\)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            // Captures name, type, and paren content for AS TYPE(...) syntax. The body is matched
+            // with a balancing group so multi-line blocks and nested parens (e.g. a value like
+            // '(local)') are captured whole instead of truncating at the first ')'.
+            var matches = Regex.Matches(script,
+                @"CREATE\s+CONNECTION\s+(\w+)\s+AS\s+(\w+)\s*\((?<body>(?:[^()]|\((?<d>)|\)(?<-d>))*(?(d)(?!)))\)",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline);
             foreach (Match match in matches)
             {
                 var name = match.Groups[1].Value;
                 var type = match.Groups[2].Value.ToUpper();
-                var parenContent = match.Groups[3].Value;
+                var parenContent = match.Groups["body"].Value;
 
                 var pathMatch = Regex.Match(parenContent, @"['""]([^'""]*)['""]");
                 var path = pathMatch.Success ? pathMatch.Groups[1].Value : "";

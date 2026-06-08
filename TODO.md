@@ -36,7 +36,7 @@
 - [x] **Delete dead file `TreePanel.cs`** — Removed; replaced by `MessageTreePanel`.
 - [ ] **Fix `ConsoleEditor` service-locator anti-pattern** — Constructor resolves services via `Program.ServiceProvider.GetRequiredService<T>()`. Move resolution to `TuiDependencyInjectionSetup` and accept via constructor parameters for testability.
 - [ ] **Fix `TuiMetadataManager` no-op bridge methods** — `RegisterTempTable`, `ClearTempTables`, `ClearCache`, `ClearDocumentConnections` etc. are empty stubs; the bridge layer is hollow relative to the real `MetadataManager`.
-- [ ] **Fix `MetadataManager` connection regex for multi-line blocks** — Current regex requires `CREATE CONNECTION … (…)` on one logical line; multi-line blocks silently produce a `MockSqlDataSource` fallback.
+- [x] **Fix `MetadataManager` connection regex for multi-line blocks** — The `CREATE CONNECTION … (…)` body is now matched with a balancing group, so multi-line blocks and values containing nested parens (e.g. `'(local)'`) are captured whole instead of truncating at the first `)`. Tests cover multi-line, nested-paren, and two-block parsing.
 - [x] **Remove stale debug comment from `Program.cs`** — Removed.
 
 ### TUI — Architecture Doc Gaps
