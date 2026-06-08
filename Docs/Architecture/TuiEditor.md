@@ -186,10 +186,13 @@ Computes the panel layout and writes ANSI escape sequences for each frame via Sp
 | Mode | Panel | Activated by |
 |------|-------|-------------|
 | Default | `MessageTreePanel` — execution tree left, messages right | F4 (third press) |
-| Results | `ResultsPanel` — scrollable result grid with filter | F4 (first press) |
+| Results | `ResultsPanel` — scrollable result grid with filter and an active-cell cursor | F4 (first press) |
 | Performance | `PerformancePanel` — timing/memory/spill metrics | F4 (second press) |
 | Output | `OutputPanel` — persistent list of served URLs and exported files | F4 (fourth press) |
+| Variables | `VariablesPanel` — script variables (name/type/value), secrets masked | F4 (fifth press) |
 | Compare | `ResultsPanel.RenderCompare` — all result sets stacked | F7 |
+
+In the **Results** view the active cell is highlighted; arrow keys move it (the view scrolls to follow), `Enter` opens a scrollable inspector for the full cell value, `Ctrl+C` copies the active cell, and database `NULL` renders distinctly from an empty string.
 
 **Compare mode:**  
 `F7` enters compare mode, which auto-maximizes the lower panel and renders each result set as its own sub-pane with an independent scroll position and filter. `F8` cycles the active (magenta-bordered) pane. `Escape` exits compare mode (or clears the active pane's filter if one is set).
@@ -199,8 +202,10 @@ Computes the panel layout and writes ANSI escape sequences for each frame via Sp
 | Zone | Content |
 |------|---------|
 | Left | Clickable shortcuts for Help, Run, Theme, Focus, Explorer, Panel, Report, Save, and Exit |
-| Center | `● filename.etlsql` + active-mode pill (`PIPELINE` / `RESULTS` / `PERF` / `OUTPUT` / `COMPARE` / `✗ ERROR`) |
+| Center | `● filename.etlsql` + active-mode pill (`⟳ RUNNING` / `SNIPPET` / `PIPELINE` / `RESULTS` / `PERF` / `OUTPUT` / `VARIABLES` / `COMPARE` / `✗ ERROR`) |
 | Right | `Ln X, Col Y  ⏱ elapsed` |
+
+When the cursor sits on a line that has a diagnostic (and no transient status is showing), the status zone displays that diagnostic — `<glyph> <source>: <message>` — colour-coded by severity.
 
 The mode pill is color-coded: grey for Pipeline, yellow for Results/Focus, cyan for Perf, green for Output, magenta for Compare, red for Error.
 
@@ -294,7 +299,7 @@ Routes `ConsoleKeyInfo` events to the correct handler. Autocomplete overlay capt
 | **View** | |
 | F1 | Help overlay (any key to close) |
 | F3 | Cycle theme |
-| F4 | Cycle lower panel: Pipeline+Messages → Results → Performance → Output |
+| F4 | Cycle lower panel: Pipeline+Messages → Results → Performance → Output → Variables |
 | F6 | Cycle focus among editor, sidebar, and the active lower panel |
 | F7 | Enter / exit Compare mode |
 | F8 | Cycle active pane in Compare mode |
@@ -334,7 +339,8 @@ Routes `ConsoleKeyInfo` events to the correct handler. Autocomplete overlay capt
 | Shift+F1 | Show help for the keyword or function at the cursor |
 | Ctrl+L | Show lineage for the identifier at the cursor |
 | **Navigation** | |
-| Ctrl+F | Find text (Filter rows when Results focused) |
+| Ctrl+F | Find text in the script (highlights all matches; filters rows when Results focused) |
+| F3 / Shift+F3 | While a find is active, jump to next / previous match (otherwise F3 cycles the theme) |
 | Ctrl+H | Replace text |
 | Ctrl+G | Go to line |
 | Ctrl+Home / End | Start / end of script |
@@ -362,7 +368,7 @@ Renders the bottom-pane view for output paths and served URLs.
 Manages the inline Command Palette (Alt+P or Ctrl+Shift+P).
 
 **Features:**
-- Exposes 24 editor/reporting commands (e.g. Save, Run, Format, Export, serve reports in browser, publish to Portal, cycle themes/panels).
+- Exposes a curated set of editor/reporting commands (e.g. Save, Run, Format, Export, serve reports in browser, publish to Portal, rollback all transactions, copy result row/set as TSV, cycle themes/panels).
 - Supports case-insensitive substring and subsequence filtering as the user types to quickly narrow commands.
 
 ---
@@ -413,7 +419,7 @@ void Render(IConsoleInterface console, int x, int y, int width, int height, int 
 **File:** [EditorPanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/EditorPanel.cs)  
 **Class:** [EditorPanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/EditorPanel.cs#L9)
 
-Renders the primary editor workspace area, writing line numbering gutters and syntax-colored script lines. It evaluates active selection bounds and applies inverted contrast markers (`RenderLineWithSelection`).
+Renders the primary editor workspace area, writing line numbering gutters and syntax-colored script lines. It evaluates active selection bounds and applies inverted contrast markers (`RenderLineWithSelection`). The gutter's far-left cell shows a colour-coded **diagnostic marker** (`✗`/`!`/`•`, worst-severity-wins per line) derived by `DiagnosticGutter` from the latest run/lint pass; matches of the active find term are highlighted inline.
 
 ### `MessageTreePanel`
 **File:** [MessageTreePanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MessageTreePanel.cs)
@@ -474,6 +480,12 @@ Drawn in the bottom panel to manage persistent served URLs and exported paths, a
 **Class:** [InfoAtCursor](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/InfoAtCursor.cs#L18)
 
 Finds words under the text cursor to generate SQL help sheets (`Shift+F1`) or fetch transformation data lineage summaries (`Ctrl+L`) with matching ASCII dataflow diagrams.
+
+### `VariablesPanel`
+**File:** [VariablesPanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/VariablesPanel.cs)
+**Class:** [VariablesPanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/VariablesPanel.cs#L14)
+
+Lower-panel view (the fifth F4 stop) rendering `evaluator.VarContext.GetVariablesWithMetadata()` as a scrollable Name/Type/Value table. Secret/sensitive values are masked and `NULL` shows distinctly from an empty string.
 
 ### `ReportPreviewPanel`
 **File:** [ReportPreviewPanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReportPreviewPanel.cs)  
@@ -544,11 +556,20 @@ Configures the DI engine instance. It registers serilog file logging, function r
 
 ## 5. Execution Flow (F5)
 
+> **Non-blocking & cancellable.** `RunScript`/`RunSelectedText`/`RunStatementAtCursor` call
+> `StartRun`, which runs the body below on a background `Task.Run` and returns immediately, so
+> the editor loop stays responsive. While a run is in flight a `⟳ RUNNING` pill shows, **Esc**
+> cancels it (a `CancellationToken` is threaded into `Evaluator.Evaluate`, surfacing
+> `OperationCanceledException` as "Execution stopped"), and a second run is rejected. The
+> lex/parse/lint stage is shared with the debounced **live-diagnostics** pass (`AnalyzeAsync`),
+> which re-runs ~350 ms after an edit on a background task — refreshing gutter markers without
+> F5 — and never executes the script.
+
 ```
 F5 pressed
     │
     ▼
-InputHandler → ConsoleEditor.RunScript()
+InputHandler → ConsoleEditor.RunScript()  → StartRun (background Task)
     │
     ├─ Lexer(source).Tokenize()        → List<Token>
     ├─ Parser(tokens, source).Parse()  → Script { Statements, Diagnostics }
@@ -579,3 +600,41 @@ InputHandler → ConsoleEditor.RunScript()
 - `SaveAsync(path, lines)` — writes UTF-8 with BOM; sets `isDirty = false` on success
 
 Open file dialog: inline prompt with **tab-completion** via `HandlePromptKey()` in `InputHandler`. The prompt scans `Directory.EnumerateFiles()` for completions as the user types.
+
+**External-change guard.** `FileChangeTracker` records each open file's last-write time at load and
+after save; before writing, `SaveScript` detects an out-of-band modification and prompts
+**Overwrite / Reload / Cancel** rather than silently clobbering it (`IFileSystem.GetLastWriteTimeUtc`).
+
+---
+
+## 7. Schema Explorer
+
+The sidebar (`SidebarPanel`) has two modes (`SidebarMode`): the filesystem **Files** view and a
+**Schema** view. A clickable `⇄ Switch` row (and `Tab` while the sidebar is focused) toggles modes;
+a `⟳ Refresh` row reloads. Schema mode lists **connections → tables → columns**, with **views in
+their own group** and `#temp` tables, sourced from the metadata scanner. Children load lazily on
+expand (`EnsureLoadedAsync`) so large schemas pay no upfront cost. **Enter** on a column (or `i` on
+any node) inserts the name at the cursor.
+
+---
+
+## 8. Workspace Persistence & Recovery
+
+`WorkspaceStore` persists the session (open file paths, active tab, per-tab cursor/scroll, and a
+recovery snapshot of dirty buffers) under `%APPDATA%/etl-sql/workspace`, keyed by working directory.
+On launch the previous session is **silently restored** (clean tabs reopen from disk; the launched
+file stays open and focused). A sentinel file written at start and removed on clean exit detects an
+unclean shutdown; if dirty-buffer snapshots exist the user is **prompted to recover**. Saves are
+debounced (and a final save runs on clean exit). Buffers that contain secrets
+(`SecurityService.RequiresSavePassword`) are never snapshotted, and recovery files are owner-locked —
+no credentials, decrypted text, results, or engine state are persisted.
+
+---
+
+## 9. Reduced-Capability Terminals
+
+`TerminalCapabilities` detects `NO_COLOR` (colour off), `ETLSQL_TUI_ASCII` (force ASCII glyphs), and
+`TERM=dumb` (both). Unicode markers degrade to ASCII when needed — the diagnostic gutter and the
+whole sidebar tree (arrows, icons, toggle/refresh rows). Below `MinWidth`×`MinHeight` (40×10) the
+editor draws a single "resize" prompt (`RenderTooSmall`) instead of corrupted, overlapping panels;
+the editor is fully keyboard-operable (mouse is additive).

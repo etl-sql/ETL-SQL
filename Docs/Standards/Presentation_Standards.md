@@ -90,7 +90,7 @@ progress, or VS Code sidebar showing artifacts from a previous file after openin
 The Execute Tree tab must update as the evaluator adds nodes — not only after execution
 completes. Displaying a snapshot only at completion is not compliant.
 
-For the TUI REPL, execution-tree snapshots are emitted as `type: "progress"` JSON packets on a 100 ms heartbeat and once more at completion. The interactive IDE currently awaits evaluation and redraws in `ConsoleEditor.ExecuteSource` after execution completes; it does not yet satisfy this rule for long-running scripts. A compliant interactive implementation must schedule periodic redraws through the editor loop while evaluation is active. VS Code consumes the REPL progress packets and must update its views as packets arrive.
+For the TUI REPL, execution-tree snapshots are emitted as `type: "progress"` JSON packets on a 100 ms heartbeat and once more at completion. The interactive IDE now satisfies this rule: `ConsoleEditor.StartRun` runs `ExecuteSource` on a background `Task.Run` while the editor loop keeps reading input and redrawing; the loop wakes on an ~80 ms heartbeat (`WaitForSingleObject` on Windows, `Console.KeyAvailable` polling elsewhere) whenever `ExecutionRunning` is set, so the execution tree and message log refresh live as the evaluator adds nodes. A `Render` race against the evaluator thread is tolerated (the frame is skipped and the next heartbeat repaints). VS Code consumes the REPL progress packets and must update its views as packets arrive.
 
 ### Rule 7: Error Messages Must Be Sanitized Before Display
 
