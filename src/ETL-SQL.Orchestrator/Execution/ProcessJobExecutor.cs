@@ -97,7 +97,10 @@ namespace ETL_SQL.Orchestrator.Execution
             catch (OperationCanceledException)
             {
                 _logger.LogWarning("Job process PID={Pid} timed out or was cancelled — killing.", process.Id);
+                try { process.CancelOutputRead(); } catch { }
+                try { process.CancelErrorRead(); } catch { }
                 try { process.Kill(entireProcessTree: true); } catch { /* already exited */ }
+                try { process.WaitForExit(2000); } catch { }
                 return new ScriptExecutionResult(false, 0, "Job execution was cancelled or timed out.");
             }
             finally
