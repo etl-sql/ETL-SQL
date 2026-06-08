@@ -89,6 +89,7 @@ namespace ETL_SQL.Tests.UI
 
             // Run so #temp is materialized in the evaluator's connections.
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F5, false, false, false));
+            await editor.WaitForRunAsync(); // F5 runs on a background task — wait for it in tests
 
             // Cursor just after the '*' on the last line ("SELECT *").
             editor._buffer.CursorLine = 2;
@@ -252,6 +253,7 @@ namespace ETL_SQL.Tests.UI
             Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
 
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F5, false, false, false));
+            await editor.WaitForRunAsync(); // F5 runs on a background task — wait for it in tests
 
             Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
             Assert.Equal(EditorFocus.ExecutionTree, editor._renderer.ActiveLowerTab);
@@ -385,6 +387,7 @@ namespace ETL_SQL.Tests.UI
             editor._renderer.Headless = true;
 
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F5, false, false, false));
+            await editor.WaitForRunAsync(); // F5 runs on a background task — wait for it in tests
 
             Assert.True(editor.Diagnostics.Count >= 2);
             Assert.Contains(editor.Diagnostics, d => d.Message.Contains("@first"));
@@ -424,10 +427,12 @@ namespace ETL_SQL.Tests.UI
 
             editor._buffer.Load(new[] { "SELECT @missing;" });
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F5, false, false, false));
+            await editor.WaitForRunAsync(); // F5 runs on a background task — wait for it in tests
             Assert.NotEmpty(editor.Diagnostics);
 
             editor._buffer.Load(new[] { "SELECT 1;" });
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F5, false, false, false));
+            await editor.WaitForRunAsync(); // F5 runs on a background task — wait for it in tests
             Assert.Empty(editor.Diagnostics);
         }
 

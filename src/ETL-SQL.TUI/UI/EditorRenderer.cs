@@ -136,6 +136,9 @@ namespace ETL_SQL.TUI.UI
         /// <summary>The active in-editor find term; when set, all occurrences are highlighted and F3/Shift+F3 navigate.</summary>
         public string? FindTerm { get; set; }
 
+        /// <summary>True while a script is executing on a background task — drives the RUNNING indicator and the input heartbeat.</summary>
+        public volatile bool ExecutionRunning = false;
+
         private readonly IConsoleInterface _console;
         private readonly EditorPanel _editorPanel;
         private readonly MessageTreePanel _messageTreePanel;
@@ -403,7 +406,9 @@ namespace ETL_SQL.TUI.UI
 
                 string panelPill;
                 bool hasError = evaluator.LastError != null;
-                if (SnippetModeActive)
+                if (ExecutionRunning)
+                    panelPill = "[bold black on green] ⟳ RUNNING — Esc to stop [/]";
+                else if (SnippetModeActive)
                     panelPill = "[bold black on green] SNIPPET [/]";
                 else if (CompareMode)
                     panelPill = $"[bold magenta] COMPARE {CompareFocusIndex + 1}/{Math.Max(1, evaluator.LastResultSets.Count)} [/]";
@@ -452,7 +457,7 @@ namespace ETL_SQL.TUI.UI
                 string rightZone = $" {cursor3} ";
                 
                 int leftWidth = leftZone.Length;
-                int midWidth = SnippetModeActive ? 9 : PerformanceVisible ? 8 : ResultsVisible ? 11 : hasError ? 9 : ResultsFocus ? 18 : 11;
+                int midWidth = ExecutionRunning ? 24 : SnippetModeActive ? 9 : PerformanceVisible ? 8 : ResultsVisible ? 11 : hasError ? 9 : ResultsFocus ? 18 : 11;
                 int rightWidth = rightZone.Length;
                 
                 int availForStatus = totalWidth - leftWidth - midWidth - rightWidth - 6; // separators

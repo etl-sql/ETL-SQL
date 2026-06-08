@@ -198,12 +198,13 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            // F5 - Run
+            // F5 - Run. Fire-and-forget: execution runs on a background task so this loop stays
+            // responsive (live updates, Esc to stop). The run task is intentionally not awaited.
             if (key.Key == ConsoleKey.F5)
             {
-                if (key.Modifiers.HasFlag(ConsoleModifiers.Shift)) await _editor.RunStatementAtCursor(); 
-                else if (key.Modifiers.HasFlag(ConsoleModifiers.Control)) await _editor.RunSelectedText();
-                else await _editor.RunScript();
+                if (key.Modifiers.HasFlag(ConsoleModifiers.Shift)) _ = _editor.RunStatementAtCursor();
+                else if (key.Modifiers.HasFlag(ConsoleModifiers.Control)) _ = _editor.RunSelectedText();
+                else _ = _editor.RunScript();
                 return;
             }
 

@@ -48,6 +48,45 @@ namespace ETL_SQL.TUI.UI
         private readonly SecurityService _security;
         private readonly EditorFileHandler _fileHandler;
         private readonly FileChangeTracker _fileTracker;
+
+        private Task? _runningTask;
+        private System.Threading.CancellationTokenSource? _runCts;
+
+        /// <summary>True while a script execution is in flight on a background task.</summary>
+        public bool IsRunning => _runningTask is { IsCompleted: false };
+
+        /// <summary>Awaits the current background run (used by tests); completes immediately if idle.</summary>
+        public Task WaitForRunAsync() => _runningTask ?? Task.CompletedTask;
+
+        /// <summary>Requests cancellation of the running script, if any.</summary>
+        public void CancelRun()
+        {
+            if (IsRunning) { _runCts?.Cancel(); _renderer.ShowStatus("Stopping execution…"); }
+        }
+
+        // Starts execution on a background task so the input loop stays responsive (live updates,
+        // Stop key). Concurrent runs are rejected. Returns the run task so tests can await it.
+        private Task StartRun(string source, string label)
+        {
+            if (IsRunning)
+            {
+                _renderer.ShowStatus("A script is already running — press Esc to stop it.");
+                return Task.CompletedTask;
+            }
+
+            _runCts?.Dispose();
+            _runCts = new System.Threading.CancellationTokenSource();
+            var ct = _runCts.Token;
+            _renderer.ExecutionRunning = true;
+            _renderer.ShowStatus(label);
+
+            _runningTask = Task.Run(async () =>
+            {
+                try { await ExecuteSource(source, ct); }
+                finally { _renderer.ExecutionRunning = false; }
+            });
+            return _runningTask;
+        }
         private string? _promptResult;
         private bool _promptResolved;
         internal string _filePath;
@@ -161,13 +200,22 @@ namespace ETL_SQL.TUI.UI
 
                 while (!_isExiting)
                 {
-                    _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
+                    // A background run mutates evaluator/renderer state concurrently; a raced
+                    // render just skips a frame and the next heartbeat repaints.
+                    try { _renderer.Render(this, Console.WindowWidth, Console.WindowHeight); }
+                    catch { }
+
                     var keyOpt = await ReadKeyOrHandleMouse();
 
                     if (keyOpt.HasValue)
                     {
                         var key = keyOpt.Value;
-                        if (!_renderer.PromptVisible)
+                        // While a script is running, Esc stops it instead of reaching the editor.
+                        if (IsRunning && key.Key == ConsoleKey.Escape && !_renderer.PromptVisible)
+                        {
+                            CancelRun();
+                        }
+                        else if (!_renderer.PromptVisible)
                         {
                             await _input.HandleKey(key);
                         }
@@ -716,6 +764,13 @@ namespace ETL_SQL.TUI.UI
                 return await ReadInputWindows();
             }
 
+            // Heartbeat while a script runs so the loop repaints live updates without blocking.
+            if (_renderer.ExecutionRunning)
+            {
+                try { if (!Console.KeyAvailable) { await Task.Delay(80); return null; } }
+                catch (InvalidOperationException) { await Task.Delay(80); return null; }
+            }
+
             ConsoleKeyInfo key;
             try
             {
@@ -815,6 +870,13 @@ namespace ETL_SQL.TUI.UI
 
             while (true)
             {
+                // While a script runs, wake periodically (even with no input) so the loop can
+                // repaint live execution/message updates; otherwise block until input arrives.
+                if (WaitForSingleObject(hStdin, _renderer.ExecutionRunning ? 80u : INFINITE) == WAIT_TIMEOUT)
+                {
+                    return null;
+                }
+
                 if (!ReadConsoleInputW(hStdin, _inputRecordBuffer, 1, out uint read) || read == 0)
                 {
                     await Task.Delay(10);
@@ -960,6 +1022,11 @@ namespace ETL_SQL.TUI.UI
 
         [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
         private static extern IntPtr GetStdHandle(int nStdHandle);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+        private const uint WAIT_TIMEOUT = 0x00000102;
+        private const uint INFINITE = 0xFFFFFFFF;
 
         [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
@@ -1183,37 +1250,29 @@ namespace ETL_SQL.TUI.UI
             return true;
         }
 
-        /// <summary>Executes the entire script.</summary>
-        public async Task RunScript()
-        {
-            _renderer.ShowStatus("Executing script...");
-            await ExecuteSource(_buffer.GetText());
-        }
+        /// <summary>Starts executing the entire script (non-blocking). Returns the run task.</summary>
+        public Task RunScript() => StartRun(_buffer.GetText(), "Executing script…");
 
-        /// <summary>Executes only the currently selected text.</summary>
-        public async Task RunSelectedText()
+        /// <summary>Starts executing only the currently selected text (non-blocking).</summary>
+        public Task RunSelectedText()
         {
             var selectedText = _buffer.GetSelectedText();
             if (string.IsNullOrEmpty(selectedText))
             {
                 _renderer.ShowStatus("No text selected.");
-                return;
+                return Task.CompletedTask;
             }
-
-            _renderer.ShowStatus("Executing selection...");
-            await ExecuteSource(selectedText);
+            return StartRun(selectedText, "Executing selection…");
         }
 
-        /// <summary>Executes only the line at the current cursor position.</summary>
-        public async Task RunStatementAtCursor()
+        /// <summary>Starts executing only the line at the current cursor position (non-blocking).</summary>
+        public Task RunStatementAtCursor()
         {
-            var lines = _buffer.Lines;
-            var currentLine = lines[_buffer.CursorLine];
-            _renderer.ShowStatus($"Executing line {_buffer.CursorLine + 1}...");
-            await ExecuteSource(currentLine);
+            var currentLine = _buffer.Lines[_buffer.CursorLine];
+            return StartRun(currentLine, $"Executing line {_buffer.CursorLine + 1}…");
         }
 
-        private async Task ExecuteSource(string source)
+        private async Task ExecuteSource(string source, System.Threading.CancellationToken ct = default)
         {
             try
             {
@@ -1280,7 +1339,7 @@ namespace ETL_SQL.TUI.UI
                 ApplyEditorExecutionPath();
                 try
                 {
-                    await _evaluator.Evaluate(script);
+                    await _evaluator.Evaluate(script, ct);
                 }
                 finally
                 {
@@ -1327,6 +1386,11 @@ namespace ETL_SQL.TUI.UI
                     _renderer.CurrentReportManifest = null;
                 }
             }
+            catch (OperationCanceledException)
+            {
+                _evaluator.Log("[STOPPED] Execution cancelled by user.", ConsoleColor.Yellow);
+                _renderer.ShowStatus("Execution stopped.");
+            }
             catch (Exception ex)
             {
                 _evaluator.Log($"[ERROR] {ex.Message}", ConsoleColor.Red);
@@ -1335,7 +1399,9 @@ namespace ETL_SQL.TUI.UI
             finally
             {
                 _renderer.MessageScrollRow = int.MaxValue; // Auto-scroll to latest messages
-                RenderCurrent();
+                // The interactive loop repaints on its heartbeat; rendering here would race it
+                // from the background thread. In headless (tests) there is no loop, so paint once.
+                if (_renderer.Headless) RenderCurrent();
             }
         }
 
