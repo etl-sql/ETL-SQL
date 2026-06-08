@@ -128,5 +128,19 @@ namespace ETL_SQL.Tests.UI
             var mgr = new TuiMetadataManager(new Dictionary<string, IDataSource>());
             Assert.Null(mgr.GetConnectionType("nope"));
         }
+
+        [Fact]
+        public async Task TuiMetadataManager_GetTempTables_ReturnsHashPrefixedKeys()
+        {
+            var connections = new Dictionary<string, IDataSource>
+            {
+                { "db", new MockSqlDataSource(SystemExecutionContext.Instance, "dummy", "MSSQL") },
+                { "#temp", new MockSqlDataSource(SystemExecutionContext.Instance, "dummy", "MSSQL") }
+            };
+            var mgr = new TuiMetadataManager(connections);
+
+            var temps = (await mgr.GetTempTablesAsync()).ToList();
+            Assert.Equal(new[] { "#temp" }, temps);
+        }
     }
 }

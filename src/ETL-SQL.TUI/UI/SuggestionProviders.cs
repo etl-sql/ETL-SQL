@@ -152,14 +152,22 @@ namespace ETL_SQL.TUI.UI
         // Dialect for database sources (SQLSERVER, POSTGRES, …); flat-file sources report FLATFILE.
         private static string TypeOf(IDataSource ds) =>
             ds is IDatabaseSource db ? (db.Dialect ?? "UNKNOWN") : "FLATFILE";
+        // Temp tables are surfaced as #-prefixed entries in the live connection dictionary
+        // (the engine registers `SELECT … INTO #t` / `CREATE TABLE #t` there).
+        public Task<IEnumerable<string>> GetTempTablesAsync(string? uri = null) =>
+            Task.FromResult(_connections.Keys.Where(k => k.StartsWith("#")).AsEnumerable());
+
+        public IEnumerable<string> GetRegisteredNames() => ConnectorRegistry.Instance?.GetRegisteredNames() ?? Enumerable.Empty<string>();
+        public IConnector? GetConnector(string name) => ConnectorRegistry.Instance?.GetConnector(name);
+
+        // This adapter is a read-only view over the live connection dictionary (the source of
+        // truth, populated upstream by the engine/metadata scan), so the register/clear and
+        // cache bridge methods are intentional no-ops — there is no separate store to mutate.
         public void RegisterConnection(string name, string type, string connectionString) { }
         public void RegisterDocumentConnection(string uri, string name, string type, string connectionString) { }
         public void ClearDocumentConnections(string uri) { }
-        public Task<IEnumerable<string>> GetTempTablesAsync(string? uri = null) => Task.FromResult(Enumerable.Empty<string>());
         public void RegisterTempTable(string uri, string name, List<string> columns) { }
         public void ClearTempTables(string uri) { }
-        public IEnumerable<string> GetRegisteredNames() => ConnectorRegistry.Instance?.GetRegisteredNames() ?? Enumerable.Empty<string>();
-        public IConnector? GetConnector(string name) => ConnectorRegistry.Instance?.GetConnector(name);
         public void ClearCache() { }
         public void ClearCacheForUri(string uri) { }
         public bool DebugMode { get; set; }
