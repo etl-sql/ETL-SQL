@@ -706,6 +706,45 @@ When querying a `DIRECTORY` connection via `SELECT` the following columns are re
 - `IsReadOnly` (BIT): `TRUE` if the file is read-only.
 - `CreationTime` (DATETIME): Time the file was created.
 
+### 3.8 MongoDB (`MONGODB`)
+Aliases: `MONGO`
+
+Connects to a MongoDB document database. Querying a `MONGODB` connection via `SELECT` retrieves documents from the specified database and collection. Inserting into a `MONGODB` connection writes new documents.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `CONNECTION_STRING` | Full MongoDB connection URI (e.g., `mongodb://localhost:27017`) | Yes (if host/port not provided) |
+| `DATABASE` | Target database name | Yes |
+| `COLLECTION` | Target collection name context | No |
+| `HOST` | MongoDB hostname (alternative to connection string) | No |
+| `PORT` | MongoDB port (alternative to connection string, default `27017`) | No |
+| `USER` | Username for authentication | No |
+| `PASSWORD` | Password for authentication (supports `ENC:`) | No |
+| `TIMEOUT_SECONDS` | Connection timeout limit in seconds (Default: `30`) | No |
+
+*Examples:*
+```sql
+-- Connection using standard Mongo URI
+CREATE CONNECTION mongo_uri AS MONGODB('mongodb://localhost:27017', DATABASE='inventory', COLLECTION='products');
+
+-- Connection using structured host/credentials options
+CREATE CONNECTION mongo_struct AS MONGODB(
+    HOST = 'localhost',
+    PORT = '27017',
+    USER = 'db_admin',
+    PASSWORD = ENC:U2FsdGVkX1+...,
+    DATABASE = 'inventory',
+    COLLECTION = 'products',
+    TIMEOUT_SECONDS = 15
+);
+
+-- Query a collection
+SELECT name, price, category FROM mongo_uri;
+
+-- Insert a new document
+INSERT INTO mongo_uri (name, price, category) VALUES ('Wireless Mouse', 29.99, 'Electronics');
+```
+
 ---
 
 ## 4. Remote & Cloud Protocol Connectors
@@ -1009,6 +1048,49 @@ CREATE CONNECTION sp_integrated AS SHAREPOINT('https://tenant.sharepoint.com/sit
          AUTH_MODE = 'INTEGRATED');
 ```
 
+### 4.7 Apache Kafka (`KAFKA`)
+
+Connects to an Apache Kafka message broker cluster to consume messages from or publish messages to a topic. Querying a `KAFKA` connection via `SELECT` pulls messages from the topic as a table. Inserting into a `KAFKA` connection publishes messages to the topic.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `BOOTSTRAP_SERVERS` | List of broker host/port pairs (e.g., `localhost:9092,host2:9092`) | Yes (if connection string not provided) |
+| `TOPIC` | Target topic name | Yes |
+| `GROUP_ID` | Consumer group ID for tracking offsets (Default: `etl-sql-group`) | No |
+| `AUTO_OFFSET_RESET` | Offset position to start from if no committed offset exists (`Earliest`, `Latest`) | No |
+| `TIMEOUT_MS` | Maximum duration in milliseconds to poll the topic for new messages (Default: `5000`) | No |
+| `MAX_MESSAGES` | Maximum number of messages to consume in a single batch (Default: `1000`) | No |
+| `SECURITY_PROTOCOL` | Security/transport protocol (`Plaintext`, `SaslPlaintext`, `SaslSsl`, `Ssl`) | No |
+| `SASL_MECHANISM` | SASL authentication mechanism (`Plain`, `ScramSha256`, `ScramSha512`) | No |
+| `SASL_USERNAME` | Username for SASL authentication | No |
+| `SASL_PASSWORD` | Password for SASL authentication (supports `ENC:`) | No |
+
+*Examples:*
+```sql
+-- Simple connection using connection string
+CREATE CONNECTION kfk_simple AS KAFKA('localhost:9092', TOPIC='orders');
+
+-- Authenticated connection using options
+CREATE CONNECTION kfk_auth AS KAFKA(
+    BOOTSTRAP_SERVERS = 'kafka-1.corp.local:9093,kafka-2.corp.local:9093',
+    TOPIC             = 'customer-events',
+    GROUP_ID          = 'etl-sql-sync',
+    AUTO_OFFSET_RESET = 'Earliest',
+    SECURITY_PROTOCOL = 'SaslSsl',
+    SASL_MECHANISM    = 'ScramSha512',
+    SASL_USERNAME     = 'etl_agent',
+    SASL_PASSWORD     = ENC:U2FsdGVkX1+...,
+    TIMEOUT_MS        = 3000,
+    MAX_MESSAGES      = 5000
+);
+
+-- Read messages from topic as a table
+SELECT Key, Value, Partition, Offset, Timestamp FROM kfk_auth;
+
+-- Publish a message to a topic (columns must align to Key/Value or columns of target schema)
+INSERT INTO kfk_simple (Key, Value) VALUES ('msg-100', '{"event": "UserSignup", "userId": 42}');
+```
+
 ---
 
 ## 5. Development & Testing: `MOCKDB`
@@ -1304,6 +1386,7 @@ WHERE sAMAccountName = 'jdoe';
 | `ORACLE` | — | Relational | ✓ | ✓ |
 | `ODBC` | — | Relational | Varies | — |
 | `NEO4J` | `NEO` | Graph | ✓ | ✗ |
+| `MONGODB` | `MONGO` | Document | — | — |
 | `MOCKDB` | — | In-memory | — | — |
 | `FLATFILE` | `CSV`, `TSV` | File | — | — |
 | `EXCEL` | `XLSX`, `XLS` | File | — | — |
@@ -1316,6 +1399,7 @@ WHERE sAMAccountName = 'jdoe';
 | `FTP` | `FTP_CONN`, `FTPS` | Protocol | — | — |
 | `AZURE_BLOB` | `BLOB` | Protocol | — | — |
 | `S3` | `AWS_S3` | Protocol | — | — |
+| `KAFKA` | — | Protocol | — | — |
 | `SMTP` | `EMAIL` | Protocol | — | — |
 | `SHAREPOINT` | `SP` | Protocol | — | — |
 | `REPORTPORTAL` | `REPORT_PORTAL` | Admin Service | — | — |

@@ -10,8 +10,55 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 - Added `gen-script` CLI command to compile standardized JSON specification contracts into ETL-SQL starter scripts. Generated templates include source layout review notes, confidence/source-evidence comments, casting expressions, inline lineage tags, `EXPECT SCHEMA` gates, validation issue summaries, optional quarantine tables, and outbound load scaffolding.
 - Added `extract-spec` CLI command utilizing PDFsharp to automatically trim and extract data dictionary pages from large vendor PDF documents using heuristic keyword scoring.
 - Added workflow guide `Docs/Reference/Spec_Driven_Development.md`, prompt instruction guide `Docs/data_spec_parser_instructions.md`, machine-readable contract `Docs/Reference/spec_pipeline.schema.json`, and Cookbook recipe 25 with a runnable customer-feed example.
-- Added `PipelineGenerator` and `SpecExtractor` test suites under `tests/ETL-SQL.Tests/App/` covering contract validation, generated-script parsing, review metadata, validation gates, and PDF trimming scoring.
+- Added [PipelineGenerator](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.App/App/PipelineGenerator.cs#L14) and [SpecExtractor](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.App/App/SpecExtractor.cs#L12) test suites under `tests/ETL-SQL.Tests/App/` covering contract validation, generated-script parsing, review metadata, validation gates, and PDF trimming scoring.
 - *Note on limits*: This is a developer productivity feature, not an automated production-pipeline generator. LLM spec parsing and vendor formats are variable; generated scripts are intended as reviewed starting points. Developers must verify the JSON, complete the extraction query, review evidence/low-confidence fields, and test against real vendor files.
+
+**Terminal IDE (TUI) Modernization**
+- Implemented collapsible sidebar file explorer tree and tabbed multi-file support in [ConsoleEditor.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ConsoleEditor.cs#L29).
+- Added in-editor text find/search with result highlighting and `F3`/`Shift+F3` navigation.
+- Added live query diagnostics while editing and visual gutter diagnostic markers.
+- Added non-blocking, cancellable script execution, allowing queries to run asynchronously in the background.
+- Added a Schema Explorer in the sidebar showing database tables and views with lazy loading support.
+- Added a Variables explorer tab in the bottom pane matching the VS Code Variable Explorer functionality.
+- Added query result-cell navigation and inspection, along with cell-value inspection popups.
+- Added automatic workspace persistence and recovery, preserving open files and tabs across TUI restarts.
+- Added customizable JSON-based editor themes with a preset theme library and `F3` theme-cycling hotkey.
+- Re-implemented robust console keyboard input via Win32 ReadConsoleInput, resolving terminal input lockups.
+- Added per-tab caching for query results, execution messages, active execution tree, and performance metrics.
+- Added mouse text drag-to-select support in the editor window.
+- Added an Output tab to act as a durable, clickable home for served URLs and export paths.
+- Added custom terminal rendering features including braille line charts, fractional-block bar charts, buttons, containers, and `RELDATEPICKER` controls.
+- Added a TUI Command Palette (`Alt+P`) and support for exporting reports directly to Markdown or PDF.
+- Added a `serve` utility (`Ctrl+Shift+R`) to run report previews directly in the browser via dynamic self-invocation.
+
+**Connectors & Integrations**
+- Added a native **Neo4j** graph database connector supporting key merging, validation, and metadata queries (see [Neo4jConnector.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Neo4j/Neo4jConnector.cs) and [Neo4jDataSource.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Neo4j/Neo4jDataSource.cs)).
+- Added outbound writing support and completed production gaps for the REST API connector.
+- Enhanced Azure Blob, SFTP, S3, and local Directory connectors to include fallback decryption and structured path parsing.
+
+**Language, Lineage & Governance**
+- Added `CREATE TAG` and `CREATE LINEAGE FROM ...` syntax to support programmatic importing of curated lineage assets and metadata tags.
+- Added the `DIFFERENCE(s1, s2)` Soundex similarity scoring string function (see [FuzzyFunctions.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Functions/FuzzyFunctions.cs)).
+- Added a cross-platform CLI `etl-sql purge` command for cleaning up old data and session histories.
+- Expanded SQL Logic Test (SLT) coverage for index creation, table truncation, table alteration, `LEFT SEMI`/`LEFT ANTI` joins, and `QUALIFY` statements.
+
+### Fixed
+- **Query Parser:** Fixed parser bugs for `LEFT SEMI`/`LEFT ANTI` joins and tolerated trailing semicolons (`;`) for statements inside `BEGIN`/`TRY` blocks.
+- **TUI Editor:** Implemented file overwrite warnings when a file changes on disk, fixed sidebar layout wipeout during redraw by clearing partial line width, and resolved keyboard input lockups on Windows.
+- **TUI Autocomplete:** Fixed snippet triggers (`$mssql`) showing inside the autocomplete suggestions and prevented crashes when brackets appeared in prompt titles.
+- **TUI Metadata:** Restored temp table querying inside [TuiMetadataManager](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L106).
+- **Report Preview:** Fixed report preview wrapping bugs and added page navigation arrows via keyboard/mouse.
+- **Test Integrity:** Resolved parallel test conflicts in Neo4j tests, and excluded Docker LDAP portal tests from non-Docker lanes.
+
+### Changed
+- **Dependencies:** Upgraded `SQLitePCLRaw` package reference to `3.0.3` to resolve pre-release auditing and scoped it exclusively to Core instead of globally.
+- **Code Refactoring:** Refactored `ConsoleEditor` dependencies to use dependency injection instead of service-locating patterns.
+- **Platform Infrastructure:** Hardened shell scripts and systemd unit files to use Unix LF line endings.
+- **Packaging:** Brought the Linux `.deb` installer to parity with the Windows MSI (including uninstall prompts and service configuration) and published VSIX as a standalone asset.
+
+### Security
+- **Path Validation:** Enforced zero-trust path validation for Snowflake `PRIVATE_KEY_FILE` option.
+- **Token Permissions:** Restricted portal token file permissions strictly to the owner.
 
 ---
 
