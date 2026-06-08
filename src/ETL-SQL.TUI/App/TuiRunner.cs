@@ -56,7 +56,10 @@ namespace ETL_SQL.TUI
                 case "ide":
                 default:
                 {
-                    var editor = new ConsoleEditor(ctx.ScriptFile?.FullName ?? "untitled.etlsql", new System.Collections.Generic.Dictionary<string, IDataSource>());
+                    var editor = TuiDependencyInjectionSetup.CreateEditor(
+                        serviceProvider,
+                        ctx.ScriptFile?.FullName ?? "untitled.etlsql",
+                        new System.Collections.Generic.Dictionary<string, IDataSource>());
                     await editor.InitializeAsync();
                     await editor.Run();
                     return 0;

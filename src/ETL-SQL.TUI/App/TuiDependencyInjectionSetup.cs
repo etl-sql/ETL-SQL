@@ -40,6 +40,21 @@ namespace ETL_SQL.TUI
 {
     public static class TuiDependencyInjectionSetup
     {
+        /// <summary>Composition root for the editor: resolves its dependencies from the provider.</summary>
+        public static UI.ConsoleEditor CreateEditor(IServiceProvider sp, string filePath,
+            System.Collections.Generic.Dictionary<string, ETL_SQL.Data.IDataSource> connections)
+        {
+            return new UI.ConsoleEditor(
+                filePath,
+                connections,
+                sp.GetRequiredService<ETL_SQL.Common.ILogger>(),
+                sp.GetRequiredService<Services.IClipboardService>(),
+                sp.GetRequiredService<ETL_SQL.Engine.Evaluator>(),
+                sp.GetRequiredService<ETL_SQL.Core.Services.ILanguageService>(),
+                sp.GetService<ETL_SQL.Core.Functions.IFunctionRegistry>(),
+                sp.GetService<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry>());
+        }
+
         public static IServiceProvider BuildServiceProvider()
         {
             var configuration = new ConfigurationBuilder()

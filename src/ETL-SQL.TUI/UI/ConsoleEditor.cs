@@ -106,17 +106,26 @@ namespace ETL_SQL.TUI.UI
 
         public IReadOnlyList<EditorDiagnostic> Diagnostics => _diagnostics;
 
-        /// <summary>Initializes a new instance of the <see cref="ConsoleEditor"/> class.</summary>
-        /// <param name="filePath">Initial file path to open.</param>
-        /// <param name="connections">Initial set of database connections.</param>
-        public ConsoleEditor(string filePath, Dictionary<string, IDataSource> connections)
+        /// <summary>
+        /// Initializes a new editor with its dependencies injected (the composition root in
+        /// <see cref="ETL_SQL.TUI.TuiDependencyInjectionSetup"/> supplies them).
+        /// </summary>
+        public ConsoleEditor(
+            string filePath,
+            Dictionary<string, IDataSource> connections,
+            ILogger logger,
+            Services.IClipboardService clipboard,
+            Evaluator evaluator,
+            ILanguageService languageService,
+            Core.Functions.IFunctionRegistry? functionRegistry = null,
+            Core.Interfaces.ILanguageHelpRegistry? helpRegistry = null)
         {
             _filePath = filePath;
             _connections = connections;
-            _logger = Program.ServiceProvider.GetRequiredService<ILogger>();
-            _clipboard = Program.ServiceProvider.GetRequiredService<Services.IClipboardService>();
+            _logger = logger;
+            _clipboard = clipboard;
             _security = new SecurityService(_logger);
-            _evaluator = Program.ServiceProvider.GetRequiredService<Evaluator>();
+            _evaluator = evaluator;
             _evaluator.RedirectOutput = true;
             foreach (var conn in connections) _evaluator.Connections[conn.Key] = conn.Value;
             _evaluator.Telemetry.IsProfiling = true;
@@ -125,10 +134,9 @@ namespace ETL_SQL.TUI.UI
             _fileTracker = new FileChangeTracker(new PhysicalFileSystem());
             _metadata = new MetadataManager(_evaluator, _connections);
             _renderer._sidebarPanel.SetMetadata(_metadata);
-            var helpRegistry = Program.ServiceProvider.GetService<Core.Interfaces.ILanguageHelpRegistry>();
             _helpRegistry = helpRegistry;
-            _functionRegistry = Program.ServiceProvider.GetService<Core.Functions.IFunctionRegistry>();
-            _languageService = Program.ServiceProvider.GetRequiredService<ILanguageService>();
+            _functionRegistry = functionRegistry;
+            _languageService = languageService;
             _autocomplete = new AutocompleteController(_buffer, _renderer, _metadata, _connections, _logger, helpRegistry);
             _input = new InputHandler(this, _buffer, _renderer, _autocomplete);
             _tabs.Add(new TabState { FilePath = filePath });
@@ -137,6 +145,21 @@ namespace ETL_SQL.TUI.UI
             {
                 ls.SuppressConsole = true;
             }
+        }
+
+        /// <summary>
+        /// Convenience constructor that resolves dependencies from <see cref="Program.ServiceProvider"/>
+        /// in one place. Used by tests; production goes through <c>TuiDependencyInjectionSetup.CreateEditor</c>.
+        /// </summary>
+        public ConsoleEditor(string filePath, Dictionary<string, IDataSource> connections)
+            : this(filePath, connections,
+                Program.ServiceProvider.GetRequiredService<ILogger>(),
+                Program.ServiceProvider.GetRequiredService<Services.IClipboardService>(),
+                Program.ServiceProvider.GetRequiredService<Evaluator>(),
+                Program.ServiceProvider.GetRequiredService<ILanguageService>(),
+                Program.ServiceProvider.GetService<Core.Functions.IFunctionRegistry>(),
+                Program.ServiceProvider.GetService<Core.Interfaces.ILanguageHelpRegistry>())
+        {
         }
 
         /// <summary>Performs asynchronous initialization, including loading the initial file.</summary>

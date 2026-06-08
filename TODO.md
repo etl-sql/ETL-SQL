@@ -34,7 +34,7 @@
 - [x] **Delete dead file `EtlSqlHighlighter.cs`** — Removed along with its `EtlSqlHighlighterTests.cs` (the only call site).
 - [x] **Delete dead file `MessagePanel.cs`** — Removed; replaced by `MessageTreePanel`.
 - [x] **Delete dead file `TreePanel.cs`** — Removed; replaced by `MessageTreePanel`.
-- [ ] **Fix `ConsoleEditor` service-locator anti-pattern** — Constructor resolves services via `Program.ServiceProvider.GetRequiredService<T>()`. Move resolution to `TuiDependencyInjectionSetup` and accept via constructor parameters for testability.
+- [x] **Fix `ConsoleEditor` service-locator anti-pattern** — The primary constructor now takes its dependencies (logger, clipboard, evaluator, language service, function/help registries) as parameters; `TuiDependencyInjectionSetup.CreateEditor` is the composition root and `TuiRunner` uses it. A thin convenience constructor resolves once from `Program.ServiceProvider` (chaining to the primary) so existing call sites/tests keep working. Factory path covered by tests.
 - [ ] **Fix `TuiMetadataManager` no-op bridge methods** — `RegisterTempTable`, `ClearTempTables`, `ClearCache`, `ClearDocumentConnections` etc. are empty stubs; the bridge layer is hollow relative to the real `MetadataManager`.
 - [x] **Fix `MetadataManager` connection regex for multi-line blocks** — The `CREATE CONNECTION … (…)` body is now matched with a balancing group, so multi-line blocks and values containing nested parens (e.g. `'(local)'`) are captured whole instead of truncating at the first `)`. Tests cover multi-line, nested-paren, and two-block parsing.
 - [x] **Remove stale debug comment from `Program.cs`** — Removed.
