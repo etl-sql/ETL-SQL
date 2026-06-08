@@ -316,6 +316,10 @@ namespace ETL_SQL.TUI.UI
                     {
                         _renderer.Focus = EditorFocus.Sidebar;
                     }
+                    else if (_renderer.VariablesVisible)
+                    {
+                        _renderer.Focus = EditorFocus.Variables;
+                    }
                     else if (_renderer.OutputVisible)
                     {
                         _renderer.Focus = EditorFocus.Output;
@@ -335,7 +339,11 @@ namespace ETL_SQL.TUI.UI
                 }
                 else if (_renderer.Focus == EditorFocus.Sidebar)
                 {
-                    if (_renderer.OutputVisible)
+                    if (_renderer.VariablesVisible)
+                    {
+                        _renderer.Focus = EditorFocus.Variables;
+                    }
+                    else if (_renderer.OutputVisible)
                     {
                         _renderer.Focus = EditorFocus.Output;
                     }
@@ -370,6 +378,7 @@ namespace ETL_SQL.TUI.UI
                     EditorFocus.Results => "Query Results",
                     EditorFocus.Performance => "Performance Metrics",
                     EditorFocus.Output => "Output",
+                    EditorFocus.Variables => "Variables",
                     _ => "Editor"
                 };
                 _renderer.ShowStatus($"Focus: {focusName}");
@@ -472,13 +481,15 @@ namespace ETL_SQL.TUI.UI
             // F4 - Cycle lower panel: Pipeline+Messages → Results → Performance → (repeat)
             if (key.Key == ConsoleKey.F4)
             {
-                // Cycle: Pipeline+Messages → Results → Performance → Output → (repeat)
+                // Cycle: Pipeline+Messages → Results → Performance → Output → Variables → (repeat)
                 if (_renderer.ResultsVisible)
                     { _renderer.ResultsVisible = false; _renderer.PerformanceVisible = true; _renderer.ShowStatus("View: Performance Metrics"); }
                 else if (_renderer.PerformanceVisible)
                     { _renderer.PerformanceVisible = false; _renderer.OutputVisible = true; _renderer.ShowStatus("View: Output"); }
                 else if (_renderer.OutputVisible)
-                    { _renderer.OutputVisible = false; _renderer.ShowStatus("View: Pipeline & Messages"); }
+                    { _renderer.OutputVisible = false; _renderer.VariablesVisible = true; _renderer.ShowStatus("View: Variables"); }
+                else if (_renderer.VariablesVisible)
+                    { _renderer.VariablesVisible = false; _renderer.ShowStatus("View: Pipeline & Messages"); }
                 else
                     { _renderer.ResultsVisible = true; _renderer.ShowStatus("View: Query Results"); }
                 _renderer.Focus = EditorFocus.Editor;
@@ -527,7 +538,7 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            if (_renderer.ResultsFocus || _renderer.Focus == EditorFocus.ExecutionTree || _renderer.Focus == EditorFocus.Messages || _renderer.Focus == EditorFocus.Performance)
+            if (_renderer.ResultsFocus || _renderer.Focus == EditorFocus.ExecutionTree || _renderer.Focus == EditorFocus.Messages || _renderer.Focus == EditorFocus.Performance || _renderer.Focus == EditorFocus.Variables)
             {
                 HandleFocusedPanelKey(key);
                 return;
@@ -615,6 +626,9 @@ namespace ETL_SQL.TUI.UI
                     return true;
                 case EditorFocus.Messages:
                     ScrollMessages();
+                    return true;
+                case EditorFocus.Variables:
+                    _renderer.VariablesScrollRow = Math.Max(0, _renderer.VariablesScrollRow + delta);
                     return true;
             }
 
@@ -704,6 +718,26 @@ namespace ETL_SQL.TUI.UI
                 case EditorFocus.Messages:
                     HandleMessagesKey(key);
                     break;
+                case EditorFocus.Variables:
+                    HandleVariablesKey(key);
+                    break;
+            }
+        }
+
+        private void HandleVariablesKey(ConsoleKeyInfo key)
+        {
+            switch (key.Key)
+            {
+                case ConsoleKey.UpArrow:
+                    _renderer.VariablesScrollRow = Math.Max(0, _renderer.VariablesScrollRow - 1); break;
+                case ConsoleKey.DownArrow:
+                    _renderer.VariablesScrollRow++; break;
+                case ConsoleKey.PageUp:
+                    _renderer.VariablesScrollRow = Math.Max(0, _renderer.VariablesScrollRow - 10); break;
+                case ConsoleKey.PageDown:
+                    _renderer.VariablesScrollRow += 10; break;
+                case ConsoleKey.Home:
+                    _renderer.VariablesScrollRow = 0; break;
             }
         }
 

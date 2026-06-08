@@ -1638,6 +1638,7 @@ namespace ETL_SQL.TUI.UI
                 tab.ResultsVisible = _renderer.ResultsVisible;
                 tab.PerformanceVisible = _renderer.PerformanceVisible;
                 tab.OutputVisible = _renderer.OutputVisible;
+                tab.VariablesVisible = _renderer.VariablesVisible;
                 tab.CompareMode = _renderer.CompareMode;
                 tab.IsBottomMaximized = _renderer.IsBottomMaximized;
             }
@@ -1686,6 +1687,7 @@ namespace ETL_SQL.TUI.UI
                 _renderer.ResultsVisible = tab.ResultsVisible;
                 _renderer.PerformanceVisible = tab.PerformanceVisible;
                 _renderer.OutputVisible = tab.OutputVisible;
+                _renderer.VariablesVisible = tab.VariablesVisible;
                 _renderer.CompareMode = tab.CompareMode;
                 _renderer.IsBottomMaximized = tab.IsBottomMaximized;
 
@@ -1831,6 +1833,7 @@ namespace ETL_SQL.TUI.UI
         public bool ResultsVisible { get; set; }
         public bool PerformanceVisible { get; set; }
         public bool OutputVisible { get; set; }
+        public bool VariablesVisible { get; set; }
         public bool CompareMode { get; set; }
         public bool IsBottomMaximized { get; set; }
     }

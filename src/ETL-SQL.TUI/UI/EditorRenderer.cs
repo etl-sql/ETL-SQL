@@ -18,7 +18,8 @@ namespace ETL_SQL.TUI.UI
         Results,
         Performance,
         Sidebar,
-        Output
+        Output,
+        Variables
     }
 
     /// <summary>
@@ -75,6 +76,8 @@ namespace ETL_SQL.TUI.UI
         public bool PerformanceVisible { get; set; } = false;
         public bool ResultsVisible { get; set; } = false;
         public bool OutputVisible { get; set; } = false;
+        public bool VariablesVisible { get; set; } = false;
+        public int VariablesScrollRow { get; set; } = 0;
         public bool CompareMode { get; set; } = false;
 
         // Durable list of locations the TUI produced (served URLs, export paths).
@@ -140,6 +143,7 @@ namespace ETL_SQL.TUI.UI
         private readonly PerformancePanel _performancePanel;
         private readonly ReportPreviewPanel _reportPreviewPanel;
         private readonly OutputPanel _outputPanel = new();
+        private readonly VariablesPanel _variablesPanel;
         public readonly SidebarPanel _sidebarPanel;
 
         /// <summary>Initializes a new instance of the <see cref="EditorRenderer"/> class.</summary>
@@ -153,6 +157,7 @@ namespace ETL_SQL.TUI.UI
             _messageTreePanel = new MessageTreePanel(evaluator);
             _resultsPanel = new ResultsPanel(evaluator, this);
             _performancePanel = new PerformancePanel(evaluator, this);
+            _variablesPanel = new VariablesPanel(evaluator, this);
             _reportPreviewPanel = new ReportPreviewPanel(this);
             _sidebarPanel = new SidebarPanel(this, evaluator);
         }
@@ -339,7 +344,8 @@ namespace ETL_SQL.TUI.UI
                 // Clickable tab strip on the first row of the lower pane; panels render below it.
                 int lowerContentTop = layout.LowerContentTop;
                 int lowerContentHeight = layout.LowerContentHeight;
-                BottomTab activeBottom = OutputVisible ? BottomTab.Output
+                BottomTab activeBottom = VariablesVisible ? BottomTab.Variables
+                                       : OutputVisible ? BottomTab.Output
                                        : PerformanceVisible ? BottomTab.Performance
                                        : (ResultsVisible || CompareMode) ? BottomTab.Results
                                        : BottomTab.Pipeline;
@@ -349,6 +355,8 @@ namespace ETL_SQL.TUI.UI
 
                 if (CompareMode)
                     _resultsPanel.RenderCompare(_console, 0, lowerContentTop, totalWidth, lowerContentHeight, evaluator, this);
+                else if (VariablesVisible)
+                    _variablesPanel.Render(_console, 0, lowerContentTop, totalWidth, lowerContentHeight, VariablesScrollRow, Focus == EditorFocus.Variables);
                 else if (OutputVisible)
                     _outputPanel.Render(_console, 0, lowerContentTop, totalWidth, lowerContentHeight, OutputEntries, OutputSelectedIndex, OutputScrollRow, Focus == EditorFocus.Output);
                 else if (PerformanceVisible)
@@ -409,8 +417,12 @@ namespace ETL_SQL.TUI.UI
                     panelPill = "[bold yellow] ▶ MESSAGES FOCUS [/]";
                 else if (Focus == EditorFocus.Performance)
                     panelPill = "[bold magenta] ▶ PERF FOCUS [/]";
+                else if (Focus == EditorFocus.Variables)
+                    panelPill = "[bold yellow] ▶ VARIABLES FOCUS [/]";
                 else if (hasError)
                     panelPill = "[bold red] ✗ ERROR [/]";
+                else if (VariablesVisible)
+                    panelPill = "[bold green] VARIABLES [/]";
                 else if (PerformanceVisible)
                     panelPill = "[bold cyan] PERF [/]";
                 else if (ReportVisible)
@@ -875,19 +887,23 @@ namespace ETL_SQL.TUI.UI
             switch (tab)
             {
                 case BottomTab.Results:
-                    ResultsVisible = true; PerformanceVisible = false; OutputVisible = false;
+                    ResultsVisible = true; PerformanceVisible = false; OutputVisible = false; VariablesVisible = false;
                     ShowStatus("View: Query Results");
                     break;
                 case BottomTab.Performance:
-                    PerformanceVisible = true; ResultsVisible = false; OutputVisible = false; CompareMode = false;
+                    PerformanceVisible = true; ResultsVisible = false; OutputVisible = false; VariablesVisible = false; CompareMode = false;
                     ShowStatus("View: Performance Metrics");
                     break;
                 case BottomTab.Output:
-                    OutputVisible = true; ResultsVisible = false; PerformanceVisible = false; CompareMode = false;
+                    OutputVisible = true; ResultsVisible = false; PerformanceVisible = false; VariablesVisible = false; CompareMode = false;
                     ShowStatus("View: Output");
                     break;
+                case BottomTab.Variables:
+                    VariablesVisible = true; OutputVisible = false; ResultsVisible = false; PerformanceVisible = false; CompareMode = false;
+                    ShowStatus("View: Variables");
+                    break;
                 default: // Pipeline & Messages
-                    ResultsVisible = false; PerformanceVisible = false; OutputVisible = false; CompareMode = false;
+                    ResultsVisible = false; PerformanceVisible = false; OutputVisible = false; VariablesVisible = false; CompareMode = false;
                     ShowStatus("View: Pipeline & Messages");
                     break;
             }
