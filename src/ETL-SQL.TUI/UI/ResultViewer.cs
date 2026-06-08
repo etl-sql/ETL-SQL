@@ -32,7 +32,7 @@ namespace ETL_SQL.TUI.UI
                 AnsiConsole.Write(new Rule($"[bold green]Query Results (Rows {_scrollRow + 1} to {Math.Min(_scrollRow + _maxDisplayRows, _table.Rows.Count)} of {_table.Rows.Count})[/]").RuleStyle("green"));
                 Console.WriteLine();
 
-                var displayTable = new Table().Border(TableBorder.Rounded);
+                var displayTable = new Table().Border(TerminalCapabilities.Current.Table());
                 foreach (var col in _table.ColumnNames) displayTable.AddColumn(new TableColumn($"[bold blue]{Markup.Escape(col)}[/]").Centered());
 
                 var rows = _table.Rows.Skip(_scrollRow).Take(_maxDisplayRows);

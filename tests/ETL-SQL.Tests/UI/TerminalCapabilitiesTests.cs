@@ -58,5 +58,17 @@ namespace ETL_SQL.Tests.UI
         {
             Assert.True(TerminalCapabilities.MinWidth > 0 && TerminalCapabilities.MinHeight > 0);
         }
+
+        [Fact]
+        public void Borders_FallBackToAscii_WhenUnicodeUnavailable()
+        {
+            var unicode = TerminalCapabilities.Detect(Env());
+            Assert.Same(Spectre.Console.BoxBorder.Rounded, unicode.Box());
+            Assert.Same(Spectre.Console.TableBorder.Rounded, unicode.Table());
+
+            var ascii = TerminalCapabilities.Detect(Env(("ETLSQL_TUI_ASCII", "1")));
+            Assert.Same(Spectre.Console.BoxBorder.Ascii, ascii.Box());
+            Assert.Same(Spectre.Console.TableBorder.Ascii, ascii.Table());
+        }
     }
 }

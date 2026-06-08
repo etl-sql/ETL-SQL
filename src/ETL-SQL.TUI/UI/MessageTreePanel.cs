@@ -98,7 +98,7 @@ namespace ETL_SQL.TUI.UI
             {
                 Header = new PanelHeader($"{treeHeader} [grey]│[/] {msgHeader}"),
                 Height = height,
-                Border = BoxBorder.Rounded,
+                Border = TerminalCapabilities.Current.Box(),
                 BorderStyle = TuiTheme.Instance.GetStyle(
                     treeFocused || msgFocused ? TuiTheme.Instance.Ui.PanelFocusedBorder : TuiTheme.Instance.Ui.PanelUnfocusedBorder,
                     new Style(treeFocused || msgFocused ? Color.Grey37 : Color.Grey23)),

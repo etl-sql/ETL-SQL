@@ -69,7 +69,7 @@ namespace ETL_SQL.TUI.UI
                 Header = new PanelHeader("[bold]Output[/]"),
                 Width = width,
                 Height = height,
-                Border = BoxBorder.Rounded,
+                Border = TerminalCapabilities.Current.Box(),
                 Padding = new Padding(1, 0, 1, 0)
             };
             panel.BorderColor(borderColor);

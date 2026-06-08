@@ -90,7 +90,7 @@ namespace ETL_SQL.TUI.UI
             var tableColor = TuiTheme.Instance.GetColor(
                 _renderer.ResultsFocus ? TuiTheme.Instance.Ui.PanelFocusedBorder : TuiTheme.Instance.Ui.PanelUnfocusedBorder,
                 _renderer.ResultsFocus ? Color.Grey37 : Color.Grey);
-            var table = new Table().Border(TableBorder.Rounded).BorderColor(tableColor).Expand();
+            var table = new Table().Border(TerminalCapabilities.Current.Table()).BorderColor(tableColor).Expand();
             int colOffset = _renderer.ResultScrollCol;
             var visibleColumns = res.ColumnNames.Skip(colOffset).Take(visibleColCount).ToList();
             foreach (var col in visibleColumns) table.AddColumn($"[bold cyan]{Markup.Escape(col)}[/]");
@@ -116,7 +116,7 @@ namespace ETL_SQL.TUI.UI
                 ? TuiTheme.Instance.Ui.ResultsFocusedBorder 
                 : (_renderer.ResultsFocus ? TuiTheme.Instance.Ui.ResultsFocusedBorder : TuiTheme.Instance.Ui.ResultsUnfocusedBorder);
             var borderStyle = TuiTheme.Instance.GetStyle(borderStyleStr, new Style(hasFilter ? Color.Yellow : (_renderer.ResultsFocus ? Color.Yellow : Color.Cyan)));
-            var panel = new Panel(table) { Header = new PanelHeader(stats), Height = height, Width = width, Border = BoxBorder.Rounded, BorderStyle = borderStyle, Padding = new Padding(0, 0, 0, 0) };
+            var panel = new Panel(table) { Header = new PanelHeader(stats), Height = height, Width = width, Border = TerminalCapabilities.Current.Box(), BorderStyle = borderStyle, Padding = new Padding(0, 0, 0, 0) };
             console.SetCursorPosition(x, y);
             console.WriteWidget(panel);
         }
@@ -191,7 +191,7 @@ namespace ETL_SQL.TUI.UI
             string focusTag   = focused ? " [bold magenta]◀[/]" : "";
             string header     = $"[cyan]Set {setIndex + 1} | {res.ExecutionTimeMs}ms | {res.TotalRowsMatched}{(res.TotalRowsMatched >= 1000 ? "+" : "")} rows[/]{colInfo}{filterInfo}{focusTag}";
 
-            var table = new Table().Border(TableBorder.Rounded).BorderColor(TuiTheme.Instance.GetColor(TuiTheme.Instance.Ui.PanelUnfocusedBorder, Color.Grey)).Expand();
+            var table = new Table().Border(TerminalCapabilities.Current.Table()).BorderColor(TuiTheme.Instance.GetColor(TuiTheme.Instance.Ui.PanelUnfocusedBorder, Color.Grey)).Expand();
             foreach (var col in visibleColumns)
                 table.AddColumn($"[bold cyan]{Markup.Escape(col)}[/]");
 
@@ -212,7 +212,7 @@ namespace ETL_SQL.TUI.UI
                 Header = new PanelHeader(header),
                 Height = height,
                 Width  = width,
-                Border = BoxBorder.Rounded,
+                Border = TerminalCapabilities.Current.Box(),
                 BorderStyle = borderStyle,
                 Padding = new Padding(0, 0, 0, 0)
             };

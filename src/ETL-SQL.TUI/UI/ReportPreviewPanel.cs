@@ -36,7 +36,7 @@ namespace ETL_SQL.TUI.UI
                 console.SetCursorPosition(x, y);
                 console.WriteWidget(new Panel(new Text("No report definitions found in active script.\nUse CREATE PAGE and CREATE VISUAL to build a report.", new Style(Color.Grey)))
                     .Header("Report Preview")
-                    .Border(BoxBorder.Rounded)
+                    .Border(TerminalCapabilities.Current.Box())
                     .Expand());
                 return;
             }
@@ -94,7 +94,7 @@ namespace ETL_SQL.TUI.UI
                 Header = new PanelHeader(pageInfo),
                 Height = height,
                 Width = width,
-                Border = BoxBorder.Rounded,
+                Border = TerminalCapabilities.Current.Box(),
                 BorderStyle = borderStyle,
                 Padding = new Padding(1, 0, 1, 0)
             };

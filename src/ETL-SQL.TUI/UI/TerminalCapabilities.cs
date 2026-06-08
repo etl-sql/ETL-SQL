@@ -40,5 +40,13 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>Returns <paramref name="unicode"/> when the terminal supports it, else <paramref name="ascii"/>.</summary>
         public string Glyph(string unicode, string ascii) => Unicode ? unicode : ascii;
+
+        /// <summary>The panel border to use — rounded box-drawing on Unicode terminals, ASCII elsewhere.</summary>
+        public Spectre.Console.BoxBorder Box() =>
+            Unicode ? Spectre.Console.BoxBorder.Rounded : Spectre.Console.BoxBorder.Ascii;
+
+        /// <summary>The table border to use — rounded box-drawing on Unicode terminals, ASCII elsewhere.</summary>
+        public Spectre.Console.TableBorder Table() =>
+            Unicode ? Spectre.Console.TableBorder.Rounded : Spectre.Console.TableBorder.Ascii;
     }
 }

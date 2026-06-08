@@ -99,7 +99,7 @@ namespace ETL_SQL.TUI.UI
             {
                 foreach (var dataTable in result.ResultsTables)
                 {
-                    var spectreTable = new Table().Border(TableBorder.Rounded);
+                    var spectreTable = new Table().Border(TerminalCapabilities.Current.Table());
                     foreach (var col in dataTable.ColumnNames) spectreTable.AddColumn(col);
                     foreach (var row in dataTable.Rows)
                         spectreTable.AddRow(row.Columns.Values.Select(v => v?.ToString() ?? "").ToArray());

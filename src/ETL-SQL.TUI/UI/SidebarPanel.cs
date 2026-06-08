@@ -444,7 +444,7 @@ namespace ETL_SQL.TUI.UI
                 Header = new PanelHeader(Mode == SidebarMode.Metadata ? "[bold]Schema[/]" : "[bold]Explorer[/]"),
                 Height = height,
                 Width = width,
-                Border = BoxBorder.Rounded,
+                Border = TerminalCapabilities.Current.Box(),
                 Padding = new Padding(1, 0, 1, 0)
             };
             panel.BorderColor(TuiTheme.Instance.GetColor(borderStyle, Color.Grey));

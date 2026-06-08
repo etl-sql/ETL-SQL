@@ -46,7 +46,7 @@ namespace ETL_SQL.TUI.UI
             var statsTableColor = TuiTheme.Instance.GetColor(
                 _renderer.Focus == EditorFocus.Performance ? TuiTheme.Instance.Ui.PanelFocusedBorder : TuiTheme.Instance.Ui.PanelUnfocusedBorder, 
                 _renderer.Focus == EditorFocus.Performance ? Color.Grey37 : Color.Grey);
-            var statsTable = new Table().Border(TableBorder.Rounded).BorderColor(statsTableColor);
+            var statsTable = new Table().Border(TerminalCapabilities.Current.Table()).BorderColor(statsTableColor);
             statsTable.AddColumn("Metric");
             statsTable.AddColumn("Value");
             
@@ -124,7 +124,7 @@ namespace ETL_SQL.TUI.UI
                 Header = new PanelHeader("[yellow] Performance Dashboard [/]", Justify.Left),
                 Height = height,
                 Width = width,
-                Border = BoxBorder.Rounded,
+                Border = TerminalCapabilities.Current.Box(),
                 BorderStyle = panelStyle
             };
 
