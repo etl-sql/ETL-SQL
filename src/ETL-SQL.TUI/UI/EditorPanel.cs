@@ -58,9 +58,7 @@ namespace ETL_SQL.TUI.UI
                     string num = (lineIdx + 1).ToString().PadLeft(Math.Max(1, gutterWidth - 2));
                     if (_renderer.DiagnosticLines.TryGetValue(lineIdx + 1, out var level))
                     {
-                        // U+FE0E forces narrow (text) presentation so an emoji-width icon can't shift the number.
-                        string glyph = DiagnosticGutter.Glyph(level) + "︎";
-                        console.Markup($"[{DiagnosticGutter.Color(level)}]{glyph}[/][{TuiTheme.Instance.Editor.Gutter}]{num} [/]");
+                        console.Markup($"[bold {DiagnosticGutter.Color(level)}]{DiagnosticGutter.Glyph(level)}[/][{TuiTheme.Instance.Editor.Gutter}]{num} [/]");
                     }
                     else
                         console.Markup($"[{TuiTheme.Instance.Editor.Gutter}] {num} [/]");

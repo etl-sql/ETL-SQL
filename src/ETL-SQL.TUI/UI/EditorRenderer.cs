@@ -453,7 +453,26 @@ namespace ETL_SQL.TUI.UI
 
                 // Status message now has much more space
                 string statusMsg = (DateTime.Now < StatusMessageExpiry) ? StatusMessage ?? "" : "";
-                
+
+                // When idle (no transient toast), a diagnostic on the cursor's line claims the
+                // status zone so the user can read what the gutter marker means.
+                string statusZoneStyle = TuiTheme.Instance.Ui.StatusBackground;
+                if (string.IsNullOrEmpty(statusMsg))
+                {
+                    var lineDiag = editor.Diagnostics.FirstOrDefault(d => d.Line == buffer.CursorLine + 1);
+                    if (lineDiag != null)
+                    {
+                        var level = DiagnosticGutter.Classify(lineDiag.Severity);
+                        statusMsg = $"{DiagnosticGutter.Glyph(level)} {lineDiag.Source}: {lineDiag.Message}";
+                        statusZoneStyle = level switch
+                        {
+                            DiagnosticLevel.Error => "white on red",
+                            DiagnosticLevel.Warning => "black on yellow",
+                            _ => "white on blue"
+                        };
+                    }
+                }
+
                 // Layout: [Dirty Filename] [Pill] [Cursor/Time] | [StatusMessage]
                 string leftZone = $" {dirtyDot}{fileLabel2} ";
                 string midZone = panelPill;
@@ -472,7 +491,7 @@ namespace ETL_SQL.TUI.UI
                     $"[{TuiTheme.Instance.Ui.StatusBackground}]{Markup.Escape(leftZone)}[/]" + sep +
                     midZone + sep +
                     $"[{TuiTheme.Instance.Ui.StatusBackground}]{Markup.Escape(rightZone)}[/]" + sep +
-                    $"[{TuiTheme.Instance.Ui.StatusBackground}] {Markup.Escape(statusMsg).PadRight(Math.Max(0, availForStatus))} [/]";
+                    $"[{statusZoneStyle}] {Markup.Escape(statusMsg).PadRight(Math.Max(0, availForStatus))} [/]";
 
                 _console.ClearLine(0, statusRow, totalWidth);
                 _console.SetCursorPosition(0, statusRow);

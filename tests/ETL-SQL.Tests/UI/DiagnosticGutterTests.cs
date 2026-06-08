@@ -51,7 +51,7 @@ namespace ETL_SQL.Tests.UI
 
         [Theory]
         [InlineData(DiagnosticLevel.Error, "✗", "red")]
-        [InlineData(DiagnosticLevel.Warning, "⚠", "yellow")]
+        [InlineData(DiagnosticLevel.Warning, "!", "yellow")]
         [InlineData(DiagnosticLevel.Info, "•", "blue")]
         public void GlyphAndColor_AreDistinctPerLevel(DiagnosticLevel level, string glyph, string color)
         {

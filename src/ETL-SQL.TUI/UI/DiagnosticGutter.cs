@@ -35,11 +35,12 @@ namespace ETL_SQL.TUI.UI
             return map;
         }
 
-        /// <summary>The single-cell marker glyph drawn in the gutter for a severity.</summary>
+        /// <summary>The single-cell marker glyph drawn in the gutter for a severity. Deliberately
+        /// narrow (text-presentation) symbols so they occupy exactly one terminal cell.</summary>
         public static string Glyph(DiagnosticLevel level) => level switch
         {
             DiagnosticLevel.Error => "✗",
-            DiagnosticLevel.Warning => "⚠",
+            DiagnosticLevel.Warning => "!",
             _ => "•"
         };
 

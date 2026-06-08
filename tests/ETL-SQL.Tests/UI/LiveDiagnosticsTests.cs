@@ -1,5 +1,6 @@
 using Xunit;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
@@ -53,6 +54,16 @@ namespace ETL_SQL.Tests.UI
             cts.Cancel();
             await Assert.ThrowsAnyAsync<System.OperationCanceledException>(
                 () => NewEditor().AnalyzeAsync("SELECT 1;", logToMessages: false, cts.Token));
+        }
+
+        [Fact]
+        public async Task Diagnostic_IsFindableByLine_ForStatusBar()
+        {
+            // The status bar shows the diagnostic on the cursor's line by matching d.Line.
+            var (_, diags) = await NewEditor().AnalyzeAsync("SELECT 1;\nSELECT @missing;", logToMessages: false);
+            var onLine2 = diags.FirstOrDefault(d => d.Line == 2);
+            Assert.NotNull(onLine2);
+            Assert.False(string.IsNullOrEmpty(onLine2!.Message));
         }
 
         [Fact]
