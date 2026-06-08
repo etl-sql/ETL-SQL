@@ -37,6 +37,8 @@ namespace ETL_SQL.TUI.UI
             new PaletteCommand("Run statement at cursor", "Shift+F5", e => e.HandleKey(Key(ConsoleKey.F5, shift: true))),
             new PaletteCommand("Format SQL", "Ctrl+I", e => e.HandleKey(Key(ConsoleKey.I, ctrl: true))),
             new PaletteCommand("Export results to CSV", "Ctrl+P", e => e.HandleKey(Key(ConsoleKey.P, ctrl: true))),
+            new PaletteCommand("Copy result row (TSV)", null, e => e.CopyResultRowTsv()),
+            new PaletteCommand("Copy result set (TSV)", null, e => e.CopyResultSetTsv()),
 
             // ── File / tabs ──
             new PaletteCommand("Save", "Ctrl+S", e => e.HandleKey(Key(ConsoleKey.S, ctrl: true))),

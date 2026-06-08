@@ -1343,6 +1343,8 @@ namespace ETL_SQL.TUI.UI
                     _renderer.ActiveResultSetIndex = _evaluator.LastResultSets.Count - 1;
                     _renderer.ResultScrollRow = 0;
                     _renderer.ResultScrollCol = 0;
+                    _renderer.ActiveResultRow = 0;
+                    _renderer.ActiveResultCol = 0;
                     _renderer.FilterText = "";
                 }
 
@@ -1602,19 +1604,63 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>Copies the current selection (or results) to the clipboard.</summary>
         /// <summary>Copies the current selection (or results) to the clipboard.</summary>
+        /// <summary>The (column, value, row) of the highlighted result cell, or null if no results.</summary>
+        private (string column, object? value, ETL_SQL.Data.Row row)? ActiveResultCell()
+        {
+            if (_evaluator.LastResultSets.Count == 0) return null;
+            int si = Math.Clamp(_renderer.ActiveResultSetIndex, 0, _evaluator.LastResultSets.Count - 1);
+            var rs = _evaluator.LastResultSets[si];
+            var rows = ResultsPanel.FilterRows(rs, _renderer.FilterText);
+            if (rows.Count == 0 || rs.ColumnNames.Count == 0) return null;
+            int r = Math.Clamp(_renderer.ActiveResultRow, 0, rows.Count - 1);
+            int c = Math.Clamp(_renderer.ActiveResultCol, 0, rs.ColumnNames.Count - 1);
+            string col = rs.ColumnNames[c];
+            return (col, rows[r][col], rows[r]);
+        }
+
+        /// <summary>Shows the active result cell's full value in a scrollable overlay (for clipped/JSON/XML).</summary>
+        public async Task InspectActiveCell()
+        {
+            var cell = ActiveResultCell();
+            if (cell == null) { _renderer.ShowStatus("No result cell to inspect."); return; }
+            string value = cell.Value.value == null ? "NULL" : (cell.Value.value.ToString() ?? "");
+            await ShowInfoOverlay($"{cell.Value.column}  (row {_renderer.ActiveResultRow + 1})", value, "Cell is empty.");
+        }
+
+        /// <summary>Copies the active result row as tab-separated values.</summary>
+        public async Task CopyResultRowTsv()
+        {
+            var cell = ActiveResultCell();
+            if (cell == null) { _renderer.ShowStatus("No result row to copy."); return; }
+            int si = Math.Clamp(_renderer.ActiveResultSetIndex, 0, _evaluator.LastResultSets.Count - 1);
+            var rs = _evaluator.LastResultSets[si];
+            await _clipboard.SetTextAsync(string.Join("\t", rs.ColumnNames.Select(c => cell.Value.row[c]?.ToString() ?? "")));
+            _renderer.ShowStatus("Result row copied as TSV.");
+        }
+
+        /// <summary>Copies the entire active result set as tab-separated values (header + rows).</summary>
+        public async Task CopyResultSetTsv()
+        {
+            if (_evaluator.LastResultSets.Count == 0) { _renderer.ShowStatus("No results to copy."); return; }
+            var rs = _evaluator.LastResultSets[Math.Clamp(_renderer.ActiveResultSetIndex, 0, _evaluator.LastResultSets.Count - 1)];
+            var sb = new StringBuilder();
+            sb.AppendLine(string.Join("\t", rs.ColumnNames));
+            foreach (var row in rs.Rows) sb.AppendLine(string.Join("\t", rs.ColumnNames.Select(c => row[c]?.ToString() ?? "")));
+            await _clipboard.SetTextAsync(sb.ToString());
+            _renderer.ShowStatus("Result set copied as TSV.");
+        }
+
         public async Task Copy()
         {
             switch (_renderer.Focus)
             {
                 case EditorFocus.Results:
-                    if (_renderer.ResultsVisible && _evaluator.LastResultSets.Count > _renderer.ActiveResultSetIndex)
+                    // Ctrl+C copies the active cell; whole-row / whole-set TSV are palette commands.
+                    var cell = ActiveResultCell();
+                    if (cell != null)
                     {
-                        var rs = _evaluator.LastResultSets[_renderer.ActiveResultSetIndex];
-                        var sb = new StringBuilder();
-                        sb.AppendLine(string.Join("\t", rs.ColumnNames));
-                        foreach (var row in rs.Rows) sb.AppendLine(string.Join("\t", row.Columns.Values));
-                        await _clipboard.SetTextAsync(sb.ToString());
-                        _renderer.ShowStatus("Results copied as TSV.");
+                        await _clipboard.SetTextAsync(cell.Value.value?.ToString() ?? "");
+                        _renderer.ShowStatus($"Copied cell {cell.Value.column}.");
                     }
                     break;
 

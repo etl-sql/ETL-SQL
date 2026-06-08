@@ -549,6 +549,14 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
+            // Enter on a focused result cell opens the value inspector (awaited so its overlay
+            // owns input while open).
+            if (_renderer.ResultsFocus && key.Key == ConsoleKey.Enter)
+            {
+                await _editor.InspectActiveCell();
+                return;
+            }
+
             if (_renderer.ResultsFocus || _renderer.Focus == EditorFocus.ExecutionTree || _renderer.Focus == EditorFocus.Messages || _renderer.Focus == EditorFocus.Performance || _renderer.Focus == EditorFocus.Variables)
             {
                 HandleFocusedPanelKey(key);
@@ -754,42 +762,37 @@ namespace ETL_SQL.TUI.UI
 
         private void HandleResultsKey(ConsoleKeyInfo key)
         {
+            // Arrow keys move the active cell; the renderer clamps to data bounds and scrolls to
+            // keep it visible. Tab switches result sets; Enter (handled in HandleKey) inspects.
             switch (key.Key)
             {
-                case ConsoleKey.UpArrow: 
-                    _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 1); 
-                    break;
-                case ConsoleKey.DownArrow: 
-                    _renderer.ResultScrollRow++; 
-                    break;
+                case ConsoleKey.UpArrow:
+                    _renderer.ActiveResultRow = Math.Max(0, _renderer.ActiveResultRow - 1); break;
+                case ConsoleKey.DownArrow:
+                    _renderer.ActiveResultRow++; break;
                 case ConsoleKey.LeftArrow:
-                    if (key.Modifiers.HasFlag(ConsoleModifiers.Control)) _renderer.ResultScrollCol = Math.Max(0, _renderer.ResultScrollCol - 1);
-                    else { _renderer.ActiveResultSetIndex = Math.Max(0, _renderer.ActiveResultSetIndex - 1); _renderer.ResultScrollRow = 0; _renderer.ResultScrollCol = 0; _renderer.FilterText = ""; }
-                    break;
+                    _renderer.ActiveResultCol = Math.Max(0, _renderer.ActiveResultCol - 1); break;
                 case ConsoleKey.RightArrow:
-                    if (key.Modifiers.HasFlag(ConsoleModifiers.Control)) _renderer.ResultScrollCol++;
-                    else { _renderer.ActiveResultSetIndex = Math.Min(_editor._evaluator.LastResultSets.Count - 1, _renderer.ActiveResultSetIndex + 1); _renderer.ResultScrollRow = 0; _renderer.ResultScrollCol = 0; _renderer.FilterText = ""; }
-                    break;
-                case ConsoleKey.PageUp: _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 10); break;
-                case ConsoleKey.PageDown: _renderer.ResultScrollRow += 10; break;
-                case ConsoleKey.Home: _renderer.ResultScrollRow = 0; break;
-                case ConsoleKey.End: 
-                    if (_editor._evaluator.LastResultSets.Count > 0) 
+                    _renderer.ActiveResultCol++; break;
+                case ConsoleKey.PageUp:
+                    _renderer.ActiveResultRow = Math.Max(0, _renderer.ActiveResultRow - 10); break;
+                case ConsoleKey.PageDown:
+                    _renderer.ActiveResultRow += 10; break;
+                case ConsoleKey.Home:
+                    _renderer.ActiveResultRow = 0; _renderer.ActiveResultCol = 0; break;
+                case ConsoleKey.End:
+                    if (_editor._evaluator.LastResultSets.Count > 0)
                     {
-                        var res = _editor._evaluator.LastResultSets[_renderer.ActiveResultSetIndex];
-                        int rowCount = res.Rows.Count;
-                        if (!string.IsNullOrEmpty(_renderer.FilterText))
-                        {
-                            rowCount = res.Rows.Count(row => res.ColumnNames.Any(c =>
-                                (row[c]?.ToString() ?? "").Contains(_renderer.FilterText, StringComparison.OrdinalIgnoreCase)));
-                        }
-                        _renderer.ResultScrollRow = Math.Max(0, rowCount - 1); 
+                        var res = _editor._evaluator.LastResultSets[Math.Clamp(_renderer.ActiveResultSetIndex, 0, _editor._evaluator.LastResultSets.Count - 1)];
+                        _renderer.ActiveResultRow = Math.Max(0, ResultsPanel.FilterRows(res, _renderer.FilterText).Count - 1);
                     }
                     break;
                 case ConsoleKey.Tab:
-                    if (_editor._evaluator.LastResultSets.Count > 1) {
+                    if (_editor._evaluator.LastResultSets.Count > 1)
+                    {
                         _renderer.ActiveResultSetIndex = (_renderer.ActiveResultSetIndex + 1) % _editor._evaluator.LastResultSets.Count;
-                        _renderer.ResultScrollRow = 0;
+                        _renderer.ResultScrollRow = 0; _renderer.ResultScrollCol = 0;
+                        _renderer.ActiveResultRow = 0; _renderer.ActiveResultCol = 0;
                         _renderer.ShowStatus($"View: Result Set {_renderer.ActiveResultSetIndex + 1}/{_editor._evaluator.LastResultSets.Count}");
                     }
                     break;

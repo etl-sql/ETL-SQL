@@ -45,6 +45,9 @@ namespace ETL_SQL.TUI.UI
         public int MessageScrollRow { get; set; } = 0;
         public int TreeScrollRow { get; set; } = 0;
         public int ActiveResultSetIndex { get; set; } = 0;
+        // The highlighted result cell (row into the filtered rows, column into ColumnNames).
+        public int ActiveResultRow { get; set; } = 0;
+        public int ActiveResultCol { get; set; } = 0;
         public bool IsBottomMaximized { get; set; } = false;
         private int _lastWidth = 0;
         private int _lastHeight = 0;

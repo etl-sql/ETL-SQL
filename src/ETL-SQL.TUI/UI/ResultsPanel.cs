@@ -17,6 +17,40 @@ namespace ETL_SQL.TUI.UI
             _renderer = renderer;
         }
 
+        /// <summary>The rows of a result set after the (case-insensitive substring) row filter.</summary>
+        public static IReadOnlyList<ETL_SQL.Data.Row> FilterRows(ETL_SQL.Data.DataTable res, string? filter)
+        {
+            if (string.IsNullOrEmpty(filter)) return res.Rows;
+            return res.Rows.Where(row => res.ColumnNames.Any(c =>
+                (row[c]?.ToString() ?? "").Contains(filter, StringComparison.OrdinalIgnoreCase))).ToList();
+        }
+
+        /// <summary>Adjusts a scroll offset so <paramref name="active"/> stays within the visible window.</summary>
+        public static int FollowScroll(int scroll, int active, int visible, int total)
+        {
+            if (total <= 0) return 0;
+            scroll = Math.Clamp(scroll, 0, Math.Max(0, total - 1));
+            if (active < scroll) return active;
+            if (active >= scroll + visible) return active - visible + 1;
+            return scroll;
+        }
+
+        // A grid cell: NULL shown distinctly from an empty string; newlines flattened and long
+        // values clipped (the full value is available via the inspector). Active cell is highlighted.
+        private static string FormatCell(object? value, bool isActive)
+        {
+            const int maxCellLen = 48;
+            bool isNull = value == null;
+            string raw = isNull ? "NULL" : (value!.ToString() ?? "");
+            string flat = raw.Replace("\r", " ").Replace("\n", " ");
+            if (flat.Length > maxCellLen) flat = flat.Substring(0, maxCellLen - 1) + "…";
+            string escaped = Markup.Escape(flat);
+
+            if (isActive) return $"[black on yellow]{escaped}[/]";
+            if (isNull) return $"[grey italic]{escaped}[/]";
+            return escaped;
+        }
+
         public void Render(IConsoleInterface console, int x, int y, int width, int height, int scrollRow = 0)
         {
             for (int i = 0; i < height; i++)
@@ -31,37 +65,50 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            var res = _evaluator.LastResultSets[_renderer.ActiveResultSetIndex];
+            int setIndex = Math.Clamp(_renderer.ActiveResultSetIndex, 0, _evaluator.LastResultSets.Count - 1);
+            var res = _evaluator.LastResultSets[setIndex];
 
-            // Apply filter
             bool hasFilter = !string.IsNullOrEmpty(_renderer.FilterText);
-            var rows = hasFilter
-                ? res.Rows.Where(row => res.ColumnNames.Any(c =>
-                    (row[c]?.ToString() ?? "").Contains(_renderer.FilterText, StringComparison.OrdinalIgnoreCase)))
-                  .ToList()
-                : res.Rows;
+            var rows = FilterRows(res, _renderer.FilterText);
+
+            // Clamp the active cell into the data, then scroll so it stays visible.
+            int visibleRowCount = Math.Max(1, height - 4);
+            const int visibleColCount = 10;
+            int activeRow = rows.Count == 0 ? 0 : Math.Clamp(_renderer.ActiveResultRow, 0, rows.Count - 1);
+            int activeCol = res.ColumnNames.Count == 0 ? 0 : Math.Clamp(_renderer.ActiveResultCol, 0, res.ColumnNames.Count - 1);
+            _renderer.ActiveResultRow = activeRow;
+            _renderer.ActiveResultCol = activeCol;
+            _renderer.ResultScrollRow = FollowScroll(_renderer.ResultScrollRow, activeRow, visibleRowCount, rows.Count);
+            _renderer.ResultScrollCol = FollowScroll(_renderer.ResultScrollCol, activeCol, visibleColCount, res.ColumnNames.Count);
 
             string filterInfo = hasFilter
                 ? $" | [yellow]Filter: {Markup.Escape(_renderer.FilterText)}  {rows.Count}/{res.Rows.Count}[/]"
                 : "";
-            string stats = $"[cyan]Set {_renderer.ActiveResultSetIndex + 1}/{_evaluator.LastResultSets.Count} | {res.ExecutionTimeMs}ms | {res.TotalRowsMatched}{(res.TotalRowsMatched >= 1000 ? "+" : "")} rows[/]{filterInfo}";
+            string cellInfo = rows.Count > 0 ? $" | [grey]R{activeRow + 1} C{activeCol + 1}[/]" : "";
+            string stats = $"[cyan]Set {setIndex + 1}/{_evaluator.LastResultSets.Count} | {res.ExecutionTimeMs}ms | {res.TotalRowsMatched}{(res.TotalRowsMatched >= 1000 ? "+" : "")} rows[/]{filterInfo}{cellInfo}";
 
             var tableColor = TuiTheme.Instance.GetColor(
-                _renderer.ResultsFocus ? TuiTheme.Instance.Ui.PanelFocusedBorder : TuiTheme.Instance.Ui.PanelUnfocusedBorder, 
+                _renderer.ResultsFocus ? TuiTheme.Instance.Ui.PanelFocusedBorder : TuiTheme.Instance.Ui.PanelUnfocusedBorder,
                 _renderer.ResultsFocus ? Color.Grey37 : Color.Grey);
             var table = new Table().Border(TableBorder.Rounded).BorderColor(tableColor).Expand();
-            var visibleColumns = res.ColumnNames.Skip(_renderer.ResultScrollCol).Take(10).ToList();
+            int colOffset = _renderer.ResultScrollCol;
+            var visibleColumns = res.ColumnNames.Skip(colOffset).Take(visibleColCount).ToList();
             foreach (var col in visibleColumns) table.AddColumn($"[bold cyan]{Markup.Escape(col)}[/]");
 
-            if (rows.Any())
+            if (rows.Count > 0)
             {
                 int start = _renderer.ResultScrollRow;
-                int count = Math.Max(1, height - 4);
-                int end = Math.Min(start + count, rows.Count);
+                int end = Math.Min(start + visibleRowCount, rows.Count);
                 for (int i = start; i < end; i++)
                 {
                     var row = rows[i];
-                    table.AddRow(visibleColumns.Select(c => Markup.Escape(row[c]?.ToString() ?? "")).ToArray());
+                    var cells = new string[visibleColumns.Count];
+                    for (int c = 0; c < visibleColumns.Count; c++)
+                    {
+                        bool isActive = _renderer.ResultsFocus && i == activeRow && (colOffset + c) == activeCol;
+                        cells[c] = FormatCell(row[visibleColumns[c]], isActive);
+                    }
+                    table.AddRow(cells);
                 }
             }
 
