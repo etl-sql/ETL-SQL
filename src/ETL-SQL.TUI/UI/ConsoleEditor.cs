@@ -57,6 +57,9 @@ namespace ETL_SQL.TUI.UI
         private Task? _runningTask;
         private System.Threading.CancellationTokenSource? _runCts;
 
+        private readonly WorkspaceStore _workspace = new();
+        private System.Threading.CancellationTokenSource? _sessionSaveCts;
+
         /// <summary>True while a script execution is in flight on a background task.</summary>
         public bool IsRunning => _runningTask is { IsCompleted: false };
 
@@ -201,6 +204,9 @@ namespace ETL_SQL.TUI.UI
                 } 
                 catch { }
 
+                // Silently restore the previous session (and offer crash recovery) before the loop.
+                try { await RestoreWorkspaceAsync(); } catch { }
+
                 _metadata.RefreshConnections(_buffer.GetText(), force: true);
 
                 while (!_isExiting)
@@ -229,6 +235,9 @@ namespace ETL_SQL.TUI.UI
             }
             finally
             {
+                // Persist the final session and clear the crash sentinel — this is a clean exit.
+                try { _workspace.Save(CaptureSession()); _workspace.MarkCleanExit(Directory.GetCurrentDirectory()); } catch { }
+
                 if (!OperatingSystem.IsWindows())
                     AnsiConsole.Console.Write("\x1b[?1000l\x1b[?1006l"); // Disable VT mouse tracking
                 AnsiConsole.Console.Write("\x1b[?1049l"); // Exit alternative buffer
@@ -1121,6 +1130,7 @@ namespace ETL_SQL.TUI.UI
         {
             _isDirty = true;
             ScheduleLiveAnalysis();
+            ScheduleSessionSave();
         }
 
         /// <summary>The current buffer text (used by the schema explorer to re-scan connections).</summary>
@@ -1559,6 +1569,7 @@ namespace ETL_SQL.TUI.UI
                 _fileTracker.Record(_filePath);
                 _renderer.ShowStatus($"Saved to {_filePath}");
                 _renderer._sidebarPanel.Initialize(_filePath);
+                ScheduleSessionSave();
                 return true;
             }
             else
@@ -1734,6 +1745,154 @@ namespace ETL_SQL.TUI.UI
         internal readonly List<TabState> _tabs = new();
         internal int _activeTabIndex = 0;
 
+        // ── Workspace persistence (silent session restore + crash recovery) ─────────────
+
+        /// <summary>Snapshots the open tabs + cursors for persistence. Dirty buffers carry a
+        /// recovery snapshot — except those containing secrets, which are never written.</summary>
+        private WorkspaceSession CaptureSession()
+        {
+            var s = new WorkspaceSession
+            {
+                WorkingDirectory = Directory.GetCurrentDirectory(),
+                ActiveTab = _activeTabIndex,
+                SavedUtc = DateTime.UtcNow
+            };
+
+            for (int i = 0; i < _tabs.Count; i++)
+            {
+                bool active = i == _activeTabIndex;
+                var t = _tabs[i];
+                string filePath = active ? _filePath : t.FilePath;
+                bool dirty = active ? _isDirty : t.IsDirty;
+                var lines = active ? _buffer.Lines : t.Lines;
+
+                string? recovery = null;
+                if (dirty && lines != null)
+                {
+                    string text = string.Join("\n", lines);
+                    // Honor "do not persist decrypted script text": skip snapshots holding secrets.
+                    if (!_security.RequiresSavePassword(text)) recovery = text;
+                }
+
+                s.Tabs.Add(new WorkspaceTab
+                {
+                    FilePath = filePath,
+                    IsDirty = dirty,
+                    CursorLine = active ? _buffer.CursorLine : t.CursorLine,
+                    CursorColumn = active ? _buffer.CursorColumn : t.CursorColumn,
+                    ScrollLine = active ? _renderer.ScrollLine : t.ScrollLine,
+                    ScrollCol = active ? _renderer.ScrollCol : t.ScrollCol,
+                    RecoveryText = recovery
+                });
+            }
+            return s;
+        }
+
+        /// <summary>Debounced background write of the workspace session (skipped while headless).</summary>
+        public void ScheduleSessionSave()
+        {
+            if (_renderer.Headless) return;
+            var session = CaptureSession(); // capture on the UI thread; only the write is deferred
+            _sessionSaveCts?.Cancel();
+            _sessionSaveCts = new System.Threading.CancellationTokenSource();
+            var ct = _sessionSaveCts.Token;
+            _ = Task.Run(async () =>
+            {
+                try { await Task.Delay(1500, ct); _workspace.Save(session); }
+                catch { }
+            });
+        }
+
+        /// <summary>
+        /// Silently restores the previous session's tabs/cursors for this directory, and offers to
+        /// recover unsaved buffers if the last run crashed. The launched file is kept open + active.
+        /// </summary>
+        public async Task RestoreWorkspaceAsync()
+        {
+            string cwd = Directory.GetCurrentDirectory();
+            bool unclean = _workspace.WasUncleanShutdown(cwd);
+            var session = _workspace.Load(cwd);
+            _workspace.MarkRunning(cwd);
+
+            if (session == null || session.Tabs.Count == 0) return;
+
+            bool recover = false;
+            if (unclean && session.Tabs.Exists(t => !string.IsNullOrEmpty(t.RecoveryText)))
+            {
+                var ans = await ShowPrompt("Recover unsaved changes from your last session? (y/n)", "");
+                recover = !string.IsNullOrEmpty(ans) && ans.TrimStart().StartsWith("y", StringComparison.OrdinalIgnoreCase);
+            }
+
+            string launched = _filePath; // opened by InitializeAsync — keep it available
+            var newTabs = new List<TabState>();
+            foreach (var wt in session.Tabs)
+            {
+                var ts = await BuildTabFromAsync(wt, recover);
+                if (ts != null) newTabs.Add(ts);
+            }
+            if (newTabs.Count == 0) return;
+
+            _tabs.Clear();
+            _tabs.AddRange(newTabs);
+            _activeTabIndex = Math.Clamp(session.ActiveTab, 0, _tabs.Count - 1);
+
+            // Make sure the explicitly launched file is present and focused.
+            if (!string.IsNullOrEmpty(launched) && launched != "untitled.etlsql")
+            {
+                int existing = _tabs.FindIndex(t => SamePath(t.FilePath, launched));
+                if (existing >= 0) _activeTabIndex = existing;
+                else if (File.Exists(launched))
+                {
+                    _tabs.Add(new TabState { FilePath = launched, Lines = (await _fileHandler.LoadAsync(launched, ShowPrompt)).lines.ToList() });
+                    _activeTabIndex = _tabs.Count - 1;
+                }
+            }
+
+            LoadTabState(_activeTabIndex);
+            _renderer._sidebarPanel.Initialize(_filePath);
+            _renderer.ShowStatus(recover ? "Recovered unsaved changes from your last session." : "Restored previous session.");
+        }
+
+        private static bool SamePath(string? a, string? b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            try { return string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase); }
+            catch { return string.Equals(a, b, StringComparison.OrdinalIgnoreCase); }
+        }
+
+        private async Task<TabState?> BuildTabFromAsync(WorkspaceTab wt, bool recover)
+        {
+            string[] lines;
+            bool dirty = false;
+
+            if (recover && !string.IsNullOrEmpty(wt.RecoveryText))
+            {
+                lines = wt.RecoveryText.Split('\n');
+                dirty = true;
+            }
+            else if (!string.IsNullOrEmpty(wt.FilePath) && wt.FilePath != "untitled.etlsql" && File.Exists(wt.FilePath))
+            {
+                lines = (await _fileHandler.LoadAsync(wt.FilePath, ShowPrompt)).lines;
+            }
+            else
+            {
+                return null; // untitled-without-recovery or a file that no longer exists → drop
+            }
+
+            int cursorLine = Math.Clamp(wt.CursorLine, 0, Math.Max(0, lines.Length - 1));
+            int cursorCol = lines.Length > 0 ? Math.Clamp(wt.CursorColumn, 0, lines[cursorLine].Length) : 0;
+            return new TabState
+            {
+                FilePath = string.IsNullOrEmpty(wt.FilePath) ? "untitled.etlsql" : wt.FilePath,
+                Lines = lines.ToList(),
+                CursorLine = cursorLine,
+                CursorColumn = cursorCol,
+                ScrollLine = wt.ScrollLine,
+                ScrollCol = wt.ScrollCol,
+                IsDirty = dirty
+            };
+        }
+
         public void SaveActiveTabState()
         {
             if (_activeTabIndex >= 0 && _activeTabIndex < _tabs.Count)
@@ -1848,6 +2007,7 @@ namespace ETL_SQL.TUI.UI
             _tabs.Add(tab);
             _activeTabIndex = _tabs.Count - 1;
             await LoadFile(filePath);
+            ScheduleSessionSave();
         }
 
         public async Task NewTab()
@@ -1861,6 +2021,7 @@ namespace ETL_SQL.TUI.UI
             // empty rather than inheriting the previous tab's session.
             LoadTabState(_tabs.Count - 1);
             _renderer.ShowStatus("New tab started.");
+            ScheduleSessionSave();
         }
 
         /// <summary>Saves the current tab's session and switches to another tab.</summary>
@@ -1869,6 +2030,7 @@ namespace ETL_SQL.TUI.UI
             if (index < 0 || index >= _tabs.Count) return;
             SaveActiveTabState();
             LoadTabState(index);
+            ScheduleSessionSave();
         }
 
         /// <summary>
