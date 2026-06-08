@@ -15,6 +15,7 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 **Terminal IDE (TUI) Modernization**
 - Implemented collapsible sidebar file explorer tree and tabbed multi-file support in [ConsoleEditor.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ConsoleEditor.cs#L29).
+- Added support for multi-cursor editing, F1 help dialog shortcuts, and drag-to-select text in the editor.
 - Added in-editor text find/search with result highlighting and `F3`/`Shift+F3` navigation.
 - Added live query diagnostics while editing and visual gutter diagnostic markers.
 - Added non-blocking, cancellable script execution, allowing queries to run asynchronously in the background.
@@ -25,11 +26,12 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 - Added customizable JSON-based editor themes with a preset theme library and `F3` theme-cycling hotkey.
 - Re-implemented robust console keyboard input via Win32 ReadConsoleInput, resolving terminal input lockups.
 - Added per-tab caching for query results, execution messages, active execution tree, and performance metrics.
-- Added mouse text drag-to-select support in the editor window.
+- Added a new `rollback-all-transactions` command to abort all active transactions.
 - Added an Output tab to act as a durable, clickable home for served URLs and export paths.
 - Added custom terminal rendering features including braille line charts, fractional-block bar charts, buttons, containers, and `RELDATEPICKER` controls.
 - Added a TUI Command Palette (`Alt+P`) and support for exporting reports directly to Markdown or PDF.
-- Added a `serve` utility (`Ctrl+Shift+R`) to run report previews directly in the browser via dynamic self-invocation.
+- Added a `serve` utility (`Ctrl+Shift+R`) to run report previews directly in the browser via dynamic self-invocation, supporting serve-folder multi-report launching.
+- Added Publish to Portal support (matching VS Code publish features) and connection reset commands.
 
 **Connectors & Integrations**
 - Added a native **Neo4j** graph database connector supporting key merging, validation, and metadata queries (see [Neo4jConnector.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Neo4j/Neo4jConnector.cs) and [Neo4jDataSource.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Neo4j/Neo4jDataSource.cs)).
@@ -42,12 +44,21 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 - Added a cross-platform CLI `etl-sql purge` command for cleaning up old data and session histories.
 - Expanded SQL Logic Test (SLT) coverage for index creation, table truncation, table alteration, `LEFT SEMI`/`LEFT ANTI` joins, and `QUALIFY` statements.
 
+**Verification & Orchestration Hardening**
+- Added job scheduler chaos coverage and concurrency race verification tests (scheduler, subscription, and active-work).
+- Added a subscription delivery diagnostics UI and preserved subscription failures in the history store.
+- Added verification tests for Report Portal user permission models and user workflows.
+- Added a new capacity planning guide (`Docs/Strategy/Capacity_Planning.md` or similar) and published service capacity baselines.
+- Added capacity workload templates and row-volume capacity planning profiles.
+- Added scaling tests for portal administration catalogs and enterprise identity lifecycle verification.
+
 ### Fixed
 - **Query Parser:** Fixed parser bugs for `LEFT SEMI`/`LEFT ANTI` joins and tolerated trailing semicolons (`;`) for statements inside `BEGIN`/`TRY` blocks.
+- **Cookbook Recipes:** Audited and fixed all 23 Cookbook recipes to ensure they compile and parse cleanly, fixing issues with `ENCRYPT`, `SEND EMAIL`, `EXEC`, `DECLARE`, and deprecated `WITH PARAMETERS` report options.
 - **TUI Editor:** Implemented file overwrite warnings when a file changes on disk, fixed sidebar layout wipeout during redraw by clearing partial line width, and resolved keyboard input lockups on Windows.
 - **TUI Autocomplete:** Fixed snippet triggers (`$mssql`) showing inside the autocomplete suggestions and prevented crashes when brackets appeared in prompt titles.
 - **TUI Metadata:** Restored temp table querying inside [TuiMetadataManager](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L106).
-- **Report Preview:** Fixed report preview wrapping bugs and added page navigation arrows via keyboard/mouse.
+- **Report Preview:** Fixed report preview wrapping bugs, added rounding for Card/Table numbers, and added page navigation arrows via keyboard/mouse.
 - **Test Integrity:** Resolved parallel test conflicts in Neo4j tests, and excluded Docker LDAP portal tests from non-Docker lanes.
 
 ### Changed
