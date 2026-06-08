@@ -399,15 +399,23 @@ namespace ETL_SQL.TUI.UI
 
             try
             {
-                if (cmd.Format?.ToLower() == "csv")
+                switch (cmd.Format?.ToLowerInvariant())
                 {
-                    await ExportToCsv(_lastResult, cmd.Path);
-                    WriteJson(new { type = "message", level = "info", text = $"Successfully exported results to {cmd.Path}" });
+                    case "csv":
+                        await ExportToCsv(_lastResult, cmd.Path);
+                        break;
+                    case "markdown":
+                    case "md":
+                        await ExportToMarkdown(_lastResult, cmd.Path);
+                        break;
+                    case "json":
+                        await ExportToJson(_lastResult, cmd.Path);
+                        break;
+                    default:
+                        WriteJson(new { type = "message", level = "error", text = $"Unsupported export format: {cmd.Format ?? "null"}" });
+                        return;
                 }
-                else
-                {
-                    WriteJson(new { type = "message", level = "error", text = $"Unsupported export format: {cmd.Format ?? "null"}" });
-                }
+                WriteJson(new { type = "message", level = "info", text = $"Successfully exported results to {cmd.Path}" });
             }
             catch (Exception ex)
             {
@@ -438,6 +446,39 @@ namespace ETL_SQL.TUI.UI
                 return $"\"{value.Replace("\"", "\"\"")}\"";
             }
             return value;
+        }
+
+        private async Task ExportToMarkdown(ETL_SQL.Data.DataTable table, string path)
+            => await System.IO.File.WriteAllTextAsync(path, FormatMarkdown(table), System.Text.Encoding.UTF8);
+
+        private async Task ExportToJson(ETL_SQL.Data.DataTable table, string path)
+            => await System.IO.File.WriteAllTextAsync(path, FormatJson(table), System.Text.Encoding.UTF8);
+
+        /// <summary>Renders a result table as a GitHub-flavoured Markdown table.</summary>
+        internal static string FormatMarkdown(ETL_SQL.Data.DataTable table)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append("| ").Append(string.Join(" | ", table.ColumnNames.Select(EscapeMarkdown))).AppendLine(" |");
+            sb.Append("| ").Append(string.Join(" | ", table.ColumnNames.Select(_ => "---"))).AppendLine(" |");
+            foreach (var row in table.Rows)
+                sb.Append("| ").Append(string.Join(" | ", table.ColumnNames.Select(c => EscapeMarkdown(row[c]?.ToString() ?? "")))).AppendLine(" |");
+            return sb.ToString();
+        }
+
+        // Pipes break table cells; backslash-escape them and flatten newlines so a cell stays one row.
+        private static string EscapeMarkdown(string value) =>
+            (value ?? "").Replace("\\", "\\\\").Replace("|", "\\|").Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
+
+        /// <summary>Renders a result table as a JSON array of row objects (column → value).</summary>
+        internal static string FormatJson(ETL_SQL.Data.DataTable table)
+        {
+            var rows = table.Rows.Select(row =>
+            {
+                var obj = new Dictionary<string, object?>();
+                foreach (var col in table.ColumnNames) obj[col] = row[col];
+                return obj;
+            }).ToList();
+            return System.Text.Json.JsonSerializer.Serialize(rows, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
         }
 
         private static readonly object _writeLock = new();
