@@ -150,6 +150,12 @@ namespace ETL_SQL.TUI.UI
                     _renderer.ShowStatus("Selection cleared.");
                     return;
                 }
+                if (!string.IsNullOrEmpty(_renderer.FindTerm))
+                {
+                    _editor.ClearFind();
+                    _renderer.ForceFullRepaint();
+                    return;
+                }
                 return;
             }
 
@@ -444,9 +450,19 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            // F3 - Cycle Theme
+            // F3 - Find Next / Shift+F3 - Find Prev while a find is active; otherwise cycle theme.
             if (key.Key == ConsoleKey.F3)
             {
+                if (!string.IsNullOrEmpty(_renderer.FindTerm))
+                {
+                    bool found = key.Modifiers.HasFlag(ConsoleModifiers.Shift)
+                        ? _editor.TryFindPrev(_renderer.FindTerm)
+                        : _editor.TryFindNext(_renderer.FindTerm);
+                    _renderer.ShowStatus(found
+                        ? $"Find '{_renderer.FindTerm}' — F3 next · Shift+F3 prev · Esc clear"
+                        : $"'{_renderer.FindTerm}' not found.");
+                    return;
+                }
                 string newTheme = TuiTheme.CycleTheme();
                 _renderer.ShowStatus($"Theme: {newTheme}");
                 _renderer.ForceFullRepaint();

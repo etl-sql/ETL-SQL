@@ -130,6 +130,9 @@ namespace ETL_SQL.TUI.UI
         /// <summary>Worst diagnostic severity per 1-based source line, for the gutter marker. Rebuilt each frame in <see cref="Render"/>.</summary>
         public IReadOnlyDictionary<int, DiagnosticLevel> DiagnosticLines { get; private set; } = new Dictionary<int, DiagnosticLevel>();
 
+        /// <summary>The active in-editor find term; when set, all occurrences are highlighted and F3/Shift+F3 navigate.</summary>
+        public string? FindTerm { get; set; }
+
         private readonly IConsoleInterface _console;
         private readonly EditorPanel _editorPanel;
         private readonly MessageTreePanel _messageTreePanel;

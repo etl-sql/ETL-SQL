@@ -1049,15 +1049,24 @@ namespace ETL_SQL.TUI.UI
             MarkDirty();
         }
 
-        /// <summary>Prompts for a search term and navigates to the next occurrence.</summary>
+        /// <summary>Prompts for a search term (pre-filled with the last one), highlights all
+        /// matches, and jumps to the next occurrence. F3/Shift+F3 then repeat; Esc clears.</summary>
         public async Task Find()
         {
-            var target = await ShowPrompt("Find", "");
+            var target = await ShowPrompt("Find", _renderer.FindTerm ?? "");
             if (string.IsNullOrEmpty(target)) return;
-            if (!TryFindNext(target))
-            {
+            _renderer.FindTerm = target;
+            if (TryFindNext(target))
+                _renderer.ShowStatus($"Find '{target}' — F3 next · Shift+F3 prev · Esc clear");
+            else
                 _renderer.ShowStatus($"'{target}' not found.");
-            }
+        }
+
+        /// <summary>Clears the active find highlight.</summary>
+        public void ClearFind()
+        {
+            _renderer.FindTerm = null;
+            _renderer.ShowStatus("Find cleared.");
         }
 
         /// <summary>Moves the cursor to the next case-insensitive match, wrapping to the top when needed.</summary>
@@ -1066,7 +1075,7 @@ namespace ETL_SQL.TUI.UI
             if (string.IsNullOrEmpty(target)) return false;
             var text = _buffer.GetText();
             int start = _buffer.GetFlatPosition(_buffer.CursorLine, _buffer.CursorColumn);
-            int index = text.IndexOf(target, start + 1, StringComparison.OrdinalIgnoreCase);
+            int index = text.IndexOf(target, Math.Min(start + 1, text.Length), StringComparison.OrdinalIgnoreCase);
             if (index == -1) index = text.IndexOf(target, 0, StringComparison.OrdinalIgnoreCase);
 
             if (index != -1)
@@ -1078,6 +1087,30 @@ namespace ETL_SQL.TUI.UI
             }
 
             return false;
+        }
+
+        /// <summary>Moves the cursor to the previous case-insensitive match, wrapping to the bottom.</summary>
+        public bool TryFindPrev(string? target)
+        {
+            if (string.IsNullOrEmpty(target)) return false;
+            var text = _buffer.GetText();
+            int caret = _buffer.GetFlatPosition(_buffer.CursorLine, _buffer.CursorColumn);
+
+            int chosen = -1, last = -1;
+            for (int i = text.IndexOf(target, 0, StringComparison.OrdinalIgnoreCase);
+                 i != -1;
+                 i = text.IndexOf(target, i + 1, StringComparison.OrdinalIgnoreCase))
+            {
+                last = i;
+                if (i < caret) chosen = i; // matches scanned ascending → keep the last one before the caret
+            }
+            if (chosen == -1) chosen = last; // none before caret → wrap to the final match
+            if (chosen == -1) return false;
+
+            var pos = _buffer.GetLineColFromFlat(chosen);
+            _buffer.CursorLine = pos.line;
+            _buffer.CursorColumn = pos.col;
+            return true;
         }
 
         /// <summary>Prompts for a string replacement and updates the buffer.</summary>

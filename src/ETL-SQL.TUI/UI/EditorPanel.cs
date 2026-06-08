@@ -64,11 +64,49 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
+        /// <summary>
+        /// Markup for the visible window of a line with every occurrence of the active find term
+        /// wrapped in a highlight style; null when there's no active term or no match in view.
+        /// </summary>
+        private string? RenderFindHighlight(string fullLine, int editorWidth)
+        {
+            var term = _renderer.FindTerm;
+            if (string.IsNullOrEmpty(term)) return null;
+
+            string visible = fullLine.Length > _renderer.ScrollCol
+                ? fullLine.Substring(_renderer.ScrollCol, Math.Min(fullLine.Length - _renderer.ScrollCol, editorWidth))
+                : "";
+            if (visible.Length == 0) return null;
+
+            int idx = visible.IndexOf(term, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) return null;
+
+            var sb = new System.Text.StringBuilder();
+            int pos = 0;
+            while (idx >= 0)
+            {
+                sb.Append(Markup.Escape(visible.Substring(pos, idx - pos)));
+                sb.Append("[black on yellow]").Append(Markup.Escape(visible.Substring(idx, term.Length))).Append("[/]");
+                pos = idx + term.Length;
+                idx = visible.IndexOf(term, pos, StringComparison.OrdinalIgnoreCase);
+            }
+            sb.Append(Markup.Escape(visible.Substring(pos)));
+            return sb.ToString();
+        }
+
         private string RenderLineWithSelection(int lineIdx, string fullLine, int editorWidth, ref bool inMultiline)
         {
             bool startsInComment = inMultiline;
             // HighlightLine handles clipping and updates inMultiline (via out endsInMultiline)
             string highlighted = ETLSuggestEngine.HighlightLine(fullLine, _renderer.ScrollCol, editorWidth, startsInComment, out inMultiline);
+
+            // Find-match highlight takes precedence over syntax colour on lines that contain a hit
+            // (no active selection). Mirrors the plain-text fallback used for selection below.
+            if (!_buffer.SelectionStartLine.HasValue)
+            {
+                var findHl = RenderFindHighlight(fullLine, editorWidth);
+                if (findHl != null) return findHl;
+            }
 
             if (!_buffer.SelectionStartLine.HasValue && !_buffer.IsMultiLineMode) return highlighted;
 
