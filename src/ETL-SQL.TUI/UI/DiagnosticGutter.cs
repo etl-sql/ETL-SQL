@@ -37,11 +37,13 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>The single-cell marker glyph drawn in the gutter for a severity. Deliberately
         /// narrow (text-presentation) symbols so they occupy exactly one terminal cell.</summary>
-        public static string Glyph(DiagnosticLevel level) => level switch
+        public static string Glyph(DiagnosticLevel level) => Glyph(level, !TerminalCapabilities.Current.Unicode);
+
+        public static string Glyph(DiagnosticLevel level, bool ascii) => level switch
         {
-            DiagnosticLevel.Error => "✗",
+            DiagnosticLevel.Error => ascii ? "x" : "✗",
             DiagnosticLevel.Warning => "!",
-            _ => "•"
+            _ => ascii ? "*" : "•"
         };
 
         /// <summary>The Spectre colour name for the marker glyph.</summary>

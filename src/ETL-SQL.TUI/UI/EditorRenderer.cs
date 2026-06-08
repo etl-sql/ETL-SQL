@@ -208,6 +208,13 @@ namespace ETL_SQL.TUI.UI
                 _forceFullRepaintPending = false;
             }
 
+            // Below a usable size the panels overlap/corrupt — show a clear prompt instead.
+            if (!Headless && (totalWidth < TerminalCapabilities.MinWidth || totalHeight < TerminalCapabilities.MinHeight))
+            {
+                RenderTooSmall(totalWidth, totalHeight);
+                return;
+            }
+
             // ── Layout Definitions (single source of truth — see LayoutCalculator) ──
             var layout = LayoutCalculator.Compute(totalWidth, totalHeight, buffer.Lines.Count,
                 SidebarVisible, SidebarWidth, IsBottomMaximized, CompareMode);
@@ -884,6 +891,16 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>Displays a temporary status message in the status bar.</summary>
         public void ShowStatus(string message) { StatusMessage = message; StatusMessageExpiry = DateTime.Now.AddSeconds(3); }
+
+        /// <summary>Minimum-size fallback: a centered prompt instead of corrupted/overlapping panels.</summary>
+        private void RenderTooSmall(int totalWidth, int totalHeight)
+        {
+            for (int i = 0; i < totalHeight; i++) _console.ClearLine(0, i, totalWidth);
+            string msg = $"Terminal too small — resize to at least {TerminalCapabilities.MinWidth}x{TerminalCapabilities.MinHeight} (now {totalWidth}x{totalHeight}).";
+            if (msg.Length > totalWidth && totalWidth > 1) msg = msg.Substring(0, totalWidth - 1);
+            _console.SetCursorPosition(0, Math.Max(0, totalHeight / 2));
+            _console.Markup($"[yellow]{Markup.Escape(msg)}[/]");
+        }
 
         /// <summary>
         /// Builds the markup for the prompt line. The title and value are user/caller

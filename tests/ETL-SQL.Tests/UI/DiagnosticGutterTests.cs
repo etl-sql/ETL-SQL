@@ -55,8 +55,17 @@ namespace ETL_SQL.Tests.UI
         [InlineData(DiagnosticLevel.Info, "•", "blue")]
         public void GlyphAndColor_AreDistinctPerLevel(DiagnosticLevel level, string glyph, string color)
         {
-            Assert.Equal(glyph, DiagnosticGutter.Glyph(level));
+            Assert.Equal(glyph, DiagnosticGutter.Glyph(level, ascii: false));
             Assert.Equal(color, DiagnosticGutter.Color(level));
+        }
+
+        [Theory]
+        [InlineData(DiagnosticLevel.Error, "x")]
+        [InlineData(DiagnosticLevel.Warning, "!")]
+        [InlineData(DiagnosticLevel.Info, "*")]
+        public void Glyph_AsciiFallback_IsPlainAscii(DiagnosticLevel level, string expected)
+        {
+            Assert.Equal(expected, DiagnosticGutter.Glyph(level, ascii: true));
         }
     }
 }

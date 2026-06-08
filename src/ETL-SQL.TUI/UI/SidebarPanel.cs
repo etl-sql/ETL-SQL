@@ -240,10 +240,13 @@ namespace ETL_SQL.TUI.UI
         {
             var list = new List<FlatItem>();
 
+            var cap = TerminalCapabilities.Current;
+
             // A clickable mode toggle is always the first row (mouse- and keyboard-addressable).
+            string swap = cap.Glyph("⇄", "<>");
             list.Add(new FlatItem
             {
-                Node = new SidebarNode { Name = Mode == SidebarMode.Files ? "⇄ Switch to Schema" : "⇄ Switch to Files", Kind = SidebarNodeKind.ModeToggle },
+                Node = new SidebarNode { Name = $"{swap} {(Mode == SidebarMode.Files ? "Switch to Schema" : "Switch to Files")}", Kind = SidebarNodeKind.ModeToggle },
                 Depth = 0
             });
 
@@ -251,7 +254,7 @@ namespace ETL_SQL.TUI.UI
             {
                 list.Add(new FlatItem
                 {
-                    Node = new SidebarNode { Name = "⟳ Refresh schema", Kind = SidebarNodeKind.Refresh },
+                    Node = new SidebarNode { Name = $"{cap.Glyph("⟳", "@")} Refresh schema", Kind = SidebarNodeKind.Refresh },
                     Depth = 0
                 });
                 foreach (var r in MetadataRoots) AddFlatItem(r, 0, list);
@@ -372,19 +375,21 @@ namespace ETL_SQL.TUI.UI
                 // One column of indent per level (was two) so deep trees keep more room
                 // for the name.
                 string indent = new string(' ', item.Depth);
+                var cap = TerminalCapabilities.Current;
+                string open = item.Node.IsExpanded ? cap.Glyph("▼", "-") : cap.Glyph("▶", "+");
                 string prefix = item.Node.Kind switch
                 {
                     SidebarNodeKind.ModeToggle => "",
                     SidebarNodeKind.Refresh    => "",
-                    SidebarNodeKind.Connection => item.Node.IsExpanded ? "▼ 🔌 " : "▶ 🔌 ",
-                    SidebarNodeKind.TempTable  => item.Node.IsExpanded ? "▼ 🧪 " : "▶ 🧪 ",
-                    SidebarNodeKind.Table      => item.Node.IsExpanded ? "▼ ▤ " : "▶ ▤ ",
-                    SidebarNodeKind.View       => item.Node.IsExpanded ? "▼ 👁 " : "▶ 👁 ",
-                    SidebarNodeKind.Group      => item.Node.IsExpanded ? "▼ 📂 " : "▶ 📂 ",
-                    SidebarNodeKind.Column     => "  • ",
-                    _ when item.Node.IsParentNav => "↑ .. ",
-                    _ when item.Node.IsDirectory => item.Node.IsExpanded ? "▼ 📁 " : "▶ 📁 ",
-                    _ => "  📄 "
+                    SidebarNodeKind.Connection => $"{open} {cap.Glyph("🔌", "#")} ",
+                    SidebarNodeKind.TempTable  => $"{open} {cap.Glyph("🧪", "~")} ",
+                    SidebarNodeKind.Table      => $"{open} {cap.Glyph("▤", "=")} ",
+                    SidebarNodeKind.View       => $"{open} {cap.Glyph("👁", "v")} ",
+                    SidebarNodeKind.Group      => $"{open} {cap.Glyph("📂", ">")} ",
+                    SidebarNodeKind.Column     => "  " + cap.Glyph("•", "-") + " ",
+                    _ when item.Node.IsParentNav => cap.Glyph("↑ .. ", "^ .. "),
+                    _ when item.Node.IsDirectory => $"{open} {cap.Glyph("📁", "/")} ",
+                    _ => "  " + cap.Glyph("📄", ".") + " "
                 };
                 string displayName = item.Node.IsParentNav ? "" : item.Node.Name;
 
