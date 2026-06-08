@@ -21,6 +21,23 @@ namespace ETL_SQL.Tests.UI
             ETL_SQL.TUI.Program.ServiceProvider = sp;
         }
 
+        [Theory]
+        [InlineData(40, 10)]  // the supported minimum
+        [InlineData(20, 6)]   // below minimum (the renderer shows a "too small" prompt, but the
+        [InlineData(1, 1)]    // geometry must still never go negative / out of bounds)
+        public void Compute_TinyTerminal_ProducesNoNegativeDimensions(int w, int h)
+        {
+            foreach (var (sidebar, maximized, compare) in new[] { (false, false, false), (true, false, false), (false, true, false), (false, false, true) })
+            {
+                var l = LayoutCalculator.Compute(w, h, bufferLineCount: 1, sidebarVisible: sidebar, sidebarWidth: 24, isBottomMaximized: maximized, compareMode: compare);
+                Assert.True(l.EditorAreaHeight >= 0, $"EditorAreaHeight negative at {w}x{h}");
+                Assert.True(l.LowerAreaHeight >= 0, $"LowerAreaHeight negative at {w}x{h}");
+                Assert.True(l.EditorAreaTop >= 0);
+                Assert.True(l.GutterWidth >= 0);
+                Assert.True(l.SidebarMaxVisibleItems >= 0);
+            }
+        }
+
         [Fact]
         public void Compute_BasicBandsAndGutter()
         {

@@ -54,7 +54,7 @@
 - [ ] **Add cancellation/responsiveness integration tests** — Use a controllable long-running evaluator/handler to prove Stop cancels the active run, the render/input loop stays responsive, a second run is rejected, and cancellation leaves the editor/session reusable.
 - [ ] **Add live-diagnostics race tests** — Verify edit debouncing, cancellation of stale analysis, latest-document-wins ordering, gutter refresh, and no evaluator construction during analysis.
 - [ ] **Add workspace recovery and external-change tests** — Cover clean shutdown restore, crash snapshot recovery, credential/decrypted-text exclusion, stale snapshot cleanup, external modification prompts, and atomic file replacement.
-- [ ] **Add narrow/monochrome terminal render tests** — Exercise minimum supported dimensions, `NO_COLOR`, ASCII fallback, no-mouse mode, and resize transitions without negative layout sizes or out-of-bounds cursor writes.
+- [~] **Add narrow/monochrome terminal render tests** — `TerminalCapabilitiesTests` covers NO_COLOR/ASCII/dumb detection and the glyph chooser; `LayoutTests` now asserts `Compute` never produces negative dimensions at/below the minimum (down to 1x1) across sidebar/maximized/compare modes. (Deferred: a full render harness for resize transitions and out-of-bounds cursor writes.)
 - [ ] **Add tests for `Ctrl+H` Replace** — No `ReplaceTests.cs`; only appears in command palette integration.
 - [ ] **Add tests for `Ctrl+G` Go to line** — No dedicated unit test for this key dispatch.
 - [x] **Add tests for Shift+Tab in snippet mode** — `KeyDispatchTests` drives Shift+Tab in snippet mode and asserts the selection moves to the previous placeholder.
