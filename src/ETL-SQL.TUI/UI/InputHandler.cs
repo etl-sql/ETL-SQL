@@ -73,7 +73,7 @@ namespace ETL_SQL.TUI.UI
                 }
                 if (key.Key == ConsoleKey.RightArrow)
                 {
-                    _renderer._sidebarPanel.HandleRight();
+                    await _renderer._sidebarPanel.HandleRight();
                     return;
                 }
                 if (key.Key == ConsoleKey.Enter)

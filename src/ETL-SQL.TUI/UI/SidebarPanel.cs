@@ -9,7 +9,7 @@ using ETL_SQL.Core;
 namespace ETL_SQL.TUI.UI
 {
     /// <summary>What a sidebar row represents — drives its icon, expand behaviour, and action.</summary>
-    public enum SidebarNodeKind { Directory, File, ModeToggle, Refresh, Connection, Table, Column, TempTable }
+    public enum SidebarNodeKind { Directory, File, ModeToggle, Refresh, Connection, Table, Column, TempTable, View, Group }
 
     public class SidebarNode
     {
@@ -24,8 +24,15 @@ namespace ETL_SQL.TUI.UI
         public string? InsertText { get; set; }
         public List<SidebarNode> Children { get; set; } = new();
 
-        /// <summary>Metadata branches (connection/table) and directories expand; leaves don't.</summary>
-        public bool IsExpandable => IsDirectory || Kind is SidebarNodeKind.Connection or SidebarNodeKind.Table or SidebarNodeKind.TempTable;
+        /// <summary>Metadata branches and directories expand; leaves (file/column) don't.</summary>
+        public bool IsExpandable => IsDirectory ||
+            Kind is SidebarNodeKind.Connection or SidebarNodeKind.Table or SidebarNodeKind.TempTable
+                  or SidebarNodeKind.View or SidebarNodeKind.Group;
+
+        /// <summary>Metadata branches whose children are fetched on demand (vs. an eager Group).</summary>
+        public bool IsLazyMetadata =>
+            Kind is SidebarNodeKind.Connection or SidebarNodeKind.TempTable
+                  or SidebarNodeKind.Table or SidebarNodeKind.View;
     }
 
     /// <summary>The sidebar's two browsing modes.</summary>
@@ -75,54 +82,76 @@ namespace ETL_SQL.TUI.UI
             _renderer.ForceFullRepaint();
         }
 
-        // Eagerly builds Connection → Table → Column (one network pass) so navigation stays
-        // synchronous afterwards. Triggered only by an explicit toggle/refresh, not per keystroke.
+        // Builds just the connection rows; tables/views/columns load lazily on expand so large
+        // schemas don't pay an upfront cost. Triggered only by an explicit toggle/refresh.
         private async Task BuildMetadataRootsAsync(string scriptText)
         {
             MetadataRoots.Clear();
             if (_metadata == null) return;
 
             _metadata.RefreshConnections(scriptText, force: true);
-            _renderer.ShowStatus("Loading schema…");
+            await Task.Yield();
 
             foreach (var conn in _metadata.GetConnections().OrderBy(c => c, StringComparer.OrdinalIgnoreCase))
             {
                 bool isTemp = conn.StartsWith("#");
-                var connNode = new SidebarNode
+                MetadataRoots.Add(new SidebarNode
                 {
                     Name = conn,
+                    Path = conn, // connection name, used as the lookup key when loading children
                     Kind = isTemp ? SidebarNodeKind.TempTable : SidebarNodeKind.Connection,
-                    InsertText = conn,
-                    IsLoaded = true
-                };
-
-                try
-                {
-                    var tables = (await _metadata.GetTablesAsync(conn)).OrderBy(t => t, StringComparer.OrdinalIgnoreCase);
-                    foreach (var table in tables)
-                    {
-                        var tableNode = new SidebarNode
-                        {
-                            Name = table,
-                            Kind = SidebarNodeKind.Table,
-                            InsertText = isTemp ? table : $"{conn}.{table}",
-                            IsLoaded = true
-                        };
-                        try
-                        {
-                            foreach (var col in await _metadata.GetColumnsAsync(conn, table))
-                                tableNode.Children.Add(new SidebarNode { Name = col, Kind = SidebarNodeKind.Column, InsertText = col });
-                        }
-                        catch { }
-                        connNode.Children.Add(tableNode);
-                    }
-                }
-                catch { }
-
-                MetadataRoots.Add(connNode);
+                    InsertText = conn
+                });
             }
 
             _renderer.ShowStatus($"Schema: {MetadataRoots.Count} connection(s).");
+        }
+
+        /// <summary>
+        /// Lazily fetches a metadata node's children on first expand: a connection's tables +
+        /// (grouped) views, or a table/view's columns. Connection name is carried in Path.
+        /// </summary>
+        public async Task EnsureLoadedAsync(SidebarNode node)
+        {
+            if (node.IsLoaded || _metadata == null || !node.IsLazyMetadata) return;
+
+            _renderer.ShowStatus($"Loading {node.Name}…");
+            try
+            {
+                if (node.Kind is SidebarNodeKind.Connection or SidebarNodeKind.TempTable)
+                {
+                    bool isTemp = node.Kind == SidebarNodeKind.TempTable;
+                    foreach (var table in (await _metadata.GetTablesAsync(node.Path)).OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
+                        node.Children.Add(new SidebarNode
+                        {
+                            Name = table, Path = node.Path, Kind = SidebarNodeKind.Table,
+                            InsertText = isTemp ? table : $"{node.Path}.{table}"
+                        });
+
+                    // Views, when present, live under a single "Views" group to keep them distinct.
+                    var views = (await _metadata.GetViewsAsync(node.Path)).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList();
+                    if (views.Count > 0)
+                    {
+                        var group = new SidebarNode { Name = $"Views ({views.Count})", Kind = SidebarNodeKind.Group, IsLoaded = true };
+                        foreach (var view in views)
+                            group.Children.Add(new SidebarNode
+                            {
+                                Name = view, Path = node.Path, Kind = SidebarNodeKind.View,
+                                InsertText = $"{node.Path}.{view}"
+                            });
+                        node.Children.Add(group);
+                    }
+                }
+                else // Table or View → its columns
+                {
+                    foreach (var col in await _metadata.GetColumnsAsync(node.Path, node.Name))
+                        node.Children.Add(new SidebarNode { Name = col, Kind = SidebarNodeKind.Column, InsertText = col });
+                }
+            }
+            catch { }
+
+            node.IsLoaded = true;
+            _renderer.ShowStatus($"{node.Name}: {node.Children.Count} item(s).");
         }
 
         public void Initialize(string? currentFilePath)
@@ -287,9 +316,9 @@ namespace ETL_SQL.TUI.UI
             list.Add(new FlatItem { Node = node, Depth = depth });
             if (node.IsExpandable && node.IsExpanded)
             {
-                if (!node.IsLoaded)
+                if (!node.IsLoaded && node.Kind == SidebarNodeKind.Directory)
                 {
-                    LoadChildren(node); // filesystem-only; metadata nodes load eagerly
+                    LoadChildren(node); // filesystem only; metadata nodes load via EnsureLoadedAsync
                 }
                 foreach (var child in node.Children)
                 {
@@ -350,6 +379,8 @@ namespace ETL_SQL.TUI.UI
                     SidebarNodeKind.Connection => item.Node.IsExpanded ? "▼ 🔌 " : "▶ 🔌 ",
                     SidebarNodeKind.TempTable  => item.Node.IsExpanded ? "▼ 🧪 " : "▶ 🧪 ",
                     SidebarNodeKind.Table      => item.Node.IsExpanded ? "▼ ▤ " : "▶ ▤ ",
+                    SidebarNodeKind.View       => item.Node.IsExpanded ? "▼ 👁 " : "▶ 👁 ",
+                    SidebarNodeKind.Group      => item.Node.IsExpanded ? "▼ 📂 " : "▶ 📂 ",
                     SidebarNodeKind.Column     => "  • ",
                     _ when item.Node.IsParentNav => "↑ .. ",
                     _ when item.Node.IsDirectory => item.Node.IsExpanded ? "▼ 📁 " : "▶ 📁 ",
@@ -383,6 +414,8 @@ namespace ETL_SQL.TUI.UI
                         SidebarNodeKind.Connection => "bold blue",
                         SidebarNodeKind.TempTable  => "magenta",
                         SidebarNodeKind.Table      => "yellow",
+                        SidebarNodeKind.View       => "green",
+                        SidebarNodeKind.Group      => "grey",
                         SidebarNodeKind.Column     => "white",
                         _ => item.Node.IsDirectory ? "yellow" : "white"
                     };
@@ -447,8 +480,9 @@ namespace ETL_SQL.TUI.UI
 
             if (node.IsExpandable)
             {
+                if (!node.IsExpanded) await EnsureLoadedAsync(node);
                 node.IsExpanded = !node.IsExpanded;
-                if (node.IsExpanded && !node.IsLoaded) LoadChildren(node);
+                if (node.IsExpanded && !node.IsLoaded && node.Kind == SidebarNodeKind.Directory) LoadChildren(node);
                 _renderer.ForceFullRepaint();
                 return;
             }
@@ -488,7 +522,7 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
-        public void HandleRight()
+        public async Task HandleRight()
         {
             var items = GetFlatVisibleItems();
             if (SelectedIndex >= 0 && SelectedIndex < items.Count)
@@ -496,8 +530,9 @@ namespace ETL_SQL.TUI.UI
                 var item = items[SelectedIndex];
                 if (item.Node.IsExpandable && !item.Node.IsExpanded && !item.Node.IsParentNav)
                 {
+                    await EnsureLoadedAsync(item.Node);
                     item.Node.IsExpanded = true;
-                    if (!item.Node.IsLoaded)
+                    if (!item.Node.IsLoaded && item.Node.Kind == SidebarNodeKind.Directory)
                     {
                         LoadChildren(item.Node);
                     }

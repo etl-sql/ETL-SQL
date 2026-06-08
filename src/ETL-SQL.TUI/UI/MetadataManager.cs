@@ -86,6 +86,13 @@ namespace ETL_SQL.TUI.UI
             return await ds.GetColumnsAsync();
         }
 
+        public async Task<IEnumerable<string>> GetViewsAsync(string connectionName)
+        {
+            if (!_connections.TryGetValue(connectionName, out var ds)) return Enumerable.Empty<string>();
+            if (ds is IDatabaseSource db) return await db.GetViewsAsync();
+            return Enumerable.Empty<string>();
+        }
+
         /// <summary>
         /// Looks up a data source in the live execution context (e.g. a #temp table
         /// materialized by SELECT … INTO during the last run), which the static script
