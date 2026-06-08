@@ -29,6 +29,9 @@ namespace ETL_SQL.TUI.UI
             new PaletteCommand("Publish to Portal", null, e => e.PublishToPortal()),
             new PaletteCommand("Reset portal connection", null, e => { e.ResetPortalConnection(); return Task.CompletedTask; }),
 
+            // ── Transactions ──
+            new PaletteCommand("Rollback all transactions", null, e => e.RollbackAllTransactionsCommand()),
+
             // ── Run / format ──
             new PaletteCommand("Run script", "F5", e => e.HandleKey(Key(ConsoleKey.F5))),
             new PaletteCommand("Run statement at cursor", "Shift+F5", e => e.HandleKey(Key(ConsoleKey.F5, shift: true))),

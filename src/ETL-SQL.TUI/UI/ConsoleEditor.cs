@@ -453,6 +453,37 @@ namespace ETL_SQL.TUI.UI
             _renderer.ShowStatus("Portal connection reset — Publish will ask for the URL and login again.");
         }
 
+        /// <summary>Rolls back every open transaction after confirming with the user; reports to Messages.</summary>
+        public async Task RollbackAllTransactionsCommand()
+        {
+            int count = _evaluator.TranCount;
+            if (count == 0)
+            {
+                _renderer.ShowStatus("No active transactions to roll back.");
+                return;
+            }
+
+            var answer = await ShowPrompt($"Roll back {count} open transaction(s)? This cannot be undone. (y/n)", "");
+            if (string.IsNullOrEmpty(answer) || !answer.TrimStart().StartsWith("y", StringComparison.OrdinalIgnoreCase))
+            {
+                _renderer.ShowStatus("Rollback cancelled.");
+                return;
+            }
+
+            try
+            {
+                await _evaluator.RollbackAllTransactions();
+                _evaluator.Log($"[ROLLBACK] Rolled back {count} open transaction(s).", ConsoleColor.Yellow);
+                _renderer.ShowStatus($"Rolled back {count} transaction(s).");
+            }
+            catch (Exception ex)
+            {
+                // Surface failure without leaking provider-specific detail.
+                _evaluator.Log("[ROLLBACK ERROR] Failed to roll back all transactions.", ConsoleColor.Red);
+                _renderer.ShowStatus($"Rollback failed: {ex.Message}");
+            }
+        }
+
         private Task PublishError(string detail) =>
             ShowInfoOverlay("Publish failed", $"{detail}\n\nPress any key to close.", "");
 

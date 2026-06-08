@@ -51,6 +51,7 @@ namespace ETL_SQL.Tests.UI
             Assert.Contains(CommandPalette.Commands, c => c.Title == "Serve report in browser");
             Assert.Contains(CommandPalette.Commands, c => c.Title == "Publish to Portal");
             Assert.Contains(CommandPalette.Commands, c => c.Title == "Reset portal connection");
+            Assert.Contains(CommandPalette.Commands, c => c.Title == "Rollback all transactions");
         }
 
         [Fact]
