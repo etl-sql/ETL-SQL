@@ -41,13 +41,13 @@
 
 ### TUI — Architecture Doc Gaps
 
-- [ ] **Rewrite `TuiEditor.md` §1 Overview** — Currently states "single-document editor, no tab system." Reality: full multi-tab system (Ctrl+T/W, Alt+←/→, per-tab session save/restore) is implemented and well-tested.
-- [ ] **Add Output tab to `TuiEditor.md` lower-panel table** — Fourth F4 stop (`OutputPanel`, `OutputEntry`, `OutputKind`) is not mentioned in the architecture doc.
-- [ ] **Document Command Palette in `TuiEditor.md`** — `CommandPalette.cs` with 21 commands and Alt+P binding is missing entirely from the architecture doc.
-- [ ] **Document `InfoAtCursor` in `TuiEditor.md`** — Shift+F1 keyword help + Ctrl+L lineage-at-cursor feature is not described.
-- [ ] **Document mouse support in `TuiEditor.md`** — Click, drag-select, tab-bar click, sidebar click, and scroll wheel are all implemented but absent from the architecture doc.
-- [ ] **Add missing named components to `TuiEditor.md` component table** — `StatusBar`, `BottomTabStrip`, `ResultSetNav`, `TabBarLayout`, `ReportLauncher`, `SuggestionEngine` are all real classes with tests but not listed.
-- [ ] **Update `Presentation_Standards.md` Rules 6 + 9** — Both reference `Application.MainLoop.Invoke` (Terminal.Gui). The TUI uses a custom `IConsoleInterface`/Spectre.Console abstraction — update to describe the actual synchronization mechanism.
+- [x] **Rewrite `TuiEditor.md` §1 Overview** — Currently states "single-document editor, no tab system." Reality: full multi-tab system (Ctrl+T/W, Alt+←/→, per-tab session save/restore) is implemented and well-tested.
+- [x] **Add Output tab to `TuiEditor.md` lower-panel table** — Fourth F4 stop (`OutputPanel`, `OutputEntry`, `OutputKind`) is not mentioned in the architecture doc.
+- [x] **Document Command Palette in `TuiEditor.md`** — `CommandPalette.cs` with 24 commands and Alt+P binding is missing entirely from the architecture doc.
+- [x] **Document `InfoAtCursor` in `TuiEditor.md`** — Shift+F1 keyword help + Ctrl+L lineage-at-cursor feature is not described.
+- [x] **Document mouse support in `TuiEditor.md`** — Click, drag-select, tab-bar click, sidebar click, and scroll wheel are all implemented but absent from the architecture doc.
+- [x] **Add missing named components to `TuiEditor.md` component table** — `StatusBar`, `BottomTabStrip`, `ResultSetNav`, `TabBarLayout`, `ReportLauncher`, `SuggestionEngine` are all real classes with tests but not listed.
+- [x] **Update `Presentation_Standards.md` Rules 6 + 9** — Remove obsolete `Application.MainLoop.Invoke` (Terminal.Gui) requirements, document REPL packet locking and editor-loop console serialization, and record the interactive IDE live-update gap.
 
 ### TUI — Test Gaps
 

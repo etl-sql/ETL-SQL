@@ -1,4 +1,4 @@
-﻿# ETL-SQL Presentation Layer Standards
+# ETL-SQL Presentation Layer Standards
 
 **Applies to ETL-SQL 0.7.0 — Established with the ScriptOutput / IOutputSink architecture**
 
@@ -90,9 +90,7 @@ progress, or VS Code sidebar showing artifacts from a previous file after openin
 The Execute Tree tab must update as the evaluator adds nodes — not only after execution
 completes. Displaying a snapshot only at completion is not compliant.
 
-For the TUI, live updates are marshalled via `Application.MainLoop.Invoke`. For VS Code,
-they are streamed as `type: "progress"` JSON packets. Both must produce visible updates
-during execution, not after.
+For the TUI REPL, execution-tree snapshots are emitted as `type: "progress"` JSON packets on a 100 ms heartbeat and once more at completion. The interactive IDE currently awaits evaluation and redraws in `ConsoleEditor.ExecuteSource` after execution completes; it does not yet satisfy this rule for long-running scripts. A compliant interactive implementation must schedule periodic redraws through the editor loop while evaluation is active. VS Code consumes the REPL progress packets and must update its views as packets arrive.
 
 ### Rule 7: Error Messages Must Be Sanitized Before Display
 
@@ -131,7 +129,7 @@ JSON packet captured from stdout.
 the evaluator runs handlers concurrently in some configurations. Both methods must be
 thread-safe. Implementations must synchronize access before touching any UI state.
 
-For the TUI: `Application.MainLoop.Invoke` is the required synchronization mechanism.
+`IConsoleInterface` is a rendering abstraction, not a synchronization mechanism. Interactive IDE console writes must remain serialized by the editor loop; background work may update only thread-safe model state and must request a redraw rather than writing to the console directly. REPL mode serializes complete JSON packets with `ReplUi._writeLock`.
 For JSON streaming: writes to stdout must be synchronized (Console output is thread-safe
 on .NET but the packet sequencing must be protected).
 
@@ -142,7 +140,8 @@ JSON packets in VS Code output.
 
 No network call, file I/O, or long computation may execute synchronously on the UI thread.
 All `ExecutionSession.ExecuteAsync` calls must be `await`ed from an async context. The TUI
-must use `Task.Run` or `await` patterns that return control to `Application.MainLoop`.
+must use asynchronous operations that keep input and redraw processing responsive; any
+CPU-bound work moved to `Task.Run` must publish state back through the editor loop.
 
 **Violation indicator:** The TUI freezing or becoming unresponsive during script execution.
 
@@ -337,6 +336,6 @@ output pipeline:
 - [ ] TUI display tests do not call engine code directly
 - [ ] No credentials in `ScriptOutput`, `OutputMessage`, or JSON packets
 - [ ] All async engine calls properly awaited (no sync-over-async)
-- [ ] `MainLoop.Invoke` used for all TUI updates from async callbacks
+- [ ] Interactive TUI console writes are serialized by the editor loop; background callbacks update thread-safe model state and request redraws
 - [ ] New `MessageCategory` or packet `type` values handled gracefully by consumers
 - [ ] `MessageCategory.Security` messages for all security-relevant events

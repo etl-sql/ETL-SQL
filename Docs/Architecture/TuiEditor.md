@@ -8,7 +8,7 @@ For the overall presentation layer boundary (output contracts, ANSI rendering), 
 
 ## 1. Overview
 
-The TUI is a **single-document editor** — one file is open at a time. There is no tab system; opening a new file replaces the current buffer.
+The TUI is a **multi-tab editor** — multiple files can be open concurrently in separate tabs. Tabs can be created, closed, and navigated using keyboard shortcuts (`Ctrl+T` to open a new tab, `Ctrl+W` to close the active tab, and `Alt+Left/Right Arrow` to switch tabs). Each tab maintains its own `TabState`, including buffer contents, cursor and selection positions, scroll offsets, diagnostics, cached query results and telemetry, and lower-panel display state. Undo/redo history is editor-wide rather than stored per tab; creating a new tab clears the shared history.
 
 ```
 ConsoleEditor.Run()  ←── Main loop
@@ -18,7 +18,8 @@ ConsoleEditor.Run()  ←── Main loop
      │        ├─ EditorPanel          (buffer + line numbers + syntax highlighting)
      │        ├─ MessageTreePanel     (execution tree left, message log right)
      │        ├─ ResultsPanel         (result grid, filter, compare mode)
-     │        └─ PerformancePanel     (metrics dashboard)
+     │        ├─ PerformancePanel     (metrics dashboard)
+     │        └─ OutputPanel          (persistent served URLs/exported file paths list)
      │
      └─ InputHandler.HandleKey()  ──► Buffer mutations + command dispatch
               │
@@ -39,9 +40,16 @@ The top-level orchestrator. Owns the buffer, renderer, input handler, evaluator,
 ```csharp
 while (!_isExiting)
 {
-    _renderer.Render(_buffer, _evaluator, filePath, isDirty, width, height);
-    var key = Console.ReadKey(intercept: true);
-    await _input.HandleKey(key);
+    _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
+    var keyOpt = await ReadKeyOrHandleMouse();
+    if (keyOpt.HasValue)
+    {
+        var key = keyOpt.Value;
+        if (!_renderer.PromptVisible)
+        {
+            await _input.HandleKey(key);
+        }
+    }
 }
 ```
 
@@ -103,21 +111,9 @@ When the undo stack exceeds 100 entries the oldest entry is dropped.
 
 ---
 
-### `EtlSqlHighlighter`
+### `ETLSuggestEngine` Syntax Highlighting
 
-Regex-based tokenizer for **terminal syntax coloring only** — it does not use the full `Lexer` from `ETL-SQL.Core`. This keeps the TUI highlight path fast and independent of parser failures.
-
-**Processing order** (earlier patterns shadow later ones):
-
-| Priority | Pattern | Color |
-|----------|---------|-------|
-| 1 | `'[^']*'` or `"[^"]*"` | String |
-| 2 | `--.*` | Comment |
-| 3 | `@\w+` | Variable |
-| 4 | `\[[^\]]*\]` | Bracket / quoted identifier |
-| 5 | Reserved keywords | Keyword / DdlKeyword / ControlFlow |
-| 6 | Built-in functions | Function |
-| 7 | Data type names | DataType |
+`ETLSuggestEngine.HighlightLine()` provides terminal syntax coloring without invoking the full parser. It scans a source line into Spectre.Console markup, carries multiline-comment state between lines, clips output to the visible horizontal viewport, redacts encrypted literals, and can apply semantic coloring using pre-scanned table aliases. Colors come from the active `TuiTheme` syntax palette.
 
 ---
 
@@ -192,6 +188,7 @@ Computes the panel layout and writes ANSI escape sequences for each frame via Sp
 | Default | `MessageTreePanel` — execution tree left, messages right | F4 (third press) |
 | Results | `ResultsPanel` — scrollable result grid with filter | F4 (first press) |
 | Performance | `PerformancePanel` — timing/memory/spill metrics | F4 (second press) |
+| Output | `OutputPanel` — persistent list of served URLs and exported files | F4 (fourth press) |
 | Compare | `ResultsPanel.RenderCompare` — all result sets stacked | F7 |
 
 **Compare mode:**  
@@ -201,11 +198,11 @@ Computes the panel layout and writes ANSI escape sequences for each frame via Sp
 
 | Zone | Content |
 |------|---------|
-| Left | `F1:Help  F5:Run  F6:Focus  F4:Panel` — always visible |
-| Center | `● filename.etlsql` + active-mode pill (`PIPELINE` / `RESULTS` / `PERF` / `COMPARE` / `✗ ERROR`) |
+| Left | Clickable shortcuts for Help, Run, Theme, Focus, Explorer, Panel, Report, Save, and Exit |
+| Center | `● filename.etlsql` + active-mode pill (`PIPELINE` / `RESULTS` / `PERF` / `OUTPUT` / `COMPARE` / `✗ ERROR`) |
 | Right | `Ln X, Col Y  ⏱ elapsed` |
 
-The mode pill is color-coded: grey for Pipeline, yellow for Results/Focus, cyan for Perf, magenta for Compare, red for Error.
+The mode pill is color-coded: grey for Pipeline, yellow for Results/Focus, cyan for Perf, green for Output, magenta for Compare, red for Error.
 
 **State properties on `EditorRenderer`:**
 
@@ -213,6 +210,7 @@ The mode pill is color-coded: grey for Pipeline, yellow for Results/Focus, cyan 
 |----------|---------|
 | `ResultsVisible` | ResultsPanel is the active lower panel |
 | `PerformanceVisible` | PerformancePanel is the active lower panel |
+| `OutputVisible` | OutputPanel is the active lower panel |
 | `ResultsFocus` | Arrow keys route to results scrolling |
 | `IsBottomMaximized` | Lower panel takes ~80% of terminal height |
 | `FilterText` | Active row filter for single results view |
@@ -295,19 +293,27 @@ Routes `ConsoleKeyInfo` events to the correct handler. Autocomplete overlay capt
 |-----|--------|
 | **View** | |
 | F1 | Help overlay (any key to close) |
-| F4 | Cycle lower panel: Pipeline+Messages → Results → Perf |
-| F6 | Toggle focus: Editor ↔ Results panel |
+| F3 | Cycle theme |
+| F4 | Cycle lower panel: Pipeline+Messages → Results → Performance → Output |
+| F6 | Cycle focus among editor, sidebar, and the active lower panel |
 | F7 | Enter / exit Compare mode |
 | F8 | Cycle active pane in Compare mode |
+| F9 / Ctrl+B | Toggle file explorer |
+| Alt+R | Toggle terminal report preview |
 | Ctrl+M | Maximize / restore lower panel |
 | **Execution** | |
 | F5 | Run entire script |
 | Shift+F5 | Run statement at cursor |
-| Ctrl+R | Clear all results and output |
+| Ctrl+F5 | Run selected text |
+| Ctrl+Shift+R | Serve report in browser |
+| Ctrl+R | Clear query results |
 | **File** | |
 | Ctrl+S | Save (Ctrl+Shift+S = Save As) |
+| F2 | Save |
 | Ctrl+O | Open file (with tab-completion) |
 | Ctrl+N | New file |
+| Ctrl+T / Ctrl+W | Open a new tab / close the active tab |
+| Alt+Left / Right | Switch to previous / next tab |
 | Ctrl+P | Export active result set to CSV |
 | Ctrl+Q | Exit |
 | **Editing** | |
@@ -320,10 +326,13 @@ Routes `ConsoleKeyInfo` events to the correct handler. Autocomplete overlay capt
 | Tab / Shift+Tab | **Snippet mode:** jump to next / previous `«placeholder»`; otherwise indent / dedent (selection-aware) |
 | Escape | **Snippet mode:** exit snippet mode; otherwise clear multi-cursors |
 | F2 (while F1 help overlay open) | Toggle help overlay page: keyboard reference ↔ snippet reference |
-| Ctrl+I / Alt+F | Format SQL (Beautifier) |
+| Ctrl+I / Alt+F / F12 | Format SQL (Beautifier) |
 | Ctrl+Space | Trigger autocomplete |
 | Alt+Up / Down | Add cursor above / below |
 | Escape | Clear multi-cursors |
+| Alt+P / Ctrl+Shift+P | Open command palette |
+| Shift+F1 | Show help for the keyword or function at the cursor |
+| Ctrl+L | Show lineage for the identifier at the cursor |
 | **Navigation** | |
 | Ctrl+F | Find text (Filter rows when Results focused) |
 | Ctrl+H | Replace text |
@@ -334,6 +343,50 @@ Routes `ConsoleKeyInfo` events to the correct handler. Autocomplete overlay capt
 | Shift+Arrows | Extend selection |
 | Ctrl+Up / Down | Scroll active panel (line) |
 | Ctrl+PgUp / PgDn | Scroll active panel (page) |
+
+---
+
+### `OutputPanel`
+
+Renders the bottom-pane view for output paths and served URLs.
+
+**Features:**
+- Persistent list of served URLs (interactive/clickable hyperlinks) and exported report/file paths.
+- Sourced from `OutputEntry` records consisting of an `OutputKind` (Server, Pdf, Markdown, Csv, File, Portal), locations, and timestamps.
+- Focused list navigation (Up/Down arrows to select, Enter to open URL/file via OS shell, `C` key to copy location to clipboard).
+
+---
+
+### `CommandPalette`
+
+Manages the inline Command Palette (Alt+P or Ctrl+Shift+P).
+
+**Features:**
+- Exposes 24 editor/reporting commands (e.g. Save, Run, Format, Export, serve reports in browser, publish to Portal, cycle themes/panels).
+- Supports case-insensitive substring and subsequence filtering as the user types to quickly narrow commands.
+
+---
+
+### `InfoAtCursor`
+
+Handles context-aware help and lineage analysis at the editor cursor position.
+
+**Features:**
+- **Help at Cursor (`Shift+F1`)**: Retrieves markdown-formatted documentation for the function or SQL keyword under the primary cursor, querying the engine's built-in registries.
+- **Lineage at Cursor (`Ctrl+L`)**: Resolves columns and tables under the cursor to display transformation lineage and a structured ASCII flow graph mapping sources to targets. If no lineage is directly available at the cursor, displays a list of all active database identifiers that have captured lineage.
+
+---
+
+### Mouse Support
+
+The TUI supports interactive mouse actions across all layout regions:
+- **Editor Area**: Clicking sets the cursor position. Drag-selecting with the left mouse button extends the selection range.
+- **Scroll Wheel**: Scrolling the mouse wheel anywhere scrolls the viewport of the targeted/underlying panel (editor, results, output, tree/messages, sidebar).
+- **Tab Bar**: Clicking a tab switches the active editor tab. Clicking the `x` on a tab closes it. Clicking the `+` button opens a new blank tab.
+- **Sidebar**: Clicking sidebar items selects/highlights them; double-clicking (or pressing Enter on selected) performs context actions like loading a file/folder.
+- **Status Bar / Help Bar**: Clicking any of the buttons (e.g., `F1:Help`, `F5:Run`) triggers their corresponding key binding action.
+- **Bottom Tab Strip**: Clicking a tab (Pipeline, Results, Performance, Output) switches the lower panel view. In Results view, clicking the right-aligned `◀` or `▶` arrows cycles the active result set.
+- **Compare Mode**: Clicking inside any stacked result pane selects it, shifting focus to that pane for keyboard scrolling.
 
 ---
 
@@ -362,17 +415,65 @@ void Render(IConsoleInterface console, int x, int y, int width, int height, int 
 
 Renders the primary editor workspace area, writing line numbering gutters and syntax-colored script lines. It evaluates active selection bounds and applies inverted contrast markers (`RenderLineWithSelection`).
 
-### `MessagePanel`
-**File:** [MessagePanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MessagePanel.cs)  
-**Class:** [MessagePanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MessagePanel.cs#L7)
+### `MessageTreePanel`
+**File:** [MessageTreePanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MessageTreePanel.cs)
+**Class:** [MessageTreePanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/MessageTreePanel.cs#L15)
 
-Renders real-time script output messages. It styles system notifications based on diagnostic severity levels (Red for Error, Yellow for Warning, Green/Cyan for info).
+Lower panel that shows the execution tree on the left and message log on the right. Manages independent scroll boundaries for the tree list and query log lines, parsing Spectre colors on text lines. Replaces the separate MessagePanel + TreePanel pair.
 
-### `TreePanel`
-**File:** [TreePanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/TreePanel.cs)  
-**Class:** [TreePanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/TreePanel.cs#L12)
+### `StatusBar`
+**File:** [StatusBar.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/StatusBar.cs)
+**Class:** [StatusBar](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/StatusBar.cs#L22)
 
-Displays active script pipeline stages as a hierarchical execute tree. It queries the evaluator's telemetry nodes to visualize parallel branches.
+Defines layout buttons for the bottom status/help bar (e.g. `F1:Help`, `F5:Run`, etc.). Shares button geometries and labels for rendering and mouse hit-testing, mapping clicks to keyboard dispatch events.
+
+### `BottomTabStrip`
+**File:** [BottomTabStrip.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/BottomTabStrip.cs)
+**Class:** [BottomTabStrip](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/BottomTabStrip.cs#L14)
+
+Coordinates tab selection drawn immediately above the lower panel, defining bounds for hitting tab options (Pipeline, Results, Performance, Output).
+
+### `ResultSetNav`
+**File:** [ResultSetNav.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ResultSetNav.cs)
+**Class:** [ResultSetNav](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ResultSetNav.cs#L10)
+
+Calculates geometry and hit boundaries for the result set pager arrows (`◀ index/count ▶`) drawn on the right side of the bottom tab strip.
+
+### `TabBarLayout`
+**File:** [TabBarLayout.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/TabBarLayout.cs)
+**Class:** [TabBarLayout](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/TabBarLayout.cs#L12)
+
+Computes tab sizes, title labeling, close button columns, and new-tab `+` button placement coordinates for the multi-tab layout at the top of the editor.
+
+### `ReportLauncher`
+**File:** [ReportLauncher.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReportLauncher.cs)
+**Class:** [ReportLauncher](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReportLauncher.cs#L14)
+
+Resolves local report player paths (`ETL-SQL.ReportPlayer`) in production or dev directories, spawning background processes, capturing served URLs, and opening web browsers.
+
+### `SuggestionEngine`
+**File:** [SuggestionProviders.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L166)
+**Class:** [SuggestionEngine](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/SuggestionProviders.cs#L166)
+
+Drives autocomplete keyword, function, and identifier scanning, managing snippet placeholder substitutions and parsing suggestion context maps.
+
+### `CommandPalette`
+**File:** [CommandPalette.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/CommandPalette.cs)
+**Class:** [CommandPalette](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/CommandPalette.cs#L17)
+
+Curates available TUI operations (like Save, Format, Theme, Serve) and performs substring/subsequence scoring to filter selections in the interactive Ctrl+Shift+P overlay.
+
+### `OutputPanel`
+**File:** [OutputPanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/OutputPanel.cs)
+**Class:** [OutputPanel](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/OutputPanel.cs#L32)
+
+Drawn in the bottom panel to manage persistent served URLs and exported paths, allowing users to scroll, copy, or open files using the default OS shell.
+
+### `InfoAtCursor`
+**File:** [InfoAtCursor.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/InfoAtCursor.cs)
+**Class:** [InfoAtCursor](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/InfoAtCursor.cs#L18)
+
+Finds words under the text cursor to generate SQL help sheets (`Shift+F1`) or fetch transformation data lineage summaries (`Ctrl+L`) with matching ASCII dataflow diagrams.
 
 ### `ReportPreviewPanel`
 **File:** [ReportPreviewPanel.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.TUI/UI/ReportPreviewPanel.cs)  
