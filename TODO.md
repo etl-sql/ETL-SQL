@@ -57,8 +57,8 @@
 - [ ] **Add narrow/monochrome terminal render tests** — Exercise minimum supported dimensions, `NO_COLOR`, ASCII fallback, no-mouse mode, and resize transitions without negative layout sizes or out-of-bounds cursor writes.
 - [ ] **Add tests for `Ctrl+H` Replace** — No `ReplaceTests.cs`; only appears in command palette integration.
 - [ ] **Add tests for `Ctrl+G` Go to line** — No dedicated unit test for this key dispatch.
-- [ ] **Add tests for Shift+Tab in snippet mode** — `AutocompleteControllerTests` covers `FindPrevPlaceholder` logic but not the `InputHandler` dispatch path.
-- [ ] **Add tests for `F2` help-page toggle** — No test for the F2 → flip-help-page branch inside the help overlay.
-- [ ] **Add tests for `Ctrl+F5` run selected text** — Not tested as a key dispatch path.
-- [ ] **Add tests for `Shift+F5` run statement at cursor** — Not tested as a key dispatch path.
-- [ ] **Add tests for `Alt+R` report preview toggle** — `ReportPreviewTests.cs` covers page navigation but not the toggle key itself.
+- [x] **Add tests for Shift+Tab in snippet mode** — `KeyDispatchTests` drives Shift+Tab in snippet mode and asserts the selection moves to the previous placeholder.
+- [x] **Add tests for `F2` help-page toggle** — `KeyDispatchTests` asserts F2 flips `HelpPageIndex` while the help overlay is visible.
+- [x] **Add tests for `Ctrl+F5` run selected text** — `KeyDispatchTests` selects text, dispatches Ctrl+F5, and verifies a result set was produced.
+- [x] **Add tests for `Shift+F5` run statement at cursor** — `KeyDispatchTests` dispatches Shift+F5 and verifies the statement executed.
+- [x] **Add tests for `Alt+R` report preview toggle** — `KeyDispatchTests` asserts Alt+R toggles `ReportVisible`.
