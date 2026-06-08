@@ -67,6 +67,20 @@ namespace ETL_SQL.Tests.UI
         }
 
         [Fact]
+        public async Task AnalyzeAsync_IsIndependentPerCall_LatestDocumentWins()
+        {
+            // Each analysis reflects only its own source (no shared mutable state), which is what
+            // makes the debounced "latest document wins" swap safe.
+            var e = NewEditor();
+            var (_, stale) = await e.AnalyzeAsync("SELECT @first;", logToMessages: false);
+            var (_, latest) = await e.AnalyzeAsync("SELECT 1;", logToMessages: false);
+
+            Assert.NotEmpty(stale);                  // @first is undeclared
+            Assert.NotSame(stale, latest);           // distinct lists, never mutated in place
+            Assert.DoesNotContain(latest, d => d.Message.Contains("@first")); // no carry-over
+        }
+
+        [Fact]
         public void ScheduleLiveAnalysis_Headless_IsNoOp()
         {
             // Tests run headless; the debounced background pass must not be scheduled.

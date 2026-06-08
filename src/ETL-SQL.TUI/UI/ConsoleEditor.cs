@@ -787,6 +787,20 @@ namespace ETL_SQL.TUI.UI
 
         private readonly Queue<ConsoleKeyInfo> _pendingKeys = new();
 
+        /// <summary>Test seam: queue keystrokes consumed by the next input reads (e.g. to answer a prompt).</summary>
+        internal void EnqueueKeys(params ConsoleKeyInfo[] keys)
+        {
+            foreach (var k in keys) _pendingKeys.Enqueue(k);
+        }
+
+        /// <summary>Test seam: queue a typed answer for a <see cref="ShowPrompt"/>, terminated by Enter.</summary>
+        internal void EnqueuePromptResponse(string text)
+        {
+            foreach (var ch in text)
+                _pendingKeys.Enqueue(new ConsoleKeyInfo(ch, ConsoleKey.NoName, false, false, false));
+            _pendingKeys.Enqueue(new ConsoleKeyInfo('\r', ConsoleKey.Enter, false, false, false));
+        }
+
         private async Task<ConsoleKeyInfo?> ReadKeyOrHandleMouse()
         {
             if (_pendingKeys.Count > 0)
@@ -1818,7 +1832,7 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>Snapshots the open tabs + cursors for persistence. Dirty buffers carry a
         /// recovery snapshot — except those containing secrets, which are never written.</summary>
-        private WorkspaceSession CaptureSession()
+        internal WorkspaceSession CaptureSession()
         {
             var s = new WorkspaceSession
             {

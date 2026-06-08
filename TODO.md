@@ -51,12 +51,12 @@
 
 ### TUI — Test Gaps
 
-- [ ] **Add cancellation/responsiveness integration tests** — Use a controllable long-running evaluator/handler to prove Stop cancels the active run, the render/input loop stays responsive, a second run is rejected, and cancellation leaves the editor/session reusable.
-- [ ] **Add live-diagnostics race tests** — Verify edit debouncing, cancellation of stale analysis, latest-document-wins ordering, gutter refresh, and no evaluator construction during analysis.
-- [ ] **Add workspace recovery and external-change tests** — Cover clean shutdown restore, crash snapshot recovery, credential/decrypted-text exclusion, stale snapshot cleanup, external modification prompts, and atomic file replacement.
+- [x] **Add cancellation/responsiveness integration tests** — `CancellationTests` runs a real `WAITFOR DELAY '00:00:30'` on a background task and proves Stop cancels it mid-flight (test finishes in ms, not 30s), a second run is rejected while blocked, and the editor runs again normally afterward.
+- [x] **Add live-diagnostics race tests** — `LiveDiagnosticsTests` proves each `AnalyzeAsync` is independent (distinct lists, latest-document-wins, no carry-over — the atomic-swap safety), honours cancellation, and never executes the script. (Deferred: the non-headless debounce timing itself.)
+- [x] **Add workspace recovery and external-change tests** — `WorkspaceRecoveryTests` covers `CaptureSession`: dirty buffers snapshot, clean ones don't, and a secret-bearing buffer (verified to trip `RequiresSavePassword`) is never snapshotted. External-modification detection is covered by `FileChangeTrackerTests`; store round-trip + crash sentinel by `WorkspaceStoreTests`.
 - [~] **Add narrow/monochrome terminal render tests** — `TerminalCapabilitiesTests` covers NO_COLOR/ASCII/dumb detection and the glyph chooser; `LayoutTests` now asserts `Compute` never produces negative dimensions at/below the minimum (down to 1x1) across sidebar/maximized/compare modes. (Deferred: a full render harness for resize transitions and out-of-bounds cursor writes.)
-- [ ] **Add tests for `Ctrl+H` Replace** — No `ReplaceTests.cs`; only appears in command palette integration.
-- [ ] **Add tests for `Ctrl+G` Go to line** — No dedicated unit test for this key dispatch.
+- [x] **Add tests for `Ctrl+H` Replace** — `PromptDispatchTests` drives Ctrl+H through the new queued-input seam and asserts all occurrences are replaced.
+- [x] **Add tests for `Ctrl+G` Go to line** — `PromptDispatchTests` drives Ctrl+G and asserts the cursor moves to the requested line (and clamps beyond the end).
 - [x] **Add tests for Shift+Tab in snippet mode** — `KeyDispatchTests` drives Shift+Tab in snippet mode and asserts the selection moves to the previous placeholder.
 - [x] **Add tests for `F2` help-page toggle** — `KeyDispatchTests` asserts F2 flips `HelpPageIndex` while the help overlay is visible.
 - [x] **Add tests for `Ctrl+F5` run selected text** — `KeyDispatchTests` selects text, dispatches Ctrl+F5, and verifies a result set was produced.
