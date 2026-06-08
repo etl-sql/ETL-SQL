@@ -12,6 +12,7 @@ namespace ETL_SQL.Common
         void WriteAllText(string path, string contents);
         string[] GetDirectories(string path);
         string[] GetFiles(string path, string searchPattern);
+        DateTime GetLastWriteTimeUtc(string path);
     }
 
     public class PhysicalFileSystem : IFileSystem
@@ -22,5 +23,6 @@ namespace ETL_SQL.Common
         public void WriteAllText(string path, string contents) => File.WriteAllText(path, contents);
         public string[] GetDirectories(string path) => Directory.GetDirectories(path);
         public string[] GetFiles(string path, string searchPattern) => Directory.GetFiles(path, searchPattern);
+        public DateTime GetLastWriteTimeUtc(string path) => File.GetLastWriteTimeUtc(path);
     }
 }

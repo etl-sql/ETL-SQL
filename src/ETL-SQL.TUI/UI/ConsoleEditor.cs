@@ -47,6 +47,7 @@ namespace ETL_SQL.TUI.UI
         private readonly Services.IClipboardService _clipboard;
         private readonly SecurityService _security;
         private readonly EditorFileHandler _fileHandler;
+        private readonly FileChangeTracker _fileTracker;
         private string? _promptResult;
         private bool _promptResolved;
         internal string _filePath;
@@ -74,6 +75,7 @@ namespace ETL_SQL.TUI.UI
             _evaluator.Telemetry.IsProfiling = true;
             _renderer = new EditorRenderer(_buffer, _evaluator);
             _fileHandler = new EditorFileHandler(new PhysicalFileSystem(), _security);
+            _fileTracker = new FileChangeTracker(new PhysicalFileSystem());
             _metadata = new MetadataManager(_evaluator, _connections);
             var helpRegistry = Program.ServiceProvider.GetService<Core.Interfaces.ILanguageHelpRegistry>();
             _helpRegistry = helpRegistry;
@@ -106,6 +108,7 @@ namespace ETL_SQL.TUI.UI
             _filePath = path;
             _isDirty = false;
             _undo.Clear();
+            _fileTracker.Record(path);
             _metadata.RefreshConnections(_buffer.GetText(), force: true);
             _renderer._sidebarPanel.Initialize(filePath);
         }
@@ -1398,12 +1401,32 @@ namespace ETL_SQL.TUI.UI
                 _filePath = newPath;
             }
 
+            // Guard against clobbering changes another program made since we loaded/saved.
+            if (_fileTracker.HasChangedExternally(_filePath))
+            {
+                var choice = (await ShowPrompt(
+                    $"{Path.GetFileName(_filePath)} changed on disk. Overwrite / Reload / Cancel? (o/r/c)", ""))
+                    ?.Trim().ToLowerInvariant();
+                if (choice == "r")
+                {
+                    await LoadFile(_filePath);
+                    _renderer.ShowStatus("Reloaded from disk — your unsaved edits were discarded.");
+                    return false;
+                }
+                if (choice != "o")
+                {
+                    _renderer.ShowStatus("Save cancelled.");
+                    return false;
+                }
+            }
+
             var text = _buffer.GetText();
             bool success = await _fileHandler.SaveAsync(_filePath, text, ShowPrompt);
 
             if (success)
             {
                 _isDirty = false;
+                _fileTracker.Record(_filePath);
                 _renderer.ShowStatus($"Saved to {_filePath}");
                 _renderer._sidebarPanel.Initialize(_filePath);
                 return true;
