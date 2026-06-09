@@ -39,6 +39,15 @@ namespace ETL_SQL.Engine.Services
         public static int OperatorMemoryGrantMB(IConfiguration? config)
             => config?.GetValue<int?>("Engine:OperatorMemoryGrantMB") ?? 256;
 
+        /// <summary>
+        /// Process-wide ceiling (MB) on the summed in-memory buffer footprint across concurrent
+        /// operators and jobs. 0 (the default when unset) means unbounded — only the per-operator
+        /// grant and row-count backstops apply. Generous by design so single queries are unaffected;
+        /// it engages under genuine concurrent multi-GB pressure.
+        /// </summary>
+        public static int TotalMemoryGrantMB(IConfiguration? config)
+            => config?.GetValue<int?>("Engine:TotalMemoryGrantMB") ?? 0;
+
         public static long TempTableSpillThresholdRows(IConfiguration? config)
             => config?.GetValue<long?>("Engine:TempTableSpillThresholdRows") ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
 

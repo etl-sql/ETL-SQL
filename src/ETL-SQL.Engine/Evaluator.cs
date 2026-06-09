@@ -491,6 +491,8 @@ namespace ETL_SQL.Engine
             ExternalSortChunkSize = DefaultThresholds.ExternalSortChunkSize(config);
             WindowSpillThreshold = DefaultThresholds.WindowSpillThreshold(config);
             OperatorMemoryGrantMB = DefaultThresholds.OperatorMemoryGrantMB(config);
+            // Configure the process-wide grant pool (shared across concurrent jobs). 0 = unbounded.
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = (long)DefaultThresholds.TotalMemoryGrantMB(config) * 1024 * 1024;
             TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
             
             _options.BatchSize = BatchSize;

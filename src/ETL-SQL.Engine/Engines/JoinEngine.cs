@@ -118,9 +118,15 @@ namespace ETL_SQL.Engine.Engines
 
                     // HYPER-SCALE: Check for disk-spilling threshold (row-count backstop + byte-based grant).
                     long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+                    long joinBufferBytes = RowWidthEstimator.EstimateTotalBytes(allBufferedRows) + RowWidthEstimator.EstimateTotalBytes(joinRows);
                     bool joinExceedsRowLimit = allBufferedRows.Count > _context.JoinSpillThreshold || joinRows.Count > _context.JoinSpillThreshold;
-                    bool joinExceedsByteGrant = RowWidthEstimator.EstimateTotalBytes(allBufferedRows) + RowWidthEstimator.EstimateTotalBytes(joinRows) > grantBytes;
-                    if (hasEquality && (joinExceedsRowLimit || joinExceedsByteGrant))
+                    bool joinExceedsByteGrant = joinBufferBytes > grantBytes;
+                    // Global pressure: spill if other concurrent operators have already committed most
+                    // of the process-wide pool (read-only — the pipeline lease owns this query's footprint).
+                    var arbiter = _context.MemoryArbiter;
+                    bool joinExceedsGlobalGrant = arbiter.TotalBudgetBytes > 0
+                        && arbiter.ReservedBytes + joinBufferBytes > arbiter.TotalBudgetBytes;
+                    if (hasEquality && (joinExceedsRowLimit || joinExceedsByteGrant || joinExceedsGlobalGrant))
                     {
                         _logger.WriteLine($"[yellow]HYPER-SCALE: Memory threshold exceeded ({Math.Max(allBufferedRows.Count, joinRows.Count)} rows). Triggering External Disk-Spilling Join.[/]");
 

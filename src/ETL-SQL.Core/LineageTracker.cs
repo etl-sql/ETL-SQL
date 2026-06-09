@@ -48,7 +48,18 @@ namespace ETL_SQL.Core
         private readonly Dictionary<(string table, string op, string? col, int l, int c, string? f), LineageEntry> _lookup = new();
         private readonly Dictionary<string, Dictionary<string, string>> _latestTableMetadata = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Dictionary<string, Dictionary<string, string>>> _latestColumnMetadata = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _detectedCycles = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> GlobalMetadata { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Nodes (table or table.column) where a lineage cycle was encountered during ancestor
+        /// traversal. Populated lazily by <see cref="GetAncestors"/>. Each cycle is also logged
+        /// once as a warning when first detected.
+        /// </summary>
+        public IReadOnlyCollection<string> DetectedCycles
+        {
+            get { lock (_lock) { return _detectedCycles.ToList(); } }
+        }
  
         public LineageTracker(ILogger logger)
         {
@@ -225,17 +236,30 @@ namespace ETL_SQL.Core
             lock (_lock)
             {
                 var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var path = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var ancestors = new List<LineageEntry>();
-                WalkAncestors(tableName, columnName, visited, ancestors);
+                WalkAncestors(tableName, columnName, visited, path, ancestors);
                 return ancestors;
             }
         }
 
-        private void WalkAncestors(string table, string? column, HashSet<string> visited, List<LineageEntry> collective)
+        private void WalkAncestors(string table, string? column, HashSet<string> visited, HashSet<string> path, List<LineageEntry> collective)
         {
             string key = column != null ? $"{table}.{column}" : table;
+
+            // A node already on the current DFS path is a back-edge — a genuine cycle. The
+            // `visited` set alone can't distinguish this from harmless re-convergent (diamond)
+            // lineage, so the active recursion stack (`path`) is tracked separately.
+            if (path.Contains(key))
+            {
+                if (_detectedCycles.Add(key))
+                    _logger.Warning("Lineage cycle detected involving '{Node}'. The cycle is skipped during traversal; ancestor lineage for this node may be incomplete.", key);
+                return;
+            }
+
             if (visited.Contains(key)) return;
             visited.Add(key);
+            path.Add(key);
 
             var entries = column != null ? GetColumnLineage(table, column) : GetLineage(table);
             foreach (var entry in entries)
@@ -245,9 +269,11 @@ namespace ETL_SQL.Core
                 {
                     var srcTable = entry.SourceTables[i];
                     var srcColumn = (entry.SourceColumns != null && i < entry.SourceColumns.Count) ? entry.SourceColumns[i] : null;
-                    WalkAncestors(srcTable, srcColumn, visited, collective);
+                    WalkAncestors(srcTable, srcColumn, visited, path, collective);
                 }
             }
+
+            path.Remove(key);
         }
 
         public Dictionary<string, string> InheritMetadata(IEnumerable<string> sourceTables, IEnumerable<string> sourceColumns, out string? derivedFromDescriptions)

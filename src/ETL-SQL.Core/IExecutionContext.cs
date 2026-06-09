@@ -203,6 +203,12 @@ namespace ETL_SQL.Core
         int WindowSpillThreshold { get; set; }
         /// <summary>Per-operator memory budget in MB. When the estimated working set exceeds this limit the engine switches to an external (disk-spilling) operator.</summary>
         int OperatorMemoryGrantMB { get; set; }
+        /// <summary>
+        /// Process-wide arbiter that bounds the summed in-memory buffer footprint across concurrent
+        /// operators and jobs (vs <see cref="OperatorMemoryGrantMB"/>, which bounds one operator).
+        /// Defaults to the shared instance; unbounded until <c>Engine:TotalMemoryGrantMB</c> is set.
+        /// </summary>
+        IMemoryGrantArbiter MemoryArbiter => MemoryGrantArbiter.Shared;
         /// <summary>Maximum number of batches held in RAM for #temp tables before spilling.</summary>
         int MaxInMemoryBatches { get; set; }
         /// <summary>Number of rows before subquery results spill to disk.</summary>

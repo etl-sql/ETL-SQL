@@ -24,6 +24,10 @@ namespace ETL_SQL.Engine.Engines
         private readonly WindowEngine _windowEngine;
         private readonly ExternalWindowEngine _externalWindowEngine;
 
+        // Per-query lease into the process-wide memory grant pool. Set for the duration of the
+        // pipeline so the spill helpers can force an early spill under global memory pressure.
+        private IMemoryGrantLease _memLease = UnlimitedMemoryGrantArbiter.Instance.AcquireLease();
+
         public SelectExecutionEngine(IExecutionContext context, ILogger logger)
         {
             _context = context;
@@ -35,6 +39,20 @@ namespace ETL_SQL.Engine.Engines
         }
 
         public async IAsyncEnumerable<DataTable> ExecuteHeavyPipeline(
+            SelectStatement stmt,
+            IAsyncEnumerable<DataTable> sourceBatches,
+            List<SelectColumn> finalColumns,
+            List<string> colNames)
+        {
+            // Hold a grant-pool lease for the lifetime of the pipeline; disposed when the consumer
+            // finishes or abandons enumeration, releasing this query's reserved footprint.
+            using var lease = _context.MemoryArbiter.AcquireLease();
+            _memLease = lease;
+            await foreach (var batch in ExecuteHeavyPipelineCore(stmt, sourceBatches, finalColumns, colNames))
+                yield return batch;
+        }
+
+        private async IAsyncEnumerable<DataTable> ExecuteHeavyPipelineCore(
             SelectStatement stmt,
             IAsyncEnumerable<DataTable> sourceBatches,
             List<SelectColumn> finalColumns,
@@ -135,8 +153,11 @@ namespace ETL_SQL.Engine.Engines
                             break;
                     }
 
+                    long aggBufferedBytes = RowWidthEstimator.EstimateTotalBytes(bufferedForSpill);
                     bool aggNeedsSpill = count >= _context.JoinSpillThreshold
-                        || RowWidthEstimator.EstimateTotalBytes(bufferedForSpill) > aggGrantBytes;
+                        || aggBufferedBytes > aggGrantBytes
+                        // Global pressure: spill if holding this buffer would breach the process-wide pool.
+                        || _memLease.RegisterAndCheckSpill(aggBufferedBytes);
                     if (aggNeedsSpill)
                     {
                         _logger.Info("[SELECT] Aggregate threshold reached ({Count} rows, grant={GrantMB} MB). Switching to ExternalAggregateEngine.", count, _context.OperatorMemoryGrantMB);
@@ -524,14 +545,19 @@ namespace ETL_SQL.Engine.Engines
         {
             if (rows.Count > _context.JoinSpillThreshold) return true;
             long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
-            return RowWidthEstimator.EstimateTotalBytes(rows) > grantBytes;
+            long bytes = RowWidthEstimator.EstimateTotalBytes(rows);
+            if (bytes > grantBytes) return true;
+            // Global pressure: spill if holding this buffer would breach the process-wide pool.
+            return _memLease.RegisterAndCheckSpill(bytes);
         }
 
         private bool ShouldSpillWindow(IReadOnlyList<Row> rows)
         {
             if (rows.Count >= _context.WindowSpillThreshold) return true;
             long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
-            return RowWidthEstimator.EstimateTotalBytes(rows) > grantBytes;
+            long bytes = RowWidthEstimator.EstimateTotalBytes(rows);
+            if (bytes > grantBytes) return true;
+            return _memLease.RegisterAndCheckSpill(bytes);
         }
 
         private async Task<List<Row>> ApplyLimits(List<Row> rows, SelectStatement stmt,
