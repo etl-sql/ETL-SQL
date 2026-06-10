@@ -38,7 +38,8 @@ namespace ETL_SQL.Engine.Handlers
 
             if (registry != null)
             {
-                var datasets = await registry.ListAll("IsAdmin=true");
+                var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
+                var datasets  = await registry.ListAll(callerCtx);
                 foreach (var ds in datasets)
                 {
                     var row = new Row();

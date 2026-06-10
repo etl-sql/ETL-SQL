@@ -72,19 +72,17 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   PUBLIC → caller has read on `FolderId` via `FolderPermissionService.GetEffectivePermissionAsync`;
   PRIVATE → owner or explicit `DatasetAcl` grant. Centralize the rule in the registry so engine + HTTP
   share it.
-- [ ] **1c. Thread caller identity into the engine (close the ACL bypass).** NOTE: the registry-side
-  ACL machinery already exists — `DatasetRegistryService.CanReadAsync` + `CallerContext.Parse`
-  (owner + `DatasetAcl` grants), and `Lookup`/`ListAll` already enforce it. What remains is *threading the
-  real caller* instead of the literal `"IsAdmin=true"` the four handlers still pass. Add a nullable
-  caller-context field on the Evaluator beside `DatasetRegistry` (assigned at `DashboardService.cs:361`);
-  shape to `CallerContext.Parse` — `"UserId=<n>"` for user runs, `"IsAdmin=true"` for scheduled/system
-  jobs. Source the user where the portal builds the evaluator (`ExecutionJobService` `UserId`, lines
-  67/211). Replace the four literal `"IsAdmin=true"` calls. Default unset = unauthenticated (fail closed);
-  non-portal standalone unchanged (registry null). (PUBLIC is still an unconditional allow in
-  `CanReadAsync` — the folder-permission gate is 1b.) Until this lands, `UseDatasetStatementHandler`
-  keeps an **interim folder guard**: PRIVATE datasets are only consumable from a script in their home
-  folder (regression test `DatasetPhase4Tests.UseDataset_PrivateFromDifferentFolder_Throws`). Remove that
-  guard here once real caller identity makes `CanReadAsync` the authority.
+- [x] **1c. Thread caller identity into the engine (close the ACL bypass).** *(done — branch v0.11.0)*
+  Added `Evaluator.DatasetCallerContext` beside `DatasetRegistry`; the four handlers now forward it to
+  `Lookup`/`ListAll` instead of the literal `"IsAdmin=true"`, so `DatasetRegistryService.CanReadAsync`
+  (owner + `DatasetAcl` grants) is the access authority for PRIVATE. The **1a interim folder guard is
+  removed**. Portal wiring: `DashboardService` takes a caller-context ctor arg and sets it where it
+  assigns the registry; `SessionCache` passes `"UserId={userId}"` (interactive viewing as the real user);
+  `ExecutionJobService` snapshot path passes `"IsAdmin=true"` (trusted server-side refresh — the HTTP
+  trigger is already permission-gated, so the user-vs-scheduled refresh *write* split stays 1d). Unset =
+  fail-closed (PRIVATE denied, PUBLIC allowed); non-portal standalone unchanged (registry null). Tests:
+  `DatasetPhase4Tests.UseDataset_PrivateWithoutAccess_Denied` + `ShowDatasets_ForwardsCallerContextToRegistry`.
+  (PUBLIC is still an unconditional allow in `CanReadAsync` — the folder-permission gate is **1b**.)
 - [ ] **1d. Refresh split + serve-stale-with-warning (option a).** Non-owner stale read → serve cached
   parquet + log staleness warning; do **not** re-materialize under consumer identity. `REFRESH DATASET`
   and `CREATE OR ALTER DATASET` query edits require editor/owner. `SHOW DATASETS` lists only what the

@@ -43,7 +43,8 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
         }
 
         var timeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
-        var svc   = new DashboardService(scriptPath, _scopeFactory, timeout);
+        // Interactive viewing runs as the real user so dataset ACLs (CanReadAsync) are enforced.
+        var svc   = new DashboardService(scriptPath, _scopeFactory, timeout, $"UserId={userId}");
         var entry = new Entry(svc, scriptPath);
         _sessions[key] = entry;
 

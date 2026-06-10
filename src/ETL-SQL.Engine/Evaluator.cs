@@ -320,6 +320,13 @@ namespace ETL_SQL.Engine
         public IDatasetRegistry? DatasetRegistry { get; set; }
 
         /// <summary>
+        /// Registry caller-permission string (e.g. "UserId=7" or "IsAdmin=true") used to ACL-gate
+        /// dataset access. Set by the portal host beside <see cref="DatasetRegistry"/>; null/empty
+        /// means fail-closed (PRIVATE datasets denied, PUBLIC still allowed).
+        /// </summary>
+        public string? DatasetCallerContext { get; set; }
+
+        /// <summary>
         /// Unique identifier for the current session.
         /// Setting this also stamps all subsequent log output from this Evaluator
         /// with the session ID for correlation across concurrent sessions.

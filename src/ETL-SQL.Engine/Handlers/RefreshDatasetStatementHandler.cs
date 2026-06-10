@@ -32,7 +32,8 @@ namespace ETL_SQL.Engine.Handlers
                     "Datasets can only be refreshed when a DatasetRegistry is available.",
                     null, stmt.Line, stmt.Column);
 
-            var existing   = await registry.Lookup(stmt.DatasetName, "IsAdmin=true");
+            var callerCtx  = (context as Evaluator)?.DatasetCallerContext ?? "";
+            var existing   = await registry.Lookup(stmt.DatasetName, callerCtx);
             if (existing == null)
                 throw new ExecutionException(
                     $"REFRESH DATASET '{stmt.DatasetName}': dataset not found in the portal registry. " +

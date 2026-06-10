@@ -172,9 +172,11 @@ public class ExecutionJobService : IDisposable
             }
             else
             {
-                // Use an independent DashboardService for snapshots (not the session cache)
+                // Use an independent DashboardService for snapshots (not the session cache).
+                // Snapshot/refresh runs as a trusted server-side job (the HTTP trigger is already
+                // permission-gated); the user-vs-scheduled refresh write split is Phase 1d.
                 var dashboardTimeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
-                await using var svc = new ETL_SQL.ReportHosting.DashboardService(scriptPath, _scopeFactory, dashboardTimeout);
+                await using var svc = new ETL_SQL.ReportHosting.DashboardService(scriptPath, _scopeFactory, dashboardTimeout, "IsAdmin=true");
 
                 if (parameters is { Count: > 0 })
                     await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));

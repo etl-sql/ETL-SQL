@@ -48,28 +48,16 @@ namespace ETL_SQL.Engine.Handlers
                     null, stmt.Line, stmt.Column);
             }
 
-            var existing = await registry.Lookup(stmt.DatasetName, "IsAdmin=true");
+            // Registry enforces the dataset ACL against the executing user (CanReadAsync): a PRIVATE
+            // dataset the caller cannot read resolves to null, surfacing as the "not found" error
+            // below (existence is not leaked). PUBLIC datasets resolve by global name from any folder.
+            var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
+            var existing  = await registry.Lookup(stmt.DatasetName, callerCtx);
             if (existing == null)
                 throw new ExecutionException(
                     $"USE DATASET '{stmt.DatasetName}': dataset not found in the portal registry. " +
                     "Run CREATE DATASET first.",
                     null, stmt.Line, stmt.Column);
-
-            // PUBLIC datasets resolve by global name from any folder (the 1a cross-folder win).
-            // PRIVATE datasets stay confined to scripts in their home folder. This is an INTERIM
-            // guard: the handler still passes "IsAdmin=true" to the registry, which short-circuits
-            // CanReadAsync, so the registry cannot yet enforce the dataset ACL. Phase 1c threads the
-            // executing user's real CallerContext (UserId + groups) into Lookup — at which point
-            // CanReadAsync becomes the access authority and this folder check is removed.
-            if (existing.AccessLevel == ETL_SQL.Core.Data.DatasetAccessLevel.Private)
-            {
-                var folderPath = Path.GetDirectoryName(context.CurrentScriptPath) ?? "";
-                if (!string.Equals(existing.FolderPath, folderPath, StringComparison.OrdinalIgnoreCase))
-                    throw new ExecutionException(
-                        $"This report requires access to dataset '{stmt.DatasetName}' which is set to private. " +
-                        "Contact the report owner to request access or change the dataset to PUBLIC.",
-                        null, stmt.Line, stmt.Column);
-            }
 
             if (IsFreshEnough(existing))
             {

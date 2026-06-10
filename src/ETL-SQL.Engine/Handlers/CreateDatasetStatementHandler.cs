@@ -56,7 +56,8 @@ namespace ETL_SQL.Engine.Handlers
             // ── 3. Staleness check — skip source query if cached data is fresh ─────
             if (registry != null)
             {
-                var existing = await registry.Lookup(stmt.TempTableName, "IsAdmin=true");
+                var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
+                var existing  = await registry.Lookup(stmt.TempTableName, callerCtx);
                 if (IsFreshEnough(existing, stmt.Ttl))
                 {
                     _logger.Debug(

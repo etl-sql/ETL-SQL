@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
@@ -154,15 +153,15 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains(results, r => r.RuleName == "UseBeforeCreate" && r.Severity == LintSeverity.Warning);
         }
 
-        // ── USE DATASET — PRIVATE cross-folder enforcement (engine) ───────────────
+        // ── USE DATASET — PRIVATE ACL enforcement via threaded caller identity (engine) ──
 
         [Fact]
-        public async Task UseDataset_PrivateFromDifferentFolder_Throws()
+        public async Task UseDataset_PrivateWithoutAccess_Denied()
         {
-            // Regression for the 1a IDOR window: a PRIVATE dataset must not be resolvable by its
-            // global name from a script outside its home folder. (Until 1c threads the real caller
-            // identity, UseDatasetStatementHandler enforces this with a folder guard.)
-            var registry = new SingleDatasetRegistry();
+            // 1c: the handler threads the executing user's real CallerContext into the registry,
+            // which ACL-gates PRIVATE datasets. A non-owner cannot resolve a PRIVATE dataset by its
+            // global name — Lookup returns null and USE surfaces "not found" (existence not leaked).
+            var registry = new SingleDatasetRegistry(ownerUserId: 1);
             await registry.RegisterOrUpdate(new DatasetMetadata
             {
                 Name            = "&secret",
@@ -174,19 +173,45 @@ namespace ETL_SQL.Tests.Reporting
             });
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            eval.DatasetRegistry  = registry;
-            eval.CurrentScriptPath = Path.Combine("/folder-b", "report.rptsql");
+            eval.DatasetRegistry      = registry;
+            eval.DatasetCallerContext = "UserId=99";   // not the owner
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(
                 () => eval.Evaluate(Parse("USE DATASET &secret;")));
-            Assert.Contains("private", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("not found", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+            // The handler forwarded the real caller identity — not the old "IsAdmin=true" literal.
+            Assert.Equal("UserId=99", registry.LastLookupPermissions);
         }
 
-        /// <summary>Minimal IDatasetRegistry holding a single dataset, resolved by name.</summary>
-        private sealed class SingleDatasetRegistry : IDatasetRegistry
+        [Fact]
+        public async Task ShowDatasets_ForwardsCallerContextToRegistry()
+        {
+            // The SHOW DATASETS handler must list only what the caller may see — it forwards the
+            // evaluator's caller context to ListAll rather than spoofing admin.
+            var registry = new SingleDatasetRegistry(ownerUserId: 1);
+
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            eval.DatasetRegistry      = registry;
+            eval.DatasetCallerContext = "UserId=7";
+
+            await eval.Evaluate(Parse("SHOW DATASETS;"));
+
+            Assert.Equal("UserId=7", registry.LastListAllPermissions);
+        }
+
+        /// <summary>
+        /// Minimal IDatasetRegistry holding a single dataset, resolved by name. Mimics the real
+        /// registry's ACL gate: PUBLIC always resolves; PRIVATE resolves only for admin or the owner.
+        /// Records the last caller-permission string each method received.
+        /// </summary>
+        private sealed class SingleDatasetRegistry(int ownerUserId) : IDatasetRegistry
         {
             private readonly Dictionary<string, DatasetMetadata> _items = new();
             private int _nextId = 1;
+
+            public string? LastLookupPermissions { get; private set; }
+            public string? LastListAllPermissions { get; private set; }
 
             public Task<int> RegisterOrUpdate(DatasetMetadata metadata)
             {
@@ -196,14 +221,29 @@ namespace ETL_SQL.Tests.Reporting
             }
 
             public Task<DatasetMetadata?> Lookup(string name, string callerPermissions = "")
-                => Task.FromResult(_items.TryGetValue(name, out var m) ? m : null);
+            {
+                LastLookupPermissions = callerPermissions;
+                if (!_items.TryGetValue(name, out var m)) return Task.FromResult<DatasetMetadata?>(null);
+                if (m.AccessLevel == DatasetAccessLevel.Public || CanRead(callerPermissions))
+                    return Task.FromResult<DatasetMetadata?>(m);
+                return Task.FromResult<DatasetMetadata?>(null);
+            }
 
             public Task<bool> Exists(string name) => Task.FromResult(_items.ContainsKey(name));
             public Task SetStale(string name) => Task.CompletedTask;
+
             public Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions)
-                => Task.FromResult<IEnumerable<DatasetMetadata>>(_items.Values.ToList());
+            {
+                LastListAllPermissions = callerPermissions;
+                var visible = _items.Values.Where(m => m.AccessLevel == DatasetAccessLevel.Public || CanRead(callerPermissions));
+                return Task.FromResult<IEnumerable<DatasetMetadata>>(visible.ToList());
+            }
+
             public Task Delete(string name) => Task.CompletedTask;
             public string BuildDatasetFilePath(int datasetId, string name) => $"{name}_{datasetId}.parquet";
+
+            private bool CanRead(string callerPermissions) =>
+                callerPermissions == "IsAdmin=true" || callerPermissions == $"UserId={ownerUserId}";
         }
     }
 }
