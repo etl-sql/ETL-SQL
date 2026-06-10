@@ -15,9 +15,10 @@ namespace ETL_SQL.Engine.Handlers
     /// Handles USE DATASET &amp;name — loads a portal-registered dataset into the calling
     /// script's temp-table namespace.
     ///
-    /// Portal mode: looks up the dataset by name + folder in the registry. If the cache is
-    /// fresh (LastRefresh + TTL &gt; now), loads from Parquet; otherwise re-materialises the
-    /// source query, writes a new Parquet file, and updates the registry.
+    /// Portal mode: resolves the dataset by its globally unique name in the registry (folder-
+    /// independent). Access is enforced by the registry's ACL gate. If the cache is fresh
+    /// (LastRefresh + TTL &gt; now), loads from Parquet; otherwise re-materialises the source
+    /// query, writes a new Parquet file, and updates the registry.
     ///
     /// Non-portal mode: the dataset must already be defined in the current script via
     /// CREATE DATASET — USE DATASET is a no-op since the temp table already exists.
@@ -32,7 +33,6 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (UseDatasetStatement)statement;
 
             var registry   = context is Evaluator e ? e.DatasetRegistry : null;
-            var folderPath = Path.GetDirectoryName(context.CurrentScriptPath) ?? "";
 
             if (registry == null)
             {
@@ -48,21 +48,27 @@ namespace ETL_SQL.Engine.Handlers
                     null, stmt.Line, stmt.Column);
             }
 
-            var existing = await registry.Lookup(stmt.DatasetName, folderPath, "IsAdmin=true");
+            var existing = await registry.Lookup(stmt.DatasetName, "IsAdmin=true");
             if (existing == null)
                 throw new ExecutionException(
-                    $"USE DATASET '{stmt.DatasetName}': dataset not found in the portal registry " +
-                    $"for folder '{folderPath}'. Run CREATE DATASET first.",
+                    $"USE DATASET '{stmt.DatasetName}': dataset not found in the portal registry. " +
+                    "Run CREATE DATASET first.",
                     null, stmt.Line, stmt.Column);
 
-            // Private datasets are only accessible from the folder that owns them
-            if (existing.AccessLevel == ETL_SQL.Core.Data.DatasetAccessLevel.Private
-                && !string.Equals(existing.FolderPath, folderPath, StringComparison.OrdinalIgnoreCase))
+            // PUBLIC datasets resolve by global name from any folder (the 1a cross-folder win).
+            // PRIVATE datasets stay confined to scripts in their home folder. This is an INTERIM
+            // guard: the handler still passes "IsAdmin=true" to the registry, which short-circuits
+            // CanReadAsync, so the registry cannot yet enforce the dataset ACL. Phase 1c threads the
+            // executing user's real CallerContext (UserId + groups) into Lookup — at which point
+            // CanReadAsync becomes the access authority and this folder check is removed.
+            if (existing.AccessLevel == ETL_SQL.Core.Data.DatasetAccessLevel.Private)
             {
-                throw new ExecutionException(
-                    $"This report requires access to dataset '{stmt.DatasetName}' which is set to private. " +
-                    "Contact the report owner to request access or change the dataset to PUBLIC.",
-                    null, stmt.Line, stmt.Column);
+                var folderPath = Path.GetDirectoryName(context.CurrentScriptPath) ?? "";
+                if (!string.Equals(existing.FolderPath, folderPath, StringComparison.OrdinalIgnoreCase))
+                    throw new ExecutionException(
+                        $"This report requires access to dataset '{stmt.DatasetName}' which is set to private. " +
+                        "Contact the report owner to request access or change the dataset to PUBLIC.",
+                        null, stmt.Line, stmt.Column);
             }
 
             if (IsFreshEnough(existing))
@@ -77,7 +83,7 @@ namespace ETL_SQL.Engine.Handlers
                 _logger.Debug(
                     "USE DATASET '{Name}': cache is stale — re-materialising from source query.",
                     stmt.DatasetName);
-                await RematerialiseAndRefresh(stmt.DatasetName, existing, folderPath, registry, context);
+                await RematerialiseAndRefresh(stmt.DatasetName, existing, registry, context);
             }
 
             if (context is IReportContext reportCtx)
@@ -133,7 +139,7 @@ namespace ETL_SQL.Engine.Handlers
 
         private async Task RematerialiseAndRefresh(
             string datasetName, DatasetMetadata existing,
-            string folderPath, IDatasetRegistry registry,
+            IDatasetRegistry registry,
             IExecutionContext context)
         {
             // Parse and re-execute the stored source SQL
@@ -156,7 +162,7 @@ namespace ETL_SQL.Engine.Handlers
             var rowCount = context.Telemetry.LastStatementRowsProcessed;
 
             // Write refreshed Parquet
-            var parquetPath = registry.BuildDatasetFilePath(datasetName, folderPath);
+            var parquetPath = registry.BuildDatasetFilePath(existing.Id, datasetName);
             var connAlias   = $"__ds_write_{Guid.NewGuid():N}__";
 
             var connStmt = new CreateConnectionStatement(

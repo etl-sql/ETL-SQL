@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -33,12 +32,11 @@ namespace ETL_SQL.Engine.Handlers
                     "Datasets can only be refreshed when a DatasetRegistry is available.",
                     null, stmt.Line, stmt.Column);
 
-            var folderPath = Path.GetDirectoryName(context.CurrentScriptPath) ?? "";
-            var existing   = await registry.Lookup(stmt.DatasetName, folderPath, "IsAdmin=true");
+            var existing   = await registry.Lookup(stmt.DatasetName, "IsAdmin=true");
             if (existing == null)
                 throw new ExecutionException(
-                    $"REFRESH DATASET '{stmt.DatasetName}': dataset not found in the portal registry " +
-                    $"for folder '{folderPath}'. Run CREATE DATASET first.",
+                    $"REFRESH DATASET '{stmt.DatasetName}': dataset not found in the portal registry. " +
+                    "Run CREATE DATASET first.",
                     null, stmt.Line, stmt.Column);
 
             if (string.IsNullOrWhiteSpace(existing.SourceQuery))
@@ -69,7 +67,7 @@ namespace ETL_SQL.Engine.Handlers
             var rowCount = context.Telemetry.LastStatementRowsProcessed;
 
             // ── 2. Re-write Parquet with machine-bound encryption ─────────────
-            var parquetPath = registry.BuildDatasetFilePath(stmt.DatasetName, folderPath);
+            var parquetPath = registry.BuildDatasetFilePath(existing.Id, stmt.DatasetName);
             var connAlias   = $"__ds_write_{Guid.NewGuid():N}__";
 
             var connStmt = new CreateConnectionStatement(

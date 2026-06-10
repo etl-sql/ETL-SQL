@@ -56,7 +56,7 @@ namespace ETL_SQL.Engine.Handlers
             // ── 3. Staleness check — skip source query if cached data is fresh ─────
             if (registry != null)
             {
-                var existing = await registry.Lookup(stmt.TempTableName, folderPath, "IsAdmin=true");
+                var existing = await registry.Lookup(stmt.TempTableName, "IsAdmin=true");
                 if (IsFreshEnough(existing, stmt.Ttl))
                 {
                     _logger.Debug(
@@ -108,7 +108,10 @@ namespace ETL_SQL.Engine.Handlers
             return existing.LastRefresh.Value + ttl.Value > DateTime.UtcNow;
         }
 
-        // Intentional ordering: write Parquet first so the registry entry always points to data that exists.
+        // Intentional ordering: register first (an INSERT allocates the stable Id that the Parquet
+        // filename is derived from), then write the Parquet, then persist the final path. The interim
+        // row has an empty ParquetFilePath, which IsFreshEnough / MapIfSafe already treat as "no cache",
+        // so a reader never sees a registry entry pointing at a file that does not exist yet.
         // If registry update succeeds but CreateRefreshJob fails, the dataset is registered but will not
         // auto-refresh — the operator must re-run the script or create a job manually.  No rollback is
         // attempted because the Parquet file and registry entry are both valid; only the refresh job is missing.
@@ -116,16 +119,11 @@ namespace ETL_SQL.Engine.Handlers
             CreateDatasetStatement stmt, IDatasetRegistry registry,
             string folderPath, long rowCount, IExecutionContext context)
         {
-            var parquetPath = registry.BuildDatasetFilePath(stmt.TempTableName, folderPath);
-
-            await WriteToParquet(stmt.TempTableName, parquetPath, stmt, context);
-            WriteSidecarScript(stmt, parquetPath, context);
-
-            await registry.RegisterOrUpdate(new DatasetMetadata
+            var metadata = new DatasetMetadata
             {
                 Name           = stmt.TempTableName,
                 FolderPath     = folderPath,
-                ParquetFilePath = parquetPath,
+                ParquetFilePath = "",   // set after the Parquet is written (path depends on the allocated Id)
                 SourceQuery    = stmt.SourceQuery.ToSql(),
                 AccessLevel    = stmt.AccessLevel,
                 EncryptionMode = stmt.EncryptionMode,
@@ -134,7 +132,17 @@ namespace ETL_SQL.Engine.Handlers
                 CachedTtl      = ParseDuration(stmt.Ttl),
                 RefreshInterval = stmt.RefreshInterval,
                 RowCount       = rowCount
-            });
+            };
+
+            var id = await registry.RegisterOrUpdate(metadata);
+            var parquetPath = registry.BuildDatasetFilePath(id, stmt.TempTableName);
+
+            await WriteToParquet(stmt.TempTableName, parquetPath, stmt, context);
+            WriteSidecarScript(stmt, parquetPath, context);
+
+            metadata.Id = id;
+            metadata.ParquetFilePath = parquetPath;
+            await registry.RegisterOrUpdate(metadata);
 
             if (!string.IsNullOrWhiteSpace(stmt.RefreshInterval))
                 await CreateRefreshJob(stmt, parquetPath, context);

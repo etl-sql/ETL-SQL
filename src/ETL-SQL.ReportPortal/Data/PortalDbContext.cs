@@ -119,7 +119,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<Dataset>(e =>
         {
             e.HasOne(x => x.OwningReport).WithMany().HasForeignKey(x => x.OwningReportId).OnDelete(DeleteBehavior.SetNull);
-            e.HasIndex(x => new { x.FolderPath, x.Name }).IsUnique();
+            e.HasIndex(x => x.Name).IsUnique();   // Names are globally unique portal-wide; USE DATASET resolves by name.
         });
 
         builder.Entity<DatasetAcl>(e =>

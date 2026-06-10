@@ -1574,10 +1574,57 @@ CREATE PAGE Main AS DASHBOARD(
             SourceQuery = "SELECT 1"
         });
 
-        var metadata = await registry.Lookup("#inside", "/reports", "Admin");
+        var metadata = await registry.Lookup("#inside", "Admin");
 
         Assert.NotNull(metadata);
         Assert.Equal(Path.Combine(_factory.TempDir, "datasets", "inside.parquet"), metadata!.ParquetFilePath);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task DatasetRegistry_ResolvesByGlobalNameRegardlessOfFolder()
+    {
+        // 1a: datasets resolve by globally unique name, folder-independent. A dataset created
+        // "in" folder A must be discoverable by a consumer running anywhere else, and moving it
+        // to a new folder must not change its on-disk parquet path (filename is keyed on the
+        // stable Id, not folder|name).
+        using var scope = _factory.Services.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+
+        var name = $"#xfolder_{Guid.NewGuid():N}".Substring(0, 14);
+
+        var id = await registry.RegisterOrUpdate(new DatasetMetadata
+        {
+            Name = name,
+            FolderPath = "/folder-a",
+            ParquetFilePath = "xfolder.parquet",
+            SourceQuery = "SELECT 1",
+            AccessLevel = DatasetAccessLevel.Public
+        });
+        Assert.True(id > 0);
+
+        // Lookup takes no folder — resolution is by name alone.
+        var resolved = await registry.Lookup(name, "Admin");
+        Assert.NotNull(resolved);
+        Assert.Equal("/folder-a", resolved!.FolderPath);
+        Assert.Equal(id, resolved.Id);
+
+        var pathBefore = registry.BuildDatasetFilePath(id, name);
+
+        // "Move" the dataset to another folder (same global name → same Id).
+        var idAfterMove = await registry.RegisterOrUpdate(new DatasetMetadata
+        {
+            Name = name,
+            FolderPath = "/folder-b",
+            ParquetFilePath = "xfolder.parquet",
+            SourceQuery = "SELECT 1",
+            AccessLevel = DatasetAccessLevel.Public
+        });
+
+        Assert.Equal(id, idAfterMove);                                   // stable identity across the move
+        Assert.Equal(pathBefore, registry.BuildDatasetFilePath(idAfterMove, name)); // file not rewritten
+        var afterMove = await registry.Lookup(name, "Admin");
+        Assert.Equal("/folder-b", afterMove!.FolderPath);               // folder is mutable display metadata
     }
 
     [Fact]
@@ -1684,8 +1731,8 @@ CREATE PAGE Main AS DASHBOARD(
         Assert.DoesNotContain($"#owner_{suffix}", viewerList);
         Assert.DoesNotContain($"#other_{suffix}", viewerList);
 
-        Assert.Null(await registry.Lookup($"#owner_{suffix}", folder.Path, $"UserId={outsider.Id}"));
-        Assert.NotNull(await registry.Lookup($"#owner_{suffix}", folder.Path, $"UserId={owner.Id}"));
+        Assert.Null(await registry.Lookup($"#owner_{suffix}", $"UserId={outsider.Id}"));
+        Assert.NotNull(await registry.Lookup($"#owner_{suffix}", $"UserId={owner.Id}"));
         Assert.Equal(4, (await registry.ListAll("Admin")).Count(d => d.FolderPath == folder.Path));
     }
 

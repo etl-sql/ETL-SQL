@@ -6,8 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
@@ -26,10 +24,10 @@ namespace ETL_SQL.ReportPortal.Services
             _config = config;
         }
 
-        public async Task RegisterOrUpdate(DatasetMetadata metadata)
+        public async Task<int> RegisterOrUpdate(DatasetMetadata metadata)
         {
             var existing = await _db.Datasets
-                .FirstOrDefaultAsync(d => d.Name == metadata.Name && d.FolderPath == metadata.FolderPath);
+                .FirstOrDefaultAsync(d => d.Name == metadata.Name);
 
             if (existing == null)
             {
@@ -56,17 +54,19 @@ namespace ETL_SQL.ReportPortal.Services
             existing.RefreshInterval = metadata.RefreshInterval;
             existing.RowCount = metadata.RowCount;
             existing.ColumnSchema = metadata.ColumnSchema;
+            existing.FolderPath = metadata.FolderPath;   // mutable display metadata — a moved dataset updates its folder
             existing.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
+            return existing.Id;
         }
 
-        public async Task<DatasetMetadata?> Lookup(string name, string folderPath, string callerPermissions = "")
+        public async Task<DatasetMetadata?> Lookup(string name, string callerPermissions = "")
         {
             var d = await _db.Datasets
                 .Include(x => x.OwningReport)
                 .Include(x => x.Acls)
-                .FirstOrDefaultAsync(x => x.Name == name && x.FolderPath == folderPath);
+                .FirstOrDefaultAsync(x => x.Name == name);
 
             if (d == null) return null;
             if (!await CanReadAsync(d, CallerContext.Parse(callerPermissions))) return null;
@@ -74,20 +74,20 @@ namespace ETL_SQL.ReportPortal.Services
             return MapIfSafe(d);
         }
 
-        public async Task<bool> Exists(string name, string folderPath)
+        public async Task<bool> Exists(string name)
         {
-            return await _db.Datasets.AnyAsync(x => x.Name == name && x.FolderPath == folderPath);
+            return await _db.Datasets.AnyAsync(x => x.Name == name);
         }
 
-        public async Task SetStale(string name, string folderPath)
+        public async Task SetStale(string name)
         {
             var d = await _db.Datasets
-                .FirstOrDefaultAsync(x => x.Name == name && x.FolderPath == folderPath);
+                .FirstOrDefaultAsync(x => x.Name == name);
             if (d != null)
             {
                 d.LastRefresh = null;
                 await _db.SaveChangesAsync();
-                _log.LogInformation("Dataset marked as stale: {FolderPath}/{Name}", folderPath, name);
+                _log.LogInformation("Dataset marked as stale: {Name}", name);
             }
         }
 
@@ -109,30 +109,27 @@ namespace ETL_SQL.ReportPortal.Services
             return allowed.Select(MapIfSafe).Where(m => m is not null)!;
         }
 
-        public async Task Delete(string name, string folderPath)
+        public async Task Delete(string name)
         {
             var d = await _db.Datasets
-                .FirstOrDefaultAsync(x => x.Name == name && x.FolderPath == folderPath);
+                .FirstOrDefaultAsync(x => x.Name == name);
             if (d != null)
             {
                 _db.Datasets.Remove(d);
                 await _db.SaveChangesAsync();
-                _log.LogInformation("Dataset deleted: {FolderPath}/{Name}", folderPath, name);
+                _log.LogInformation("Dataset deleted: {Name}", name);
             }
         }
 
-        public string BuildDatasetFilePath(string name, string folderPath)
+        public string BuildDatasetFilePath(int datasetId, string name)
         {
             var safeName = Regex.Replace(
                 name.TrimStart('&', '#'), @"[^\w\-]", "_", RegexOptions.None).ToLowerInvariant();
 
-            var hashInput = $"{folderPath}|{name}".ToLowerInvariant();
-            var hash = Convert.ToHexString(
-                SHA256.HashData(Encoding.UTF8.GetBytes(hashInput)))[..8].ToLowerInvariant();
-
+            // Suffix with the stable Id so moving/renaming a dataset never rewrites its file.
             var rootPath = Path.GetFullPath(_config.DatasetRootPath);
             Directory.CreateDirectory(rootPath);
-            return Path.Combine(rootPath, $"{safeName}_{hash}.parquet");
+            return Path.Combine(rootPath, $"{safeName}_{datasetId}.parquet");
         }
 
         private string ResolveDatasetPathOrThrow(string path)
@@ -224,6 +221,7 @@ namespace ETL_SQL.ReportPortal.Services
         {
             return new DatasetMetadata
             {
+                Id = d.Id,
                 Name = d.Name,
                 FolderPath = d.FolderPath,
                 ParquetFilePath = parquetFilePath,

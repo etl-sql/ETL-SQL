@@ -287,7 +287,7 @@ public class DatasetController(
         }
 
         // Mark stale so the engine re-materialises on next CREATE DATASET hit
-        await registry.SetStale(dataset.Name, dataset.FolderPath);
+        await registry.SetStale(dataset.Name);
 
         // If we have an owning report, queue a real engine refresh.
         // Path security is enforced inside RunJobAsync — no need to pre-validate here.
@@ -373,7 +373,7 @@ public class DatasetController(
         var perm = await GetEffectivePermissionAsync(dataset);
         if (!CanManage(perm)) return Forbid();
 
-        await registry.Delete(dataset.Name, dataset.FolderPath);
+        await registry.Delete(dataset.Name);
         await audit.LogAsync(CurrentUserId, "DELETE_DATASET", "Dataset", id.ToString(), dataset.Name);
 
         return NoContent();

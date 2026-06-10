@@ -10,6 +10,7 @@ namespace ETL_SQL.Core.Data
 
     public class DatasetMetadata
     {
+        public int                   Id              { get; set; }
         public string                Name            { get; set; } = "";
         public string                FolderPath      { get; set; } = "";
         public string                ParquetFilePath { get; set; } = "";
@@ -29,17 +30,25 @@ namespace ETL_SQL.Core.Data
 
     public interface IDatasetRegistry
     {
-        Task RegisterOrUpdate(DatasetMetadata metadata);
-        Task<DatasetMetadata?> Lookup(string name, string folderPath, string callerPermissions = "");
-        Task<bool> Exists(string name, string folderPath);
-        Task SetStale(string name, string folderPath);
+        /// <summary>
+        /// Inserts or updates the dataset (keyed by globally unique <see cref="DatasetMetadata.Name"/>)
+        /// and returns its stable database Id. The returned Id is used to derive the on-disk
+        /// Parquet filename via <see cref="BuildDatasetFilePath"/>.
+        /// </summary>
+        Task<int> RegisterOrUpdate(DatasetMetadata metadata);
+        Task<DatasetMetadata?> Lookup(string name, string callerPermissions = "");
+        Task<bool> Exists(string name);
+        Task SetStale(string name);
         Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions);
-        Task Delete(string name, string folderPath);
+        Task Delete(string name);
 
         /// <summary>
         /// Computes the absolute Parquet file path for a dataset within the registry's
         /// configured storage root. Deterministic: same inputs always produce the same path.
+        /// The filename is based on the stable <paramref name="datasetId"/> so moving (or
+        /// renaming) a dataset never rewrites its file; <paramref name="name"/> is only a
+        /// human-readable prefix.
         /// </summary>
-        string BuildDatasetFilePath(string name, string folderPath);
+        string BuildDatasetFilePath(int datasetId, string name);
     }
 }

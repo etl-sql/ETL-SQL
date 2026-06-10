@@ -637,7 +637,7 @@ namespace ETL_SQL.Tests.Scale
                     """));
                 sw.Stop();
 
-                var metadata = await registry.Lookup("&cert", reportDir, "IsAdmin=true");
+                var metadata = await registry.Lookup("&cert", "IsAdmin=true");
                 Assert.NotNull(metadata);
                 Assert.True(File.Exists(metadata!.ParquetFilePath));
                 Assert.Equal(Rows, metadata.RowCount);
@@ -847,7 +847,8 @@ namespace ETL_SQL.Tests.Scale
         private sealed class InMemoryDatasetRegistry : IDatasetRegistry
         {
             private readonly string _root;
-            private readonly Dictionary<(string Name, string Folder), DatasetMetadata> _items = new();
+            private readonly Dictionary<string, DatasetMetadata> _items = new();
+            private int _nextId = 1;
 
             public InMemoryDatasetRegistry(string root)
             {
@@ -855,24 +856,29 @@ namespace ETL_SQL.Tests.Scale
                 Directory.CreateDirectory(_root);
             }
 
-            public Task RegisterOrUpdate(DatasetMetadata metadata)
+            public Task<int> RegisterOrUpdate(DatasetMetadata metadata)
             {
-                _items[(metadata.Name, metadata.FolderPath)] = metadata;
-                return Task.CompletedTask;
+                if (_items.TryGetValue(metadata.Name, out var existing))
+                    metadata.Id = existing.Id;
+                else if (metadata.Id == 0)
+                    metadata.Id = _nextId++;
+
+                _items[metadata.Name] = metadata;
+                return Task.FromResult(metadata.Id);
             }
 
-            public Task<DatasetMetadata?> Lookup(string name, string folderPath, string callerPermissions = "")
+            public Task<DatasetMetadata?> Lookup(string name, string callerPermissions = "")
             {
-                _items.TryGetValue((name, folderPath), out var metadata);
+                _items.TryGetValue(name, out var metadata);
                 return Task.FromResult(metadata);
             }
 
-            public Task<bool> Exists(string name, string folderPath)
-                => Task.FromResult(_items.ContainsKey((name, folderPath)));
+            public Task<bool> Exists(string name)
+                => Task.FromResult(_items.ContainsKey(name));
 
-            public Task SetStale(string name, string folderPath)
+            public Task SetStale(string name)
             {
-                if (_items.TryGetValue((name, folderPath), out var metadata))
+                if (_items.TryGetValue(name, out var metadata))
                     metadata.LastRefresh = null;
                 return Task.CompletedTask;
             }
@@ -880,19 +886,17 @@ namespace ETL_SQL.Tests.Scale
             public Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions)
                 => Task.FromResult<IEnumerable<DatasetMetadata>>(_items.Values.ToList());
 
-            public Task Delete(string name, string folderPath)
+            public Task Delete(string name)
             {
-                _items.Remove((name, folderPath));
+                _items.Remove(name);
                 return Task.CompletedTask;
             }
 
-            public string BuildDatasetFilePath(string name, string folderPath)
+            public string BuildDatasetFilePath(int datasetId, string name)
             {
-                var safeFolder = folderPath.Replace(Path.DirectorySeparatorChar, '_').Replace(Path.AltDirectorySeparatorChar, '_').Trim('_');
                 var safeName = name.TrimStart('&', '#').Replace(Path.DirectorySeparatorChar, '_').Replace(Path.AltDirectorySeparatorChar, '_');
-                var dir = Path.Combine(_root, safeFolder.Length == 0 ? "root" : safeFolder);
-                Directory.CreateDirectory(dir);
-                return Path.Combine(dir, safeName + ".parquet");
+                Directory.CreateDirectory(_root);
+                return Path.Combine(_root, $"{safeName}_{datasetId}.parquet");
             }
         }
 
