@@ -34,6 +34,7 @@ namespace ETL_SQL.ReportHosting
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly TimeSpan _executionTimeout;
         private readonly string? _datasetCallerContext;
+        private readonly int? _datasetOwningReportId;
         private readonly SemaphoreSlim _lock = new(1, 1);
 
         private IServiceScope? _currentScope;
@@ -49,12 +50,13 @@ namespace ETL_SQL.ReportHosting
 
         public string ScriptDirectory => Path.GetDirectoryName(_scriptPath) ?? Directory.GetCurrentDirectory();
 
-        public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory, TimeSpan? executionTimeout = null, string? datasetCallerContext = null)
+        public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory, TimeSpan? executionTimeout = null, string? datasetCallerContext = null, int? datasetOwningReportId = null)
         {
             _scriptPath = scriptPath ?? throw new ArgumentNullException(nameof(scriptPath));
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
             _executionTimeout = executionTimeout ?? TimeSpan.FromSeconds(30);
             _datasetCallerContext = datasetCallerContext;
+            _datasetOwningReportId = datasetOwningReportId;
         }
 
         public async ValueTask DisposeAsync()
@@ -364,6 +366,7 @@ namespace ETL_SQL.ReportHosting
                 {
                     evaluator.DatasetRegistry = registry;
                     evaluator.DatasetCallerContext = _datasetCallerContext;
+                    evaluator.DatasetOwningReportId = _datasetOwningReportId;
                 }
 
                 evaluator.RedirectOutput = true;

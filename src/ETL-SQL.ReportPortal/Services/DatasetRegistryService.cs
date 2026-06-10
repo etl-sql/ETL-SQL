@@ -16,12 +16,14 @@ namespace ETL_SQL.ReportPortal.Services
         private readonly PortalDbContext _db;
         private readonly ILogger<DatasetRegistryService> _log;
         private readonly PortalConfig _config;
+        private readonly FolderPermissionService _folderPerms;
 
-        public DatasetRegistryService(PortalDbContext db, ILogger<DatasetRegistryService> log, PortalConfig config)
+        public DatasetRegistryService(PortalDbContext db, ILogger<DatasetRegistryService> log, PortalConfig config, FolderPermissionService folderPerms)
         {
             _db = db;
             _log = log;
             _config = config;
+            _folderPerms = folderPerms;
         }
 
         public async Task<int> RegisterOrUpdate(DatasetMetadata metadata)
@@ -46,6 +48,10 @@ namespace ETL_SQL.ReportPortal.Services
 
             existing.ParquetFilePath = ResolveDatasetPathOrThrow(metadata.ParquetFilePath);
             existing.OwningReportId = metadata.OwningReportId;
+            // Link to the owning report's folder so PUBLIC access can be gated by folder permission.
+            existing.FolderId = metadata.OwningReportId is int rid
+                ? await _db.Reports.Where(r => r.Id == rid).Select(r => (int?)r.FolderId).FirstOrDefaultAsync()
+                : null;
             existing.SourceQuery = metadata.SourceQuery;
             existing.AccessLevel = metadata.AccessLevel;
             existing.EncryptionMode = metadata.EncryptionMode;
@@ -170,16 +176,29 @@ namespace ETL_SQL.ReportPortal.Services
         private async Task<bool> CanReadAsync(Dataset dataset, CallerContext caller)
         {
             if (caller.IsAdmin) return true;
-            if (dataset.AccessLevel == DatasetAccessLevel.Public) return true;
+
+            // Resolve the caller's group memberships once (empty for an unauthenticated caller).
+            ISet<int> groupIds = caller.UserId is int uid
+                ? (await _db.UserGroups
+                    .Where(ug => ug.UserId == uid)
+                    .Select(ug => ug.GroupId)
+                    .ToListAsync()).ToHashSet()
+                : new HashSet<int>();
+
+            if (dataset.AccessLevel == DatasetAccessLevel.Public)
+            {
+                // PUBLIC = any authenticated user with Read on the dataset's folder. When the dataset
+                // has no resolvable folder, fall back to "any authenticated caller".
+                if (dataset.FolderId is int fid)
+                    return await _folderPerms.GetEffectivePermissionAsync(fid, groupIds) is not null;
+                return caller.UserId is not null;
+            }
+
+            // PRIVATE = owner or an explicit dataset grant.
             if (caller.UserId is null) return false;
 
             if (dataset.OwningReport?.CreatedBy == caller.UserId.Value)
                 return true;
-
-            var groupIds = await _db.UserGroups
-                .Where(ug => ug.UserId == caller.UserId.Value)
-                .Select(ug => ug.GroupId)
-                .ToListAsync();
 
             return dataset.Acls.Any(a =>
                 groupIds.Contains(a.GroupId)
@@ -224,6 +243,7 @@ namespace ETL_SQL.ReportPortal.Services
                 Id = d.Id,
                 Name = d.Name,
                 FolderPath = d.FolderPath,
+                FolderId = d.FolderId,
                 ParquetFilePath = parquetFilePath,
                 OwningReportId = d.OwningReportId,
                 SourceQuery = d.SourceQuery,

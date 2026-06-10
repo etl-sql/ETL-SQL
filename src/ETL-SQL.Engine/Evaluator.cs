@@ -327,6 +327,13 @@ namespace ETL_SQL.Engine
         public string? DatasetCallerContext { get; set; }
 
         /// <summary>
+        /// Id of the report whose script is executing, used to link any datasets it CREATEs to their
+        /// owning report (and, via the report, their folder for PUBLIC access checks). Set by the
+        /// portal host beside <see cref="DatasetRegistry"/>; null in non-portal/standalone runs.
+        /// </summary>
+        public int? DatasetOwningReportId { get; set; }
+
+        /// <summary>
         /// Unique identifier for the current session.
         /// Setting this also stamps all subsequent log output from this Evaluator
         /// with the session ID for correlation across concurrent sessions.

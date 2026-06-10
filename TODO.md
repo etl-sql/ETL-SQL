@@ -67,11 +67,17 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   (`DatasetRegistry_ResolvesByGlobalNameRegardlessOfFolder`). CREATE rejecting a duplicate name now
   surfaces as the DB unique-constraint error — a friendly pre-check is deferred to 1b/1c. EF migration
   drops `(FolderPath, Name)`; note: a catalog with the same name in two folders must be de-duped first.
-- [ ] **1b. Link datasets to a folder by ID + folder-permission access (PUBLIC).** Add `FolderId` to
-  `Dataset` (resolve from the script's folder at create); keep `FolderPath` for display. Access:
-  PUBLIC → caller has read on `FolderId` via `FolderPermissionService.GetEffectivePermissionAsync`;
-  PRIVATE → owner or explicit `DatasetAcl` grant. Centralize the rule in the registry so engine + HTTP
-  share it.
+- [x] **1b. Link datasets to a folder by ID + folder-permission access (PUBLIC).** *(done — branch v0.11.0)*
+  Added `Dataset.FolderId` (nullable FK, migration `DatasetAddFolderId`). The dataset→folder link is
+  derived from the **executing report**: the report id is threaded into the engine
+  (`Evaluator.DatasetOwningReportId`, set by `DashboardService`/`SessionCache`/`ExecutionJobService`
+  like the 1c caller context), `CreateDataset` stamps `OwningReportId`, and `RegisterOrUpdate` resolves
+  `FolderId = Report.FolderId`. `CanReadAsync` PUBLIC branch now requires Read on `FolderId` via
+  `FolderPermissionService.GetEffectivePermissionAsync`; PUBLIC with no folder → any authenticated
+  caller (unauthenticated/unset denied). This also **revived the PRIVATE owner check** (`OwningReportId`
+  is now populated). `Folder.Path` is logical, not the script dir, so the link could not come from
+  `FolderPath`. Tests: `DatasetRegistry_PublicGatedByFolderReadPermission` + updated
+  `DatasetRegistry_FiltersPrivateDatasetsByOwnerAclAndAdmin` (no-folder PUBLIC requires auth).
 - [x] **1c. Thread caller identity into the engine (close the ACL bypass).** *(done — branch v0.11.0)*
   Added `Evaluator.DatasetCallerContext` beside `DatasetRegistry`; the four handlers now forward it to
   `Lookup`/`ListAll` instead of the literal `"IsAdmin=true"`, so `DatasetRegistryService.CanReadAsync`

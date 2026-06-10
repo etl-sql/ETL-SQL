@@ -1669,8 +1669,8 @@ CREATE PAGE Main AS DASHBOARD(
             FolderPath = folder.Path,
             ParquetFilePath = $"public_{suffix}.parquet",
             SourceQuery = "SELECT 1",
-            AccessLevel = DatasetAccessLevel.Public,
-            OwningReportId = otherReport.Id
+            AccessLevel = DatasetAccessLevel.Public
+            // No OwningReportId → no folder link → PUBLIC falls back to "any authenticated caller".
         });
         await registry.RegisterOrUpdate(new DatasetMetadata
         {
@@ -1713,8 +1713,10 @@ CREATE PAGE Main AS DASHBOARD(
         });
         await db.SaveChangesAsync();
 
+        // Unauthenticated caller: a no-folder PUBLIC dataset now requires authentication (1b), so it
+        // is no longer visible anonymously; PRIVATE datasets remain hidden.
         var anonymousList = (await registry.ListAll("")).Select(d => d.Name).ToHashSet();
-        Assert.Contains($"#public_{suffix}", anonymousList);
+        Assert.DoesNotContain($"#public_{suffix}", anonymousList);
         Assert.DoesNotContain($"#owner_{suffix}", anonymousList);
         Assert.DoesNotContain($"#acl_{suffix}", anonymousList);
         Assert.DoesNotContain($"#other_{suffix}", anonymousList);
@@ -1734,6 +1736,65 @@ CREATE PAGE Main AS DASHBOARD(
         Assert.Null(await registry.Lookup($"#owner_{suffix}", $"UserId={outsider.Id}"));
         Assert.NotNull(await registry.Lookup($"#owner_{suffix}", $"UserId={owner.Id}"));
         Assert.Equal(4, (await registry.ListAll("Admin")).Count(d => d.FolderPath == folder.Path));
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task DatasetRegistry_PublicGatedByFolderReadPermission()
+    {
+        // 1b: PUBLIC = any authenticated user with Read on the dataset's folder. The dataset's
+        // FolderId is resolved from its owning report's folder; access reuses FolderPermissionService.
+        using var scope = _factory.Services.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var granted = new PortalUser { UserName = $"fg_granted_{suffix}", Email = $"fg_granted_{suffix}@test.local" };
+        var denied  = new PortalUser { UserName = $"fg_denied_{suffix}",  Email = $"fg_denied_{suffix}@test.local" };
+        db.Users.AddRange(granted, denied);
+        await db.SaveChangesAsync();
+
+        var folder = new Folder { Name = $"FG {suffix}", Path = $"/fg-{suffix}", OwnerId = granted.Id };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+
+        // Grant Read on the folder to a group that only `granted` belongs to.
+        var group = new Group { Name = $"fg-readers-{suffix}" };
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+        db.UserGroups.Add(new UserGroup { UserId = granted.Id, GroupId = group.Id });
+        db.FolderAcls.Add(new FolderAcl { FolderId = folder.Id, GroupId = group.Id, Permission = FolderPermission.Read });
+
+        var report = new Report
+        {
+            FolderId   = folder.Id,
+            Name       = $"FG Report {suffix}",
+            ScriptPath = Path.Combine(_factory.TempDir, "scripts", $"fg_{suffix}.rptsql"),
+            CreatedBy  = granted.Id
+        };
+        db.Reports.Add(report);
+        await db.SaveChangesAsync();
+
+        var name = $"#fg_{suffix}";
+        await registry.RegisterOrUpdate(new DatasetMetadata
+        {
+            Name           = name,
+            FolderPath     = folder.Path,
+            ParquetFilePath = $"fg_{suffix}.parquet",
+            SourceQuery    = "SELECT 1",
+            AccessLevel    = DatasetAccessLevel.Public,
+            OwningReportId = report.Id
+        });
+
+        // FolderId is resolved from the owning report's folder.
+        var stored = await db.Datasets.SingleAsync(d => d.Name == name);
+        Assert.Equal(folder.Id, stored.FolderId);
+
+        // Folder Read → visible; no folder permission → denied; admin always; unauthenticated denied.
+        Assert.NotNull(await registry.Lookup(name, $"UserId={granted.Id}"));
+        Assert.Null(await registry.Lookup(name, $"UserId={denied.Id}"));
+        Assert.NotNull(await registry.Lookup(name, "Admin"));
+        Assert.Null(await registry.Lookup(name, ""));
     }
 
     [Fact]

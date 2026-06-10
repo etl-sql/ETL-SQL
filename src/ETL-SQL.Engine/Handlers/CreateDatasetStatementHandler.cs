@@ -124,6 +124,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 Name           = stmt.TempTableName,
                 FolderPath     = folderPath,
+                OwningReportId = (context as Evaluator)?.DatasetOwningReportId,
                 ParquetFilePath = "",   // set after the Parquet is written (path depends on the allocated Id)
                 SourceQuery    = stmt.SourceQuery.ToSql(),
                 AccessLevel    = stmt.AccessLevel,
