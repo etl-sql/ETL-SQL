@@ -14,6 +14,18 @@ public class PortalConfig
     public IdentityConfig  Identity  { get; set; } = new();
     public FirstRunConfig  FirstRun  { get; set; } = new();
     public OrchestratorConfig Orchestrator { get; set; } = new();
+    public DatasetConfig   Dataset   { get; set; } = new();
+}
+
+public class DatasetConfig
+{
+    /// <summary>
+    /// Portal-managed at-rest key (base64) used to encrypt cached dataset parquet. Portable: back it
+    /// up with the portal config and move it with the portal — losing it makes every cached dataset
+    /// unreadable (they must be re-materialised). When unset, datasets fall back to host-bound
+    /// ENCRYPT=MACHINE encryption (not portable across hosts).
+    /// </summary>
+    public string? AtRestKey { get; set; }
 }
 
 public class IdentityConfig

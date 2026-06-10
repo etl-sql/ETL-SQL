@@ -32,8 +32,9 @@ namespace ETL_SQL.Engine.Handlers
                     "Datasets can only be refreshed when a DatasetRegistry is available.",
                     null, stmt.Line, stmt.Column);
 
-            var callerCtx  = (context as Evaluator)?.DatasetCallerContext ?? "";
-            var existing   = await registry.Lookup(stmt.DatasetName, callerCtx);
+            var callerCtx        = (context as Evaluator)?.DatasetCallerContext ?? "";
+            var callerAtRestKey  = (context as Evaluator)?.DatasetAtRestKey;
+            var existing         = await registry.Lookup(stmt.DatasetName, callerCtx);
             if (existing == null)
                 throw new ExecutionException(
                     $"REFRESH DATASET '{stmt.DatasetName}': dataset not found in the portal registry. " +
@@ -78,14 +79,16 @@ namespace ETL_SQL.Engine.Handlers
             var parquetPath = registry.BuildDatasetFilePath(existing.Id, stmt.DatasetName);
             var connAlias   = $"__ds_write_{Guid.NewGuid():N}__";
 
+            var encOptions = new Dictionary<string, Expression>
+            {
+                ["COMPRESSION"] = new LiteralExpression("SNAPPY", TokenType.STRING_LITERAL)
+            };
+            DatasetAtRestOptions.Apply(encOptions, callerAtRestKey);
+
             var connStmt = new CreateConnectionStatement(
                 connAlias, "PARQUET",
                 new LiteralExpression(parquetPath, TokenType.STRING_LITERAL),
-                new Dictionary<string, Expression>
-                {
-                    ["COMPRESSION"] = new LiteralExpression("SNAPPY", TokenType.STRING_LITERAL),
-                    ["ENCRYPT"]     = new LiteralExpression("MACHINE", TokenType.STRING_LITERAL)
-                });
+                encOptions);
 
             var insertStmt = new InsertStatement(
                 new TableReference("FILE", null, null, connAlias),

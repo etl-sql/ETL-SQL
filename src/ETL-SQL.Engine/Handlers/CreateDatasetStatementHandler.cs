@@ -201,7 +201,7 @@ namespace ETL_SQL.Engine.Handlers
             var connStmt = new CreateConnectionStatement(
                 connAlias, "PARQUET",
                 new LiteralExpression(parquetPath, TokenType.STRING_LITERAL),
-                BuildParquetOptions(stmt, includeCompression: true));
+                BuildParquetOptions(stmt, includeCompression: true, (context as Evaluator)?.DatasetAtRestKey));
 
             var insertStmt = new InsertStatement(
                 new TableReference("FILE", null, null, connAlias),
@@ -225,7 +225,7 @@ namespace ETL_SQL.Engine.Handlers
             var connStmt = new CreateConnectionStatement(
                 connAlias, "PARQUET",
                 new LiteralExpression(parquetPath, TokenType.STRING_LITERAL),
-                BuildParquetOptions(stmt, includeCompression: false));
+                BuildParquetOptions(stmt, includeCompression: false, (context as Evaluator)?.DatasetAtRestKey));
 
             var selectStmt = new SelectStatement(
                 new List<SelectColumn> { new(new IdentifierExpression("*"), null, null) },
@@ -252,10 +252,13 @@ namespace ETL_SQL.Engine.Handlers
 
             var connAlias = $"__ds_{MakeSafeAlias(stmt.TempTableName)}__";
 
+            // The scheduled job must write the cache with the same at-rest key so USE can read it,
+            // so the key is baked into the job's connection options at creation time. (Carrying the
+            // key in scheduled-refresh definitions is revisited with the Phase 2 sidecar/secret cleanup.)
             var connStmt = new CreateConnectionStatement(
                 connAlias, "PARQUET",
                 new LiteralExpression(parquetPath, TokenType.STRING_LITERAL),
-                BuildParquetOptions(stmt, includeCompression: true),
+                BuildParquetOptions(stmt, includeCompression: true, (context as Evaluator)?.DatasetAtRestKey),
                 ObjectCreationMode.CreateOrAlter);
 
             var insertStmt = new InsertStatement(
@@ -314,13 +317,13 @@ namespace ETL_SQL.Engine.Handlers
 
         /// <summary>
         /// Builds the encryption-related options for a synthetic PARQUET CreateConnectionStatement.
-        /// MACHINE → ENCRYPT=MACHINE (no credential needed).
-        /// PASSWORD → ENCRYPT=PASSWORD + PASSWORD=value.
+        /// MACHINE → the portal at-rest key (ENCRYPT=PASSWORD) when one is configured, else ENCRYPT=MACHINE.
+        /// PASSWORD → ENCRYPT=PASSWORD + PASSWORD=value (explicit transport credential — Phase 2).
         /// KEYFILE  → ENCRYPT=KEYFILE  + KEYFILE=path.
         /// None     → no encryption options added.
         /// </summary>
         private static Dictionary<string, Expression> BuildParquetOptions(
-            CreateDatasetStatement stmt, bool includeCompression = true)
+            CreateDatasetStatement stmt, bool includeCompression, string? atRestKey)
         {
             var opts = new Dictionary<string, Expression>();
 
@@ -330,7 +333,7 @@ namespace ETL_SQL.Engine.Handlers
             switch (stmt.EncryptionMode)
             {
                 case DatasetEncryptionMode.MachineBound:
-                    opts["ENCRYPT"] = new LiteralExpression("MACHINE", TokenType.STRING_LITERAL);
+                    DatasetAtRestOptions.Apply(opts, atRestKey);   // portal key when set, else host MACHINE
                     break;
                 case DatasetEncryptionMode.Password:
                     opts["ENCRYPT"]   = new LiteralExpression("PASSWORD",                   TokenType.STRING_LITERAL);

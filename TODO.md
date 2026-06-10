@@ -98,10 +98,17 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   `SHOW DATASETS` already caller-filtered (1c). Re-materialization now happens only via the producing
   report's `CREATE` (owner or scheduled/admin job). Tests: `DatasetPhase4Tests` refresh/create-or-alter
   denial + serve-stale + never-materialized; `PortalIntegrationTests.DatasetRegistry_CanEdit_OnlyOwnerEditorAndAdmin`.
-- [ ] **1e. Portal-managed at-rest key.** Introduce an at-rest key abstraction bound to the service
-  account, persisted where it can be backed up (config/keystore), replacing the implicit host-DPAPI
-  assumption in the consume path. Engine parquet read for portal datasets uses this key (no credential at
-  `USE`). Document the backup requirement.
+- [x] **1e. Portal-managed at-rest key.** *(done — branch v0.11.0)* Dataset parquet is now encrypted at
+  rest with a portal-managed key — `Portal:Dataset:AtRestKey` (base64 config secret, like
+  `Portal:Jwt:Secret`), threaded into the engine as `Evaluator.DatasetAtRestKey` (set by
+  `DashboardService`/`SessionCache`/`ExecutionJobService`). The three implicit-MACHINE sites
+  (`Use`/`Refresh`/`Create` handlers) route through a shared `DatasetAtRestOptions.Apply`: a configured
+  key → `ENCRYPT=PASSWORD` with that key (reuses the existing AES-256/PBKDF2 `CryptoUtils` path — no new
+  primitive); **unset → falls back to host `ENCRYPT=MACHINE`** (dev/standalone unchanged). The cache is
+  portal-bound and portable: back the key up with config and move it with the portal; losing it makes
+  caches unreadable (re-materialise to recover). Tests: `DatasetPhase4Tests` at-rest round-trip +
+  wrong-key-fails. NOTE: explicit `ENCRYPT=PASSWORD|KEYFILE` on `CREATE` (transport) and the
+  scheduled-refresh-job key embedding are revisited in **Phase 2**.
 
 ### Phase 2 — Portable move (the "movable" story)
 

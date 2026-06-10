@@ -334,6 +334,13 @@ namespace ETL_SQL.Engine
         public int? DatasetOwningReportId { get; set; }
 
         /// <summary>
+        /// Portal-managed at-rest key (base64) used to encrypt/decrypt cached dataset parquet, so the
+        /// cache is bound to the portal (not the host) and is portable. Set by the portal host beside
+        /// <see cref="DatasetRegistry"/>; null/empty falls back to host-bound ENCRYPT=MACHINE.
+        /// </summary>
+        public string? DatasetAtRestKey { get; set; }
+
+        /// <summary>
         /// Unique identifier for the current session.
         /// Setting this also stamps all subsequent log output from this Evaluator
         /// with the session ID for correlation across concurrent sessions.

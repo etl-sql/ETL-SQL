@@ -76,7 +76,7 @@ namespace ETL_SQL.Engine.Handlers
                     ConsoleColor.Yellow);
             }
 
-            await LoadFromParquet(existing.ParquetFilePath, stmt.DatasetName, context);
+            await LoadFromParquet(existing.ParquetFilePath, stmt.DatasetName, context, (context as Evaluator)?.DatasetAtRestKey);
 
             if (context is IReportContext reportCtx)
             {
@@ -106,17 +106,17 @@ namespace ETL_SQL.Engine.Handlers
             return ttl.HasValue && existing.LastRefresh.Value + ttl.Value > DateTime.UtcNow;
         }
 
-        private async Task LoadFromParquet(string parquetPath, string datasetName, IExecutionContext context)
+        private async Task LoadFromParquet(string parquetPath, string datasetName, IExecutionContext context, string? atRestKey)
         {
             var connAlias = $"__ds_load_{Guid.NewGuid():N}__";
+
+            var encOptions = new System.Collections.Generic.Dictionary<string, Expression>();
+            DatasetAtRestOptions.Apply(encOptions, atRestKey);
 
             var connStmt = new CreateConnectionStatement(
                 connAlias, "PARQUET",
                 new LiteralExpression(parquetPath, TokenType.STRING_LITERAL),
-                new System.Collections.Generic.Dictionary<string, Expression>
-                {
-                    ["ENCRYPT"] = new LiteralExpression("MACHINE", TokenType.STRING_LITERAL)
-                });
+                encOptions);
 
             var selectStmt = new SelectStatement(
                 new List<SelectColumn> { new(new IdentifierExpression("*"), null, null) },

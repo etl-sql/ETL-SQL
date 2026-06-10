@@ -45,7 +45,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
         var timeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
         // Interactive viewing runs as the real user so dataset ACLs (CanReadAsync) are enforced;
         // reportId links any datasets the script CREATEs to this report (and thus its folder).
-        var svc   = new DashboardService(scriptPath, _scopeFactory, timeout, $"UserId={userId}", reportId);
+        var svc   = new DashboardService(scriptPath, _scopeFactory, timeout, $"UserId={userId}", reportId, _config.Dataset.AtRestKey);
         var entry = new Entry(svc, scriptPath);
         _sessions[key] = entry;
 

@@ -304,6 +304,80 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("materialised", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
+        // ── 1e: portal at-rest key ────────────────────────────────────────────────
+
+        [Fact]
+        public async Task UseDataset_AtRestKey_RoundTrips()
+        {
+            // With a portal at-rest key set, CREATE encrypts the parquet with it and USE decrypts it
+            // with the same key — the cache is portal-bound, not host-bound.
+            var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_key_" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(root);
+            try
+            {
+                var registry = new SingleDatasetRegistry(ownerUserId: 1, root: root);
+                const string key = "cG9ydGFsLWF0LXJlc3Qta2V5LTEyMzQ1Ng==";
+
+                var producer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                producer.DatasetRegistry      = registry;
+                producer.DatasetCallerContext = "IsAdmin=true";
+                producer.DatasetAtRestKey     = key;
+                await producer.Evaluate(Parse(@"
+                    CREATE TABLE #seed (v INT);
+                    INSERT INTO #seed VALUES (10);
+                    INSERT INTO #seed VALUES (20);
+                    CREATE DATASET &enc AS (SELECT v FROM #seed);"));
+
+                var consumer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                consumer.DatasetRegistry      = registry;
+                consumer.DatasetCallerContext = "IsAdmin=true";
+                consumer.DatasetAtRestKey     = key;
+                await consumer.Evaluate(Parse("USE DATASET &enc; SELECT COUNT(*) AS n, SUM(v) AS s FROM &enc;"));
+
+                var row = consumer.LastResult!.Rows[0];
+                Assert.Equal(2m,  Convert.ToDecimal(row["n"]));
+                Assert.Equal(30m, Convert.ToDecimal(row["s"]));
+            }
+            finally
+            {
+                try { Directory.Delete(root, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
+        public async Task UseDataset_WrongAtRestKey_FailsToDecrypt()
+        {
+            // A consumer with the wrong at-rest key cannot read the cache (decrypt fails) — the file
+            // is gated by the portal key, not host DPAPI.
+            var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_wkey_" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(root);
+            try
+            {
+                var registry = new SingleDatasetRegistry(ownerUserId: 1, root: root);
+
+                var producer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                producer.DatasetRegistry      = registry;
+                producer.DatasetCallerContext = "IsAdmin=true";
+                producer.DatasetAtRestKey     = "cG9ydGFsLWtleS1BLTAwMDAwMDAwMDA=";
+                await producer.Evaluate(Parse(@"
+                    CREATE TABLE #seed (v INT);
+                    INSERT INTO #seed VALUES (1);
+                    CREATE DATASET &enc AS (SELECT v FROM #seed);"));
+
+                var consumer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                consumer.DatasetRegistry      = registry;
+                consumer.DatasetCallerContext = "IsAdmin=true";
+                consumer.DatasetAtRestKey     = "cG9ydGFsLWtleS1CLTk5OTk5OTk5OTk=";   // different key
+
+                await Assert.ThrowsAnyAsync<Exception>(
+                    () => consumer.Evaluate(Parse("USE DATASET &enc;")));
+            }
+            finally
+            {
+                try { Directory.Delete(root, recursive: true); } catch { }
+            }
+        }
+
         /// <summary>
         /// Minimal IDatasetRegistry holding a single dataset, resolved by name. Mimics the real
         /// registry's ACL gate: PUBLIC always resolves; PRIVATE resolves only for admin or the owner.
