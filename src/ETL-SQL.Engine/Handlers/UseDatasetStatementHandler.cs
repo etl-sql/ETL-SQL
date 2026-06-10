@@ -7,7 +7,6 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -16,9 +15,10 @@ namespace ETL_SQL.Engine.Handlers
     /// script's temp-table namespace.
     ///
     /// Portal mode: resolves the dataset by its globally unique name in the registry (folder-
-    /// independent). Access is enforced by the registry's ACL gate. If the cache is fresh
-    /// (LastRefresh + TTL &gt; now), loads from Parquet; otherwise re-materialises the source
-    /// query, writes a new Parquet file, and updates the registry.
+    /// independent). Access is enforced by the registry's ACL gate. Loads the cached Parquet; when
+    /// the cache is stale (LastRefresh + TTL &lt;= now) it serves the last materialised snapshot with
+    /// a staleness warning. USE never re-runs the source query — re-materialisation happens only via
+    /// the producing report's CREATE or an explicit REFRESH DATASET (owner / scheduled-admin job).
     ///
     /// Non-portal mode: the dataset must already be defined in the current script via
     /// CREATE DATASET — USE DATASET is a no-op since the temp table already exists.
@@ -59,20 +59,24 @@ namespace ETL_SQL.Engine.Handlers
                     "Run CREATE DATASET first.",
                     null, stmt.Line, stmt.Column);
 
-            if (IsFreshEnough(existing))
+            // Consume path is read-only: a stale cache is served with a warning, never re-materialised
+            // under the consumer's identity (the consumer may not even have access to the source tables).
+            if (string.IsNullOrWhiteSpace(existing.ParquetFilePath) || !File.Exists(existing.ParquetFilePath))
+                throw new ExecutionException(
+                    $"USE DATASET '{stmt.DatasetName}': the dataset has not been materialised yet. " +
+                    "Ask the dataset owner to refresh it (or run its producing report).",
+                    null, stmt.Line, stmt.Column);
+
+            if (!IsFreshEnough(existing))
             {
-                _logger.Debug(
-                    "USE DATASET '{Name}': loading from Parquet cache (last refresh: {Time}).",
-                    stmt.DatasetName, existing.LastRefresh);
-                await LoadFromParquet(existing.ParquetFilePath, stmt.DatasetName, context);
+                _logger.Debug("USE DATASET '{Name}': cache is stale — serving the last materialised snapshot.", stmt.DatasetName);
+                context.Log(
+                    $"Dataset '{stmt.DatasetName}' is stale (past its TTL); serving the last materialised snapshot. " +
+                    "Ask the owner to refresh it for current data.",
+                    ConsoleColor.Yellow);
             }
-            else
-            {
-                _logger.Debug(
-                    "USE DATASET '{Name}': cache is stale — re-materialising from source query.",
-                    stmt.DatasetName);
-                await RematerialiseAndRefresh(stmt.DatasetName, existing, registry, context);
-            }
+
+            await LoadFromParquet(existing.ParquetFilePath, stmt.DatasetName, context);
 
             if (context is IReportContext reportCtx)
             {
@@ -123,61 +127,6 @@ namespace ETL_SQL.Engine.Handlers
 
             await context.EvaluateStatement(connStmt);
             await context.EvaluateStatement(selectStmt);
-        }
-
-        private async Task RematerialiseAndRefresh(
-            string datasetName, DatasetMetadata existing,
-            IDatasetRegistry registry,
-            IExecutionContext context)
-        {
-            // Parse and re-execute the stored source SQL
-            var tokens     = new Lexer(existing.SourceQuery).Tokenize();
-            var parser     = new Parser(tokens);
-            var sourceStmt = new StatementParser(parser).ParseStatement();
-
-            Statement selectInto;
-            if (sourceStmt is SelectStatement sel)
-                selectInto = sel with { IntoTable = new TableReference(datasetName) };
-            else
-                selectInto = new SelectStatement(
-                    new List<SelectColumn> { new(new IdentifierExpression("*"), null, null) },
-                    new TableReference(datasetName),
-                    new TableReference("SUBQUERY", null, null, null, "_src", sourceStmt),
-                    new List<JoinClause>(),
-                    null);
-
-            await context.EvaluateStatement(selectInto);
-            var rowCount = context.Telemetry.LastStatementRowsProcessed;
-
-            // Write refreshed Parquet
-            var parquetPath = registry.BuildDatasetFilePath(existing.Id, datasetName);
-            var connAlias   = $"__ds_write_{Guid.NewGuid():N}__";
-
-            var connStmt = new CreateConnectionStatement(
-                connAlias, "PARQUET",
-                new LiteralExpression(parquetPath, TokenType.STRING_LITERAL),
-                new System.Collections.Generic.Dictionary<string, Expression>
-                {
-                    ["COMPRESSION"] = new LiteralExpression("SNAPPY", TokenType.STRING_LITERAL),
-                    ["ENCRYPT"]     = new LiteralExpression("MACHINE", TokenType.STRING_LITERAL)
-                });
-
-            var insertStmt = new InsertStatement(
-                new TableReference("FILE", null, null, connAlias),
-                new SelectStatement(
-                    new List<SelectColumn> { new(new IdentifierExpression("*"), null, null) },
-                    null,
-                    new TableReference(datasetName),
-                    new List<JoinClause>(),
-                    null));
-
-            await context.EvaluateStatement(connStmt);
-            await context.EvaluateStatement(insertStmt);
-
-            existing.ParquetFilePath = parquetPath;
-            existing.LastRefresh     = DateTime.UtcNow;
-            existing.RowCount        = rowCount;
-            await registry.RegisterOrUpdate(existing);
         }
 
         private static TimeSpan? ParseDuration(string? duration)

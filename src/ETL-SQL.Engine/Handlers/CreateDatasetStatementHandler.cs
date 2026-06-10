@@ -57,6 +57,16 @@ namespace ETL_SQL.Engine.Handlers
             if (registry != null)
             {
                 var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
+
+                // Redefining an existing dataset (CREATE OR ALTER) is a write — restrict to editor/owner
+                // (admin/scheduled jobs pass). A brand-new CREATE is unaffected.
+                if (stmt.Mode == ObjectCreationMode.CreateOrAlter
+                    && await registry.Exists(stmt.TempTableName)
+                    && !await registry.CanEditAsync(stmt.TempTableName, callerCtx))
+                    throw new ExecutionException(
+                        $"CREATE OR ALTER DATASET '{stmt.TempTableName}' requires editor or owner permission.",
+                        null, stmt.Line, stmt.Column);
+
                 var existing  = await registry.Lookup(stmt.TempTableName, callerCtx);
                 if (IsFreshEnough(existing, stmt.Ttl))
                 {

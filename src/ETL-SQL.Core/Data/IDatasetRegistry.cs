@@ -39,6 +39,13 @@ namespace ETL_SQL.Core.Data
         Task<int> RegisterOrUpdate(DatasetMetadata metadata);
         Task<DatasetMetadata?> Lookup(string name, string callerPermissions = "");
         Task<bool> Exists(string name);
+
+        /// <summary>
+        /// True if the caller may edit/refresh the named dataset (admin, the owner, or an
+        /// Editor/Owner dataset grant). False if the dataset does not exist or the caller lacks
+        /// write access. Used to gate REFRESH DATASET and CREATE OR ALTER DATASET.
+        /// </summary>
+        Task<bool> CanEditAsync(string name, string callerPermissions);
         Task SetStale(string name);
         Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions);
         Task Delete(string name);

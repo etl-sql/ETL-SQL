@@ -40,6 +40,13 @@ namespace ETL_SQL.Engine.Handlers
                     "Run CREATE DATASET first.",
                     null, stmt.Line, stmt.Column);
 
+            // Refresh re-materialises the source query — restricted to editor/owner (admin/scheduled
+            // jobs pass). A viewer who can read the dataset cannot force a refresh under their identity.
+            if (!await registry.CanEditAsync(stmt.DatasetName, callerCtx))
+                throw new ExecutionException(
+                    $"REFRESH DATASET '{stmt.DatasetName}' requires editor or owner permission.",
+                    null, stmt.Line, stmt.Column);
+
             if (string.IsNullOrWhiteSpace(existing.SourceQuery))
                 throw new ExecutionException(
                     $"REFRESH DATASET '{stmt.DatasetName}': no source query stored in registry. " +

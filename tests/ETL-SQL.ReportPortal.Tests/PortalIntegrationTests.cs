@@ -1798,6 +1798,65 @@ CREATE PAGE Main AS DASHBOARD(
     }
 
     [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task DatasetRegistry_CanEdit_OnlyOwnerEditorAndAdmin()
+    {
+        // 1d: REFRESH / CREATE OR ALTER are gated on edit permission = admin, owner, or an
+        // Editor/Owner dataset grant. A Viewer grant (or read-only access) cannot edit.
+        using var scope = _factory.Services.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var owner   = new PortalUser { UserName = $"ed_owner_{suffix}",   Email = $"ed_owner_{suffix}@test.local" };
+        var editor  = new PortalUser { UserName = $"ed_editor_{suffix}",  Email = $"ed_editor_{suffix}@test.local" };
+        var viewer  = new PortalUser { UserName = $"ed_viewer_{suffix}",  Email = $"ed_viewer_{suffix}@test.local" };
+        var outsider = new PortalUser { UserName = $"ed_out_{suffix}",    Email = $"ed_out_{suffix}@test.local" };
+        db.Users.AddRange(owner, editor, viewer, outsider);
+        await db.SaveChangesAsync();
+
+        var folder = new Folder { Name = $"ED {suffix}", Path = $"/ed-{suffix}", OwnerId = owner.Id };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+
+        var report = new Report
+        {
+            FolderId = folder.Id, Name = $"ED Report {suffix}",
+            ScriptPath = Path.Combine(_factory.TempDir, "scripts", $"ed_{suffix}.rptsql"), CreatedBy = owner.Id
+        };
+        db.Reports.Add(report);
+        await db.SaveChangesAsync();
+
+        var name = $"#ed_{suffix}";
+        await registry.RegisterOrUpdate(new DatasetMetadata
+        {
+            Name = name, FolderPath = folder.Path, ParquetFilePath = $"ed_{suffix}.parquet",
+            SourceQuery = "SELECT 1", AccessLevel = DatasetAccessLevel.Private, OwningReportId = report.Id
+        });
+
+        var editorGroup = new Group { Name = $"ed-editors-{suffix}" };
+        var viewerGroup = new Group { Name = $"ed-viewers-{suffix}" };
+        db.Groups.AddRange(editorGroup, viewerGroup);
+        await db.SaveChangesAsync();
+        db.UserGroups.AddRange(
+            new UserGroup { UserId = editor.Id, GroupId = editorGroup.Id },
+            new UserGroup { UserId = viewer.Id, GroupId = viewerGroup.Id });
+        var ds = await db.Datasets.SingleAsync(d => d.Name == name);
+        db.DatasetAcls.AddRange(
+            new DatasetAcl { DatasetId = ds.Id, GroupId = editorGroup.Id, Permission = DatasetPermission.Editor },
+            new DatasetAcl { DatasetId = ds.Id, GroupId = viewerGroup.Id, Permission = DatasetPermission.Viewer });
+        await db.SaveChangesAsync();
+
+        Assert.True (await registry.CanEditAsync(name, "Admin"));
+        Assert.True (await registry.CanEditAsync(name, $"UserId={owner.Id}"));
+        Assert.True (await registry.CanEditAsync(name, $"UserId={editor.Id}"));
+        Assert.False(await registry.CanEditAsync(name, $"UserId={viewer.Id}"));
+        Assert.False(await registry.CanEditAsync(name, $"UserId={outsider.Id}"));
+        Assert.False(await registry.CanEditAsync(name, ""));
+        Assert.False(await registry.CanEditAsync($"#nonexistent_{suffix}", "Admin"));
+    }
+
+    [Fact]
     [Trait("Category", "Smoke.Portal")]
     public async Task ReadOnlyReportAccess_AllowsSnapshotAndExportButFiltersPrivateDatasets()
     {

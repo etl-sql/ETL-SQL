@@ -85,6 +85,17 @@ namespace ETL_SQL.ReportPortal.Services
             return await _db.Datasets.AnyAsync(x => x.Name == name);
         }
 
+        public async Task<bool> CanEditAsync(string name, string callerPermissions)
+        {
+            var d = await _db.Datasets
+                .Include(x => x.OwningReport)
+                .Include(x => x.Acls)
+                .FirstOrDefaultAsync(x => x.Name == name);
+
+            if (d == null) return false;
+            return await CanWriteAsync(d, CallerContext.Parse(callerPermissions));
+        }
+
         public async Task SetStale(string name)
         {
             var d = await _db.Datasets
@@ -203,6 +214,26 @@ namespace ETL_SQL.ReportPortal.Services
             return dataset.Acls.Any(a =>
                 groupIds.Contains(a.GroupId)
                 && a.Permission is DatasetPermission.Viewer or DatasetPermission.Editor or DatasetPermission.Owner);
+        }
+
+        // Write access (REFRESH / CREATE OR ALTER): admin, the owner, or an Editor/Owner grant.
+        // Mirrors DatasetController.GetEffectivePermission + CanEdit. Folder/PUBLIC read does not grant edit.
+        private async Task<bool> CanWriteAsync(Dataset dataset, CallerContext caller)
+        {
+            if (caller.IsAdmin) return true;
+            if (caller.UserId is null) return false;
+
+            if (dataset.OwningReport?.CreatedBy == caller.UserId.Value)
+                return true;
+
+            var groupIds = await _db.UserGroups
+                .Where(ug => ug.UserId == caller.UserId.Value)
+                .Select(ug => ug.GroupId)
+                .ToListAsync();
+
+            return dataset.Acls.Any(a =>
+                groupIds.Contains(a.GroupId)
+                && a.Permission is DatasetPermission.Editor or DatasetPermission.Owner);
         }
 
         private sealed record CallerContext(bool IsAdmin, int? UserId)

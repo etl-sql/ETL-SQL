@@ -876,6 +876,10 @@ namespace ETL_SQL.Tests.Scale
             public Task<bool> Exists(string name)
                 => Task.FromResult(_items.ContainsKey(name));
 
+            // Scale tests run as admin and don't exercise edit-gating; allow edits.
+            public Task<bool> CanEditAsync(string name, string callerPermissions)
+                => Task.FromResult(_items.ContainsKey(name));
+
             public Task SetStale(string name)
             {
                 if (_items.TryGetValue(name, out var metadata))

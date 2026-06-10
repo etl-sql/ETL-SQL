@@ -89,10 +89,15 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   fail-closed (PRIVATE denied, PUBLIC allowed); non-portal standalone unchanged (registry null). Tests:
   `DatasetPhase4Tests.UseDataset_PrivateWithoutAccess_Denied` + `ShowDatasets_ForwardsCallerContextToRegistry`.
   (PUBLIC is still an unconditional allow in `CanReadAsync` — the folder-permission gate is **1b**.)
-- [ ] **1d. Refresh split + serve-stale-with-warning (option a).** Non-owner stale read → serve cached
-  parquet + log staleness warning; do **not** re-materialize under consumer identity. `REFRESH DATASET`
-  and `CREATE OR ALTER DATASET` query edits require editor/owner. `SHOW DATASETS` lists only what the
-  caller may see.
+- [x] **1d. Refresh split + serve-stale-with-warning (option a).** *(done — branch v0.11.0)* `USE DATASET`
+  is now read-only: a stale cache is served with a yellow staleness warning and **never re-materialized
+  under the consumer's identity** (`RematerialiseAndRefresh` deleted from `UseDatasetStatementHandler`);
+  a never-materialized dataset errors instead of re-running the source. `REFRESH DATASET` and
+  `CREATE OR ALTER DATASET` (over an existing dataset) require editor/owner via new
+  `IDatasetRegistry.CanEditAsync` (admin/owner/Editor-or-Owner grant — mirrors `DatasetController.CanEdit`).
+  `SHOW DATASETS` already caller-filtered (1c). Re-materialization now happens only via the producing
+  report's `CREATE` (owner or scheduled/admin job). Tests: `DatasetPhase4Tests` refresh/create-or-alter
+  denial + serve-stale + never-materialized; `PortalIntegrationTests.DatasetRegistry_CanEdit_OnlyOwnerEditorAndAdmin`.
 - [ ] **1e. Portal-managed at-rest key.** Introduce an at-rest key abstraction bound to the service
   account, persisted where it can be backed up (config/keystore), replacing the implicit host-DPAPI
   assumption in the consume path. Engine parquet read for portal datasets uses this key (no credential at

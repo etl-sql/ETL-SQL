@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
@@ -200,18 +201,123 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Equal("UserId=7", registry.LastListAllPermissions);
         }
 
+        // ── 1d: refresh/edit gates + serve-stale ──────────────────────────────────
+
+        [Fact]
+        public async Task RefreshDataset_NonEditor_Denied()
+        {
+            // A viewer who can read a dataset cannot REFRESH it (re-materialise) — editor/owner only.
+            var registry = new SingleDatasetRegistry(ownerUserId: 1);
+            await registry.RegisterOrUpdate(new DatasetMetadata
+            {
+                Name = "&pub", FolderPath = "/f", ParquetFilePath = "pub_1.parquet",
+                SourceQuery = "SELECT 1 AS v", AccessLevel = DatasetAccessLevel.Public, LastRefresh = DateTime.UtcNow
+            });
+
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            eval.DatasetRegistry      = registry;
+            eval.DatasetCallerContext = "UserId=99";   // can read (PUBLIC) but not edit
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(
+                () => eval.Evaluate(Parse("REFRESH DATASET &pub;")));
+            Assert.Contains("editor or owner", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task CreateOrAlterDataset_NonEditor_Denied()
+        {
+            // Redefining an existing dataset via CREATE OR ALTER requires editor/owner.
+            var registry = new SingleDatasetRegistry(ownerUserId: 1);
+            await registry.RegisterOrUpdate(new DatasetMetadata
+            {
+                Name = "&pub", FolderPath = "/f", ParquetFilePath = "pub_1.parquet",
+                SourceQuery = "SELECT 1 AS v", AccessLevel = DatasetAccessLevel.Public, LastRefresh = DateTime.UtcNow
+            });
+
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            eval.DatasetRegistry      = registry;
+            eval.DatasetCallerContext = "UserId=99";
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(
+                () => eval.Evaluate(Parse("CREATE OR ALTER DATASET &pub AS (SELECT 1 AS v FROM t);")));
+            Assert.Contains("editor or owner", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task UseDataset_StaleCache_ServesCachedSnapshotWithoutReRun()
+        {
+            // USE never re-materialises: a stale cache is served as-is. Proven by consuming from a
+            // second evaluator that has NO seed table — if USE re-ran the source it would fail.
+            var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_stale_" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(root);
+            try
+            {
+                var registry = new SingleDatasetRegistry(ownerUserId: 1, root: root);
+
+                var producer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                producer.DatasetRegistry      = registry;
+                producer.DatasetCallerContext = "IsAdmin=true";
+                await producer.Evaluate(Parse(@"
+                    CREATE TABLE #seed (v INT);
+                    INSERT INTO #seed VALUES (10);
+                    INSERT INTO #seed VALUES (20);
+                    CREATE DATASET &sales TTL = '1h' AS (SELECT v FROM #seed);"));
+
+                // Force the cache stale.
+                registry.Stored("&sales").LastRefresh = DateTime.UtcNow.AddHours(-2);
+
+                // Fresh evaluator (no #seed) consumes the dataset. CREATE DATASET defaults to PRIVATE,
+                // so read as admin; the point is that USE serves the stale parquet without re-running.
+                var consumer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                consumer.DatasetRegistry      = registry;
+                consumer.DatasetCallerContext = "IsAdmin=true";
+                await consumer.Evaluate(Parse("USE DATASET &sales; SELECT COUNT(*) AS n, SUM(v) AS s FROM &sales;"));
+
+                var row = consumer.LastResult!.Rows[0];
+                Assert.Equal(2m, Convert.ToDecimal(row["n"]));
+                Assert.Equal(30m, Convert.ToDecimal(row["s"]));
+            }
+            finally
+            {
+                try { Directory.Delete(root, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
+        public async Task UseDataset_NeverMaterialized_Errors()
+        {
+            // USE of a registered dataset whose parquet file is absent errors (it does not re-run the
+            // source under the consumer's identity).
+            var registry = new SingleDatasetRegistry(ownerUserId: 1);
+            await registry.RegisterOrUpdate(new DatasetMetadata
+            {
+                Name = "&ghost", FolderPath = "/f", ParquetFilePath = "does_not_exist.parquet",
+                SourceQuery = "SELECT 1 AS v", AccessLevel = DatasetAccessLevel.Public, LastRefresh = DateTime.UtcNow
+            });
+
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            eval.DatasetRegistry      = registry;
+            eval.DatasetCallerContext = "IsAdmin=true";
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(
+                () => eval.Evaluate(Parse("USE DATASET &ghost;")));
+            Assert.Contains("materialised", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// Minimal IDatasetRegistry holding a single dataset, resolved by name. Mimics the real
         /// registry's ACL gate: PUBLIC always resolves; PRIVATE resolves only for admin or the owner.
         /// Records the last caller-permission string each method received.
         /// </summary>
-        private sealed class SingleDatasetRegistry(int ownerUserId) : IDatasetRegistry
+        private sealed class SingleDatasetRegistry(int ownerUserId, string? root = null) : IDatasetRegistry
         {
             private readonly Dictionary<string, DatasetMetadata> _items = new();
             private int _nextId = 1;
 
             public string? LastLookupPermissions { get; private set; }
             public string? LastListAllPermissions { get; private set; }
+
+            public DatasetMetadata Stored(string name) => _items[name];
 
             public Task<int> RegisterOrUpdate(DatasetMetadata metadata)
             {
@@ -232,6 +338,10 @@ namespace ETL_SQL.Tests.Reporting
             public Task<bool> Exists(string name) => Task.FromResult(_items.ContainsKey(name));
             public Task SetStale(string name) => Task.CompletedTask;
 
+            // Edit access mirrors the real registry: admin or the owner (folder/PUBLIC read does not grant edit).
+            public Task<bool> CanEditAsync(string name, string callerPermissions) =>
+                Task.FromResult(_items.ContainsKey(name) && CanWrite(callerPermissions));
+
             public Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions)
             {
                 LastListAllPermissions = callerPermissions;
@@ -240,9 +350,17 @@ namespace ETL_SQL.Tests.Reporting
             }
 
             public Task Delete(string name) => Task.CompletedTask;
-            public string BuildDatasetFilePath(int datasetId, string name) => $"{name}_{datasetId}.parquet";
+
+            public string BuildDatasetFilePath(int datasetId, string name)
+            {
+                var safe = name.TrimStart('&', '#');
+                return root is null ? $"{safe}_{datasetId}.parquet" : Path.Combine(root, $"{safe}_{datasetId}.parquet");
+            }
 
             private bool CanRead(string callerPermissions) =>
+                callerPermissions == "IsAdmin=true" || callerPermissions == $"UserId={ownerUserId}";
+
+            private bool CanWrite(string callerPermissions) =>
                 callerPermissions == "IsAdmin=true" || callerPermissions == $"UserId={ownerUserId}";
         }
     }
