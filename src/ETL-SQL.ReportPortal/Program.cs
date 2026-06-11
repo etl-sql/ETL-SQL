@@ -130,8 +130,20 @@ builder.Services.AddAuthentication(opt =>
             }
 
             var portalDb = context.HttpContext.RequestServices.GetRequiredService<PortalDbContext>();
-            if (!await portalDb.Users.AnyAsync(user => user.Id == userId && user.IsActive))
+            var user = await portalDb.Users
+                .Where(candidate => candidate.Id == userId)
+                .Select(candidate => new { candidate.IsActive, candidate.SecurityStamp })
+                .FirstOrDefaultAsync();
+            if (user is null || !user.IsActive)
+            {
                 context.Fail("User account is disabled.");
+                return;
+            }
+
+            var issuedStamp = context.Principal?.FindFirstValue(TokenService.SecurityStampClaim);
+            if (string.IsNullOrEmpty(issuedStamp)
+                || !string.Equals(issuedStamp, user.SecurityStamp, StringComparison.Ordinal))
+                context.Fail("Security context has changed.");
         }
     };
 });
@@ -165,8 +177,14 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.TokenService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SecuritySessionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionDeliveryStatusService>();
+// Trusted subscription executor (P0.1/P0.2): delivery runs in-process with delivery-time
+// reauthorization; persisted job scripts are credential-free triggers.
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ISubscriptionScriptRunner,
+    ETL_SQL.ReportPortal.Services.EngineSubscriptionScriptRunner>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionDeliveryService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.FolderPermissionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetPermissionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyRotationService>();

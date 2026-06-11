@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using ETL_SQL.ReportPortal.Data;
@@ -6,7 +7,8 @@ namespace ETL_SQL.ReportPortal.Services;
 
 /// <summary>
 /// Background service that polls the Orchestrator's JobHistory SQLite table every 60 seconds.
-/// When a dataset-refresh job completes, it invalidates the snapshot and queues a re-execution.
+/// Dataset-refresh completions invalidate the snapshot and queue a re-execution. Subscription
+/// trigger completions are routed through the trusted delivery executor.
 /// If the Orchestrator DB is unreachable the portal continues in degraded mode (cached snapshots only).
 /// </summary>
 public class OrchestratorPollerService(
@@ -26,33 +28,9 @@ public class OrchestratorPollerService(
         }
     }
 
-    private async Task PollAsync(CancellationToken ct)
+    internal async Task PollAsync(CancellationToken ct)
     {
-        // Find orchestrator DB path from portal DatasetJobs table
-        string? orchDbPath;
-        int[]   watchedReportIds;
-
-        try
-        {
-            using var scope = scopes.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-
-            var datasetJobs = await db.DatasetJobs
-                .Include(j => j.Report)
-                .Where(j => !j.Report.IsDeleted)
-                .ToListAsync(ct);
-
-            if (!datasetJobs.Any()) return;
-
-            watchedReportIds = datasetJobs.Select(j => j.ReportId).ToArray();
-            // Orchestrator DB path comes from appsettings — for now derive from default location
-            orchDbPath = dbLocator.Resolve();
-        }
-        catch (Exception ex)
-        {
-            log.LogWarning("OrchestratorPoller: failed to load dataset jobs — {Message}", ex.Message);
-            return;
-        }
+        var orchDbPath = dbLocator.Resolve();
 
         if (orchDbPath is null || !File.Exists(orchDbPath))
         {
@@ -61,9 +39,11 @@ public class OrchestratorPollerService(
         }
 
         List<(string JobName, DateTime EndTime)> completions;
+        var pollUpperBound = DateTime.UtcNow;
         try
         {
-            completions = await QueryCompletionsAsync(orchDbPath, _lastPollTime, ct);
+            completions = await QueryCompletionsAsync(
+                orchDbPath, _lastPollTime, pollUpperBound, ct);
         }
         catch (Exception ex)
         {
@@ -73,24 +53,36 @@ public class OrchestratorPollerService(
 
         if (!completions.Any())
         {
-            _lastPollTime = DateTime.UtcNow;
+            _lastPollTime = pollUpperBound;
             return;
         }
 
         log.LogInformation("OrchestratorPoller: {Count} job completion(s) detected", completions.Count);
 
-        try
+        foreach (var (jobName, endTime) in completions)
         {
-            using var scope = scopes.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-
-            foreach (var (jobName, endTime) in completions)
+            try
             {
+                using var scope = scopes.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+
+                if (TryParseSubscriptionId(jobName, out var subscriptionId))
+                {
+                    await ProcessSubscriptionCompletionAsync(
+                        scope.ServiceProvider, db, subscriptionId, endTime, ct);
+                    _lastPollTime = endTime;
+                    continue;
+                }
+
                 var datasetJob = await db.DatasetJobs
                     .Include(j => j.Report)
                     .FirstOrDefaultAsync(j => j.OrchestratorJobName == jobName, ct);
 
-                if (datasetJob is null) continue;
+                if (datasetJob is null)
+                {
+                    _lastPollTime = endTime;
+                    continue;
+                }
 
                 log.LogInformation("OrchestratorPoller: refreshing report {ReportId} after job {JobName}",
                     datasetJob.ReportId, jobName);
@@ -105,18 +97,59 @@ public class OrchestratorPollerService(
                     userId: 0,
                     scriptPath: datasetJob.Report.ScriptPath,
                     trustedDatasetExecution: true);
+
+                _lastPollTime = endTime;
+            }
+            catch (Exception ex)
+            {
+                log.LogError(ex,
+                    "OrchestratorPoller: error processing completion for job {JobName}", jobName);
+                break;
             }
         }
-        catch (Exception ex)
-        {
-            log.LogError(ex, "OrchestratorPoller: error processing completions");
-        }
+    }
 
-        _lastPollTime = DateTime.UtcNow;
+    private async Task ProcessSubscriptionCompletionAsync(
+        IServiceProvider services,
+        PortalDbContext db,
+        int subscriptionId,
+        DateTime endTime,
+        CancellationToken ct)
+    {
+        var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct);
+        if (sub is null || sub.LastTriggeredAt >= endTime)
+            return;
+
+        log.LogInformation(
+            "OrchestratorPoller: delivering subscription {SubscriptionId}", subscriptionId);
+
+        var delivery = services.GetRequiredService<SubscriptionDeliveryService>();
+        var result = await delivery.DeliverAsync(subscriptionId, ct);
+
+        // Every terminal delivery decision consumes this scheduler completion. Transient retry and
+        // unknown-outcome semantics require a durable delivery ledger and are tracked separately.
+        sub.LastTriggeredAt = endTime;
+        await db.SaveChangesAsync(ct);
+
+        log.LogInformation(
+            "OrchestratorPoller: subscription {SubscriptionId} completed with outcome {Outcome}",
+            subscriptionId, result.Outcome);
+    }
+
+    private static bool TryParseSubscriptionId(string jobName, out int subscriptionId)
+    {
+        subscriptionId = 0;
+        if (!jobName.StartsWith("SUB:", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var separator = jobName.IndexOf(':', 4);
+        var idText = separator < 0 ? jobName.AsSpan(4) : jobName.AsSpan(4, separator - 4);
+        return int.TryParse(idText, NumberStyles.None, CultureInfo.InvariantCulture, out subscriptionId)
+            && subscriptionId > 0;
     }
 
     private static async Task<List<(string JobName, DateTime EndTime)>> QueryCompletionsAsync(
-        string dbPath, DateTime since, CancellationToken ct)
+        string dbPath, DateTime since, DateTime through, CancellationToken ct)
     {
         var results = new List<(string, DateTime)>();
         var cs = $"Data Source={dbPath};Mode=ReadOnly";
@@ -128,17 +161,23 @@ public class OrchestratorPollerService(
         cmd.CommandText = """
             SELECT JobName, EndTime FROM JobHistory
             WHERE Status = 'SUCCESS'
-              AND EndTime > $since
+              AND julianday(EndTime) > julianday($since)
+              AND julianday(EndTime) <= julianday($through)
             ORDER BY EndTime ASC
             """;
-        cmd.Parameters.AddWithValue("$since", since.ToString("o"));
+        cmd.Parameters.AddWithValue("$since", since.ToString("o", CultureInfo.InvariantCulture));
+        cmd.Parameters.AddWithValue("$through", through.ToString("o", CultureInfo.InvariantCulture));
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
             var name    = reader.GetString(0);
             var endRaw  = reader.GetString(1);
-            if (DateTime.TryParse(endRaw, out var endTime))
+            if (DateTime.TryParse(
+                    endRaw,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var endTime))
                 results.Add((name, endTime));
         }
 

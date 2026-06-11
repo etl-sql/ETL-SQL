@@ -905,7 +905,7 @@ namespace ETL_SQL.ReportPortal.Tests
             })).StatusCode);
 
             Assert.Equal(HttpStatusCode.OK, (await AuthGet(tFinRead, "/api/share/fin-share-token-xyz123")).StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(tOutsider, "/api/share/fin-share-token-xyz123")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await AuthGet(tOutsider, "/api/share/fin-share-token-xyz123")).StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync("/api/embed/fin-embed-token-abc987")).StatusCode);
         }
 

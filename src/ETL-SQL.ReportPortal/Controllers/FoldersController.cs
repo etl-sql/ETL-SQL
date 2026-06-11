@@ -11,7 +11,11 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [ApiController]
 [Route("api/folders")]
 [Authorize]
-public class FoldersController(PortalDbContext db, AuditService audit, FolderPermissionService folderPermissions) : ControllerBase
+public class FoldersController(
+    PortalDbContext db,
+    AuditService audit,
+    FolderPermissionService folderPermissions,
+    SecuritySessionService securitySessions) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -235,6 +239,7 @@ public class FoldersController(PortalDbContext db, AuditService audit, FolderPer
             db.FolderAcls.Add(new FolderAcl { FolderId = id, GroupId = req.GroupId, Permission = req.Permission });
 
         await db.SaveChangesAsync();
+        await securitySessions.InvalidateGroupMembersAsync(req.GroupId);
         await audit.LogAsync(CurrentUserId, "GRANT_PERMISSION", "Folder", id.ToString(),
             $"group={req.GroupId} perm={req.Permission}");
         return NoContent();
@@ -250,6 +255,7 @@ public class FoldersController(PortalDbContext db, AuditService audit, FolderPer
 
         db.FolderAcls.Remove(acl);
         await db.SaveChangesAsync();
+        await securitySessions.InvalidateGroupMembersAsync(groupId);
         await audit.LogAsync(CurrentUserId, "REVOKE_PERMISSION", "Folder", id.ToString(),
             $"group={groupId}");
         return NoContent();

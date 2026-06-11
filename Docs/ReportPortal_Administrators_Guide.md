@@ -620,7 +620,15 @@ SHOW FAVORITES FOR USER 'john.doe' LIMIT 50 INTO #favorites;
 
 ### 6.10 Share Links
 
-Share links are shortcuts, not permission bypasses. Resolving a share link still requires an authenticated portal user with access to the report's folder. Users without folder permission receive `403 Forbidden`, and revoked or expired links return `404 Not Found`.
+Share links and embed tokens are anonymous bearer capabilities. Keep their URLs secret. Resolution does
+not require a portal login, but the portal rechecks the creator on every request: the creator must still
+be active and retain read permission on the report (or remain an Admin). Revoked, expired,
+creator-disabled, and permission-lost capabilities return `404 Not Found`.
+
+New share links and embed tokens expire after seven days unless `ExpiresAt` is supplied. Role demotion or
+account disablement explicitly revokes all capabilities created by that user. Successful anonymous views
+are audited without recording the token. Administrators can inventory all capabilities through
+`GET /api/admin/anonymous-report-access`; the inventory intentionally excludes the bearer token itself.
 
 Use `CREATE SHARE LINK FOR REPORT`, `SHOW SHARE LINKS`, and `REVOKE SHARE LINK` for script-first administration, or the backing REST endpoints:
 
@@ -629,7 +637,9 @@ Use `CREATE SHARE LINK FOR REPORT`, `SHOW SHARE LINKS`, and `REVOKE SHARE LINK` 
 | `POST /api/reports/{id}/share-links` | Create a share link for a report the caller can execute. |
 | `GET /api/reports/{id}/share-links` | List share links for a report the caller can manage. |
 | `DELETE /api/reports/{id}/share-links/{token}` | Revoke a share link. |
-| `GET /api/share/{token}` | Resolve a share link after checking the caller's report permission. |
+| `GET /api/share/{token}` | Resolve an anonymous share capability after reauthorizing its creator. |
+| `GET /api/embed/{token}` | Resolve an anonymous embed capability after reauthorizing its creator. |
+| `GET /api/admin/anonymous-report-access` | Admin inventory of active, expired, revoked, disabled-creator, and permission-lost capabilities. |
 
 ```sql
 CREATE SHARE LINK FOR REPORT 'Monthly Sales'
@@ -670,7 +680,14 @@ DROP SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales';
 
 ### 6.13 Alerts
 
-Alerts track threshold rules for KPI-style visuals such as cards and gauges. Alert ownership follows the creating user; admins can see all alerts. Delivery uses the same notification direction as subscriptions: a recipient and SMTP alias can be attached to the alert definition, and the evaluation runner can use that metadata when scheduled alert checks are enabled.
+Alerts store threshold definitions for KPI-style visuals such as cards and gauges. Alert ownership follows
+the creating user; admins can see all alerts. In v0.11.0 alerts are definition-only/browser-consumed
+metadata: the portal does not evaluate thresholds, schedule checks, or deliver email server-side.
+`Recipient` and `SmtpAlias` are reserved metadata for a future trusted delivery implementation.
+
+Any future server-side alert delivery must use the same security boundary as subscriptions: reload the
+owner and current report permission immediately before evaluation/send, resolve SMTP secrets only at
+runtime, and never persist credentials in jobs or generated scripts.
 
 ```sql
 CREATE ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales'
@@ -1002,7 +1019,9 @@ EXECUTE portal BEGIN
 END;
 ```
 
-`SHOW ACTIVE SESSIONS` reports unrevoked, unexpired refresh tokens. `DISCONNECT USER` revokes those active refresh sessions; already-issued access tokens still expire on their normal JWT lifetime.
+`SHOW ACTIVE SESSIONS` reports unrevoked, unexpired refresh tokens. `DISCONNECT USER` and
+`REVOKE TOKENS` revoke refresh tokens and rotate the user's security stamp, so already-issued access
+tokens are rejected on their next request.
 
 ### 9.4 Service Control
 
@@ -1103,8 +1122,14 @@ Click **Export CSV** to download up to 10,000 most-recent entries as a UTF-8 CSV
 The portal uses **JWT Bearer tokens** with HMAC-SHA256 signing.
 
 - Access tokens expire after `Jwt.ExpiryMinutes` (default 60 min).
-- Refresh tokens expire after `Jwt.RefreshExpiryDays` (default 7 days). Each refresh issues a new refresh token (rolling window).
-- Refresh tokens are stored in the database and can be individually revoked via **Revoke Tokens**.
+- Every access token contains the user's Identity security stamp. Validation reloads current account
+  state and rejects the token immediately when the stamp no longer matches.
+- Refresh tokens expire after `Jwt.RefreshExpiryDays` (default 7 days), are stored only as SHA-256
+  digests, and are single-use. Each successful refresh revokes the old token and returns a replacement.
+- Role, group, folder/dataset ACL, active-state, password, and LDAP mapping changes rotate the stamp and
+  revoke outstanding refresh tokens for affected users.
+- **Logout**, **Disconnect User**, and **Revoke Tokens** invalidate all current sessions for that user,
+  including already-issued access tokens.
 
 ### 11.2 Roles
 

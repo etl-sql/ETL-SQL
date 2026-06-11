@@ -16,6 +16,7 @@ public class AuthController(
     SignInManager<PortalUser> signInManager,
     TokenService             tokenService,
     AuditService             auditService,
+    SecuritySessionService   securitySessions,
     PortalDbContext          db,
     PortalConfig             config,
     ILdapService             ldapService) : ControllerBase
@@ -164,6 +165,10 @@ public class AuthController(
                 var currentUserLdapGroupIds = currentUserLdapMemberships.Select(ug => ug.GroupId).ToList();
                 var membershipsToAdd = matchingGroupIds.Except(currentUserLdapGroupIds).ToList();
                 var membershipsToRemove = currentUserLdapMemberships.Where(ug => !matchingGroupIds.Contains(ug.GroupId)).ToList();
+                var securityContextChanged = rolesToAdd.Count > 0
+                    || rolesToRemove.Count > 0
+                    || membershipsToAdd.Count > 0
+                    || membershipsToRemove.Count > 0;
 
                 if (membershipsToRemove.Any())
                 {
@@ -175,6 +180,12 @@ public class AuthController(
                 }
 
                 await db.SaveChangesAsync();
+                if (securityContextChanged)
+                {
+                    await securitySessions.InvalidateUserAsync(user.Id);
+                    if (rolesToRemove.Count > 0)
+                        await securitySessions.RevokeAnonymousCapabilitiesAsync([user.Id]);
+                }
                 await transaction.CommitAsync();
             }
             catch (Exception)
@@ -212,7 +223,7 @@ public class AuthController(
         db.RefreshTokens.Add(new RefreshToken
         {
             UserId    = user.Id,
-            Token     = rawRefresh,
+            Token     = TokenService.HashRefreshToken(rawRefresh),
             ExpiresAt = DateTime.UtcNow.AddDays(config.Jwt.RefreshExpiryDays)
         });
         await db.SaveChangesAsync();
@@ -225,9 +236,10 @@ public class AuthController(
     [AllowAnonymous]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest req)
     {
+        var tokenHash = TokenService.HashRefreshToken(req.RefreshToken);
         var token = await db.RefreshTokens
             .Include(t => t.User)
-            .FirstOrDefaultAsync(t => t.Token == req.RefreshToken
+            .FirstOrDefaultAsync(t => t.Token == tokenHash
                 && t.RevokedAt == null
                 && t.ExpiresAt > DateTime.UtcNow);
 
@@ -247,7 +259,7 @@ public class AuthController(
         db.RefreshTokens.Add(new RefreshToken
         {
             UserId    = token.UserId,
-            Token     = newRaw,
+            Token     = TokenService.HashRefreshToken(newRaw),
             ExpiresAt = DateTime.UtcNow.AddDays(config.Jwt.RefreshExpiryDays)
         });
         await db.SaveChangesAsync();
@@ -284,6 +296,7 @@ public class AuthController(
 
         user.MustChangePassword = false;
         await userManager.UpdateAsync(user);
+        await securitySessions.InvalidateUserAsync(user.Id);
         await auditService.LogAsync(userId.Value, "PASSWORD_CHANGED", "User", userId.Value.ToString());
 
         return NoContent();
@@ -293,17 +306,9 @@ public class AuthController(
     [Authorize]
     public async Task<IActionResult> Logout([FromBody] RefreshRequest req)
     {
-        var token = await db.RefreshTokens
-            .FirstOrDefaultAsync(t => t.Token == req.RefreshToken && t.RevokedAt == null);
-
-        if (token is not null)
-        {
-            token.RevokedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
-        }
-
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
+        await securitySessions.InvalidateUserAsync(userId.Value);
         await auditService.LogAsync(userId.Value, "LOGOUT", "User", userId.Value.ToString());
         return NoContent();
     }

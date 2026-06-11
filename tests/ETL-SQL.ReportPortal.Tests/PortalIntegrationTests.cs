@@ -760,7 +760,7 @@ CREATE VISUAL {visualName} AS CARD (
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
-    public async Task ReportShareLinks_ResolveOnlyWhenCallerHasPermission()
+    public async Task ReportShareLinks_ResolveAnonymouslyWhileCreatorRemainsAuthorized()
     {
         var token = await GetAdminTokenAsync();
 
@@ -792,14 +792,13 @@ CREATE VISUAL {visualName} AS CARD (
         var shareToken = share!["token"]!.GetValue<string>();
         Assert.Contains($"/api/share/{shareToken}", share["url"]!.GetValue<string>());
 
-        var adminResolve = await AuthGet(token, $"/api/share/{shareToken}");
+        var adminResolve = await _client.GetAsync($"/api/share/{shareToken}");
         Assert.Equal(HttpStatusCode.OK, adminResolve.StatusCode);
         var resolved = await adminResolve.Content.ReadFromJsonAsync<JsonObject>(_json);
         Assert.Equal(reportId, resolved!["reportId"]!.GetValue<int>());
 
-        var viewerToken = await GetFreshViewerTokenAsync();
-        var viewerResolve = await AuthGet(viewerToken, $"/api/share/{shareToken}");
-        Assert.Equal(HttpStatusCode.Forbidden, viewerResolve.StatusCode);
+        var anonymousResolve = await _client.GetAsync($"/api/share/{shareToken}");
+        Assert.Equal(HttpStatusCode.OK, anonymousResolve.StatusCode);
 
         var listRes = await AuthGet(token, $"/api/reports/{reportId}/share-links");
         Assert.Equal(HttpStatusCode.OK, listRes.StatusCode);
@@ -809,7 +808,7 @@ CREATE VISUAL {visualName} AS CARD (
         var revokeRes = await AuthDelete(token, $"/api/reports/{reportId}/share-links/{shareToken}");
         Assert.Equal(HttpStatusCode.NoContent, revokeRes.StatusCode);
 
-        var revokedResolve = await AuthGet(token, $"/api/share/{shareToken}");
+        var revokedResolve = await _client.GetAsync($"/api/share/{shareToken}");
         Assert.Equal(HttpStatusCode.NotFound, revokedResolve.StatusCode);
     }
 

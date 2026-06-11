@@ -228,6 +228,9 @@ public class Subscription
     public string?             ParametersJson   { get; set; }
     public DateTime?           LastSentAt       { get; set; }
     public DateTime?           NextRunAt        { get; set; }
+    /// <summary>EndTime of the last Orchestrator trigger completion handled by the portal's
+    /// delivery executor — durable dedupe so a re-observed completion is not delivered twice.</summary>
+    public DateTime?           LastTriggeredAt  { get; set; }
     public int                 FailCount        { get; set; } = 0;
     public bool                IsActive         { get; set; } = true;
 }

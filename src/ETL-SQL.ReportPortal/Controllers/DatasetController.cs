@@ -23,6 +23,7 @@ public class DatasetController(
     DatasetViewerService viewer,
     DatasetPermissionService datasetPermissions,
     FolderPermissionService folderPermissions,
+    SecuritySessionService securitySessions,
     SessionCache sessions) : ControllerBase
 {
     private int  CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -467,6 +468,7 @@ public class DatasetController(
             existing.Permission = granted;
 
         await db.SaveChangesAsync();
+        await securitySessions.InvalidateGroupMembersAsync(req.GroupId);
         await audit.LogAsync(CurrentUserId, "GRANT_DATASET_PERMISSION", "Dataset", id.ToString(),
             $"{dataset.Name} → group {req.GroupId} as {granted}");
 
@@ -490,6 +492,7 @@ public class DatasetController(
 
         db.DatasetAcls.Remove(acl);
         await db.SaveChangesAsync();
+        await securitySessions.InvalidateGroupMembersAsync(groupId);
         await audit.LogAsync(CurrentUserId, "REVOKE_DATASET_PERMISSION", "Dataset", id.ToString(),
             $"{dataset.Name} → group {groupId}");
 

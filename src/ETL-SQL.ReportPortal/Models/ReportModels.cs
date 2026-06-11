@@ -76,6 +76,21 @@ public record ReportEmbedTokenDto(
     DateTime? ExpiresAt,
     DateTime? RevokedAt);
 
+public record AnonymousReportAccessDto(
+    string Type,
+    int Id,
+    int ReportId,
+    string ReportName,
+    string FolderPath,
+    string? Name,
+    int CreatedBy,
+    string? CreatorUsername,
+    bool CreatorIsActive,
+    DateTime CreatedAt,
+    DateTime? ExpiresAt,
+    DateTime? RevokedAt,
+    string Status);
+
 public record CreateSavedReportViewRequest(
     string Name,
     Dictionary<string, string>? Parameters,

@@ -5,7 +5,6 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
@@ -14,6 +13,7 @@ using ETL_SQL.Orchestrator.Service;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Services;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Tests.Integration.Connectors;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +22,7 @@ namespace ETL_SQL.ReportPortal.Tests
 {
     [Collection("SMTP collection")]
     [Trait("Category", "Integration")]
+    [Trait("CompatBreak", "0.11")]
     public class SubscriptionIntegrationTests
     {
         private readonly SmtpFixture _smtp;
@@ -146,6 +147,20 @@ namespace ETL_SQL.ReportPortal.Tests
             Assert.Equal(HttpStatusCode.Accepted, triggerRes.StatusCode);
         }
 
+        private static async Task PollPortalOrchestratorAsync(PortalWebFactory factory)
+        {
+            var poller = ActivatorUtilities.CreateInstance<OrchestratorPollerService>(factory.Services);
+            await poller.PollAsync(CancellationToken.None);
+        }
+
+        private static async Task DelayGeneratedTriggerAsync(string scriptPath, int seconds = 3)
+        {
+            var script = await File.ReadAllTextAsync(scriptPath);
+            await File.WriteAllTextAsync(
+                scriptPath,
+                $"WAITFOR DELAY '00:00:{seconds:00}';{Environment.NewLine}{script}");
+        }
+
         private static string GeneratedSubscriptionScriptPath(string tempDir, int subId, string reportName)
         {
             var sanitizedReportName = new string(reportName.Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
@@ -154,7 +169,7 @@ namespace ETL_SQL.ReportPortal.Tests
 
         private static void AssertNoSecretLeak(string? text, params string[] secrets)
         {
-            Assert.NotNull(text);
+            if (text is null) return;
             foreach (var secret in secrets)
             {
                 Assert.DoesNotContain(secret, text, StringComparison.OrdinalIgnoreCase);
@@ -262,6 +277,8 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             Assert.NotNull(store);
             var history = await PollHistoryUntilCountAsync(store, jobName, 1);
             Assert.True(history[0].Status == "SUCCESS", $"Job failed with error: {history[0].ErrorMessage}");
+            await PollPortalOrchestratorAsync(portalFactory);
+            await PollPortalOrchestratorAsync(portalFactory);
 
             // 4. Assert MailPit received the email
             await PollMailPitUntilCountAsync(initialMailCount + 1);
@@ -367,12 +384,15 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var sub = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
             var subId = sub!["id"]!.GetValue<int>();
 
-            // Verify generated job script contains parameter SET statement
+            // The persisted scheduler script is a non-secret trigger only.
             var sanitizedReportName = new string(reportName.Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
             var generatedScriptPath = Path.Combine(portalFactory.TempDir, "scripts", "subscriptions", $"sub_{subId}_{sanitizedReportName}.etlsql");
             Assert.True(File.Exists(generatedScriptPath));
-            var scriptLines = await File.ReadAllLinesAsync(generatedScriptPath);
-            Assert.Contains(scriptLines, line => line.Trim().Equals("DECLARE @Region STRING = 'NA';", StringComparison.OrdinalIgnoreCase));
+            var persistedScript = await File.ReadAllTextAsync(generatedScriptPath);
+            Assert.Contains($"subscription {subId}", persistedScript, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("@Region", persistedScript, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(recipientEmail, persistedScript, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("PASSWORD", persistedScript, StringComparison.OrdinalIgnoreCase);
 
             var jobName = $"SUB:{subId}:{reportName}";
             await TriggerJobAsync(orchClient, jobName);
@@ -382,6 +402,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             Assert.NotNull(store);
             var history = await PollHistoryUntilCountAsync(store, jobName, 1);
             Assert.True(history[0].Status == "SUCCESS", $"Job failed with error: {history[0].ErrorMessage}");
+            await PollPortalOrchestratorAsync(portalFactory);
 
             // 4. Assert MailPit received the email and attachment reflects the parameter NA
             await PollMailPitUntilCountAsync(initialMailCount + 1);
@@ -486,12 +507,14 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             Assert.Equal("WEEK", job.Unit);
             Assert.False(job.IsEnabled);
 
-            // 5. Verify script file parameters rewrote
+            // 5. Verify the persisted trigger remains free of delivery configuration.
             var generatedScriptPath = GeneratedSubscriptionScriptPath(portalFactory.TempDir, subId, reportName);
-            var scriptLines = await File.ReadAllLinesAsync(generatedScriptPath);
-            Assert.Contains(scriptLines, line => line.Trim().Equals("DECLARE @Region STRING = 'APAC';", StringComparison.OrdinalIgnoreCase));
-            Assert.DoesNotContain(scriptLines, line => line.Trim().Equals("DECLARE @Region STRING = 'EMEA';", StringComparison.OrdinalIgnoreCase));
-            Assert.Contains(scriptLines, line => line.Contains("portal-updated@example.com", StringComparison.OrdinalIgnoreCase));
+            var persistedScript = await File.ReadAllTextAsync(generatedScriptPath);
+            Assert.Contains($"subscription {subId}", persistedScript, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("APAC", persistedScript, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("EMEA", persistedScript, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("portal-updated@example.com", persistedScript, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("new-recipient@test.local", persistedScript, StringComparison.OrdinalIgnoreCase);
 
             var reenableRes = await AuthPut(portalClient, token, $"/api/subscriptions/{subId}", new
             {
@@ -540,6 +563,8 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var store = orchestratorFactory.Services.GetRequiredService<IJobHistoryStore>() as SQLiteJobHistoryStore;
             Assert.NotNull(store);
 
+            var generatedScriptPath = GeneratedSubscriptionScriptPath(portalFactory.TempDir, subId, reportName);
+            await DelayGeneratedTriggerAsync(generatedScriptPath);
             await TriggerJobAsync(orchClient, jobName);
             await PollHistoryUntilStatusAsync(store, jobName, "RUNNING");
 
@@ -563,9 +588,9 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             Assert.Equal("WEEK", job.Unit);
             Assert.True(job.IsEnabled);
 
-            var generatedScriptPath = GeneratedSubscriptionScriptPath(portalFactory.TempDir, subId, reportName);
             var generatedScript = await File.ReadAllTextAsync(generatedScriptPath);
-            Assert.Contains("after-update@test.local", generatedScript, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains($"subscription {subId}", generatedScript, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("after-update@test.local", generatedScript, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("before-update@test.local", generatedScript, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -606,6 +631,8 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var store = orchestratorFactory.Services.GetRequiredService<IJobHistoryStore>() as SQLiteJobHistoryStore;
             Assert.NotNull(store);
 
+            await DelayGeneratedTriggerAsync(
+                GeneratedSubscriptionScriptPath(portalFactory.TempDir, initialId, reportName));
             await TriggerJobAsync(orchClient, initialJobName);
             await PollHistoryUntilStatusAsync(store, initialJobName, "RUNNING");
 
@@ -685,6 +712,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var store = orchestratorFactory.Services.GetRequiredService<IJobHistoryStore>() as SQLiteJobHistoryStore;
             Assert.NotNull(store);
 
+            await DelayGeneratedTriggerAsync(generatedScriptPath);
             await TriggerJobAsync(orchClient, jobName);
             await PollHistoryUntilStatusAsync(store, jobName, "RUNNING");
 
@@ -817,17 +845,16 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var store = orchestratorFactory.Services.GetRequiredService<IJobHistoryStore>() as SQLiteJobHistoryStore;
             Assert.NotNull(store);
             var history = await PollHistoryUntilCountAsync(store, jobName, 1);
-            Assert.Equal("FAILURE", history[0].Status);
-            Assert.Contains("report file not found", history[0].ErrorMessage);
+            Assert.Equal("SUCCESS", history[0].Status);
+            await PollPortalOrchestratorAsync(portalFactory);
 
-            // 5. Verify failure visible in portal subscription history API
+            // 5. The trigger succeeded; the portal records the delivery failure separately.
             var getHistRes = await AuthGet(portalClient, token, $"/api/subscriptions/{subId}/history");
             Assert.Equal(HttpStatusCode.OK, getHistRes.StatusCode);
             var portalHistory = await getHistRes.Content.ReadFromJsonAsync<List<JobHistoryEntry>>(_json);
             Assert.NotNull(portalHistory);
             var subEntry = Assert.Single(portalHistory);
-            Assert.Equal("FAILURE", subEntry.Status);
-            Assert.Contains("report file not found", subEntry.ErrorMessage);
+            Assert.Equal("SUCCESS", subEntry.Status);
 
             var subGetRes = await AuthGet(portalClient, token, $"/api/subscriptions/{subId}");
             var subBody = await subGetRes.Content.ReadFromJsonAsync<JsonObject>(_json);
@@ -839,8 +866,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var auditItems = auditBody!["items"]!.AsArray();
             var auditEntry = Assert.Single(auditItems);
             Assert.Equal(subId.ToString(), auditEntry!["resourceId"]!.GetValue<string>());
-            Assert.Contains("Job history entry", auditEntry["detail"]!.GetValue<string>());
-            Assert.DoesNotContain("report file not found", auditEntry["detail"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("script file", auditEntry["detail"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
 
             var metricsRes = await AuthGet(portalClient, token, "/api/admin/metrics/usage");
             Assert.Equal(HttpStatusCode.OK, metricsRes.StatusCode);
@@ -924,7 +950,6 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
         [Theory]
         [InlineData("invalid-script")]
         [InlineData("unreachable-smtp")]
-        [InlineData("blocked-attachment")]
         public async Task Verify_Subscription_Controlled_Failure_Scenarios(string scenario)
         {
             using var portalFactory = new PortalWebFactory();
@@ -963,34 +988,30 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             var subId = sub!["id"]!.GetValue<int>();
             var jobName = $"SUB:{subId}:{reportName}";
 
-            if (scenario == "blocked-attachment")
-            {
-                var blockedPath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                    ? "C:/Windows/System32/config/SAM"
-                    : "/etc/shadow";
-                var generatedScriptPath = GeneratedSubscriptionScriptPath(portalFactory.TempDir, subId, reportName);
-                var scriptText = await File.ReadAllTextAsync(generatedScriptPath);
-                scriptText = System.Text.RegularExpressions.Regex.Replace(
-                    scriptText,
-                    @"ATTACH\s+'[^']+'",
-                    $"ATTACH '{blockedPath}'",
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                await File.WriteAllTextAsync(generatedScriptPath, scriptText);
-            }
-
             await TriggerJobAsync(orchClient, jobName);
 
             var store = orchestratorFactory.Services.GetRequiredService<IJobHistoryStore>() as SQLiteJobHistoryStore;
             Assert.NotNull(store);
             var history = await PollHistoryUntilCountAsync(store, jobName, 1);
-            Assert.Equal("FAILURE", history[0].Status);
+            Assert.Equal("SUCCESS", history[0].Status);
             AssertNoSecretLeak(history[0].ErrorMessage, smtpSecret, "ENC:");
+            await PollPortalOrchestratorAsync(portalFactory);
 
             var getHistRes = await AuthGet(portalClient, token, $"/api/subscriptions/{subId}/history");
             Assert.Equal(HttpStatusCode.OK, getHistRes.StatusCode);
             var portalHistory = await getHistRes.Content.ReadFromJsonAsync<List<JobHistoryEntry>>(_json);
             Assert.NotNull(portalHistory);
-            Assert.Contains(portalHistory, h => h.Status == "FAILURE");
+            Assert.Contains(portalHistory, h => h.Status == "SUCCESS");
+
+            var subGetRes = await AuthGet(portalClient, token, $"/api/subscriptions/{subId}");
+            var subBody = await subGetRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            Assert.Equal(1, subBody!["failCount"]!.GetValue<int>());
+
+            var auditRes = await AuthGet(
+                portalClient, token, "/api/admin/audit?action=SUBSCRIPTION_DELIVERY_FAILED");
+            var auditBody = await auditRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var detail = Assert.Single(auditBody!["items"]!.AsArray())!["detail"]!.GetValue<string>();
+            AssertNoSecretLeak(detail, smtpSecret, "ENC:");
         }
 
         [Fact]

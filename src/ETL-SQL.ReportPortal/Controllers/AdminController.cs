@@ -18,6 +18,7 @@ public class AdminController(
     UserManager<PortalUser> userManager,
     PortalDbContext          db,
     AuditService             audit,
+    SecuritySessionService   securitySessions,
     PortalConfig             config,
     SubscriptionDeliveryStatusService deliveryStatus,
     DatasetAtRestKeyRotationService datasetKeyRotation,
@@ -191,6 +192,7 @@ public class AdminController(
         if (user is null) return NotFound();
 
         var wasActive = user.IsActive;
+        var roleChanged = false;
         if (req.Email    is not null) user.Email    = req.Email;
         if (req.FirstName is not null) user.FirstName = req.FirstName;
         if (req.LastName  is not null) user.LastName  = req.LastName;
@@ -199,16 +201,21 @@ public class AdminController(
         if (req.Role is not null)
         {
             var currentRoles = await userManager.GetRolesAsync(user);
-            await userManager.RemoveFromRolesAsync(user, currentRoles);
-            await userManager.AddToRoleAsync(user, req.Role);
+            roleChanged = currentRoles.Count != 1
+                || !string.Equals(currentRoles[0], req.Role, StringComparison.OrdinalIgnoreCase);
+            if (roleChanged)
+            {
+                await userManager.RemoveFromRolesAsync(user, currentRoles);
+                await userManager.AddToRoleAsync(user, req.Role);
+            }
         }
 
         await userManager.UpdateAsync(user);
-        if (wasActive && req.IsActive == false)
+        if (roleChanged || (req.IsActive.HasValue && req.IsActive.Value != wasActive))
         {
-            var tokens = await db.RefreshTokens.Where(t => t.UserId == id && t.RevokedAt == null).ToListAsync();
-            foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
+            await securitySessions.InvalidateUserAsync(id);
+            if (roleChanged || req.IsActive == false)
+                await securitySessions.RevokeAnonymousCapabilitiesAsync([id]);
         }
         await audit.LogAsync(CurrentUserId, "UPDATE_USER", "User", id.ToString());
         return NoContent();
@@ -224,15 +231,10 @@ public class AdminController(
         foreach (var user in users)
             user.IsActive = req.IsActive;
 
-        if (!req.IsActive)
-        {
-            var tokens = await db.RefreshTokens
-                .Where(t => ids.Contains(t.UserId) && t.RevokedAt == null)
-                .ToListAsync();
-            foreach (var token in tokens) token.RevokedAt = DateTime.UtcNow;
-        }
-
         await db.SaveChangesAsync();
+        await securitySessions.InvalidateUsersAsync(users.Select(user => user.Id));
+        if (!req.IsActive)
+            await securitySessions.RevokeAnonymousCapabilitiesAsync(users.Select(user => user.Id));
         await audit.LogAsync(CurrentUserId, "BULK_UPDATE_USER_STATUS", "User", null,
             $"{users.Count} users set active={req.IsActive}");
         return Ok(new { Updated = users.Count });
@@ -281,6 +283,7 @@ public class AdminController(
 
         user.MustChangePassword = true;
         await userManager.UpdateAsync(user);
+        await securitySessions.InvalidateUserAsync(id);
         await audit.LogAsync(CurrentUserId, "RESET_PASSWORD", "User", id.ToString());
         return NoContent();
     }
@@ -288,9 +291,8 @@ public class AdminController(
     [HttpPost("users/{id:int}/revoke-tokens")]
     public async Task<IActionResult> RevokeTokens(int id)
     {
-        var tokens = await db.RefreshTokens.Where(t => t.UserId == id && t.RevokedAt == null).ToListAsync();
-        foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
+        if (!await db.Users.AnyAsync(u => u.Id == id)) return NotFound();
+        await securitySessions.InvalidateUserAsync(id);
         await audit.LogAsync(CurrentUserId, "REVOKE_TOKENS", "User", id.ToString());
         return NoContent();
     }
@@ -323,9 +325,7 @@ public class AdminController(
         var tokens = await db.RefreshTokens
             .Where(t => t.UserId == id && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
             .ToListAsync();
-        foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
-
-        await db.SaveChangesAsync();
+        await securitySessions.InvalidateUserAsync(id);
         await audit.LogAsync(CurrentUserId, "DISCONNECT_USER", "User", id.ToString());
         return Ok(new { Revoked = tokens.Count });
     }
@@ -505,10 +505,12 @@ public class AdminController(
         if (hasEntries && !cascade)
             return Conflict(new { error = "Group has members or ACL entries. Use ?cascade=true." });
 
+        var affectedUserIds = group.UserGroups.Select(ug => ug.UserId).ToList();
         db.UserGroups.RemoveRange(group.UserGroups);
         db.FolderAcls.RemoveRange(group.FolderAcls);
         db.Groups.Remove(group);
         await db.SaveChangesAsync();
+        await securitySessions.InvalidateUsersAsync(affectedUserIds);
         await audit.LogAsync(CurrentUserId, "DELETE_GROUP", "Group", id.ToString(), group.Name);
         return NoContent();
     }
@@ -527,6 +529,11 @@ public class AdminController(
         if (!req.Cascade && groups.Any(g => g.UserGroups.Any() || g.FolderAcls.Any()))
             return Conflict(new { error = "One or more groups have members or ACL entries. Use cascade=true." });
 
+        var affectedUserIds = groups
+            .SelectMany(group => group.UserGroups)
+            .Select(membership => membership.UserId)
+            .Distinct()
+            .ToList();
         foreach (var group in groups)
         {
             db.UserGroups.RemoveRange(group.UserGroups);
@@ -534,6 +541,7 @@ public class AdminController(
         }
         db.Groups.RemoveRange(groups);
         await db.SaveChangesAsync();
+        await securitySessions.InvalidateUsersAsync(affectedUserIds);
         await audit.LogAsync(CurrentUserId, "BULK_DELETE_GROUPS", "Group", null, $"{groups.Count} groups deleted");
         return Ok(new { Deleted = groups.Count });
     }
@@ -598,6 +606,7 @@ public class AdminController(
 
         db.UserGroups.Add(new UserGroup { UserId = user.Id, GroupId = id });
         await db.SaveChangesAsync();
+        await securitySessions.InvalidateUserAsync(user.Id);
         await audit.LogAsync(CurrentUserId, "ADD_USER_TO_GROUP", "Group", id.ToString(), user.UserName);
         return NoContent();
     }
@@ -619,6 +628,7 @@ public class AdminController(
             .ToListAsync();
         db.UserGroups.AddRange(validIds.Select(userId => new UserGroup { GroupId = id, UserId = userId }));
         await db.SaveChangesAsync();
+        await securitySessions.InvalidateUsersAsync(validIds);
         await audit.LogAsync(CurrentUserId, "BULK_ADD_USERS_TO_GROUP", "Group", id.ToString(),
             $"{validIds.Count} users added");
         return Ok(new { Added = validIds.Count });
@@ -636,6 +646,7 @@ public class AdminController(
             .ToListAsync();
         db.UserGroups.RemoveRange(memberships);
         await db.SaveChangesAsync();
+        await securitySessions.InvalidateUsersAsync(memberships.Select(membership => membership.UserId));
         await audit.LogAsync(CurrentUserId, "BULK_REMOVE_USERS_FROM_GROUP", "Group", id.ToString(),
             $"{memberships.Count} users removed");
         return Ok(new { Removed = memberships.Count });
@@ -649,6 +660,7 @@ public class AdminController(
 
         db.UserGroups.Remove(ug);
         await db.SaveChangesAsync();
+        await securitySessions.InvalidateUserAsync(userId);
         await audit.LogAsync(CurrentUserId, "REMOVE_USER_FROM_GROUP", "Group", id.ToString());
         return NoContent();
     }

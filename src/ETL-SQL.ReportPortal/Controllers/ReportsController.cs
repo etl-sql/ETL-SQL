@@ -21,6 +21,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [Authorize]
 public class ReportsController : ControllerBase
 {
+    private static readonly TimeSpan DefaultAnonymousAccessLifetime = TimeSpan.FromDays(7);
     private readonly PortalDbContext db;
     private readonly AuditService audit;
     private readonly PortalConfig portalConfig;
@@ -47,6 +48,31 @@ public class ReportsController : ControllerBase
 
     private Task<FolderPermission?> GetEffectivePermissionAsync(int folderId) =>
         folderPermissions.GetEffectivePermissionAsync(folderId, User);
+
+    private async Task<bool> CreatorCanResolveAsync(
+        int creatorId,
+        int folderId,
+        CancellationToken ct = default)
+    {
+        var creator = await db.Users.FirstOrDefaultAsync(user => user.Id == creatorId, ct);
+        if (creator is null || !creator.IsActive)
+            return false;
+
+        var isAdmin = await db.UserRoles
+            .Join(db.Roles, userRole => userRole.RoleId, role => role.Id,
+                (userRole, role) => new { userRole.UserId, role.Name })
+            .AnyAsync(value => value.UserId == creatorId && value.Name == "Admin", ct);
+        if (isAdmin)
+            return true;
+
+        var groupIds = await db.UserGroups
+            .Where(membership => membership.UserId == creatorId)
+            .Select(membership => membership.GroupId)
+            .ToListAsync(ct);
+        var permission = await folderPermissions.GetEffectivePermissionAsync(
+            folderId, new HashSet<int>(groupIds));
+        return permission >= FolderPermission.Read;
+    }
 
     private ReportDto ToDto(Report r, ReportSnapshot? snap, bool isFavorite = false)
     {
@@ -1050,7 +1076,8 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null || perm < FolderPermission.Execute) return Forbid();
 
-        if (req?.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow)
+        var expiresAt = req?.ExpiresAt ?? DateTime.UtcNow.Add(DefaultAnonymousAccessLifetime);
+        if (expiresAt <= DateTime.UtcNow)
             return BadRequest(new { error = "Share link expiration must be in the future." });
 
         var link = new ReportShareLink
@@ -1058,7 +1085,7 @@ public class ReportsController : ControllerBase
             ReportId = id,
             CreatedBy = CurrentUserId,
             Token = await GenerateUniqueShareTokenAsync(),
-            ExpiresAt = req?.ExpiresAt
+            ExpiresAt = expiresAt
         };
         db.ReportShareLinks.Add(link);
         await db.SaveChangesAsync();
@@ -1115,9 +1142,11 @@ public class ReportsController : ControllerBase
 
     // ── GET /api/share/{token} ──────────────────────────────────────────────
 
+    [AllowAnonymous]
     [HttpGet("share/{token}")]
     public async Task<IActionResult> ResolveShareLink(string token)
     {
+        // COMPAT_BREAK: 0.11
         var link = await db.ReportShareLinks
             .Include(l => l.Report).ThenInclude(r => r.Folder)
             .FirstOrDefaultAsync(l => l.Token == token);
@@ -1125,9 +1154,11 @@ public class ReportsController : ControllerBase
         if (link.RevokedAt is not null) return NotFound();
         if (link.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow) return NotFound();
 
-        var perm = await GetEffectivePermissionAsync(link.Report.FolderId);
-        if (perm is null) return Forbid();
+        if (!await CreatorCanResolveAsync(link.CreatedBy, link.Report.FolderId))
+            return NotFound();
 
+        await audit.LogAsync(null, "ANONYMOUS_SHARE_LINK_VIEW", "Report",
+            link.ReportId.ToString(), $"creator={link.CreatedBy}");
         return Ok(new ReportShareResolutionDto(
             link.ReportId,
             link.Report.Name,
@@ -1145,7 +1176,8 @@ public class ReportsController : ControllerBase
         if (report is null) return NotFound();
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
-        if (req?.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow)
+        var expiresAt = req?.ExpiresAt ?? DateTime.UtcNow.Add(DefaultAnonymousAccessLifetime);
+        if (expiresAt <= DateTime.UtcNow)
             return BadRequest(new { error = "Embed token expiration must be in the future." });
 
         var token = new ReportEmbedToken
@@ -1154,7 +1186,7 @@ public class ReportsController : ControllerBase
             CreatedBy = CurrentUserId,
             Name = string.IsNullOrWhiteSpace(req?.Name) ? "Embed token" : req!.Name!,
             Token = await GenerateUniqueEmbedTokenAsync(),
-            ExpiresAt = req?.ExpiresAt
+            ExpiresAt = expiresAt
         };
         db.ReportEmbedTokens.Add(token);
         await db.SaveChangesAsync();
@@ -1203,7 +1235,64 @@ public class ReportsController : ControllerBase
         if (embed is null || embed.Report.IsDeleted) return NotFound();
         if (embed.RevokedAt is not null) return NotFound();
         if (embed.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow) return NotFound();
+        if (!await CreatorCanResolveAsync(embed.CreatedBy, embed.Report.FolderId))
+            return NotFound();
+        await audit.LogAsync(null, "ANONYMOUS_EMBED_TOKEN_VIEW", "Report",
+            embed.ReportId.ToString(), $"creator={embed.CreatedBy}");
         return Ok(new ReportShareResolutionDto(embed.ReportId, embed.Report.Name, embed.Report.Folder.Path, $"/reports/{embed.ReportId}", embed.ExpiresAt));
+    }
+
+    [HttpGet("admin/anonymous-report-access")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAnonymousReportAccessInventory()
+    {
+        var now = DateTime.UtcNow;
+        var shares = await db.ReportShareLinks
+            .Include(link => link.Report).ThenInclude(report => report.Folder)
+            .Include(link => link.Creator)
+            .ToListAsync();
+        var embeds = await db.ReportEmbedTokens
+            .Include(token => token.Report).ThenInclude(report => report.Folder)
+            .Include(token => token.Creator)
+            .ToListAsync();
+
+        static string Status(
+            DateTime? revokedAt,
+            DateTime? expiresAt,
+            bool creatorActive,
+            bool reportDeleted,
+            bool creatorAuthorized,
+            DateTime now) =>
+            revokedAt is not null ? "Revoked"
+            : expiresAt is not null && expiresAt <= now ? "Expired"
+            : !creatorActive ? "CreatorDisabled"
+            : reportDeleted ? "ReportDeleted"
+            : !creatorAuthorized ? "PermissionLost"
+            : "Active";
+
+        var items = new List<AnonymousReportAccessDto>();
+        foreach (var link in shares)
+        {
+            var creatorAuthorized = await CreatorCanResolveAsync(link.CreatedBy, link.Report.FolderId);
+            items.Add(new AnonymousReportAccessDto(
+                "ShareLink", link.Id, link.ReportId, link.Report.Name, link.Report.Folder.Path,
+                null, link.CreatedBy, link.Creator.UserName, link.Creator.IsActive, link.CreatedAt,
+                link.ExpiresAt, link.RevokedAt,
+                Status(link.RevokedAt, link.ExpiresAt, link.Creator.IsActive,
+                    link.Report.IsDeleted, creatorAuthorized, now)));
+        }
+        foreach (var token in embeds)
+        {
+            var creatorAuthorized = await CreatorCanResolveAsync(token.CreatedBy, token.Report.FolderId);
+            items.Add(new AnonymousReportAccessDto(
+                "EmbedToken", token.Id, token.ReportId, token.Report.Name, token.Report.Folder.Path,
+                token.Name, token.CreatedBy, token.Creator.UserName, token.Creator.IsActive, token.CreatedAt,
+                token.ExpiresAt, token.RevokedAt,
+                Status(token.RevokedAt, token.ExpiresAt, token.Creator.IsActive,
+                    token.Report.IsDeleted, creatorAuthorized, now)));
+        }
+
+        return Ok(items.OrderByDescending(item => item.CreatedAt));
     }
 
     // ── Saved parameter/filter views ────────────────────────────────────────

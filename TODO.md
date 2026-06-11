@@ -18,18 +18,25 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 
 ### Priority 0 — Immediate security boundaries
 
-- [ ] **P0.1 Remove plaintext SMTP credentials from generated subscription scripts.**
+- [x] **P0.1 Remove plaintext SMTP credentials from generated subscription scripts.**
   `SubscriptionsController.GenerateJobScript` currently decrypts `SmtpConnection.EncryptedPassword` and
   writes `PASSWORD = '...'` into a persistent `.etlsql` file. Replace this with a runtime secret
   reference/resolver so generated job SQL contains only a non-secret SMTP alias or secret identifier.
   Scan generated scripts, job rows, logs, exceptions, and exports for known credential markers.
-- [ ] **P0.2 Reauthorize every subscription at delivery time.**
+  *(done — v0.11.0)* Generated Orchestrator scripts are credential-free triggers containing only the
+  subscription ID. SMTP credentials are decrypted only inside the portal delivery scope, composed into
+  an in-memory script, sanitized from failures, and covered by trigger/history/audit secret-marker tests.
+- [x] **P0.2 Reauthorize every subscription at delivery time.**
   A subscription is permission-checked when created, but its scheduled script can continue after its user
   is disabled, removed from a group, or loses report/folder permission. Route delivery through a trusted
   subscription executor that reloads the subscription owner, active state, report state, and current
   permission immediately before export/send. Denied delivery must be recorded without exposing report
   data and must not be retried as a transient SMTP failure.
-- [ ] **P0.3 Make privilege reduction effective for issued access tokens.**
+  *(done — v0.11.0)* `SubscriptionDeliveryService` reloads owner/report/subscription state and current
+  folder permission immediately before delivery. The Orchestrator poller dispatches successful `SUB:`
+  triggers, records terminal delivery outcomes, and persists `LastTriggeredAt` so denied or repeated
+  completions are not retried as SMTP failures.
+- [x] **P0.3 Make privilege reduction effective for issued access tokens.**
   JWT validation currently reloads `User.IsActive` but trusts role claims minted at login. Add a
   security/version stamp or reload current roles during token validation so Admin/Publisher/
   OrchestratorManager removal takes effect immediately. Password reset, explicit token revocation, role
@@ -37,18 +44,32 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   Include refresh tokens explicitly: the `RefreshToken` plumbing already exists, so define what logout,
   account disable, password reset, and role change do to outstanding refresh tokens (revocation and
   rotation-on-use), not just to access tokens.
-- [ ] **P0.4 Govern anonymous share links and embed tokens like delivery (the P0.2 problem in another
+  *(done — v0.11.0)* Access tokens carry the ASP.NET Identity security stamp and validation compares it
+  with current user state on every request. Role, group, folder/dataset ACL, active-state, password,
+  LDAP mapping, explicit revoke/disconnect, and logout events rotate the stamp and revoke outstanding
+  refresh tokens. Refresh tokens are single-use and rotate on refresh; logout invalidates all sessions
+  for the current user.
+- [x] **P0.4 Govern anonymous share links and embed tokens like delivery (the P0.2 problem in another
   costume).** `ReportShareLink` resolution is anonymous (`ReportsController.ResolveShareLink`,
   `[AllowAnonymous]`), and a link created by a user who is later disabled or loses folder permission
   keeps resolving. Reauthorize against the creator's current state at resolve time, add expiry defaults,
   revoke on creator disable/demotion, assert token entropy, provide an admin inventory of all
   outstanding anonymous links/embed tokens, and audit anonymous views. (P1.8 only excludes these tokens
   from configuration export — nothing covers their runtime semantics.)
-- [ ] **P0.5 Decide and secure the alert delivery path.** `ReportAlert` entities exist but have no
+  *(done — v0.11.0)* Share and embed capabilities are anonymous but resolve only while the creator is
+  active and currently retains report read permission (or Admin). New capabilities default to seven-day
+  expiry, use 256-bit random tokens, are explicitly revoked on creator disable/demotion, produce
+  token-free anonymous-view audit events, and appear in an admin inventory with active/expired/revoked/
+  permission-lost status.
+- [x] **P0.5 Decide and secure the alert delivery path.** `ReportAlert` entities exist but have no
   server-side delivery service today (CRUD-only). Either bring alert delivery into the trusted
   executor/reauthorization boundary of P0.2 (alerts that email must never embed SMTP secrets and must
   recheck permission at send time) or explicitly document alerts as browser-side-only and out of P0.2
   scope. An undecided delivery path is how the persisted-SMTP-credential mistake happens twice.
+  *(done — v0.11.0)* Alerts are explicitly definition-only/browser-consumed metadata. The portal does
+  not evaluate thresholds, schedule alert checks, or send alert email server-side; recipient and SMTP
+  fields are reserved metadata. Any future server delivery must use the trusted subscription executor
+  pattern with delivery-time reauthorization and runtime-only secret resolution.
 
 ### Priority 1 — Multi-user correctness and recoverability
 
@@ -585,11 +606,14 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   regardless of identity provider, and the LDAP sync no longer touches `IsActive` — only an
   administrator re-enables an account. Regression:
   `LdapAuthTests.Login_DisabledLdapUser_IsRejectedAndStaysDisabled`.
-- [ ] **R2 (P1). Hash refresh tokens at rest.**
+- [x] **R2 (P1). Hash refresh tokens at rest.**
   Refresh tokens are stored as plaintext in `RefreshTokens.Token` (`AuthController.cs:204-210`) and
   looked up by raw value. A portal DB file/backup leak lets an attacker mint sessions for any user for
   up to `RefreshExpiryDays`. Store `SHA256(token)` and hash the presented value on lookup — no schema
   semantics change. (Rotation/invalidation semantics remain P0.3; this is at-rest protection.)
+  *(done — v0.11.0)* Login and refresh return the raw bearer value once, while SQLite stores only its
+  SHA-256 digest. Refresh hashes presented values before lookup, and regression tests assert the raw
+  value never equals the persisted token.
 - [x] **R3 (P1). Replace the hardcoded first-run admin password.** *(done — v0.11.0)*
   New `Portal:FirstRun:AdminPassword` provisions the seed password; when unset, a random password is
   generated and logged once under the `Portal.FirstRun` category — no well-known default remains.
@@ -631,13 +655,15 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   or dispose the displaced entry. Also note: the session key is (reportId, userId) but the caller
   context now embeds `IsAdmin` — an admin-elevated session created before role removal keeps serving
   with admin dataset context until eviction (P0.3-adjacent; document or key on the role too).
-- [ ] **R10 (P2). `OrchestratorPollerService` watermark can skip completions.**
+- [x] **R10 (P2). `OrchestratorPollerService` watermark can skip completions.**
   `_lastPollTime = DateTime.UtcNow` is set after processing (`OrchestratorPollerService.cs:115`), so
   any job that completed between the query and the assignment is never observed; a mid-loop exception
   still advances the watermark and silently drops the remaining completions. Advance the watermark to
   the max `EndTime` actually processed. Also parse `EndTime` with
   `CultureInfo.InvariantCulture` + `DateTimeStyles.RoundtripKind` (`:141`) — the current
   `DateTime.TryParse` is culture/kind-sensitive against the "o"-format value the query compares.
+  *(done — v0.11.0)* Polls use a bounded absolute-time window via SQLite `julianday`, parse timestamps
+  with invariant round-trip semantics, and advance only through each successfully handled completion.
 - [ ] **R11 (P2). Dead write in `DatasetRegistryService.RegisterOrUpdate`.**
   Line 57 sets `existing.EncryptionMode = MachineBound` when a portal key is configured, then line 68
   unconditionally overwrites it with `metadata.EncryptionMode`. Harmless today only because the viewer

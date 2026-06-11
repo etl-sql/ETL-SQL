@@ -143,6 +143,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         (await AuthPost(adminToken, $"/api/admin/groups/{groupId}/members", new { userId }))
             .EnsureSuccessStatusCode();
         await AddFolderAclAsync(folderId, groupId, FolderPermission.Read);
+        userToken = await LoginExistingUserAsync(username, "Folder@Changed9!");
 
         Assert.Equal(HttpStatusCode.OK, (await AuthGet(userToken, $"/api/datasets/{datasetId}")).StatusCode);
         using (var scope = _factory.Services.CreateScope())
@@ -564,6 +565,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
             $"/api/datasets/{id}/acl",
             new { groupId, permission = "Refresh" });
         Assert.Equal(HttpStatusCode.OK, grantRes.StatusCode);
+        userToken = await LoginExistingUserAsync(username, "Refresh@Changed9!");
 
         var refreshRes = await AuthPost(userToken, $"/api/datasets/{id}/refresh", new { });
         Assert.Equal(HttpStatusCode.Accepted, refreshRes.StatusCode);
@@ -666,6 +668,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         (await AuthPost(adminToken, $"/api/admin/groups/{groupId}/members", new { userId }))
             .EnsureSuccessStatusCode();
         await AddFolderAclAsync(sourceFolderId, groupId, FolderPermission.Manage);
+        userToken = await LoginExistingUserAsync(username, "Mover@Changed9!");
 
         var name = $"#move_{suffix}";
         await RegisterDatasetAsync(name, sourcePath, DatasetAccessLevel.Public);
@@ -685,6 +688,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
 
         await AddFolderAclAsync(destinationFolderId, groupId, FolderPermission.Manage);
+        userToken = await LoginExistingUserAsync(username, "Mover@Changed9!");
         var moved = await AuthPost(
             userToken,
             $"/api/datasets/{datasetId}/move",
@@ -825,6 +829,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
 
         await AuthPost(adminToken, $"/api/admin/groups/{groupId}/members", new { userId = editorId });
         await AddDatasetAclAsync(id, groupId, DatasetPermission.Editor);
+        editorToken = await LoginExistingUserAsync($"editor_{suffix}", "Edit@Changed9!");
 
         // Editor can view but cannot delete (CanManage requires Owner)
         var delRes = await AuthDelete(editorToken, $"/api/datasets/{id}");
@@ -1173,6 +1178,13 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         var reloginRes = await _client.PostAsJsonAsync("/api/auth/login", new { username, password = newPassword });
         reloginRes.EnsureSuccessStatusCode();
         return (await reloginRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["token"]!.GetValue<string>();
+    }
+
+    private async Task<string> LoginExistingUserAsync(string username, string password)
+    {
+        var response = await _client.PostAsJsonAsync("/api/auth/login", new { username, password });
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<JsonObject>(_json))!["token"]!.GetValue<string>();
     }
 
     private async Task<string> GetAdminTokenAsync()

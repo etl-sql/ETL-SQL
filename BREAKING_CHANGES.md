@@ -15,6 +15,21 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.11.0 — Runtime: Share links are anonymous creator-authorized capabilities
+- **What changed**: Share links now resolve without caller authentication, but share and embed capabilities fail closed when their creator is disabled or loses current report permission; new capabilities expire after seven days by default.
+- **Who is affected**: Portal clients that treated share links as authenticated shortcuts or created links/embeds without an explicit expiry.
+- **Migration**: Treat the capability URL as a bearer secret, distribute it only to intended viewers, and ensure the creator retains report access; specify `ExpiresAt` when a lifetime other than seven days is required.
+
+### v0.11.0 — Runtime: Portal sessions are invalidated on security changes
+- **What changed**: Access tokens now require a current Identity security stamp, refresh tokens are stored as SHA-256 digests and rotate on use, and logout or security-sensitive account/permission changes revoke all sessions for affected users.
+- **Who is affected**: Portal API clients holding tokens across role, group, ACL, password, active-state, logout, disconnect, or explicit revocation changes.
+- **Migration**: Treat `401 Unauthorized` after a security change as a required reauthentication and replace stored refresh tokens after every successful refresh.
+
+### v0.11.0 — Runtime: Subscription jobs are credential-free delivery triggers
+- **What changed**: Scheduled subscription scripts no longer contain export, recipient, parameter, or SMTP credential data; they trigger portal-side delivery that reauthorizes the owner immediately before export and send.
+- **Who is affected**: Administrators or integrations that inspect, edit, or execute generated `SUB:` job scripts outside the Report Portal.
+- **Migration**: Keep the Report Portal running with access to the Orchestrator database and manage delivery configuration through the subscription and SMTP APIs instead of editing generated scripts.
+
 ### v0.10.0 — Runtime: Audit log exports are audited
 - **What changed**: Exporting the Portal audit log now records an `EXPORT_AUDIT_LOG` audit event.
 - **Who is affected**: Administrators and integrations that export or count Portal audit records.
