@@ -1130,6 +1130,11 @@ The portal uses **JWT Bearer tokens** with HMAC-SHA256 signing.
   revoke outstanding refresh tokens for affected users.
 - **Logout**, **Disconnect User**, and **Revoke Tokens** invalidate all current sessions for that user,
   including already-issued access tokens.
+- Browser clients store access and refresh tokens in `sessionStorage`, not cookies. This avoids a
+  cookie/CSRF authentication surface and keeps API clients on the same bearer-token model, but
+  JavaScript running in the page can read the tokens. The portal therefore applies a nonce-based
+  Content Security Policy, blocks inline event handlers, and does not permit arbitrary script origins.
+  Do not weaken `script-src` or add `unsafe-inline`.
 
 ### 11.2 Roles
 
@@ -1156,6 +1161,31 @@ After **5 consecutive failed login attempts** an account is locked for **15 minu
 ### 11.6 HTTPS in Production
 
 When `ASPNETCORE_ENVIRONMENT` is `Production`, the portal enables `UseHttpsRedirection()` and HSTS. **Always run behind a TLS-terminating reverse proxy in production.**
+
+### 11.7 Browser Security Headers and Embedding
+
+The portal sends `Content-Security-Policy`, `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: no-referrer`, and a restrictive `Permissions-Policy` on every response. Portal HTML
+uses a fresh script nonce per response. Same-origin framing is allowed by default; external framing is
+denied.
+
+To allow a trusted application to frame portal content, list each exact origin. Paths, wildcards, user
+information, and non-HTTP schemes are rejected:
+
+```json
+"Portal": {
+  "Security": {
+    "FrameAncestors": [
+      "https://analytics.example.com",
+      "https://intranet.example.com:8443"
+    ]
+  }
+}
+```
+
+When no external origin is configured, the portal also sends `X-Frame-Options: SAMEORIGIN`. When
+external origins are configured, CSP `frame-ancestors` is authoritative and the legacy header is
+omitted because it cannot express an allowlist.
 
 ---
 

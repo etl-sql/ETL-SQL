@@ -300,6 +300,7 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("Pragma", "no-cache");
     await next();
 });
+app.UseMiddleware<SecurityHeadersMiddleware>();
 
 var staticFileOptions = new StaticFileOptions();
 var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();

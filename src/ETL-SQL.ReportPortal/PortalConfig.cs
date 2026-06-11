@@ -15,6 +15,16 @@ public class PortalConfig
     public FirstRunConfig  FirstRun  { get; set; } = new();
     public OrchestratorConfig Orchestrator { get; set; } = new();
     public DatasetConfig   Dataset   { get; set; } = new();
+    public PortalSecurityConfig Security { get; set; } = new();
+}
+
+public class PortalSecurityConfig
+{
+    /// <summary>
+    /// Exact HTTP(S) origins allowed to frame portal pages. Same-origin framing is always allowed.
+    /// Wildcards are intentionally unsupported so embedding remains an explicit deployment decision.
+    /// </summary>
+    public string[] FrameAncestors { get; set; } = [];
 }
 
 public class DatasetConfig

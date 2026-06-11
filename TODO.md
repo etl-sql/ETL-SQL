@@ -139,12 +139,15 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 
 ### Priority 1 — Security plumbing
 
-- [ ] **P1.12 Add HTTP security headers and a Content-Security-Policy.**
+- [x] **P1.12 Add HTTP security headers and a Content-Security-Policy.**
   Beyond HSTS and HTTPS redirection the portal sends no CSP, `X-Content-Type-Options`, or
   `X-Frame-Options`/`frame-ancestors`. This matters doubly here: JWTs live in `sessionStorage`
   (XSS-stealable — CSP is the mitigation) and the embed-token feature requires a deliberate
   frame-ancestors policy instead of the default "frameable by anyone." Document the
   sessionStorage-vs-httpOnly-cookie token storage decision alongside the header work.
+  *(done — v0.11.0)* Every response now receives CSP, nosniff, referrer, and permissions headers.
+  HTML scripts use per-response nonces, inline event handlers are prohibited, and framing defaults
+  to same-origin with exact external origins opt-in through `Portal:Security:FrameAncestors`.
 - [ ] **P1.13 Rate-limit auth endpoints and anonymous token resolution.**
   Identity lockout protects local passwords only. There is no throttle on `/auth` (user enumeration,
   refresh-token guessing) or on the anonymous share-link/embed resolve endpoints (token brute force);

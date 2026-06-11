@@ -1712,10 +1712,8 @@ function renderParamFields(containerId, params, currentValues) {
                data-required="${p.required ? 'true' : 'false'}"
                value="${esc(String(current))}" placeholder="${p.required ? 'Required value' : 'Optional value'}">
         ${isReldate ? `
-          <button type="button" class="btn btn-outline"
-                  onclick="document.getElementById('${inputId}-picker').showPicker()">📅</button>
-          <input type="date" id="${inputId}-picker" class="sr-date-input"
-                 onchange="document.getElementById('${inputId}').value = this.value">
+          <button type="button" class="btn btn-outline" data-date-picker="${inputId}-picker">📅</button>
+          <input type="date" id="${inputId}-picker" class="sr-date-input" data-date-target="${inputId}">
         ` : ''}
       </div>
       ${isReldate ? `<div class="reldate-quickpicks">${RELDATE_PICKS.map(q => `<button type="button" data-pick="${q}" data-for="${inputId}">${q}</button>`).join('')}</div>` : ''}`;
@@ -1728,6 +1726,16 @@ function renderParamFields(containerId, params, currentValues) {
     btn.addEventListener('click', () => {
       const pick = btn.dataset.pick === 'Today' ? 'D-0' : btn.dataset.pick;
       document.getElementById(btn.dataset.for).value = pick;
+    });
+  });
+  $container.querySelectorAll('[data-date-picker]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById(btn.dataset.datePicker).showPicker();
+    });
+  });
+  $container.querySelectorAll('[data-date-target]').forEach(input => {
+    input.addEventListener('change', () => {
+      document.getElementById(input.dataset.dateTarget).value = input.value;
     });
   });
 }
