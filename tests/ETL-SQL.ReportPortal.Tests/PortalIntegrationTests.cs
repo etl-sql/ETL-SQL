@@ -1637,6 +1637,12 @@ CREATE PAGE Main AS DASHBOARD(
         Assert.Equal(folder.Id, interactive!.FolderId);
         Assert.Equal(publisher.Id, interactive.OwnerUserId);
 
+        var interactiveAdmin = await registry.AuthorizePublishAsync(
+            folder.Path,
+            $"UserId={publisher.Id};IsAdmin=true");
+        Assert.NotNull(interactiveAdmin);
+        Assert.Equal(publisher.Id, interactiveAdmin!.OwnerUserId);
+
         var system = await registry.AuthorizePublishAsync(folder.Path, "IsAdmin=true");
         Assert.NotNull(system);
         Assert.Equal(owner.Id, system!.OwnerUserId);

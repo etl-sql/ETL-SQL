@@ -25,7 +25,9 @@ For the user-facing syntax reference, see [Docs/Report_SQL_Guide.md](../Report_S
 │  ETL-SQL.Engine  (Evaluator)                                  │
 │  CreateVisualStatementHandler    → VisualDefinitions[]        │
 │  CreatePageStatementHandler      → PageDefinitions[]          │
-│  CreateDatasetStatementHandler   → SELECT INTO #temp          │
+│  CreateDatasetStatementHandler   → #temp + optional portal    │
+│                                    registry/Parquet cache      │
+│  Use/Refresh/Export/PublishDataset handlers                    │
 │  CreateContainerStatementHandler → ContainerDefinitions[]     │
 │  CreateNavigationStatementHandler→ NavigationDefinitions[]    │
 │  SetReportMetadataStatementHandler → ReportTitle/Description  │
@@ -59,7 +61,7 @@ build / refresh / serve                Kestrel HTTP + ReportHosting
 | Project | Role |
 |---------|------|
 | `ETL-SQL.Core` | Report-SQL lexer tokens, AST nodes (`ReportAst.cs`), parser (`StatementParser.Report.cs`) |
-| `ETL-SQL.Engine` | Statement handlers that register visual/page/dataset/container/navigation definitions into `IExecutionContext` |
+| `ETL-SQL.Engine` | Statement handlers that register report definitions, materialize datasets, enforce registry decisions, and perform atomic dataset refresh/export/publish file transitions |
 | `ETL-SQL.Reporting` | Manifest building, ECharts rendering, SVG rendering, PDF/CSV/Markdown/terminal rendering, snapshot persistence, shared interaction refresh semantics |
 | `ETL-SQL.ReportHosting` | Reusable report sessions, parameter state, selective refresh, manifest caching, background dataset refresh timers, and multi-report manifest factories |
 | `ETL-SQL.ReportRuntime` | Canonical browser runtime assets (`report-runtime.js`, `echarts.min.js`, CSS themes, Tabulator assets) — sync to host projects via `node .\scripts\sync-assets.js` and verify with `node .\scripts\sync-assets.js -Check` |
@@ -87,6 +89,11 @@ Report-SQL files use the same lexer and parser as standard ETL-SQL scripts. Repo
 | `CREATE OR ALTER VISUAL` | `ParseCreateVisual()` | `CreateVisualStatement` (Mode=CreateOrAlter) |
 | `CREATE PAGE` | `ParseCreatePage()` | `CreatePageStatement` |
 | `CREATE DATASET` | `ParseCreateDataset()` | `CreateDatasetStatement` |
+| `USE DATASET` | `ParseUseDataset()` | `UseDatasetStatement` |
+| `REFRESH DATASET` | `ParseRefreshDataset()` | `RefreshDatasetStatement` |
+| `EXPORT DATASET` | `ParseExportDataset()` | `ExportDatasetStatement` |
+| `PUBLISH DATASET` | `ParsePublishDataset()` | `PublishDatasetStatement` |
+| `SHOW DATASETS` | `ParseShowDatasets()` | `ShowDatasetsStatement` |
 | `CREATE CONTAINER` | `ParseCreateContainer()` | `CreateContainerStatement` |
 | `CREATE NAVIGATION` | `ParseCreateNavigation()` | `CreateNavigationStatement` |
 | `CREATE STYLE` | `ParseCreateStyle()` | `CreateStyleStatement` |
@@ -201,6 +208,7 @@ Compress           — store compressed on disk
 EncryptionMode     — None | MachineBound | Password | KeyFile
 EncryptionPassword — password string (EncryptionMode = Password)
 KeyFile            — path to key file (EncryptionMode = KeyFile)
+AccessLevel        — Private (default) | Public
 SourceQuery        — SelectStatement materialized into TempTableName
 ```
 
@@ -264,24 +272,45 @@ Value — the string value
 
 ### 4.3 `CreateDatasetStatementHandler`
 
-- Validates encryption configuration (KEYFILE mode requires a key path; PASSWORD mode requires a password)
-- Rewrites to an equivalent `SELECT INTO #tempName FROM (source)` and executes it
-- Registers: `context.DatasetDefinitions[tableName] = stmt` for manifest metadata
+- Rewrites the source to an equivalent `SELECT INTO &dataset` and materializes it in engine memory.
+- In standalone mode, applies the statement's `MACHINE`, `PASSWORD`, or `KEYFILE` encryption directly
+  when writing a Parquet cache.
+- In portal mode, resolves the global dataset name through `IDatasetRegistry`, forwards the real caller
+  context, and serves a fresh TTL cache without rerunning the source query.
+- Portal writes always use the configured portal at-rest key, stamp its non-secret key version, write to
+  a staging file, atomically replace the managed cache, and then update registry metadata.
+- `CREATE OR ALTER` requires dataset Editor/Owner permission. A new report-created dataset is linked to
+  its owning report and folder.
+- Registers `context.DatasetDefinitions[tableName] = stmt` for manifest metadata.
 
-### 4.4 `CreateContainerStatementHandler`
+### 4.4 Shared Dataset Handlers
+
+- `USE DATASET` resolves by globally unique name. It loads the managed cache only after centralized
+  registry authorization and serves the last complete snapshot with a warning when TTL is stale.
+- `SHOW DATASETS` returns only datasets visible to the caller.
+- `REFRESH DATASET` requires Refresh or higher permission, reruns the stored source, and preserves the
+  prior cache if materialization or registry update fails.
+- `EXPORT DATASET` requires read permission and creates a failure-atomic portable copy encrypted with a
+  one-operation PASSWORD or KEYFILE transport credential.
+- `PUBLISH DATASET` requires destination folder Manage permission, decrypts the transport copy once,
+  re-encrypts with the destination portal at-rest key, and rolls back its row/files on failure.
+- The published portal cache is not a transport artifact. Keep the original export if another transfer
+  may be required.
+
+### 4.5 `CreateContainerStatementHandler`
 
 - Registers: `context.ContainerDefinitions[stmt.Name] = stmt`
 - No data query at registration time
 
-### 4.5 `CreateNavigationStatementHandler`
+### 4.6 `CreateNavigationStatementHandler`
 
 - Registers: `context.NavigationDefinitions[stmt.Name] = stmt`
 
-### 4.6 `SetReportMetadataStatementHandler`
+### 4.7 `SetReportMetadataStatementHandler`
 
 - Sets report-level metadata on `context.ReportContext`, including `TITLE`, `DESCRIPTION`, custom CSS/JS/HTML fragments, favicon, logo, background, theme, and navigation reference.
 
-### 4.7 Other report object handlers
+### 4.8 Other report object handlers
 
 - `CreateStyleStatementHandler` registers named style dictionaries.
 - `CreateButtonStatementHandler` registers page-addressable buttons.
@@ -547,9 +576,42 @@ Chart visuals use `echarts.init(div)` + `chart.setOption(JSON.parse(config))`. F
 | `LoadAsync(path)` | Deserialize JSON → `ReportManifest`; returns `null` if absent |
 | `IsStale(manifest, scriptPath, ttl?)` | True if script file is newer than `BuiltAt`, or TTL elapsed |
 
-**Known gaps:**
-- Writes are not atomic — a crash mid-write can corrupt the file
-- No reader/writer lock; concurrent reads and `CREATE DATASET` refreshes can race
+`SnapshotStore` serializes to a unique temporary file and atomically moves it over the destination.
+Per-path async reader/writer locks allow concurrent readers while excluding in-process writes.
+Cross-process writers are last-writer-wins, but each committed snapshot is complete. Corrupt JSON is
+treated as a missing snapshot so the host can rebuild it, and startup cleanup can remove abandoned
+snapshot temporary files.
+
+Dataset Parquet caches use a separate `DatasetFileTransaction`: writes go to a managed staging file,
+the previous complete cache is backed up before replacement, and failures restore the backup. Portal
+startup reconciliation removes abandoned dataset transaction/rotation files and catalog/filesystem
+orphans inside `DatasetRootPath`.
+
+---
+
+## 7.1 Portal Dataset Security Model
+
+Portal datasets have two encryption layers with different purposes:
+
+| Layer | Purpose | Credential lifetime |
+|---|---|---|
+| Portal at rest | Protect the managed Parquet cache inside one portal | Long-lived portal secret, versioned and backed up with `portal.db` and `DatasetRootPath` |
+| Export transport | Move one portable encrypted copy between portals | PASSWORD or KEYFILE supplied only to EXPORT/PUBLISH and never persisted |
+
+`PUBLIC` is not anonymous access. A public dataset linked to a folder requires authenticated folder
+Read or higher. `PRIVATE` requires report/dataset ownership, an explicit dataset grant, or administrator
+rights. Dataset grants are hierarchical: Viewer, Refresh, Editor, Owner.
+
+Interactive report execution and user-triggered refresh retain `UserId` and administrator role in the
+dataset caller context. Only the local orchestrator poller explicitly requests trusted scheduled
+dataset execution. Report-created datasets remain linked to their report; interactive publications are
+owned by the caller; a userless trusted publication falls back to the destination folder owner.
+
+The at-rest key is a recovery dependency, not just a runtime setting. Production startup fails for
+missing, weak, invalid, or unresolved key-version configuration. Operators must back up the current and
+previous key mappings together with the database and dataset directory. See the
+[Report Portal Administrator Guide](../ReportPortal_Administrators_Guide.md#65-dataset-at-rest-key-lifecycle)
+for provisioning, rotation, restore, and orphan-reconciliation procedures.
 
 ---
 

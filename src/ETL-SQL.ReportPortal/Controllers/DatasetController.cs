@@ -275,7 +275,11 @@ public class DatasetController(
         // Path security is enforced inside RunJobAsync — no need to pre-validate here.
         if (dataset.OwningReport is not null)
         {
-            var jobId = jobService.EnqueueRefresh(dataset.OwningReport.Id, CurrentUserId, dataset.OwningReport.ScriptPath);
+            var jobId = jobService.EnqueueRefresh(
+                dataset.OwningReport.Id,
+                CurrentUserId,
+                dataset.OwningReport.ScriptPath,
+                isAdministrator: IsAdmin);
             await audit.LogAsync(CurrentUserId, "REFRESH_DATASET", "Dataset", id.ToString(), dataset.Name);
             Response.Headers.Append("Location", $"/api/jobs/{jobId}");
             return Accepted(new { triggered = true, jobId });

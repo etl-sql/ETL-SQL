@@ -14,7 +14,9 @@ public enum JobStatus { Pending, Running, Completed, Failed, Cancelled }
 public record ExecutionJob(
     string Id,
     int    ReportId,
-    int    UserId)
+    int    UserId,
+    bool   IsAdministrator = false,
+    bool   TrustedDatasetExecution = false)
 {
     public JobStatus  Status       { get; set; } = JobStatus.Pending;
     public DateTime   CreatedAt    { get; init; } = DateTime.UtcNow;
@@ -22,6 +24,11 @@ public record ExecutionJob(
     public DateTime?  CompletedAt  { get; set; }
     public string?    ManifestPath { get; set; }
     public string?    Error        { get; set; }
+    public string DatasetCallerContext => TrustedDatasetExecution
+        ? "IsAdmin=true"
+        : IsAdministrator
+            ? $"UserId={UserId};IsAdmin=true"
+            : $"UserId={UserId}";
 }
 
 /// <summary>
@@ -65,10 +72,11 @@ public class ExecutionJobService : IDisposable
 
     /// <summary>Queues a new execution job and starts it in the background.</summary>
     public string EnqueueExecution(int reportId, int userId, string scriptPath,
-        Dictionary<string, string>? parameters = null)
+        Dictionary<string, string>? parameters = null,
+        bool isAdministrator = false)
     {
         var jobId = Guid.NewGuid().ToString("N");
-        var job   = new ExecutionJob(jobId, reportId, userId);
+        var job   = new ExecutionJob(jobId, reportId, userId, IsAdministrator: isAdministrator);
         _jobs[jobId] = job;
 
         _ = RunJobAsync(job, scriptPath, parameters, CancellationToken.None);
@@ -79,13 +87,25 @@ public class ExecutionJobService : IDisposable
     /// Enqueues a refresh job for a report. Debounced — returns the existing jobId if
     /// a refresh is already in flight for this report.
     /// </summary>
-    public string EnqueueRefresh(int reportId, int userId, string scriptPath)
+    public string EnqueueRefresh(
+        int reportId,
+        int userId,
+        string scriptPath,
+        bool isAdministrator = false,
+        bool trustedDatasetExecution = false)
     {
-        if (_activeRefreshes.TryGetValue(reportId, out var existing))
-            return existing;
+        var jobId = Guid.NewGuid().ToString("N");
+        if (!_activeRefreshes.TryAdd(reportId, jobId))
+            return _activeRefreshes[reportId];
 
-        var jobId = EnqueueExecution(reportId, userId, scriptPath);
-        _activeRefreshes[reportId] = jobId;
+        var job = new ExecutionJob(
+            jobId,
+            reportId,
+            userId,
+            IsAdministrator: isAdministrator,
+            TrustedDatasetExecution: trustedDatasetExecution);
+        _jobs[jobId] = job;
+        _ = RunJobAsync(job, scriptPath, parameters: null, CancellationToken.None);
         return jobId;
     }
 
@@ -99,14 +119,30 @@ public class ExecutionJobService : IDisposable
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeout);
 
-        await _gate.WaitAsync(cts.Token).ConfigureAwait(false);
-        job.Status    = JobStatus.Running;
-        job.StartedAt = DateTime.UtcNow;
-        await UpdateReportRefreshStatusAsync(job, "Running", null);
-        _log.LogInformation("Execution job {JobId} started for report {ReportId}", job.Id, job.ReportId);
+        try
+        {
+            await _gate.WaitAsync(cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Timed out while queued — the gate was never acquired, so only the job
+            // bookkeeping needs unwinding (no Release, but the refresh debounce must clear).
+            job.Status      = JobStatus.Cancelled;
+            job.CompletedAt = DateTime.UtcNow;
+            job.Error       = "Execution timed out while waiting for an execution slot";
+            _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
+            await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
+            _log.LogWarning("Execution job {JobId} cancelled while queued for an execution slot", job.Id);
+            return;
+        }
 
         try
         {
+            job.Status    = JobStatus.Running;
+            job.StartedAt = DateTime.UtcNow;
+            await UpdateReportRefreshStatusAsync(job, "Running", null);
+            _log.LogInformation("Execution job {JobId} started for report {ReportId}", job.Id, job.ReportId);
+
             if (!PortalPathGuard.TryResolveScript(_config, scriptPath, out var resolvedScriptPath))
                 throw new UnauthorizedAccessException("Report script path is outside the configured script root.");
             scriptPath = resolvedScriptPath;
@@ -173,10 +209,16 @@ public class ExecutionJobService : IDisposable
             else
             {
                 // Use an independent DashboardService for snapshots (not the session cache).
-                // Snapshot/refresh runs as a trusted server-side job (the HTTP trigger is already
-                // permission-gated); the user-vs-scheduled refresh write split is Phase 1d.
+                // Interactive execution and user-triggered refresh retain the caller identity.
+                // Only the orchestrator poller explicitly creates trusted scheduled refreshes.
                 var dashboardTimeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
-                await using var svc = new ETL_SQL.ReportHosting.DashboardService(scriptPath, _scopeFactory, dashboardTimeout, "IsAdmin=true", job.ReportId, _config.Dataset.AtRestKey);
+                await using var svc = new ETL_SQL.ReportHosting.DashboardService(
+                    scriptPath,
+                    _scopeFactory,
+                    dashboardTimeout,
+                    job.DatasetCallerContext,
+                    job.ReportId,
+                    _config.Dataset.AtRestKey);
 
                 if (parameters is { Count: > 0 })
                     await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));
@@ -283,28 +325,39 @@ public class ExecutionJobService : IDisposable
 
     private async Task UpdateReportRefreshStatusAsync(ExecutionJob job, string status, string? error)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-        var report = await db.Reports.FindAsync(job.ReportId);
-        if (report is null) return;
-
-        if (string.Equals(status, "Running", StringComparison.OrdinalIgnoreCase))
+        // Status reporting must never take down the execution path: a transient DB failure
+        // (e.g. SQLite busy) here would otherwise leak the concurrency gate or strand the job.
+        try
         {
-            report.LastRefreshStartedAt   = job.StartedAt ?? DateTime.UtcNow;
-            report.LastRefreshCompletedAt = null;
-            report.LastRefreshDurationMs  = null;
-        }
-        else
-        {
-            report.LastRefreshCompletedAt = job.CompletedAt ?? DateTime.UtcNow;
-            report.LastRefreshDurationMs  = job.StartedAt is null
-                ? null
-                : (long)(report.LastRefreshCompletedAt.Value - job.StartedAt.Value).TotalMilliseconds;
-        }
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var report = await db.Reports.FindAsync(job.ReportId);
+            if (report is null) return;
 
-        report.LastRefreshStatus = status;
-        report.LastRefreshError  = error;
-        await db.SaveChangesAsync();
+            if (string.Equals(status, "Running", StringComparison.OrdinalIgnoreCase))
+            {
+                report.LastRefreshStartedAt   = job.StartedAt ?? DateTime.UtcNow;
+                report.LastRefreshCompletedAt = null;
+                report.LastRefreshDurationMs  = null;
+            }
+            else
+            {
+                report.LastRefreshCompletedAt = job.CompletedAt ?? DateTime.UtcNow;
+                report.LastRefreshDurationMs  = job.StartedAt is null
+                    ? null
+                    : (long)(report.LastRefreshCompletedAt.Value - job.StartedAt.Value).TotalMilliseconds;
+            }
+
+            report.LastRefreshStatus = status;
+            report.LastRefreshError  = error;
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex,
+                "Failed to record refresh status '{Status}' for report {ReportId} (job {JobId})",
+                status, job.ReportId, job.Id);
+        }
     }
 
     public void Dispose() => _gate.Dispose();

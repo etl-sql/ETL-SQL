@@ -26,6 +26,7 @@ public class ExecutionController(
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private bool IsAdmin => User.IsInRole("Admin");
 
     private Task<FolderPermission?> GetEffectivePermissionAsync(int folderId) =>
         folderPermissions.GetEffectivePermissionAsync(folderId, User);
@@ -51,7 +52,12 @@ public class ExecutionController(
             scriptHash = "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         }
 
-        var jobId = jobService.EnqueueExecution(id, CurrentUserId, resolvedScriptPath, req?.Parameters);
+        var jobId = jobService.EnqueueExecution(
+            id,
+            CurrentUserId,
+            resolvedScriptPath,
+            req?.Parameters,
+            isAdministrator: IsAdmin);
         await audit.LogAsync(CurrentUserId, "EXECUTE_REPORT", "Report", id.ToString(), scriptHash);
 
         return Accepted(new { jobId });
@@ -171,7 +177,11 @@ public class ExecutionController(
 
         var jobId = alreadyRunning
             ? existingJobId!
-            : jobService.EnqueueRefresh(id, CurrentUserId, resolvedScriptPath);
+            : jobService.EnqueueRefresh(
+                id,
+                CurrentUserId,
+                resolvedScriptPath,
+                isAdministrator: IsAdmin);
 
         if (!alreadyRunning)
             await audit.LogAsync(CurrentUserId, "REFRESH_REPORT", "Report", id.ToString());
@@ -311,7 +321,11 @@ public class ExecutionController(
     private async Task<ETL_SQL.ReportHosting.DashboardService> GetOrRebuildSessionAsync(
         int reportId, string scriptPath)
     {
-        var svc = sessions.GetOrCreate(reportId, CurrentUserId, scriptPath);
+        var svc = sessions.GetOrCreate(
+            reportId,
+            CurrentUserId,
+            scriptPath,
+            isAdministrator: IsAdmin);
 
         // If session was just created and there is a snapshot, prime it from disk
         // so the user doesn't wait for a full re-execution on parameter change.

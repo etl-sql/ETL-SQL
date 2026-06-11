@@ -338,22 +338,27 @@ namespace ETL_SQL.ReportPortal.Services
                     || trimmed.Equals("IsAdmin=true", StringComparison.OrdinalIgnoreCase))
                     return new CallerContext(true, null);
 
+                var isAdmin = false;
+                int? parsedUserId = null;
                 foreach (var part in trimmed.Split(new[] { ';', ',', '|' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 {
                     if (part.Equals("Admin", StringComparison.OrdinalIgnoreCase)
                         || part.Equals("IsAdmin=true", StringComparison.OrdinalIgnoreCase))
-                        return new CallerContext(true, null);
+                    {
+                        isAdmin = true;
+                        continue;
+                    }
 
                     var split = part.Split(new[] { '=', ':' }, 2, StringSplitOptions.TrimEntries);
                     if (split.Length == 2
                         && split[0].Equals("UserId", StringComparison.OrdinalIgnoreCase)
                         && int.TryParse(split[1], out var userId))
                     {
-                        return new CallerContext(false, userId);
+                        parsedUserId = userId;
                     }
                 }
 
-                return new CallerContext(false, null);
+                return new CallerContext(isAdmin, parsedUserId);
             }
         }
 

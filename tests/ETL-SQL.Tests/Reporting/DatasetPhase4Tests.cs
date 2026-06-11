@@ -501,6 +501,83 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
+        public async Task ExportPublish_DoesNotPersistAtRestOrTransportSecrets()
+        {
+            var rootA = Path.Combine(Path.GetTempPath(), "etlsql_ds_secret_a_" + Guid.NewGuid().ToString("N")[..8]);
+            var rootB = Path.Combine(Path.GetTempPath(), "etlsql_ds_secret_b_" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(rootA);
+            Directory.CreateDirectory(rootB);
+            var exportPath = Path.Combine(rootA, "portable-export.parquet").Replace('\\', '/');
+            const string atRestA = "AT_REST_SECRET_MARKER_ALPHA_0123456789";
+            const string atRestB = "AT_REST_SECRET_MARKER_BRAVO_0123456789";
+            const string transport = "TRANSPORT_SECRET_MARKER_0123456789";
+
+            try
+            {
+                var registryA = new SingleDatasetRegistry(ownerUserId: 1, root: rootA);
+                var portalA = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                portalA.DatasetRegistry = registryA;
+                portalA.DatasetCallerContext = "UserId=1";
+                portalA.DatasetAtRestKey = atRestA;
+                await portalA.Evaluate(Parse($@"
+                    CREATE DATASET &secret_source AS (SELECT 7 AS v);
+                    EXPORT DATASET &secret_source TO '{exportPath}'
+                        ENCRYPT = PASSWORD PASSWORD = '{transport}';"));
+
+                var registryB = new SingleDatasetRegistry(ownerUserId: 2, root: rootB);
+                var portalB = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                portalB.DatasetRegistry = registryB;
+                portalB.DatasetCallerContext = "UserId=2";
+                portalB.DatasetAtRestKey = atRestB;
+                await portalB.Evaluate(Parse(
+                    $"PUBLISH DATASET FROM '{exportPath}' AS &secret_import INTO '/imports' " +
+                    $"ENCRYPT = PASSWORD PASSWORD = '{transport}';"));
+
+                foreach (var metadata in new[]
+                {
+                    registryA.Stored("&secret_source"),
+                    registryB.Stored("&secret_import")
+                })
+                {
+                    var persisted = string.Join("|",
+                        metadata.Name,
+                        metadata.FolderPath,
+                        metadata.ParquetFilePath,
+                        metadata.SourceQuery,
+                        metadata.ColumnSchema,
+                        metadata.RefreshInterval,
+                        metadata.Ttl,
+                        metadata.AtRestKeyVersion);
+                    Assert.DoesNotContain(atRestA, persisted, StringComparison.Ordinal);
+                    Assert.DoesNotContain(atRestB, persisted, StringComparison.Ordinal);
+                    Assert.DoesNotContain(transport, persisted, StringComparison.Ordinal);
+                }
+
+                foreach (var file in Directory.EnumerateFiles(rootA).Concat(Directory.EnumerateFiles(rootB)))
+                {
+                    Assert.DoesNotContain(atRestA, Path.GetFileName(file), StringComparison.Ordinal);
+                    Assert.DoesNotContain(atRestB, Path.GetFileName(file), StringComparison.Ordinal);
+                    Assert.DoesNotContain(transport, Path.GetFileName(file), StringComparison.Ordinal);
+                    var bytes = await File.ReadAllBytesAsync(file);
+                    Assert.False(ContainsUtf8(bytes, atRestA), $"{file} contains the source at-rest key.");
+                    Assert.False(ContainsUtf8(bytes, atRestB), $"{file} contains the destination at-rest key.");
+                    Assert.False(ContainsUtf8(bytes, transport), $"{file} contains the transport password.");
+                }
+
+                var wrong = await Assert.ThrowsAnyAsync<Exception>(() => portalB.Evaluate(Parse(
+                    $"PUBLISH DATASET FROM '{exportPath}' AS &secret_failed INTO '/imports' " +
+                    $"ENCRYPT = PASSWORD PASSWORD = '{transport}-wrong';")));
+                Assert.DoesNotContain(transport, wrong.ToString(), StringComparison.Ordinal);
+                Assert.False(await registryB.Exists("&secret_failed"));
+            }
+            finally
+            {
+                try { Directory.Delete(rootA, recursive: true); } catch { }
+                try { Directory.Delete(rootB, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
         public async Task PublishDataset_DuplicateName_Rejected()
         {
             var registry = new SingleDatasetRegistry(ownerUserId: 1);
@@ -720,6 +797,12 @@ namespace ETL_SQL.Tests.Reporting
 
             private bool CanWrite(string callerPermissions) =>
                 callerPermissions == "IsAdmin=true" || callerPermissions == $"UserId={ownerUserId}";
+        }
+
+        private static bool ContainsUtf8(byte[] bytes, string marker)
+        {
+            var needle = System.Text.Encoding.UTF8.GetBytes(marker);
+            return bytes.AsSpan().IndexOf(needle) >= 0;
         }
     }
 }

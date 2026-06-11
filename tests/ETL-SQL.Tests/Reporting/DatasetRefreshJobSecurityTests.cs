@@ -106,6 +106,9 @@ namespace ETL_SQL.Tests.Reporting
                 Assert.DoesNotContain("PASSWORD", job.Script, StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("BEGIN ... END", job.Script, StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("SELECT v FROM #seed", job.Script, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(atRestKey, job.Name);
+                Assert.DoesNotContain(atRestKey, job.ScriptHash ?? "");
+                Assert.DoesNotContain(atRestKey, job.HashPolicy);
                 Assert.IsType<PrintStatement>(Assert.Single(Parse(job.Script).Statements));
                 Assert.Equal((42, jobName, "1m"), registry.RefreshJob);
             }

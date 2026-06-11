@@ -1407,6 +1407,7 @@ CREATE DATASET &<name>
   [REFRESH EVERY '<interval>']
   [TTL = '<duration>']
   [COMPRESS = ON|OFF]
+  [ACCESS PUBLIC | PRIVATE]
   [ENCRYPT = MACHINE | PASSWORD | KEYFILE]
   [PASSWORD = '<password>']
   [KEYFILE  = '<path>']
@@ -1423,7 +1424,7 @@ In standalone execution without a portal registry, the clause is applied directl
 
 | Mode | Standalone behavior |
 |------|-------------|
-| `ENCRYPT = MACHINE` | Encrypts using a machine-bound key (DPAPI on Windows; OS keyring on Linux/macOS). No password or key file needed. Snapshot can only be decrypted on the same machine. |
+| `ENCRYPT = MACHINE` | Encrypts using host-bound machine protection. No password or key file needed. Snapshot can only be decrypted in the matching host context. |
 | `ENCRYPT = PASSWORD, PASSWORD = '...'` | AES encryption with a user-supplied password. Portable — can be decrypted on any machine with the password. |
 | `ENCRYPT = KEYFILE, KEYFILE = '...'` | AES encryption using a key file at the specified path. Portable with the key file. |
 
@@ -1461,6 +1462,7 @@ CREATE DATASET &sales_keyfile
 | `REFRESH EVERY '<interval>'` | No | Re-compute interval. Format: `<n>s`, `<n>m`, `<n>h`, or `<n>d` (e.g. `'30m'`, `'1h'`, `'7d'`). |
 | `TTL = '<duration>'` | No | How long a snapshot stays valid before `IsStale` returns true. Same interval format. |
 | `COMPRESS = ON` | No | Compress the snapshot file on disk. Default `OFF`. |
+| `ACCESS PUBLIC\|PRIVATE` | No | Portal access model. Defaults to `PRIVATE`. `PUBLIC` still requires authenticated Read or higher on the owning folder; `PRIVATE` requires ownership, an explicit dataset grant, or administrator rights. |
 | `ENCRYPT = MACHINE\|PASSWORD\|KEYFILE` | No | Encryption mode. See table above. |
 | `PASSWORD = '<password>'` | Required when `ENCRYPT = PASSWORD` | Password for AES encryption. |
 | `KEYFILE = '<path>'` | Required when `ENCRYPT = KEYFILE` | Absolute path to the AES key file. Linter raises an error if `ENCRYPT = KEYFILE` but `KEYFILE` is absent. |

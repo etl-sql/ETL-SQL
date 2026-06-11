@@ -98,8 +98,13 @@ public class OrchestratorPollerService(
                 datasetJob.LastRefreshedAt = endTime;
                 await db.SaveChangesAsync(ct);
 
-                // Queue re-execution (system user id = 0)
-                jobs.EnqueueRefresh(datasetJob.ReportId, userId: 0, datasetJob.Report.ScriptPath);
+                // The poller is the sole trusted dataset execution path. Interactive execution and
+                // user-triggered refreshes retain their real UserId caller context.
+                jobs.EnqueueRefresh(
+                    datasetJob.ReportId,
+                    userId: 0,
+                    scriptPath: datasetJob.Report.ScriptPath,
+                    trustedDatasetExecution: true);
             }
         }
         catch (Exception ex)

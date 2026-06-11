@@ -310,6 +310,120 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
             (await AuthGet(ownerToken, $"/api/datasets/{datasetId}")).StatusCode);
     }
 
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task HttpAndRegistryAuthorization_DecisionsMatchAcrossDatasetIdentityMatrix()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        async Task<(int Id, string Token)> CreateUser(string role)
+        {
+            var username = $"{role}_{suffix}";
+            var initial = $"{role}A@1234!";
+            var changed = $"{role}B@5678!";
+            var response = await AuthPost(adminToken, "/api/admin/users", new
+            {
+                username,
+                email = $"{username}@test.local",
+                password = initial,
+                role = "Viewer"
+            });
+            response.EnsureSuccessStatusCode();
+            var id = (await response.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+            return (id, await LoginAndChangePasswordAsync(username, initial, changed));
+        }
+
+        var reader = await CreateUser("matrix_reader");
+        var owner = await CreateUser("matrix_owner");
+        var granted = await CreateUser("matrix_granted");
+        var outsider = await CreateUser("matrix_outsider");
+
+        int folderId;
+        string folderPath;
+        int readerGroupId;
+        int grantedGroupId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var folder = new Folder
+            {
+                Name = $"matrix_folder_{suffix}",
+                Path = $"/matrix_folder_{suffix}",
+                OwnerId = owner.Id
+            };
+            var readerGroup = new Group { Name = $"matrix_readers_{suffix}" };
+            var grantedGroup = new Group { Name = $"matrix_grants_{suffix}" };
+            db.AddRange(folder, readerGroup, grantedGroup);
+            await db.SaveChangesAsync();
+
+            db.UserGroups.AddRange(
+                new UserGroup { UserId = reader.Id, GroupId = readerGroup.Id },
+                new UserGroup { UserId = granted.Id, GroupId = grantedGroup.Id });
+            db.FolderAcls.Add(new FolderAcl
+            {
+                FolderId = folder.Id,
+                GroupId = readerGroup.Id,
+                Permission = FolderPermission.Read
+            });
+            await db.SaveChangesAsync();
+
+            folderId = folder.Id;
+            folderPath = folder.Path;
+            readerGroupId = readerGroup.Id;
+            grantedGroupId = grantedGroup.Id;
+        }
+
+        var publicName = $"#matrix_public_{suffix}";
+        var privateName = $"#matrix_private_{suffix}";
+        await RegisterDatasetAsync(publicName, folderPath, DatasetAccessLevel.Public);
+        await RegisterDatasetAsync(
+            privateName,
+            folderPath,
+            DatasetAccessLevel.Private,
+            createdBy: owner.Id);
+        var publicId = await GetDatasetIdAsync(publicName, folderPath);
+        var privateId = await GetDatasetIdAsync(privateName, folderPath);
+        await AddDatasetAclAsync(privateId, grantedGroupId, DatasetPermission.Viewer);
+
+        using var registryScope = _factory.Services.CreateScope();
+        var registry = registryScope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+
+        async Task AssertParity(
+            string token,
+            string callerContext,
+            int datasetId,
+            string datasetName,
+            bool expected)
+        {
+            var http = await AuthGet(token, $"/api/datasets/{datasetId}");
+            Assert.Equal(expected ? HttpStatusCode.OK : HttpStatusCode.Forbidden, http.StatusCode);
+            Assert.Equal(expected, await registry.Lookup(datasetName, callerContext) is not null);
+        }
+
+        await AssertParity(reader.Token, $"UserId={reader.Id}", publicId, publicName, expected: true);
+        await AssertParity(outsider.Token, $"UserId={outsider.Id}", publicId, publicName, expected: false);
+        await AssertParity(owner.Token, $"UserId={owner.Id}", privateId, privateName, expected: true);
+        await AssertParity(granted.Token, $"UserId={granted.Id}", privateId, privateName, expected: true);
+        await AssertParity(outsider.Token, $"UserId={outsider.Id}", privateId, privateName, expected: false);
+
+        int adminId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            adminId = (await db.Users.SingleAsync(u => u.UserName == "admin")).Id;
+        }
+        await AssertParity(
+            adminToken,
+            $"UserId={adminId};IsAdmin=true",
+            privateId,
+            privateName,
+            expected: true);
+
+        Assert.True(folderId > 0);
+        Assert.True(readerGroupId > 0);
+    }
+
     // ── 3. GET /api/datasets/{id}/rows — column schema preview ────────────────
 
     [Fact]
