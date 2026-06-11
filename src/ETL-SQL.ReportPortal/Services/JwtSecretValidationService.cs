@@ -19,9 +19,16 @@ public class JwtSecretValidationService(PortalConfig config, IHostApplicationLif
 
     public Task StartAsync(CancellationToken ct)
     {
-        var secret = config.Jwt.Secret;
+        var secrets = new[] { config.Jwt.Secret }.Concat(config.Jwt.PreviousSecrets ?? []).ToArray();
+        var secret = secrets[0];
 
-        if (string.IsNullOrWhiteSpace(secret) || secret.Length < 32)
+        if ((config.Jwt.PreviousSecrets?.Length ?? 0) > 1)
+        {
+            Console.Error.WriteLine(
+                "FATAL: Portal:Jwt:PreviousSecrets supports exactly one temporary previous key.");
+            lifetime.StopApplication();
+        }
+        else if (string.IsNullOrWhiteSpace(secret) || secret.Length < 32)
         {
             Console.Error.WriteLine(
                 "FATAL: Portal:Jwt:Secret is missing or fewer than 32 characters. " +
@@ -29,12 +36,13 @@ public class JwtSecretValidationService(PortalConfig config, IHostApplicationLif
                 "or set the Portal__Jwt__Secret environment variable.");
             lifetime.StopApplication();
         }
-        else if (KnownInsecureSecrets.Contains(secret))
+        else if (secrets.Any(candidate =>
+                     !string.IsNullOrWhiteSpace(candidate)
+                     && (candidate.Length < 32 || KnownInsecureSecrets.Contains(candidate))))
         {
             Console.Error.WriteLine(
-                "FATAL: Portal:Jwt:Secret is set to a known insecure default. " +
-                "Generate a strong secret with: GENERATE JWT_SECRET " +
-                "or set the Portal__Jwt__Secret environment variable.");
+                "FATAL: A current or previous Portal JWT secret is fewer than 32 characters " +
+                "or is a known insecure default. Generate strong secrets with GENERATE JWT_SECRET.");
             lifetime.StopApplication();
         }
 

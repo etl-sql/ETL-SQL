@@ -1209,6 +1209,47 @@ embed-token resolution. When the portal runs behind a reverse proxy, configure A
 headers at the host boundary so `RemoteIpAddress` is the trusted client address; do not accept forwarded
 addresses from arbitrary direct clients.
 
+### 11.9 Runtime Secret Provisioning and Rotation
+
+Provision `Portal:Jwt:Secret`, `Portal:Orchestrator:ApiKey`, and `Orchestrator:ApiKey` through
+environment variables or the deployment secret provider. The shared `AddSecureConfiguration` layer
+also accepts machine-bound `ENC:` values. Do not commit plaintext production values to
+`appsettings.json`.
+
+The portal persists its ASP.NET Data Protection key ring in `.portal-keys` beside `portal.db`.
+Admin-entered Orchestrator API keys in `portal-orchestrator.json` are protected by that ring. Back up
+`.portal-keys` with the portal database; losing it makes protected SMTP and Orchestrator values
+unreadable. Legacy sidecars containing plaintext `ApiKey` are automatically rewritten with
+`ProtectedApiKey` when first loaded.
+
+#### Rotate the JWT signing secret
+
+1. Generate a new 256-bit-or-stronger secret.
+2. Set the new value as `Portal__Jwt__Secret`.
+3. Put the old value in `Portal__Jwt__PreviousSecrets__0`.
+4. Restart all portal instances together. New tokens use only the new key; existing access tokens
+   signed by the old key remain valid.
+5. After at least `Jwt.ExpiryMinutes` plus clock skew has elapsed, remove the old value from
+   `PreviousSecrets` and restart all instances.
+
+Removing the old key immediately is an emergency revocation procedure and invalidates access tokens
+signed with it. Refresh tokens are not JWT-signed and can still obtain a new access token unless the
+user sessions are separately revoked.
+
+#### Rotate the Orchestrator API key without downtime
+
+1. Generate a new random key.
+2. Add it to `Orchestrator__PreviousApiKeys__0` while leaving the old key in
+   `Orchestrator__ApiKey`; restart the Orchestrator. It now accepts both.
+3. Change the portal to send the new key through `Portal__Orchestrator__ApiKey` or Admin Settings and
+   verify an authenticated management request.
+4. Set the new key as `Orchestrator__ApiKey`, retain the old key temporarily in
+   `Orchestrator__PreviousApiKeys__0`, and restart the Orchestrator.
+5. After every caller has moved to the new key, remove the old key from `PreviousApiKeys` and restart.
+
+Keep the overlap short and record the cutover. `PreviousSecrets` and `PreviousApiKeys` are validation
+rings, not permanent secret archives.
+
 ---
 
 ## 13. Orchestrator Management

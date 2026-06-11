@@ -24,7 +24,7 @@ public class TokenService(PortalConfig config)
         foreach (var role in roles)
             claims.Add(new Claim(ClaimTypes.Role, role));
 
-        var key   = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config.Jwt.Secret));
+        var key   = JwtSigningKeyRing.Current(config.Jwt);
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
             claims:  claims,

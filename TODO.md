@@ -157,12 +157,18 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   *(done — v0.11.0)* Built-in fixed-window policies partition by remote IP and endpoint path, reject
   without queuing, and return `429` plus `Retry-After`. Limits are configurable under
   `Portal:RateLimit`; defaults are 20 auth and 60 anonymous-token requests per minute.
-- [ ] **P1.14 Define rotation and provisioning for the remaining runtime secrets.**
+- [x] **P1.14 Define rotation and provisioning for the remaining runtime secrets.**
   The dataset at-rest key now has startup validation and resumable rotation, but `Portal:Jwt:Secret`
   and the Orchestrator API keys are plaintext config with no rotation procedure. JWT secret rotation
   invalidates every session — document the procedure (or support a two-key validation ring), define
   Orchestrator key rotation across both sides of the shared secret, and prefer environment/secret-
   provider references for the running portal (P1.8 covers references only inside the export script).
+  *(done — v0.11.0)* JWTs are signed only by the current secret and validated against a bounded
+  current-plus-previous ring. Orchestrator authentication accepts current and previous keys during a
+  coordinated cutover using constant-time digest comparison. Admin-entered Orchestrator keys are
+  Data-Protection-encrypted at rest, legacy plaintext sidecars migrate automatically, and deployment
+  documentation defines environment/`ENC:` provisioning, rotation order, retirement windows, and
+  Data Protection key-ring backup requirements.
 
 - [ ] **P2.1 Add a hosted-service integration lane.**
   `PortalWebFactory` removes every `IHostedService`, so normal portal API tests do not exercise startup

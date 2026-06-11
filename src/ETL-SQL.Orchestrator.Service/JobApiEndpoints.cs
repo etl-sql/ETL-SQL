@@ -1,4 +1,6 @@
 using System;
+using System.Security.Cryptography;
+using System.Text;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -399,18 +401,36 @@ namespace ETL_SQL.Orchestrator.Service
 
         private static bool ApiKeyDenied(HttpContext ctx, IConfiguration cfg)
         {
-            var configuredKey = cfg["Orchestrator:ApiKey"];
-            if (string.IsNullOrWhiteSpace(configuredKey)) return false; // key not configured → open
             ctx.Request.Headers.TryGetValue("X-Orchestrator-Key", out var provided);
-            return !string.Equals(configuredKey, provided.ToString(), StringComparison.Ordinal);
+            return !ApiKeyAccepted(cfg, provided.ToString());
         }
 
         private static bool ApiKeyAcceptedForSensitivePayload(HttpContext ctx, IConfiguration cfg)
         {
-            var configuredKey = cfg["Orchestrator:ApiKey"];
-            if (string.IsNullOrWhiteSpace(configuredKey)) return false;
             ctx.Request.Headers.TryGetValue("X-Orchestrator-Key", out var provided);
-            return string.Equals(configuredKey, provided.ToString(), StringComparison.Ordinal);
+            return ApiKeyAccepted(cfg, provided.ToString(), requireConfiguredKey: true);
+        }
+
+        internal static bool ApiKeyAccepted(
+            IConfiguration cfg,
+            string? provided,
+            bool requireConfiguredKey = false)
+        {
+            var configuredKeys = new[] { cfg["Orchestrator:ApiKey"] }
+                .Concat((cfg.GetSection("Orchestrator:PreviousApiKeys").Get<string[]>() ?? []).Take(1))
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (configuredKeys.Length == 0)
+                return !requireConfiguredKey;
+            if (string.IsNullOrEmpty(provided))
+                return false;
+
+            var providedDigest = SHA256.HashData(Encoding.UTF8.GetBytes(provided));
+            return configuredKeys.Any(key =>
+                CryptographicOperations.FixedTimeEquals(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(key!)),
+                    providedDigest));
         }
 
         private static string GetScriptRoot(IConfiguration cfg) =>

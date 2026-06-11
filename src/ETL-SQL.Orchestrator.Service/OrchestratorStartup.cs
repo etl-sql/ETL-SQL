@@ -102,8 +102,17 @@ namespace ETL_SQL.Orchestrator.Service
         /// </summary>
         public static void ValidateApiKeyBinding(IConfiguration configuration)
         {
-            var apiKey = configuration["Orchestrator:ApiKey"];
-            if (!string.IsNullOrWhiteSpace(apiKey))
+            var previousApiKeys =
+                configuration.GetSection("Orchestrator:PreviousApiKeys").Get<string[]>() ?? [];
+            if (previousApiKeys.Length > 1)
+            {
+                throw new InvalidOperationException(
+                    "Orchestrator:PreviousApiKeys supports exactly one temporary previous key.");
+            }
+
+            var apiKeys = new[] { configuration["Orchestrator:ApiKey"] }
+                .Concat(previousApiKeys);
+            if (apiKeys.Any(key => !string.IsNullOrWhiteSpace(key)))
             {
                 return;
             }

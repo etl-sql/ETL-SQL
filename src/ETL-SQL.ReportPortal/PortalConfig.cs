@@ -119,6 +119,7 @@ public class ResourcesConfig
 public class JwtConfig
 {
     public string Secret          { get; set; } = "";
+    public string[] PreviousSecrets { get; set; } = [];
     public int    ExpiryMinutes   { get; set; } = 60;
     public int    RefreshExpiryDays { get; set; } = 7;
 }

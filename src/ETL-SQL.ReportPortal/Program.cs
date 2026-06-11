@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
@@ -103,6 +104,9 @@ var rawSecret = string.IsNullOrEmpty(portalConfig.Jwt.Secret)
     ? System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)
     : Encoding.UTF8.GetBytes(portalConfig.Jwt.Secret);
 var signingKey = new SymmetricSecurityKey(rawSecret);
+var validationKeys = string.IsNullOrEmpty(portalConfig.Jwt.Secret)
+    ? [signingKey]
+    : JwtSigningKeyRing.ValidationKeys(portalConfig.Jwt);
 
 builder.Services.AddAuthentication(opt =>
 {
@@ -117,7 +121,7 @@ builder.Services.AddAuthentication(opt =>
         ValidateAudience         = false,
         ValidateLifetime         = true,
         ValidateIssuerSigningKey = true,
-        IssuerSigningKey         = signingKey,
+        IssuerSigningKeys        = validationKeys,
         ClockSkew                = TimeSpan.FromSeconds(30)
     };
     opt.Events = new JwtBearerEvents
@@ -206,6 +210,13 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 builder.Services.AddMemoryCache();
+var dataProtectionPath = Path.Combine(
+    Path.GetDirectoryName(dbPath) ?? AppContext.BaseDirectory,
+    ".portal-keys");
+Directory.CreateDirectory(dataProtectionPath);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
+    .SetApplicationName("ETL-SQL.ReportPortal");
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.TokenService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SecuritySessionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
@@ -223,6 +234,7 @@ builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.Datas
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetViewerService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ILdapService, ETL_SQL.ReportPortal.Services.LdapService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SmtpPasswordProtector>();
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorApiKeyProtector>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorDbLocator>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.PortalBrandingSettingsService>();
 
