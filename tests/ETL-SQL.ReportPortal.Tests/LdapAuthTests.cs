@@ -60,7 +60,7 @@ namespace ETL_SQL.ReportPortal.Tests
                         MapRootPath       = mapRoot,
                         DatasetRootPath   = datasetRoot,
                         Jwt = new JwtConfig { Secret = jwtSecret, ExpiryMinutes = 60, RefreshExpiryDays = 7 },
-                        FirstRun          = new FirstRunConfig { AdminUsername = "admin" },
+                        FirstRun          = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
                         Orchestrator      = new OrchestratorConfig { DatabasePath = orchDbPath },
                         Identity = new IdentityConfig
                         {
@@ -283,6 +283,46 @@ namespace ETL_SQL.ReportPortal.Tests
                 Assert.Contains("Portal Admins", groupNames);
                 Assert.DoesNotContain("GG-Portal-Publishers", groupNames);
                 Assert.Contains("Local-Analysts", groupNames); // Local group preserved!
+            }
+        }
+
+        [Fact]
+        public async Task Login_DisabledLdapUser_IsRejectedAndStaysDisabled()
+        {
+            var suffix = Guid.NewGuid().ToString("N")[..8];
+            var username = $"ldapoff_{suffix}";
+
+            _factory.MockLdap.AuthenticateFunc = (u, p) => new LdapUserResult
+            {
+                Username = username,
+                Email = $"{username}@corp.local",
+                FirstName = "Ldap",
+                LastName = "Disabled",
+                Groups = new List<string>()
+            };
+
+            // Provision the account via a first successful LDAP login.
+            var first = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, "ldapPass123!"));
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+            // An administrator disables the account.
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                var user = await db.Users.SingleAsync(u => u.UserName == username);
+                user.IsActive = false;
+                await db.SaveChangesAsync();
+            }
+
+            // Valid LDAP credentials must not resurrect a portal-disabled account.
+            var second = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, "ldapPass123!"));
+            Assert.Equal(HttpStatusCode.Unauthorized, second.StatusCode);
+
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                var user = await db.Users.SingleAsync(u => u.UserName == username);
+                Assert.False(user.IsActive);
             }
         }
 

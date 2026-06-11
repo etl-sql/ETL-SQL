@@ -107,4 +107,10 @@ public class JwtConfig
 public class FirstRunConfig
 {
     public string AdminUsername { get; set; } = "admin";
+
+    /// <summary>
+    /// Initial password for the seeded admin account. When unset, a random password is generated
+    /// at first run and written once to the startup log — there is no well-known default.
+    /// </summary>
+    public string? AdminPassword { get; set; }
 }

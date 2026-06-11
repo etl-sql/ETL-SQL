@@ -64,6 +64,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 ["Portal:Jwt:ExpiryMinutes"]      = "60",
                 ["Portal:Jwt:RefreshExpiryDays"]  = "7",
                 ["Portal:FirstRun:AdminUsername"] = "admin",
+                ["Portal:FirstRun:AdminPassword"] = "Admin@12345!",
                 ["Portal:Resources:MaxConcurrentReportExecutions"] = "2",
                 ["Portal:Resources:ExecutionTimeoutSeconds"]       = "30",
                 ["Portal:Resources:SessionCacheMaxSize"]           = "10",
@@ -90,7 +91,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 MapRootPath       = mapRoot,
                 DatasetRootPath   = datasetRoot,
                 Jwt = new JwtConfig { Secret = jwtSecret, ExpiryMinutes = 60, RefreshExpiryDays = 7 },
-                FirstRun          = new FirstRunConfig { AdminUsername = "admin" },
+                FirstRun          = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
                 Orchestrator      = new OrchestratorConfig { DatabasePath = orchDbPath },
             };
             services.AddSingleton(cfg);

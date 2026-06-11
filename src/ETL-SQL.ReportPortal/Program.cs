@@ -260,7 +260,9 @@ using (var scope = app.Services.CreateScope())
         scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
             .CreateLogger("DatasetStorageMaintenance"));
 
-    await SeedFirstRunAsync(scope.ServiceProvider, portalConfig);
+    // Resolve PortalConfig from DI (not the locally parsed copy) so test hosts that override the
+    // singleton — e.g. to pin FirstRun.AdminPassword — seed with the effective configuration.
+    await SeedFirstRunAsync(scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<PortalConfig>());
 }
 
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
@@ -358,11 +360,36 @@ static async Task SeedFirstRunAsync(IServiceProvider services, PortalConfig conf
             IsActive            = true,
             MustChangePassword  = true
         };
-        // Temporary password — must be changed on first login
-        var result = await userMgr.CreateAsync(admin, "Admin@12345!");
+        // Temporary password — must be changed on first login. No hardcoded default: either the
+        // operator supplies Portal:FirstRun:AdminPassword or a random one is generated and logged once.
+        var password  = config.FirstRun.AdminPassword;
+        var generated = string.IsNullOrWhiteSpace(password);
+        if (generated)
+            password = GenerateInitialAdminPassword();
+
+        var result = await userMgr.CreateAsync(admin, password!);
         if (result.Succeeded)
+        {
             await userMgr.AddToRoleAsync(admin, "Admin");
+            if (generated)
+            {
+                services.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Portal.FirstRun")
+                    .LogWarning(
+                        "First-run admin account '{User}' created with generated password: {Password} — " +
+                        "log in and change it now, or set Portal:FirstRun:AdminPassword before first start.",
+                        adminUsername, password);
+            }
+        }
     }
+}
+
+static string GenerateInitialAdminPassword()
+{
+    // Fixed prefix deterministically satisfies the Identity policy (upper/lower/digit/length);
+    // all entropy lives in the random suffix.
+    return "Aa1!" + Convert.ToBase64String(
+        System.Security.Cryptography.RandomNumberGenerator.GetBytes(18));
 }
 
 static string? FindRepoFile(string fileName)

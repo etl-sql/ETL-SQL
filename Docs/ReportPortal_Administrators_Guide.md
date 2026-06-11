@@ -35,7 +35,8 @@ To get the Report Portal running in under 5 minutes:
 5. **Admin Login**:
    - URL: `http://localhost:5001`
    - User: `admin`
-   - Temp Password: `Admin@12345!`
+   - Temp Password: the value of `Portal__FirstRun__AdminPassword` if you configured one; otherwise a
+     randomly generated password printed once to the startup log (look for the `Portal.FirstRun` category).
 6. **Secure Account**: Change the admin password immediately upon first login.
 7. **Publish**: Go to **Admin -> Folders**, click **Publish Report**, and point to a `.rptsql` file.
 
@@ -180,7 +181,10 @@ On first start the portal:
 
 1. Runs any pending EF Core migrations, creating the SQLite schema.
 2. Creates the three default roles: `Admin`, `Publisher`, `Viewer`.
-3. If no `admin` user exists, creates one with username `admin` and temporary password `Admin@12345!` with `MustChangePassword = true`.
+3. If no `admin` user exists, creates one with username `admin` and `MustChangePassword = true`. The
+   temporary password comes from `Portal:FirstRun:AdminPassword` (or the `Portal__FirstRun__AdminPassword`
+   environment variable); when unset, a random password is generated and written once to the startup log
+   under the `Portal.FirstRun` category — there is no well-known default password.
 
 **You must log in as `admin` immediately and change the password.** The portal enforces this — no API calls will succeed until the password has been changed.
 
@@ -423,8 +427,24 @@ Cross-report shared datasets allow reports to consume cached, shared data with a
 Dataset permissions are independent of folder ACLs. Folder permissions control report browsing and execution; dataset ACLs control cross-report dataset reuse. A user who can run a report does not automatically gain access to every private dataset in the portal.
 
 Dataset permissions are hierarchical: `Viewer < Refresh < Editor < Owner`. `Refresh` can read and
-trigger materialization but cannot alter dataset metadata or source definitions. Administrators and
-trusted scheduled jobs have owner-level rights.
+trigger materialization but cannot alter dataset metadata or source definitions. Interactive report
+execution and user-triggered refresh retain the real user's dataset identity. The orchestrator poller is
+the only non-user execution path that explicitly runs a scheduled dataset refresh with administrator
+dataset rights.
+
+Dataset ownership and folder mutation use these rules:
+
+| Operation | Owner recorded | Required folder permission |
+| :--- | :--- | :--- |
+| `CREATE DATASET` in a report | The owning report; the report publisher has owner rights | Report execution permission; updates still require dataset Editor/Owner rights |
+| Interactive `PUBLISH DATASET` | The calling user, including an administrator | `Manage` on the destination folder; administrators satisfy this automatically |
+| Userless trusted system `PUBLISH DATASET` | The destination folder owner | Trusted scheduled execution only |
+| Scheduled refresh | Ownership is unchanged | Trusted poller execution |
+| Move dataset | Ownership is unchanged | `Manage` on both source and destination folders; administrators satisfy this automatically |
+
+Publish and move audits record the initiating user when one exists. Userless scheduled activity is
+recorded without a fabricated user identity. Failed publish audits contain the target and a sanitized
+reason, never transport credentials.
 
 All dataset file paths are also constrained to `Portal:DatasetRootPath`. ACLs cannot grant access to a dataset record whose backing file is outside that configured root.
 
@@ -458,6 +478,22 @@ key makes the caches unreadable.
 `Portal:Dataset:AllowMachineFallback=true` is supported only for deliberate development/standalone use.
 It creates host-bound caches that cannot be restored on another host.
 
+At startup, the portal validates the current key, every `PreviousAtRestKeys` entry, and
+`LegacyAtRestKeyVersion`. Startup is fatal when a required key is missing, is not valid base64, decodes
+to fewer than 32 bytes, reuses the current version as a previous version, or names a legacy version that
+cannot be resolved. The only exception is an empty current key with
+`AllowMachineFallback=true`, which starts with a warning and host-bound encryption.
+
+For backup and restore:
+
+1. Stop writes or take a coordinated snapshot.
+2. Back up `portal.db`, `Portal:DatasetRootPath`, the current key/version, all configured previous
+   key/version pairs, and `LegacyAtRestKeyVersion`.
+3. Restore those items as one set. Do not start the portal with only the database or dataset directory.
+4. Start the portal and verify dataset reads before retiring the backup.
+5. A restore with the wrong key must fail cleanly; restore the matching secret rather than changing
+   metadata or attempting to regenerate the key.
+
 To stamp existing unversioned datasets without changing the key:
 
 1. Configure the existing key and `AtRestKeyVersion`.
@@ -489,6 +525,42 @@ After the response reports no failures and every dataset row records `v2`, take 
 `LegacyAtRestKeyVersion`, and remove `v1` from `PreviousAtRestKeys`. Do not retire the old key until old
 backups have expired or their recovery procedure retains that key separately. Rotation audit entries
 record versions and counts only, never key material.
+
+#### Interrupted Rotation
+
+Rotation is resumable per dataset. If the request is cancelled, the process stops, or one dataset fails:
+
+1. Keep the current and previous key mappings unchanged.
+2. Restart the portal. Startup reconciliation removes abandoned `.rotate-*`, `.tmp-*`, and `.bak-*`
+   staging files under `DatasetRootPath`.
+3. Review the rotation response and portal logs for failed dataset names. Keys and credentials are not
+   logged.
+4. Correct missing files, permissions, or key-version mappings.
+5. Call `POST /api/admin/datasets/rotate-at-rest-key` again. Datasets already at the target version are
+   skipped; incomplete datasets are retried.
+6. Retire the previous key only after every catalog row reports the target version and reads succeed.
+
+#### Dataset Orphan Reconciliation
+
+The portal runs dataset storage reconciliation automatically during startup, before serving requests.
+It is intentionally limited to the top level of `DatasetRootPath`:
+
+- abandoned transaction and rotation staging files are deleted;
+- catalog rows with an empty path or a missing managed cache file are deleted;
+- unreferenced files matching the managed `<safe-name>_<id>.parquet` naming pattern are deleted;
+- files outside `DatasetRootPath`, nested files, and files that do not match the managed naming pattern
+  are not adopted or deleted.
+
+Operator procedure:
+
+1. Back up `portal.db` and `DatasetRootPath` before manually repairing catalog or filesystem state.
+2. Stop the portal and inspect both sides together. Do not rename managed files to make them appear
+   referenced; their stable dataset ID is part of the filename contract.
+3. Restore a missing referenced cache from the coordinated backup before startup. If no valid cache
+   exists, allow reconciliation to remove the stale row, then republish or rerun the producing report.
+4. Move suspected unmanaged files outside `DatasetRootPath` before startup if they need investigation.
+5. Start the portal and inspect `DatasetStorageMaintenance` log entries for each removed row or file.
+6. Run `SHOW DATASETS` and exercise representative reads after reconciliation.
 
 ### 6.6 Effective Permissions
 
@@ -1200,7 +1272,7 @@ Use this checklist before promoting the Report Portal to a production or custome
 
 ### Security
 
-- [ ] **Required** — Change the default `admin` password. The factory password `Admin@12345!` must not be used in production.
+- [ ] **Required** — Change the initial `admin` password after first login. If it was provisioned via `Portal__FirstRun__AdminPassword`, remove that value from configuration afterwards; if it was generated, treat the startup log line that printed it as sensitive.
 - [ ] **Required** — Replace the default JWT secret. Set `Portal__Jwt__Secret` in environment variables or `appsettings.json` to a randomly generated 256-bit value. Run `etl-sql config setup-jwt --update` to generate one.
 - [ ] **Required** — Set `Portal__Jwt__Issuer` and `Portal__Jwt__Audience` to values that match your deployment. Default `ETL-SQL-Portal` values are acceptable but should be documented.
 - [ ] **Required** — Enable HTTPS in production. Configure a reverse proxy (nginx, Caddy, IIS) or supply a TLS certificate via Kestrel. Do not run the portal over plain HTTP with real user data.

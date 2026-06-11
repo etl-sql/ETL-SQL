@@ -46,7 +46,8 @@ Then, host the report using the portal player:
 REPORT PORTAL QUICKSTART:
   1. Set a 32-char 'Portal__Jwt__Secret' env var.
   2. Run ./ETL-SQL-Portal and login at http://localhost:5001.
-  3. Default Admin: admin / Admin@12345! (Change on first login!)
+  3. Admin login: user 'admin'; password = Portal__FirstRun__AdminPassword if set,
+     otherwise generated and printed once in the startup log. (Change on first login!)
   4. Detailed guide in Docs/ReportPortal_Guide.txt.
 
 5. CONNECTORS

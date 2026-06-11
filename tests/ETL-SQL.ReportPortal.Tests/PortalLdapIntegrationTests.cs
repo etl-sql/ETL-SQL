@@ -178,7 +178,7 @@ namespace ETL_SQL.ReportPortal.Tests
                         MapRootPath       = mapRoot,
                         DatasetRootPath   = datasetRoot,
                         Jwt = new JwtConfig { Secret = jwtSecret, ExpiryMinutes = 60, RefreshExpiryDays = 7 },
-                        FirstRun          = new FirstRunConfig { AdminUsername = "admin" },
+                        FirstRun          = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
                         Orchestrator      = new OrchestratorConfig { DatabasePath = orchDbPath },
                         Identity = new IdentityConfig
                         {

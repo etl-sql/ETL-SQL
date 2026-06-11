@@ -38,6 +38,14 @@ public class AuthController(
 
         var user = await userManager.FindByNameAsync(cleanUsername);
 
+        // A portal-disabled account stays disabled regardless of identity provider. LDAP
+        // authentication must not resurrect it — only an administrator re-enables the account.
+        if (user is not null && !user.IsActive)
+        {
+            await auditService.LogAsync(user.Id, "LOGIN_FAILED", "User", user.Id.ToString(), "Account is disabled.");
+            return Unauthorized(new { error = "Invalid credentials" });
+        }
+
         bool useLdap = false;
         if (config.Identity.Ldap.Enabled)
         {
@@ -93,11 +101,11 @@ public class AuthController(
                 }
                 else
                 {
-                    // Sync user details
+                    // Sync user details. IsActive is deliberately not touched: a portal disable
+                    // must survive LDAP re-authentication (checked and rejected above).
                     user.Email = ldapResult.Email ?? user.Email;
                     user.FirstName = ldapResult.FirstName ?? user.FirstName;
                     user.LastName = ldapResult.LastName ?? user.LastName;
-                    user.IsActive = true;
                     await userManager.UpdateAsync(user);
                 }
 

@@ -242,6 +242,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 .WithEnvironment("Portal__SnapshotDirectory", "/app/Snapshots")
                 .WithEnvironment("Portal__Jwt__Secret", "DockerSmokeJwtSecretThatIsAtLeast32Chars!")
                 .WithEnvironment("Portal__FirstRun__AdminUsername", AdminUser)
+                .WithEnvironment("Portal__FirstRun__AdminPassword", InitialAdminPassword)
                 .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r =>
                     r.ForPort(PortalPort).ForPath("/health")))
                 .Build();
