@@ -33,9 +33,10 @@ namespace ETL_SQL.Tests.Analysis
         [Fact]
         public async Task DatasetEncryptWithoutKey_PasswordMode_NoPassword_Error()
         {
+            // The transport-credential requirement now applies to EXPORT/PUBLISH, not CREATE.
             var rule = new DatasetEncryptWithoutKeyRule();
             var results = await Lint(rule,
-                "CREATE DATASET &sales ENCRYPT = PASSWORD AS (SELECT 1 AS v);");
+                "EXPORT DATASET &sales TO 'sales.parquet' ENCRYPT = PASSWORD;");
             Assert.NotEmpty(results);
             Assert.Equal("DatasetEncryptWithoutKey", results[0].RuleName);
             Assert.Equal(LintSeverity.Error, results[0].Severity);
@@ -46,7 +47,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new DatasetEncryptWithoutKeyRule();
             var results = await Lint(rule,
-                "CREATE DATASET &sales ENCRYPT = PASSWORD PASSWORD = 'secret' AS (SELECT 1 AS v);");
+                "EXPORT DATASET &sales TO 'sales.parquet' ENCRYPT = PASSWORD PASSWORD = 'secret';");
             Assert.Empty(results);
         }
 
@@ -55,7 +56,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new DatasetEncryptWithoutKeyRule();
             var results = await Lint(rule,
-                "CREATE DATASET &sales ENCRYPT = KEYFILE AS (SELECT 1 AS v);");
+                "EXPORT DATASET &sales TO 'sales.parquet' ENCRYPT = KEYFILE;");
             Assert.NotEmpty(results);
             Assert.Equal("DatasetEncryptWithoutKey", results[0].RuleName);
         }
@@ -65,16 +66,17 @@ namespace ETL_SQL.Tests.Analysis
         {
             var rule = new DatasetEncryptWithoutKeyRule();
             var results = await Lint(rule,
-                "CREATE DATASET &sales ENCRYPT = KEYFILE KEYFILE = '/keys/k.pem' AS (SELECT 1 AS v);");
+                "EXPORT DATASET &sales TO 'sales.parquet' ENCRYPT = KEYFILE KEYFILE = '/keys/k.pem';");
             Assert.Empty(results);
         }
 
         [Fact]
-        public async Task DatasetEncryptWithoutKey_MachineMode_NoError()
+        public async Task DatasetEncryptWithoutKey_CreateDataset_NoError()
         {
+            // CREATE DATASET no longer carries a credential requirement (at rest uses the portal key).
             var rule = new DatasetEncryptWithoutKeyRule();
             var results = await Lint(rule,
-                "CREATE DATASET &sales ENCRYPT = MACHINE AS (SELECT 1 AS v);");
+                "CREATE DATASET &sales ENCRYPT = PASSWORD AS (SELECT 1 AS v);");
             Assert.Empty(results);
         }
 

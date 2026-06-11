@@ -112,17 +112,24 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 
 ### Phase 2 — Portable move (the "movable" story)
 
-- [ ] **2a. EXPORT DATASET** `&x TO '<file>' ENCRYPT = PASSWORD|KEYFILE (PASSWORD='…' | KEYFILE='…')` —
-  portable parquet encrypted with the transport credential (supplied at export, never sidecar'd). Reuse
-  `CryptoUtils`/`EncryptionOptions`. New AST + parser case + handler.
-- [ ] **2b. PUBLISH/IMPORT** a portable file into a portal — decrypt once with the supplied credential,
-  re-encrypt with the portal at-rest key, register, mark **not movable**, surface the keep-your-original
-  warning.
-- [ ] **2c. Repurpose `ENCRYPT=PASSWORD|KEYFILE` on `CREATE DATASET` into a portal** (currently conflates
-  transport with at-rest). Realign lint rules `DatasetEncryptWithoutKeyRule` / `DatasetEncryptionModeRule`
-  to transport-only semantics.
-- [ ] **2d. Remove the cleartext-credential sidecar** (`CreateDatasetStatementHandler` 260-275); any
-  refresh sidecar carries no secret.
+> **Phase 2 COMPLETE (2a-2d) on branch v0.11.0.** Commits: 2d 8796ffb8, 2a 588220c0, 2b 9aa6594d, 2c <this>.
+
+- [x] **2a. EXPORT DATASET** *(done)* `&x TO '<file>' ENCRYPT = PASSWORD|KEYFILE [PASSWORD=… | KEYFILE=…]` —
+  decrypts the at-rest cache, re-encrypts to the target with the transport credential (supplied at export,
+  never persisted). AST `ExportDatasetStatement` + EXPORT dispatch → `ReportParser.ParseExportDataset` +
+  `ExportDatasetStatementHandler` (reuses `EncryptionOptions`/`CryptoUtils`).
+- [x] **2b. PUBLISH/IMPORT** *(done)* `PUBLISH DATASET FROM '<file>' AS &x [INTO '<folder>'] [ACCESS …]
+  ENCRYPT = …` — decrypt once with the credential, re-encrypt with the portal at-rest key, register.
+  Published copy is at-rest-bound (not movable); keep-your-original warning. New `Dataset.CreatedBy`
+  (publisher owner; migration `DatasetAddCreatedBy`); `CanReadAsync`/`CanWriteAsync` fall back to
+  `CreatedBy`; folder resolved from target logical path.
+- [x] **2c. Repurpose `ENCRYPT=PASSWORD|KEYFILE` on `CREATE DATASET` to transport-only** *(done)* — in a
+  portal the at-rest cache always uses the portal key (`BuildParquetOptions` ignores the statement's
+  ENCRYPT clause when an at-rest key is set); the CREATE credential throw now only applies in non-portal
+  mode. Lint realigned: `DatasetEncryptionModeRule` reworded (transport-only/ignored-at-rest/use EXPORT),
+  `DatasetEncryptWithoutKeyRule` repointed to EXPORT/PUBLISH (where the credential is required).
+- [x] **2d. Remove the cleartext-credential sidecar** *(done)* — deleted `WriteSidecarScript` +
+  `EncryptLabel` from `CreateDatasetStatementHandler`.
 
 ### Phase 3 — Verification deck (scripts + xUnit)
 

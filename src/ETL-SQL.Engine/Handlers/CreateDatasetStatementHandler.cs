@@ -32,24 +32,29 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (CreateDatasetStatement)statement;
 
-            // ── 1. Validate encryption credential completeness ─────────────────────
-            // (Mode-appropriateness is a lint warning, not a runtime error — users may
-            //  deliberately choose PASSWORD/KEYFILE for portable cross-machine datasets.)
-            if (stmt.EncryptionMode is DatasetEncryptionMode.Password
-                && string.IsNullOrWhiteSpace(stmt.EncryptionPassword))
-                throw new ExecutionException(
-                    $"CREATE DATASET '{stmt.TempTableName}': ENCRYPT = PASSWORD requires PASSWORD = '...' to be specified.",
-                    null, stmt.Line, stmt.Column);
-
-            if (stmt.EncryptionMode is DatasetEncryptionMode.KeyFile
-                && string.IsNullOrWhiteSpace(stmt.KeyFile))
-                throw new ExecutionException(
-                    $"CREATE DATASET '{stmt.TempTableName}': ENCRYPT = KEYFILE requires KEYFILE = '...' to be specified.",
-                    null, stmt.Line, stmt.Column);
-
-            // ── 2. Resolve portal registry and folder ──────────────────────────────
+            // ── 1. Resolve portal registry and folder ──────────────────────────────
             var registry = context is Evaluator e ? e.DatasetRegistry : null;
             var folderPath = Path.GetDirectoryName(context.CurrentScriptPath) ?? "";
+
+            // ── 2. Validate encryption credential completeness (non-portal only) ────
+            // In a portal the at-rest cache always uses the portal key, so an ENCRYPT=PASSWORD|KEYFILE
+            // clause is a transport credential that is ignored at rest (see EXPORT/PUBLISH DATASET);
+            // a missing credential is harmless. In non-portal mode the clause is honored at write time,
+            // so the credential must be complete.
+            if (registry == null)
+            {
+                if (stmt.EncryptionMode is DatasetEncryptionMode.Password
+                    && string.IsNullOrWhiteSpace(stmt.EncryptionPassword))
+                    throw new ExecutionException(
+                        $"CREATE DATASET '{stmt.TempTableName}': ENCRYPT = PASSWORD requires PASSWORD = '...' to be specified.",
+                        null, stmt.Line, stmt.Column);
+
+                if (stmt.EncryptionMode is DatasetEncryptionMode.KeyFile
+                    && string.IsNullOrWhiteSpace(stmt.KeyFile))
+                    throw new ExecutionException(
+                        $"CREATE DATASET '{stmt.TempTableName}': ENCRYPT = KEYFILE requires KEYFILE = '...' to be specified.",
+                        null, stmt.Line, stmt.Column);
+            }
 
             // ── 3. Staleness check — skip source query if cached data is fresh ─────
             if (registry != null)
@@ -279,10 +284,10 @@ namespace ETL_SQL.Engine.Handlers
 
         /// <summary>
         /// Builds the encryption-related options for a synthetic PARQUET CreateConnectionStatement.
-        /// MACHINE → the portal at-rest key (ENCRYPT=PASSWORD) when one is configured, else ENCRYPT=MACHINE.
-        /// PASSWORD → ENCRYPT=PASSWORD + PASSWORD=value (explicit transport credential — Phase 2).
-        /// KEYFILE  → ENCRYPT=KEYFILE  + KEYFILE=path.
-        /// None     → no encryption options added.
+        /// In a portal (an at-rest key is configured) the cache ALWAYS uses the portal at-rest key
+        /// (ENCRYPT=PASSWORD), regardless of the statement's ENCRYPT clause — that clause is a transport
+        /// credential, ignored at rest (use EXPORT/PUBLISH DATASET to move data). In non-portal mode the
+        /// statement's mode is honored: MACHINE → host-bound; PASSWORD/KEYFILE → that credential; None → plain.
         /// </summary>
         private static Dictionary<string, Expression> BuildParquetOptions(
             CreateDatasetStatement stmt, bool includeCompression, string? atRestKey)
@@ -292,10 +297,17 @@ namespace ETL_SQL.Engine.Handlers
             if (includeCompression)
                 opts["COMPRESSION"] = new LiteralExpression("SNAPPY", TokenType.STRING_LITERAL);
 
+            // Portal at rest: always the portal key, ignoring the statement's transport ENCRYPT clause.
+            if (!string.IsNullOrWhiteSpace(atRestKey))
+            {
+                DatasetAtRestOptions.Apply(opts, atRestKey);
+                return opts;
+            }
+
             switch (stmt.EncryptionMode)
             {
                 case DatasetEncryptionMode.MachineBound:
-                    DatasetAtRestOptions.Apply(opts, atRestKey);   // portal key when set, else host MACHINE
+                    DatasetAtRestOptions.Apply(opts, null);   // host MACHINE (no portal key)
                     break;
                 case DatasetEncryptionMode.Password:
                     opts["ENCRYPT"]   = new LiteralExpression("PASSWORD",                   TokenType.STRING_LITERAL);

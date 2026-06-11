@@ -125,7 +125,7 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Single(results);
             Assert.Equal(LintSeverity.Warning, results[0].Severity);
             Assert.Contains("ENCRYPT = PASSWORD", results[0].Message);
-            Assert.Contains("MACHINE", results[0].Message);
+            Assert.Contains("EXPORT", results[0].Message);
         }
 
         [Fact]

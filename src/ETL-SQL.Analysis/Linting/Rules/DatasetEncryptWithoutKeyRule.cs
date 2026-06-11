@@ -4,12 +4,14 @@ using System.Threading.Tasks;
 namespace ETL_SQL.Analysis.Linting.Rules
 {
     /// <summary>
-    /// Errors when ENCRYPT = PASSWORD is missing a PASSWORD, or ENCRYPT = KEYFILE is missing a KEYFILE.
+    /// Errors when EXPORT DATASET or PUBLISH DATASET specifies ENCRYPT = PASSWORD without a PASSWORD,
+    /// or ENCRYPT = KEYFILE without a KEYFILE. The transport credential is required for the portable
+    /// file (CREATE DATASET encrypts at rest with the portal key and needs no credential).
     /// </summary>
     public class DatasetEncryptWithoutKeyRule : ILintRule
     {
         public string Name        => "DatasetEncryptWithoutKey";
-        public string Description => "Errors when CREATE DATASET encryption mode is missing its required credential.";
+        public string Description => "Errors when EXPORT/PUBLISH DATASET is missing the transport credential its ENCRYPT mode requires.";
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {
@@ -17,30 +19,35 @@ namespace ETL_SQL.Analysis.Linting.Rules
 
             foreach (var stmt in script.Statements)
             {
-                if (stmt is not CreateDatasetStatement ds) continue;
+                (string verb, string name, DatasetEncryptionMode mode, string? password, string? keyFile, int line, int col)? t = stmt switch
+                {
+                    ExportDatasetStatement ex  => ("EXPORT",  ex.DatasetName,  ex.EncryptionMode,  ex.EncryptionPassword,  ex.KeyFile,  ex.Line,  ex.Column),
+                    PublishDatasetStatement pb => ("PUBLISH", pb.DatasetName,  pb.EncryptionMode,  pb.EncryptionPassword,  pb.KeyFile,  pb.Line,  pb.Column),
+                    _ => null
+                };
+                if (t is null) continue;
+                var (verb, name, mode, password, keyFile, line, col) = t.Value;
 
-                if (ds.EncryptionMode == DatasetEncryptionMode.Password &&
-                    string.IsNullOrWhiteSpace(ds.EncryptionPassword))
+                if (mode == DatasetEncryptionMode.Password && string.IsNullOrWhiteSpace(password))
                 {
                     results.Add(new LintResult
                     {
                         RuleName     = Name,
                         Severity     = LintSeverity.Error,
-                        Message      = $"Dataset '{ds.TempTableName}': ENCRYPT = PASSWORD requires PASSWORD = '...' to be specified.",
-                        LineNumber   = ds.Line,
-                        ColumnNumber = ds.Column
+                        Message      = $"Dataset '{name}': {verb} DATASET with ENCRYPT = PASSWORD requires PASSWORD = '...' to be specified.",
+                        LineNumber   = line,
+                        ColumnNumber = col
                     });
                 }
-                else if (ds.EncryptionMode == DatasetEncryptionMode.KeyFile &&
-                         string.IsNullOrWhiteSpace(ds.KeyFile))
+                else if (mode == DatasetEncryptionMode.KeyFile && string.IsNullOrWhiteSpace(keyFile))
                 {
                     results.Add(new LintResult
                     {
                         RuleName     = Name,
                         Severity     = LintSeverity.Error,
-                        Message      = $"Dataset '{ds.TempTableName}': ENCRYPT = KEYFILE requires KEYFILE = '...' to be specified.",
-                        LineNumber   = ds.Line,
-                        ColumnNumber = ds.Column
+                        Message      = $"Dataset '{name}': {verb} DATASET with ENCRYPT = KEYFILE requires KEYFILE = '...' to be specified.",
+                        LineNumber   = line,
+                        ColumnNumber = col
                     });
                 }
             }
