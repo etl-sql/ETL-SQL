@@ -1,9 +1,11 @@
 using System.Text;
 using System.Text.Json;
 using System.Security.Claims;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
@@ -151,6 +153,34 @@ builder.Services.AddAuthentication(opt =>
 builder.Services.AddAuthorization(opt =>
 {
     opt.AddPolicy("OrchestratorAccess", p => p.RequireRole("Admin", "OrchestratorManager"));
+});
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            context.HttpContext.Response.Headers.RetryAfter =
+                Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds)).ToString();
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new { error = "Too many requests. Try again later." },
+            cancellationToken);
+    };
+    options.AddPolicy("auth", context =>
+    {
+        var limits = context.RequestServices.GetRequiredService<PortalConfig>().RateLimit;
+        return CreateFixedWindowPartition(
+            context, "auth", limits.AuthPermitLimit, limits.AuthWindowSeconds);
+    });
+    options.AddPolicy("anonymous-token", context =>
+    {
+        var limits = context.RequestServices.GetRequiredService<PortalConfig>().RateLimit;
+        return CreateFixedWindowPartition(
+            context,
+            "anonymous-token",
+            limits.AnonymousTokenPermitLimit,
+            limits.AnonymousTokenWindowSeconds);
+    });
 });
 
 // ── Swagger ───────────────────────────────────────────────────────────────────
@@ -307,6 +337,8 @@ var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProv
 provider.Mappings[".geojson"] = "application/geo+json";
 staticFileOptions.ContentTypeProvider = provider;
 app.UseStaticFiles(staticFileOptions);
+app.UseRouting();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<MustChangePasswordMiddleware>();
@@ -426,4 +458,26 @@ static string? FindRepoFile(string fileName)
     }
 
     return null;
+}
+
+static RateLimitPartition<string> CreateFixedWindowPartition(
+    HttpContext context,
+    string policyName,
+    int permitLimit,
+    int windowSeconds)
+{
+    var remoteAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    var routePattern = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText
+        ?? context.Request.Path.Value
+        ?? "unknown";
+    var partitionKey = $"{policyName}:{remoteAddress}:{routePattern.ToLowerInvariant()}";
+    return RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey,
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = Math.Max(1, permitLimit),
+            Window = TimeSpan.FromSeconds(Math.Max(1, windowSeconds)),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
 }

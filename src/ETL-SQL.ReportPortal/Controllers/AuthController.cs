@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
@@ -11,6 +12,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 
 [ApiController]
 [Route("api/auth")]
+[EnableRateLimiting("auth")]
 public class AuthController(
     UserManager<PortalUser>  userManager,
     SignInManager<PortalUser> signInManager,

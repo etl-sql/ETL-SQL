@@ -1187,6 +1187,28 @@ When no external origin is configured, the portal also sends `X-Frame-Options: S
 external origins are configured, CSP `frame-ancestors` is authoritative and the legacy header is
 omitted because it cannot express an allowlist.
 
+### 11.8 Unauthenticated Request Rate Limits
+
+The portal applies fixed-window limits by remote IP address and endpoint path. Requests over the limit
+are rejected immediately with `429 Too Many Requests` and `Retry-After: 60`; excess requests are not
+queued.
+
+```json
+"Portal": {
+  "RateLimit": {
+    "AuthPermitLimit": 20,
+    "AuthWindowSeconds": 60,
+    "AnonymousTokenPermitLimit": 60,
+    "AnonymousTokenWindowSeconds": 60
+  }
+}
+```
+
+The auth policy covers every `/api/auth/*` action. The anonymous-token policy covers share-link and
+embed-token resolution. When the portal runs behind a reverse proxy, configure ASP.NET Core forwarded
+headers at the host boundary so `RemoteIpAddress` is the trusted client address; do not accept forwarded
+addresses from arbitrary direct clients.
+
 ---
 
 ## 13. Orchestrator Management

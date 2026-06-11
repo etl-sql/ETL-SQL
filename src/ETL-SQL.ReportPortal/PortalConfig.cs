@@ -16,6 +16,15 @@ public class PortalConfig
     public OrchestratorConfig Orchestrator { get; set; } = new();
     public DatasetConfig   Dataset   { get; set; } = new();
     public PortalSecurityConfig Security { get; set; } = new();
+    public PortalRateLimitConfig RateLimit { get; set; } = new();
+}
+
+public class PortalRateLimitConfig
+{
+    public int AuthPermitLimit { get; set; } = 20;
+    public int AuthWindowSeconds { get; set; } = 60;
+    public int AnonymousTokenPermitLimit { get; set; } = 60;
+    public int AnonymousTokenWindowSeconds { get; set; } = 60;
 }
 
 public class PortalSecurityConfig

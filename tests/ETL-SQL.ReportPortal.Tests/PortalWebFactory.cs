@@ -26,9 +26,17 @@ namespace ETL_SQL.ReportPortal.Tests;
 public class PortalWebFactory : WebApplicationFactory<PortalMarker>
 {
     public string TempDir { get; } = Path.Combine(Path.GetTempPath(), $"portal_test_{Guid.NewGuid():N}");
+    private readonly int authPermitLimit;
+    private readonly int anonymousTokenPermitLimit;
 
-    public PortalWebFactory()
+    public PortalWebFactory() : this(500, 500)
     {
+    }
+
+    internal PortalWebFactory(int authPermitLimit, int anonymousTokenPermitLimit)
+    {
+        this.authPermitLimit = authPermitLimit;
+        this.anonymousTokenPermitLimit = anonymousTokenPermitLimit;
         Directory.CreateDirectory(TempDir);
         Directory.CreateDirectory(Path.Combine(TempDir, "scripts"));
         Directory.CreateDirectory(Path.Combine(TempDir, "snapshots"));
@@ -63,6 +71,8 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 ["Portal:Jwt:Secret"]             = jwtSecret,
                 ["Portal:Jwt:ExpiryMinutes"]      = "60",
                 ["Portal:Jwt:RefreshExpiryDays"]  = "7",
+                ["Portal:RateLimit:AuthPermitLimit"] = authPermitLimit.ToString(),
+                ["Portal:RateLimit:AnonymousTokenPermitLimit"] = anonymousTokenPermitLimit.ToString(),
                 ["Portal:FirstRun:AdminUsername"] = "admin",
                 ["Portal:FirstRun:AdminPassword"] = "Admin@12345!",
                 ["Portal:Resources:MaxConcurrentReportExecutions"] = "2",
@@ -91,6 +101,11 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 MapRootPath       = mapRoot,
                 DatasetRootPath   = datasetRoot,
                 Jwt = new JwtConfig { Secret = jwtSecret, ExpiryMinutes = 60, RefreshExpiryDays = 7 },
+                RateLimit = new PortalRateLimitConfig
+                {
+                    AuthPermitLimit = authPermitLimit,
+                    AnonymousTokenPermitLimit = anonymousTokenPermitLimit
+                },
                 FirstRun          = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
                 Orchestrator      = new OrchestratorConfig { DatabasePath = orchDbPath },
             };

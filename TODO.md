@@ -148,12 +148,15 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   *(done — v0.11.0)* Every response now receives CSP, nosniff, referrer, and permissions headers.
   HTML scripts use per-response nonces, inline event handlers are prohibited, and framing defaults
   to same-origin with exact external origins opt-in through `Portal:Security:FrameAncestors`.
-- [ ] **P1.13 Rate-limit auth endpoints and anonymous token resolution.**
+- [x] **P1.13 Rate-limit auth endpoints and anonymous token resolution.**
   Identity lockout protects local passwords only. There is no throttle on `/auth` (user enumeration,
   refresh-token guessing) or on the anonymous share-link/embed resolve endpoints (token brute force);
   the only rate limit in the codebase is the PDF export bucket. Use the built-in ASP.NET Core
   `AddRateLimiter` on auth and anonymous endpoints. P2.6 covers workload fairness for authenticated
   users; this item covers abuse of unauthenticated surfaces.
+  *(done — v0.11.0)* Built-in fixed-window policies partition by remote IP and endpoint path, reject
+  without queuing, and return `429` plus `Retry-After`. Limits are configurable under
+  `Portal:RateLimit`; defaults are 20 auth and 60 anonymous-token requests per minute.
 - [ ] **P1.14 Define rotation and provisioning for the remaining runtime secrets.**
   The dataset at-rest key now has startup validation and resumable rotation, but `Portal:Jwt:Secret`
   and the Orchestrator API keys are plaintext config with no rotation procedure. JWT secret rotation

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
@@ -1143,6 +1144,7 @@ public class ReportsController : ControllerBase
     // ── GET /api/share/{token} ──────────────────────────────────────────────
 
     [AllowAnonymous]
+    [EnableRateLimiting("anonymous-token")]
     [HttpGet("share/{token}")]
     public async Task<IActionResult> ResolveShareLink(string token)
     {
@@ -1228,6 +1230,7 @@ public class ReportsController : ControllerBase
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting("anonymous-token")]
     [HttpGet("embed/{token}")]
     public async Task<IActionResult> ResolveEmbedToken(string token)
     {
