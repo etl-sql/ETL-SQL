@@ -378,6 +378,69 @@ namespace ETL_SQL.Tests.Reporting
             }
         }
 
+        // ── 2a: EXPORT DATASET (portable transport-encrypted copy) ────────────────
+
+        [Fact]
+        public async Task ExportDataset_PasswordRoundTrips()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_exp_" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(root);
+            var exportPath = Path.Combine(root, "sales_export.parquet").Replace('\\', '/');
+            try
+            {
+                var registry = new SingleDatasetRegistry(ownerUserId: 1, root: root);
+                const string atKey = "cG9ydGFsLWF0LXJlc3Qta2V5LWV4cG9ydA==";
+                const string transport = "transport-secret-pw";
+
+                var producer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                producer.DatasetRegistry      = registry;
+                producer.DatasetCallerContext = "IsAdmin=true";
+                producer.DatasetAtRestKey     = atKey;
+                await producer.Evaluate(Parse($@"
+                    CREATE TABLE #seed (v INT);
+                    INSERT INTO #seed VALUES (10);
+                    INSERT INTO #seed VALUES (20);
+                    CREATE DATASET &sales AS (SELECT v FROM #seed);
+                    EXPORT DATASET &sales TO '{exportPath}' ENCRYPT = PASSWORD PASSWORD = '{transport}';"));
+
+                Assert.True(File.Exists(exportPath));
+
+                // The export is transport-encrypted (not the at-rest key): read it back via a PARQUET
+                // connection with the transport password.
+                var reader = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                await reader.Evaluate(Parse(
+                    $"CREATE CONNECTION expconn AS PARQUET('{exportPath}', ENCRYPT = 'PASSWORD', PASSWORD = '{transport}'); " +
+                    "SELECT COUNT(*) AS n, SUM(v) AS s FROM expconn.FILE;"));
+
+                var row = reader.LastResult!.Rows[0];
+                Assert.Equal(2m,  Convert.ToDecimal(row["n"]));
+                Assert.Equal(30m, Convert.ToDecimal(row["s"]));
+            }
+            finally
+            {
+                try { Directory.Delete(root, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
+        public async Task ExportDataset_MissingCredential_Errors()
+        {
+            var registry = new SingleDatasetRegistry(ownerUserId: 1);
+            await registry.RegisterOrUpdate(new DatasetMetadata
+            {
+                Name = "&sales", FolderPath = "/f", ParquetFilePath = "sales_1.parquet",
+                SourceQuery = "SELECT 1 AS v", AccessLevel = DatasetAccessLevel.Public, LastRefresh = DateTime.UtcNow
+            });
+
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            eval.DatasetRegistry      = registry;
+            eval.DatasetCallerContext = "IsAdmin=true";
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(
+                () => eval.Evaluate(Parse("EXPORT DATASET &sales TO 'out.parquet' ENCRYPT = PASSWORD;")));
+            Assert.Contains("PASSWORD", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// Minimal IDatasetRegistry holding a single dataset, resolved by name. Mimics the real
         /// registry's ACL gate: PUBLIC always resolves; PRIVATE resolves only for admin or the owner.

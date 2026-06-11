@@ -97,6 +97,11 @@ namespace ETL_SQL.Core.Parser
             _dispatchMap[TokenType.EXPORT]        = () =>
             {
                 var t = _parser.Previous;
+                if (_parser.Current.Type == TokenType.DATASET)
+                {
+                    _parser.Advance();
+                    return ReportParser.ParseExportDataset(t);
+                }
                 if (_parser.Current.Type == TokenType.SCRIPT || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("SCRIPT", StringComparison.OrdinalIgnoreCase)))
                 {
                     _parser.Advance();

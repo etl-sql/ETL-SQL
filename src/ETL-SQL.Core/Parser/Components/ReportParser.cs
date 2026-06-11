@@ -465,6 +465,69 @@ namespace ETL_SQL.Core.Parser.Components
             };
         }
 
+        // ── EXPORT DATASET ────────────────────────────────────────────────────
+
+        public Statement ParseExportDataset(Token startToken)
+        {
+            var name = ConsumeIdentifier("Expected &datasetName after EXPORT DATASET").Value;
+            if (!name.StartsWith("&"))
+                throw new SyntaxException("EXPORT DATASET names must use the &dataset form", startToken.Line, startToken.Column);
+
+            Consume(TokenType.TO, "Expected TO after EXPORT DATASET name");
+            var targetPath = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
+
+            var     encryptionMode = DatasetEncryptionMode.None;
+            string? password       = null;
+            string? keyFile        = null;
+
+            while (!ReportCheck(TokenType.SEMICOLON) && !ReportAtEnd())
+            {
+                if (Match(TokenType.ENCRYPT))
+                {
+                    Match(TokenType.EQUALS);
+                    var modeVal = _parser.Current.Value.ToUpperInvariant();
+                    _parser.Advance();
+                    encryptionMode = modeVal switch
+                    {
+                        "PASSWORD" => DatasetEncryptionMode.Password,
+                        "KEYFILE"  => DatasetEncryptionMode.KeyFile,
+                        _ => throw new SyntaxException(
+                            "EXPORT DATASET requires ENCRYPT = PASSWORD or KEYFILE (a transport credential)",
+                            _parser.Previous.Line, _parser.Previous.Column)
+                    };
+                }
+                else if (Match(TokenType.PASSWORD))
+                {
+                    Match(TokenType.EQUALS);
+                    password = Consume(TokenType.STRING_LITERAL, "Expected password string after PASSWORD =").Value;
+                }
+                else if (Match(TokenType.KEYFILE))
+                {
+                    Match(TokenType.EQUALS);
+                    keyFile = Consume(TokenType.STRING_LITERAL, "Expected key file path after KEYFILE =").Value;
+                }
+                else
+                {
+                    throw new SyntaxException(
+                        $"Unexpected token '{_parser.Current.Value}' in EXPORT DATASET options",
+                        _parser.Current.Line, _parser.Current.Column);
+                }
+            }
+
+            Match(TokenType.SEMICOLON);
+
+            return new ExportDatasetStatement
+            {
+                DatasetName        = name,
+                TargetPath         = targetPath,
+                EncryptionMode     = encryptionMode,
+                EncryptionPassword = password,
+                KeyFile            = keyFile,
+                Line               = startToken.Line,
+                Column             = startToken.Column
+            };
+        }
+
         // ── CREATE STYLE ──────────────────────────────────────────────────────
 
         public Statement ParseCreateStyle(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)

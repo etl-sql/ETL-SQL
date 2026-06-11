@@ -429,6 +429,20 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>
+    /// EXPORT DATASET &amp;name TO '&lt;file&gt;' ENCRYPT = PASSWORD|KEYFILE [PASSWORD=… | KEYFILE=…] —
+    /// writes a portable copy of the dataset's Parquet, re-encrypted with a transport credential
+    /// (supplied here, never persisted), so it can be moved to another machine/portal and PUBLISHed.
+    /// </summary>
+    public record ExportDatasetStatement : Statement
+    {
+        public required string DatasetName            { get; init; }
+        public required string TargetPath             { get; init; }
+        public DatasetEncryptionMode EncryptionMode   { get; init; } = DatasetEncryptionMode.None;
+        public string? EncryptionPassword             { get; init; }
+        public string? KeyFile                        { get; init; }
+    }
+
+    /// <summary>
     /// DROP CHART|PAGE|CONTAINER|STYLE|NAVIGATION|DATASET <name>
     /// </summary>
     public record DropReportObjectStatement : Statement
