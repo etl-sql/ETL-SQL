@@ -1666,11 +1666,11 @@ CREATE PAGE Main AS DASHBOARD(
         await registry.RegisterOrUpdate(new DatasetMetadata
         {
             Name = $"#public_{suffix}",
-            FolderPath = folder.Path,
+            FolderPath = $"/unfiled-{suffix}",   // no matching Folder → no folder link
             ParquetFilePath = $"public_{suffix}.parquet",
             SourceQuery = "SELECT 1",
             AccessLevel = DatasetAccessLevel.Public
-            // No OwningReportId → no folder link → PUBLIC falls back to "any authenticated caller".
+            // No OwningReportId and no resolvable folder → PUBLIC falls back to "any authenticated caller".
         });
         await registry.RegisterOrUpdate(new DatasetMetadata
         {
@@ -1735,7 +1735,7 @@ CREATE PAGE Main AS DASHBOARD(
 
         Assert.Null(await registry.Lookup($"#owner_{suffix}", $"UserId={outsider.Id}"));
         Assert.NotNull(await registry.Lookup($"#owner_{suffix}", $"UserId={owner.Id}"));
-        Assert.Equal(4, (await registry.ListAll("Admin")).Count(d => d.FolderPath == folder.Path));
+        Assert.Equal(4, (await registry.ListAll("Admin")).Count(d => d.Name.EndsWith(suffix)));
     }
 
     [Fact]
@@ -1854,6 +1854,45 @@ CREATE PAGE Main AS DASHBOARD(
         Assert.False(await registry.CanEditAsync(name, $"UserId={outsider.Id}"));
         Assert.False(await registry.CanEditAsync(name, ""));
         Assert.False(await registry.CanEditAsync($"#nonexistent_{suffix}", "Admin"));
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task DatasetRegistry_PublishedDataset_OwnedByCreatedBy()
+    {
+        // 2b: a published dataset has no owning report — its owner is Dataset.CreatedBy (the publisher),
+        // and its folder is resolved from the target folder's logical Path.
+        using var scope = _factory.Services.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var publisher = new PortalUser { UserName = $"pub_{suffix}", Email = $"pub_{suffix}@test.local" };
+        var outsider  = new PortalUser { UserName = $"out_{suffix}", Email = $"out_{suffix}@test.local" };
+        db.Users.AddRange(publisher, outsider);
+        await db.SaveChangesAsync();
+
+        var folder = new Folder { Name = $"Pub {suffix}", Path = $"/pub-{suffix}", OwnerId = publisher.Id };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+
+        var name = $"#published_{suffix}";
+        await registry.RegisterOrUpdate(new DatasetMetadata
+        {
+            Name = name, FolderPath = folder.Path, ParquetFilePath = $"published_{suffix}.parquet",
+            SourceQuery = "", AccessLevel = DatasetAccessLevel.Private,
+            CreatedBy = publisher.Id, LastRefresh = DateTime.UtcNow
+        });
+
+        var stored = await db.Datasets.SingleAsync(d => d.Name == name);
+        Assert.Equal(publisher.Id, stored.CreatedBy);
+        Assert.Equal(folder.Id, stored.FolderId);   // resolved from the target folder's logical Path
+
+        // Publisher is the owner: can read + edit. Outsider: denied.
+        Assert.NotNull(await registry.Lookup(name, $"UserId={publisher.Id}"));
+        Assert.Null(await registry.Lookup(name, $"UserId={outsider.Id}"));
+        Assert.True (await registry.CanEditAsync(name, $"UserId={publisher.Id}"));
+        Assert.False(await registry.CanEditAsync(name, $"UserId={outsider.Id}"));
     }
 
     [Fact]

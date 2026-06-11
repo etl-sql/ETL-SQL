@@ -528,6 +528,90 @@ namespace ETL_SQL.Core.Parser.Components
             };
         }
 
+        // ── PUBLISH DATASET ───────────────────────────────────────────────────
+
+        public Statement ParsePublishDataset(Token startToken)
+        {
+            Consume(TokenType.FROM, "Expected FROM after PUBLISH DATASET");
+            var sourcePath = Consume(TokenType.STRING_LITERAL, "Expected source file path after FROM").Value;
+
+            Consume(TokenType.AS, "Expected AS &datasetName after the source file");
+            var name = ConsumeIdentifier("Expected &datasetName after AS").Value;
+            if (!name.StartsWith("&"))
+                throw new SyntaxException("PUBLISH DATASET names must use the &dataset form", startToken.Line, startToken.Column);
+
+            string? targetFolder   = null;
+            var     accessLevel    = ETL_SQL.Core.Data.DatasetAccessLevel.Private;
+            var     encryptionMode = DatasetEncryptionMode.None;
+            string? password       = null;
+            string? keyFile        = null;
+
+            while (!ReportCheck(TokenType.SEMICOLON) && !ReportAtEnd())
+            {
+                if (Match(TokenType.INTO))
+                {
+                    targetFolder = Consume(TokenType.STRING_LITERAL, "Expected folder path after INTO").Value;
+                }
+                else if (MatchIdentifier("ACCESS"))
+                {
+                    var val = _parser.Current.Value.ToUpperInvariant();
+                    if (val != "PUBLIC" && val != "PRIVATE")
+                        throw new SyntaxException(
+                            $"Expected PUBLIC or PRIVATE after ACCESS, got '{_parser.Current.Value}'",
+                            _parser.Current.Line, _parser.Current.Column);
+                    Advance();
+                    accessLevel = val == "PUBLIC"
+                        ? ETL_SQL.Core.Data.DatasetAccessLevel.Public
+                        : ETL_SQL.Core.Data.DatasetAccessLevel.Private;
+                }
+                else if (Match(TokenType.ENCRYPT))
+                {
+                    Match(TokenType.EQUALS);
+                    var modeVal = _parser.Current.Value.ToUpperInvariant();
+                    _parser.Advance();
+                    encryptionMode = modeVal switch
+                    {
+                        "PASSWORD" => DatasetEncryptionMode.Password,
+                        "KEYFILE"  => DatasetEncryptionMode.KeyFile,
+                        _ => throw new SyntaxException(
+                            "PUBLISH DATASET requires ENCRYPT = PASSWORD or KEYFILE (the transport credential the file was exported with)",
+                            _parser.Previous.Line, _parser.Previous.Column)
+                    };
+                }
+                else if (Match(TokenType.PASSWORD))
+                {
+                    Match(TokenType.EQUALS);
+                    password = Consume(TokenType.STRING_LITERAL, "Expected password string after PASSWORD =").Value;
+                }
+                else if (Match(TokenType.KEYFILE))
+                {
+                    Match(TokenType.EQUALS);
+                    keyFile = Consume(TokenType.STRING_LITERAL, "Expected key file path after KEYFILE =").Value;
+                }
+                else
+                {
+                    throw new SyntaxException(
+                        $"Unexpected token '{_parser.Current.Value}' in PUBLISH DATASET options",
+                        _parser.Current.Line, _parser.Current.Column);
+                }
+            }
+
+            Match(TokenType.SEMICOLON);
+
+            return new PublishDatasetStatement
+            {
+                SourcePath         = sourcePath,
+                DatasetName        = name,
+                TargetFolder       = targetFolder,
+                AccessLevel        = accessLevel,
+                EncryptionMode     = encryptionMode,
+                EncryptionPassword = password,
+                KeyFile            = keyFile,
+                Line               = startToken.Line,
+                Column             = startToken.Column
+            };
+        }
+
         // ── CREATE STYLE ──────────────────────────────────────────────────────
 
         public Statement ParseCreateStyle(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)

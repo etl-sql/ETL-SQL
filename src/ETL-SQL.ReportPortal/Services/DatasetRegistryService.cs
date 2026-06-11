@@ -48,10 +48,12 @@ namespace ETL_SQL.ReportPortal.Services
 
             existing.ParquetFilePath = ResolveDatasetPathOrThrow(metadata.ParquetFilePath);
             existing.OwningReportId = metadata.OwningReportId;
-            // Link to the owning report's folder so PUBLIC access can be gated by folder permission.
+            existing.CreatedBy = metadata.CreatedBy;
+            // Link to a folder for PUBLIC access checks: from the owning report when there is one,
+            // otherwise (e.g. a published dataset) resolve the target folder by its logical Path.
             existing.FolderId = metadata.OwningReportId is int rid
                 ? await _db.Reports.Where(r => r.Id == rid).Select(r => (int?)r.FolderId).FirstOrDefaultAsync()
-                : null;
+                : await _db.Folders.Where(f => f.Path == metadata.FolderPath).Select(f => (int?)f.Id).FirstOrDefaultAsync();
             existing.SourceQuery = metadata.SourceQuery;
             existing.AccessLevel = metadata.AccessLevel;
             existing.EncryptionMode = metadata.EncryptionMode;
@@ -205,10 +207,11 @@ namespace ETL_SQL.ReportPortal.Services
                 return caller.UserId is not null;
             }
 
-            // PRIVATE = owner or an explicit dataset grant.
+            // PRIVATE = owner or an explicit dataset grant. Owner is the owning report's creator, or
+            // the publisher (dataset.CreatedBy) when the dataset has no owning report.
             if (caller.UserId is null) return false;
 
-            if (dataset.OwningReport?.CreatedBy == caller.UserId.Value)
+            if (dataset.OwningReport?.CreatedBy == caller.UserId.Value || dataset.CreatedBy == caller.UserId.Value)
                 return true;
 
             return dataset.Acls.Any(a =>
@@ -223,7 +226,7 @@ namespace ETL_SQL.ReportPortal.Services
             if (caller.IsAdmin) return true;
             if (caller.UserId is null) return false;
 
-            if (dataset.OwningReport?.CreatedBy == caller.UserId.Value)
+            if (dataset.OwningReport?.CreatedBy == caller.UserId.Value || dataset.CreatedBy == caller.UserId.Value)
                 return true;
 
             var groupIds = await _db.UserGroups
@@ -275,6 +278,7 @@ namespace ETL_SQL.ReportPortal.Services
                 Name = d.Name,
                 FolderPath = d.FolderPath,
                 FolderId = d.FolderId,
+                CreatedBy = d.CreatedBy,
                 ParquetFilePath = parquetFilePath,
                 OwningReportId = d.OwningReportId,
                 SourceQuery = d.SourceQuery,

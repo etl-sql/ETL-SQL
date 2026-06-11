@@ -119,6 +119,11 @@ namespace ETL_SQL.Core.Parser
             _dispatchMap[TokenType.PUBLISH]      = () =>
             {
                 var t = _parser.Previous;
+                if (_parser.Current.Type == TokenType.DATASET)
+                {
+                    _parser.Advance();
+                    return ReportParser.ParsePublishDataset(t);
+                }
                 if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("BUNDLE", StringComparison.OrdinalIgnoreCase))
                 {
                     _parser.Advance();

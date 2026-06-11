@@ -441,6 +441,82 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("PASSWORD", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
+        // ── 2b: EXPORT → PUBLISH round-trip (move between portals) ─────────────────
+
+        [Fact]
+        public async Task ExportThenPublish_AcrossPortals_RoundTrips()
+        {
+            var rootA = Path.Combine(Path.GetTempPath(), "etlsql_ds_pa_" + Guid.NewGuid().ToString("N")[..8]);
+            var rootB = Path.Combine(Path.GetTempPath(), "etlsql_ds_pb_" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(rootA);
+            Directory.CreateDirectory(rootB);
+            var exportPath = Path.Combine(rootA, "sales_export.parquet").Replace('\\', '/');
+            try
+            {
+                const string transport = "move-me-secret";
+
+                // Portal A: create with at-rest key A, then export with a transport credential.
+                var registryA = new SingleDatasetRegistry(ownerUserId: 1, root: rootA);
+                var portalA = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                portalA.DatasetRegistry      = registryA;
+                portalA.DatasetCallerContext = "IsAdmin=true";
+                portalA.DatasetAtRestKey     = "cG9ydGFsLUEtYXQtcmVzdC1rZXktMDAw";
+                await portalA.Evaluate(Parse($@"
+                    CREATE TABLE #seed (v INT);
+                    INSERT INTO #seed VALUES (10);
+                    INSERT INTO #seed VALUES (20);
+                    CREATE DATASET &sales AS (SELECT v FROM #seed);
+                    EXPORT DATASET &sales TO '{exportPath}' ENCRYPT = PASSWORD PASSWORD = '{transport}';"));
+
+                // Portal B: a DIFFERENT at-rest key. Publish the portable file, then consume it.
+                var registryB = new SingleDatasetRegistry(ownerUserId: 1, root: rootB);
+                var portalB = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                portalB.DatasetRegistry      = registryB;
+                portalB.DatasetCallerContext = "IsAdmin=true";
+                portalB.DatasetAtRestKey     = "cG9ydGFsLUItYXQtcmVzdC1rZXktOTk5";
+                await portalB.Evaluate(Parse(
+                    $"PUBLISH DATASET FROM '{exportPath}' AS &imported ACCESS PUBLIC ENCRYPT = PASSWORD PASSWORD = '{transport}'; " +
+                    "USE DATASET &imported; SELECT COUNT(*) AS n, SUM(v) AS s FROM &imported;"));
+
+                var row = portalB.LastResult!.Rows[0];
+                Assert.Equal(2m,  Convert.ToDecimal(row["n"]));
+                Assert.Equal(30m, Convert.ToDecimal(row["s"]));
+
+                // The published copy is re-encrypted with portal B's at-rest key, not the transport
+                // credential: reading it with the transport password must fail.
+                var published = registryB.Stored("&imported").ParquetFilePath;
+                Assert.True(File.Exists(published));
+                var reader = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                await Assert.ThrowsAnyAsync<Exception>(() => reader.Evaluate(Parse(
+                    $"CREATE CONNECTION badc AS PARQUET('{published.Replace('\\', '/')}', ENCRYPT = 'PASSWORD', PASSWORD = '{transport}'); " +
+                    "SELECT COUNT(*) AS n FROM badc.FILE;")));
+            }
+            finally
+            {
+                try { Directory.Delete(rootA, recursive: true); } catch { }
+                try { Directory.Delete(rootB, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
+        public async Task PublishDataset_DuplicateName_Rejected()
+        {
+            var registry = new SingleDatasetRegistry(ownerUserId: 1);
+            await registry.RegisterOrUpdate(new DatasetMetadata
+            {
+                Name = "&taken", FolderPath = "/f", ParquetFilePath = "taken_1.parquet",
+                SourceQuery = "SELECT 1 AS v", AccessLevel = DatasetAccessLevel.Public, LastRefresh = DateTime.UtcNow
+            });
+
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            eval.DatasetRegistry      = registry;
+            eval.DatasetCallerContext = "IsAdmin=true";
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(
+                () => eval.Evaluate(Parse("PUBLISH DATASET FROM 'whatever.parquet' AS &taken ENCRYPT = PASSWORD PASSWORD = 'p';")));
+            Assert.Contains("already exists", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// Minimal IDatasetRegistry holding a single dataset, resolved by name. Mimics the real
         /// registry's ACL gate: PUBLIC always resolves; PRIVATE resolves only for admin or the owner.

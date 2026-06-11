@@ -291,6 +291,7 @@ public class Dataset
     public string             Name            { get; set; } = "";
     public string             FolderPath      { get; set; } = "";   // display metadata (logical or filesystem path)
     public int?               FolderId        { get; set; }         // portal folder for PUBLIC access checks; resolved from OwningReport.FolderId
+    public int?               CreatedBy       { get; set; }         // publisher/owner when there is no OwningReport (e.g. PUBLISH DATASET)
     public string             ParquetFilePath { get; set; } = "";
     public int?               OwningReportId  { get; set; }
     public Report?            OwningReport    { get; set; }

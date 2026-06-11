@@ -14,6 +14,7 @@ namespace ETL_SQL.Core.Data
         public string                Name            { get; set; } = "";
         public string                FolderPath      { get; set; } = "";
         public int?                  FolderId        { get; set; }
+        public int?                  CreatedBy       { get; set; }
         public string                ParquetFilePath { get; set; } = "";
         public int?                  OwningReportId  { get; set; }
         public string                SourceQuery     { get; set; } = "";

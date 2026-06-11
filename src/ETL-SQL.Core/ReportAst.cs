@@ -443,6 +443,25 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>
+    /// PUBLISH DATASET FROM '&lt;file&gt;' AS &amp;name [INTO '&lt;folder&gt;'] [ACCESS PUBLIC|PRIVATE]
+    /// ENCRYPT = PASSWORD|KEYFILE [PASSWORD=… | KEYFILE=…] — imports a portable EXPORTed file into the
+    /// portal: decrypts once with the supplied transport credential, then re-encrypts with the portal
+    /// at-rest key and registers it. The published copy is at-rest-encrypted (not movable); the author
+    /// keeps the original export file.
+    /// </summary>
+    public record PublishDatasetStatement : Statement
+    {
+        public required string SourcePath             { get; init; }
+        public required string DatasetName            { get; init; }
+        public string? TargetFolder                   { get; init; }
+        public DatasetAccessLevel AccessLevel         { get; init; } = DatasetAccessLevel.Private;
+        public DatasetEncryptionMode EncryptionMode   { get; init; } = DatasetEncryptionMode.None;
+        public string? EncryptionPassword             { get; init; }
+        public string? KeyFile                        { get; init; }
+        public override string? GetCreatedTable() => DatasetName;
+    }
+
+    /// <summary>
     /// DROP CHART|PAGE|CONTAINER|STYLE|NAVIGATION|DATASET <name>
     /// </summary>
     public record DropReportObjectStatement : Statement
