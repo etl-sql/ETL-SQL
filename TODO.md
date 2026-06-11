@@ -180,11 +180,17 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   missing-file catalog rows, and unreferenced managed `<name>_<id>.parquet` files while leaving unrelated
   exports untouched. Failure-injection tests cover refresh rollback, publish credential failure, direct
   and report-owned deletion, and orphan reconciliation.
-- [ ] **2i. Enforce and version the portal-managed at-rest key.** Portal production mode must not silently
-  fall back to host MACHINE encryption when `Portal:Dataset:AtRestKey` is empty. Validate base64/entropy at
-  startup, define first-run provisioning and backup/restore behavior, store a non-secret key version on
-  each dataset, and provide a rotation/re-encryption procedure that can resume safely. Keep an explicit
-  development/standalone fallback only if deliberately configured.
+- [x] **2i (core). Fail closed on a missing/weak at-rest key.** *(done — v0.11.0)* The portal no longer
+  silently falls back to host MACHINE encryption. New `DatasetAtRestKeyValidationService` (an
+  `IHostedService` mirroring `JwtSecretValidationService`) validates `Portal:Dataset:AtRestKey` at startup
+  via the pure `DatasetAtRestKeyValidator`: a set key must be base64 and decode to ≥ 32 bytes; an unset key
+  is **Fatal** (the app `StopApplication()`s) unless the new `Portal:Dataset:AllowMachineFallback=true` dev
+  opt-in is set (then a Warn). `PortalWebFactory` strips hosted services, so tests are unaffected. Tests:
+  `DatasetAtRestKeyValidatorTests`.
+- [ ] **2i (follow-up). Version + rotate the at-rest key.** Store a non-secret **key version** on each
+  dataset (stamped at write, used at read), define first-run provisioning + backup/restore behavior, and
+  provide a **resumable rotation/re-encryption** procedure (old key → new key across all datasets). Also
+  absorbs the 2g legacy Password/KeyFile at-rest row migration.
 - [x] **2j. Authorize PUBLISH target folders and define system ownership.** *(done — v0.11.0)*
   Added a registry publish preflight that resolves the target folder and requires folder `Manage` before
   `PUBLISH DATASET` allocates a row. Interactive publications set `CreatedBy` to the caller; trusted

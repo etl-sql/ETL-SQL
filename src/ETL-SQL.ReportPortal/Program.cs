@@ -213,6 +213,10 @@ builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.OrchestratorPoll
 // JWT secret validation (runs after WebApplicationFactory can inject test configuration)
 builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.JwtSecretValidationService>();
 
+// Dataset at-rest key validation: fail closed if Portal:Dataset:AtRestKey is missing/weak in production
+// (unless Portal:Dataset:AllowMachineFallback is deliberately set for dev/standalone).
+builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyValidationService>();
+
 // Phase 5 — subscriptions (backed by Orchestrator jobs)
 
 // Phase 6 — health checks

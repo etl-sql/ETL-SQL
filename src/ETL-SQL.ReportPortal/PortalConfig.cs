@@ -23,9 +23,16 @@ public class DatasetConfig
     /// Portal-managed at-rest key (base64) used to encrypt cached dataset parquet. Portable: back it
     /// up with the portal config and move it with the portal — losing it makes every cached dataset
     /// unreadable (they must be re-materialised). When unset, datasets fall back to host-bound
-    /// ENCRYPT=MACHINE encryption (not portable across hosts).
+    /// ENCRYPT=MACHINE encryption (not portable across hosts) — see <see cref="AllowMachineFallback"/>.
     /// </summary>
     public string? AtRestKey { get; set; }
+
+    /// <summary>
+    /// Allow the host-bound ENCRYPT=MACHINE fallback when <see cref="AtRestKey"/> is unset. Production
+    /// must leave this false: the portal refuses to start without a key. Set true only for
+    /// dev/standalone, where host-bound (non-portable) dataset caches are acceptable.
+    /// </summary>
+    public bool AllowMachineFallback { get; set; }
 }
 
 public class IdentityConfig
