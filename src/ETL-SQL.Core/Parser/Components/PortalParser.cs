@@ -197,7 +197,7 @@ namespace ETL_SQL.Core.Parser.Components
         // ── Permissions ───────────────────────────────────────────────────────
 
         // GRANT READ|EXECUTE|MANAGE ON FOLDER '/path' TO GROUP 'name'
-        // GRANT VIEWER|EDITOR|OWNER ON DATASET 'name' IN FOLDER '/path' TO GROUP 'name'
+        // GRANT VIEWER|REFRESH|EDITOR|OWNER ON DATASET 'name' IN FOLDER '/path' TO GROUP 'name'
         public Statement ParseGrant(Token start)
         {
             var permissionToken = _parser.Advance();
@@ -229,7 +229,7 @@ namespace ETL_SQL.Core.Parser.Components
         }
 
         // REVOKE READ|EXECUTE|MANAGE ON FOLDER '/path' FROM GROUP 'name'
-        // REVOKE VIEWER|EDITOR|OWNER ON DATASET 'name' IN FOLDER '/path' FROM GROUP 'name'
+        // REVOKE VIEWER|REFRESH|EDITOR|OWNER ON DATASET 'name' IN FOLDER '/path' FROM GROUP 'name'
         public Statement ParseRevoke(Token start)
         {
             if (Match(TokenType.SHARE))
@@ -951,11 +951,12 @@ namespace ETL_SQL.Core.Parser.Components
         {
             return tok.Value.ToUpperInvariant() switch
             {
-                "VIEWER" => PortalDatasetPermission.Viewer,
-                "EDITOR" => PortalDatasetPermission.Editor,
-                "OWNER"  => PortalDatasetPermission.Owner,
+                "VIEWER"  => PortalDatasetPermission.Viewer,
+                "REFRESH" => PortalDatasetPermission.Refresh,
+                "EDITOR"  => PortalDatasetPermission.Editor,
+                "OWNER"   => PortalDatasetPermission.Owner,
                 _ => throw new SyntaxException(
-                    $"Expected VIEWER, EDITOR, or OWNER, got '{tok.Value}'",
+                    $"Expected VIEWER, REFRESH, EDITOR, or OWNER, got '{tok.Value}'",
                     tok.Line, tok.Column)
             };
         }

@@ -41,11 +41,11 @@ namespace ETL_SQL.Engine.Handlers
                     "Run CREATE DATASET first.",
                     null, stmt.Line, stmt.Column);
 
-            // Refresh re-materialises the source query — restricted to editor/owner (admin/scheduled
-            // jobs pass). A viewer who can read the dataset cannot force a refresh under their identity.
-            if (!await registry.CanEditAsync(stmt.DatasetName, callerCtx))
+            // Refresh re-materialises the source query. It is independently delegable without granting
+            // metadata/query editing; admin and trusted scheduled jobs also pass this check.
+            if (!await registry.CanRefreshAsync(stmt.DatasetName, callerCtx))
                 throw new ExecutionException(
-                    $"REFRESH DATASET '{stmt.DatasetName}' requires editor or owner permission.",
+                    $"REFRESH DATASET '{stmt.DatasetName}' requires refresh, editor, or owner permission.",
                     null, stmt.Line, stmt.Column);
 
             if (string.IsNullOrWhiteSpace(existing.SourceQuery))
@@ -77,6 +77,7 @@ namespace ETL_SQL.Engine.Handlers
 
             // ── 2. Re-write Parquet with machine-bound encryption ─────────────
             var parquetPath = registry.BuildDatasetFilePath(existing.Id, stmt.DatasetName);
+            using var fileTransaction = DatasetFileTransaction.Create(parquetPath);
             var connAlias   = $"__ds_write_{Guid.NewGuid():N}__";
 
             var encOptions = new Dictionary<string, Expression>
@@ -87,7 +88,7 @@ namespace ETL_SQL.Engine.Handlers
 
             var connStmt = new CreateConnectionStatement(
                 connAlias, "PARQUET",
-                new LiteralExpression(parquetPath, TokenType.STRING_LITERAL),
+                new LiteralExpression(fileTransaction.StagingPath, TokenType.STRING_LITERAL),
                 encOptions);
 
             var insertStmt = new InsertStatement(
@@ -101,12 +102,14 @@ namespace ETL_SQL.Engine.Handlers
 
             await context.EvaluateStatement(connStmt);
             await context.EvaluateStatement(insertStmt);
+            fileTransaction.Commit();
 
             // ── 3. Update registry ────────────────────────────────────────────
             existing.ParquetFilePath = parquetPath;
             existing.LastRefresh     = DateTime.UtcNow;
             existing.RowCount        = rowCount;
             await registry.RegisterOrUpdate(existing);
+            fileTransaction.Complete();
 
             context.Log($"Dataset '{stmt.DatasetName}' refreshed ({rowCount:N0} rows).");
         }

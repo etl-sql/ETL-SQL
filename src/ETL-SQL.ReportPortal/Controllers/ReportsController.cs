@@ -27,8 +27,9 @@ public class ReportsController : ControllerBase
     private readonly ILineageCatalogStore lineageCatalog;
     private readonly FolderPermissionService folderPermissions;
     private readonly ReportScriptInspectionService scriptInspection;
+    private readonly IDatasetRegistry datasetRegistry;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, IDatasetRegistry datasetRegistry)
     {
         this.db = db;
         this.audit = audit;
@@ -36,6 +37,7 @@ public class ReportsController : ControllerBase
         this.lineageCatalog = lineageCatalog;
         this.folderPermissions = folderPermissions;
         this.scriptInspection = scriptInspection;
+        this.datasetRegistry = datasetRegistry;
     }
 
     private int CurrentUserId =>
@@ -1429,7 +1431,10 @@ public class ReportsController : ControllerBase
 
         return dataset.Acls.Any(a =>
             groupIds.Contains(a.GroupId)
-            && a.Permission is DatasetPermission.Viewer or DatasetPermission.Editor or DatasetPermission.Owner);
+            && a.Permission is DatasetPermission.Viewer
+                or DatasetPermission.Refresh
+                or DatasetPermission.Editor
+                or DatasetPermission.Owner);
     }
 
     // ── DELETE /api/reports/{id} ──────────────────────────────────────────────
@@ -1452,6 +1457,13 @@ public class ReportsController : ControllerBase
         if (cascade)
             foreach (var sub in report.Subscriptions)
                 sub.IsActive = false;
+
+        var datasetNames = await db.Datasets
+            .Where(d => d.OwningReportId == report.Id)
+            .Select(d => d.Name)
+            .ToListAsync();
+        foreach (var datasetName in datasetNames)
+            await datasetRegistry.Delete(datasetName);
 
         report.IsDeleted = true;
         await db.SaveChangesAsync();

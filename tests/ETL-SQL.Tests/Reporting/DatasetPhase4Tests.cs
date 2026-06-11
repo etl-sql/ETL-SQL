@@ -220,7 +220,7 @@ namespace ETL_SQL.Tests.Reporting
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(
                 () => eval.Evaluate(Parse("REFRESH DATASET &pub;")));
-            Assert.Contains("editor or owner", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("refresh, editor, or owner", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -475,12 +475,14 @@ namespace ETL_SQL.Tests.Reporting
                 portalB.DatasetCallerContext = "IsAdmin=true";
                 portalB.DatasetAtRestKey     = "cG9ydGFsLUItYXQtcmVzdC1rZXktOTk5";
                 await portalB.Evaluate(Parse(
-                    $"PUBLISH DATASET FROM '{exportPath}' AS &imported ACCESS PUBLIC ENCRYPT = PASSWORD PASSWORD = '{transport}'; " +
+                    $"PUBLISH DATASET FROM '{exportPath}' AS &imported INTO '/imports' ACCESS PUBLIC ENCRYPT = PASSWORD PASSWORD = '{transport}'; " +
                     "USE DATASET &imported; SELECT COUNT(*) AS n, SUM(v) AS s FROM &imported;"));
 
                 var row = portalB.LastResult!.Rows[0];
                 Assert.Equal(2m,  Convert.ToDecimal(row["n"]));
                 Assert.Equal(30m, Convert.ToDecimal(row["s"]));
+                Assert.Equal(1, registryB.Stored("&imported").CreatedBy);
+                Assert.Equal((null, "&imported", "/imports", true), registryB.LastPublishAudit);
 
                 // The published copy is re-encrypted with portal B's at-rest key, not the transport
                 // credential: reading it with the transport password must fail.
@@ -517,6 +519,109 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("already exists", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
+        [Fact]
+        public async Task PublishDataset_UnauthorizedFolder_DeniedBeforeAllocationAndAudited()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_pubdeny_" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(root);
+            var sourcePath = Path.Combine(root, "portable.parquet");
+            await File.WriteAllTextAsync(sourcePath, "not read because authorization fails");
+            try
+            {
+                var registry = new SingleDatasetRegistry(ownerUserId: 1, root: root)
+                {
+                    AllowPublish = false
+                };
+                var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                eval.DatasetRegistry = registry;
+                eval.DatasetCallerContext = "UserId=7";
+
+                var ex = await Assert.ThrowsAsync<ExecutionException>(() => eval.Evaluate(Parse(
+                    $"PUBLISH DATASET FROM '{sourcePath.Replace('\\', '/')}' AS &denied INTO '/restricted' " +
+                    "ENCRYPT = PASSWORD PASSWORD = 'transport-secret';")));
+
+                Assert.Contains("Manage permission", ex.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(0, registry.RegisterCalls);
+                Assert.Equal((7, "&denied", "/restricted", false), registry.LastPublishAudit);
+            }
+            finally
+            {
+                try { Directory.Delete(root, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
+        public async Task PublishDataset_WrongPassword_RollsBackRowAndPartialFiles()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_pubrollback_" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(root);
+            var sourcePath = Path.Combine(root, "portable.parquet");
+            await File.WriteAllTextAsync(sourcePath, "not encrypted with the supplied password");
+            try
+            {
+                var registry = new SingleDatasetRegistry(ownerUserId: 1, root: root);
+                var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                eval.DatasetRegistry = registry;
+                eval.DatasetCallerContext = "IsAdmin=true";
+                eval.DatasetAtRestKey = "cG9ydGFsLWF0LXJlc3Qta2V5";
+
+                await Assert.ThrowsAnyAsync<Exception>(() => eval.Evaluate(Parse(
+                    $"PUBLISH DATASET FROM '{sourcePath.Replace('\\', '/')}' AS &retryable INTO '/imports' " +
+                    "ENCRYPT = PASSWORD PASSWORD = 'wrong-password';")));
+
+                Assert.False(await registry.Exists("&retryable"));
+                Assert.Equal(1, registry.DeleteCalls);
+                Assert.Empty(Directory.GetFiles(root, "retryable_*.parquet"));
+                Assert.Empty(Directory.GetFiles(root, ".*.tmp-*.parquet"));
+                Assert.Equal((null, "&retryable", "/imports", false), registry.LastPublishAudit);
+            }
+            finally
+            {
+                try { Directory.Delete(root, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
+        public async Task RefreshDataset_RegistryFailure_RestoresPreviousCache()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_refreshrollback_" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(root);
+            try
+            {
+                const string atRestKey = "cG9ydGFsLXJlZnJlc2gtcm9sbGJhY2sta2V5";
+                var registry = new SingleDatasetRegistry(ownerUserId: 1, root: root);
+                var producer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                producer.DatasetRegistry = registry;
+                producer.DatasetCallerContext = "IsAdmin=true";
+                producer.DatasetAtRestKey = atRestKey;
+                await producer.Evaluate(Parse("CREATE DATASET &stable AS (SELECT 1 AS v);"));
+
+                registry.Stored("&stable").SourceQuery = "SELECT 2 AS v";
+                registry.FailNextRegister = true;
+
+                var refresh = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                refresh.DatasetRegistry = registry;
+                refresh.DatasetCallerContext = "IsAdmin=true";
+                refresh.DatasetAtRestKey = atRestKey;
+                await Assert.ThrowsAnyAsync<Exception>(
+                    () => refresh.Evaluate(Parse("REFRESH DATASET &stable;")));
+
+                var cachePath = registry.Stored("&stable").ParquetFilePath.Replace('\\', '/');
+                var reader = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                await reader.Evaluate(Parse(
+                    $"CREATE CONNECTION stable_cache AS PARQUET('{cachePath}', ENCRYPT = 'PASSWORD', PASSWORD = '{atRestKey}'); " +
+                    "SELECT v FROM stable_cache.FILE;"));
+
+                Assert.Equal(1m, Convert.ToDecimal(reader.LastResult!.Rows[0]["v"]));
+                Assert.Empty(Directory.GetFiles(root, ".*.tmp-*.parquet"));
+                Assert.Empty(Directory.GetFiles(root, ".*.bak-*.parquet"));
+            }
+            finally
+            {
+                try { Directory.Delete(root, recursive: true); } catch { }
+            }
+        }
+
         /// <summary>
         /// Minimal IDatasetRegistry holding a single dataset, resolved by name. Mimics the real
         /// registry's ACL gate: PUBLIC always resolves; PRIVATE resolves only for admin or the owner.
@@ -529,11 +634,22 @@ namespace ETL_SQL.Tests.Reporting
 
             public string? LastLookupPermissions { get; private set; }
             public string? LastListAllPermissions { get; private set; }
+            public bool AllowPublish { get; init; } = true;
+            public int RegisterCalls { get; private set; }
+            public int DeleteCalls { get; private set; }
+            public bool FailNextRegister { get; set; }
+            public (int? UserId, string DatasetName, string FolderPath, bool Succeeded)? LastPublishAudit { get; private set; }
 
             public DatasetMetadata Stored(string name) => _items[name];
 
             public Task<int> RegisterOrUpdate(DatasetMetadata metadata)
             {
+                RegisterCalls++;
+                if (FailNextRegister)
+                {
+                    FailNextRegister = false;
+                    throw new InvalidOperationException("Injected registry failure.");
+                }
                 if (metadata.Id == 0) metadata.Id = _nextId++;
                 _items[metadata.Name] = metadata;
                 return Task.FromResult(metadata.Id);
@@ -555,6 +671,9 @@ namespace ETL_SQL.Tests.Reporting
             public Task<bool> CanEditAsync(string name, string callerPermissions) =>
                 Task.FromResult(_items.ContainsKey(name) && CanWrite(callerPermissions));
 
+            public Task<bool> CanRefreshAsync(string name, string callerPermissions) =>
+                Task.FromResult(_items.ContainsKey(name) && CanWrite(callerPermissions));
+
             public Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions)
             {
                 LastListAllPermissions = callerPermissions;
@@ -562,7 +681,33 @@ namespace ETL_SQL.Tests.Reporting
                 return Task.FromResult<IEnumerable<DatasetMetadata>>(visible.ToList());
             }
 
-            public Task Delete(string name) => Task.CompletedTask;
+            public Task Delete(string name)
+            {
+                DeleteCalls++;
+                _items.Remove(name);
+                return Task.CompletedTask;
+            }
+
+            public Task<DatasetPublishTarget?> AuthorizePublishAsync(
+                string targetFolderPath,
+                string callerPermissions)
+            {
+                return Task.FromResult<DatasetPublishTarget?>(
+                    AllowPublish && !string.IsNullOrWhiteSpace(targetFolderPath)
+                        ? new DatasetPublishTarget(1, targetFolderPath, ownerUserId)
+                        : null);
+            }
+
+            public Task AuditPublishAsync(
+                int? userId,
+                string datasetName,
+                string targetFolderPath,
+                bool succeeded,
+                string? failureReason = null)
+            {
+                LastPublishAudit = (userId, datasetName, targetFolderPath, succeeded);
+                return Task.CompletedTask;
+            }
 
             public string BuildDatasetFilePath(int datasetId, string name)
             {

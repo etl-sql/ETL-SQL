@@ -1581,6 +1581,91 @@ CREATE PAGE Main AS DASHBOARD(
     }
 
     [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task DatasetRegistry_PublishAuthorization_RequiresManageAndDefinesOwnership()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var owner = new PortalUser
+        {
+            UserName = $"publish_owner_{suffix}",
+            Email = $"publish_owner_{suffix}@test.local"
+        };
+        var publisher = new PortalUser
+        {
+            UserName = $"publish_user_{suffix}",
+            Email = $"publish_user_{suffix}@test.local"
+        };
+        db.Users.AddRange(owner, publisher);
+        await db.SaveChangesAsync();
+
+        var folder = new Folder
+        {
+            Name = $"Publish {suffix}",
+            Path = $"/publish-{suffix}",
+            OwnerId = owner.Id
+        };
+        var group = new Group { Name = $"publishers-{suffix}" };
+        db.Folders.Add(folder);
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+
+        db.UserGroups.Add(new UserGroup { UserId = publisher.Id, GroupId = group.Id });
+        db.FolderAcls.Add(new FolderAcl
+        {
+            FolderId = folder.Id,
+            GroupId = group.Id,
+            Permission = FolderPermission.Read
+        });
+        await db.SaveChangesAsync();
+
+        Assert.Null(await registry.AuthorizePublishAsync("/missing", $"UserId={publisher.Id}"));
+        Assert.Null(await registry.AuthorizePublishAsync(folder.Path, $"UserId={publisher.Id}"));
+
+        var acl = await db.FolderAcls.SingleAsync(a =>
+            a.FolderId == folder.Id && a.GroupId == group.Id);
+        acl.Permission = FolderPermission.Manage;
+        await db.SaveChangesAsync();
+
+        var interactive = await registry.AuthorizePublishAsync(
+            folder.Path,
+            $"UserId={publisher.Id}");
+        Assert.NotNull(interactive);
+        Assert.Equal(folder.Id, interactive!.FolderId);
+        Assert.Equal(publisher.Id, interactive.OwnerUserId);
+
+        var system = await registry.AuthorizePublishAsync(folder.Path, "IsAdmin=true");
+        Assert.NotNull(system);
+        Assert.Equal(owner.Id, system!.OwnerUserId);
+
+        await registry.AuditPublishAsync(
+            publisher.Id,
+            "&authorized",
+            folder.Path,
+            succeeded: true);
+        await registry.AuditPublishAsync(
+            publisher.Id,
+            "&denied",
+            folder.Path,
+            succeeded: false,
+            "target folder was not found or caller lacks Manage permission");
+
+        Assert.True(await db.AuditLogs.AnyAsync(a =>
+            a.Action == "PUBLISH_DATASET" &&
+            a.ResourceId == "&authorized" &&
+            a.Detail == $"Published to {folder.Path}"));
+        var failedAudit = await db.AuditLogs.SingleAsync(a =>
+            a.Action == "PUBLISH_DATASET_FAILED" &&
+            a.ResourceId == "&denied");
+        Assert.NotNull(failedAudit.Detail);
+        Assert.DoesNotContain("password", failedAudit.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret", failedAudit.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     [Trait("Category", "Smoke.Portal")]
     public async Task DatasetRegistry_ResolvesByGlobalNameRegardlessOfFolder()
     {
@@ -1799,20 +1884,21 @@ CREATE PAGE Main AS DASHBOARD(
 
     [Fact]
     [Trait("Category", "Smoke.Security")]
-    public async Task DatasetRegistry_CanEdit_OnlyOwnerEditorAndAdmin()
+    public async Task DatasetRegistry_SeparatesRefreshFromEditPermission()
     {
-        // 1d: REFRESH / CREATE OR ALTER are gated on edit permission = admin, owner, or an
-        // Editor/Owner dataset grant. A Viewer grant (or read-only access) cannot edit.
+        // Refresh can be delegated independently. Editors and owners retain refresh rights,
+        // while a Refresh grant cannot edit metadata or source definitions.
         using var scope = _factory.Services.CreateScope();
         var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
 
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var owner   = new PortalUser { UserName = $"ed_owner_{suffix}",   Email = $"ed_owner_{suffix}@test.local" };
+        var refresher = new PortalUser { UserName = $"ed_refresh_{suffix}", Email = $"ed_refresh_{suffix}@test.local" };
         var editor  = new PortalUser { UserName = $"ed_editor_{suffix}",  Email = $"ed_editor_{suffix}@test.local" };
         var viewer  = new PortalUser { UserName = $"ed_viewer_{suffix}",  Email = $"ed_viewer_{suffix}@test.local" };
         var outsider = new PortalUser { UserName = $"ed_out_{suffix}",    Email = $"ed_out_{suffix}@test.local" };
-        db.Users.AddRange(owner, editor, viewer, outsider);
+        db.Users.AddRange(owner, refresher, editor, viewer, outsider);
         await db.SaveChangesAsync();
 
         var folder = new Folder { Name = $"ED {suffix}", Path = $"/ed-{suffix}", OwnerId = owner.Id };
@@ -1834,21 +1920,34 @@ CREATE PAGE Main AS DASHBOARD(
             SourceQuery = "SELECT 1", AccessLevel = DatasetAccessLevel.Private, OwningReportId = report.Id
         });
 
+        var refreshGroup = new Group { Name = $"ed-refreshers-{suffix}" };
         var editorGroup = new Group { Name = $"ed-editors-{suffix}" };
         var viewerGroup = new Group { Name = $"ed-viewers-{suffix}" };
-        db.Groups.AddRange(editorGroup, viewerGroup);
+        db.Groups.AddRange(refreshGroup, editorGroup, viewerGroup);
         await db.SaveChangesAsync();
         db.UserGroups.AddRange(
+            new UserGroup { UserId = refresher.Id, GroupId = refreshGroup.Id },
             new UserGroup { UserId = editor.Id, GroupId = editorGroup.Id },
             new UserGroup { UserId = viewer.Id, GroupId = viewerGroup.Id });
         var ds = await db.Datasets.SingleAsync(d => d.Name == name);
         db.DatasetAcls.AddRange(
+            new DatasetAcl { DatasetId = ds.Id, GroupId = refreshGroup.Id, Permission = DatasetPermission.Refresh },
             new DatasetAcl { DatasetId = ds.Id, GroupId = editorGroup.Id, Permission = DatasetPermission.Editor },
             new DatasetAcl { DatasetId = ds.Id, GroupId = viewerGroup.Id, Permission = DatasetPermission.Viewer });
         await db.SaveChangesAsync();
 
+        Assert.True (await registry.CanRefreshAsync(name, "Admin"));
+        Assert.True (await registry.CanRefreshAsync(name, $"UserId={owner.Id}"));
+        Assert.True (await registry.CanRefreshAsync(name, $"UserId={refresher.Id}"));
+        Assert.True (await registry.CanRefreshAsync(name, $"UserId={editor.Id}"));
+        Assert.False(await registry.CanRefreshAsync(name, $"UserId={viewer.Id}"));
+        Assert.False(await registry.CanRefreshAsync(name, $"UserId={outsider.Id}"));
+        Assert.False(await registry.CanRefreshAsync(name, ""));
+        Assert.False(await registry.CanRefreshAsync($"#nonexistent_{suffix}", "Admin"));
+
         Assert.True (await registry.CanEditAsync(name, "Admin"));
         Assert.True (await registry.CanEditAsync(name, $"UserId={owner.Id}"));
+        Assert.False(await registry.CanEditAsync(name, $"UserId={refresher.Id}"));
         Assert.True (await registry.CanEditAsync(name, $"UserId={editor.Id}"));
         Assert.False(await registry.CanEditAsync(name, $"UserId={viewer.Id}"));
         Assert.False(await registry.CanEditAsync(name, $"UserId={outsider.Id}"));

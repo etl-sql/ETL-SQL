@@ -26,6 +26,8 @@ public record DatasetPreviewDto(
 
 public record UpdateDatasetRequest(string? AccessLevel, string? Ttl);
 
+public record MoveDatasetRequest(int DestinationFolderId);
+
 public record DatasetAclEntryDto(int GroupId, string GroupName, string Permission);
 
 public record GrantDatasetPermissionRequest(int GroupId, string Permission);

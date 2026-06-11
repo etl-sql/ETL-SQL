@@ -421,7 +421,7 @@ namespace ETL_SQL.Core
     /// <summary>
     /// REFRESH DATASET &amp;name — forces re-execution of the stored source query,
     /// re-writes the Parquet file, and updates LastRefresh in the registry.
-    /// Requires editor/owner permission in portal context.
+    /// Requires refresh/editor/owner permission in portal context.
     /// </summary>
     public record RefreshDatasetStatement : Statement
     {

@@ -18,10 +18,10 @@ namespace ETL_SQL.Engine.Handlers
     /// temp table (SELECT INTO equivalent) so the rest of the script can use it.
     ///
     /// In portal mode (IDatasetRegistry is available on the Evaluator): also persists
-    /// the result as a machine-key-encrypted Parquet file, registers the dataset in
-    /// portal.db, writes a sidecar refresh script, and optionally creates a scheduled
-    /// refresh job when REFRESH EVERY is specified.  On subsequent executions within
-    /// the TTL the Parquet cache is loaded instead of re-running the source query.
+    /// the result as an encrypted Parquet file, registers the dataset in portal.db,
+    /// and optionally creates a scheduled trigger mapped to the owning report when
+    /// REFRESH EVERY is specified. On subsequent executions within the TTL the Parquet
+    /// cache is loaded instead of re-running the source query.
     /// </summary>
     public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
     {
@@ -122,23 +122,20 @@ namespace ETL_SQL.Engine.Handlers
             return existing.LastRefresh.Value + ttl.Value > DateTime.UtcNow;
         }
 
-        // Intentional ordering: register first (an INSERT allocates the stable Id that the Parquet
-        // filename is derived from), then write the Parquet, then persist the final path. The interim
-        // row has an empty ParquetFilePath, which IsFreshEnough / MapIfSafe already treat as "no cache",
-        // so a reader never sees a registry entry pointing at a file that does not exist yet.
-        // If registry update succeeds but CreateRefreshJob fails, the dataset is registered but will not
-        // auto-refresh — the operator must re-run the script or create a job manually.  No rollback is
-        // attempted because the Parquet file and registry entry are both valid; only the refresh job is missing.
         private async Task PersistToPortal(
             CreateDatasetStatement stmt, IDatasetRegistry registry,
             string folderPath, long rowCount, IExecutionContext context)
         {
+            var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
+            var existing = await registry.Lookup(stmt.TempTableName, callerCtx);
             var metadata = new DatasetMetadata
             {
+                Id             = existing?.Id ?? 0,
                 Name           = stmt.TempTableName,
                 FolderPath     = folderPath,
                 OwningReportId = (context as Evaluator)?.DatasetOwningReportId,
-                ParquetFilePath = "",   // set after the Parquet is written (path depends on the allocated Id)
+                CreatedBy      = existing?.CreatedBy,
+                ParquetFilePath = existing?.ParquetFilePath ?? "",
                 SourceQuery    = stmt.SourceQuery.ToSql(),
                 AccessLevel    = stmt.AccessLevel,
                 EncryptionMode = stmt.EncryptionMode,
@@ -149,17 +146,45 @@ namespace ETL_SQL.Engine.Handlers
                 RowCount       = rowCount
             };
 
-            var id = await registry.RegisterOrUpdate(metadata);
+            var allocatedNewRow = existing == null;
+            var id = existing?.Id ?? await registry.RegisterOrUpdate(metadata);
             var parquetPath = registry.BuildDatasetFilePath(id, stmt.TempTableName);
+            using var fileTransaction = DatasetFileTransaction.Create(parquetPath);
 
-            await WriteToParquet(stmt.TempTableName, parquetPath, stmt, context);
+            try
+            {
+                await WriteToParquet(
+                    stmt.TempTableName,
+                    fileTransaction.StagingPath,
+                    stmt,
+                    context);
+                fileTransaction.Commit();
 
-            metadata.Id = id;
-            metadata.ParquetFilePath = parquetPath;
-            await registry.RegisterOrUpdate(metadata);
+                metadata.Id = id;
+                metadata.ParquetFilePath = parquetPath;
+                await registry.RegisterOrUpdate(metadata);
+                fileTransaction.Complete();
+            }
+            catch
+            {
+                if (allocatedNewRow)
+                {
+                    try
+                    {
+                        await registry.Delete(stmt.TempTableName);
+                    }
+                    catch
+                    {
+                        // Preserve the write failure. Startup reconciliation removes an interrupted
+                        // allocation that still has no valid managed cache.
+                    }
+                }
+                throw;
+            }
 
+            // A refresh-job failure does not roll back a valid cache and registry update.
             if (!string.IsNullOrWhiteSpace(stmt.RefreshInterval))
-                await CreateRefreshJob(stmt, parquetPath, context);
+                await CreateRefreshJob(stmt, registry, context);
         }
 
         private async Task MaterializeSourceQuery(CreateDatasetStatement stmt, IExecutionContext context)
@@ -241,7 +266,9 @@ namespace ETL_SQL.Engine.Handlers
         }
 
         private async Task CreateRefreshJob(
-            CreateDatasetStatement stmt, string parquetPath, IExecutionContext context)
+            CreateDatasetStatement stmt,
+            IDatasetRegistry registry,
+            IExecutionContext context)
         {
             var schedule = ParseRefreshInterval(stmt.RefreshInterval!);
             if (schedule == null)
@@ -252,26 +279,28 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
 
-            var connAlias = $"__ds_{MakeSafeAlias(stmt.TempTableName)}__";
+            var reportId = (context as Evaluator)?.DatasetOwningReportId;
+            if (reportId is null)
+            {
+                _logger.Warning(
+                    "Dataset '{Name}' declares REFRESH EVERY but has no owning report. " +
+                    "Durable refresh scheduling requires portal report execution.",
+                    stmt.TempTableName);
+                return;
+            }
 
-            // The scheduled job must write the cache with the same at-rest key so USE can read it,
-            // so the key is baked into the job's connection options at creation time. (Carrying the
-            // key in scheduled-refresh definitions is revisited with the Phase 2 sidecar/secret cleanup.)
-            var connStmt = new CreateConnectionStatement(
-                connAlias, "PARQUET",
-                new LiteralExpression(parquetPath, TokenType.STRING_LITERAL),
-                BuildParquetOptions(stmt, includeCompression: true, (context as Evaluator)?.DatasetAtRestKey),
-                ObjectCreationMode.CreateOrAlter);
-
-            var insertStmt = new InsertStatement(
-                new TableReference("FILE", null, null, connAlias),
-                stmt.SourceQuery);
-
-            var jobScript = new BlockStatement(new List<Statement> { connStmt, insertStmt });
             var jobName   = $"__dataset_refresh_{MakeSafeAlias(stmt.TempTableName)}__";
+            var jobScript = new PrintStatement(
+                [new LiteralExpression(
+                    $"Dataset refresh trigger for {stmt.TempTableName}",
+                    TokenType.STRING_LITERAL)]);
 
             var jobStmt = new CreateJobStatement(jobName, schedule, jobScript);
             await context.EvaluateStatement(jobStmt);
+            await registry.RegisterRefreshJobAsync(
+                reportId.Value,
+                jobName,
+                stmt.RefreshInterval!);
         }
 
         private static void RegisterReportContext(CreateDatasetStatement stmt, IExecutionContext context)

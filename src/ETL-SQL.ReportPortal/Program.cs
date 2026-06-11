@@ -10,6 +10,7 @@ using Microsoft.IdentityModel.Tokens;
 using ETL_SQL.ReportPortal;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Middleware;
+using ETL_SQL.ReportPortal.Services;
 using ETL_SQL.ReportPortal.Services.HealthChecks;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator;
@@ -36,6 +37,13 @@ builder.Configuration.AddSecureConfiguration();
 // ── Configuration ─────────────────────────────────────────────────────────────
 var portalConfig = builder.Configuration.GetSection("Portal").Get<PortalConfig>()
     ?? new PortalConfig();
+
+// Expose the dataset at-rest key as a process secret so the engine can resolve ENCRYPT = PORTAL (used by
+// scheduled refresh jobs, which must not embed the key in persisted SQL). A SEPARATE orchestrator service
+// must set the same ETLSQL_DATASET_ATREST_KEY env var (or share this config) for scheduled refresh to run.
+if (!string.IsNullOrWhiteSpace(portalConfig.Dataset.AtRestKey))
+    Environment.SetEnvironmentVariable(
+        ETL_SQL.Core.Common.EncryptionOptions.PortalAtRestKeyEnvVar, portalConfig.Dataset.AtRestKey);
 
 // ── Engine services (centralized in Orchestrator extension) ─────────
 var loggerService = new LoggerService();
@@ -160,6 +168,7 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.TokenService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionDeliveryStatusService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.FolderPermissionService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetPermissionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptInspectionService>();
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetViewerService>();
@@ -240,6 +249,11 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
     db.Database.Migrate();
     db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+    await DatasetStorageMaintenance.ReconcileAsync(
+        db,
+        portalConfig,
+        scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("DatasetStorageMaintenance"));
 
     await SeedFirstRunAsync(scope.ServiceProvider, portalConfig);
 }

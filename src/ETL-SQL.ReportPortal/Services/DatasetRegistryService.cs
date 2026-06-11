@@ -16,14 +16,14 @@ namespace ETL_SQL.ReportPortal.Services
         private readonly PortalDbContext _db;
         private readonly ILogger<DatasetRegistryService> _log;
         private readonly PortalConfig _config;
-        private readonly FolderPermissionService _folderPerms;
+        private readonly DatasetPermissionService _permissions;
 
-        public DatasetRegistryService(PortalDbContext db, ILogger<DatasetRegistryService> log, PortalConfig config, FolderPermissionService folderPerms)
+        public DatasetRegistryService(PortalDbContext db, ILogger<DatasetRegistryService> log, PortalConfig config, DatasetPermissionService permissions)
         {
             _db = db;
             _log = log;
             _config = config;
-            _folderPerms = folderPerms;
+            _permissions = permissions;
         }
 
         public async Task<int> RegisterOrUpdate(DatasetMetadata metadata)
@@ -98,6 +98,22 @@ namespace ETL_SQL.ReportPortal.Services
             return await CanWriteAsync(d, CallerContext.Parse(callerPermissions));
         }
 
+        public async Task<bool> CanRefreshAsync(string name, string callerPermissions)
+        {
+            var d = await _db.Datasets
+                .Include(x => x.OwningReport)
+                .Include(x => x.Acls)
+                .FirstOrDefaultAsync(x => x.Name == name);
+
+            if (d == null) return false;
+            var caller = CallerContext.Parse(callerPermissions);
+            var permission = await _permissions.GetEffectivePermissionAsync(
+                d,
+                caller.UserId,
+                caller.IsAdmin);
+            return DatasetPermissionService.CanRefresh(permission);
+        }
+
         public async Task SetStale(string name)
         {
             var d = await _db.Datasets
@@ -134,10 +150,108 @@ namespace ETL_SQL.ReportPortal.Services
                 .FirstOrDefaultAsync(x => x.Name == name);
             if (d != null)
             {
+                var managedPath = ResolveDatasetPathOrNull(d.ParquetFilePath);
                 _db.Datasets.Remove(d);
                 await _db.SaveChangesAsync();
+
+                if (!string.IsNullOrWhiteSpace(managedPath))
+                {
+                    try
+                    {
+                        if (File.Exists(managedPath))
+                            File.Delete(managedPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogWarning(
+                            ex,
+                            "Dataset '{Name}' was removed from the catalog but its managed file could not be deleted: {Path}",
+                            name,
+                            managedPath);
+                    }
+                }
+
                 _log.LogInformation("Dataset deleted: {Name}", name);
             }
+        }
+
+        public async Task RegisterRefreshJobAsync(
+            int reportId,
+            string orchestratorJobName,
+            string refreshInterval)
+        {
+            var job = await _db.DatasetJobs
+                .FirstOrDefaultAsync(j => j.OrchestratorJobName == orchestratorJobName);
+            if (job == null)
+            {
+                job = new DatasetJob
+                {
+                    ReportId = reportId,
+                    OrchestratorJobName = orchestratorJobName
+                };
+                _db.DatasetJobs.Add(job);
+            }
+            else
+            {
+                job.ReportId = reportId;
+            }
+
+            job.RefreshInterval = refreshInterval;
+            await _db.SaveChangesAsync();
+        }
+
+        public async Task<DatasetPublishTarget?> AuthorizePublishAsync(
+            string targetFolderPath,
+            string callerPermissions)
+        {
+            if (string.IsNullOrWhiteSpace(targetFolderPath))
+                return null;
+
+            var folder = await _db.Folders
+                .FirstOrDefaultAsync(f => f.Path == targetFolderPath);
+            if (folder == null)
+                return null;
+
+            var caller = CallerContext.Parse(callerPermissions);
+            if (!caller.IsAdmin)
+            {
+                if (caller.UserId is null)
+                    return null;
+
+                var groupIds = await _permissions.GetUserGroupIdsAsync(caller.UserId.Value);
+                var permission = await _db.FolderAcls
+                    .Where(a => a.FolderId == folder.Id && groupIds.Contains(a.GroupId))
+                    .Select(a => (FolderPermission?)a.Permission)
+                    .MaxAsync();
+                if (permission is null || permission < FolderPermission.Manage)
+                    return null;
+            }
+
+            return new DatasetPublishTarget(
+                folder.Id,
+                folder.Path,
+                caller.UserId ?? folder.OwnerId);
+        }
+
+        public async Task AuditPublishAsync(
+            int? userId,
+            string datasetName,
+            string targetFolderPath,
+            bool succeeded,
+            string? failureReason = null)
+        {
+            _db.AuditLogs.Add(new AuditLog
+            {
+                UserId = userId,
+                Action = succeeded ? "PUBLISH_DATASET" : "PUBLISH_DATASET_FAILED",
+                ResourceType = "Dataset",
+                ResourceId = datasetName,
+                Detail = succeeded
+                    ? $"Published to {targetFolderPath}"
+                    : $"Target {targetFolderPath}: {failureReason ?? "publish failed"}",
+                Timestamp = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
         }
 
         public string BuildDatasetFilePath(int datasetId, string name)
@@ -188,55 +302,19 @@ namespace ETL_SQL.ReportPortal.Services
 
         private async Task<bool> CanReadAsync(Dataset dataset, CallerContext caller)
         {
-            if (caller.IsAdmin) return true;
-
-            // Resolve the caller's group memberships once (empty for an unauthenticated caller).
-            ISet<int> groupIds = caller.UserId is int uid
-                ? (await _db.UserGroups
-                    .Where(ug => ug.UserId == uid)
-                    .Select(ug => ug.GroupId)
-                    .ToListAsync()).ToHashSet()
-                : new HashSet<int>();
-
-            if (dataset.AccessLevel == DatasetAccessLevel.Public)
-            {
-                // PUBLIC = any authenticated user with Read on the dataset's folder. When the dataset
-                // has no resolvable folder, fall back to "any authenticated caller".
-                if (dataset.FolderId is int fid)
-                    return await _folderPerms.GetEffectivePermissionAsync(fid, groupIds) is not null;
-                return caller.UserId is not null;
-            }
-
-            // PRIVATE = owner or an explicit dataset grant. Owner is the owning report's creator, or
-            // the publisher (dataset.CreatedBy) when the dataset has no owning report.
-            if (caller.UserId is null) return false;
-
-            if (dataset.OwningReport?.CreatedBy == caller.UserId.Value || dataset.CreatedBy == caller.UserId.Value)
-                return true;
-
-            return dataset.Acls.Any(a =>
-                groupIds.Contains(a.GroupId)
-                && a.Permission is DatasetPermission.Viewer or DatasetPermission.Editor or DatasetPermission.Owner);
+            return await _permissions.GetEffectivePermissionAsync(
+                dataset,
+                caller.UserId,
+                caller.IsAdmin) is not null;
         }
 
-        // Write access (REFRESH / CREATE OR ALTER): admin, the owner, or an Editor/Owner grant.
-        // Mirrors DatasetController.GetEffectivePermission + CanEdit. Folder/PUBLIC read does not grant edit.
         private async Task<bool> CanWriteAsync(Dataset dataset, CallerContext caller)
         {
-            if (caller.IsAdmin) return true;
-            if (caller.UserId is null) return false;
-
-            if (dataset.OwningReport?.CreatedBy == caller.UserId.Value || dataset.CreatedBy == caller.UserId.Value)
-                return true;
-
-            var groupIds = await _db.UserGroups
-                .Where(ug => ug.UserId == caller.UserId.Value)
-                .Select(ug => ug.GroupId)
-                .ToListAsync();
-
-            return dataset.Acls.Any(a =>
-                groupIds.Contains(a.GroupId)
-                && a.Permission is DatasetPermission.Editor or DatasetPermission.Owner);
+            var permission = await _permissions.GetEffectivePermissionAsync(
+                dataset,
+                caller.UserId,
+                caller.IsAdmin);
+            return DatasetPermissionService.CanEdit(permission);
         }
 
         private sealed record CallerContext(bool IsAdmin, int? UserId)

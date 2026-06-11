@@ -12,6 +12,13 @@ namespace ETL_SQL.Core.Common
     /// </summary>
     public class EncryptionOptions
     {
+        /// <summary>
+        /// Process-level secret holding the portal at-rest key (base64), set by the portal/orchestrator
+        /// host from <c>Portal:Dataset:AtRestKey</c>. <c>ENCRYPT = PORTAL</c> resolves the key from here at
+        /// run time so it is never embedded in (and persisted with) scheduled-job SQL.
+        /// </summary>
+        public const string PortalAtRestKeyEnvVar = "ETLSQL_DATASET_ATREST_KEY";
+
         public bool Enabled { get; }
         /// <summary>True when ENCRYPT = MACHINE; data is bound to this machine via DPAPI (Windows) or a machine-unique key (Linux/macOS).</summary>
         public bool IsMachineBound { get; }
@@ -32,7 +39,18 @@ namespace ETL_SQL.Core.Common
             {
                 var mode = enc.ToUpperInvariant();
                 IsMachineBound = mode == "MACHINE";
-                Enabled = mode is "ON" or "TRUE" or "MACHINE" or "PASSWORD" or "KEYFILE";
+                Enabled = mode is "ON" or "TRUE" or "MACHINE" or "PASSWORD" or "KEYFILE" or "PORTAL";
+
+                if (mode == "PORTAL")
+                {
+                    // Resolve the portal at-rest key from the process secret; behaves as ENCRYPT=PASSWORD
+                    // with that key. The key is never present in the connection options / persisted SQL.
+                    var portalKey = Environment.GetEnvironmentVariable(PortalAtRestKeyEnvVar);
+                    if (string.IsNullOrWhiteSpace(portalKey))
+                        throw new ExecutionException(
+                            $"ENCRYPT = PORTAL requires the portal at-rest key (env {PortalAtRestKeyEnvVar}) to be configured.");
+                    Password = portalKey;
+                }
             }
 
             if (options.TryGetValue("ALGORITHM", out var algo))

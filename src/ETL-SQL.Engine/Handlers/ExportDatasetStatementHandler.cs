@@ -64,15 +64,18 @@ namespace ETL_SQL.Engine.Handlers
             var targetPath = context.ResolvePath(stmt.TargetPath);
 
             var tempPlain = Path.Combine(Path.GetTempPath(), $"__ds_export_{Guid.NewGuid():N}.parquet");
+            using var fileTransaction = DatasetFileTransaction.Create(targetPath);
             try
             {
                 // Decrypt the at-rest cache to a transient plaintext parquet, then re-encrypt to the target.
                 atRest.DecryptFile(existing.ParquetFilePath, tempPlain);
-                transport.EncryptFile(tempPlain, targetPath);
+                transport.EncryptFile(tempPlain, fileTransaction.StagingPath);
+                fileTransaction.Commit();
+                fileTransaction.Complete();
             }
             finally
             {
-                try { if (File.Exists(tempPlain)) File.Delete(tempPlain); } catch { /* best effort */ }
+                DatasetFileTransaction.Cleanup(tempPlain);
             }
 
             _logger.Debug("EXPORT DATASET '{Name}': wrote portable file to {Path}.", stmt.DatasetName, targetPath);

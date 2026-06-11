@@ -20,44 +20,23 @@ public class DatasetController(
     IDatasetRegistry    registry,
     AuditService        audit,
     ExecutionJobService jobService,
-    DatasetViewerService viewer) : ControllerBase
+    DatasetViewerService viewer,
+    DatasetPermissionService datasetPermissions,
+    FolderPermissionService folderPermissions,
+    SessionCache sessions) : ControllerBase
 {
     private int  CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin       => User.IsInRole("Admin");
 
     // ── Permission helpers ────────────────────────────────────────────────────
 
-    private static DatasetPermission? GetEffectivePermission(
-        Dataset dataset, int currentUserId, bool isAdmin, ICollection<int> groupIds)
-    {
-        if (isAdmin) return DatasetPermission.Owner;
-        if (dataset.OwningReport?.CreatedBy == currentUserId) return DatasetPermission.Owner;
-        if (dataset.AccessLevel == DatasetAccessLevel.Public) return DatasetPermission.Viewer;
+    private Task<DatasetPermission?> GetEffectivePermissionAsync(Dataset dataset) =>
+        datasetPermissions.GetEffectivePermissionAsync(dataset, CurrentUserId, IsAdmin);
 
-        var acls = dataset.Acls.Where(a => groupIds.Contains(a.GroupId)).ToList();
-        if (!acls.Any()) return null;
-        return (DatasetPermission)acls.Max(a => (int)a.Permission);
-    }
-
-    private async Task<DatasetPermission?> GetEffectivePermissionAsync(Dataset dataset)
-    {
-        if (IsAdmin) return DatasetPermission.Owner;
-        if (dataset.OwningReport?.CreatedBy == CurrentUserId) return DatasetPermission.Owner;
-        if (dataset.AccessLevel == DatasetAccessLevel.Public) return DatasetPermission.Viewer;
-
-        var groupIds = await db.UserGroups
-            .Where(ug => ug.UserId == CurrentUserId)
-            .Select(ug => ug.GroupId)
-            .ToListAsync();
-
-        var acls = dataset.Acls.Where(a => groupIds.Contains(a.GroupId)).ToList();
-        if (!acls.Any()) return null;
-        return (DatasetPermission)acls.Max(a => (int)a.Permission);
-    }
-
-    private static bool CanView(DatasetPermission? p)   => p is not null;
-    private static bool CanEdit(DatasetPermission? p)   => p is DatasetPermission.Editor or DatasetPermission.Owner;
-    private static bool CanManage(DatasetPermission? p) => p is DatasetPermission.Owner;
+    private static bool CanView(DatasetPermission? p)   => DatasetPermissionService.CanView(p);
+    private static bool CanRefresh(DatasetPermission? p) => DatasetPermissionService.CanRefresh(p);
+    private static bool CanEdit(DatasetPermission? p)   => DatasetPermissionService.CanEdit(p);
+    private static bool CanManage(DatasetPermission? p) => DatasetPermissionService.CanManage(p);
 
     // ── GET /api/datasets ─────────────────────────────────────────────────────
 
@@ -70,16 +49,19 @@ public class DatasetController(
             .ToListAsync();
 
         var groupIds = IsAdmin
-            ? (List<int>)[]
-            : await db.UserGroups
-                .Where(ug => ug.UserId == CurrentUserId)
-                .Select(ug => ug.GroupId)
-                .ToListAsync();
-
-        var result = datasets
-            .Where(d => CanView(GetEffectivePermission(d, CurrentUserId, IsAdmin, groupIds)))
-            .Select(ToDto)
-            .ToList();
+            ? new HashSet<int>()
+            : await datasetPermissions.GetUserGroupIdsAsync(CurrentUserId);
+        var result = new List<DatasetDto>();
+        foreach (var dataset in datasets)
+        {
+            var permission = await datasetPermissions.GetEffectivePermissionAsync(
+                dataset,
+                CurrentUserId,
+                IsAdmin,
+                groupIds);
+            if (CanView(permission))
+                result.Add(ToDto(dataset));
+        }
 
         return Ok(result);
     }
@@ -273,7 +255,7 @@ public class DatasetController(
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
-        if (!CanEdit(perm)) return Forbid();
+        if (!CanRefresh(perm)) return Forbid();
 
         // Concurrent refresh guard: reject if the owning report is already executing
         if (dataset.OwningReportId.HasValue)
@@ -362,6 +344,63 @@ public class DatasetController(
         return Ok(ToDto(dataset));
     }
 
+    // ── POST /api/datasets/{id}/move ─────────────────────────────────────────
+
+    [HttpPost("{id:int}/move")]
+    public async Task<IActionResult> Move(int id, [FromBody] MoveDatasetRequest req)
+    {
+        var dataset = await LoadDataset(id);
+        if (dataset is null) return NotFound();
+
+        var destination = await db.Folders.FindAsync(req.DestinationFolderId);
+        if (destination is null)
+            return NotFound(new { error = "Destination folder not found." });
+
+        if (dataset.FolderId == destination.Id)
+            return Ok(ToDto(dataset));
+
+        if (dataset.FolderId is int sourceFolderId)
+        {
+            if (!await folderPermissions.HasPermissionAsync(
+                    sourceFolderId,
+                    FolderPermission.Manage,
+                    User))
+            {
+                return Forbid();
+            }
+        }
+        else if (!IsAdmin)
+        {
+            return Forbid();
+        }
+
+        if (!await folderPermissions.HasPermissionAsync(
+                destination.Id,
+                FolderPermission.Manage,
+                User))
+        {
+            return Forbid();
+        }
+
+        var sourcePath = dataset.FolderPath;
+        dataset.FolderId = destination.Id;
+        dataset.FolderPath = destination.Path;
+        dataset.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        if (dataset.OwningReportId is int reportId)
+            await sessions.InvalidateReportAsync(reportId);
+
+        await audit.LogAsync(
+            CurrentUserId,
+            "MOVE_DATASET",
+            "Dataset",
+            id.ToString(),
+            $"{dataset.Name}: {sourcePath} -> {destination.Path}");
+
+        return Ok(ToDto(dataset));
+    }
+
     // ── DELETE /api/datasets/{id} ─────────────────────────────────────────────
 
     [HttpDelete("{id:int}")]
@@ -410,7 +449,7 @@ public class DatasetController(
         if (!CanManage(perm)) return Forbid();
 
         if (!Enum.TryParse<DatasetPermission>(req.Permission, ignoreCase: true, out var granted))
-            return BadRequest(new { error = "permission must be 'Viewer', 'Editor', or 'Owner'." });
+            return BadRequest(new { error = "permission must be 'Viewer', 'Refresh', 'Editor', or 'Owner'." });
 
         if (!await db.Groups.AnyAsync(g => g.Id == req.GroupId))
             return NotFound(new { error = "Group not found." });

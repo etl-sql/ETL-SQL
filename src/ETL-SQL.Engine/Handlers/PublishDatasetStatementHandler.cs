@@ -59,40 +59,93 @@ namespace ETL_SQL.Engine.Handlers
 
             var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
             var atRestKey = (context as Evaluator)?.DatasetAtRestKey;
+            var callerUserId = ParseUserId(callerCtx);
+            var targetFolder = stmt.TargetFolder ?? "";
 
-            // Register first to allocate the stable Id the at-rest filename is keyed on.
-            var metadata = new DatasetMetadata
+            var publishTarget = await registry.AuthorizePublishAsync(targetFolder, callerCtx);
+            if (publishTarget == null)
             {
-                Name            = stmt.DatasetName,
-                FolderPath      = stmt.TargetFolder ?? "",   // logical folder → registry resolves FolderId
-                ParquetFilePath = "",
-                SourceQuery     = "",                        // published snapshots have no source to re-run
-                AccessLevel     = stmt.AccessLevel,
-                CreatedBy       = ParseUserId(callerCtx),
-                LastRefresh     = DateTime.UtcNow,
-                RowCount        = 0                          // unknown for an imported snapshot
-            };
-            var id = await registry.RegisterOrUpdate(metadata);
-            var atRestPath = registry.BuildDatasetFilePath(id, stmt.DatasetName);
+                await registry.AuditPublishAsync(
+                    callerUserId,
+                    stmt.DatasetName,
+                    targetFolder,
+                    succeeded: false,
+                    "target folder was not found or caller lacks Manage permission");
+                throw new ExecutionException(
+                    $"PUBLISH DATASET '{stmt.DatasetName}': target folder was not found or the caller lacks Manage permission.",
+                    null, stmt.Line, stmt.Column);
+            }
 
-            var transport = new EncryptionOptions(BuildTransportOptions(stmt));
-            var atRest    = new EncryptionOptions(BuildAtRestOptions(atRestKey));
-
-            var tempPlain = Path.Combine(Path.GetTempPath(), $"__ds_publish_{Guid.NewGuid():N}.parquet");
+            var allocatedRow = false;
             try
             {
-                // Decrypt the portable file once with the transport credential, then re-encrypt at rest.
-                transport.DecryptFile(sourcePath, tempPlain);
-                atRest.EncryptFile(tempPlain, atRestPath);
+                // Register first to allocate the stable Id the at-rest filename is keyed on.
+                var metadata = new DatasetMetadata
+                {
+                    Name            = stmt.DatasetName,
+                    FolderPath      = publishTarget.FolderPath,
+                    FolderId        = publishTarget.FolderId,
+                    ParquetFilePath = "",
+                    SourceQuery     = "",                        // published snapshots have no source to re-run
+                    AccessLevel     = stmt.AccessLevel,
+                    CreatedBy       = publishTarget.OwnerUserId,
+                    LastRefresh     = DateTime.UtcNow,
+                    RowCount        = 0                          // unknown for an imported snapshot
+                };
+                var id = await registry.RegisterOrUpdate(metadata);
+                allocatedRow = true;
+                var atRestPath = registry.BuildDatasetFilePath(id, stmt.DatasetName);
+                using var fileTransaction = DatasetFileTransaction.Create(atRestPath);
+
+                var transport = new EncryptionOptions(BuildTransportOptions(stmt));
+                var atRest    = new EncryptionOptions(BuildAtRestOptions(atRestKey));
+
+                var tempPlain = Path.Combine(Path.GetTempPath(), $"__ds_publish_{Guid.NewGuid():N}.parquet");
+                try
+                {
+                    // Decrypt the portable file once with the transport credential, then re-encrypt at rest.
+                    transport.DecryptFile(sourcePath, tempPlain);
+                    atRest.EncryptFile(tempPlain, fileTransaction.StagingPath);
+                    fileTransaction.Commit();
+                }
+                finally
+                {
+                    DatasetFileTransaction.Cleanup(tempPlain);
+                }
+
+                metadata.Id = id;
+                metadata.ParquetFilePath = atRestPath;
+                await registry.RegisterOrUpdate(metadata);
+                fileTransaction.Complete();
             }
-            finally
+            catch
             {
-                try { if (File.Exists(tempPlain)) File.Delete(tempPlain); } catch { /* best effort */ }
+                if (allocatedRow)
+                {
+                    try
+                    {
+                        await registry.Delete(stmt.DatasetName);
+                    }
+                    catch
+                    {
+                        // Preserve the original publish failure. Startup reconciliation removes
+                        // any empty-path row or managed file left by an interrupted rollback.
+                    }
+                }
+                await registry.AuditPublishAsync(
+                    callerUserId,
+                    stmt.DatasetName,
+                    publishTarget.FolderPath,
+                    succeeded: false,
+                    "publish processing failed");
+                throw;
             }
 
-            metadata.Id = id;
-            metadata.ParquetFilePath = atRestPath;
-            await registry.RegisterOrUpdate(metadata);
+            await registry.AuditPublishAsync(
+                callerUserId,
+                stmt.DatasetName,
+                publishTarget.FolderPath,
+                succeeded: true);
 
             _logger.Debug("PUBLISH DATASET '{Name}': imported from {Path} and re-encrypted at rest.", stmt.DatasetName, sourcePath);
             context.Log(

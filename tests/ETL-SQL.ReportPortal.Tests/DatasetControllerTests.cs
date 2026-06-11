@@ -92,6 +92,66 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.DoesNotContain($"#prv_{suffix}", names);
     }
 
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task PublicDataset_WithFolder_RequiresFolderReadEverywhere()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var username = $"folder_reader_{suffix}";
+
+        var folderRes = await AuthPost(adminToken, "/api/folders", new
+        {
+            name = $"dataset_folder_{suffix}",
+            parentId = (int?)null
+        });
+        folderRes.EnsureSuccessStatusCode();
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        string folderPath;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            folderPath = (await db.Folders.SingleAsync(f => f.Id == folderId)).Path;
+        }
+
+        var userRes = await AuthPost(adminToken, "/api/admin/users", new
+        {
+            username,
+            email = $"{username}@test.local",
+            password = "Folder@1234!",
+            role = "Viewer"
+        });
+        userRes.EnsureSuccessStatusCode();
+        var userId = (await userRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        var userToken = await LoginAndChangePasswordAsync(username, "Folder@1234!", "Folder@Changed9!");
+
+        var name = $"#folder_public_{suffix}";
+        await RegisterDatasetAsync(name, folderPath, DatasetAccessLevel.Public);
+        var datasetId = await GetDatasetIdAsync(name, folderPath);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(userToken, $"/api/datasets/{datasetId}")).StatusCode);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+            Assert.Null(await registry.Lookup(name, $"UserId={userId}"));
+        }
+
+        var groupRes = await AuthPost(adminToken, "/api/admin/groups", new { name = $"folder_group_{suffix}" });
+        groupRes.EnsureSuccessStatusCode();
+        var groupId = (await groupRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        (await AuthPost(adminToken, $"/api/admin/groups/{groupId}/members", new { userId }))
+            .EnsureSuccessStatusCode();
+        await AddFolderAclAsync(folderId, groupId, FolderPermission.Read);
+
+        Assert.Equal(HttpStatusCode.OK, (await AuthGet(userToken, $"/api/datasets/{datasetId}")).StatusCode);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+            Assert.NotNull(await registry.Lookup(name, $"UserId={userId}"));
+        }
+    }
+
     // ── 2. GET /api/datasets/{id} — metadata panel ────────────────────────────
 
     [Fact]
@@ -142,6 +202,39 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
 
         var res = await AuthGet(outsiderToken, $"/api/datasets/{id}");
         Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task PublisherOwnsPrivateDatasetWithoutOwningReport()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var username = $"publisher_{suffix}";
+
+        var userRes = await AuthPost(adminToken, "/api/admin/users", new
+        {
+            username,
+            email = $"{username}@test.local",
+            password = "Publish@1234!",
+            role = "Viewer"
+        });
+        userRes.EnsureSuccessStatusCode();
+        var userId = (await userRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        var publisherToken = await LoginAndChangePasswordAsync(username, "Publish@1234!", "Publish@Changed9!");
+
+        var name = $"#published_{suffix}";
+        var folder = $"/published_{suffix}";
+        await RegisterDatasetAsync(
+            name,
+            folder,
+            DatasetAccessLevel.Private,
+            createdBy: userId);
+        var id = await GetDatasetIdAsync(name, folder);
+
+        Assert.Equal(HttpStatusCode.OK, (await AuthGet(publisherToken, $"/api/datasets/{id}")).StatusCode);
+        var patchRes = await AuthPatch(publisherToken, $"/api/datasets/{id}", new { ttl = "2h" });
+        Assert.Equal(HttpStatusCode.OK, patchRes.StatusCode);
     }
 
     // ── 3. GET /api/datasets/{id}/rows — column schema preview ────────────────
@@ -244,6 +337,54 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
     }
 
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task RefreshPermission_AllowsRefreshWithoutMetadataEdit()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var username = $"refresher_{suffix}";
+        var name = $"#refresh_only_{suffix}";
+        var folder = $"/refresh_only_{suffix}";
+
+        var userRes = await AuthPost(adminToken, "/api/admin/users", new
+        {
+            username,
+            email = $"{username}@test.local",
+            password = "Refresh@1234!",
+            role = "Viewer"
+        });
+        userRes.EnsureSuccessStatusCode();
+        var userId = (await userRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        var userToken = await LoginAndChangePasswordAsync(
+            username,
+            "Refresh@1234!",
+            "Refresh@Changed9!");
+
+        var groupRes = await AuthPost(
+            adminToken,
+            "/api/admin/groups",
+            new { name = $"refreshers_{suffix}" });
+        groupRes.EnsureSuccessStatusCode();
+        var groupId = (await groupRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        (await AuthPost(adminToken, $"/api/admin/groups/{groupId}/members", new { userId }))
+            .EnsureSuccessStatusCode();
+
+        await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Private, lastRefresh: DateTime.UtcNow);
+        var id = await GetDatasetIdAsync(name, folder);
+        var grantRes = await AuthPost(
+            adminToken,
+            $"/api/datasets/{id}/acl",
+            new { groupId, permission = "Refresh" });
+        Assert.Equal(HttpStatusCode.OK, grantRes.StatusCode);
+
+        var refreshRes = await AuthPost(userToken, $"/api/datasets/{id}/refresh", new { });
+        Assert.Equal(HttpStatusCode.Accepted, refreshRes.StatusCode);
+
+        var editRes = await AuthPatch(userToken, $"/api/datasets/{id}", new { ttl = "2h" });
+        Assert.Equal(HttpStatusCode.Forbidden, editRes.StatusCode);
+    }
+
     // ── 5. PATCH /api/datasets/{id} — update metadata ─────────────────────────
 
     [Fact]
@@ -287,6 +428,100 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.BadRequest, patchRes.StatusCode);
     }
 
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task Move_RequiresManageOnSourceAndDestination_AndPreservesFileIdentity()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var username = $"mover_{suffix}";
+
+        var sourceRes = await AuthPost(adminToken, "/api/folders", new
+        {
+            name = $"move_source_{suffix}",
+            parentId = (int?)null
+        });
+        sourceRes.EnsureSuccessStatusCode();
+        var sourceFolderId = (await sourceRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var destinationRes = await AuthPost(adminToken, "/api/folders", new
+        {
+            name = $"move_destination_{suffix}",
+            parentId = (int?)null
+        });
+        destinationRes.EnsureSuccessStatusCode();
+        var destinationFolderId =
+            (await destinationRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        string sourcePath;
+        string destinationPath;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            sourcePath = (await db.Folders.SingleAsync(f => f.Id == sourceFolderId)).Path;
+            destinationPath = (await db.Folders.SingleAsync(f => f.Id == destinationFolderId)).Path;
+        }
+
+        var userRes = await AuthPost(adminToken, "/api/admin/users", new
+        {
+            username,
+            email = $"{username}@test.local",
+            password = "Mover@1234!",
+            role = "Viewer"
+        });
+        userRes.EnsureSuccessStatusCode();
+        var userId = (await userRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        var userToken = await LoginAndChangePasswordAsync(username, "Mover@1234!", "Mover@Changed9!");
+
+        var groupRes = await AuthPost(adminToken, "/api/admin/groups", new { name = $"movers_{suffix}" });
+        groupRes.EnsureSuccessStatusCode();
+        var groupId = (await groupRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        (await AuthPost(adminToken, $"/api/admin/groups/{groupId}/members", new { userId }))
+            .EnsureSuccessStatusCode();
+        await AddFolderAclAsync(sourceFolderId, groupId, FolderPermission.Manage);
+
+        var name = $"#move_{suffix}";
+        await RegisterDatasetAsync(name, sourcePath, DatasetAccessLevel.Public);
+        var datasetId = await GetDatasetIdAsync(name, sourcePath);
+
+        string originalFilePath;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            originalFilePath = (await db.Datasets.SingleAsync(d => d.Id == datasetId)).ParquetFilePath;
+        }
+
+        var denied = await AuthPost(
+            userToken,
+            $"/api/datasets/{datasetId}/move",
+            new { destinationFolderId });
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+
+        await AddFolderAclAsync(destinationFolderId, groupId, FolderPermission.Manage);
+        var moved = await AuthPost(
+            userToken,
+            $"/api/datasets/{datasetId}/move",
+            new { destinationFolderId });
+        Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
+        var dto = await moved.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal(destinationPath, dto!["folderPath"]!.GetValue<string>());
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var dataset = await db.Datasets.SingleAsync(d => d.Id == datasetId);
+            Assert.Equal(destinationFolderId, dataset.FolderId);
+            Assert.Equal(destinationPath, dataset.FolderPath);
+            Assert.Equal(originalFilePath, dataset.ParquetFilePath);
+            Assert.True(await db.AuditLogs.AnyAsync(a =>
+                a.Action == "MOVE_DATASET" &&
+                a.ResourceId == datasetId.ToString() &&
+                a.Detail != null &&
+                a.Detail.Contains(sourcePath) &&
+                a.Detail.Contains(destinationPath)));
+        }
+    }
+
     // ── 6. DELETE /api/datasets/{id} ──────────────────────────────────────────
 
     [Fact]
@@ -299,12 +534,77 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
 
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Public);
         var id = await GetDatasetIdAsync(name, folder);
+        string managedPath;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            managedPath = (await db.Datasets.SingleAsync(d => d.Id == id)).ParquetFilePath;
+            await File.WriteAllTextAsync(managedPath, "managed dataset cache");
+        }
 
         var delRes = await AuthDelete(token, $"/api/datasets/{id}");
         Assert.Equal(HttpStatusCode.NoContent, delRes.StatusCode);
+        Assert.False(File.Exists(managedPath));
 
         var afterRes = await AuthGet(token, $"/api/datasets/{id}");
         Assert.Equal(HttpStatusCode.NotFound, afterRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteReport_RemovesOwnedDatasetFiles()
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var folderRes = await AuthPost(token, "/api/folders", new
+        {
+            name = $"report_cleanup_{suffix}",
+            parentId = (int?)null
+        });
+        folderRes.EnsureSuccessStatusCode();
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        string folderPath;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            folderPath = (await db.Folders.SingleAsync(f => f.Id == folderId)).Path;
+        }
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"report_cleanup_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "PRINT 'cleanup';");
+        var reportRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = $"report_cleanup_{suffix}",
+            description = "",
+            scriptPath
+        });
+        reportRes.EnsureSuccessStatusCode();
+        var reportId = (await reportRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var datasetName = $"#report_cleanup_{suffix}";
+        await RegisterDatasetAsync(
+            datasetName,
+            folderPath,
+            DatasetAccessLevel.Private,
+            owningReportId: reportId);
+        var datasetId = await GetDatasetIdAsync(datasetName, folderPath);
+
+        string managedPath;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            managedPath = (await db.Datasets.SingleAsync(d => d.Id == datasetId)).ParquetFilePath;
+            await File.WriteAllTextAsync(managedPath, "managed report dataset");
+        }
+
+        var deleteRes = await AuthDelete(token, $"/api/reports/{reportId}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
+        Assert.False(File.Exists(managedPath));
+
+        using var verifyScope = _factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.False(await verifyDb.Datasets.AnyAsync(d => d.Id == datasetId));
     }
 
     [Fact]
@@ -400,6 +700,51 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     }
 
     // ── 8. Phase 6 — Portal-Triggered Refresh ────────────────────────────────
+
+    [Fact]
+    public async Task RefreshJobRegistration_UpsertsOwningReportMapping()
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var folderRes = await AuthPost(token, "/api/folders", new
+        {
+            name = $"schedule_{suffix}",
+            parentId = (int?)null
+        });
+        folderRes.EnsureSuccessStatusCode();
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"schedule_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "PRINT 'scheduled dataset owner';");
+        var reportRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = $"schedule_{suffix}",
+            description = "",
+            scriptPath
+        });
+        reportRes.EnsureSuccessStatusCode();
+        var reportId = (await reportRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        var jobName = $"__dataset_refresh_schedule_{suffix}__";
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+            await registry.RegisterRefreshJobAsync(reportId, jobName, "5m");
+            await registry.RegisterRefreshJobAsync(reportId, jobName, "10m");
+        }
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var job = Assert.Single(await db.DatasetJobs
+                .Where(j => j.OrchestratorJobName == jobName)
+                .ToListAsync());
+            Assert.Equal(reportId, job.ReportId);
+            Assert.Equal("10m", job.RefreshInterval);
+        }
+    }
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
@@ -569,7 +914,8 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         DatasetAccessLevel accessLevel = DatasetAccessLevel.Public,
         long rowCount = 0, string? ttl = null, string? columnSchema = null,
         DateTime? lastRefresh = null, int? owningReportId = null,
-        ETL_SQL.Core.DatasetEncryptionMode encryptionMode = ETL_SQL.Core.DatasetEncryptionMode.None)
+        ETL_SQL.Core.DatasetEncryptionMode encryptionMode = ETL_SQL.Core.DatasetEncryptionMode.None,
+        int? createdBy = null)
     {
         using var scope = _factory.Services.CreateScope();
         var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
@@ -586,7 +932,8 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
             Ttl             = ttl,
             ColumnSchema    = columnSchema,
             LastRefresh     = lastRefresh,
-            OwningReportId  = owningReportId
+            OwningReportId  = owningReportId,
+            CreatedBy       = createdBy
         });
     }
 
@@ -606,6 +953,19 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         {
             DatasetId  = datasetId,
             GroupId    = groupId,
+            Permission = permission
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private async Task AddFolderAclAsync(int folderId, int groupId, FolderPermission permission)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        db.FolderAcls.Add(new FolderAcl
+        {
+            FolderId = folderId,
+            GroupId = groupId,
             Permission = permission
         });
         await db.SaveChangesAsync();

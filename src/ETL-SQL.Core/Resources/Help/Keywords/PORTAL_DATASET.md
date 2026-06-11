@@ -48,10 +48,11 @@ SELECT dataset_name, hit_rate, last_refreshed, ttl FROM #metrics;
 ## Notes
 - Portal datasets (`&Name`) are named result sets cached in the portal and shared across reports that reference them.
 - Dataset names always begin with `&` — the ampersand prefix is part of the identifier and must be included in all commands.
-- `REFRESH DATASET` marks the dataset as stale and queues it for re-evaluation during the next scheduled refresh cycle. Existing cached data remains available until the refresh completes.
+- `REFRESH DATASET` requires `REFRESH`, `EDITOR`, or `OWNER` dataset permission. It marks the dataset as stale and queues it for re-evaluation when portal hosting is available. Existing cached data remains available until the refresh completes.
 - `REBUILD SNAPSHOT` forces an immediate, synchronous data refresh, bypassing the TTL. Use this when data must be current before a scheduled event or delivery.
 - `TTL` (time-to-live) is specified as a duration string in `hh:mm:ss` format (e.g., `01:00:00` for one hour). After expiry, the next request triggers a refresh.
-- `ACCESS = PUBLIC` makes the dataset visible to all authenticated portal users. `ACCESS = PRIVATE` restricts access to users or groups that have been explicitly granted permissions on the dataset's source folder.
+- `ACCESS = PUBLIC` requires authenticated access plus `Read` or higher on the linked portal folder. `ACCESS = PRIVATE` restricts access to the owner and groups explicitly granted dataset permission.
+- Dataset permissions are hierarchical: `VIEWER`, `REFRESH`, `EDITOR`, `OWNER`. `REFRESH` permits refresh without metadata or source-query editing.
 - `DROP DATASET` removes the registry entry and all cached data. Reports referencing the dataset will produce errors until they are republished with a valid dataset reference or a replacement dataset is registered.
 - See: PORTAL_REPORT, PORTAL_REFRESHJOB, PORTAL_SHOW
 

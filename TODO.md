@@ -25,10 +25,11 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   name portal-wide. Folder is *mutable metadata* (datasets can be moved later).
 - **Access:** **PUBLIC = any authenticated user with read permission on the dataset's folder** (reuse
   `FolderPermissionService`); **PRIVATE = owner + explicit dataset grants only** (ignores folder read).
-- **Refresh:** transparent stale-cache refresh serves **stale-with-warning** to readers — only the
-  **owner / scheduled job** re-materializes (never under a consumer's identity). Editing the source
-  query or a forced `REFRESH DATASET` requires **editor/owner**. User runs are ACL-gated; **scheduled /
-  system refresh jobs keep admin rights**.
+- **Refresh:** transparent stale-cache refresh serves **stale-with-warning** to readers and never
+  re-materializes under a consumer's identity. A forced `REFRESH DATASET` requires
+  **refresh/editor/owner**; editing the source query requires **editor/owner**. This lets a user group
+  operate refreshes without receiving metadata or query-edit rights. **Scheduled/system refresh jobs
+  keep admin rights**.
 - Threat model: at-rest encryption + compression (already SNAPPY parquet) protects moved files and other
   local users; an attacker with code-exec **as the service account** is out of scope.
 
@@ -92,9 +93,11 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 - [x] **1d. Refresh split + serve-stale-with-warning (option a).** *(done — branch v0.11.0)* `USE DATASET`
   is now read-only: a stale cache is served with a yellow staleness warning and **never re-materialized
   under the consumer's identity** (`RematerialiseAndRefresh` deleted from `UseDatasetStatementHandler`);
-  a never-materialized dataset errors instead of re-running the source. `REFRESH DATASET` and
-  `CREATE OR ALTER DATASET` (over an existing dataset) require editor/owner via new
-  `IDatasetRegistry.CanEditAsync` (admin/owner/Editor-or-Owner grant — mirrors `DatasetController.CanEdit`).
+  a never-materialized dataset errors instead of re-running the source. `REFRESH DATASET` requires the
+  independent Refresh/Editor/Owner capability via `IDatasetRegistry.CanRefreshAsync`;
+  `CREATE OR ALTER DATASET` (over an existing dataset) remains Editor/Owner-only via
+  `IDatasetRegistry.CanEditAsync`. The four-level ACL hierarchy is Viewer < Refresh < Editor < Owner,
+  with a migration preserving existing Editor/Owner grants.
   `SHOW DATASETS` already caller-filtered (1c). Re-materialization now happens only via the producing
   report's `CREATE` (owner or scheduled/admin job). Tests: `DatasetPhase4Tests` refresh/create-or-alter
   denial + serve-stale + never-materialized; `PortalIntegrationTests.DatasetRegistry_CanEdit_OnlyOwnerEditorAndAdmin`.
@@ -136,16 +139,26 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 > The portable EXPORT/PUBLISH flow is implemented, but the items below are required before the target
 > model can be considered production-hardened.
 
-- [ ] **2e. Remove the portal at-rest key from persisted scheduled-job SQL.** `CreateDatasetStatementHandler`
-  currently builds a refresh job whose serialized PARQUET connection contains the at-rest password;
-  `CreateJobStatementHandler` then persists that script in the job store. Scheduled refresh must obtain
-  the portal key from trusted runtime configuration/secret injection instead. Add a regression test that
-  searches stored job definitions, logs, errors, and generated scripts and proves the key is absent.
-- [ ] **2f. Centralize portal/engine dataset authorization.** `DatasetController` currently treats every
-  PUBLIC dataset as visible without requiring folder Read and does not recognize `Dataset.CreatedBy` as
-  the owner of a published dataset. Reuse one permission authority for registry and HTTP endpoints so
-  PUBLIC, PRIVATE, owner, publisher, explicit grants, and admin have identical behavior for list, detail,
-  data, export, stats, column-values, refresh, update, delete, and ACL operations.
+- [x] **2e. Keep the portal at-rest key out of persisted scheduled-job SQL.** *(done — v0.11.0)*
+  Scheduled dataset jobs now persist only a no-secret trigger, so neither the portal key nor source
+  credentials enter job SQL. The runtime **`ENCRYPT = PORTAL`** mechanism remains available for other
+  persisted connector definitions: `EncryptionOptions` resolves the key from
+  **`ETLSQL_DATASET_ATREST_KEY`**, which the portal exports from `Portal:Dataset:AtRestKey`.
+  `DatasetRefreshJobSecurityTests` covers PORTAL round-trip/env failure and the no-secret trigger.
+- [x] **2L. Make scheduled dataset refresh functional.** *(done — v0.11.0)*
+  Replaced the serialized `BEGIN … END` placeholder with a parseable, credential-free orchestrator
+  trigger. `IDatasetRegistry.RegisterRefreshJobAsync` maps that trigger to the owning report in
+  `DatasetJobs`; `OrchestratorPollerService` observes successful completion and queues the report through
+  the portal's keyed `ExecutionJobService`, preserving connection setup, report identity, registry access,
+  and at-rest encryption context. Repeated report runs upsert the mapping. A dataset without an owning
+  report logs that durable `REFRESH EVERY` scheduling is unavailable instead of creating a false job.
+- [x] **2f. Centralize portal/engine dataset authorization.** *(done — v0.11.0)*
+  Added `DatasetPermissionService` as the shared authority used by `DatasetRegistryService` and every
+  `DatasetController` endpoint. PUBLIC datasets now require folder Read when linked to a portal folder
+  (with the documented authenticated-user fallback for legacy rows without a folder); PRIVATE datasets
+  require owner/publisher status or an explicit grant; admins remain owners; and ACLs consistently elevate
+  eligible readers to Editor/Owner. Added controller/registry regressions for folder-gated PUBLIC access
+  and `Dataset.CreatedBy` publisher ownership; the existing seeded dataset permission matrix also passes.
 - [x] **2g. Fix portal-key dataset viewing — decrypt by config, not the stored mode.** *(done — v0.11.0)*
   `DatasetViewerService.LoadCachedAsync` no longer decides decryption from `Dataset.EncryptionMode` (which
   records the CREATE transport clause and is unreliable at rest). New `ResolveAtRestDecryptOptions`: when
@@ -156,25 +169,36 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   Remaining bit of the original item — explicit at-rest **version** metadata + migrating legacy
   Password/KeyFile rows + key **rotation** — folded into **2i**. (`ColumnSchema`/`RowCount` not populated
   for PUBLISH is a small separate follow-up; rows still read from the parquet's own schema.)
-- [ ] **2h. Make CREATE/REFRESH/PUBLISH/EXPORT failure-atomic.** Write encrypted output to a temporary
-  file under the destination root, validate it, then atomically replace the live cache/export. If publish
-  decryption, encryption, registry update, or finalization fails, remove the allocated registry row and
-  partial files so retrying the same global name succeeds. Preserve the last good cache during failed or
-  concurrent refreshes. Add cleanup for dataset/report deletion so managed parquet files do not become
-  orphans, plus startup/maintenance reconciliation for pre-existing orphan rows/files.
+- [x] **2h. Make CREATE/REFRESH/PUBLISH/EXPORT failure-atomic.** *(done — v0.11.0)*
+  Added a shared same-directory dataset file transaction. All four write paths now produce a uniquely
+  named `.parquet` staging file, reject missing/empty output, and atomically replace the destination only
+  after the write succeeds. A same-directory backup remains until the registry update commits, so failed
+  CREATE/REFRESH metadata updates restore the previous readable cache; EXPORT failures preserve an
+  existing target. Failed PUBLISH removes its allocated row and partial files so the global name is
+  immediately retryable. Dataset deletion and report deletion remove only path-guarded managed files
+  inside `DatasetRootPath`. Portal startup reconciliation removes abandoned staging/backup files,
+  missing-file catalog rows, and unreferenced managed `<name>_<id>.parquet` files while leaving unrelated
+  exports untouched. Failure-injection tests cover refresh rollback, publish credential failure, direct
+  and report-owned deletion, and orphan reconciliation.
 - [ ] **2i. Enforce and version the portal-managed at-rest key.** Portal production mode must not silently
   fall back to host MACHINE encryption when `Portal:Dataset:AtRestKey` is empty. Validate base64/entropy at
   startup, define first-run provisioning and backup/restore behavior, store a non-secret key version on
   each dataset, and provide a rotation/re-encryption procedure that can resume safely. Keep an explicit
   development/standalone fallback only if deliberately configured.
-- [ ] **2j. Authorize PUBLISH target folders and define system ownership.** Require the target folder to
-  exist and the interactive publisher to have the required publish/manage permission before allocating
-  a dataset row. Define ownership for admin/scheduled/system publication instead of leaving
-  `CreatedBy = null`, and audit successful and failed publish attempts without logging credentials.
-- [ ] **2k. Implement dataset move semantics.** Folder is mutable metadata in the target model, but the
-  API currently cannot move a dataset. Add a move operation that checks manage rights on the source and
-  destination folders, updates `FolderId` and `FolderPath` together, preserves the stable Id/file path,
-  invalidates relevant caches, and records an audit event.
+- [x] **2j. Authorize PUBLISH target folders and define system ownership.** *(done — v0.11.0)*
+  Added a registry publish preflight that resolves the target folder and requires folder `Manage` before
+  `PUBLISH DATASET` allocates a row. Interactive publications set `CreatedBy` to the caller; trusted
+  admin/system publication falls back to the target folder owner, so ownership is never null. Successful,
+  denied, and post-authorization failed attempts write sanitized `PUBLISH_DATASET` audit events without
+  credentials. Tests cover missing/Read-only/Manage targets, system ownership, denial before allocation,
+  audit sanitization, and the cross-portal export/publish round-trip.
+- [x] **2k. Implement dataset move semantics.** *(done — v0.11.0)*
+  Added `POST /api/datasets/{id}/move`. The caller must have folder `Manage` on both the current and
+  destination folders (admins may recover legacy rows with no folder); the destination must exist.
+  The operation updates `FolderId` and `FolderPath` together, preserves the stable dataset Id and Parquet
+  path, invalidates the owning report's sessions, and writes a `MOVE_DATASET` audit event. Regression
+  coverage proves denial without destination rights and verifies the successful move after permission is
+  granted.
 
 ### Phase 3 — Verification deck (scripts + xUnit)
 
@@ -198,8 +222,9 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   2. **Default round-trip:** CREATE folder A → `USE` from folder B by global name → rows match (red today).
   3. **Access model (1b/1c):** PUBLIC consumable with folder read, denied without; PRIVATE denied to
      non-owner, allowed to owner + explicit `DatasetAcl` grant; non-admin `SHOW` lists only visible.
-  4. **Refresh split (1d):** non-owner stale → cached + warning, no re-run; `REFRESH`/query-edit denied to
-     viewer, allowed to editor/owner; scheduled/system (admin) refreshes.
+  4. **Refresh split (1d):** non-owner stale → cached + warning, no re-run; `REFRESH` denied to viewer
+     and allowed to refresh/editor/owner; query edits remain editor/owner-only; scheduled/system
+     (admin) refreshes.
   5. **Export→Publish (Phase 2):** export w/ password/keyfile, re-import, decrypt once, consume by ACL
      with no credential; assert published copy is at-rest-encrypted and credential never sidecar'd.
   6. **Portal/engine parity:** matrix every HTTP dataset endpoint against registry/`USE DATASET` for

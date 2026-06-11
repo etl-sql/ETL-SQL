@@ -103,6 +103,14 @@ namespace ETL_SQL.Tests
             Assert.Equal("Sales Summary", revoke.DatasetName);
             Assert.Equal("/Finance", revoke.FolderPath);
             Assert.Equal("Analysts", revoke.GroupName);
+
+            var refreshScript = TestHelpers.Parse(
+                "GRANT REFRESH ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'Operators';");
+            var refresh = Assert.IsType<GrantPortalDatasetPermissionStatement>(
+                Assert.Single(refreshScript.Statements));
+
+            Assert.Equal(PortalDatasetPermission.Refresh, refresh.Permission);
+            Assert.Equal("Operators", refresh.GroupName);
         }
 
         [Fact]

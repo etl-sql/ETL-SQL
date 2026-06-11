@@ -415,12 +415,16 @@ Cross-report shared datasets allow reports to consume cached, shared data with a
 
 | Dataset state | Who can see or use it |
 | :--- | :--- |
-| `Public` | Any authenticated portal caller. |
+| `Public` | Authenticated callers with `Read` or higher on the linked folder; legacy datasets without a folder allow any authenticated caller. |
 | `Private` with owning report | Admins and the user who published the owning report. |
-| `Private` with dataset ACL | Admins and members of groups granted `Viewer`, `Editor`, or `Owner` on that dataset. |
+| `Private` with dataset ACL | Admins and members of groups granted `Viewer`, `Refresh`, `Editor`, or `Owner` on that dataset. |
 | `Private` with no owner or ACL | Admins only. |
 
 Dataset permissions are independent of folder ACLs. Folder permissions control report browsing and execution; dataset ACLs control cross-report dataset reuse. A user who can run a report does not automatically gain access to every private dataset in the portal.
+
+Dataset permissions are hierarchical: `Viewer < Refresh < Editor < Owner`. `Refresh` can read and
+trigger materialization but cannot alter dataset metadata or source definitions. Administrators and
+trusted scheduled jobs have owner-level rights.
 
 All dataset file paths are also constrained to `Portal:DatasetRootPath`. ACLs cannot grant access to a dataset record whose backing file is outside that configured root.
 
@@ -433,6 +437,7 @@ ALTER DATASET 'Sales Summary' IN FOLDER '/Finance'
     SET ACCESS = PUBLIC, TTL = '2h';
 
 GRANT VIEWER ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'Finance';
+GRANT REFRESH ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'DataOperations';
 GRANT EDITOR ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'FinanceAnalysts';
 GRANT OWNER  ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'FinanceAdmins';
 REVOKE EDITOR ON DATASET 'Sales Summary' IN FOLDER '/Finance' FROM GROUP 'FinanceAnalysts';
