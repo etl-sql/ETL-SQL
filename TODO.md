@@ -187,10 +187,17 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   is **Fatal** (the app `StopApplication()`s) unless the new `Portal:Dataset:AllowMachineFallback=true` dev
   opt-in is set (then a Warn). `PortalWebFactory` strips hosted services, so tests are unaffected. Tests:
   `DatasetAtRestKeyValidatorTests`.
-- [ ] **2i (follow-up). Version + rotate the at-rest key.** Store a non-secret **key version** on each
-  dataset (stamped at write, used at read), define first-run provisioning + backup/restore behavior, and
-  provide a **resumable rotation/re-encryption** procedure (old key → new key across all datasets). Also
-  absorbs the 2g legacy Password/KeyFile at-rest row migration.
+- [x] **2i (follow-up). Version + rotate the at-rest key.** *(done — v0.11.0)* Added nullable
+  `Dataset.AtRestKeyVersion` with an EF migration; portal writes stamp the configured non-secret
+  `AtRestKeyVersion`, and version-aware registry/viewer reads resolve either the current key or a
+  configured `PreviousAtRestKeys` entry. `LegacyAtRestKeyVersion` explicitly identifies unversioned rows
+  during the first rotation; leaving it unset stamps existing current-key rows without rewriting them.
+  Admin-only `POST /api/admin/datasets/rotate-at-rest-key` re-encrypts one guarded managed file at a time,
+  atomically updates its version, continues past failures, and is safe to rerun. Rotation also normalizes
+  stale Password/KeyFile metadata to portal-managed at-rest semantics. Startup validation checks current,
+  previous, and legacy version mappings. The administrator guide now defines first-run provisioning,
+  coordinated backup/restore, rotation, resume, verification, and old-key retirement. Tests cover
+  validation, previous-version reads, successful re-encryption, legacy stamping, and resumability.
 - [x] **2j. Authorize PUBLISH target folders and define system ownership.** *(done — v0.11.0)*
   Added a registry publish preflight that resolves the target folder and requires folder `Manage` before
   `PUBLISH DATASET` allocates a row. Interactive publications set `CreatedBy` to the caller; trusted
@@ -208,7 +215,7 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 
 ### Phase 3 — Verification deck (scripts + xUnit)
 
-- [ ] **Runnable example deck** `samples/08_Reporting/datasets/` + `README.md` (tiny inline/CSV seed; no
+- [x] **Runnable example deck** `samples/08_Reporting/datasets/` + `README.md` (tiny inline/CSV seed; no
   external deps; reuse keyfile at `samples/10_Kitchen_Sinks/test_key/`). Datasets deployed **separately**
   from the reports that consume them:
   - `01_deploy_datasets.etlsql` — CREATE `&sales_public` + `&sales_private`; ends with `SHOW DATASETS`.
@@ -219,9 +226,22 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
     ACL only; shows "not movable after publish."
   - `README.md` — manual portal walkthrough: 2nd user sees PUBLIC (folder read), 403 on PRIVATE, grant
     flips it, refresh permission, "copy the portal .parquet elsewhere → fails."
+  *(done — v0.11.0)* Added five parser-verified scripts with inline seed rows, separate producer and
+  consumer deployment instructions, an expected PRIVATE-denial case, and PASSWORD plus RSA KEYFILE
+  export/publish round trips. The portal runbook covers folder/read/grant behavior, independent Refresh
+  permission, at-rest-file non-portability, wrong-credential cleanup, secret-persistence inspection, and
+  the distinction between local syntax checks and identity-aware portal execution.
 - [ ] **Automated xUnit** — new `tests/ETL-SQL.Tests/Reporting/DatasetSecurityMatrixTests.cs` + extend
   `tests/ETL-SQL.ReportPortal.Tests/DatasetControllerTests.cs`. Build on `PortalIntegrationTests.cs`
   (real registry, ~920-1006) and crypto round-trips in `DatasetPhase2Tests.cs`:
+  *(in progress — v0.11.0)* Added the named security-matrix test file with deterministic portal-key,
+  PASSWORD transport, and generated RSA KEYFILE transport round trips. It asserts ciphertext differs
+  from plaintext and verifies swapped passwords plus missing/wrong private keys fail. Existing Phase 4,
+  controller, integration, storage-maintenance, viewer, validator, and rotation suites already cover
+  substantial access, refresh, publish, atomicity, folder lifecycle, and key-lifecycle rows below. The
+  controller suite now also proves that deleting an owning report leaves its PRIVATE dataset row in
+  place but removes the former report owner's implicit access. The remaining work is to consolidate the
+  uncovered portal/engine parity and persistence cases rather than duplicate those tests under new names.
   1. **Crypto portability (in-process — no 2nd machine):** at-rest key decrypts locally, swapped key
      throws; transport PASSWORD right/wrong; transport KEYFILE right/missing/wrong; ciphertext ≠
      plaintext. (Deterministic CI assertion on the Linux/keyfile path; Windows binds via DPAPI.)
@@ -259,10 +279,15 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 - [ ] Update `Docs/Architecture/Reporting.md` (already stale) + user-facing portal docs: at-rest-vs-
   transport model, "not movable after publish / keep your original," PUBLIC=folder-read /
   PRIVATE=grant, at-rest key backup requirement.
-- [ ] Document `EXPORT DATASET` and `PUBLISH DATASET` in `Docs/Reference/Grammar.md`,
+- [x] Document `EXPORT DATASET` and `PUBLISH DATASET` in `Docs/Reference/Grammar.md`,
   `Docs/Report_SQL_Guide.md`, keyword help, language-server/VS Code completion and syntax surfaces.
-  Include complete signatures, PASSWORD and KEYFILE examples, target-folder authorization, failure
-  behavior, and the fact that transport credentials are never persisted.
+  *(done — v0.11.0)* Added complete PASSWORD and KEYFILE signatures/examples, read and destination
+  `Manage` authorization requirements, global-name behavior, atomic failure/retry semantics, and explicit
+  transport-credential non-persistence. Corrected the stale Report-SQL claim that portal CREATE
+  PASSWORD/KEYFILE modes make the managed cache portable: portal storage always uses the portal at-rest
+  key, and portability is EXPORT→PUBLISH only. Added `$export-dataset` and `$publish-dataset` snippets,
+  expanded VS Code highlighting for dataset transport clauses, regenerated the syntax index, and updated
+  snippet-library coverage.
 - [ ] Document portal at-rest key provisioning, validation, backup/restore, key-version metadata,
   rotation/recovery, and the explicitly supported development fallback. Add an operator runbook for
   orphan reconciliation and interrupted rotation.

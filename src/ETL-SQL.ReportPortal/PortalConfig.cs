@@ -27,6 +27,22 @@ public class DatasetConfig
     /// </summary>
     public string? AtRestKey { get; set; }
 
+    /// <summary>Non-secret identifier stamped on datasets encrypted with <see cref="AtRestKey"/>.</summary>
+    public string AtRestKeyVersion { get; set; } = "v1";
+
+    /// <summary>
+    /// Older version-to-key mappings retained only while datasets are being rotated. Remove an entry
+    /// after no dataset references that version and backups made with it are no longer required.
+    /// </summary>
+    public Dictionary<string, string> PreviousAtRestKeys { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Version assigned to unversioned legacy rows during rotation. Leave unset when first adopting
+    /// version metadata without changing the key; set to the old version before the first key rotation.
+    /// </summary>
+    public string? LegacyAtRestKeyVersion { get; set; }
+
     /// <summary>
     /// Allow the host-bound ENCRYPT=MACHINE fallback when <see cref="AtRestKey"/> is unset. Production
     /// must leave this false: the portal refuses to start without a key. Set true only for

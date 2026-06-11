@@ -169,6 +169,7 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionDeliveryStatusService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.FolderPermissionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetPermissionService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyRotationService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptInspectionService>();
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetViewerService>();

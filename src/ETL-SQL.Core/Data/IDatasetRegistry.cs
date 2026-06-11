@@ -27,6 +27,9 @@ namespace ETL_SQL.Core.Data
         public int?                  FolderId        { get; set; }
         public int?                  CreatedBy       { get; set; }
         public string                ParquetFilePath { get; set; } = "";
+        public string?               AtRestKeyVersion { get; set; }
+        /// <summary>Resolved in-memory decryption key; registry implementations must never persist it.</summary>
+        public string?               AtRestDecryptionKey { get; set; }
         public int?                  OwningReportId  { get; set; }
         public string                SourceQuery     { get; set; } = "";
         public DatasetAccessLevel    AccessLevel     { get; set; } = DatasetAccessLevel.Private;

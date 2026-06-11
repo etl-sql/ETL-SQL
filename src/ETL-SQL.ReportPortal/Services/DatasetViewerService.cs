@@ -194,7 +194,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
     // credential we don't have at read time — surfaced as a clear, viewable error.
     private Dictionary<string, string>? ResolveAtRestDecryptOptions(Dataset dataset)
     {
-        var atRestKey = config.Dataset.AtRestKey;
+        var atRestKey = ResolveConfiguredKey(dataset.AtRestKeyVersion);
         if (!string.IsNullOrWhiteSpace(atRestKey))
             return new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = atRestKey };
 
@@ -205,6 +205,23 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
             _ => throw new InvalidOperationException(
                 $"Dataset '{dataset.Name}' was encrypted at rest with a {dataset.EncryptionMode} credential and no portal at-rest key is configured, so it cannot be viewed. Configure Portal:Dataset:AtRestKey or re-materialise the dataset.")
         };
+    }
+
+    private string? ResolveConfiguredKey(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(config.Dataset.AtRestKey))
+            return null;
+
+        if (string.IsNullOrWhiteSpace(version)
+            || version.Equals(config.Dataset.AtRestKeyVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            return config.Dataset.AtRestKey;
+        }
+
+        return config.Dataset.PreviousAtRestKeys.TryGetValue(version, out var previousKey)
+            ? previousKey
+            : throw new InvalidOperationException(
+                $"Dataset key version '{version}' is not configured. Restore that version's key or complete key rotation.");
     }
 
     private static async Task<List<Dictionary<string, object?>>> ReadParquetAsync(

@@ -61,6 +61,26 @@ public sealed class DatasetViewerServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task View_PreviousKeyVersion_UsesConfiguredPreviousKey()
+    {
+        var oldKey = Convert.ToBase64String(Enumerable.Repeat((byte)4, 32).ToArray());
+        var newKey = Convert.ToBase64String(Enumerable.Repeat((byte)5, 32).ToArray());
+        var parquet = WriteParquet(
+            "ds_previous.parquet",
+            new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = oldKey });
+
+        await using var db = NewDb(out var config, newKey);
+        config.Dataset.AtRestKeyVersion = "v2";
+        config.Dataset.PreviousAtRestKeys["v1"] = oldKey;
+        var id = AddDataset(db, "#previous", parquet, DatasetEncryptionMode.MachineBound);
+        (await db.Datasets.SingleAsync(d => d.Id == id)).AtRestKeyVersion = "v1";
+        await db.SaveChangesAsync();
+
+        var rows = (await NewViewer(db, config).QueryAsync(id, 1, 100, null, null, null, [])).Rows.ToList();
+        AssertSeedRows(rows);
+    }
+
+    [Fact]
     public async Task View_NoKey_MachineEncrypted_Decrypts()
     {
         var parquet = WriteParquet("ds_machine.parquet",

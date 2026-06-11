@@ -76,7 +76,12 @@ namespace ETL_SQL.Engine.Handlers
                     _logger.Debug(
                         "Dataset '{Name}' is within TTL (last refresh: {Time}). Loading from Parquet cache.",
                         stmt.TempTableName, existing!.LastRefresh);
-                    await LoadFromParquet(existing.ParquetFilePath, stmt.TempTableName, stmt, context);
+                    await LoadFromParquet(
+                        existing.ParquetFilePath,
+                        stmt.TempTableName,
+                        stmt,
+                        context,
+                        existing.AtRestDecryptionKey);
                     RegisterReportContext(stmt, context);
                     await context.EnsureCatalogMetadataImportedAsync(stmt.SourceQuery.GetSourceTables());
                     new LineageManager(context.LineageTracker).RecordCreateDatasetLineage(stmt);
@@ -245,14 +250,18 @@ namespace ETL_SQL.Engine.Handlers
 
         private async Task LoadFromParquet(
             string parquetPath, string tempTableName,
-            CreateDatasetStatement stmt, IExecutionContext context)
+            CreateDatasetStatement stmt, IExecutionContext context,
+            string? resolvedAtRestKey = null)
         {
             var connAlias = $"__ds_load_{Guid.NewGuid():N}__";
 
             var connStmt = new CreateConnectionStatement(
                 connAlias, "PARQUET",
                 new LiteralExpression(parquetPath, TokenType.STRING_LITERAL),
-                BuildParquetOptions(stmt, includeCompression: false, (context as Evaluator)?.DatasetAtRestKey));
+                BuildParquetOptions(
+                    stmt,
+                    includeCompression: false,
+                    resolvedAtRestKey ?? (context as Evaluator)?.DatasetAtRestKey));
 
             var selectStmt = new SelectStatement(
                 new List<SelectColumn> { new(new IdentifierExpression("*"), null, null) },

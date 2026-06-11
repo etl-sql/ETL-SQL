@@ -1,0 +1,7 @@
+-- Expected result: USE DATASET fails without revealing whether the private
+-- dataset exists. Run as a non-owner who has no explicit dataset grant.
+
+USE DATASET &sales_private;
+
+-- This statement must not execute.
+SELECT * FROM &sales_private;

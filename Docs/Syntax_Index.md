@@ -1183,6 +1183,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `FUNCTION` | DDL | Canonical language token |
 | `INDEX` | DDL | Canonical language token |
 | `KEY` | DDL | Canonical language token |
+| `LINEAGE` | DDL | Canonical language token |
 | `NAVIGATION` | DDL | Canonical language token |
 | `PAGE` | DDL | Canonical language token |
 | `PGP_KEY_PAIR` | DDL | Canonical language token |
@@ -1193,9 +1194,11 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `RETURNS` | DDL | Canonical language token |
 | `ROLLBACK` | DDL | Canonical language token |
 | `SCHEMA` | DDL | Canonical language token |
+| `SETS` | DDL | Canonical language token |
 | `SSH_KEY_PAIR` | DDL | Canonical language token |
 | `STYLE` | DDL | Canonical language token |
 | `TABLE` | DDL | Canonical language token |
+| `TAG` | DDL | Canonical language token |
 | `TEMPLATE` | DDL | Canonical language token |
 | `TRAN` | DDL | Canonical language token |
 | `TRANSACTION` | DDL | Canonical language token |
@@ -1282,8 +1285,6 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `FOREACH_PAGE_SIZE` | Settings & Engine Configuration | Canonical language token |
 | `INTERACTIVE_MODE` | Settings & Engine Configuration | Canonical language token |
 | `JOIN_SPILL_THRESHOLD` | Settings & Engine Configuration | Canonical language token |
-| `LINEAGE_IMPORT_CATALOG` | Settings & Engine Configuration | Canonical language token |
-| `LINEAGE_NAMESPACE` | Settings & Engine Configuration | Canonical language token |
 | `LINT` | Settings & Engine Configuration | Canonical language token |
 | `MAX_FILE_OPERATIONS` | Settings & Engine Configuration | Canonical language token |
 | `MAX_GENERATE_ROWS` | Settings & Engine Configuration | Canonical language token |
@@ -1753,7 +1754,6 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `KAFKA` | Connector | Canonical connector token |
 | `MOCKDB` | Connector | Canonical connector token |
 | `MONGODB` | Connector | Canonical connector token |
-| `NEO4J` | Connector | Canonical connector token |
 | `MSSQL` | Connector | Canonical connector token |
 | `ODBC` | Connector | Canonical connector token |
 | `ORACLE` | Connector | Canonical connector token |
@@ -1816,6 +1816,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `DECOMPRESS_FILE` | Function | Canonical built-in function |
 | `DEGREES` | Function | Canonical built-in function |
 | `DENSE_RANK` | Function | Canonical built-in function |
+| `DIFFERENCE` | Function | Canonical built-in function |
 | `DIRECTORY_EXISTS` | Function | Canonical built-in function |
 | `DMETAPHONE` | Function | Canonical built-in function |
 | `DMETAPHONE_ALT` | Function | Canonical built-in function |

@@ -1413,9 +1413,15 @@ CREATE DATASET &<name>
 AS ( SELECT ... );
 ```
 
-### Encryption modes
+### Encryption and portability
 
-| Mode | Description |
+In portal hosting, every managed cache is encrypted with the portal at-rest key. The `ENCRYPT` clause on
+`CREATE DATASET` is transport intent only; it does not make the managed portal file directly portable.
+Use `EXPORT DATASET`, then `PUBLISH DATASET`, to move a snapshot between portals.
+
+In standalone execution without a portal registry, the clause is applied directly:
+
+| Mode | Standalone behavior |
 |------|-------------|
 | `ENCRYPT = MACHINE` | Encrypts using a machine-bound key (DPAPI on Windows; OS keyring on Linux/macOS). No password or key file needed. Snapshot can only be decrypted on the same machine. |
 | `ENCRYPT = PASSWORD, PASSWORD = '...'` | AES encryption with a user-supplied password. Portable — can be decrypted on any machine with the password. |
@@ -1459,6 +1465,62 @@ CREATE DATASET &sales_keyfile
 | `PASSWORD = '<password>'` | Required when `ENCRYPT = PASSWORD` | Password for AES encryption. |
 | `KEYFILE = '<path>'` | Required when `ENCRYPT = KEYFILE` | Absolute path to the AES key file. Linter raises an error if `ENCRYPT = KEYFILE` but `KEYFILE` is absent. |
 | `AS ( SELECT ... )` | Yes | The query to execute. Must be the last clause before the semicolon. |
+
+---
+
+## EXPORT DATASET / PUBLISH DATASET
+
+Use this two-step workflow to move a materialized dataset between portals:
+
+1. `EXPORT DATASET` decrypts the source portal cache and creates a portable copy encrypted with a
+   one-time transport credential.
+2. Transfer the encrypted file and credential separately.
+3. `PUBLISH DATASET` decrypts that copy once and re-encrypts it with the destination portal's at-rest key.
+
+Transport credentials are never persisted. The published copy is portal-managed and is not itself
+portable; keep the original export for subsequent transfers.
+
+### Password transport
+
+```sql
+EXPORT DATASET &sales_snap
+  TO 'C:\Transfer\sales_snap.parquet'
+  ENCRYPT = PASSWORD
+  PASSWORD = 'one-time-transport-secret';
+
+PUBLISH DATASET
+  FROM 'C:\Transfer\sales_snap.parquet'
+  AS &sales_imported
+  INTO '/Finance/Imported'
+  ACCESS PRIVATE
+  ENCRYPT = PASSWORD
+  PASSWORD = 'one-time-transport-secret';
+```
+
+### Key-file transport
+
+```sql
+EXPORT DATASET &sales_snap
+  TO 'C:\Transfer\sales_snap.parquet'
+  ENCRYPT = KEYFILE
+  KEYFILE = 'C:\Transfer\keys\dataset_transport.pub';
+
+PUBLISH DATASET
+  FROM 'C:\Transfer\sales_snap.parquet'
+  AS &sales_imported
+  INTO '/Finance/Imported'
+  ACCESS PUBLIC
+  ENCRYPT = KEYFILE
+  KEYFILE = 'C:\Transfer\keys\dataset_transport';
+```
+
+The key files must match the engine's supported key-file encryption format. `EXPORT DATASET` requires
+read access to the source dataset. `PUBLISH DATASET` requires an existing destination folder and
+folder `Manage` permission. Dataset names are globally unique. `ACCESS` defaults to `PRIVATE`.
+
+Both operations are failure-atomic: incomplete output is discarded, failed publish allocation is rolled
+back, and retrying the same global name is supported. Passwords, key paths containing credentials, and
+portal at-rest keys must not be printed or logged.
 
 ---
 

@@ -54,6 +54,13 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 - Reuses the view directly as a table visual source and inside an aggregate chart query.
 - Demonstrates that views are query aliases, not materialized report datasets.
 
+### [08_Reporting/datasets/README.md](../samples/08_Reporting/datasets/README.md)
+**Purpose**: Portal dataset security and portable-transfer verification deck.
+- Uses inline rows to deploy separate PUBLIC and PRIVATE datasets without an external data source.
+- Verifies cross-folder consumption, private grants and denials, and independent refresh permission.
+- Exercises PASSWORD and RSA KEYFILE `EXPORT DATASET` to `PUBLISH DATASET` round trips.
+- Requires portal execution for registry, folder, identity, and ACL behavior; local tests parser-check all five scripts.
+
 ### [10_Kitchen_Sinks/report_kitchen_sink.rptsql](../samples/10_Kitchen_Sinks/report_kitchen_sink.rptsql)
 **Purpose**: Full Report-SQL reference report for release readiness and visual/runtime coverage.
 - Demonstrates the extended visual set, named styles, datasets, buttons, navigation, containers, interactions, and advanced charts.

@@ -76,7 +76,11 @@ namespace ETL_SQL.Engine.Handlers
                     ConsoleColor.Yellow);
             }
 
-            await LoadFromParquet(existing.ParquetFilePath, stmt.DatasetName, context, (context as Evaluator)?.DatasetAtRestKey);
+            await LoadFromParquet(
+                existing.ParquetFilePath,
+                stmt.DatasetName,
+                context,
+                existing.AtRestDecryptionKey ?? (context as Evaluator)?.DatasetAtRestKey);
 
             if (context is IReportContext reportCtx)
             {

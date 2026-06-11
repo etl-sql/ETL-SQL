@@ -48,4 +48,41 @@ public class DatasetAtRestKeyValidatorTests
         var shortKey = Convert.ToBase64String(new byte[16]);   // only 128-bit
         Assert.Equal(Sev.Fatal, Validate(shortKey, allowFallback: false));
     }
+
+    [Fact]
+    public void PreviousKey_MustBeStrongAndUseDifferentVersion()
+    {
+        var key = Convert.ToBase64String(new byte[32]);
+        var duplicate = new DatasetConfig
+        {
+            AtRestKey = key,
+            AtRestKeyVersion = "v2",
+            PreviousAtRestKeys = new() { ["v2"] = key }
+        };
+        Assert.Equal(Sev.Fatal, DatasetAtRestKeyValidator.Validate(duplicate).Severity);
+
+        var weak = new DatasetConfig
+        {
+            AtRestKey = key,
+            AtRestKeyVersion = "v2",
+            PreviousAtRestKeys = new() { ["v1"] = Convert.ToBase64String(new byte[16]) }
+        };
+        Assert.Equal(Sev.Fatal, DatasetAtRestKeyValidator.Validate(weak).Severity);
+    }
+
+    [Fact]
+    public void LegacyVersion_MustResolveToConfiguredKey()
+    {
+        var key = Convert.ToBase64String(new byte[32]);
+        var config = new DatasetConfig
+        {
+            AtRestKey = key,
+            AtRestKeyVersion = "v2",
+            LegacyAtRestKeyVersion = "v1"
+        };
+
+        Assert.Equal(Sev.Fatal, DatasetAtRestKeyValidator.Validate(config).Severity);
+        config.PreviousAtRestKeys["v1"] = Convert.ToBase64String(new byte[32]);
+        Assert.Equal(Sev.Ok, DatasetAtRestKeyValidator.Validate(config).Severity);
+    }
 }

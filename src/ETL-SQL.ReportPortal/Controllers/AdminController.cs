@@ -20,10 +20,35 @@ public class AdminController(
     AuditService             audit,
     PortalConfig             config,
     SubscriptionDeliveryStatusService deliveryStatus,
+    DatasetAtRestKeyRotationService datasetKeyRotation,
     IHostApplicationLifetime lifetime) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    [HttpPost("datasets/rotate-at-rest-key")]
+    public async Task<IActionResult> RotateDatasetAtRestKey(CancellationToken cancellationToken)
+    {
+        DatasetKeyRotationResult result;
+        try
+        {
+            result = await datasetKeyRotation.RotateAsync(cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+
+        await audit.LogAsync(
+            CurrentUserId,
+            "ROTATE_DATASET_AT_REST_KEY",
+            "Dataset",
+            null,
+            $"TargetVersion={result.TargetVersion}; Rotated={result.Rotated}; " +
+            $"AlreadyCurrent={result.AlreadyCurrent}; Failed={result.FailedDatasets.Count}");
+
+        return Ok(result);
+    }
 
     // ── Users ─────────────────────────────────────────────────────────────────
 

@@ -47,8 +47,6 @@ namespace ETL_SQL.Engine.Handlers
                     null, stmt.Line, stmt.Column);
 
             var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
-            var atRestKey = (context as Evaluator)?.DatasetAtRestKey;
-
             var existing = await registry.Lookup(stmt.DatasetName, callerCtx);
             if (existing == null)
                 throw new ExecutionException(
@@ -59,7 +57,8 @@ namespace ETL_SQL.Engine.Handlers
                     $"EXPORT DATASET '{stmt.DatasetName}': the dataset has not been materialised yet. Ask the owner to refresh it.",
                     null, stmt.Line, stmt.Column);
 
-            var atRest    = new EncryptionOptions(BuildAtRestOptions(atRestKey));
+            var atRest    = new EncryptionOptions(BuildAtRestOptions(
+                existing.AtRestDecryptionKey ?? (context as Evaluator)?.DatasetAtRestKey));
             var transport = new EncryptionOptions(BuildTransportOptions(stmt));
             var targetPath = context.ResolvePath(stmt.TargetPath);
 

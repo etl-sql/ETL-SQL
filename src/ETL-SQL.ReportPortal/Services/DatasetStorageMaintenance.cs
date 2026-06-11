@@ -19,7 +19,8 @@ public static class DatasetStorageMaintenance
 
         foreach (var path in Directory.EnumerateFiles(root, ".*", SearchOption.TopDirectoryOnly)
                      .Where(p => Path.GetFileName(p).Contains(".tmp-", StringComparison.OrdinalIgnoreCase)
-                              || Path.GetFileName(p).Contains(".bak-", StringComparison.OrdinalIgnoreCase)))
+                              || Path.GetFileName(p).Contains(".bak-", StringComparison.OrdinalIgnoreCase)
+                              || Path.GetFileName(p).StartsWith(".rotate-", StringComparison.OrdinalIgnoreCase)))
         {
             TryDelete(path, logger, "abandoned dataset staging file");
         }

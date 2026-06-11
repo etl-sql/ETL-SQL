@@ -2364,6 +2364,56 @@ AS ( SELECT ... );
 
 Interval format: `<n>s`, `<n>m`, `<n>h`, `<n>d`.
 
+#### A.2.1 `EXPORT DATASET`
+
+Produces a portable encrypted copy of a materialized portal dataset. The portal decrypts its managed
+at-rest cache and encrypts the export with the supplied transport credential. The credential is used
+only for this operation and is never stored in dataset metadata, generated scripts, or scheduled jobs.
+
+```sql
+EXPORT DATASET &<name>
+  TO '<absolute-output-path>'
+  ENCRYPT = PASSWORD
+  PASSWORD = '<transport-password>';
+
+EXPORT DATASET &<name>
+  TO '<absolute-output-path>'
+  ENCRYPT = KEYFILE
+  KEYFILE = '<absolute-key-file-path>';
+```
+
+`&<name>`, `TO`, one supported `ENCRYPT` mode, and its matching credential are required. The caller must
+be able to read the dataset. Output is written to a staging file and atomically committed; a failed export
+does not replace an existing destination.
+
+#### A.2.2 `PUBLISH DATASET`
+
+Imports a portable dataset export into a portal. The source is decrypted once with its transport
+credential and re-encrypted with the destination portal's managed at-rest key.
+
+```sql
+PUBLISH DATASET
+  FROM '<absolute-export-path>'
+  AS &<globally-unique-name>
+  INTO '<portal-folder-path>'
+  [ACCESS PUBLIC | PRIVATE]
+  ENCRYPT = PASSWORD
+  PASSWORD = '<transport-password>';
+
+PUBLISH DATASET
+  FROM '<absolute-export-path>'
+  AS &<globally-unique-name>
+  INTO '<portal-folder-path>'
+  [ACCESS PUBLIC | PRIVATE]
+  ENCRYPT = KEYFILE
+  KEYFILE = '<absolute-key-file-path>';
+```
+
+`ACCESS` defaults to `PRIVATE`. The destination folder must exist and the caller must have `Manage` on
+it. The name must be globally unique. A failed publish removes its allocated catalog row and partial
+files, so the same name can be retried. The published portal copy is not transport-portable; retain the
+original export if it may need to move again.
+
 ### A.3 `CREATE VISUAL`
 ```sql
 CREATE VISUAL <name> AS <type> (

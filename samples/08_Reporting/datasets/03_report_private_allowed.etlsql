@@ -1,0 +1,7 @@
+-- Run as the dataset owner or a user with an explicit read grant.
+
+USE DATASET &sales_private;
+
+SELECT sale_id, region, amount
+FROM &sales_private
+ORDER BY sale_id;

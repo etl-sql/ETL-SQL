@@ -47,6 +47,15 @@ namespace ETL_SQL.ReportPortal.Services
             }
 
             existing.ParquetFilePath = ResolveDatasetPathOrThrow(metadata.ParquetFilePath);
+            if (!string.IsNullOrWhiteSpace(metadata.ParquetFilePath))
+            {
+                existing.AtRestKeyVersion = metadata.AtRestKeyVersion
+                    ?? (!string.IsNullOrWhiteSpace(_config.Dataset.AtRestKey)
+                        ? _config.Dataset.AtRestKeyVersion
+                        : null);
+                if (!string.IsNullOrWhiteSpace(_config.Dataset.AtRestKey))
+                    existing.EncryptionMode = ETL_SQL.Core.DatasetEncryptionMode.MachineBound;
+            }
             existing.OwningReportId = metadata.OwningReportId;
             existing.CreatedBy = metadata.CreatedBy;
             // Link to a folder for PUBLIC access checks: from the owning report when there is one,
@@ -348,7 +357,7 @@ namespace ETL_SQL.ReportPortal.Services
             }
         }
 
-        private static DatasetMetadata Map(Dataset d, string parquetFilePath)
+        private DatasetMetadata Map(Dataset d, string parquetFilePath)
         {
             return new DatasetMetadata
             {
@@ -358,6 +367,8 @@ namespace ETL_SQL.ReportPortal.Services
                 FolderId = d.FolderId,
                 CreatedBy = d.CreatedBy,
                 ParquetFilePath = parquetFilePath,
+                AtRestKeyVersion = d.AtRestKeyVersion,
+                AtRestDecryptionKey = ResolveAtRestKey(d.AtRestKeyVersion),
                 OwningReportId = d.OwningReportId,
                 SourceQuery = d.SourceQuery,
                 AccessLevel = d.AccessLevel,
@@ -370,6 +381,26 @@ namespace ETL_SQL.ReportPortal.Services
                 CreatedAt = d.CreatedAt,
                 UpdatedAt = d.UpdatedAt
             };
+        }
+
+        private string? ResolveAtRestKey(string? version)
+        {
+            if (string.IsNullOrWhiteSpace(_config.Dataset.AtRestKey))
+                return null;
+
+            var effectiveVersion = version
+                ?? _config.Dataset.LegacyAtRestKeyVersion
+                ?? _config.Dataset.AtRestKeyVersion;
+            if (effectiveVersion.Equals(
+                    _config.Dataset.AtRestKeyVersion,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return _config.Dataset.AtRestKey;
+            }
+
+            return _config.Dataset.PreviousAtRestKeys.TryGetValue(effectiveVersion, out var key)
+                ? key
+                : null;
         }
     }
 }

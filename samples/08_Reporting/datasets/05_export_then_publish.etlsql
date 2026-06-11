@@ -1,0 +1,42 @@
+-- Portal-mode transfer verification.
+--
+-- Before running, replace C:\ETL-SQL-Dataset-Deck with an absolute writable
+-- directory. Replace the key paths if the repository is checked out elsewhere.
+-- Transport credentials are examples only and must be supplied securely in
+-- production automation.
+
+-- Password transport: export, publish under a globally unique name, then use
+-- the published portal copy without supplying the transport password again.
+EXPORT DATASET &sales_public
+    TO 'C:\ETL-SQL-Dataset-Deck\sales-public-password.parquet.enc'
+    ENCRYPT = PASSWORD
+    PASSWORD = 'deck-password-change-me';
+
+PUBLISH DATASET
+    FROM 'C:\ETL-SQL-Dataset-Deck\sales-public-password.parquet.enc'
+    AS &sales_public_password_copy
+    INTO '/Dataset Deck/Imports'
+    ACCESS PRIVATE
+    ENCRYPT = PASSWORD
+    PASSWORD = 'deck-password-change-me';
+
+USE DATASET &sales_public_password_copy;
+SELECT * FROM &sales_public_password_copy ORDER BY sale_id;
+
+-- Key-file transport: EXPORT uses the public key; PUBLISH uses the matching
+-- private key. The repository test key is for samples and tests only.
+EXPORT DATASET &sales_public
+    TO 'C:\ETL-SQL-Dataset-Deck\sales-public-keyfile.parquet.enc'
+    ENCRYPT = KEYFILE
+    KEYFILE = 'C:\ETL-SQL\samples\10_Kitchen_Sinks\test_key\id_rsa.pub';
+
+PUBLISH DATASET
+    FROM 'C:\ETL-SQL-Dataset-Deck\sales-public-keyfile.parquet.enc'
+    AS &sales_public_keyfile_copy
+    INTO '/Dataset Deck/Imports'
+    ACCESS PRIVATE
+    ENCRYPT = KEYFILE
+    KEYFILE = 'C:\ETL-SQL\samples\10_Kitchen_Sinks\test_key\id_rsa';
+
+USE DATASET &sales_public_keyfile_copy;
+SELECT * FROM &sales_public_keyfile_copy ORDER BY sale_id;

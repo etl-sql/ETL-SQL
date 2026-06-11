@@ -237,6 +237,79 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.OK, patchRes.StatusCode);
     }
 
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task PrivateDataset_OrphanedOwningReport_DeniesFormerReportOwner()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var username = $"orphan_owner_{suffix}";
+
+        var userRes = await AuthPost(adminToken, "/api/admin/users", new
+        {
+            username,
+            email = $"{username}@test.local",
+            password = "Orphan@1234!",
+            role = "Viewer"
+        });
+        userRes.EnsureSuccessStatusCode();
+        var userId = (await userRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        var ownerToken = await LoginAndChangePasswordAsync(username, "Orphan@1234!", "Orphan@Changed9!");
+
+        int reportId;
+        string folderPath;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var folder = new Folder
+            {
+                Name = $"orphan_folder_{suffix}",
+                Path = $"/orphan_folder_{suffix}",
+                OwnerId = userId
+            };
+            db.Folders.Add(folder);
+            await db.SaveChangesAsync();
+
+            var report = new Report
+            {
+                FolderId = folder.Id,
+                Name = $"orphan_report_{suffix}",
+                ScriptPath = $"orphan_report_{suffix}.rptsql",
+                ScriptLastModified = DateTime.UtcNow,
+                CreatedBy = userId
+            };
+            db.Reports.Add(report);
+            await db.SaveChangesAsync();
+            reportId = report.Id;
+            folderPath = folder.Path;
+        }
+
+        var name = $"#orphan_private_{suffix}";
+        await RegisterDatasetAsync(
+            name,
+            folderPath,
+            DatasetAccessLevel.Private,
+            owningReportId: reportId);
+        var datasetId = await GetDatasetIdAsync(name, folderPath);
+
+        Assert.Equal(HttpStatusCode.OK, (await AuthGet(ownerToken, $"/api/datasets/{datasetId}")).StatusCode);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.Reports.Remove(await db.Reports.SingleAsync(r => r.Id == reportId));
+            await db.SaveChangesAsync();
+
+            var orphan = await db.Datasets.SingleAsync(d => d.Id == datasetId);
+            Assert.Null(orphan.OwningReportId);
+            Assert.Null(orphan.CreatedBy);
+        }
+
+        Assert.Equal(
+            HttpStatusCode.Forbidden,
+            (await AuthGet(ownerToken, $"/api/datasets/{datasetId}")).StatusCode);
+    }
+
     // ── 3. GET /api/datasets/{id}/rows — column schema preview ────────────────
 
     [Fact]

@@ -19,6 +19,18 @@ EXPORT #orders TO MyDB.dbo.OrdersArchive;
 -- Export to SFTP
 EXPORT #report TO SftpConn:'reports/daily.csv';
 
+-- Create a portable dataset copy with a one-time transport password
+EXPORT DATASET &sales
+TO 'C:\Transfer\sales.parquet'
+ENCRYPT = PASSWORD
+PASSWORD = 'transport-secret';
+
+-- Or encrypt the portable copy with a key file
+EXPORT DATASET &sales
+TO 'C:\Transfer\sales.parquet'
+ENCRYPT = KEYFILE
+KEYFILE = 'C:\Transfer\keys\dataset_transport.pub';
+
 -- Recover a published Orchestrator bundle
 EXPORT SCRIPT 'orch://finance-load@3/main.etlsql' TO 'C:\Recovered\finance-load';
 
@@ -60,6 +72,10 @@ WITH (
 - For database destinations, the target table must exist unless the connection supports auto-create.
 - SFTP, S3, and API connection types are supported as destinations.
 - To control column order or filter rows before export, `SELECT ... INTO #subset` first.
+- `EXPORT DATASET` is portal-only and requires dataset read access. It decrypts the managed cache and
+  creates a portable copy using the supplied PASSWORD or KEYFILE transport credential.
+- Dataset export credentials are operation-only and are never persisted. Output is committed atomically,
+  so a failure preserves any existing destination.
 - `EXPORT SCRIPT` preserves published bundle relative paths but does not decrypt or reveal secrets; recovered scripts may require credentials to be re-entered.
 - Explicit `PDF_MODE = HOSTED` and `PDF_MODE = BROWSER` require a `HOST` URL and a discoverable or configured installed browser; use `PDF_MODE = AUTO` to allow fallback to `STATIC`.
 - See: CREATE CONNECTION, SELECT

@@ -293,6 +293,7 @@ public class Dataset
     public int?               FolderId        { get; set; }         // portal folder for PUBLIC access checks; resolved from OwningReport.FolderId
     public int?               CreatedBy       { get; set; }         // publisher/owner when there is no OwningReport (e.g. PUBLISH DATASET)
     public string             ParquetFilePath { get; set; } = "";
+    public string?            AtRestKeyVersion { get; set; }
     public int?               OwningReportId  { get; set; }
     public Report?            OwningReport    { get; set; }
     public string             SourceQuery     { get; set; } = "";

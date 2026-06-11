@@ -1,0 +1,24 @@
+-- Deploy this producer script to portal folder /Dataset Deck/Producer.
+-- The portal persists both snapshots with its configured at-rest key.
+
+CREATE DATASET &sales_public
+    ACCESS PUBLIC
+    TTL = '1h'
+AS (
+    SELECT 1001 AS sale_id, 'North' AS region, 125.50 AS amount
+    UNION ALL
+    SELECT 1002 AS sale_id, 'South' AS region, 210.00 AS amount
+    UNION ALL
+    SELECT 1003 AS sale_id, 'West' AS region, 89.25 AS amount
+);
+
+CREATE DATASET &sales_private
+    ACCESS PRIVATE
+    TTL = '1h'
+AS (
+    SELECT 2001 AS sale_id, 'Internal' AS region, 500.00 AS amount
+    UNION ALL
+    SELECT 2002 AS sale_id, 'Forecast' AS region, 750.00 AS amount
+);
+
+SHOW DATASETS;

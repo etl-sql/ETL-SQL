@@ -447,7 +447,50 @@ DROP DATASET 'Sales Summary' IN FOLDER '/Finance';
 
 Use `&dataset` only for report-owned dataset definitions inside `.rptsql` files. Portal registry commands use string-literal catalog names plus `IN FOLDER` so they cannot be confused with engine `#temp` tables or report dataset declarations.
 
-### 6.5 Effective Permissions
+### 6.5 Dataset At-Rest Key Lifecycle
+
+Production portals require `Portal:Dataset:AtRestKey`, a base64 value decoding to at least 32 bytes.
+Generate it with a cryptographically secure random generator, store it in the portal's secret manager,
+and set a non-secret `Portal:Dataset:AtRestKeyVersion` such as `2026-01`. Back up the key, its version,
+`portal.db`, and the dataset directory together. Restoring only the database/files without the matching
+key makes the caches unreadable.
+
+`Portal:Dataset:AllowMachineFallback=true` is supported only for deliberate development/standalone use.
+It creates host-bound caches that cannot be restored on another host.
+
+To stamp existing unversioned datasets without changing the key:
+
+1. Configure the existing key and `AtRestKeyVersion`.
+2. Leave `LegacyAtRestKeyVersion` unset.
+3. Call `POST /api/admin/datasets/rotate-at-rest-key` as an administrator.
+
+To rotate from `v1` to `v2`:
+
+```json
+{
+  "Dataset": {
+    "AtRestKey": "<new-v2-base64-key>",
+    "AtRestKeyVersion": "v2",
+    "PreviousAtRestKeys": {
+      "v1": "<old-v1-base64-key>"
+    },
+    "LegacyAtRestKeyVersion": "v1",
+    "AllowMachineFallback": false
+  }
+}
+```
+
+Restart the portal, then call `POST /api/admin/datasets/rotate-at-rest-key`. Rotation processes datasets
+in stable ID order and commits each file and version independently. A failed dataset keeps its old file
+and version; rerun the same endpoint to resume. Readers and engine scripts can use both current and
+configured previous versions during this window.
+
+After the response reports no failures and every dataset row records `v2`, take a new backup, remove
+`LegacyAtRestKeyVersion`, and remove `v1` from `PreviousAtRestKeys`. Do not retire the old key until old
+backups have expired or their recovery procedure retains that key separately. Rotation audit entries
+record versions and counts only, never key material.
+
+### 6.6 Effective Permissions
 
 Admins can inspect resolved portal access without mentally joining users, groups, folders, reports, and ACL rows:
 
@@ -465,7 +508,7 @@ SHOW EFFECTIVE PERMISSIONS FOR REPORT 'Monthly Sales' INTO #effective;
 SHOW EFFECTIVE PERMISSIONS FOR FOLDER '/Finance' INTO #effective;
 ```
 
-### 6.6 Usage Metrics
+### 6.7 Usage Metrics
 
 Admins can inspect operational usage with `SHOW PORTAL USAGE METRICS FOR 30 DAYS` or `GET /api/admin/metrics/usage?days=30`. The response includes total report views, unique viewers, reports viewed, refresh failure count, average refresh duration, subscription delivery failures, and per-report rows with view counts, unique viewers, last view time, refresh status/error/duration, and subscription failure counts.
 
@@ -473,7 +516,7 @@ Admins can inspect operational usage with `SHOW PORTAL USAGE METRICS FOR 30 DAYS
 SHOW PORTAL USAGE METRICS FOR 30 DAYS INTO #usage;
 ```
 
-### 6.7 Report Dependencies
+### 6.8 Report Dependencies
 
 Use `SHOW REPORT DEPENDENCIES 'Report Name'` or `GET /api/reports/{id}/dependencies` to inspect the dependency view available from the report viewer. The response is permission-aware and includes the report identity, latest snapshot metadata, datasets found in the snapshot manifest, report-owned registered datasets, dataset refresh jobs, and source table references that can be parsed from the report script or dataset source queries.
 
@@ -483,7 +526,7 @@ SHOW REPORT DEPENDENCIES 'Monthly Sales' INTO #dependencies;
 
 Source connection values are derived from two-part object names such as `sales.Orders`: `sales` is reported as the connection and `Orders` as the object. Raw column-level lineage remains available through engine lineage commands such as `SHOW LINEAGE`; the portal dependency endpoint only reports lineage details that are already present in portal metadata or parseable script text.
 
-### 6.8 Catalog Search
+### 6.9 Catalog Search
 
 Use `SHOW CATALOG SEARCH '<term>'` or `GET /api/catalog/search?q=<term>` to search visible folders and reports. Search is permission-aware: admins search the full catalog, while other users only see folders granted through group ACLs and reports inside those folders.
 
@@ -503,7 +546,7 @@ UNFAVORITE REPORT 'Monthly Sales' FOR USER 'john.doe';
 SHOW FAVORITES FOR USER 'john.doe' LIMIT 50 INTO #favorites;
 ```
 
-### 6.9 Share Links
+### 6.10 Share Links
 
 Share links are shortcuts, not permission bypasses. Resolving a share link still requires an authenticated portal user with access to the report's folder. Users without folder permission receive `403 Forbidden`, and revoked or expired links return `404 Not Found`.
 
@@ -525,7 +568,7 @@ SHOW SHARE LINKS FOR REPORT 'Monthly Sales' INTO #shares;
 REVOKE SHARE LINK 'share-token';
 ```
 
-### 6.10 Embed Tokens
+### 6.11 Embed Tokens
 
 Embed tokens are scoped report tokens intended for trusted internal applications. They are created by users with manage permission on the report and resolve through `GET /api/embed/{token}`. They do not grant portal administration rights and can be expired or revoked independently.
 
@@ -539,7 +582,7 @@ SHOW EMBED TOKENS FOR REPORT 'Monthly Sales' INTO #embed_tokens;
 REVOKE EMBED TOKEN 'embed-token';
 ```
 
-### 6.11 Saved Views
+### 6.12 Saved Views
 
 Saved views store a user's report parameter/filter state so common slices can be reopened without re-entering parameters. They are per-user by default; admins should treat shared curated variants as separate reports or publish-time defaults rather than hidden shared state.
 
@@ -553,7 +596,7 @@ SHOW SAVED VIEWS FOR REPORT 'Monthly Sales' INTO #views;
 DROP SAVED VIEW 'West Coast' FOR REPORT 'Monthly Sales';
 ```
 
-### 6.12 Alerts
+### 6.13 Alerts
 
 Alerts track threshold rules for KPI-style visuals such as cards and gauges. Alert ownership follows the creating user; admins can see all alerts. Delivery uses the same notification direction as subscriptions: a recipient and SMTP alias can be attached to the alert definition, and the evaluation runner can use that metadata when scheduled alert checks are enabled.
 
@@ -567,7 +610,7 @@ SHOW ALERTS FOR REPORT 'Monthly Sales' INTO #alerts;
 DROP ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales';
 ```
 
-### 6.13 Environment Promotion Pattern
+### 6.14 Environment Promotion Pattern
 
 Use ETL-SQL environment sets as the deployment boundary. Do not create a separate portal deployment language for dev/test/prod. Scripts should define or load the environment values first, activate the target set, then use the same portal admin commands for folders, grants, publishing, subscriptions, and refresh jobs.
 

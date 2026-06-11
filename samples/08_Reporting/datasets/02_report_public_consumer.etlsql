@@ -1,0 +1,8 @@
+-- Deploy this consumer to /Dataset Deck/Consumers, not the producer folder.
+-- Run as a user who can read the producer folder.
+
+USE DATASET &sales_public;
+
+SELECT sale_id, region, amount
+FROM &sales_public
+ORDER BY sale_id;
