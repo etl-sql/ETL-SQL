@@ -1,17 +1,17 @@
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace ETL_SQL.ReportPortal.Data.Migrations
 {
-    [DbContext(typeof(PortalDbContext))]
-    [Migration("20260611120000_AddDatasetRefreshPermission")]
+    /// <inheritdoc />
     public partial class AddDatasetRefreshPermission : Migration
     {
+        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Preserve existing meanings while inserting Refresh between Viewer and Editor.
+            // Data-only migration: a new Refresh permission is inserted between Viewer and Editor in the
+            // DatasetPermission enum. Renumber existing DatasetAcls grants to preserve their meaning.
             migrationBuilder.Sql(
                 """
                 UPDATE DatasetAcls
@@ -23,6 +23,7 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                 """);
         }
 
+        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             // Refresh-only grants degrade to Viewer when returning to the three-level model.
