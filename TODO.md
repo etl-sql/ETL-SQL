@@ -4,6 +4,224 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 
 ---
 
+## Enterprise Multi-User Hardening + Script-First Recovery
+
+> Status: **planned.**
+> Goal: prove that datasets, users, permissions, jobs, and subscriptions remain secure and correct under
+> concurrent users, process failure, permission changes, and clean-server recovery. Functional endpoint
+> coverage is not enough: enterprise readiness requires durable coordination, authorization at the time
+> work executes, recoverable cross-resource operations, and a script-first way to reconstruct the portal.
+>
+> Priority convention: **P0** security/data-exposure blocker, **P1** correctness/recovery required before
+> an enterprise claim, **P2** verification and operational hardening, **P3** larger enterprise capability
+> or an explicitly documented deployment boundary.
+
+### Priority 0 — Immediate security boundaries
+
+- [ ] **P0.1 Remove plaintext SMTP credentials from generated subscription scripts.**
+  `SubscriptionsController.GenerateJobScript` currently decrypts `SmtpConnection.EncryptedPassword` and
+  writes `PASSWORD = '...'` into a persistent `.etlsql` file. Replace this with a runtime secret
+  reference/resolver so generated job SQL contains only a non-secret SMTP alias or secret identifier.
+  Scan generated scripts, job rows, logs, exceptions, and exports for known credential markers.
+- [ ] **P0.2 Reauthorize every subscription at delivery time.**
+  A subscription is permission-checked when created, but its scheduled script can continue after its user
+  is disabled, removed from a group, or loses report/folder permission. Route delivery through a trusted
+  subscription executor that reloads the subscription owner, active state, report state, and current
+  permission immediately before export/send. Denied delivery must be recorded without exposing report
+  data and must not be retried as a transient SMTP failure.
+- [ ] **P0.3 Make privilege reduction effective for issued access tokens.**
+  JWT validation currently reloads `User.IsActive` but trusts role claims minted at login. Add a
+  security/version stamp or reload current roles during token validation so Admin/Publisher/
+  OrchestratorManager removal takes effect immediately. Password reset, explicit token revocation, role
+  change, and group/permission changes need clearly defined access-token invalidation semantics.
+  Include refresh tokens explicitly: the `RefreshToken` plumbing already exists, so define what logout,
+  account disable, password reset, and role change do to outstanding refresh tokens (revocation and
+  rotation-on-use), not just to access tokens.
+- [ ] **P0.4 Govern anonymous share links and embed tokens like delivery (the P0.2 problem in another
+  costume).** `ReportShareLink` resolution is anonymous (`ReportsController.ResolveShareLink`,
+  `[AllowAnonymous]`), and a link created by a user who is later disabled or loses folder permission
+  keeps resolving. Reauthorize against the creator's current state at resolve time, add expiry defaults,
+  revoke on creator disable/demotion, assert token entropy, provide an admin inventory of all
+  outstanding anonymous links/embed tokens, and audit anonymous views. (P1.8 only excludes these tokens
+  from configuration export — nothing covers their runtime semantics.)
+- [ ] **P0.5 Decide and secure the alert delivery path.** `ReportAlert` entities exist but have no
+  server-side delivery service today (CRUD-only). Either bring alert delivery into the trusted
+  executor/reauthorization boundary of P0.2 (alerts that email must never embed SMTP secrets and must
+  recheck permission at send time) or explicitly document alerts as browser-side-only and out of P0.2
+  scope. An undecided delivery path is how the persisted-SMTP-credential mistake happens twice.
+
+### Priority 1 — Multi-user correctness and recoverability
+
+- [ ] **P1.1 Add a durable per-job execution lease.**
+  Multiple Orchestrator instances can observe the same due job and execute it. Acquire a database-backed
+  lease/claim before starting a scheduled run, include owner/expiry/heartbeat fields, and safely reclaim
+  abandoned leases. Prove two scheduler processes produce one execution, including crash and clock-skew
+  cases. The existing global throttle is capacity control, not duplicate-execution prevention. Note:
+  SQLite's single-writer model constrains what a database-backed lease can promise across processes —
+  design the lease against that limit and keep it consistent with the P3.1 topology decision.
+- [ ] **P1.2 Make subscription create/update/delete recoverable across portal DB, job DB, and files.**
+  These operations currently commit independent resources in sequence. Introduce an operation record or
+  transactional outbox plus idempotent reconciliation so crashes cannot leave orphan rows, plaintext or
+  stale scripts, or active jobs for deleted subscriptions. Updates must use atomic file replacement.
+- [ ] **P1.3 Add optimistic concurrency to administrator-managed resources.**
+  Add row versions/ETags to users, groups, folders, ACLs, reports, datasets, jobs, subscriptions, and SMTP
+  definitions. Simultaneous edits must return a conflict with current state rather than silently applying
+  last-write-wins behavior. Bulk operations need partial-failure and retry semantics.
+- [ ] **P1.4 Define durable portal execution state and the supported deployment topology.**
+  `ExecutionJobService`, active-refresh suppression, session cache, export rate limits, and execution
+  gates are process-local. Either make job/status/refresh coordination durable and shared, or explicitly
+  limit the supported portal topology to one instance. Restarts must not report vanished work as success,
+  and duplicate refreshes from separate processes must be prevented.
+- [ ] **P1.5 Fix ownership lifecycle and folder-owner semantics.**
+  `Folder.OwnerId` is recorded but does not grant effective permission. Decide whether ownership implies
+  Manage or remove the misleading field. Add explicit ownership transfer/reassignment for folders,
+  reports, datasets, subscriptions, alerts, and other user-owned objects before deleting a user. Define
+  behavior for LDAP users and groups that disappear during synchronization.
+- [ ] **P1.6 Make audit recording part of the operation contract.**
+  Mutations and their audit rows are generally separate commits. Ensure security-sensitive changes cannot
+  succeed without a durable audit event, add operation/correlation IDs for background work, and define
+  retention/export. Decide whether enterprise mode requires append-only external export or tamper-evident
+  hash chaining rather than relying only on the mutable portal database.
+
+### Priority 1 — Script-first clean-server reconstruction
+
+- [ ] **P1.7 Add `EXPORT PORTAL CONFIGURATION` as an admin-only ETL-SQL operation.**
+  Export the current declarative setup as a readable, versioned, idempotent `.etlsql` bootstrap script.
+  Emit logical names and paths rather than database IDs, in dependency order:
+  portal settings that are safe to export; groups; users; group memberships; folders; folder ACLs;
+  reports/publication references; dataset metadata and ACLs; SMTP aliases; jobs; subscriptions; alerts;
+  saved administrative definitions; and other scriptable portal resources discovered during inventory.
+  Do not silently omit an unsupported resource: produce an export summary listing emitted, skipped,
+  runtime-only, and secret-required items.
+- [ ] **P1.8 Exclude secrets and ephemeral/security artifacts from configuration export.**
+  Never export password hashes, encrypted ciphertext, JWT/dataset-at-rest keys, SMTP passwords,
+  Orchestrator API keys, refresh/share/embed tokens, sessions, job history, audit rows, cached dataset
+  contents, or snapshots as configuration. Emit explicit placeholders such as
+  `${INITIAL_ADMIN_PASSWORD}`, `${SMTP_CORPORATE_PASSWORD}`, and `${ORCHESTRATOR_API_KEY}` with a generated
+  requirements header. Prefer environment/secret-provider references so an administrator does not have
+  to place plaintext directly in the bootstrap script.
+- [ ] **P1.9 Add deterministic import, validation, and dry-run behavior.**
+  The exported script must support `SET WHAT_IF ON`, report missing secrets and conflicting objects before
+  mutation, and be safe to rerun. Define create/update/skip behavior explicitly; do not depend on source
+  integer IDs. Validate referential order and fail closed when a named folder, group, report, SMTP alias,
+  or dataset source is unavailable.
+- [ ] **P1.10 Separate configuration reconstruction from data/content backup.**
+  A bootstrap script reconstructs configuration, not encrypted datasets or generated report output.
+  Produce a companion manifest/runbook identifying report scripts/bundles and portable dataset exports
+  that must be copied or published separately. Existing portal and Orchestrator database/file backups
+  remain the exact-state disaster-recovery path; configuration export is the auditable clean-start path.
+- [ ] **P1.11 Prove clean-server round-trip reconstruction.**
+  Seed a portal with multiple users/groups, overlapping ACLs, reports, public/private datasets, refresh
+  grants, jobs, SMTP aliases, subscriptions, and disabled resources. Export configuration, initialize an
+  empty portal, supply test secrets, execute the script twice, and compare normalized effective state.
+  Assert that no source secret or security token appears in the export.
+
+### Priority 1 — Security plumbing
+
+- [ ] **P1.12 Add HTTP security headers and a Content-Security-Policy.**
+  Beyond HSTS and HTTPS redirection the portal sends no CSP, `X-Content-Type-Options`, or
+  `X-Frame-Options`/`frame-ancestors`. This matters doubly here: JWTs live in `sessionStorage`
+  (XSS-stealable — CSP is the mitigation) and the embed-token feature requires a deliberate
+  frame-ancestors policy instead of the default "frameable by anyone." Document the
+  sessionStorage-vs-httpOnly-cookie token storage decision alongside the header work.
+- [ ] **P1.13 Rate-limit auth endpoints and anonymous token resolution.**
+  Identity lockout protects local passwords only. There is no throttle on `/auth` (user enumeration,
+  refresh-token guessing) or on the anonymous share-link/embed resolve endpoints (token brute force);
+  the only rate limit in the codebase is the PDF export bucket. Use the built-in ASP.NET Core
+  `AddRateLimiter` on auth and anonymous endpoints. P2.6 covers workload fairness for authenticated
+  users; this item covers abuse of unauthenticated surfaces.
+- [ ] **P1.14 Define rotation and provisioning for the remaining runtime secrets.**
+  The dataset at-rest key now has startup validation and resumable rotation, but `Portal:Jwt:Secret`
+  and the Orchestrator API keys are plaintext config with no rotation procedure. JWT secret rotation
+  invalidates every session — document the procedure (or support a two-key validation ring), define
+  Orchestrator key rotation across both sides of the shared secret, and prefer environment/secret-
+  provider references for the running portal (P1.8 covers references only inside the export script).
+
+- [ ] **P2.1 Add a hosted-service integration lane.**
+  `PortalWebFactory` removes every `IHostedService`, so normal portal API tests do not exercise startup
+  validation, polling, reconciliation, cleanup, and their interactions. Add a separate fixture that runs
+  selected hosted services against isolated databases and controlled clocks.
+- [ ] **P2.2 Add genuine multi-process tests.**
+  Start two portal and/or Orchestrator processes against the supported shared state and test simultaneous
+  refresh, due-job claims, job cancellation, permission changes, subscription delivery, restart recovery,
+  and conflicting administration. In-process `Task.WhenAll` tests do not prove process coordination.
+- [ ] **P2.3 Add subscription delivery idempotency and failure tests.**
+  Cover SMTP timeout after server acceptance, retry after unknown outcome, duplicate scheduler trigger,
+  attachment generation failure, invalid recipient isolation, disabled SMTP alias, and partial recipient
+  failure. Choose and document at-most-once or at-least-once semantics; use delivery IDs and a durable
+  ledger/outbox to make duplicates observable and controllable.
+- [ ] **P2.4 Add fault-injection and recovery tests.**
+  Kill processes between every cross-resource step; simulate SQLite busy/locked, disk full, corrupt files,
+  unavailable Orchestrator/SMTP, network partition, and clock skew. Verify reconciliation is idempotent and
+  preserves the last known-good report/dataset/subscription state.
+- [ ] **P2.5 Automate a complete backup/restore drill.**
+  Restore portal DB, Orchestrator DB, report scripts/bundles, subscription definitions, snapshots,
+  datasets, Data Protection/key material, and configuration into a clean location. Verify permissions,
+  key-version reads, jobs, subscriptions, and audit continuity after restore.
+- [ ] **P2.6 Add workload fairness and abuse tests.**
+  Global concurrency caps allow one user or group to consume all capacity. Define per-user/group limits,
+  queue fairness, cancellation, timeouts, export quotas, and administrative overrides; test mixed short,
+  long, interactive, scheduled, refresh, and subscription workloads.
+- [ ] **P2.7 Test the versioned upgrade path, not just backup/restore.**
+  P2.5 drills restore into a clean location; nothing proves an N→N+1 upgrade: EF migrations applying
+  over a live catalog, Orchestrator SQLite schema changes, parquet/key-version compatibility, and what
+  rollback means after a partial migration. Seed a portal on release N, upgrade in place to N+1, and
+  verify permissions, jobs, subscriptions, datasets, and audit continuity. Define and document the
+  supported rollback procedure (restore-from-backup vs. down-migration).
+- [ ] **P2.8 Add operational observability for a multi-user deployment.**
+  P1.6 adds correlation IDs for audit only. An administrator running this for real users needs: active
+  executions, queue depth, job/SMTP failure rates, and disk usage of dataset/snapshot storage — via
+  expanded health checks or a metrics endpoint (OpenTelemetry if warranted). Extend the
+  no-credentials-in-logs guarantee from a dataset-test-only scan to a portal-wide log-hygiene rule.
+- [ ] **P2.9 Gate CI on dependency vulnerability scanning.**
+  THIRD-PARTY-INVENTORY covers license compliance but nothing scans for known-vulnerable packages. Add
+  `dotnet list package --vulnerable --include-transitive` (or equivalent) as a CI gate and define the
+  response procedure when a hit blocks the build.
+
+### Priority 3 — Enterprise capability decisions
+
+- [ ] **P3.1 Decide the HA/cluster roadmap.**
+  SQLite and local/process state are suitable for a single-node deployment but not an unqualified HA
+  claim. Define whether clustered portal/orchestrator operation will use a server database, distributed
+  cache/queue/lease provider, shared key ring, and shared or object-backed report/dataset storage.
+- [ ] **P3.2 Add or explicitly defer OIDC/SAML and MFA.**
+  Local Identity and LDAP do not cover common enterprise SSO, conditional-access, and MFA requirements.
+  Document the supported identity boundary until federated authentication is implemented.
+- [ ] **P3.3 Review the authorization model for inheritance, deny, and direct grants.**
+  Current group-based highest-permission-wins ACLs may be sufficient, but enterprise deployments often
+  require inherited folder permissions, explicit deny, direct user/service-account grants, nested groups,
+  and a permission-change impact preview. Decide intentionally and add effective-permission tests.
+- [ ] **P3.4 Decide departmental/tenant isolation and naming boundaries.**
+  Dataset names are globally unique and portal state is shared. Determine whether one portal is one trust
+  boundary or whether departments/tenants need isolated namespaces, administration, quotas, encryption
+  keys, audit views, and export scope.
+- [ ] **P3.5 Add change approval where production governance requires it.**
+  Consider optional four-eyes approval for report publication, job changes, subscription recipient
+  changes, SMTP/secret changes, and high-impact ACL grants. Preserve script-first operation by making
+  approval state and promotion scriptable and auditable.
+- [ ] **P3.6 Decide the self-service password recovery boundary.**
+  Only administrator password reset exists today. That may be the right answer for an LDAP-centric
+  deployment, but document it as an explicit boundary alongside the P3.2 SSO/MFA decision (and note
+  that email-based self-service reset would depend on the P0.1/P0.2 trusted SMTP path) so it reads as
+  a choice rather than an omission.
+
+### Recommended execution order
+
+1. **P0.1 and P0.2 together:** remove persisted SMTP secrets and introduce the runtime subscription
+   executor/authorization boundary. **P0.5** (alert delivery decision) rides along — it picks the same
+   boundary or documents itself out of scope.
+2. **P0.3 and P0.4:** immediate privilege-reduction semantics for tokens, refresh tokens, and
+   anonymous share/embed links.
+3. **P1.12-P1.14:** security headers/CSP, auth-surface rate limiting, and runtime secret rotation —
+   small, independent, and cheap to land early.
+4. **P1.1 and P1.2:** durable job claims and recoverable subscription lifecycle.
+5. **P1.7-P1.11:** script-first configuration export/import and clean-server round-trip.
+6. **P1.3-P1.6:** multi-admin conflicts, durable portal state, ownership, and audit guarantees.
+7. **P2 lane:** hosted-service, multi-process, delivery, chaos, restore, upgrade, observability,
+   dependency-scanning, and workload tests.
+8. **P3 decisions:** publish explicit deployment/identity/isolation/recovery boundaries before making
+   an enterprise or HA support claim.
+
 ## DATASET Hardening + Permutation/Security Verification
 
 > Status: **planned, not started.** Design agreed; pick up Phase 1 first.
@@ -231,17 +449,19 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   export/publish round trips. The portal runbook covers folder/read/grant behavior, independent Refresh
   permission, at-rest-file non-portability, wrong-credential cleanup, secret-persistence inspection, and
   the distinction between local syntax checks and identity-aware portal execution.
-- [ ] **Automated xUnit** — new `tests/ETL-SQL.Tests/Reporting/DatasetSecurityMatrixTests.cs` + extend
+- [x] **Automated xUnit** — new `tests/ETL-SQL.Tests/Reporting/DatasetSecurityMatrixTests.cs` + extend
   `tests/ETL-SQL.ReportPortal.Tests/DatasetControllerTests.cs`. Build on `PortalIntegrationTests.cs`
   (real registry, ~920-1006) and crypto round-trips in `DatasetPhase2Tests.cs`:
-  *(in progress — v0.11.0)* Added the named security-matrix test file with deterministic portal-key,
-  PASSWORD transport, and generated RSA KEYFILE transport round trips. It asserts ciphertext differs
-  from plaintext and verifies swapped passwords plus missing/wrong private keys fail. Existing Phase 4,
-  controller, integration, storage-maintenance, viewer, validator, and rotation suites already cover
-  substantial access, refresh, publish, atomicity, folder lifecycle, and key-lifecycle rows below. The
-  controller suite now also proves that deleting an owning report leaves its PRIVATE dataset row in
-  place but removes the former report owner's implicit access. The remaining work is to consolidate the
-  uncovered portal/engine parity and persistence cases rather than duplicate those tests under new names.
+  *(done — v0.11.0)* `DatasetSecurityMatrixTests` provides deterministic portal-key, PASSWORD, and
+  generated RSA KEYFILE portability/failure assertions. `DatasetPhase4Tests` covers global-name
+  round trips, stale reads, refresh/edit separation, export/publish, rollback, and plaintext-secret
+  scanning across metadata and persisted files; `DatasetRefreshJobSecurityTests` verifies the
+  SQLite-backed scheduled definition is parseable and contains neither source SQL nor the at-rest key.
+  `DatasetControllerTests` now compares real HTTP and registry decisions for public folder readers,
+  private owners/grants/outsiders, and administrators, in addition to endpoint-specific list, data,
+  export, refresh, edit, move, delete, ACL, orphan-owner, and status coverage. Portal integration,
+  viewer, storage-maintenance, validator, rotation, execution-trust, and concurrent-snapshot tests cover
+  the remaining metadata, key lifecycle, failure atomicity, folder lifecycle, and trusted-scheduler rows.
   1. **Crypto portability (in-process — no 2nd machine):** at-rest key decrypts locally, swapped key
      throws; transport PASSWORD right/wrong; transport KEYFILE right/missing/wrong; ciphertext ≠
      plaintext. (Deterministic CI assertion on the Linux/keyfile path; Windows binds via DPAPI.)
@@ -276,9 +496,13 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 
 ### Phase 4 — Docs / residual decisions
 
-- [ ] Update `Docs/Architecture/Reporting.md` (already stale) + user-facing portal docs: at-rest-vs-
+- [x] Update `Docs/Architecture/Reporting.md` (already stale) + user-facing portal docs: at-rest-vs-
   transport model, "not movable after publish / keep your original," PUBLIC=folder-read /
-  PRIVATE=grant, at-rest key backup requirement.
+  PRIVATE=grant, at-rest key backup requirement. *(done — v0.11.0)* Replaced the obsolete temp-only
+  dataset and unsafe-snapshot descriptions with current registry, caller-context, ACL, atomic file,
+  key-version, rotation, export/publish, and reconciliation architecture. The Report-SQL guide now
+  includes `ACCESS PUBLIC|PRIVATE` in the CREATE signature/reference and accurately describes
+  host-bound standalone encryption.
 - [x] Document `EXPORT DATASET` and `PUBLISH DATASET` in `Docs/Reference/Grammar.md`,
   `Docs/Report_SQL_Guide.md`, keyword help, language-server/VS Code completion and syntax surfaces.
   *(done — v0.11.0)* Added complete PASSWORD and KEYFILE signatures/examples, read and destination
@@ -288,12 +512,26 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   key, and portability is EXPORT→PUBLISH only. Added `$export-dataset` and `$publish-dataset` snippets,
   expanded VS Code highlighting for dataset transport clauses, regenerated the syntax index, and updated
   snippet-library coverage.
-- [ ] Document portal at-rest key provisioning, validation, backup/restore, key-version metadata,
+- [x] Document portal at-rest key provisioning, validation, backup/restore, key-version metadata,
   rotation/recovery, and the explicitly supported development fallback. Add an operator runbook for
-  orphan reconciliation and interrupted rotation.
-- [ ] Confirm scheduled-refresh-as-admin is the only standing "trusted" path.
-- [ ] Decide and document ownership/audit semantics for datasets published by admin, scheduled, or
+  orphan reconciliation and interrupted rotation. *(done — v0.11.0)* The administrator guide now
+  defines fatal startup validation, coordinated key/database/file backup and restore, the development
+  machine fallback, legacy stamping, resumable per-dataset rotation and key retirement, interrupted
+  rotation recovery, and the exact startup reconciliation deletion boundary and operator procedure.
+- [x] Confirm scheduled-refresh-as-admin is the only standing "trusted" path. *(done — v0.11.0)*
+  Removed the implicit administrator context from ordinary `EnqueueExecution` and user-triggered
+  `EnqueueRefresh` jobs. Execution jobs now carry an explicit trust flag and derive either
+  `UserId=<caller>` or `IsAdmin=true`; only `OrchestratorPollerService` opts into the trusted form.
+  Regression tests prove that `UserId=0` alone does not grant trust. Remote orchestrator workers do not
+  host the portal dataset registry, so no portal dataset trust context is delegated to them.
+- [x] Decide and document ownership/audit semantics for datasets published by admin, scheduled, or
   system identities, and the required permission level for publishing/moving into a folder.
+  *(done — v0.11.0)* Report-created datasets remain owned through their owning report; interactive
+  PUBLISH is owned and audited as the actual caller, including administrators; userless trusted system
+  PUBLISH falls back to the destination folder owner; refresh and move preserve ownership. Publishing
+  requires destination `Manage`, and moving requires `Manage` on source and destination, with the normal
+  administrator bypass. Execution/session caller contexts now preserve both `UserId` and the Admin role
+  so authorization does not erase accountability.
 
 ### Files to modify / add (representative)
 
@@ -331,3 +569,116 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 
 > Convention: INT/TINYINT/BIGINT all materialize as `decimal` at runtime — dataset row assertions use
 > `m` suffixes / `Convert.ToDecimal`, never int/long literals.
+
+---
+
+## Fresh-Eyes Review Findings (2026-06-11)
+
+> Source: full-repo review against AGENTS.md / GOALS.md. Items below are **new** — they do not
+> duplicate the Enterprise Hardening P0–P3 lanes above (cross-references noted where adjacent).
+> Same priority convention as above.
+
+### Security
+
+- [x] **R1 (P0). LDAP login silently re-activates disabled accounts.** *(done — v0.11.0)*
+  `AuthController.Login` now rejects any portal-disabled account up front (generic 401 + audit event)
+  regardless of identity provider, and the LDAP sync no longer touches `IsActive` — only an
+  administrator re-enables an account. Regression:
+  `LdapAuthTests.Login_DisabledLdapUser_IsRejectedAndStaysDisabled`.
+- [ ] **R2 (P1). Hash refresh tokens at rest.**
+  Refresh tokens are stored as plaintext in `RefreshTokens.Token` (`AuthController.cs:204-210`) and
+  looked up by raw value. A portal DB file/backup leak lets an attacker mint sessions for any user for
+  up to `RefreshExpiryDays`. Store `SHA256(token)` and hash the presented value on lookup — no schema
+  semantics change. (Rotation/invalidation semantics remain P0.3; this is at-rest protection.)
+- [x] **R3 (P1). Replace the hardcoded first-run admin password.** *(done — v0.11.0)*
+  New `Portal:FirstRun:AdminPassword` provisions the seed password; when unset, a random password is
+  generated and logged once under the `Portal.FirstRun` category — no well-known default remains.
+  Seeding now reads the DI-resolved `PortalConfig` so test hosts can pin the password; the
+  WebApplicationFactory fixtures, the Docker portal fixture (`Portal__FirstRun__AdminPassword` env),
+  the administrators guide, and QUICKSTART were updated accordingly.
+- [ ] **R4 (P1). Dataset access-level change should require Manage, not Edit.**
+  `PATCH /api/datasets/{id}` lets a dataset **Editor** flip `AccessLevel` Private→Public
+  (`DatasetController.cs:325-339`), widening exposure to every folder reader. ACL grant/revoke
+  correctly requires Manage; the access-level flip is the same class of operation and should be gated
+  the same. Keep TTL/metadata edits at Editor.
+- [ ] **R5 (P2). Purge expired/revoked refresh tokens and detect reuse.**
+  Nothing deletes `RefreshTokens` rows — the table grows forever, and presenting an already-revoked
+  token is not treated as a theft signal (standard response: revoke the user's whole token family).
+  Add a periodic cleanup and reuse detection alongside the P0.3 invalidation work.
+
+### Bugs / correctness
+
+- [x] **R6 (P1). `ExecutionJobService.RunJobAsync` can leak the concurrency gate and strand refreshes.**
+  *(done — v0.11.0)* A timeout while queued now lands in a dedicated catch that marks the job
+  Cancelled, clears the `_activeRefreshes` debounce entry, and records the status — without releasing
+  a gate it never acquired. The Running-status update moved inside the guarded region, and
+  `UpdateReportRefreshStatusAsync` swallows-and-logs DB failures so a transient SQLite busy error can
+  no longer leak the gate or strand the job. Regression:
+  `ExecutionJobServiceTests.RefreshTimedOutWhileQueued_ReachesTerminalStateAndFreesGateAndDebounce`.
+- [ ] **R7 (P2). `EnqueueRefresh` debounce race can throw.**
+  `if (!_activeRefreshes.TryAdd(...)) return _activeRefreshes[reportId];`
+  (`ExecutionJobService.cs:97-99`) — if the in-flight refresh completes between the failed `TryAdd`
+  and the indexer read, the indexer throws `KeyNotFoundException` → 500 to the caller. Use
+  `TryGetValue` with a retry/fall-through to enqueue.
+- [ ] **R8 (P2). `_jobs` dictionary is never evicted.**
+  Completed/failed `ExecutionJob` entries live forever in `ExecutionJobService._jobs` — unbounded
+  memory growth on a long-running portal. Evict completed jobs after a retention window (keep the
+  status queryable for, say, 24h). Related to P1.4 (durable job state) but worth fixing in-process now.
+- [ ] **R9 (P2). `SessionCache.GetOrCreate` races leak DashboardServices.**
+  Two concurrent requests for the same (report, user) both construct a `DashboardService`; the loser
+  is overwritten in `_sessions[key] = entry` and **never disposed** (`SessionCache.cs:43-66`). The
+  script-path-change branch also overwrites without disposing the old entry. Use `GetOrAdd`-with-lazy
+  or dispose the displaced entry. Also note: the session key is (reportId, userId) but the caller
+  context now embeds `IsAdmin` — an admin-elevated session created before role removal keeps serving
+  with admin dataset context until eviction (P0.3-adjacent; document or key on the role too).
+- [ ] **R10 (P2). `OrchestratorPollerService` watermark can skip completions.**
+  `_lastPollTime = DateTime.UtcNow` is set after processing (`OrchestratorPollerService.cs:115`), so
+  any job that completed between the query and the assignment is never observed; a mid-loop exception
+  still advances the watermark and silently drops the remaining completions. Advance the watermark to
+  the max `EndTime` actually processed. Also parse `EndTime` with
+  `CultureInfo.InvariantCulture` + `DateTimeStyles.RoundtripKind` (`:141`) — the current
+  `DateTime.TryParse` is culture/kind-sensitive against the "o"-format value the query compares.
+- [ ] **R11 (P2). Dead write in `DatasetRegistryService.RegisterOrUpdate`.**
+  Line 57 sets `existing.EncryptionMode = MachineBound` when a portal key is configured, then line 68
+  unconditionally overwrites it with `metadata.EncryptionMode`. Harmless today only because the viewer
+  decrypts by config (2g), but the stored mode stays misleading and the 2i rotation normalization
+  relies on accurate metadata. Reorder or delete one of the writes.
+- [ ] **R12 (P3). `DatasetDto.IsEncrypted` reports the wrong fact.**
+  `IsEncrypted: !string.IsNullOrWhiteSpace(d.ParquetFilePath)` (`DatasetController.cs:519`) means
+  "has a cache file," not "encrypted." Derive from encryption mode/at-rest key state or rename the
+  DTO field.
+
+### Performance / operational
+
+- [ ] **R13 (P1). Report snapshots accumulate without bound.**
+  Every execution writes a unique `report_{id}_{jobId}.snapshot.json` and a `ReportSnapshots` row;
+  nothing deletes old manifests or rows. A report refreshed every 5 minutes produces ~105k files/year.
+  Add retention (keep last N per report) to complement `DatasetStorageMaintenance`, and surface disk
+  usage via the P2.8 observability item.
+- [ ] **R14 (P2). Per-request DB hit in `OnTokenValidated`.**
+  Every authenticated request runs a `Users.AnyAsync` query (`Program.cs:123-135`); the P0.3 role/
+  security-stamp reload will make this heavier. Add a short (~30s) memory-cache of the user's active/
+  stamp state so revocation latency stays bounded without a DB roundtrip per request.
+- [ ] **R15 (P3). Dataset listing is N+1.**
+  `DatasetController.GetAll` and `DatasetRegistryService.ListAll` load all datasets then await a
+  permission check per dataset (each potentially hitting folder ACLs). Fine at dozens of datasets;
+  precompute group→folder permissions once per request before scaling the catalog.
+
+### Tooling / standards / docs
+
+- [ ] **R16 (P2). No `.editorconfig`, analyzer config, or format gate.**
+  User config claims "standard EditorConfig settings" but the repo has none at root, no
+  `TreatWarningsAsErrors`/`AnalysisLevel` in `Directory.Build.props`, and CI has no
+  `dotnet format --verify-no-changes` step. The build is currently 0-warning — cheap to lock that in
+  now (warnings-as-errors + an `.editorconfig`) before drift accumulates.
+- [ ] **R17 (P3). `SharpCompress` is referenced globally.**
+  `Directory.Build.props` injects `<PackageReference Include="SharpCompress" />` into **every**
+  project, including Core and shells that don't compress anything. Scope it to the projects that use
+  it (transitive surface, audit noise, P2.9 scan scope).
+- [ ] **R18 (P2). AGENTS.md connector list is stale.**
+  §2 lists ~20 connector tokens; the code ships 29 (missing from the list: `MYSQL`, `SQLITE`,
+  `MONGODB`, `KAFKA`, `NEO4J`, `S3`, `SHAREPOINT`, `ACTIVE_DIRECTORY` — all of which
+  `Data_Connectors.md` documents). CLAUDE.md's "14 connector types" is also stale. Agents writing
+  scripts from AGENTS.md will wrongly avoid supported connectors. Sync both files (and note
+  CLAUDE.md says `sync-assets.ps1` while AGENTS.md/CI use `node scripts/sync-assets.js` — pick one
+  as canonical).
