@@ -144,19 +144,21 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
 
         var columns = ParseColumnSchema(dataset.ColumnSchema);
 
-        if (dataset.EncryptionMode is not DatasetEncryptionMode.None and not DatasetEncryptionMode.MachineBound)
-            throw new InvalidOperationException(
-                $"Dataset '{dataset.Name}' uses {dataset.EncryptionMode} encryption, which is not supported for web viewing.");
+        // How the at-rest cache is encrypted is decided by config (the same authority the engine writes
+        // by), NOT by Dataset.EncryptionMode — that field records the CREATE transport clause, which 1e/2c
+        // made irrelevant at rest. When a portal at-rest key is configured every cache is encrypted with
+        // it; otherwise the stored mode applies (MachineBound → MACHINE, None → plaintext).
+        var atRestDecryptOptions = ResolveAtRestDecryptOptions(dataset);
 
         string effectivePath = dataset.ParquetFilePath;
         string? tempFile = null;
 
-        if (dataset.EncryptionMode == DatasetEncryptionMode.MachineBound)
+        if (atRestDecryptOptions != null)
         {
             try
             {
                 tempFile = Path.GetTempFileName();
-                var enc = new EncryptionOptions(new Dictionary<string, string> { { "ENCRYPT", "MACHINE" } });
+                var enc = new EncryptionOptions(atRestDecryptOptions);
                 enc.DecryptFile(dataset.ParquetFilePath, tempFile);
                 effectivePath = tempFile;
             }
@@ -184,6 +186,25 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
         var result = (rows, columns);
         cache.Set(cacheKey, result, CacheOptions);
         return result;
+    }
+
+    // Returns the EncryptionOptions dictionary needed to decrypt the at-rest cache, or null when the
+    // file is plaintext. A configured portal key encrypts every cache (regardless of the stored mode);
+    // otherwise the stored mode is honored. A legacy Password/KeyFile record with no portal key carries a
+    // credential we don't have at read time — surfaced as a clear, viewable error.
+    private Dictionary<string, string>? ResolveAtRestDecryptOptions(Dataset dataset)
+    {
+        var atRestKey = config.Dataset.AtRestKey;
+        if (!string.IsNullOrWhiteSpace(atRestKey))
+            return new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = atRestKey };
+
+        return dataset.EncryptionMode switch
+        {
+            DatasetEncryptionMode.None         => null,
+            DatasetEncryptionMode.MachineBound => new Dictionary<string, string> { ["ENCRYPT"] = "MACHINE" },
+            _ => throw new InvalidOperationException(
+                $"Dataset '{dataset.Name}' was encrypted at rest with a {dataset.EncryptionMode} credential and no portal at-rest key is configured, so it cannot be viewed. Configure Portal:Dataset:AtRestKey or re-materialise the dataset.")
+        };
     }
 
     private static async Task<List<Dictionary<string, object?>>> ReadParquetAsync(

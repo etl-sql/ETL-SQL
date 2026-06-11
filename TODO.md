@@ -131,6 +131,51 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 - [x] **2d. Remove the cleartext-credential sidecar** *(done)* — deleted `WriteSidecarScript` +
   `EncryptLabel` from `CreateDatasetStatementHandler`.
 
+### Phase 2 follow-up — Security, metadata, and lifecycle correctness
+
+> The portable EXPORT/PUBLISH flow is implemented, but the items below are required before the target
+> model can be considered production-hardened.
+
+- [ ] **2e. Remove the portal at-rest key from persisted scheduled-job SQL.** `CreateDatasetStatementHandler`
+  currently builds a refresh job whose serialized PARQUET connection contains the at-rest password;
+  `CreateJobStatementHandler` then persists that script in the job store. Scheduled refresh must obtain
+  the portal key from trusted runtime configuration/secret injection instead. Add a regression test that
+  searches stored job definitions, logs, errors, and generated scripts and proves the key is absent.
+- [ ] **2f. Centralize portal/engine dataset authorization.** `DatasetController` currently treats every
+  PUBLIC dataset as visible without requiring folder Read and does not recognize `Dataset.CreatedBy` as
+  the owner of a published dataset. Reuse one permission authority for registry and HTTP endpoints so
+  PUBLIC, PRIVATE, owner, publisher, explicit grants, and admin have identical behavior for list, detail,
+  data, export, stats, column-values, refresh, update, delete, and ACL operations.
+- [x] **2g. Fix portal-key dataset viewing — decrypt by config, not the stored mode.** *(done — v0.11.0)*
+  `DatasetViewerService.LoadCachedAsync` no longer decides decryption from `Dataset.EncryptionMode` (which
+  records the CREATE transport clause and is unreliable at rest). New `ResolveAtRestDecryptOptions`: when
+  `Portal:Dataset:AtRestKey` is set every cache decrypts with the portal key (ENCRYPT=PASSWORD); else the
+  stored mode applies (MachineBound→MACHINE, None→plaintext); a legacy Password/KeyFile record with no key
+  surfaces a clear error. New `DatasetViewerServiceTests` (portal-key/wrong-key/MACHINE/plaintext/publish-
+  shape) over a direct temp-SQLite `PortalDbContext`; existing `DatasetControllerTests` unchanged.
+  Remaining bit of the original item — explicit at-rest **version** metadata + migrating legacy
+  Password/KeyFile rows + key **rotation** — folded into **2i**. (`ColumnSchema`/`RowCount` not populated
+  for PUBLISH is a small separate follow-up; rows still read from the parquet's own schema.)
+- [ ] **2h. Make CREATE/REFRESH/PUBLISH/EXPORT failure-atomic.** Write encrypted output to a temporary
+  file under the destination root, validate it, then atomically replace the live cache/export. If publish
+  decryption, encryption, registry update, or finalization fails, remove the allocated registry row and
+  partial files so retrying the same global name succeeds. Preserve the last good cache during failed or
+  concurrent refreshes. Add cleanup for dataset/report deletion so managed parquet files do not become
+  orphans, plus startup/maintenance reconciliation for pre-existing orphan rows/files.
+- [ ] **2i. Enforce and version the portal-managed at-rest key.** Portal production mode must not silently
+  fall back to host MACHINE encryption when `Portal:Dataset:AtRestKey` is empty. Validate base64/entropy at
+  startup, define first-run provisioning and backup/restore behavior, store a non-secret key version on
+  each dataset, and provide a rotation/re-encryption procedure that can resume safely. Keep an explicit
+  development/standalone fallback only if deliberately configured.
+- [ ] **2j. Authorize PUBLISH target folders and define system ownership.** Require the target folder to
+  exist and the interactive publisher to have the required publish/manage permission before allocating
+  a dataset row. Define ownership for admin/scheduled/system publication instead of leaving
+  `CreatedBy = null`, and audit successful and failed publish attempts without logging credentials.
+- [ ] **2k. Implement dataset move semantics.** Folder is mutable metadata in the target model, but the
+  API currently cannot move a dataset. Add a move operation that checks manage rights on the source and
+  destination folders, updates `FolderId` and `FolderPath` together, preserves the stable Id/file path,
+  invalidates relevant caches, and records an audit event.
+
 ### Phase 3 — Verification deck (scripts + xUnit)
 
 - [ ] **Runnable example deck** `samples/08_Reporting/datasets/` + `README.md` (tiny inline/CSV seed; no
@@ -157,9 +202,24 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
      viewer, allowed to editor/owner; scheduled/system (admin) refreshes.
   5. **Export→Publish (Phase 2):** export w/ password/keyfile, re-import, decrypt once, consume by ACL
      with no credential; assert published copy is at-rest-encrypted and credential never sidecar'd.
-  6. **Portal/engine parity:** a user forbidden by the HTTP API is also denied by `USE DATASET`.
+  6. **Portal/engine parity:** matrix every HTTP dataset endpoint against registry/`USE DATASET` for
+     PUBLIC folder-read/no-read, PRIVATE owner/publisher/grants/no-grant, and admin. The same identity
+     must receive the same decision through both paths.
   7. **Negatives:** duplicate global name rejected; orphaned `OwningReportId` → PRIVATE inaccessible to
      former owner; export missing credential → clear error.
+  8. **Secret non-persistence:** scheduled job definitions, SQLite job rows, logs, exceptions, snapshots,
+     and generated scripts never contain the portal at-rest key or transport credentials.
+  9. **Metadata/viewer parity:** CREATE with MACHINE/PASSWORD/KEYFILE and PUBLISH with PASSWORD/KEYFILE
+     all produce portal-managed at-rest files that the web viewer/API can read without transport creds;
+     migrate a legacy metadata row and prove it remains readable.
+  10. **Failure atomicity:** wrong publish password, invalid keyfile, encryption failure, registry failure,
+      and cancelled refresh leave no blocking row/partial export/orphan plaintext; failed refresh keeps
+      the previous cache readable; concurrent readers see either the old or new complete snapshot.
+  11. **Key lifecycle:** missing/invalid/weak production key fails startup; backup/restore with the same
+      key works; wrong key fails cleanly; key rotation re-encrypts resumably and records the new version.
+  12. **Folder lifecycle:** publish to missing/unauthorized folder denied before row allocation; dataset
+      move requires source/destination rights, updates both folder fields, and does not rename/rewrite the
+      parquet file; delete/report cleanup removes only managed files inside `DatasetRootPath`.
   - Run: `dotnet test ETL-SQL.slnx --filter "Category!=Integration&Category!=Performance&Category!=SLT"`
     (Portal tests use WebApplicationFactory — no Docker).
 
@@ -168,7 +228,16 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 - [ ] Update `Docs/Architecture/Reporting.md` (already stale) + user-facing portal docs: at-rest-vs-
   transport model, "not movable after publish / keep your original," PUBLIC=folder-read /
   PRIVATE=grant, at-rest key backup requirement.
+- [ ] Document `EXPORT DATASET` and `PUBLISH DATASET` in `Docs/Reference/Grammar.md`,
+  `Docs/Report_SQL_Guide.md`, keyword help, language-server/VS Code completion and syntax surfaces.
+  Include complete signatures, PASSWORD and KEYFILE examples, target-folder authorization, failure
+  behavior, and the fact that transport credentials are never persisted.
+- [ ] Document portal at-rest key provisioning, validation, backup/restore, key-version metadata,
+  rotation/recovery, and the explicitly supported development fallback. Add an operator runbook for
+  orphan reconciliation and interrupted rotation.
 - [ ] Confirm scheduled-refresh-as-admin is the only standing "trusted" path.
+- [ ] Decide and document ownership/audit semantics for datasets published by admin, scheduled, or
+  system identities, and the required permission level for publishing/moving into a folder.
 
 ### Files to modify / add (representative)
 
@@ -181,6 +250,9 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   caller). Remove sidecar secret.
 - At-rest key + transport: `CryptoUtils`/`EncryptionOptions`; new EXPORT/PUBLISH AST + parser
   (`ReportAst.cs` / `ReportParser.cs` / `SystemParser.cs`) + handler(s).
+- Security/lifecycle follow-up: central dataset permission service shared by registry/controller;
+  `DatasetViewerService` at-rest metadata support; portal key validation/version/rotation service;
+  atomic dataset file writer and orphan reconciliation; publish/move authorization and audit.
 - Lint: `Analysis/Linting/Rules/DatasetEncrypt*Rule.cs` realign to transport-only.
 - Examples: `samples/08_Reporting/datasets/*`. Tests: new `DatasetSecurityMatrixTests.cs`, extend
   `DatasetControllerTests.cs` + `DatasetPhase3/4Tests.cs`.
@@ -195,6 +267,11 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
    `dotnet run --project src/ETL-SQL.App -- run samples/08_Reporting/datasets/01_deploy_datasets.etlsql`
    then `02_`–`05_`.
 4. Optional manual portal pass via the deck README checklist.
+5. Inspect persisted job definitions and portal logs for known test credentials/key markers — zero
+   matches. Force publish/refresh failures and cancellation; verify no plaintext temp files, partial
+   ciphertext, orphan registry rows, or lost last-good cache remain.
+6. Start portal with missing/invalid production key (must fail), restore with the backed-up key (datasets
+   readable), then execute the rotation runbook and verify every dataset records the new key version.
 
 > Convention: INT/TINYINT/BIGINT all materialize as `decimal` at runtime — dataset row assertions use
 > `m` suffixes / `Convert.ToDecimal`, never int/long literals.
