@@ -172,6 +172,11 @@ namespace ETL_SQL.Orchestrator.Service
                 UpdateScheduledJobRequest req, IJobHistoryStore store, IBundleStore bundleStore, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var expectedVersion = ReadExpectedVersion(ctx);
+                if (expectedVersion is null)
+                    return Results.Json(
+                        new { Error = "If-Match with the current job version is required." },
+                        statusCode: StatusCodes.Status428PreconditionRequired);
 
                 var jobs = await store.GetAllJobsAsync();
                 var existing = jobs.FirstOrDefault(j =>
@@ -192,21 +197,42 @@ namespace ETL_SQL.Orchestrator.Service
                     HashPolicy = req.HashPolicy ?? existing.HashPolicy
                 };
 
-                await store.SaveJobAsync(updated);
-                return Results.Ok(updated);
+                if (!await store.TrySaveJobAsync(updated, expectedVersion.Value))
+                {
+                    var current = await store.GetJobAsync(existing.Name);
+                    return Results.Conflict(new
+                    {
+                        Error = "The job changed after it was read. Refresh it and retry.",
+                        Current = current
+                    });
+                }
+                return Results.Ok(await store.GetJobAsync(existing.Name));
             }).WithName("updateScheduledJob");
 
             app.MapDelete("/api/scheduled-jobs/{name}", async (HttpContext ctx, string name,
                 IJobHistoryStore store, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                var expectedVersion = ReadExpectedVersion(ctx);
+                if (expectedVersion is null)
+                    return Results.Json(
+                        new { Error = "If-Match with the current job version is required." },
+                        statusCode: StatusCodes.Status428PreconditionRequired);
 
                 var jobs = await store.GetAllJobsAsync();
                 var unescaped = Uri.UnescapeDataString(name);
                 if (!jobs.Any(j => j.Name.Equals(unescaped, StringComparison.OrdinalIgnoreCase)))
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
 
-                await store.DeleteJobAsync(unescaped);
+                if (!await store.TryDeleteJobAsync(unescaped, expectedVersion.Value))
+                {
+                    var current = await store.GetJobAsync(unescaped);
+                    return Results.Conflict(new
+                    {
+                        Error = "The job changed after it was read. Refresh it and retry.",
+                        Current = current
+                    });
+                }
                 return Results.Ok(new { Deleted = unescaped });
             }).WithName("deleteScheduledJob");
 
@@ -549,6 +575,12 @@ namespace ETL_SQL.Orchestrator.Service
             int? RetryDelaySeconds = null,
             string? HashPolicy = null
         );
+
+        private static long? ReadExpectedVersion(HttpContext context)
+        {
+            var value = context.Request.Headers.IfMatch.ToString().Trim().Trim('"');
+            return long.TryParse(value, out var version) && version > 0 ? version : null;
+        }
 
         private sealed record PublishBundleApiRequest(
             BundlePublishRequest Bundle,

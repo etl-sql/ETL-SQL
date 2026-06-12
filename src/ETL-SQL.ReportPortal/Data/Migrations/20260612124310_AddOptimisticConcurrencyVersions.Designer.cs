@@ -3,6 +3,7 @@ using System;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ETL_SQL.ReportPortal.Data.Migrations
 {
     [DbContext(typeof(PortalDbContext))]
-    partial class PortalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260612124310_AddOptimisticConcurrencyVersions")]
+    partial class AddOptimisticConcurrencyVersions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.8");
@@ -263,51 +266,6 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Groups");
-                });
-
-            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalExecutionJob", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Error")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ManifestPath")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompletedAt");
-
-                    b.HasIndex("ReportId", "Kind")
-                        .IsUnique()
-                        .HasFilter("\"Kind\" = 'Refresh' AND \"Status\" IN ('Pending', 'Running')");
-
-                    b.ToTable("PortalExecutionJobs");
                 });
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalRole", b =>

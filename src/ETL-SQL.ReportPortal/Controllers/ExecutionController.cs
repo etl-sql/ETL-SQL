@@ -52,7 +52,7 @@ public class ExecutionController(
             scriptHash = "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         }
 
-        var jobId = jobService.EnqueueExecution(
+        var jobId = await jobService.EnqueueExecutionAsync(
             id,
             CurrentUserId,
             resolvedScriptPath,
@@ -66,9 +66,9 @@ public class ExecutionController(
     // ── 2.1  GET /api/jobs/{jobId} ────────────────────────────────────────────
 
     [HttpGet("jobs/{jobId}")]
-    public IActionResult GetJob(string jobId)
+    public async Task<IActionResult> GetJob(string jobId)
     {
-        var job = jobService.Get(jobId);
+        var job = await jobService.GetAsync(jobId);
         if (job is null) return NotFound();
 
         return Ok(new JobStatusResponse(
@@ -172,12 +172,12 @@ public class ExecutionController(
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
-        string? existingJobId = jobService.GetActiveRefreshJobId(id);
+        string? existingJobId = await jobService.GetActiveRefreshJobIdAsync(id);
         bool alreadyRunning = existingJobId is not null;
 
         var jobId = alreadyRunning
             ? existingJobId!
-            : jobService.EnqueueRefresh(
+            : await jobService.EnqueueRefreshAsync(
                 id,
                 CurrentUserId,
                 resolvedScriptPath,

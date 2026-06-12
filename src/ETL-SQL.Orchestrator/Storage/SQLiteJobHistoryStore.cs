@@ -68,7 +68,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     NextRun TEXT,
                     IsEnabled INTEGER NOT NULL DEFAULT 1,
                     MaxRetries INTEGER NOT NULL DEFAULT 0,
-                    RetryDelaySeconds INTEGER NOT NULL DEFAULT 30
+                    RetryDelaySeconds INTEGER NOT NULL DEFAULT 30,
+                    Version INTEGER NOT NULL DEFAULT 1
                 );";
 
                 var createHistoryTable = @"
@@ -207,6 +208,13 @@ namespace ETL_SQL.Orchestrator.Storage
                 cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN LeaseExpiresAt TEXT;";
                 await cmd.ExecuteNonQueryAsync();
             }
+
+            if (!columns.Contains("Version"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN Version INTEGER NOT NULL DEFAULT 1;";
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
 
         private async Task EnsureHistoryColumnsExist(SqliteConnection connection)
@@ -297,7 +305,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     MaxRetries        = excluded.MaxRetries,
                     RetryDelaySeconds = excluded.RetryDelaySeconds,
                     ScriptHash        = excluded.ScriptHash,
-                    HashPolicy        = excluded.HashPolicy;";
+                    HashPolicy        = excluded.HashPolicy,
+                    Version           = Jobs.Version + 1;";
 
             using var command = connection.CreateCommand();
             command.CommandText = sql;
@@ -315,6 +324,49 @@ namespace ETL_SQL.Orchestrator.Storage
             command.Parameters.AddWithValue("$hashPolicy", job.HashPolicy);
 
             await command.ExecuteNonQueryAsync();
+        }
+
+        public async Task<bool> TrySaveJobAsync(JobDefinition job, long expectedVersion)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                UPDATE Jobs SET
+                    Script = $script,
+                    Interval = $interval,
+                    Unit = $unit,
+                    AtTime = $atTime,
+                    LastRun = $lastRun,
+                    NextRun = $nextRun,
+                    IsEnabled = $isEnabled,
+                    MaxRetries = $maxRetries,
+                    RetryDelaySeconds = $retryDelay,
+                    ScriptHash = $scriptHash,
+                    HashPolicy = $hashPolicy,
+                    Version = Version + 1
+                WHERE Name = $name COLLATE NOCASE AND Version = $expectedVersion;";
+            AddJobParameters(command, job);
+            command.Parameters.AddWithValue("$expectedVersion", expectedVersion);
+            return await command.ExecuteNonQueryAsync() == 1;
+        }
+
+        private static void AddJobParameters(SqliteCommand command, JobDefinition job)
+        {
+            command.Parameters.AddWithValue("$name", job.Name);
+            command.Parameters.AddWithValue("$script", job.Script);
+            command.Parameters.AddWithValue("$interval", job.Interval);
+            command.Parameters.AddWithValue("$unit", job.Unit);
+            command.Parameters.AddWithValue("$atTime", (object?)job.AtTime ?? DBNull.Value);
+            command.Parameters.AddWithValue("$lastRun", (object?)job.LastRun?.ToString("O") ?? DBNull.Value);
+            command.Parameters.AddWithValue("$nextRun", (object?)job.NextRun?.ToString("O") ?? DBNull.Value);
+            command.Parameters.AddWithValue("$isEnabled", job.IsEnabled ? 1 : 0);
+            command.Parameters.AddWithValue("$maxRetries", job.MaxRetries);
+            command.Parameters.AddWithValue("$retryDelay", job.RetryDelaySeconds);
+            command.Parameters.AddWithValue("$scriptHash", (object?)job.ScriptHash ?? DBNull.Value);
+            command.Parameters.AddWithValue("$hashPolicy", job.HashPolicy);
         }
 
         // ── Execution lease (P1.1) ────────────────────────────────────────────────
@@ -391,20 +443,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
-                jobs.Add(new JobDefinition(
-                    reader.GetString(0),
-                    reader.GetString(1),
-                    reader.GetInt32(2),
-                    reader.GetString(3),
-                    reader.IsDBNull(4) ? null : reader.GetString(4),
-                    reader.IsDBNull(5) ? null : DateTime.Parse(reader.GetString(5)),
-                    reader.IsDBNull(6) ? null : DateTime.Parse(reader.GetString(6)),
-                    reader.GetInt32(7) == 1,
-                    reader.IsDBNull(8) ? 0 : reader.GetInt32(8),
-                    reader.IsDBNull(9) ? 30 : reader.GetInt32(9),
-                    reader.IsDBNull(10) ? null : reader.GetString(10),
-                    reader.IsDBNull(11) ? "Warn" : reader.GetString(11)
-                ));
+                jobs.Add(ReadJob(reader));
             }
             return jobs;
         }
@@ -422,20 +461,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
-                jobs.Add(new JobDefinition(
-                    reader.GetString(0),
-                    reader.GetString(1),
-                    reader.GetInt32(2),
-                    reader.GetString(3),
-                    reader.IsDBNull(4) ? null : reader.GetString(4),
-                    reader.IsDBNull(5) ? null : DateTime.Parse(reader.GetString(5)),
-                    reader.IsDBNull(6) ? null : DateTime.Parse(reader.GetString(6)),
-                    reader.GetInt32(7) == 1,
-                    reader.IsDBNull(8) ? 0 : reader.GetInt32(8),
-                    reader.IsDBNull(9) ? 30 : reader.GetInt32(9),
-                    reader.IsDBNull(10) ? null : reader.GetString(10),
-                    reader.IsDBNull(11) ? "Warn" : reader.GetString(11)
-                ));
+                jobs.Add(ReadJob(reader));
             }
             return jobs;
         }
@@ -453,20 +479,31 @@ namespace ETL_SQL.Orchestrator.Storage
             using var reader = await command.ExecuteReaderAsync();
             if (!await reader.ReadAsync()) return null;
 
+            return ReadJob(reader);
+        }
+
+        private static JobDefinition ReadJob(SqliteDataReader reader)
+        {
+            var lastRunOrdinal = reader.GetOrdinal("LastRun");
+            var nextRunOrdinal = reader.GetOrdinal("NextRun");
+            var atTimeOrdinal = reader.GetOrdinal("AtTime");
+            var scriptHashOrdinal = reader.GetOrdinal("ScriptHash");
+            var hashPolicyOrdinal = reader.GetOrdinal("HashPolicy");
+            var versionOrdinal = reader.GetOrdinal("Version");
             return new JobDefinition(
-                reader.GetString(0),
-                reader.GetString(1),
-                reader.GetInt32(2),
-                reader.GetString(3),
-                reader.IsDBNull(4) ? null : reader.GetString(4),
-                reader.IsDBNull(5) ? null : DateTime.Parse(reader.GetString(5)),
-                reader.IsDBNull(6) ? null : DateTime.Parse(reader.GetString(6)),
-                reader.GetInt32(7) == 1,
-                reader.IsDBNull(8) ? 0 : reader.GetInt32(8),
-                reader.IsDBNull(9) ? 30 : reader.GetInt32(9),
-                reader.IsDBNull(10) ? null : reader.GetString(10),
-                reader.IsDBNull(11) ? "Warn" : reader.GetString(11)
-            );
+                reader.GetString(reader.GetOrdinal("Name")),
+                reader.GetString(reader.GetOrdinal("Script")),
+                reader.GetInt32(reader.GetOrdinal("Interval")),
+                reader.GetString(reader.GetOrdinal("Unit")),
+                reader.IsDBNull(atTimeOrdinal) ? null : reader.GetString(atTimeOrdinal),
+                reader.IsDBNull(lastRunOrdinal) ? null : DateTime.Parse(reader.GetString(lastRunOrdinal)),
+                reader.IsDBNull(nextRunOrdinal) ? null : DateTime.Parse(reader.GetString(nextRunOrdinal)),
+                reader.GetInt32(reader.GetOrdinal("IsEnabled")) == 1,
+                reader.GetInt32(reader.GetOrdinal("MaxRetries")),
+                reader.GetInt32(reader.GetOrdinal("RetryDelaySeconds")),
+                reader.IsDBNull(scriptHashOrdinal) ? null : reader.GetString(scriptHashOrdinal),
+                reader.IsDBNull(hashPolicyOrdinal) ? "Warn" : reader.GetString(hashPolicyOrdinal),
+                reader.GetInt64(versionOrdinal));
         }
 
         public async Task DeleteJobAsync(string name)
@@ -499,6 +536,33 @@ namespace ETL_SQL.Orchestrator.Storage
                 await transaction.RollbackAsync();
                 throw;
             }
+        }
+
+        public async Task<bool> TryDeleteJobAsync(string name, long expectedVersion)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+            using var transaction = connection.BeginTransaction();
+
+            using var deleteJob = connection.CreateCommand();
+            deleteJob.Transaction = transaction;
+            deleteJob.CommandText = "DELETE FROM Jobs WHERE Name = $name COLLATE NOCASE AND Version = $version;";
+            deleteJob.Parameters.AddWithValue("$name", name);
+            deleteJob.Parameters.AddWithValue("$version", expectedVersion);
+            if (await deleteJob.ExecuteNonQueryAsync() != 1)
+            {
+                await transaction.RollbackAsync();
+                return false;
+            }
+
+            using var deleteHistory = connection.CreateCommand();
+            deleteHistory.Transaction = transaction;
+            deleteHistory.CommandText = "DELETE FROM JobHistory WHERE JobName = $name;";
+            deleteHistory.Parameters.AddWithValue("$name", name);
+            await deleteHistory.ExecuteNonQueryAsync();
+            await transaction.CommitAsync();
+            return true;
         }
 
         public async Task UpdateJobLastRunAsync(string name, DateTime lastRun, DateTime? nextRun)

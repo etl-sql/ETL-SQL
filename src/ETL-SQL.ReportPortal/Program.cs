@@ -269,6 +269,7 @@ else
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SessionCache>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.SessionCache>());
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.ExecutionJobService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.ExecutionJobService>());
 builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.OrchestratorPollerService>();
 
 // JWT secret validation (runs after WebApplicationFactory can inject test configuration)

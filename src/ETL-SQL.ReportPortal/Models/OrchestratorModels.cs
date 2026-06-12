@@ -12,7 +12,8 @@ public record JobDefinitionDto(
     int MaxRetries,
     int RetryDelaySeconds,
     string? ScriptHash,
-    string HashPolicy
+    string HashPolicy,
+    long Version = 1
 );
 
 public record JobHistoryEntryDto(

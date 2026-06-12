@@ -37,7 +37,7 @@ public record ExecutionJob(
 /// and stores the ManifestPath in ReportSnapshots.
 /// Concurrency is capped by MaxConcurrentReportExecutions.
 /// </summary>
-public class ExecutionJobService : IDisposable
+public class ExecutionJobService : IHostedService, IDisposable
 {
     private readonly ConcurrentDictionary<string, ExecutionJob> _jobs = new();
     private readonly ConcurrentDictionary<int, string> _activeRefreshes = new();
@@ -47,6 +47,7 @@ public class ExecutionJobService : IDisposable
     private readonly ILogger<ExecutionJobService> _log;
     private readonly SessionCache _sessions;
     private readonly IJobChannel _channel;
+    private readonly List<FileStream> _instanceLocks = [];
     public ExecutionJobService(
         PortalConfig config,
         IServiceScopeFactory scopeFactory,
@@ -67,8 +68,17 @@ public class ExecutionJobService : IDisposable
     /// in-memory job table cannot grow without bound on a long-running portal.</summary>
     internal static readonly TimeSpan CompletedJobRetention = TimeSpan.FromHours(24);
 
-    public ExecutionJob? Get(string jobId) =>
-        _jobs.TryGetValue(jobId, out var j) ? j : null;
+    public async Task<ExecutionJob?> GetAsync(string jobId)
+    {
+        if (_jobs.TryGetValue(jobId, out var job))
+            return job;
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetService<PortalDbContext>();
+        var stored = db is null ? null : await db.PortalExecutionJobs.AsNoTracking()
+            .FirstOrDefaultAsync(value => value.Id == jobId);
+        return stored is null ? null : FromEntity(stored);
+    }
 
     private void EvictExpiredJobs()
     {
@@ -81,11 +91,25 @@ public class ExecutionJobService : IDisposable
     }
 
     /// <summary>Returns the in-progress jobId for a report if a refresh is already running.</summary>
-    public string? GetActiveRefreshJobId(int reportId) =>
-        _activeRefreshes.TryGetValue(reportId, out var id) ? id : null;
+    public async Task<string?> GetActiveRefreshJobIdAsync(int reportId)
+    {
+        if (_activeRefreshes.TryGetValue(reportId, out var id))
+            return id;
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetService<PortalDbContext>();
+        return db is null
+            ? null
+            : await db.PortalExecutionJobs.AsNoTracking()
+                .Where(value => value.ReportId == reportId
+                    && value.Kind == "Refresh"
+                    && (value.Status == "Pending" || value.Status == "Running"))
+                .Select(value => value.Id)
+                .FirstOrDefaultAsync();
+    }
 
     /// <summary>Queues a new execution job and starts it in the background.</summary>
-    public string EnqueueExecution(int reportId, int userId, string scriptPath,
+    public async Task<string> EnqueueExecutionAsync(int reportId, int userId, string scriptPath,
         Dictionary<string, string>? parameters = null,
         bool isAdministrator = false)
     {
@@ -93,6 +117,7 @@ public class ExecutionJobService : IDisposable
         var jobId = Guid.NewGuid().ToString("N");
         var job = new ExecutionJob(jobId, reportId, userId, IsAdministrator: isAdministrator);
         _jobs[jobId] = job;
+        await PersistNewJobAsync(job, "Execution");
 
         _ = RunJobAsync(job, scriptPath, parameters, CancellationToken.None);
         return jobId;
@@ -102,7 +127,7 @@ public class ExecutionJobService : IDisposable
     /// Enqueues a refresh job for a report. Debounced — returns the existing jobId if
     /// a refresh is already in flight for this report.
     /// </summary>
-    public string EnqueueRefresh(
+    public async Task<string> EnqueueRefreshAsync(
         int reportId,
         int userId,
         string scriptPath,
@@ -110,6 +135,10 @@ public class ExecutionJobService : IDisposable
         bool trustedDatasetExecution = false)
     {
         EvictExpiredJobs();
+        var existingPersisted = await GetActiveRefreshJobIdAsync(reportId);
+        if (existingPersisted is not null)
+            return existingPersisted;
+
         var jobId = Guid.NewGuid().ToString("N");
         while (!_activeRefreshes.TryAdd(reportId, jobId))
         {
@@ -126,6 +155,15 @@ public class ExecutionJobService : IDisposable
             IsAdministrator: isAdministrator,
             TrustedDatasetExecution: trustedDatasetExecution);
         _jobs[jobId] = job;
+
+        if (!await TryPersistRefreshJobAsync(job))
+        {
+            _jobs.TryRemove(jobId, out _);
+            _activeRefreshes.TryRemove(new KeyValuePair<int, string>(reportId, jobId));
+            return await GetActiveRefreshJobIdAsync(reportId)
+                ?? throw new InvalidOperationException("The active refresh claim could not be resolved.");
+        }
+
         _ = RunJobAsync(job, scriptPath, parameters: null, CancellationToken.None);
         return jobId;
     }
@@ -152,6 +190,7 @@ public class ExecutionJobService : IDisposable
             job.CompletedAt = DateTime.UtcNow;
             job.Error = "Execution timed out while waiting for an execution slot";
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
+            await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
             _log.LogWarning("Execution job {JobId} cancelled while queued for an execution slot", job.Id);
             return;
@@ -161,6 +200,7 @@ public class ExecutionJobService : IDisposable
         {
             job.Status = JobStatus.Running;
             job.StartedAt = DateTime.UtcNow;
+            await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Running", null);
             _log.LogInformation("Execution job {JobId} started for report {ReportId}", job.Id, job.ReportId);
 
@@ -311,6 +351,7 @@ public class ExecutionJobService : IDisposable
             job.Status = JobStatus.Completed;
             job.ManifestPath = manifestPath;
             job.CompletedAt = DateTime.UtcNow;
+            await PersistJobAsync(job);
             _log.LogInformation("Execution job {JobId} completed", job.Id);
 
         }
@@ -319,6 +360,7 @@ public class ExecutionJobService : IDisposable
             job.Status = JobStatus.Cancelled;
             job.CompletedAt = DateTime.UtcNow;
             job.Error = "Execution timed out or was cancelled";
+            await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
             _log.LogWarning("Execution job {JobId} cancelled/timed out", job.Id);
         }
@@ -327,6 +369,7 @@ public class ExecutionJobService : IDisposable
             job.Status = JobStatus.Failed;
             job.CompletedAt = DateTime.UtcNow;
             job.Error = ex.Message;
+            await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Failed", job.Error);
             _log.LogError(ex, "Execution job {JobId} failed: {Message}. StackTrace: {Stack}",
                 job.Id, ex.Message, ex.StackTrace);
@@ -336,6 +379,170 @@ public class ExecutionJobService : IDisposable
             _gate.Release();
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
         }
+    }
+
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        var lockPaths = new[]
+        {
+            Path.Combine(Path.GetDirectoryName(Path.GetFullPath(_config.DatabasePath))!, "portal.instance.lock"),
+            Path.Combine(Path.GetFullPath(_config.ScriptRootPath), ".portal.instance.lock"),
+            Path.Combine(Path.GetFullPath(_config.SnapshotDirectory), ".portal.instance.lock"),
+            Path.Combine(Path.GetFullPath(_config.DatasetRootPath), ".portal.instance.lock")
+        }.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value).ToList();
+
+        try
+        {
+            // COMPAT_BREAK: 0.12
+            foreach (var lockPath in lockPaths)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(lockPath)!);
+                _instanceLocks.Add(new FileStream(
+                    lockPath,
+                    FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite,
+                    FileShare.None));
+            }
+        }
+        catch (IOException ex)
+        {
+            ReleaseInstanceLocks();
+            throw new InvalidOperationException(
+                "Another Report Portal instance is already using this portal database or storage root. "
+                + "The supported topology allows one active portal instance per database and storage root.",
+                ex);
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetService<PortalDbContext>();
+        if (db is null)
+            return;
+
+        var now = DateTime.UtcNow;
+        var interrupted = await db.PortalExecutionJobs
+            .Where(value => value.Status == "Pending" || value.Status == "Running")
+            .ToListAsync(cancellationToken);
+        foreach (var job in interrupted)
+        {
+            job.Status = "Cancelled";
+            job.CompletedAt = now;
+            job.Error = "Portal execution was interrupted by a process restart.";
+        }
+
+        var interruptedReportIds = interrupted.Select(value => value.ReportId).Distinct().ToList();
+        if (interruptedReportIds.Count > 0)
+        {
+            var reports = await db.Reports
+                .Where(value => interruptedReportIds.Contains(value.Id)
+                    && value.LastRefreshStatus == "Running")
+                .ToListAsync(cancellationToken);
+            foreach (var report in reports)
+            {
+                report.LastRefreshStatus = "Cancelled";
+                report.LastRefreshCompletedAt = now;
+                report.LastRefreshError = "Portal execution was interrupted by a process restart.";
+                report.LastRefreshDurationMs = report.LastRefreshStartedAt is null
+                    ? null
+                    : (long)(now - report.LastRefreshStartedAt.Value).TotalMilliseconds;
+            }
+        }
+
+        var cutoff = now - CompletedJobRetention;
+        await db.PortalExecutionJobs
+            .Where(value => value.CompletedAt < cutoff)
+            .ExecuteDeleteAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        ReleaseInstanceLocks();
+        return Task.CompletedTask;
+    }
+
+    private void ReleaseInstanceLocks()
+    {
+        foreach (var instanceLock in _instanceLocks)
+            instanceLock.Dispose();
+        _instanceLocks.Clear();
+    }
+
+    private async Task PersistNewJobAsync(ExecutionJob job, string kind)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetService<PortalDbContext>();
+        if (db is null)
+            return;
+
+        db.PortalExecutionJobs.Add(ToEntity(job, kind));
+        await db.SaveChangesAsync();
+    }
+
+    private async Task<bool> TryPersistRefreshJobAsync(ExecutionJob job)
+    {
+        try
+        {
+            await PersistNewJobAsync(job, "Refresh");
+            return true;
+        }
+        catch (DbUpdateException)
+        {
+            return false;
+        }
+    }
+
+    private async Task PersistJobAsync(ExecutionJob job)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetService<PortalDbContext>();
+            if (db is null)
+                return;
+
+            var stored = await db.PortalExecutionJobs.FindAsync(job.Id);
+            if (stored is null)
+                return;
+
+            stored.Status = job.Status.ToString();
+            stored.StartedAt = job.StartedAt;
+            stored.CompletedAt = job.CompletedAt;
+            stored.ManifestPath = job.ManifestPath;
+            stored.Error = job.Error;
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Failed to persist execution job {JobId} status", job.Id);
+        }
+    }
+
+    private static PortalExecutionJob ToEntity(ExecutionJob job, string kind) => new()
+    {
+        Id = job.Id,
+        ReportId = job.ReportId,
+        UserId = job.UserId,
+        Kind = kind,
+        Status = job.Status.ToString(),
+        CreatedAt = job.CreatedAt,
+        StartedAt = job.StartedAt,
+        CompletedAt = job.CompletedAt,
+        ManifestPath = job.ManifestPath,
+        Error = job.Error
+    };
+
+    private static ExecutionJob FromEntity(PortalExecutionJob stored)
+    {
+        var job = new ExecutionJob(stored.Id, stored.ReportId, stored.UserId)
+        {
+            Status = Enum.TryParse<JobStatus>(stored.Status, out var status) ? status : JobStatus.Failed,
+            CreatedAt = stored.CreatedAt,
+            StartedAt = stored.StartedAt,
+            CompletedAt = stored.CompletedAt,
+            ManifestPath = stored.ManifestPath,
+            Error = stored.Error
+        };
+        return job;
     }
 
     private async Task PersistReportLineageAsync(ExecutionJob job, string scriptPath, ILineageTracker? tracker)
@@ -429,5 +636,9 @@ public class ExecutionJobService : IDisposable
         }
     }
 
-    public void Dispose() => _gate.Dispose();
+    public void Dispose()
+    {
+        ReleaseInstanceLocks();
+        _gate.Dispose();
+    }
 }

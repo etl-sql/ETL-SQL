@@ -1499,6 +1499,7 @@ async function showMySubscriptions() {
 
   try {
     const subs = await subscriptionsApi.list();
+    mySubscriptions = subs;
     renderMySubscriptions(subs);
   } catch {
     $main.innerHTML = `
@@ -1509,6 +1510,8 @@ async function showMySubscriptions() {
       </div>`;
   }
 }
+
+let mySubscriptions = [];
 
 function renderMySubscriptions(subs) {
   const $main = document.getElementById('mainContent');
@@ -1588,11 +1591,13 @@ async function handleSubAction(btn) {
   const action = btn.dataset.action;
   if (action === 'delete') {
     if (!confirm('Delete this subscription? This stops future deliveries but does not remove generated report snapshots.')) return;
-    try { await subscriptionsApi.delete(id); showMySubscriptions(); }
+    const subscription = mySubscriptions.find(x => x.id === id);
+    try { await subscriptionsApi.delete(id, subscription?.version); showMySubscriptions(); }
     catch (err) { alert(err.message); }
   } else if (action === 'toggle') {
     const isActive = btn.dataset.active === 'true';
-    try { await subscriptionsApi.update(id, { isActive: !isActive }); showMySubscriptions(); }
+    const subscription = mySubscriptions.find(x => x.id === id);
+    try { await subscriptionsApi.update(id, { isActive: !isActive }, subscription?.version); showMySubscriptions(); }
     catch (err) { alert(err.message); }
   } else if (action === 'history') {
     showSubscriptionHistory(id, btn.dataset.name);
@@ -1600,7 +1605,8 @@ async function handleSubAction(btn) {
     const currentParams = JSON.parse(btn.dataset.params || '{}');
     const reportId      = +btn.dataset.reportId;
     const label         = btn.dataset.name;
-    openEditParamsModal(id, reportId, label, currentParams, () => showMySubscriptions());
+    const subscription = mySubscriptions.find(x => x.id === id);
+    openEditParamsModal(id, reportId, label, currentParams, subscription?.version, () => showMySubscriptions());
   }
 }
 
@@ -1629,11 +1635,13 @@ document.getElementById('subscriptionHistoryCloseBtn').addEventListener('click',
 let _epSubId      = null;
 let _epParams     = [];
 let _epOnSaved    = null;
+let _epVersion    = null;
 
-async function openEditParamsModal(subId, reportId, label, currentValues, onSaved) {
+async function openEditParamsModal(subId, reportId, label, currentValues, version, onSaved) {
   _epSubId   = subId;
   _epParams  = [];
   _epOnSaved = onSaved;
+  _epVersion = version;
 
   document.getElementById('ep-subtitle').textContent = label;
   document.getElementById('ep-error').textContent    = '';
@@ -1668,7 +1676,7 @@ function wireEditParamsModal() {
     }
     const parameters = validation.values;
     try {
-      await subscriptionsApi.update(_epSubId, { parameters: Object.keys(parameters).length ? parameters : null });
+      await subscriptionsApi.update(_epSubId, { parameters: Object.keys(parameters).length ? parameters : null }, _epVersion);
       document.getElementById('editParamsModal').style.display = 'none';
       _epOnSaved?.();
     } catch (err) {

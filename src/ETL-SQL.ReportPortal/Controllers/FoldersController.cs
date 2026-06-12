@@ -42,7 +42,7 @@ public class FoldersController(
 
         FolderDto ToDto(Folder f) => new(
             f.Id, f.ParentId, f.Name, f.Path,
-            visible.Where(c => c.ParentId == f.Id).Select(ToDto).ToList());
+            visible.Where(c => c.ParentId == f.Id).Select(ToDto).ToList(), f.Version);
 
         return Ok(roots.Select(ToDto));
     }
@@ -81,7 +81,7 @@ public class FoldersController(
         await audit.LogAsync(CurrentUserId, "CREATE_FOLDER", "Folder", folder.Id.ToString(), path);
 
         return CreatedAtAction(nameof(GetById), new { id = folder.Id },
-            new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, []));
+            new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
     }
 
     [HttpGet("{id:int}")]
@@ -92,7 +92,8 @@ public class FoldersController(
         if (!IsAdmin && !await folderPermissions.HasPermissionAsync(id, FolderPermission.Read, User))
             return Forbid();
 
-        return Ok(new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, []));
+        OptimisticConcurrency.SetETag(Response, folder.Version);
+        return Ok(new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
     }
 
     [HttpPut("{id:int}")]
@@ -104,6 +105,13 @@ public class FoldersController(
 
         if (!await folderPermissions.HasPermissionAsync(folder.Id, FolderPermission.Manage, User))
             return Forbid();
+
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, folder, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(
+                this, new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
 
         bool pathChanged = false;
         if (req.Name is not null && req.Name != folder.Name)
@@ -154,9 +162,19 @@ public class FoldersController(
             await UpdatePathsRecursiveAsync(folder);
         }
 
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(folder).ReloadAsync();
+            return OptimisticConcurrency.Conflict(
+                this, new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
+        }
         await audit.LogAsync(CurrentUserId, "UPDATE_FOLDER", "Folder", id.ToString(), folder.Path);
-        return Ok(new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, []));
+        OptimisticConcurrency.SetETag(Response, folder.Version);
+        return Ok(new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
     }
 
     private async Task UpdatePathsRecursiveAsync(Folder folder)
@@ -164,6 +182,7 @@ public class FoldersController(
         var children = await db.Folders.Where(f => f.ParentId == folder.Id).ToListAsync();
         foreach (var child in children)
         {
+            child.Version = checked(child.Version + 1);
             child.Path = $"{folder.Path}/{child.Name}";
             await UpdatePathsRecursiveAsync(child);
         }
@@ -180,12 +199,31 @@ public class FoldersController(
             .FirstOrDefaultAsync(f => f.Id == id);
         if (folder is null) return NotFound();
 
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, folder, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(
+                this, new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
+
         bool hasChildren = folder.Children.Any() || folder.Reports.Any(r => !r.IsDeleted);
         if (hasChildren && !cascade)
             return Conflict(new { error = "Folder has contents. Use ?cascade=true to delete recursively." });
 
         await DeleteFolderRecursiveAsync(folder);
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            db.ChangeTracker.Clear();
+            var current = await db.Folders.FindAsync(id);
+            return current is null
+                ? NotFound()
+                : OptimisticConcurrency.Conflict(
+                    this, new FolderDto(current.Id, current.ParentId, current.Name, current.Path, [], current.Version));
+        }
         await audit.LogAsync(CurrentUserId, "DELETE_FOLDER", "Folder", id.ToString(), folder.Path);
         return NoContent();
     }
@@ -227,8 +265,15 @@ public class FoldersController(
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Grant(int id, [FromBody] GrantPermissionRequest req)
     {
-        if (!await db.Folders.AnyAsync(f => f.Id == id)) return NotFound("Folder not found");
+        var folder = await db.Folders.FindAsync(id);
+        if (folder is null) return NotFound("Folder not found");
         if (!await db.Groups.AnyAsync(g => g.Id == req.GroupId)) return NotFound("Group not found");
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, folder, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(
+                this, new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
 
         var existing = await db.FolderAcls.FirstOrDefaultAsync(
             a => a.FolderId == id && a.GroupId == req.GroupId);
@@ -238,26 +283,58 @@ public class FoldersController(
         else
             db.FolderAcls.Add(new FolderAcl { FolderId = id, GroupId = req.GroupId, Permission = req.Permission });
 
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            db.ChangeTracker.Clear();
+            var current = await db.Folders.FindAsync(id);
+            return current is null
+                ? NotFound()
+                : OptimisticConcurrency.Conflict(
+                    this, new FolderDto(current.Id, current.ParentId, current.Name, current.Path, [], current.Version));
+        }
         await securitySessions.InvalidateGroupMembersAsync(req.GroupId);
         await audit.LogAsync(CurrentUserId, "GRANT_PERMISSION", "Folder", id.ToString(),
             $"group={req.GroupId} perm={req.Permission}");
-        return NoContent();
+        OptimisticConcurrency.SetETag(Response, folder.Version);
+        return Ok(new { folder.Version });
     }
 
     [HttpDelete("{id:int}/acl/{groupId:int}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Revoke(int id, int groupId)
     {
+        var folder = await db.Folders.FindAsync(id);
+        if (folder is null) return NotFound();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, folder, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(
+                this, new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
+
         var acl = await db.FolderAcls.FirstOrDefaultAsync(
             a => a.FolderId == id && a.GroupId == groupId);
         if (acl is null) return NotFound();
 
         db.FolderAcls.Remove(acl);
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(folder).ReloadAsync();
+            return OptimisticConcurrency.Conflict(
+                this, new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
+        }
         await securitySessions.InvalidateGroupMembersAsync(groupId);
         await audit.LogAsync(CurrentUserId, "REVOKE_PERMISSION", "Folder", id.ToString(),
             $"group={groupId}");
-        return NoContent();
+        OptimisticConcurrency.SetETag(Response, folder.Version);
+        return Ok(new { folder.Version });
     }
 }

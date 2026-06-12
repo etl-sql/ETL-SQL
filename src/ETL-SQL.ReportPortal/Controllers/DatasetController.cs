@@ -69,6 +69,7 @@ public class DatasetController(
         var perm = await GetEffectivePermissionAsync(dataset);
         if (!CanView(perm)) return Forbid();
 
+        OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(ToDto(dataset));
     }
 
@@ -252,7 +253,7 @@ public class DatasetController(
         // Concurrent refresh guard: reject if the owning report is already executing
         if (dataset.OwningReportId.HasValue)
         {
-            var existingJobId = jobService.GetActiveRefreshJobId(dataset.OwningReportId.Value);
+            var existingJobId = await jobService.GetActiveRefreshJobIdAsync(dataset.OwningReportId.Value);
             if (existingJobId is not null)
             {
                 Response.Headers.Append("Location", $"/api/jobs/{existingJobId}");
@@ -267,7 +268,7 @@ public class DatasetController(
         // Path security is enforced inside RunJobAsync — no need to pre-validate here.
         if (dataset.OwningReport is not null)
         {
-            var jobId = jobService.EnqueueRefresh(
+            var jobId = await jobService.EnqueueRefreshAsync(
                 dataset.OwningReport.Id,
                 CurrentUserId,
                 dataset.OwningReport.ScriptPath,
@@ -296,10 +297,10 @@ public class DatasetController(
 
         if (dataset.OwningReportId.HasValue)
         {
-            var jobId = jobService.GetActiveRefreshJobId(dataset.OwningReportId.Value);
+            var jobId = await jobService.GetActiveRefreshJobIdAsync(dataset.OwningReportId.Value);
             if (jobId is not null)
             {
-                var job = jobService.Get(jobId);
+                var job = await jobService.GetAsync(jobId);
                 return Ok(new DatasetRefreshStatusDto(
                     "InProgress", jobId,
                     job?.StartedAt, null, null,
@@ -322,6 +323,11 @@ public class DatasetController(
 
         var perm = await GetEffectivePermissionAsync(dataset);
         if (!CanEdit(perm)) return Forbid();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, dataset, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
 
         if (req.AccessLevel is not null)
         {
@@ -340,9 +346,18 @@ public class DatasetController(
             dataset.Ttl = string.IsNullOrWhiteSpace(req.Ttl) ? null : req.Ttl;
 
         dataset.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(dataset).ReloadAsync();
+            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
+        }
         await audit.LogAsync(CurrentUserId, "UPDATE_DATASET", "Dataset", id.ToString(), dataset.Name);
 
+        OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(ToDto(dataset));
     }
 
@@ -360,6 +375,12 @@ public class DatasetController(
 
         if (dataset.FolderId == destination.Id)
             return Ok(ToDto(dataset));
+
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, dataset, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
 
         if (dataset.FolderId is int sourceFolderId)
         {
@@ -388,7 +409,15 @@ public class DatasetController(
         dataset.FolderId = destination.Id;
         dataset.FolderPath = destination.Path;
         dataset.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(dataset).ReloadAsync();
+            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
+        }
 
         if (dataset.OwningReportId is int reportId)
             await sessions.InvalidateReportAsync(reportId);
@@ -400,6 +429,7 @@ public class DatasetController(
             id.ToString(),
             $"{dataset.Name}: {sourcePath} -> {destination.Path}");
 
+        OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(ToDto(dataset));
     }
 
@@ -414,7 +444,22 @@ public class DatasetController(
         var perm = await GetEffectivePermissionAsync(dataset);
         if (!CanManage(perm)) return Forbid();
 
-        await registry.Delete(dataset.Name);
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, dataset, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
+
+        try
+        {
+            await registry.Delete(dataset.Name);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            db.ChangeTracker.Clear();
+            var current = await LoadDataset(id);
+            return current is null ? NotFound() : OptimisticConcurrency.Conflict(this, ToDto(current));
+        }
         await audit.LogAsync(CurrentUserId, "DELETE_DATASET", "Dataset", id.ToString(), dataset.Name);
 
         return NoContent();
@@ -449,6 +494,11 @@ public class DatasetController(
 
         var perm = await GetEffectivePermissionAsync(dataset);
         if (!CanManage(perm)) return Forbid();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, dataset, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
 
         if (!Enum.TryParse<DatasetPermission>(req.Permission, ignoreCase: true, out var granted))
             return BadRequest(new { error = "permission must be 'Viewer', 'Refresh', 'Editor', or 'Owner'." });
@@ -464,12 +514,21 @@ public class DatasetController(
         else
             existing.Permission = granted;
 
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(dataset).ReloadAsync();
+            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
+        }
         await securitySessions.InvalidateGroupMembersAsync(req.GroupId);
         await audit.LogAsync(CurrentUserId, "GRANT_DATASET_PERMISSION", "Dataset", id.ToString(),
             $"{dataset.Name} → group {req.GroupId} as {granted}");
 
-        return Ok();
+        OptimisticConcurrency.SetETag(Response, dataset.Version);
+        return Ok(new { dataset.Version });
     }
 
     // ── DELETE /api/datasets/{id}/acl/{groupId} ───────────────────────────────
@@ -482,18 +541,32 @@ public class DatasetController(
 
         var perm = await GetEffectivePermissionAsync(dataset);
         if (!CanManage(perm)) return Forbid();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, dataset, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
 
         var acl = await db.DatasetAcls
             .FirstOrDefaultAsync(a => a.DatasetId == id && a.GroupId == groupId);
         if (acl is null) return NotFound(new { error = "ACL entry not found." });
 
         db.DatasetAcls.Remove(acl);
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(dataset).ReloadAsync();
+            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
+        }
         await securitySessions.InvalidateGroupMembersAsync(groupId);
         await audit.LogAsync(CurrentUserId, "REVOKE_DATASET_PERMISSION", "Dataset", id.ToString(),
             $"{dataset.Name} → group {groupId}");
 
-        return NoContent();
+        OptimisticConcurrency.SetETag(Response, dataset.Version);
+        return Ok(new { dataset.Version });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -520,7 +593,8 @@ public class DatasetController(
             && d.EncryptionMode != ETL_SQL.Core.DatasetEncryptionMode.None,
         d.CreatedAt, d.UpdatedAt,
         d.OwningReport?.Name,
-        d.OwningReportId);
+        d.OwningReportId,
+        d.Version);
 
     private static bool IsStale(Dataset d)
     {

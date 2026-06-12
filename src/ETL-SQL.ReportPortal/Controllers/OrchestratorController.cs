@@ -58,7 +58,10 @@ public class OrchestratorController(OrchestratorProxyService proxy, AuditService
     [HttpPut("jobs/{name}")]
     public async Task<IActionResult> UpdateJob(string name, [FromBody] UpdateJobRequest req)
     {
-        using var resp = await proxy.UpdateJobAsync(name, req);
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        using var resp = await proxy.UpdateJobAsync(name, req, expectedVersion.Value);
         if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         if (!resp.IsSuccessStatusCode)
         {
@@ -77,7 +80,10 @@ public class OrchestratorController(OrchestratorProxyService proxy, AuditService
     [HttpDelete("jobs/{name}")]
     public async Task<IActionResult> DeleteJob(string name)
     {
-        using var resp = await proxy.DeleteJobAsync(name);
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        using var resp = await proxy.DeleteJobAsync(name, expectedVersion.Value);
         if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
         if (!resp.IsSuccessStatusCode)
         {

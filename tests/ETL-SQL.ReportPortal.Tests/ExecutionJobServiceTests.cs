@@ -61,18 +61,18 @@ public class ExecutionJobServiceTests : IDisposable
         using var service = new ExecutionJobService(
             config, scopeFactory, NullLogger<ExecutionJobService>.Instance, sessions, channel);
 
-        var first = service.EnqueueRefresh(reportId: 1, userId: 7, scriptPath);
-        var second = service.EnqueueRefresh(reportId: 2, userId: 7, scriptPath);
+        var first = await service.EnqueueRefreshAsync(reportId: 1, userId: 7, scriptPath);
+        var second = await service.EnqueueRefreshAsync(reportId: 2, userId: 7, scriptPath);
 
         await WaitForTerminalAsync(service, first);
         await WaitForTerminalAsync(service, second);
 
-        Assert.Null(service.GetActiveRefreshJobId(1));
-        Assert.Null(service.GetActiveRefreshJobId(2));
+        Assert.Null(await service.GetActiveRefreshJobIdAsync(1));
+        Assert.Null(await service.GetActiveRefreshJobIdAsync(2));
 
         // The debounce entry must be gone (a new job id is issued) and the gate must still
         // have capacity (the new job also runs to a terminal state instead of queueing forever).
-        var third = service.EnqueueRefresh(reportId: 1, userId: 7, scriptPath);
+        var third = await service.EnqueueRefreshAsync(reportId: 1, userId: 7, scriptPath);
         Assert.NotEqual(first, third);
         await WaitForTerminalAsync(service, third);
     }
@@ -110,18 +110,18 @@ public class ExecutionJobServiceTests : IDisposable
         using var service = new ExecutionJobService(
             config, scopeFactory, NullLogger<ExecutionJobService>.Instance, sessions, channel);
 
-        var old = service.EnqueueRefresh(reportId: 1, userId: 7, scriptPath);
+        var old = await service.EnqueueRefreshAsync(reportId: 1, userId: 7, scriptPath);
         await WaitForTerminalAsync(service, old);
-        service.Get(old)!.CompletedAt =
+        (await service.GetAsync(old))!.CompletedAt =
             DateTime.UtcNow - ExecutionJobService.CompletedJobRetention - TimeSpan.FromMinutes(1);
 
-        var recent = service.EnqueueRefresh(reportId: 2, userId: 7, scriptPath);
+        var recent = await service.EnqueueRefreshAsync(reportId: 2, userId: 7, scriptPath);
         await WaitForTerminalAsync(service, recent);
 
-        var trigger = service.EnqueueRefresh(reportId: 3, userId: 7, scriptPath);
+        var trigger = await service.EnqueueRefreshAsync(reportId: 3, userId: 7, scriptPath);
 
-        Assert.Null(service.Get(old));        // past retention — evicted
-        Assert.NotNull(service.Get(recent));  // recent terminal job — still queryable
+        Assert.Null(await service.GetAsync(old));        // past retention — evicted
+        Assert.NotNull(await service.GetAsync(recent));  // recent terminal job — still queryable
         await WaitForTerminalAsync(service, trigger);
     }
 
@@ -197,12 +197,116 @@ public class ExecutionJobServiceTests : IDisposable
         Assert.All(otherFiles, f => Assert.True(File.Exists(f)));
     }
 
+    [Fact]
+    [Trait("CompatBreak", "0.12")]
+    public async Task StartAsync_RejectsSecondPortalInstanceUsingSameDatabase()
+    {
+        var (config, provider) = CreatePersistentServices();
+        await using var services = provider;
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        var sessions = new SessionCache(config, scopes, NullLogger<SessionCache>.Instance);
+        var channel = new HttpJobChannelClient(
+            new HttpClient(new NeverRespondingHandler()) { BaseAddress = new Uri("http://localhost:9") },
+            NullLogger<HttpJobChannelClient>.Instance);
+        using var first = new ExecutionJobService(
+            config, scopes, NullLogger<ExecutionJobService>.Instance, sessions, channel);
+        using var second = new ExecutionJobService(
+            config, scopes, NullLogger<ExecutionJobService>.Instance, sessions, channel);
+
+        await first.StartAsync(CancellationToken.None);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => second.StartAsync(CancellationToken.None));
+
+        Assert.Contains("one active portal instance", error.Message, StringComparison.OrdinalIgnoreCase);
+        await first.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StartAsync_MarksAbandonedJobsAndReportRefreshAsInterrupted()
+    {
+        var (config, provider) = CreatePersistentServices();
+        await using var services = provider;
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        int reportId;
+        const string jobId = "abandoned-job";
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var folder = new Folder { Name = "restart", Path = "/restart" };
+            var report = new Report
+            {
+                Folder = folder,
+                Name = "restart report",
+                ScriptPath = "restart.rptsql",
+                LastRefreshStatus = "Running",
+                LastRefreshStartedAt = DateTime.UtcNow.AddMinutes(-2)
+            };
+            db.AddRange(folder, report);
+            await db.SaveChangesAsync();
+            reportId = report.Id;
+            db.PortalExecutionJobs.Add(new PortalExecutionJob
+            {
+                Id = jobId,
+                ReportId = reportId,
+                UserId = 1,
+                Kind = "Refresh",
+                Status = "Running",
+                StartedAt = report.LastRefreshStartedAt
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var sessions = new SessionCache(config, scopes, NullLogger<SessionCache>.Instance);
+        var channel = new HttpJobChannelClient(
+            new HttpClient(new NeverRespondingHandler()) { BaseAddress = new Uri("http://localhost:9") },
+            NullLogger<HttpJobChannelClient>.Instance);
+        using var service = new ExecutionJobService(
+            config, scopes, NullLogger<ExecutionJobService>.Instance, sessions, channel);
+
+        await service.StartAsync(CancellationToken.None);
+
+        var job = await service.GetAsync(jobId);
+        Assert.NotNull(job);
+        Assert.Equal(JobStatus.Cancelled, job.Status);
+        Assert.Contains("interrupted", job.Error!, StringComparison.OrdinalIgnoreCase);
+
+        await using var verifyScope = provider.CreateAsyncScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var reportState = await verifyDb.Reports.FindAsync(reportId);
+        Assert.Equal("Cancelled", reportState!.LastRefreshStatus);
+        Assert.Contains("interrupted", reportState.LastRefreshError!, StringComparison.OrdinalIgnoreCase);
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    private (PortalConfig Config, ServiceProvider Provider) CreatePersistentServices()
+    {
+        var config = new PortalConfig
+        {
+            DatabasePath = Path.Combine(_tempDir, "portal.db"),
+            ScriptRootPath = Path.Combine(_tempDir, "scripts"),
+            SnapshotDirectory = Path.Combine(_tempDir, "snapshots"),
+            DatasetRootPath = Path.Combine(_tempDir, "datasets"),
+            Resources = new ResourcesConfig
+            {
+                MaxConcurrentReportExecutions = 1,
+                ExecutionTimeoutSeconds = 1
+            }
+        };
+        var services = new ServiceCollection()
+            .AddDbContext<PortalDbContext>(options =>
+                options.UseSqlite($"Data Source={config.DatabasePath}"))
+            .BuildServiceProvider();
+        using var scope = services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<PortalDbContext>().Database.EnsureCreated();
+        return (config, services);
+    }
+
     private static async Task WaitForTerminalAsync(ExecutionJobService service, string jobId)
     {
         var deadline = DateTime.UtcNow.AddSeconds(15);
         while (DateTime.UtcNow < deadline)
         {
-            var job = service.Get(jobId);
+            var job = await service.GetAsync(jobId);
             Assert.NotNull(job);
             if (job.Status is JobStatus.Cancelled or JobStatus.Failed or JobStatus.Completed)
                 return;
@@ -211,7 +315,7 @@ public class ExecutionJobServiceTests : IDisposable
 
         Assert.Fail(
             $"Job {jobId} did not reach a terminal state within 15s " +
-            $"(status={service.Get(jobId)?.Status}).");
+            $"(status={(await service.GetAsync(jobId))?.Status}).");
     }
 
     private sealed class NeverRespondingHandler : HttpMessageHandler

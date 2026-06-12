@@ -4,9 +4,14 @@ using Microsoft.AspNetCore.Identity;
 
 namespace ETL_SQL.ReportPortal.Data;
 
+public interface IVersionedEntity
+{
+    long Version { get; set; }
+}
+
 // ── Identity ──────────────────────────────────────────────────────────────────
 
-public class PortalUser : IdentityUser<int>
+public class PortalUser : IdentityUser<int>, IVersionedEntity
 {
     public string? FirstName { get; set; }
     public string? LastName { get; set; }
@@ -15,6 +20,7 @@ public class PortalUser : IdentityUser<int>
     public bool MustChangePassword { get; set; } = false;
     public string Provider { get; set; } = "Local";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public long Version { get; set; } = 1;
 
     public ICollection<UserGroup> UserGroups { get; set; } = [];
     public ICollection<Subscription> Subscriptions { get; set; } = [];
@@ -32,13 +38,14 @@ public class PortalRole : IdentityRole<int>
 
 // ── Groups ────────────────────────────────────────────────────────────────────
 
-public class Group
+public class Group : IVersionedEntity
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
     public string? Description { get; set; }
     public string Provider { get; set; } = "Local";
     public string? AdGroup { get; set; }
+    public long Version { get; set; } = 1;
 
     public ICollection<UserGroup> UserGroups { get; set; } = [];
     public ICollection<FolderAcl> FolderAcls { get; set; } = [];
@@ -55,7 +62,7 @@ public class UserGroup
 
 // ── Folders ───────────────────────────────────────────────────────────────────
 
-public class Folder
+public class Folder : IVersionedEntity
 {
     public int Id { get; set; }
     public int? ParentId { get; set; }
@@ -63,6 +70,7 @@ public class Folder
     public string Name { get; set; } = "";
     public string Path { get; set; } = "";
     public int OwnerId { get; set; }
+    public long Version { get; set; } = 1;
 
     public ICollection<Folder> Children { get; set; } = [];
     public ICollection<FolderAcl> Acls { get; set; } = [];
@@ -83,7 +91,7 @@ public class FolderAcl
 
 // ── Reports ───────────────────────────────────────────────────────────────────
 
-public class Report
+public class Report : IVersionedEntity
 {
     public int Id { get; set; }
     public int FolderId { get; set; }
@@ -111,6 +119,7 @@ public class Report
     public string? LastRefreshError { get; set; }
     public long? LastRefreshDurationMs { get; set; }
     public bool IsDeleted { get; set; } = false;
+    public long Version { get; set; } = 1;
 
     public ICollection<ReportSnapshot> Snapshots { get; set; } = [];
     public ICollection<Subscription> Subscriptions { get; set; } = [];
@@ -207,11 +216,27 @@ public class ReportSnapshot
     public bool? HashMatched { get; set; }
 }
 
+// ── Portal execution jobs ─────────────────────────────────────────────────────
+
+public class PortalExecutionJob
+{
+    public string Id { get; set; } = "";
+    public int ReportId { get; set; }
+    public int UserId { get; set; }
+    public string Kind { get; set; } = "Execution";
+    public string Status { get; set; } = "Pending";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public string? ManifestPath { get; set; }
+    public string? Error { get; set; }
+}
+
 // ── Subscriptions ─────────────────────────────────────────────────────────────
 
 public enum SubscriptionFormat { PDF, CSV, Markdown, Link }
 
-public class Subscription
+public class Subscription : IVersionedEntity
 {
     public int Id { get; set; }
     public int ReportId { get; set; }
@@ -236,11 +261,12 @@ public class Subscription
     public DateTime? LastTriggeredAt { get; set; }
     public int FailCount { get; set; } = 0;
     public bool IsActive { get; set; } = true;
+    public long Version { get; set; } = 1;
 }
 
 // ── SMTP Connections ──────────────────────────────────────────────────────────
 
-public class SmtpConnection
+public class SmtpConnection : IVersionedEntity
 {
     public int Id { get; set; }
     public string Alias { get; set; } = "";
@@ -250,6 +276,7 @@ public class SmtpConnection
     public string? EncryptedPassword { get; set; }
     public string? FromAddress { get; set; }
     public bool UseSsl { get; set; } = true;
+    public long Version { get; set; } = 1;
 }
 
 // ── Audit Log ─────────────────────────────────────────────────────────────────
@@ -291,7 +318,7 @@ public class RefreshToken
 
 // ── Datasets ──────────────────────────────────────────────────────────────────
 
-public class Dataset
+public class Dataset : IVersionedEntity
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
@@ -312,6 +339,7 @@ public class Dataset
     public string? ColumnSchema { get; set; } // JSON
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public long Version { get; set; } = 1;
 
     public ICollection<DatasetAcl> Acls { get; set; } = [];
 }

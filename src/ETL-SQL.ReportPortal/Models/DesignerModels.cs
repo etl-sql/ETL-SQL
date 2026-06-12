@@ -38,4 +38,4 @@ public record DesignerDatasetDto(
 
 public record ScriptContentRequest(string ScriptText);
 
-public record ScriptContentResponse(string ScriptText);
+public record ScriptContentResponse(string ScriptText, long Version = 1);

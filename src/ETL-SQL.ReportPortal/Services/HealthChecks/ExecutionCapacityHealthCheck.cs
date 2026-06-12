@@ -18,10 +18,14 @@ public class ExecutionCapacityHealthCheck(
 
         int smtpCount = await db.SmtpConnections.CountAsync(ct);
         int activeSubs = await db.Subscriptions.CountAsync(s => s.IsActive, ct);
+        int activeExecutions = await db.PortalExecutionJobs.CountAsync(
+            job => job.Status == "Pending" || job.Status == "Running", ct);
 
         var data = new Dictionary<string, object>
         {
             ["execution_cap"] = cap,
+            ["active_executions"] = activeExecutions,
+            ["portal_topology"] = "single-active-instance",
             ["smtp_connections"] = smtpCount,
             ["active_subscriptions"] = activeSubs
         };

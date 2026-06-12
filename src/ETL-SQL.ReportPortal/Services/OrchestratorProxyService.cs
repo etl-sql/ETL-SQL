@@ -55,15 +55,15 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogWarning(ex, "Failed to create job."); return null; }
     }
 
-    public async Task<HttpResponseMessage?> UpdateJobAsync(string name, UpdateJobRequest req)
+    public async Task<HttpResponseMessage?> UpdateJobAsync(string name, UpdateJobRequest req, long version)
     {
-        try { return await SendAsync(HttpMethod.Put, $"api/scheduled-jobs/{Uri.EscapeDataString(name)}", req); }
+        try { return await SendAsync(HttpMethod.Put, $"api/scheduled-jobs/{Uri.EscapeDataString(name)}", req, version); }
         catch (Exception ex) { logger.LogWarning(ex, "Failed to update job {Name}.", name); return null; }
     }
 
-    public async Task<HttpResponseMessage?> DeleteJobAsync(string name)
+    public async Task<HttpResponseMessage?> DeleteJobAsync(string name, long version)
     {
-        try { return await SendAsync(HttpMethod.Delete, $"api/scheduled-jobs/{Uri.EscapeDataString(name)}"); }
+        try { return await SendAsync(HttpMethod.Delete, $"api/scheduled-jobs/{Uri.EscapeDataString(name)}", version: version); }
         catch (Exception ex) { logger.LogWarning(ex, "Failed to delete job {Name}.", name); return null; }
     }
 
@@ -120,7 +120,11 @@ public class OrchestratorProxyService(
         return await resp.Content.ReadFromJsonAsync<T>();
     }
 
-    private async Task<HttpResponseMessage?> SendAsync(HttpMethod method, string path, object? body = null)
+    private async Task<HttpResponseMessage?> SendAsync(
+        HttpMethod method,
+        string path,
+        object? body = null,
+        long? version = null)
     {
         var url = settings.BuildUrl(path);
         if (url is null) return null;
@@ -129,6 +133,8 @@ public class OrchestratorProxyService(
         var key = settings.ApiKey;
         if (!string.IsNullOrEmpty(key))
             req.Headers.TryAddWithoutValidation("X-Orchestrator-Key", key);
+        if (version.HasValue)
+            req.Headers.TryAddWithoutValidation("If-Match", OptimisticConcurrency.ToETag(version.Value));
         if (body is not null)
             req.Content = JsonContent.Create(body);
 

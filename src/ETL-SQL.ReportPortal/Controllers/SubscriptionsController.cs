@@ -84,6 +84,7 @@ public class SubscriptionsController(
         var sub = await db.Subscriptions.Include(s => s.Report).FirstOrDefaultAsync(s => s.Id == id);
         if (sub is null) return NotFound();
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
+        OptimisticConcurrency.SetETag(Response, sub.Version);
         return Ok(ToDto(sub));
     }
 
@@ -174,6 +175,11 @@ public class SubscriptionsController(
         var sub = await db.Subscriptions.Include(s => s.Report).FirstOrDefaultAsync(s => s.Id == id);
         if (sub is null) return NotFound();
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, sub, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToDto(sub));
 
         var scheduleChanged = req.Schedule is not null && req.Schedule != sub.Schedule;
         var newFormat = sub.Format;
@@ -204,6 +210,16 @@ public class SubscriptionsController(
             GenerateJobScript(sub, sub.Report);
         }
 
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(sub).ReloadAsync();
+            return OptimisticConcurrency.Conflict(this, ToDto(sub));
+        }
+
         // Sync the Orchestrator job if schedule or active state changed
         var orchDbPath = dbLocator.Resolve();
         if (orchDbPath is not null && (scheduleChanged || req.IsActive.HasValue))
@@ -232,8 +248,8 @@ public class SubscriptionsController(
             }
         }
 
-        await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "UPDATE_SUBSCRIPTION", "Subscription", sub.Id.ToString());
+        OptimisticConcurrency.SetETag(Response, sub.Version);
         return Ok(ToDto(sub));
     }
 
@@ -241,34 +257,61 @@ public class SubscriptionsController(
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> BulkUpdateStatus([FromBody] BulkSubscriptionStatusRequest req)
     {
-        var ids = req.SubscriptionIds.Distinct().ToList();
-        if (ids.Count == 0) return BadRequest(new { error = "Select at least one subscription." });
-
-        var subs = await db.Subscriptions
-            .Include(s => s.Report)
-            .Where(s => ids.Contains(s.Id))
-            .ToListAsync();
-        foreach (var sub in subs)
-            sub.IsActive = req.IsActive;
+        var items = (req.Subscriptions ?? []).GroupBy(item => item.Id).Select(group => group.First()).ToList();
+        if (items.Count == 0) return BadRequest(new { error = "Select at least one subscription." });
 
         var orchDbPath = dbLocator.Resolve();
+        SQLiteJobHistoryStore? store = null;
         if (orchDbPath is not null)
         {
-            var store = new SQLiteJobHistoryStore(orchDbPath);
+            store = new SQLiteJobHistoryStore(orchDbPath);
             await store.InitializeAsync();
-            foreach (var sub in subs)
+        }
+
+        var results = new List<BulkMutationResult>();
+        var updated = 0;
+        foreach (var item in items)
+        {
+            var sub = await db.Subscriptions
+                .Include(value => value.Report)
+                .FirstOrDefaultAsync(value => value.Id == item.Id);
+            if (sub is null)
+            {
+                results.Add(new(item.Id, "NotFound"));
+                continue;
+            }
+            if (!OptimisticConcurrency.Prepare(db, sub, item.Version))
+            {
+                results.Add(new(item.Id, "Conflict", sub.Version));
+                continue;
+            }
+
+            sub.IsActive = req.IsActive;
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await db.Entry(sub).ReloadAsync();
+                results.Add(new(item.Id, "Conflict", sub.Version));
+                continue;
+            }
+
+            if (store is not null)
             {
                 var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report.Name);
                 var job = await store.GetJobAsync(jobName);
                 if (job is not null)
                     await store.SaveJobAsync(job with { IsEnabled = req.IsActive });
             }
+            results.Add(new(item.Id, "Updated", sub.Version));
+            updated++;
         }
 
-        await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "BULK_UPDATE_SUBSCRIPTION_STATUS", "Subscription", null,
-            $"{subs.Count} subscriptions set active={req.IsActive}");
-        return Ok(new { Updated = subs.Count });
+            $"{updated} subscriptions set active={req.IsActive}");
+        return Ok(new { Updated = updated, Results = results });
     }
 
     [HttpDelete("api/subscriptions/{id:int}")]
@@ -277,6 +320,21 @@ public class SubscriptionsController(
         var sub = await db.Subscriptions.Include(s => s.Report).FirstOrDefaultAsync(s => s.Id == id);
         if (sub is null) return NotFound();
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, sub, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToDto(sub));
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(sub).ReloadAsync();
+            return OptimisticConcurrency.Conflict(this, ToDto(sub));
+        }
 
         var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name);
         string? resolvedScriptPath = null;
@@ -330,7 +388,7 @@ public class SubscriptionsController(
     public async Task<IActionResult> ListSmtp()
     {
         var conns = await db.SmtpConnections
-            .Select(c => new SmtpConnectionDto(c.Id, c.Alias, c.Host, c.Port, c.Username, c.FromAddress, c.UseSsl))
+            .Select(c => new SmtpConnectionDto(c.Id, c.Alias, c.Host, c.Port, c.Username, c.FromAddress, c.UseSsl, c.Version))
             .ToListAsync();
         return Ok(conns);
     }
@@ -355,7 +413,7 @@ public class SubscriptionsController(
         db.SmtpConnections.Add(conn);
         await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "CREATE_SMTP", "SmtpConnection", conn.Id.ToString(), req.Alias);
-        return Ok(new SmtpConnectionDto(conn.Id, conn.Alias, conn.Host, conn.Port, conn.Username, conn.FromAddress, conn.UseSsl));
+        return Ok(new SmtpConnectionDto(conn.Id, conn.Alias, conn.Host, conn.Port, conn.Username, conn.FromAddress, conn.UseSsl, conn.Version));
     }
 
     [HttpPut("api/admin/smtp/{id:int}")]
@@ -364,6 +422,11 @@ public class SubscriptionsController(
     {
         var conn = await db.SmtpConnections.FirstOrDefaultAsync(c => c.Id == id);
         if (conn is null) return NotFound();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, conn, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToSmtpDto(conn));
 
         if (req.Host is not null) conn.Host = req.Host;
         if (req.Port.HasValue) conn.Port = req.Port.Value;
@@ -372,8 +435,17 @@ public class SubscriptionsController(
         if (req.FromAddress is not null) conn.FromAddress = req.FromAddress;
         if (req.UseSsl.HasValue) conn.UseSsl = req.UseSsl.Value;
 
-        await db.SaveChangesAsync();
-        return Ok(new SmtpConnectionDto(conn.Id, conn.Alias, conn.Host, conn.Port, conn.Username, conn.FromAddress, conn.UseSsl));
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(conn).ReloadAsync();
+            return OptimisticConcurrency.Conflict(this, ToSmtpDto(conn));
+        }
+        OptimisticConcurrency.SetETag(Response, conn.Version);
+        return Ok(ToSmtpDto(conn));
     }
 
     [HttpDelete("api/admin/smtp/{id:int}")]
@@ -382,8 +454,22 @@ public class SubscriptionsController(
     {
         var conn = await db.SmtpConnections.FirstOrDefaultAsync(c => c.Id == id);
         if (conn is null) return NotFound();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, conn, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToSmtpDto(conn));
         db.SmtpConnections.Remove(conn);
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            db.ChangeTracker.Clear();
+            var current = await db.SmtpConnections.FindAsync(id);
+            return current is null ? NotFound() : OptimisticConcurrency.Conflict(this, ToSmtpDto(current));
+        }
         await audit.LogAsync(CurrentUserId, "DELETE_SMTP", "SmtpConnection", id.ToString());
         return NoContent();
     }
@@ -425,8 +511,19 @@ public class SubscriptionsController(
             s.Id, s.ReportId, s.Report?.Name ?? "",
             s.Name, s.Schedule, s.DeliverOnRefresh, s.Format.ToString(),
             s.SmtpAlias, s.Recipients, s.LastSentAt, s.NextRunAt, s.FailCount, s.IsActive,
-            parameters, summary);
+            parameters, summary, s.Version);
     }
+
+    private static SmtpConnectionDto ToSmtpDto(SmtpConnection connection) =>
+        new(
+            connection.Id,
+            connection.Alias,
+            connection.Host,
+            connection.Port,
+            connection.Username,
+            connection.FromAddress,
+            connection.UseSsl,
+            connection.Version);
 
     private static string? SerializeParams(Dictionary<string, string>? p) =>
         p is { Count: > 0 } ? JsonSerializer.Serialize(p) : null;

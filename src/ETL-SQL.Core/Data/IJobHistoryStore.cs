@@ -61,7 +61,8 @@ namespace ETL_SQL.Core.Data
         int MaxRetries = 0,
         int RetryDelaySeconds = 30,
         string? ScriptHash = null,
-        string HashPolicy = "Warn"
+        string HashPolicy = "Warn",
+        long Version = 1
     );
 
     public record JobHistoryEntry(
@@ -84,10 +85,12 @@ namespace ETL_SQL.Core.Data
 
         // Job Management
         Task SaveJobAsync(JobDefinition job);
+        Task<bool> TrySaveJobAsync(JobDefinition job, long expectedVersion);
         Task<JobDefinition?> GetJobAsync(string name);
         Task<IEnumerable<JobDefinition>> GetActiveJobsAsync();
         Task<IEnumerable<JobDefinition>> GetAllJobsAsync();
         Task DeleteJobAsync(string name);
+        Task<bool> TryDeleteJobAsync(string name, long expectedVersion);
         Task UpdateJobLastRunAsync(string name, DateTime lastRun, DateTime? nextRun);
 
         // Execution lease (P1.1). A scheduler instance must claim a job before running it so that

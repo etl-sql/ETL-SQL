@@ -27,6 +27,23 @@ public class AdminController(
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
+    private async Task<UserDto> ToUserDtoAsync(PortalUser user)
+    {
+        var roles = await userManager.GetRolesAsync(user);
+        var groups = await db.UserGroups
+            .Where(ug => ug.UserId == user.Id)
+            .Select(ug => ug.Group.Name)
+            .OrderBy(name => name)
+            .ToListAsync();
+        return new UserDto(
+            user.Id, user.UserName!, user.Email, user.FirstName, user.LastName,
+            user.IsActive, user.MustChangePassword, user.CreatedAt,
+            roles, groups, user.Provider, user.Version);
+    }
+
+    private static GroupDto ToGroupDto(Group group, int memberCount) =>
+        new(group.Id, group.Name, group.Description, memberCount, group.Provider, group.AdGroup, group.Version);
+
     [HttpPost("datasets/rotate-at-rest-key")]
     public async Task<IActionResult> RotateDatasetAtRestKey(CancellationToken cancellationToken)
     {
@@ -66,7 +83,7 @@ public class AdminController(
             var roles = await userManager.GetRolesAsync(u);
             var groups = u.UserGroups.Select(ug => ug.Group.Name).ToList();
             dtos.Add(new UserDto(u.Id, u.UserName!, u.Email, u.FirstName, u.LastName,
-                u.IsActive, u.MustChangePassword, u.CreatedAt, roles, groups, u.Provider));
+                u.IsActive, u.MustChangePassword, u.CreatedAt, roles, groups, u.Provider, u.Version));
         }
         return Ok(dtos);
     }
@@ -127,7 +144,7 @@ public class AdminController(
             var roles = await userManager.GetRolesAsync(u);
             var groups = u.UserGroups.Select(ug => ug.Group.Name).OrderBy(name => name).ToList();
             items.Add(new UserDto(u.Id, u.UserName!, u.Email, u.FirstName, u.LastName,
-                u.IsActive, u.MustChangePassword, u.CreatedAt, roles, groups, u.Provider));
+                u.IsActive, u.MustChangePassword, u.CreatedAt, roles, groups, u.Provider, u.Version));
         }
         return Ok(new PagedResult<UserDto>(items, total, page, pageSize));
     }
@@ -168,7 +185,7 @@ public class AdminController(
         await audit.LogAsync(CurrentUserId, "CREATE_USER", "User", user.Id.ToString(), req.Username);
         return CreatedAtAction(nameof(GetUser), new { id = user.Id },
             new UserDto(user.Id, user.UserName!, user.Email, user.FirstName, user.LastName,
-                true, user.MustChangePassword, user.CreatedAt, [req.Role], [], user.Provider));
+                true, user.MustChangePassword, user.CreatedAt, [req.Role], [], user.Provider, user.Version));
     }
 
     [HttpGet("users/{id:int}")]
@@ -181,8 +198,9 @@ public class AdminController(
 
         var roles = await userManager.GetRolesAsync(user);
         var groups = user.UserGroups.Select(ug => ug.Group.Name).ToList();
+        OptimisticConcurrency.SetETag(Response, user.Version);
         return Ok(new UserDto(user.Id, user.UserName!, user.Email, user.FirstName, user.LastName,
-            user.IsActive, user.MustChangePassword, user.CreatedAt, roles, groups, user.Provider));
+            user.IsActive, user.MustChangePassword, user.CreatedAt, roles, groups, user.Provider, user.Version));
     }
 
     [HttpPut("users/{id:int}")]
@@ -190,9 +208,15 @@ public class AdminController(
     {
         var user = await userManager.FindByIdAsync(id.ToString());
         if (user is null) return NotFound();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, user, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, await ToUserDtoAsync(user));
 
         var wasActive = user.IsActive;
         var roleChanged = false;
+        await using var transaction = await db.Database.BeginTransactionAsync();
         if (req.Email is not null) user.Email = req.Email;
         if (req.FirstName is not null) user.FirstName = req.FirstName;
         if (req.LastName is not null) user.LastName = req.LastName;
@@ -210,7 +234,18 @@ public class AdminController(
             }
         }
 
-        await userManager.UpdateAsync(user);
+        var result = await userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            await transaction.RollbackAsync();
+            if (result.Errors.Any(error => error.Code == "ConcurrencyFailure"))
+            {
+                await db.Entry(user).ReloadAsync();
+                return OptimisticConcurrency.Conflict(this, await ToUserDtoAsync(user));
+            }
+            return BadRequest(new { errors = result.Errors.Select(error => error.Description) });
+        }
+        await transaction.CommitAsync();
         if (roleChanged || (req.IsActive.HasValue && req.IsActive.Value != wasActive))
         {
             await securitySessions.InvalidateUserAsync(id);
@@ -218,26 +253,53 @@ public class AdminController(
                 await securitySessions.RevokeAnonymousCapabilitiesAsync([id]);
         }
         await audit.LogAsync(CurrentUserId, "UPDATE_USER", "User", id.ToString());
-        return NoContent();
+        OptimisticConcurrency.SetETag(Response, user.Version);
+        return Ok(await ToUserDtoAsync(user));
     }
 
     [HttpPost("users/bulk-status")]
     public async Task<IActionResult> BulkUpdateUserStatus([FromBody] BulkUserStatusRequest req)
     {
-        var ids = req.UserIds.Distinct().ToList();
-        if (ids.Count == 0) return BadRequest(new { error = "Select at least one user." });
+        var items = (req.Users ?? []).GroupBy(item => item.Id).Select(group => group.First()).ToList();
+        if (items.Count == 0) return BadRequest(new { error = "Select at least one user." });
 
-        var users = await db.Users.Where(u => ids.Contains(u.Id)).ToListAsync();
-        foreach (var user in users)
+        var results = new List<BulkMutationResult>();
+        var updatedIds = new List<int>();
+        foreach (var item in items)
+        {
+            var user = await db.Users.FirstOrDefaultAsync(candidate => candidate.Id == item.Id);
+            if (user is null)
+            {
+                results.Add(new(item.Id, "NotFound"));
+                continue;
+            }
+            if (!OptimisticConcurrency.Prepare(db, user, item.Version))
+            {
+                results.Add(new(item.Id, "Conflict", user.Version));
+                db.Entry(user).State = EntityState.Unchanged;
+                continue;
+            }
+
             user.IsActive = req.IsActive;
+            try
+            {
+                await db.SaveChangesAsync();
+                results.Add(new(item.Id, "Updated", user.Version));
+                updatedIds.Add(user.Id);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await db.Entry(user).ReloadAsync();
+                results.Add(new(item.Id, "Conflict", user.Version));
+            }
+        }
 
-        await db.SaveChangesAsync();
-        await securitySessions.InvalidateUsersAsync(users.Select(user => user.Id));
+        await securitySessions.InvalidateUsersAsync(updatedIds);
         if (!req.IsActive)
-            await securitySessions.RevokeAnonymousCapabilitiesAsync(users.Select(user => user.Id));
+            await securitySessions.RevokeAnonymousCapabilitiesAsync(updatedIds);
         await audit.LogAsync(CurrentUserId, "BULK_UPDATE_USER_STATUS", "User", null,
-            $"{users.Count} users set active={req.IsActive}");
-        return Ok(new { Updated = users.Count });
+            $"{updatedIds.Count} users set active={req.IsActive}");
+        return Ok(new { Updated = updatedIds.Count, Results = results });
     }
 
     [HttpDelete("users/{id:int}")]
@@ -247,6 +309,11 @@ public class AdminController(
             .Include(u => u.Subscriptions.Where(s => s.IsActive))
             .FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return NotFound();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, user, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, await ToUserDtoAsync(user));
 
         if (user.Subscriptions.Any() && !cascade)
             return Conflict(new { error = "User has active subscriptions. Use ?cascade=true." });
@@ -263,7 +330,13 @@ public class AdminController(
         db.UserGroups.RemoveRange(memberships);
 
         await db.SaveChangesAsync();
-        await userManager.DeleteAsync(user);
+        var deleteResult = await userManager.DeleteAsync(user);
+        if (!deleteResult.Succeeded)
+        {
+            if (deleteResult.Errors.Any(error => error.Code == "ConcurrencyFailure"))
+                return Conflict(new { error = "The user changed after it was read." });
+            return BadRequest(new { errors = deleteResult.Errors.Select(error => error.Description) });
+        }
         await audit.LogAsync(CurrentUserId, "DELETE_USER", "User", id.ToString(), user.UserName);
         return NoContent();
     }
@@ -275,25 +348,53 @@ public class AdminController(
     {
         var user = await userManager.FindByIdAsync(id.ToString());
         if (user is null) return NotFound();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, user, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, await ToUserDtoAsync(user));
 
         var token = await userManager.GeneratePasswordResetTokenAsync(user);
         var result = await userManager.ResetPasswordAsync(user, token, req.NewPassword);
         if (!result.Succeeded)
+        {
+            if (result.Errors.Any(error => error.Code == "ConcurrencyFailure"))
+            {
+                db.ChangeTracker.Clear();
+                return OptimisticConcurrency.Conflict(
+                    this, await ToUserDtoAsync((await userManager.FindByIdAsync(id.ToString()))!));
+            }
             return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
+        }
 
         user.MustChangePassword = true;
         await userManager.UpdateAsync(user);
         await securitySessions.InvalidateUserAsync(id);
         await audit.LogAsync(CurrentUserId, "RESET_PASSWORD", "User", id.ToString());
+        OptimisticConcurrency.SetETag(Response, user.Version);
         return NoContent();
     }
 
     [HttpPost("users/{id:int}/revoke-tokens")]
     public async Task<IActionResult> RevokeTokens(int id)
     {
-        if (!await db.Users.AnyAsync(u => u.Id == id)) return NotFound();
+        var user = await db.Users.FindAsync(id);
+        if (user is null) return NotFound();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, user, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, await ToUserDtoAsync(user));
+        try { await db.SaveChangesAsync(); }
+        catch (DbUpdateConcurrencyException)
+        {
+            db.ChangeTracker.Clear();
+            return OptimisticConcurrency.Conflict(
+                this, await ToUserDtoAsync((await db.Users.FindAsync(id))!));
+        }
         await securitySessions.InvalidateUserAsync(id);
         await audit.LogAsync(CurrentUserId, "REVOKE_TOKENS", "User", id.ToString());
+        OptimisticConcurrency.SetETag(Response, user.Version);
         return NoContent();
     }
 
@@ -398,7 +499,7 @@ public class AdminController(
     {
         var groups = await db.Groups
             .Select(g => new GroupDto(g.Id, g.Name, g.Description,
-                g.UserGroups.Count, g.Provider, g.AdGroup))
+                g.UserGroups.Count, g.Provider, g.AdGroup, g.Version))
             .ToListAsync();
         return Ok(groups);
     }
@@ -430,7 +531,7 @@ public class AdminController(
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(g => new GroupDto(g.Id, g.Name, g.Description,
-                g.UserGroups.Count, g.Provider, g.AdGroup))
+                g.UserGroups.Count, g.Provider, g.AdGroup, g.Version))
             .ToListAsync();
         return Ok(new PagedResult<GroupDto>(items, total, page, pageSize));
     }
@@ -452,7 +553,7 @@ public class AdminController(
         await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "CREATE_GROUP", "Group", group.Id.ToString(), req.Name);
         return CreatedAtAction(nameof(GetGroup), new { id = group.Id },
-            new GroupDto(group.Id, group.Name, group.Description, 0, group.Provider, group.AdGroup));
+            new GroupDto(group.Id, group.Name, group.Description, 0, group.Provider, group.AdGroup, group.Version));
     }
 
     [HttpGet("groups/{id:int}")]
@@ -460,9 +561,11 @@ public class AdminController(
     {
         var group = await db.Groups
             .Where(g => g.Id == id)
-            .Select(g => new GroupDto(g.Id, g.Name, g.Description, g.UserGroups.Count, g.Provider, g.AdGroup))
+            .Select(g => new GroupDto(g.Id, g.Name, g.Description, g.UserGroups.Count, g.Provider, g.AdGroup, g.Version))
             .FirstOrDefaultAsync();
-        return group is null ? NotFound() : Ok(group);
+        if (group is null) return NotFound();
+        OptimisticConcurrency.SetETag(Response, group.Version);
+        return Ok(group);
     }
 
     [HttpPut("groups/{id:int}")]
@@ -470,6 +573,12 @@ public class AdminController(
     {
         var group = await db.Groups.FindAsync(id);
         if (group is null) return NotFound();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, group, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(
+                this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
 
         if (req.Name is not null)
         {
@@ -487,9 +596,19 @@ public class AdminController(
         if (req.AdGroup is not null)
             group.AdGroup = req.AdGroup;
 
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(group).ReloadAsync();
+            return OptimisticConcurrency.Conflict(
+                this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
+        }
         await audit.LogAsync(CurrentUserId, "UPDATE_GROUP", "Group", id.ToString());
-        return NoContent();
+        OptimisticConcurrency.SetETag(Response, group.Version);
+        return Ok(ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
     }
 
     [HttpDelete("groups/{id:int}")]
@@ -500,6 +619,11 @@ public class AdminController(
             .Include(g => g.FolderAcls)
             .FirstOrDefaultAsync(g => g.Id == id);
         if (group is null) return NotFound();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, group, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToGroupDto(group, group.UserGroups.Count));
 
         bool hasEntries = group.UserGroups.Any() || group.FolderAcls.Any();
         if (hasEntries && !cascade)
@@ -518,32 +642,58 @@ public class AdminController(
     [HttpPost("groups/bulk-delete")]
     public async Task<IActionResult> BulkDeleteGroups([FromBody] BulkDeleteGroupsRequest req)
     {
-        var ids = req.GroupIds.Distinct().ToList();
-        if (ids.Count == 0) return BadRequest(new { error = "Select at least one group." });
+        var items = (req.Groups ?? []).GroupBy(item => item.Id).Select(group => group.First()).ToList();
+        if (items.Count == 0) return BadRequest(new { error = "Select at least one group." });
 
-        var groups = await db.Groups
-            .Include(g => g.UserGroups)
-            .Include(g => g.FolderAcls)
-            .Where(g => ids.Contains(g.Id))
-            .ToListAsync();
-        if (!req.Cascade && groups.Any(g => g.UserGroups.Any() || g.FolderAcls.Any()))
-            return Conflict(new { error = "One or more groups have members or ACL entries. Use cascade=true." });
-
-        var affectedUserIds = groups
-            .SelectMany(group => group.UserGroups)
-            .Select(membership => membership.UserId)
-            .Distinct()
-            .ToList();
-        foreach (var group in groups)
+        var results = new List<BulkMutationResult>();
+        var affectedUserIds = new HashSet<int>();
+        var deleted = 0;
+        foreach (var item in items)
         {
+            var group = await db.Groups
+                .Include(value => value.UserGroups)
+                .Include(value => value.FolderAcls)
+                .FirstOrDefaultAsync(value => value.Id == item.Id);
+            if (group is null)
+            {
+                results.Add(new(item.Id, "NotFound"));
+                continue;
+            }
+            if (!req.Cascade && (group.UserGroups.Any() || group.FolderAcls.Any()))
+            {
+                results.Add(new(item.Id, "Blocked", group.Version, "Group has members or ACL entries."));
+                continue;
+            }
+            if (!OptimisticConcurrency.Prepare(db, group, item.Version))
+            {
+                results.Add(new(item.Id, "Conflict", group.Version));
+                continue;
+            }
+
+            foreach (var userId in group.UserGroups.Select(value => value.UserId))
+                affectedUserIds.Add(userId);
             db.UserGroups.RemoveRange(group.UserGroups);
             db.FolderAcls.RemoveRange(group.FolderAcls);
+            db.Groups.Remove(group);
+            try
+            {
+                await db.SaveChangesAsync();
+                results.Add(new(item.Id, "Deleted"));
+                deleted++;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                db.ChangeTracker.Clear();
+                var currentVersion = await db.Groups
+                    .Where(value => value.Id == item.Id)
+                    .Select(value => (long?)value.Version)
+                    .FirstOrDefaultAsync();
+                results.Add(new(item.Id, currentVersion is null ? "NotFound" : "Conflict", currentVersion));
+            }
         }
-        db.Groups.RemoveRange(groups);
-        await db.SaveChangesAsync();
         await securitySessions.InvalidateUsersAsync(affectedUserIds);
-        await audit.LogAsync(CurrentUserId, "BULK_DELETE_GROUPS", "Group", null, $"{groups.Count} groups deleted");
-        return Ok(new { Deleted = groups.Count });
+        await audit.LogAsync(CurrentUserId, "BULK_DELETE_GROUPS", "Group", null, $"{deleted} groups deleted");
+        return Ok(new { Deleted = deleted, Results = results });
     }
 
     [HttpGet("groups/{id:int}/members")]
@@ -593,7 +743,13 @@ public class AdminController(
     [HttpPost("groups/{id:int}/members")]
     public async Task<IActionResult> AddMember(int id, [FromBody] AddUserToGroupRequest req)
     {
-        if (!await db.Groups.AnyAsync(g => g.Id == id)) return NotFound("Group not found");
+        var group = await db.Groups.FindAsync(id);
+        if (group is null) return NotFound("Group not found");
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null) return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, group, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(
+                this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
 
         PortalUser? user = req.UserId.HasValue
             ? await userManager.FindByIdAsync(req.UserId.Value.ToString())
@@ -605,16 +761,30 @@ public class AdminController(
             return Conflict(new { error = "User is already a member" });
 
         db.UserGroups.Add(new UserGroup { UserId = user.Id, GroupId = id });
-        await db.SaveChangesAsync();
+        try { await db.SaveChangesAsync(); }
+        catch (DbUpdateConcurrencyException)
+        {
+            db.ChangeTracker.Clear();
+            return OptimisticConcurrency.Conflict(
+                this, ToGroupDto((await db.Groups.FindAsync(id))!,
+                    await db.UserGroups.CountAsync(value => value.GroupId == id)));
+        }
         await securitySessions.InvalidateUserAsync(user.Id);
         await audit.LogAsync(CurrentUserId, "ADD_USER_TO_GROUP", "Group", id.ToString(), user.UserName);
-        return NoContent();
+        OptimisticConcurrency.SetETag(Response, group.Version);
+        return Ok(new { group.Version });
     }
 
     [HttpPost("groups/{id:int}/members/bulk-add")]
     public async Task<IActionResult> BulkAddMembers(int id, [FromBody] BulkGroupMembershipRequest req)
     {
-        if (!await db.Groups.AnyAsync(g => g.Id == id)) return NotFound("Group not found");
+        var group = await db.Groups.FindAsync(id);
+        if (group is null) return NotFound("Group not found");
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null) return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, group, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(
+                this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
         var ids = req.UserIds.Distinct().ToList();
         if (ids.Count == 0) return BadRequest(new { error = "Select at least one user." });
 
@@ -627,17 +797,31 @@ public class AdminController(
             .Select(u => u.Id)
             .ToListAsync();
         db.UserGroups.AddRange(validIds.Select(userId => new UserGroup { GroupId = id, UserId = userId }));
-        await db.SaveChangesAsync();
+        try { await db.SaveChangesAsync(); }
+        catch (DbUpdateConcurrencyException)
+        {
+            db.ChangeTracker.Clear();
+            return OptimisticConcurrency.Conflict(
+                this, ToGroupDto((await db.Groups.FindAsync(id))!,
+                    await db.UserGroups.CountAsync(value => value.GroupId == id)));
+        }
         await securitySessions.InvalidateUsersAsync(validIds);
         await audit.LogAsync(CurrentUserId, "BULK_ADD_USERS_TO_GROUP", "Group", id.ToString(),
             $"{validIds.Count} users added");
-        return Ok(new { Added = validIds.Count });
+        OptimisticConcurrency.SetETag(Response, group.Version);
+        return Ok(new { Added = validIds.Count, group.Version });
     }
 
     [HttpPost("groups/{id:int}/members/bulk-remove")]
     public async Task<IActionResult> BulkRemoveMembers(int id, [FromBody] BulkGroupMembershipRequest req)
     {
-        if (!await db.Groups.AnyAsync(g => g.Id == id)) return NotFound("Group not found");
+        var group = await db.Groups.FindAsync(id);
+        if (group is null) return NotFound("Group not found");
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null) return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, group, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(
+                this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
         var ids = req.UserIds.Distinct().ToList();
         if (ids.Count == 0) return BadRequest(new { error = "Select at least one user." });
 
@@ -645,24 +829,47 @@ public class AdminController(
             .Where(ug => ug.GroupId == id && ids.Contains(ug.UserId))
             .ToListAsync();
         db.UserGroups.RemoveRange(memberships);
-        await db.SaveChangesAsync();
+        try { await db.SaveChangesAsync(); }
+        catch (DbUpdateConcurrencyException)
+        {
+            db.ChangeTracker.Clear();
+            return OptimisticConcurrency.Conflict(
+                this, ToGroupDto((await db.Groups.FindAsync(id))!,
+                    await db.UserGroups.CountAsync(value => value.GroupId == id)));
+        }
         await securitySessions.InvalidateUsersAsync(memberships.Select(membership => membership.UserId));
         await audit.LogAsync(CurrentUserId, "BULK_REMOVE_USERS_FROM_GROUP", "Group", id.ToString(),
             $"{memberships.Count} users removed");
-        return Ok(new { Removed = memberships.Count });
+        OptimisticConcurrency.SetETag(Response, group.Version);
+        return Ok(new { Removed = memberships.Count, group.Version });
     }
 
     [HttpDelete("groups/{id:int}/members/{userId:int}")]
     public async Task<IActionResult> RemoveMember(int id, int userId)
     {
+        var group = await db.Groups.FindAsync(id);
+        if (group is null) return NotFound("Group not found");
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null) return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, group, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(
+                this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
         var ug = await db.UserGroups.FirstOrDefaultAsync(x => x.GroupId == id && x.UserId == userId);
         if (ug is null) return NotFound();
 
         db.UserGroups.Remove(ug);
-        await db.SaveChangesAsync();
+        try { await db.SaveChangesAsync(); }
+        catch (DbUpdateConcurrencyException)
+        {
+            db.ChangeTracker.Clear();
+            return OptimisticConcurrency.Conflict(
+                this, ToGroupDto((await db.Groups.FindAsync(id))!,
+                    await db.UserGroups.CountAsync(value => value.GroupId == id)));
+        }
         await securitySessions.InvalidateUserAsync(userId);
         await audit.LogAsync(CurrentUserId, "REMOVE_USER_FROM_GROUP", "Group", id.ToString());
-        return NoContent();
+        OptimisticConcurrency.SetETag(Response, group.Version);
+        return Ok(new { group.Version });
     }
 
     // ── Reports ───────────────────────────────────────────────────────────────

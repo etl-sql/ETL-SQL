@@ -22,7 +22,8 @@ public record UserDto(
     DateTime CreatedAt,
     IList<string> Roles,
     IList<string> Groups,
-    string? Provider = null);
+    string? Provider = null,
+    long Version = 1);
 
 public record UpdateUserRequest(
     string? Email,
@@ -31,17 +32,31 @@ public record UpdateUserRequest(
     string? Role,
     bool? IsActive);
 
-public record BulkUserStatusRequest(IList<int> UserIds, bool IsActive);
+public record VersionedResourceRequest(int Id, long Version);
+
+public record BulkUserStatusRequest(IList<VersionedResourceRequest>? Users, bool IsActive)
+{
+    public IList<int> UserIds => (Users ?? []).Select(x => x.Id).ToList();
+}
 
 public record CreateGroupRequest(string Name, string? Description, string? Provider = null, string? AdGroup = null);
 public record UpdateGroupRequest(string? Name, string? Description, string? Provider = null, string? AdGroup = null);
 
-public record GroupDto(int Id, string Name, string? Description, int MemberCount, string? Provider = null, string? AdGroup = null);
+public record GroupDto(int Id, string Name, string? Description, int MemberCount, string? Provider = null, string? AdGroup = null, long Version = 1);
 public record GroupMemberDto(int Id, string Username, string? Email, bool IsActive);
 
 public record AddUserToGroupRequest(string? Username, int? UserId);
 public record BulkGroupMembershipRequest(IList<int> UserIds);
-public record BulkDeleteGroupsRequest(IList<int> GroupIds, bool Cascade = false);
+public record BulkDeleteGroupsRequest(IList<VersionedResourceRequest>? Groups, bool Cascade = false)
+{
+    public IList<int> GroupIds => (Groups ?? []).Select(x => x.Id).ToList();
+}
+
+public record BulkMutationResult(
+    int Id,
+    string Status,
+    long? CurrentVersion = null,
+    string? Error = null);
 
 public record AuditLogDto(
     int Id,

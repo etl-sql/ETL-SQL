@@ -698,7 +698,11 @@ document.getElementById('usersDisableBtn').addEventListener('click', () => bulkU
 async function bulkUserStatus(isActive) {
   const ids = selectedIds(document.getElementById('userTableWrap'));
   if (!ids.length) return;
-  await adminApi.bulkUserStatus(ids, isActive).catch(alertErr);
+  const users = ids.map(id => {
+    const user = allUsers.find(x => x.id === id);
+    return { id, version: user?.version };
+  });
+  await adminApi.bulkUserStatus(users, isActive).catch(alertErr);
   loadUsers();
 }
 
@@ -707,16 +711,19 @@ async function handleUserAction(btn) {
   const action = btn.dataset.action;
   if (action === 'delete') {
     if (!confirm('Delete this user? This cannot be undone.')) return;
-    await adminApi.deleteUser(id).catch(alertErr);
+    const user = allUsers.find(x => x.id === id);
+    await adminApi.deleteUser(id, user?.version).catch(alertErr);
     loadUsers();
   } else if (action === 'toggle') {
     const active = btn.dataset.active === 'true';
-    await adminApi.updateUser(id, { isActive: !active }).catch(alertErr);
+    const user = allUsers.find(x => x.id === id);
+    await adminApi.updateUser(id, { isActive: !active }, user?.version).catch(alertErr);
     loadUsers();
   } else if (action === 'reset') {
     const pwd = prompt('Enter new temporary password (min 8 chars):');
     if (!pwd) return;
-    await adminApi.resetPassword(id, pwd).catch(alertErr);
+    const user = allUsers.find(x => x.id === id);
+    await adminApi.resetPassword(id, pwd, user?.version).catch(alertErr);
     alert('Password reset.');
   } else if (action === 'edit-user') {
     const u = allUsers.find(x => x.id == id);
@@ -767,9 +774,12 @@ document.getElementById('nu-saveBtn').addEventListener('click', async () => {
 
   try {
     if (id) {
-      await adminApi.updateUser(+id, body);
+      const user = allUsers.find(x => x.id === +id);
+      await adminApi.updateUser(+id, body, user?.version);
       if (body.password) {
-        await adminApi.resetPassword(+id, body.password);
+        const refreshed = await adminApi.listUsers();
+        const updatedUser = refreshed.find(x => x.id === +id);
+        await adminApi.resetPassword(+id, body.password, updatedUser?.version);
       }
     } else {
       await adminApi.createUser(body);
@@ -829,7 +839,11 @@ document.getElementById('groupFilter').addEventListener('input', () => { groupPa
 document.getElementById('groupsDeleteBtn').addEventListener('click', async () => {
   const ids = selectedIds(document.getElementById('groupTableWrap'));
   if (!ids.length || !confirm('Delete the selected groups? Groups with members or ACL entries will be rejected.')) return;
-  await adminApi.bulkDeleteGroups(ids).catch(alertErr);
+  const groups = ids.map(id => {
+    const group = allGroups.find(x => x.id === id);
+    return { id, version: group?.version };
+  });
+  await adminApi.bulkDeleteGroups(groups).catch(alertErr);
   loadGroups();
 });
 
@@ -837,7 +851,8 @@ async function handleGroupAction(btn) {
   const id = +btn.dataset.id;
   if (btn.dataset.action === 'delete') {
     if (!confirm('Delete this group?')) return;
-    await adminApi.deleteGroup(id).catch(alertErr);
+    const group = allGroups.find(x => x.id === id);
+    await adminApi.deleteGroup(id, group?.version).catch(alertErr);
     loadGroups();
   } else if (btn.dataset.action === 'edit-group') {
     const g = allGroups.find(x => x.id == id);
@@ -883,7 +898,9 @@ async function loadMembers(groupId) {
       </table>`;
     $wrap.querySelectorAll('[data-uid]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        await adminApi.removeMember(groupId, +btn.dataset.uid).catch(alertErr);
+        const group = allGroups.find(x => x.id === groupId);
+        await adminApi.removeMember(groupId, +btn.dataset.uid, group?.version).catch(alertErr);
+        await loadGroups();
         loadMembers(groupId);
       });
     });
@@ -901,9 +918,10 @@ document.getElementById('memberFilter').addEventListener('input', () => {
 document.getElementById('membersRemoveBtn').addEventListener('click', async () => {
   const ids = selectedIds(document.getElementById('memberTableWrap'));
   if (!selectedGroupId || !ids.length || !confirm('Remove the selected users from this group?')) return;
-  await adminApi.bulkRemoveMembers(selectedGroupId, ids).catch(alertErr);
+  const group = allGroups.find(x => x.id === selectedGroupId);
+  await adminApi.bulkRemoveMembers(selectedGroupId, ids, group?.version).catch(alertErr);
   loadMembers(selectedGroupId);
-  loadGroups();
+  await loadGroups();
 });
 
 document.getElementById('newGroupBtn').addEventListener('click', () => {
@@ -921,7 +939,8 @@ document.getElementById('ng-saveBtn').addEventListener('click', async () => {
   if (!name) { $err.textContent = 'Name is required.'; $err.classList.add('show'); return; }
   try {
     if (id) {
-      await adminApi.updateGroup(+id, { name, description: desc });
+      const group = allGroups.find(x => x.id === +id);
+      await adminApi.updateGroup(+id, { name, description: desc }, group?.version);
     } else {
       await adminApi.createGroup({ name, description: desc });
     }
@@ -963,10 +982,11 @@ document.getElementById('am-cancelBtn').addEventListener('click', () => {
 document.getElementById('am-saveBtn').addEventListener('click', async () => {
   const userIds = [...document.getElementById('addMemberSelect').selectedOptions].map(option => +option.value);
   if (!selectedGroupId || !userIds.length) return;
-  await adminApi.bulkAddMembers(selectedGroupId, userIds).catch(alertErr);
+  const group = allGroups.find(x => x.id === selectedGroupId);
+  await adminApi.bulkAddMembers(selectedGroupId, userIds, group?.version).catch(alertErr);
   document.getElementById('addMemberForm').style.display = 'none';
   loadMembers(selectedGroupId);
-  loadGroups();
+  await loadGroups();
 });
 
 // ── Folders & ACL ──────────────────────────────────────────────────────────────
@@ -1010,7 +1030,8 @@ async function handleFolderAction(btn) {
   const id = +btn.dataset.id;
   if (btn.dataset.action === 'delete') {
     if (!confirm('Delete this folder? Reports inside will also be removed.')) return;
-    await foldersApi.delete(id, true).catch(alertErr);
+    const folder = allFolders.find(x => x.id === id);
+    await foldersApi.delete(id, true, folder?.version).catch(alertErr);
     loadFolders();
   } else if (btn.dataset.action === 'edit-folder') {
     const f = allFolders.find(x => x.id == id);
@@ -1048,7 +1069,9 @@ async function loadAcl(folderId) {
       </table>`;
     $wrap.querySelectorAll('[data-gid]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        await foldersApi.revokeAcl(folderId, +btn.dataset.gid).catch(alertErr);
+        const folder = allFolders.find(x => x.id === folderId);
+        await foldersApi.revokeAcl(folderId, +btn.dataset.gid, folder?.version).catch(alertErr);
+        await loadFolders();
         loadAcl(folderId);
       });
     });
@@ -1070,7 +1093,8 @@ document.getElementById('nf-saveBtn').addEventListener('click', async () => {
   if (!name) { $err.textContent = 'Name is required.'; $err.classList.add('show'); return; }
   try {
     if (id) {
-      await foldersApi.update(+id, { name, parentId: parentId ? +parentId : null });
+      const folder = allFolders.find(x => x.id === +id);
+      await foldersApi.update(+id, { name, parentId: parentId ? +parentId : null }, folder?.version);
     } else {
       await foldersApi.create(name, parentId ? +parentId : null);
     }
@@ -1117,7 +1141,9 @@ async function loadReports() {
     $wrap.querySelectorAll('[data-action="delete-report"]').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (!confirm('Delete this report? Subscription schedules for this report will be cancelled.')) return;
-        await reportsApi.delete(+btn.dataset.id).catch(alertErr);
+        const id = +btn.dataset.id;
+        const report = allReports.find(x => x.id === id);
+        await reportsApi.delete(id, report?.version).catch(alertErr);
         loadReports();
       });
     });
@@ -1258,7 +1284,8 @@ document.getElementById('pr-saveBtn').addEventListener('click', async () => {
     const validation = await reportsApi.validateScript(path);
     renderPublishValidation(validation);
     if (id) {
-      await reportsApi.update(+id, { name, scriptPath: path, description: desc, folderId });
+      const report = allReports.find(x => x.id === +id);
+      await reportsApi.update(+id, { name, scriptPath: path, description: desc, folderId }, report?.version);
     } else {
       await reportsApi.create({ name, scriptPath: path, description: desc, folderId });
     }
@@ -1406,6 +1433,7 @@ document.getElementById('auditExportBtn').addEventListener('click', () => {
 
 // ── Subscriptions ──────────────────────────────────────────────────────────────
 let subscriptionPage = 1;
+let allSubscriptions = [];
 
 async function loadSubscriptions() {
   const $wrap = document.getElementById('subsTableWrap');
@@ -1417,6 +1445,7 @@ async function loadSubscriptions() {
       pageSize: 25,
     }));
     const subs = result.items || [];
+    allSubscriptions = subs;
     const rows = subs.map(s => {
       const schedule = s.deliverOnRefresh ? 'On Refresh' : (s.schedule || '—');
       return `
@@ -1474,7 +1503,11 @@ document.getElementById('subsPauseBtn').addEventListener('click', () => bulkSubs
 async function bulkSubscriptionStatus(isActive) {
   const ids = selectedIds(document.getElementById('subsTableWrap'));
   if (!ids.length) return;
-  await adminApi.bulkSubscriptionStatus(ids, isActive).catch(alertErr);
+  const subscriptions = ids.map(id => {
+    const subscription = allSubscriptions.find(x => x.id === id);
+    return { id, version: subscription?.version };
+  });
+  await adminApi.bulkSubscriptionStatus(subscriptions, isActive).catch(alertErr);
   loadSubscriptions();
 }
 
@@ -1483,15 +1516,18 @@ async function handleAdminSubscriptionAction(btn) {
   if (btn.dataset.action === 'history') {
     await showAdminSubscriptionHistory(id, btn.dataset.label);
   } else if (btn.dataset.action === 'toggle') {
-    await subscriptionsApi.update(id, { isActive: btn.dataset.active !== 'true' }).catch(alertErr);
+    const subscription = allSubscriptions.find(x => x.id === id);
+    await subscriptionsApi.update(id, { isActive: btn.dataset.active !== 'true' }, subscription?.version).catch(alertErr);
     loadSubscriptions();
   } else if (btn.dataset.action === 'delete') {
     if (!confirm('Delete this subscription? This stops future deliveries and removes its generated job.')) return;
-    await subscriptionsApi.delete(id).catch(alertErr);
+    const subscription = allSubscriptions.find(x => x.id === id);
+    await subscriptionsApi.delete(id, subscription?.version).catch(alertErr);
     loadSubscriptions();
   } else if (btn.dataset.action === 'edit-params') {
     const current = JSON.parse(btn.dataset.params || '{}');
-    openEditParamsModal(id, +btn.dataset.rid, btn.dataset.label, current, () => loadSubscriptions());
+    const subscription = allSubscriptions.find(x => x.id === id);
+    openEditParamsModal(id, +btn.dataset.rid, btn.dataset.label, current, subscription?.version, () => loadSubscriptions());
   }
 }
 
@@ -1517,9 +1553,11 @@ document.getElementById('subscriptionHistoryCloseBtn').addEventListener('click',
 });
 
 let _onParamsSaved = null;
+let _editParamsVersion = null;
 
-function openEditParamsModal(subId, reportId, label, currentValues, onSaved) {
+function openEditParamsModal(subId, reportId, label, currentValues, version, onSaved) {
   _onParamsSaved = onSaved;
+  _editParamsVersion = version;
   document.getElementById('editParamsSubId').value = subId;
   document.getElementById('editParamsReportId').value = reportId;
   document.getElementById('editParamsTitle').textContent = `Edit Parameters — ${label}`;
@@ -1597,7 +1635,7 @@ document.getElementById('editParamsSaveBtn').addEventListener('click', async () 
   } catch { params = null; }
 
   try {
-    await subscriptionsApi.update(subId, { parameters: params });
+    await subscriptionsApi.update(subId, { parameters: params }, _editParamsVersion);
     document.getElementById('editParamsModal').style.display = 'none';
     _onParamsSaved?.();
   } catch (err) {

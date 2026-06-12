@@ -82,6 +82,10 @@ async function apiJson(url, opts = {}) {
     return res.json();
 }
 
+function versionHeaders(version) {
+    return { 'If-Match': `"${version}"` };
+}
+
 // ── Auth ───────────────────────────────────────────────────────────────────────
 
 export const authApi = {
@@ -120,12 +124,13 @@ export const authApi = {
 export const foldersApi = {
     list: ()                  => apiJson('/api/folders'),
     create: (name, parentId)  => apiJson('/api/folders', { method: 'POST', body: { name, parentId } }),
-    update: (id, body)        => apiJson(`/api/folders/${id}`, { method: 'PUT', body }),
-    delete: (id, cascade)     => apiJson(`/api/folders/${id}?cascade=${!!cascade}`, { method: 'DELETE' }),
+    update: (id, body, version) => apiJson(`/api/folders/${id}`, { method: 'PUT', headers: versionHeaders(version), body }),
+    delete: (id, cascade, version) => apiJson(`/api/folders/${id}?cascade=${!!cascade}`, { method: 'DELETE', headers: versionHeaders(version) }),
     listAcl: (id)             => apiJson(`/api/folders/${id}/acl`),
-    grantAcl: (id, groupId, permission) =>
-        apiJson(`/api/folders/${id}/acl`, { method: 'POST', body: { groupId, permission } }),
-    revokeAcl: (id, groupId)  => apiJson(`/api/folders/${id}/acl/${groupId}`, { method: 'DELETE' })
+    grantAcl: (id, groupId, permission, version) =>
+        apiJson(`/api/folders/${id}/acl`, { method: 'POST', headers: versionHeaders(version), body: { groupId, permission } }),
+    revokeAcl: (id, groupId, version) =>
+        apiJson(`/api/folders/${id}/acl/${groupId}`, { method: 'DELETE', headers: versionHeaders(version) })
 };
 
 // ── Reports ────────────────────────────────────────────────────────────────────
@@ -134,8 +139,8 @@ export const reportsApi = {
     list:   (folderId) => apiJson(`/api/folders/${folderId}/reports`),
     get:    (id)       => apiJson(`/api/reports/${id}`),
     create: (body)     => apiJson('/api/reports', { method: 'POST', body }),
-    update: (id, body) => apiJson(`/api/reports/${id}`, { method: 'PUT', body }),
-    delete: (id)       => apiJson(`/api/reports/${id}`, { method: 'DELETE' }),
+    update: (id, body, version) => apiJson(`/api/reports/${id}`, { method: 'PUT', headers: versionHeaders(version), body }),
+    delete: (id, version)       => apiJson(`/api/reports/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
     favorite: (id)    => apiJson(`/api/reports/${id}/favorite`, { method: 'POST' }),
     unfavorite: (id)  => apiJson(`/api/reports/${id}/favorite`, { method: 'DELETE' }),
     dependencies: (id) => apiJson(`/api/reports/${id}/dependencies`),
@@ -190,8 +195,8 @@ export const subscriptionsApi = {
     list:       ()          => apiJson('/api/subscriptions'),
     get:        (id)        => apiJson(`/api/subscriptions/${id}`),
     create:     (body)      => apiJson('/api/subscriptions',      { method: 'POST',   body }),
-    update:     (id, body)  => apiJson(`/api/subscriptions/${id}`, { method: 'PUT',    body }),
-    delete:     (id)        => apiJson(`/api/subscriptions/${id}`, { method: 'DELETE' }),
+    update:     (id, body, version) => apiJson(`/api/subscriptions/${id}`, { method: 'PUT', headers: versionHeaders(version), body }),
+    delete:     (id, version) => apiJson(`/api/subscriptions/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
     history:    (id, n=50)  => apiJson(`/api/subscriptions/${id}/history?limit=${n}`),
     smtpAliases: ()         => apiJson('/api/smtp-aliases')
 };
@@ -201,15 +206,15 @@ export const subscriptionsApi = {
 export const datasetsApi = {
     list:          ()                       => apiJson('/api/datasets'),
     get:           (id)                     => apiJson(`/api/datasets/${id}`),
-    update:        (id, body)               => apiJson(`/api/datasets/${id}`, { method: 'PATCH', body }),
-    delete:        (id)                     => apiJson(`/api/datasets/${id}`, { method: 'DELETE' }),
+    update:        (id, body, version)       => apiJson(`/api/datasets/${id}`, { method: 'PATCH', headers: versionHeaders(version), body }),
+    delete:        (id, version)             => apiJson(`/api/datasets/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
     refresh:       (id)                     => apiJson(`/api/datasets/${id}/refresh`, { method: 'POST' }),
     refreshStatus: (id)                     => apiJson(`/api/datasets/${id}/refresh-status`),
     listAcl:       (id)                     => apiJson(`/api/datasets/${id}/acl`),
-    grantAcl:      (id, groupId, permission) =>
-        apiJson(`/api/datasets/${id}/acl`, { method: 'POST', body: { groupId, permission } }),
-    revokeAcl:     (id, groupId)            =>
-        apiJson(`/api/datasets/${id}/acl/${groupId}`, { method: 'DELETE' }),
+    grantAcl:      (id, groupId, permission, version) =>
+        apiJson(`/api/datasets/${id}/acl`, { method: 'POST', headers: versionHeaders(version), body: { groupId, permission } }),
+    revokeAcl:     (id, groupId, version) =>
+        apiJson(`/api/datasets/${id}/acl/${groupId}`, { method: 'DELETE', headers: versionHeaders(version) }),
 
     data(id, { page = 1, pageSize = 50, sort = null, dir = null, search = null, filters = null } = {}) {
         const p = new URLSearchParams({ page, pageSize });
@@ -290,32 +295,33 @@ export const adminApi = {
     listUsers:       ()           => apiJson('/api/admin/users'),
     userCatalog:     (query = '') => apiJson(`/api/admin/users/catalog${query ? `?${query}` : ''}`),
     createUser:      (body)       => apiJson('/api/admin/users',     { method: 'POST',   body }),
-    updateUser:      (id, body)   => apiJson(`/api/admin/users/${id}`, { method: 'PUT',  body }),
-    deleteUser:      (id)         => apiJson(`/api/admin/users/${id}`, { method: 'DELETE' }),
-    bulkUserStatus:  (userIds, isActive) => apiJson('/api/admin/users/bulk-status',
-                                        { method: 'POST', body: { userIds, isActive } }),
-    resetPassword:   (id, pwd)    => apiJson(`/api/admin/users/${id}/reset-password`,
-                                        { method: 'POST', body: { newPassword: pwd } }),
-    revokeTokens:    (id)         => apiJson(`/api/admin/users/${id}/revoke-tokens`, { method: 'POST' }),
+    updateUser:      (id, body, version) => apiJson(`/api/admin/users/${id}`, { method: 'PUT', headers: versionHeaders(version), body }),
+    deleteUser:      (id, version) => apiJson(`/api/admin/users/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
+    bulkUserStatus:  (users, isActive) => apiJson('/api/admin/users/bulk-status',
+                                        { method: 'POST', body: { users, isActive } }),
+    resetPassword:   (id, pwd, version) => apiJson(`/api/admin/users/${id}/reset-password`,
+                                        { method: 'POST', headers: versionHeaders(version), body: { newPassword: pwd } }),
+    revokeTokens:    (id, version) => apiJson(`/api/admin/users/${id}/revoke-tokens`,
+                                        { method: 'POST', headers: versionHeaders(version) }),
 
     // groups
     listGroups:      ()           => apiJson('/api/admin/groups'),
     groupCatalog:    (query = '') => apiJson(`/api/admin/groups/catalog${query ? `?${query}` : ''}`),
     createGroup:     (body)       => apiJson('/api/admin/groups',    { method: 'POST',   body }),
-    updateGroup:     (id, body)   => apiJson(`/api/admin/groups/${id}`, { method: 'PUT', body }),
-    deleteGroup:     (id)         => apiJson(`/api/admin/groups/${id}`, { method: 'DELETE' }),
-    bulkDeleteGroups:(groupIds, cascade = false) => apiJson('/api/admin/groups/bulk-delete',
-                                        { method: 'POST', body: { groupIds, cascade } }),
+    updateGroup:     (id, body, version) => apiJson(`/api/admin/groups/${id}`, { method: 'PUT', headers: versionHeaders(version), body }),
+    deleteGroup:     (id, version) => apiJson(`/api/admin/groups/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
+    bulkDeleteGroups:(groups, cascade = false) => apiJson('/api/admin/groups/bulk-delete',
+                                        { method: 'POST', body: { groups, cascade } }),
     listMembers:     (id)         => apiJson(`/api/admin/groups/${id}/members`),
     memberCatalog:   (id, query = '') => apiJson(`/api/admin/groups/${id}/members/catalog${query ? `?${query}` : ''}`),
-    addMember:       (id, userId) => apiJson(`/api/admin/groups/${id}/members`,
-                                        { method: 'POST', body: { userId } }),
-    bulkAddMembers:  (id, userIds) => apiJson(`/api/admin/groups/${id}/members/bulk-add`,
-                                        { method: 'POST', body: { userIds } }),
-    bulkRemoveMembers: (id, userIds) => apiJson(`/api/admin/groups/${id}/members/bulk-remove`,
-                                        { method: 'POST', body: { userIds } }),
-    removeMember:    (id, userId) => apiJson(`/api/admin/groups/${id}/members/${userId}`,
-                                        { method: 'DELETE' }),
+    addMember:       (id, userId, version) => apiJson(`/api/admin/groups/${id}/members`,
+                                        { method: 'POST', headers: versionHeaders(version), body: { userId } }),
+    bulkAddMembers:  (id, userIds, version) => apiJson(`/api/admin/groups/${id}/members/bulk-add`,
+                                        { method: 'POST', headers: versionHeaders(version), body: { userIds } }),
+    bulkRemoveMembers: (id, userIds, version) => apiJson(`/api/admin/groups/${id}/members/bulk-remove`,
+                                        { method: 'POST', headers: versionHeaders(version), body: { userIds } }),
+    removeMember:    (id, userId, version) => apiJson(`/api/admin/groups/${id}/members/${userId}`,
+                                        { method: 'DELETE', headers: versionHeaders(version) }),
 
     // audit
     auditLog: (page = 1, pageSize = 50, action = '', userId = '') =>
@@ -327,8 +333,8 @@ export const adminApi = {
     // subscriptions (admin sees all)
     listAllSubscriptions: () => apiJson('/api/subscriptions'),
     subscriptionCatalog: (query = '') => apiJson(`/api/admin/subscriptions/catalog${query ? `?${query}` : ''}`),
-    bulkSubscriptionStatus: (subscriptionIds, isActive) => apiJson('/api/admin/subscriptions/bulk-status',
-                                        { method: 'POST', body: { subscriptionIds, isActive } }),
+    bulkSubscriptionStatus: (subscriptions, isActive) => apiJson('/api/admin/subscriptions/bulk-status',
+                                        { method: 'POST', body: { subscriptions, isActive } }),
 
     // reports (admin sees all)
     listAllReports: () => apiJson('/api/admin/reports'),

@@ -20,10 +20,16 @@ public class OrchestratorJobApiAuthTests : IDisposable
 
     public void Dispose() => _factory.Dispose();
 
-    private static HttpRequestMessage Request(HttpMethod method, string uri, string? apiKey, object? body = null)
+    private static HttpRequestMessage Request(
+        HttpMethod method,
+        string uri,
+        string? apiKey,
+        object? body = null,
+        long? version = null)
     {
         var req = new HttpRequestMessage(method, uri);
         if (apiKey != null) req.Headers.Add("X-Orchestrator-Key", apiKey);
+        if (version.HasValue) req.Headers.TryAddWithoutValidation("If-Match", $"\"{version.Value}\"");
         if (body != null) req.Content = JsonContent.Create(body);
         return req;
     }
@@ -83,5 +89,54 @@ public class OrchestratorJobApiAuthTests : IDisposable
         using var req = Request(HttpMethod.Get, path, apiKey: null);
         var res = await client.SendAsync(req);
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.12")]
+    public async Task ScheduledJobUpdate_RequiresVersion_AndReturnsCurrentStateOnConflict()
+    {
+        var client = _factory.CreateClient();
+        using var create = Request(
+            HttpMethod.Post,
+            "/api/scheduled-jobs",
+            ValidKey,
+            new
+            {
+                Name = "versioned-job",
+                ScriptText = "PRINT 'hi';",
+                Interval = 1,
+                Unit = "HOUR"
+            });
+        Assert.Equal(HttpStatusCode.Created, (await client.SendAsync(create)).StatusCode);
+
+        using var missing = Request(
+            HttpMethod.Put,
+            "/api/scheduled-jobs/versioned-job",
+            ValidKey,
+            new { Interval = 2 });
+        Assert.Equal(HttpStatusCode.PreconditionRequired, (await client.SendAsync(missing)).StatusCode);
+
+        using var update = Request(
+            HttpMethod.Put,
+            "/api/scheduled-jobs/versioned-job",
+            ValidKey,
+            new { Interval = 2 },
+            version: 1);
+        var updated = await client.SendAsync(update);
+        Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
+        var updatedBody = await updated.Content.ReadFromJsonAsync<System.Text.Json.Nodes.JsonObject>();
+        Assert.Equal(2, updatedBody!["version"]!.GetValue<long>());
+
+        using var stale = Request(
+            HttpMethod.Put,
+            "/api/scheduled-jobs/versioned-job",
+            ValidKey,
+            new { Interval = 3 },
+            version: 1);
+        var conflict = await client.SendAsync(stale);
+        Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+        var conflictBody = await conflict.Content.ReadFromJsonAsync<System.Text.Json.Nodes.JsonObject>();
+        Assert.Equal(2, conflictBody!["current"]!["version"]!.GetValue<long>());
+        Assert.Equal(2, conflictBody["current"]!["interval"]!.GetValue<int>());
     }
 }

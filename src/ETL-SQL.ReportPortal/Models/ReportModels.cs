@@ -171,7 +171,8 @@ public record ReportDto(
     long? LastRefreshDurationMs,
     bool IsFavorite,
     bool IsStale,
-    bool ScriptChanged);
+    bool ScriptChanged,
+    long Version = 1);
 
 public record ReportDependencyDto(
     ReportDependencyReportDto Report,

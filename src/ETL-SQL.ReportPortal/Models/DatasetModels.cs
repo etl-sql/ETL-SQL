@@ -16,7 +16,8 @@ public record DatasetDto(
     DateTime CreatedAt,
     DateTime UpdatedAt,
     string? OwningReportName,
-    int? OwningReportId);
+    int? OwningReportId,
+    long Version = 1);
 
 public record DatasetColumnDto(string Name, string Type);
 

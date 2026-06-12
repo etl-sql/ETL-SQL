@@ -15,6 +15,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<FolderAcl> FolderAcls => Set<FolderAcl>();
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<ReportSnapshot> ReportSnapshots => Set<ReportSnapshot>();
+    public DbSet<PortalExecutionJob> PortalExecutionJobs => Set<PortalExecutionJob>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<SmtpConnection> SmtpConnections => Set<SmtpConnection>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -47,12 +48,14 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<Folder>(e =>
         {
+            e.Property(x => x.Version).IsConcurrencyToken();
             e.HasOne(x => x.Parent).WithMany(f => f.Children).HasForeignKey(x => x.ParentId);
             e.HasMany(x => x.Reports).WithOne(r => r.Folder).HasForeignKey(r => r.FolderId);
         });
 
         builder.Entity<Report>(e =>
         {
+            e.Property(x => x.Version).IsConcurrencyToken();
             e.HasMany(x => x.Snapshots).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
             e.HasMany(x => x.Subscriptions).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
             e.HasMany(x => x.DatasetJobs).WithOne(j => j.Report).HasForeignKey(j => j.ReportId);
@@ -60,6 +63,15 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasMany(x => x.EmbedTokens).WithOne(t => t.Report).HasForeignKey(t => t.ReportId);
             e.HasMany(x => x.SavedViews).WithOne(v => v.Report).HasForeignKey(v => v.ReportId);
             e.HasMany(x => x.Alerts).WithOne(a => a.Report).HasForeignKey(a => a.ReportId);
+        });
+
+        builder.Entity<PortalExecutionJob>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.ReportId, x.Kind })
+                .IsUnique()
+                .HasFilter("\"Kind\" = 'Refresh' AND \"Status\" IN ('Pending', 'Running')");
+            e.HasIndex(x => x.CompletedAt);
         });
 
         builder.Entity<RefreshToken>(e =>
@@ -103,12 +115,24 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<SmtpConnection>(e =>
         {
+            e.Property(x => x.Version).IsConcurrencyToken();
             e.HasIndex(x => x.Alias).IsUnique();
         });
 
         builder.Entity<Group>(e =>
         {
+            e.Property(x => x.Version).IsConcurrencyToken();
             e.HasIndex(x => x.Name).IsUnique();
+        });
+
+        builder.Entity<PortalUser>(e =>
+        {
+            e.Property(x => x.Version).IsConcurrencyToken();
+        });
+
+        builder.Entity<Subscription>(e =>
+        {
+            e.Property(x => x.Version).IsConcurrencyToken();
         });
 
         builder.Entity<Folder>(e =>
@@ -118,6 +142,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<Dataset>(e =>
         {
+            e.Property(x => x.Version).IsConcurrencyToken();
             e.HasOne(x => x.OwningReport).WithMany().HasForeignKey(x => x.OwningReportId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne<Folder>().WithMany().HasForeignKey(x => x.FolderId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(x => x.Name).IsUnique();   // Names are globally unique portal-wide; USE DATASET resolves by name.

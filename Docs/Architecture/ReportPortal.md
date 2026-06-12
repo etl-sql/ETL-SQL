@@ -53,6 +53,7 @@ Report ──< DatasetJob
 PortalUser ──< RefreshToken
 SmtpConnection  (standalone)
 AuditLog        (append-oriented portal event table)
+PortalExecutionJob (durable portal execution/refresh polling state)
 ```
 
 ### Key Design Decisions
@@ -145,9 +146,24 @@ GET /api/jobs/{jobId}          — poll job status
 GET /api/reports/{id}/snapshot — fetch completed snapshot JSON
 ```
 
-**`ExecutionJobService`** is a singleton that manages a `SemaphoreSlim` with `MaxConcurrentReportExecutions` slots. Jobs that exceed the slot limit are queued.
+**Supported topology:** one active Report Portal process per portal SQLite database and
+script/snapshot/dataset storage root. `ExecutionJobService` holds an exclusive
+`portal.instance.lock` beside the database and fails startup if another process already owns it.
+The execution semaphore, interactive session cache, ASP.NET rate-limit partitions, and PDF quota
+are therefore intentionally process-local.
 
-**`SessionCache`** is a singleton hosted service that holds in-memory execution sessions for active result streaming. It evicts idle sessions after `SessionCacheTtlMinutes` and enforces a max size of `SessionCacheMaxSize`. The cache is not persisted — a portal restart clears all in-progress sessions.
+**`ExecutionJobService`** is a singleton/hosted service that manages a `SemaphoreSlim` with
+`MaxConcurrentReportExecutions` slots. Jobs that exceed the slot limit are queued. Every job is
+also written to `PortalExecutionJobs`, so `GET /api/jobs/{jobId}` remains meaningful after a
+restart. A filtered unique index permits only one `Pending`/`Running` refresh per report. Startup
+marks abandoned jobs and report refresh status as `Cancelled` with an interruption reason; it
+does not claim that vanished work completed successfully.
+
+**`SessionCache`** is a singleton hosted service that holds in-memory execution sessions for
+active result streaming. It evicts idle sessions after `SessionCacheTtlMinutes` and enforces a max
+size of `SessionCacheMaxSize`. The cache is intentionally not persisted: after restart, the next
+interaction creates a new session from the report script/current snapshot rather than reporting a
+lost session as successful work.
 
 ---
 
@@ -173,7 +189,7 @@ Three `IHealthCheck` implementations registered with `AddHealthChecks()`:
 | :--- | :--- | :--- |
 | `db` | `PortalDbHealthCheck` | `Unhealthy` if `db.Users.CountAsync()` throws |
 | `orchestrator` | `OrchestratorHealthCheck` | `Degraded` if Orchestrator DB path not found |
-| `execution` | `ExecutionCapacityHealthCheck` | `Degraded` if execution slots nearing cap |
+| `execution` | `ExecutionCapacityHealthCheck` | Reports the single-instance topology, durable active execution count, configured cap, SMTP connections, and active subscriptions |
 
 The `/health` endpoint uses a custom `ResponseWriter` that serializes the `HealthReport` to a structured JSON document. It is mapped with `.AllowAnonymous()` so monitoring tools do not need a JWT.
 

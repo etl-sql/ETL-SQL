@@ -266,7 +266,8 @@ export function createDatasetsAdmin(opts = {}) {
       return;
     } else if (action === 'delete') {
       if (!confirmFn('Delete this dataset? This removes the registry entry and cached data.')) return;
-      await datasetsApi.delete(id).catch(alertErr);
+      const dataset = allDatasets.find(x => x.id === id);
+      await datasetsApi.delete(id, dataset?.version).catch(alertErr);
       loadDatasets();
     } else if (action === 'refresh') {
       try {
@@ -349,7 +350,9 @@ export function createDatasetsAdmin(opts = {}) {
         </table>`;
       $wrap.querySelectorAll('[data-gid]').forEach(btn => {
         btn.addEventListener('click', async () => {
-          await datasetsApi.revokeAcl(datasetId, +btn.dataset.gid).catch(alertErr);
+          const dataset = allDatasets.find(x => x.id === datasetId);
+          await datasetsApi.revokeAcl(datasetId, +btn.dataset.gid, dataset?.version).catch(alertErr);
+          await loadDatasets();
           loadDatasetAcl(datasetId);
         });
       });
@@ -646,7 +649,8 @@ export function createDatasetsAdmin(opts = {}) {
       const $err = document.getElementById('ds-error');
       $err.classList.remove('show');
       try {
-        await datasetsApi.update(id, { accessLevel, ttl });
+        const dataset = allDatasets.find(x => x.id === id);
+        await datasetsApi.update(id, { accessLevel, ttl }, dataset?.version);
         document.getElementById('editDatasetForm').style.display = 'none';
         loadDatasets();
       } catch (err) { $err.textContent = err.message; $err.classList.add('show'); }
@@ -659,7 +663,9 @@ export function createDatasetsAdmin(opts = {}) {
       const groupId = +document.getElementById('ds-acl-group').value;
       const permission = document.getElementById('ds-acl-perm').value;
       if (!groupId) return;
-      await datasetsApi.grantAcl(selectedDatasetId, groupId, permission).catch(alertErr);
+      const dataset = allDatasets.find(x => x.id === selectedDatasetId);
+      await datasetsApi.grantAcl(selectedDatasetId, groupId, permission, dataset?.version).catch(alertErr);
+      await loadDatasets();
       loadDatasetAcl(selectedDatasetId);
     });
 

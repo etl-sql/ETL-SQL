@@ -15,6 +15,16 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.12.0 — Runtime: Portal administration mutations require optimistic-concurrency versions
+- **What changed**: Updates, deletes, ACL changes, and bulk administration operations for users, groups, folders, reports, datasets, subscriptions, SMTP definitions, and scheduled jobs require the version returned by the latest read; stale writes return `409 Conflict` with current state instead of silently overwriting a newer edit.
+- **Who is affected**: Report Portal API and UI clients that mutate administrator-managed resources.
+- **Migration**: Read the resource first, retain its `Version`/ETag, and send it with the mutation as documented; for bulk operations inspect each per-item result and retry only conflicted items after refreshing their current state.
+
+### v0.12.0 — Runtime: Report Portal enforces a single-active-instance topology
+- **What changed**: A portal process now holds an exclusive instance lock beside the portal database. A second process pointed at the same database fails startup. Execution jobs are persisted, active refresh ownership is database-enforced, and jobs abandoned by restart become `Cancelled` with an interruption reason.
+- **Who is affected**: Deployments that started multiple Report Portal processes against one SQLite database or storage root.
+- **Migration**: Run exactly one portal service instance per portal database and script/snapshot/dataset storage root. Use the separate Orchestrator service for distributed scheduled execution; multi-instance portal hosting remains unsupported until shared gates, sessions, and quotas are implemented.
+
 ### v0.11.0 — Runtime: Share links are anonymous creator-authorized capabilities
 - **What changed**: Share links now resolve without caller authentication, but share and embed capabilities fail closed when their creator is disabled or loses current report permission; new capabilities expire after seven days by default.
 - **Who is affected**: Portal clients that treated share links as authenticated shortcuts or created links/embeds without an explicit expiry.

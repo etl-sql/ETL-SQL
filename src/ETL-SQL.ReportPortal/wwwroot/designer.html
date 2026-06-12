@@ -57,6 +57,7 @@ async function apiJson(url, opts = {}) {
 let initialState      = null;
 let initialReportName = 'New Report';
 let initialFolderId   = folderId;
+let initialReportVersion = null;
 
 if (reportId) {
   try {
@@ -66,6 +67,7 @@ if (reportId) {
       initialFolderId   = report.folderId;
     }
     const sc = await apiJson(`/api/reports/${reportId}/script-content`);
+    initialReportVersion = sc?.version ?? report?.version ?? null;
     if (sc?.scriptText) {
       const parsed = await apiJson('/api/designer/parse', { method: 'POST', body: { script: sc.scriptText } });
       if (parsed?.designState?.pages?.length) initialState = parsed.designState;
@@ -78,6 +80,7 @@ if (reportId) {
 createDesigner(container, {
   designState:  initialState,
   reportId,
+  reportVersion: initialReportVersion,
   reportName:   initialReportName,
   folderId:     initialFolderId,
   apiBase:      '',

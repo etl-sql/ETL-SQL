@@ -92,7 +92,7 @@ public class OrchestratorPollerService(
 
                 // The poller is the sole trusted dataset execution path. Interactive execution and
                 // user-triggered refreshes retain their real UserId caller context.
-                jobs.EnqueueRefresh(
+                await jobs.EnqueueRefreshAsync(
                     datasetJob.ReportId,
                     userId: 0,
                     scriptPath: datasetJob.Report.ScriptPath,

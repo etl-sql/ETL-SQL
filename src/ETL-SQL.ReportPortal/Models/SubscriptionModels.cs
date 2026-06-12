@@ -22,7 +22,8 @@ public record SubscriptionDto(
     int FailCount,
     bool IsActive,
     Dictionary<string, string>? Parameters,
-    string? ParameterSummary);
+    string? ParameterSummary,
+    long Version = 1);
 
 public record CreateSubscriptionRequest(
     int ReportId,
@@ -44,7 +45,10 @@ public record UpdateSubscriptionRequest(
     bool? IsActive,
     Dictionary<string, string>? Parameters);
 
-public record BulkSubscriptionStatusRequest(IList<int> SubscriptionIds, bool IsActive);
+public record BulkSubscriptionStatusRequest(IList<VersionedResourceRequest>? Subscriptions, bool IsActive)
+{
+    public IList<int> SubscriptionIds => (Subscriptions ?? []).Select(x => x.Id).ToList();
+}
 
 public record SmtpConnectionDto(
     int Id,
@@ -53,7 +57,8 @@ public record SmtpConnectionDto(
     int Port,
     string? Username,
     string? FromAddress,
-    bool UseSsl);
+    bool UseSsl,
+    long Version = 1);
 
 public record CreateSmtpRequest(
     string Alias,

@@ -110,7 +110,8 @@ public class ReportsController : ControllerBase
             r.LastRefreshDurationMs,
             isFavorite,
             isStale,
-            scriptChanged);
+            scriptChanged,
+            r.Version);
     }
 
     private async Task<string> GenerateUniqueShareTokenAsync()
@@ -335,6 +336,7 @@ public class ReportsController : ControllerBase
         if (perm is null) return Forbid();
 
         var isFavorite = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
+        OptimisticConcurrency.SetETag(Response, report.Version);
         return Ok(ToDto(report, report.Snapshots.FirstOrDefault(), isFavorite));
     }
 
@@ -970,6 +972,11 @@ public class ReportsController : ControllerBase
 
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, report, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToDto(report, null));
 
         if (req.Name is not null) report.Name = req.Name;
         if (req.Description is not null) report.Description = req.Description;
@@ -1020,10 +1027,19 @@ public class ReportsController : ControllerBase
         }
 
         report.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(report).ReloadAsync();
+            return OptimisticConcurrency.Conflict(this, ToDto(report, null));
+        }
         await audit.LogAsync(CurrentUserId, "UPDATE_REPORT", "Report", id.ToString());
 
         var isFavorite = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
+        OptimisticConcurrency.SetETag(Response, report.Version);
         return Ok(ToDto(report, null, isFavorite));
     }
 
@@ -1541,6 +1557,11 @@ public class ReportsController : ControllerBase
 
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, report, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToDto(report, null));
 
         bool hasActive = report.Subscriptions.Any();
         if (hasActive && !cascade)
@@ -1558,7 +1579,15 @@ public class ReportsController : ControllerBase
             await datasetRegistry.Delete(datasetName);
 
         report.IsDeleted = true;
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await db.Entry(report).ReloadAsync();
+            return OptimisticConcurrency.Conflict(this, ToDto(report, null));
+        }
         await audit.LogAsync(CurrentUserId, "DELETE_REPORT", "Report", id.ToString(), report.Name);
         return NoContent();
     }
@@ -1582,7 +1611,8 @@ public class ReportsController : ControllerBase
         var text = System.IO.File.Exists(resolved)
             ? await System.IO.File.ReadAllTextAsync(resolved)
             : string.Empty;
-        return Ok(new ScriptContentResponse(text));
+        OptimisticConcurrency.SetETag(Response, report.Version);
+        return Ok(new ScriptContentResponse(text, report.Version));
     }
 
     // ── PUT /api/reports/{id}/script-content ──────────────────────────────────
@@ -1597,20 +1627,81 @@ public class ReportsController : ControllerBase
 
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        if (expectedVersion is null)
+            return OptimisticConcurrency.MissingVersion(this);
+        if (!OptimisticConcurrency.Prepare(db, report, expectedVersion.Value))
+            return OptimisticConcurrency.Conflict(this, ToDto(report, null));
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolved))
             return Forbid();
 
-        await System.IO.File.WriteAllTextAsync(resolved, req.ScriptText, System.Text.Encoding.UTF8);
-
         var hash = "sha256:" + Convert.ToHexString(
             SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(req.ScriptText))).ToLowerInvariant();
-        report.PublishedScriptHash = hash;
-        report.ScriptLastModified = DateTime.UtcNow;
-        report.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
+        var directory = Path.GetDirectoryName(resolved)!;
+        Directory.CreateDirectory(directory);
+        var hadOriginal = System.IO.File.Exists(resolved);
+        var stagedPath = Path.Combine(directory, $".{Path.GetFileName(resolved)}.{Guid.NewGuid():N}.tmp");
+        var backupPath = Path.Combine(directory, $".{Path.GetFileName(resolved)}.{Guid.NewGuid():N}.bak");
+        await System.IO.File.WriteAllTextAsync(stagedPath, req.ScriptText, System.Text.Encoding.UTF8);
+
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        try
+        {
+            // Claim the catalog version before touching the published script. The open SQLite
+            // write transaction prevents another portal process from claiming the next version
+            // until the file swap and metadata commit complete.
+            await db.SaveChangesAsync();
+
+            if (hadOriginal)
+                System.IO.File.Move(resolved, backupPath);
+            System.IO.File.Move(stagedPath, resolved);
+
+            report.PublishedScriptHash = hash;
+            report.ScriptLastModified = DateTime.UtcNow;
+            report.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+            await transaction.CommitAsync();
+            if (System.IO.File.Exists(backupPath))
+                System.IO.File.Delete(backupPath);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync();
+            RestoreScriptBackup(resolved, stagedPath, backupPath, hadOriginal);
+            await db.Entry(report).ReloadAsync();
+            return OptimisticConcurrency.Conflict(this, ToDto(report, null));
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            RestoreScriptBackup(resolved, stagedPath, backupPath, hadOriginal);
+            throw;
+        }
         await audit.LogAsync(CurrentUserId, "DESIGNER_SAVE", "Report", id.ToString(), report.Name);
-        return NoContent();
+        OptimisticConcurrency.SetETag(Response, report.Version);
+        return Ok(new { report.Version });
+    }
+
+    private static void RestoreScriptBackup(
+        string resolved,
+        string stagedPath,
+        string backupPath,
+        bool hadOriginal)
+    {
+        if (System.IO.File.Exists(backupPath))
+        {
+            if (System.IO.File.Exists(resolved))
+                System.IO.File.Delete(resolved);
+            System.IO.File.Move(backupPath, resolved);
+        }
+        else if (!hadOriginal && System.IO.File.Exists(resolved))
+        {
+            System.IO.File.Delete(resolved);
+        }
+
+        if (System.IO.File.Exists(stagedPath))
+            System.IO.File.Delete(stagedPath);
     }
 
     // ── POST /api/scripts/upload ──────────────────────────────────────────────

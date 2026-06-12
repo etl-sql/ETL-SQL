@@ -1155,6 +1155,7 @@ export async function createScriptEditor(container, opts = {}) {
  * @param {Object}      [opts]
  * @param {Object|null} [opts.designState=null]   Parsed DesignState JSON (null = new report).
  * @param {number|null} [opts.reportId=null]       Existing report ID for save.
+ * @param {number|null} [opts.reportVersion=null]  Current optimistic concurrency version.
  * @param {string}      [opts.reportName='New Report']
  * @param {number|null} [opts.folderId=null]
  * @param {string}      [opts.apiBase='']          Portal API base URL.
@@ -1179,6 +1180,7 @@ export function createDesigner(container, opts = {}) {
     let scriptEditor = null;
     let reportName  = opts.reportName ?? 'New Report';
     const reportId  = opts.reportId   ?? null;
+    let reportVersion = opts.reportVersion ?? null;
     const folderId  = opts.folderId   ?? null;
     const apiBase   = opts.apiBase    ?? '';
     const _fetch    = opts.authFetch  ?? ((url, o) => fetch(url, o));
@@ -1193,8 +1195,10 @@ export function createDesigner(container, opts = {}) {
     const ROLES  = ['X', 'Y', 'VALUE', 'CATEGORY', 'SERIES', 'LABEL', 'TOOLTIP'];
 
     // ── API helper ────────────────────────────────────────────────────────────
-    async function apiJson(url, method = 'GET', body = null) {
+    async function apiJson(url, method = 'GET', body = null, version = null) {
         const init = { method, headers: {} };
+        if (version !== null)
+            init.headers['If-Match'] = `"${version}"`;
         if (body !== null) {
             init.headers['Content-Type'] = 'application/json';
             init.body = JSON.stringify(body);
@@ -1559,7 +1563,12 @@ export function createDesigner(container, opts = {}) {
                 return;
             }
             if (reportId) {
-                await apiJson(`/api/reports/${reportId}/script-content`, 'PUT', { scriptText: script });
+                const saved = await apiJson(
+                    `/api/reports/${reportId}/script-content`,
+                    'PUT',
+                    { scriptText: script },
+                    reportVersion);
+                reportVersion = saved?.version ?? reportVersion;
                 opts.onSave?.();
             } else {
                 saveModal.querySelector('#dsgn-modal-name').value   = reportName;

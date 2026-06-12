@@ -1441,7 +1441,9 @@ Use this checklist before promoting the Report Portal to a production or custome
 
 ### Reliability
 
+- [ ] **Required** — Run exactly one active Report Portal process for each portal SQLite database and script/snapshot/dataset storage root. The portal enforces this with `portal.instance.lock` beside the database and refuses a second instance. Horizontal portal replicas are not a supported topology.
 - [ ] **Required** — Run the portal as a managed service (Windows Service or systemd unit) so it restarts automatically on host reboot or crash.
+- [ ] **Required** — Treat a restart as cancellation of in-flight portal executions. Polling remains durable through `PortalExecutionJobs`; abandoned `Pending`/`Running` jobs return `Cancelled` with an interruption reason and must be submitted again.
 - [ ] **Recommended** — Verify the `/health` endpoint returns `Healthy` before directing user traffic. Wire this endpoint into your load balancer or monitoring system.
 - [ ] **Recommended** — If the Orchestrator is deployed separately, confirm `Portal:Orchestrator:ApiUrl` and both `ApiKey` values match. Verify the connection via the Admin → Orchestrator page.
 - [ ] **Recommended** — Configure SMTP for subscriptions. Test an outbound email from Admin → Connections before creating live subscriptions.
