@@ -295,6 +295,16 @@ public class ExecutionJobService : IDisposable
 
             await db.SaveChangesAsync();
 
+            try
+            {
+                await PruneSnapshotsAsync(db, job.ReportId);
+            }
+            catch (Exception ex)
+            {
+                // Retention is best-effort; never fail a completed execution over it.
+                _log.LogWarning(ex, "Snapshot pruning failed for report {ReportId}", job.ReportId);
+            }
+
             // Invalidate sessions so next parameter interaction picks up fresh data
             await _sessions.InvalidateReportAsync(job.ReportId);
 
@@ -342,6 +352,44 @@ public class ExecutionJobService : IDisposable
             $"report:{job.ReportId}:{job.Id}",
             scriptPath,
             DateTime.UtcNow);
+    }
+
+    /// <summary>Keeps the newest <see cref="ResourcesConfig.SnapshotRetentionPerReport"/>
+    /// snapshots for the report; older rows and their manifest files are removed. File
+    /// deletion is restricted to names the path guard resolves inside the snapshot directory.</summary>
+    internal async Task PruneSnapshotsAsync(PortalDbContext db, int reportId)
+    {
+        var keep = Math.Max(1, _config.Resources.SnapshotRetentionPerReport);
+        var stale = await db.ReportSnapshots
+            .Where(s => s.ReportId == reportId)
+            .OrderByDescending(s => s.BuiltAt)
+            .Skip(keep)
+            .ToListAsync();
+        if (stale.Count == 0) return;
+
+        db.ReportSnapshots.RemoveRange(stale);
+        await db.SaveChangesAsync();
+
+        foreach (var snapshot in stale)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(snapshot.ManifestPath)
+                    && PortalPathGuard.TryResolveSnapshot(
+                        _config, Path.GetFileName(snapshot.ManifestPath), out var resolved)
+                    && System.IO.File.Exists(resolved))
+                {
+                    System.IO.File.Delete(resolved);
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Failed to delete pruned snapshot manifest {ManifestPath}",
+                    snapshot.ManifestPath);
+            }
+        }
+
+        _log.LogDebug("Pruned {Count} snapshots for report {ReportId}", stale.Count, reportId);
     }
 
     private async Task UpdateReportRefreshStatusAsync(ExecutionJob job, string status, string? error)

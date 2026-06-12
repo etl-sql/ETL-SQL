@@ -114,6 +114,10 @@ public class ResourcesConfig
     public int SessionCacheMaxSize { get; set; } = 50;
     public int SessionCacheTtlMinutes { get; set; } = 30;
     public bool PersistAdHocInteractions { get; set; } = false;
+
+    /// <summary>Newest snapshots kept per report; older rows and their manifest files are
+    /// pruned after each successful execution. Minimum effective value is 1.</summary>
+    public int SnapshotRetentionPerReport { get; set; } = 20;
 }
 
 public class JwtConfig

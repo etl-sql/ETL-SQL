@@ -755,11 +755,16 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 
 ### Performance / operational
 
-- [ ] **R13 (P1). Report snapshots accumulate without bound.**
+- [x] **R13 (P1). Report snapshots accumulate without bound.**
   Every execution writes a unique `report_{id}_{jobId}.snapshot.json` and a `ReportSnapshots` row;
   nothing deletes old manifests or rows. A report refreshed every 5 minutes produces ~105k files/year.
   Add retention (keep last N per report) to complement `DatasetStorageMaintenance`, and surface disk
   usage via the P2.8 observability item.
+  *(done — v0.11.0)* After each successful execution the portal keeps the newest
+  `Portal:Resources:SnapshotRetentionPerReport` snapshots (default 20) and removes older rows plus
+  their path-guarded manifest files; pruning is best-effort and never fails a completed run.
+  Documented in the administrators guide. Disk-usage surfacing remains under P2.8. Regression:
+  `ExecutionJobServiceTests.PruneSnapshots_KeepsNewestPerReport_DeletesRowsAndFiles`.
 - [ ] **R14 (P2). Per-request DB hit in `OnTokenValidated`.**
   Every authenticated request runs a `Users.AnyAsync` query (`Program.cs:123-135`); the P0.3 role/
   security-stamp reload will make this heavier. Add a short (~30s) memory-cache of the user's active/

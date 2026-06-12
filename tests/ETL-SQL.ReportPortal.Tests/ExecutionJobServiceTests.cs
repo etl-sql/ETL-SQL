@@ -1,5 +1,7 @@
 using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -121,6 +123,78 @@ public class ExecutionJobServiceTests : IDisposable
         Assert.Null(service.Get(old));        // past retention — evicted
         Assert.NotNull(service.Get(recent));  // recent terminal job — still queryable
         await WaitForTerminalAsync(service, trigger);
+    }
+
+    /// <summary>
+    /// Regression for unbounded snapshot accumulation: pruning keeps the newest
+    /// SnapshotRetentionPerReport rows (and their manifest files) for the report and leaves
+    /// other reports' snapshots untouched.
+    /// </summary>
+    [Fact]
+    public async Task PruneSnapshots_KeepsNewestPerReport_DeletesRowsAndFiles()
+    {
+        var snapshotDir = Path.Combine(_tempDir, "snapshots");
+        var config = new PortalConfig
+        {
+            DatabasePath = Path.Combine(_tempDir, "portal.db"),
+            ScriptRootPath = Path.Combine(_tempDir, "scripts"),
+            SnapshotDirectory = snapshotDir,
+            DatasetRootPath = Path.Combine(_tempDir, "datasets"),
+            Resources = new ResourcesConfig { SnapshotRetentionPerReport = 3 }
+        };
+
+        var options = new DbContextOptionsBuilder<PortalDbContext>()
+            .UseSqlite($"Data Source={config.DatabasePath}")
+            .Options;
+        using var db = new PortalDbContext(options);
+        db.Database.EnsureCreated();
+
+        var folder = new Folder { Name = "f", Path = "/f" };
+        var report = new Report { Folder = folder, Name = "r", ScriptPath = "r.rptsql" };
+        var other = new Report { Folder = folder, Name = "o", ScriptPath = "o.rptsql" };
+        db.AddRange(folder, report, other);
+        await db.SaveChangesAsync();
+
+        string AddSnapshot(Report r, int age)
+        {
+            var path = Path.Combine(snapshotDir, $"report_{r.Name}_{age}.snapshot.json");
+            File.WriteAllText(path, "{}");
+            db.ReportSnapshots.Add(new ReportSnapshot
+            {
+                Report = r,
+                ManifestPath = path,
+                BuiltAt = DateTime.UtcNow.AddMinutes(-age)
+            });
+            return path;
+        }
+
+        var reportFiles = Enumerable.Range(0, 5).Select(age => AddSnapshot(report, age)).ToList();
+        var otherFiles = Enumerable.Range(0, 2).Select(age => AddSnapshot(other, age)).ToList();
+        await db.SaveChangesAsync();
+
+        var scopeFactory = new ServiceCollection()
+            .BuildServiceProvider()
+            .GetRequiredService<IServiceScopeFactory>();
+        var sessions = new SessionCache(config, scopeFactory, NullLogger<SessionCache>.Instance);
+        var channel = new HttpJobChannelClient(
+            new HttpClient(new NeverRespondingHandler()) { BaseAddress = new Uri("http://localhost:9") },
+            NullLogger<HttpJobChannelClient>.Instance);
+        using var service = new ExecutionJobService(
+            config, scopeFactory, NullLogger<ExecutionJobService>.Instance, sessions, channel);
+
+        await service.PruneSnapshotsAsync(db, report.Id);
+
+        var remaining = await db.ReportSnapshots.Where(s => s.ReportId == report.Id).ToListAsync();
+        Assert.Equal(3, remaining.Count);
+        Assert.All(remaining, s => Assert.True(File.Exists(s.ManifestPath)));
+
+        // The two oldest (ages 3, 4) are gone — rows and files.
+        Assert.False(File.Exists(reportFiles[3]));
+        Assert.False(File.Exists(reportFiles[4]));
+
+        // The other report is untouched.
+        Assert.Equal(2, await db.ReportSnapshots.CountAsync(s => s.ReportId == other.Id));
+        Assert.All(otherFiles, f => Assert.True(File.Exists(f)));
     }
 
     private static async Task WaitForTerminalAsync(ExecutionJobService service, string jobId)

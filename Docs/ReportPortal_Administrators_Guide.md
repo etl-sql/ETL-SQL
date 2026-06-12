@@ -102,7 +102,8 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
       "MaxConcurrentReportExecutions": 4,
       "ExecutionTimeoutSeconds":       300,
       "SessionCacheMaxSize":           50,
-      "SessionCacheTtlMinutes":        30
+      "SessionCacheTtlMinutes":        30,
+      "SnapshotRetentionPerReport":    20
     },
     "Jwt": {
       "Secret":            "",
@@ -148,6 +149,7 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Resources.ExecutionTimeoutSeconds` | `300` | Per-execution timeout. Jobs exceeding this are cancelled. |
 | `Resources.SessionCacheMaxSize` | `50` | Maximum number of in-memory execution sessions cached for result streaming. |
 | `Resources.SessionCacheTtlMinutes` | `30` | How long an idle session is kept before eviction. |
+| `Resources.SnapshotRetentionPerReport` | `20` | Newest snapshots kept per report. After each successful execution, older snapshot rows and their manifest files are pruned (minimum effective value is 1). |
 | `Jwt.Secret` | *(required)* | HMAC-SHA256 signing secret. **Must be at least 32 characters.** The portal will refuse to start without it. |
 | `Jwt.ExpiryMinutes` | `60` | How long an access token is valid. |
 | `Jwt.RefreshExpiryDays` | `7` | How long a refresh token is valid. |
