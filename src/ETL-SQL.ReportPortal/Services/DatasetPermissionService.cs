@@ -54,7 +54,7 @@ public sealed class DatasetPermissionService(
 
         FolderPermission? folderPermission = null;
         if (dataset.AccessLevel == DatasetAccessLevel.Public && dataset.FolderId is int folderId)
-            folderPermission = await folderPermissions.GetEffectivePermissionAsync(folderId, groupIds);
+            folderPermission = await folderPermissions.GetEffectivePermissionAsync(folderId, groupIds, userId);
 
         return Evaluate(dataset, userId.Value, groupIds, folderPermission);
     }
@@ -91,7 +91,7 @@ public sealed class DatasetPermissionService(
             .Select(d => d.FolderId!.Value)
             .Distinct()
             .ToList();
-        var folderPermissionMap = await folderPermissions.GetEffectivePermissionsAsync(folderIds, groupIds);
+        var folderPermissionMap = await folderPermissions.GetEffectivePermissionsAsync(folderIds, groupIds, userId);
 
         foreach (var dataset in datasets)
         {

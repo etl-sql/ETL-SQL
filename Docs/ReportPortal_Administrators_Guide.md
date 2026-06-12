@@ -321,6 +321,33 @@ Use **Reset Password** on the user's profile to force a new temporary password a
 
 **Revoke Tokens** immediately invalidates all refresh tokens for that user, ending all active sessions. Use this if an account is believed to be compromised.
 
+### 4.7 Deleting a User — Ownership Lifecycle
+
+Deleting a user distinguishes durable shared resources from personal artifacts:
+
+- **Durable resources must be reassigned first.** If the user owns folders, published reports, or
+  datasets, the delete returns `409 Conflict` with a count of each. Retry with
+  `DELETE /api/admin/users/{id}?reassignTo=<userId>` naming a different, active user; ownership of
+  all three transfers in one operation and a `TRANSFER_OWNERSHIP` audit event records the counts
+  and the target.
+- **Personal artifacts die with the user.** Subscriptions (including their Orchestrator jobs and
+  generated trigger scripts, which are removed immediately), alerts, saved views, favorites,
+  share links, embed tokens, and refresh tokens are deleted — they are personal capabilities, not
+  shared state. Active subscriptions still require the explicit `?cascade=true` acknowledgement.
+
+### 4.8 LDAP Account Lifecycle Boundary
+
+LDAP synchronization happens **at login only** — there is no background directory sweep:
+
+- A user removed from the directory simply can no longer authenticate (the LDAP bind fails). Their
+  portal account, ownerships, and grants remain until an administrator deactivates or deletes the
+  account using the lifecycle above. Synchronization never deactivates or deletes accounts.
+- On each successful LDAP login the user's memberships in `Provider = 'LDAP'` groups converge to
+  the directory's group list (additions and removals), and mapped roles are applied. Local groups
+  are never touched by synchronization.
+- An LDAP-mapped group removed from the directory keeps its portal row and ACLs; it loses members
+  one at a time as they log in. Delete the group in the portal when it is no longer wanted.
+
 ---
 
 ## 5. Groups & Folder Permissions
@@ -343,7 +370,7 @@ Each folder can have one or more ACL entries, each granting a group a permission
 | `Execute` | Run reports and build new snapshots |
 | `Manage` | Publish, update, and delete reports within the folder |
 
-ACLs are not inherited — a group must be explicitly granted access to each folder it needs to see. A folder with no ACLs is visible only to Admins.
+ACLs are not inherited — a group must be explicitly granted access to each folder it needs to see. A folder with no ACLs is visible only to Admins **and its owner**: the user who created a folder (or received it through ownership transfer) always holds effective `Manage` on it, without an ACL entry. Ownership moves only through the explicit transfer on user deletion (§4.7); revoking a group ACL never locks an owner out of their own folder.
 
 > [!TIP]
 > Create an **Everyone** group, add all users to it, and grant it `Read` on public folders rather than individually managing each user.

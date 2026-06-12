@@ -34,8 +34,17 @@ public class SubscriptionDeliverySecurityTests
             Email = $"subscription-owner-{suffix}@test.local",
             IsActive = ownerIsActive
         };
+        // The folder belongs to a different user: folder ownership implies Manage (P1.5), and
+        // this test exercises ACL-derived read loss, which only applies to non-owners.
+        var folderOwner = new PortalUser
+        {
+            UserName = $"folder-owner-{suffix}",
+            Email = $"folder-owner-{suffix}@test.local",
+            IsActive = true
+        };
         var group = new Group { Name = $"subscription-group-{suffix}" };
         db.Users.Add(owner);
+        db.Users.Add(folderOwner);
         db.Groups.Add(group);
         await db.SaveChangesAsync();
 
@@ -43,7 +52,7 @@ public class SubscriptionDeliverySecurityTests
         {
             Name = $"Subscription Folder {suffix}",
             Path = $"/subscription-{suffix}",
-            OwnerId = owner.Id
+            OwnerId = folderOwner.Id
         };
         db.Folders.Add(folder);
         await db.SaveChangesAsync();

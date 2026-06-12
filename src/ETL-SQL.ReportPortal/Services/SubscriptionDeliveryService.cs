@@ -168,7 +168,7 @@ public class SubscriptionDeliveryService(
             .Where(ug => ug.UserId == owner.Id)
             .Select(ug => ug.GroupId)
             .ToListAsync(ct));
-        var permission = await folderPermissions.GetEffectivePermissionAsync(sub.Report.FolderId, groupIds);
+        var permission = await folderPermissions.GetEffectivePermissionAsync(sub.Report.FolderId, groupIds, owner.Id);
         if (permission is null || permission < FolderPermission.Read)
             return "Subscription owner no longer has read permission on the report.";
 

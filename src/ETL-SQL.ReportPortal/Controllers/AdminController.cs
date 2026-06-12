@@ -22,6 +22,7 @@ public class AdminController(
     PortalConfig config,
     SubscriptionDeliveryStatusService deliveryStatus,
     DatasetAtRestKeyRotationService datasetKeyRotation,
+    OrchestratorDbLocator orchestratorDb,
     IHostApplicationLifetime lifetime) : ControllerBase
 {
     private int CurrentUserId =>
@@ -303,7 +304,8 @@ public class AdminController(
     }
 
     [HttpDelete("users/{id:int}")]
-    public async Task<IActionResult> DeleteUser(int id, [FromQuery] bool cascade = false)
+    public async Task<IActionResult> DeleteUser(
+        int id, [FromQuery] bool cascade = false, [FromQuery] int? reassignTo = null)
     {
         var user = await userManager.Users
             .Include(u => u.Subscriptions.Where(s => s.IsActive))
@@ -318,9 +320,69 @@ public class AdminController(
         if (user.Subscriptions.Any() && !cascade)
             return Conflict(new { error = "User has active subscriptions. Use ?cascade=true." });
 
-        if (cascade)
-            foreach (var sub in user.Subscriptions)
-                sub.IsActive = false;
+        // Durable shared resources (folders, reports, datasets) must be explicitly reassigned
+        // before their owner disappears — otherwise ownership dangles and PRIVATE datasets
+        // become reachable only by administrators.
+        var ownedFolders = await db.Folders.CountAsync(f => f.OwnerId == id);
+        var ownedReports = await db.Reports.CountAsync(r => r.CreatedBy == id);
+        var ownedDatasets = await db.Datasets.CountAsync(d => d.CreatedBy == id);
+        if (ownedFolders + ownedReports + ownedDatasets > 0)
+        {
+            if (reassignTo is null)
+                return Conflict(new
+                {
+                    error = "User owns durable resources. Supply ?reassignTo=<userId> to transfer ownership.",
+                    ownedFolders,
+                    ownedReports,
+                    ownedDatasets
+                });
+
+            var target = await db.Users.FirstOrDefaultAsync(u => u.Id == reassignTo && u.IsActive);
+            if (target is null || target.Id == id)
+                return BadRequest(new { error = "reassignTo must identify a different, active user." });
+
+            // Bump versions so any concurrent edit holding the old version conflicts cleanly.
+            await db.Folders.Where(f => f.OwnerId == id).ExecuteUpdateAsync(s => s
+                .SetProperty(f => f.OwnerId, target.Id)
+                .SetProperty(f => f.Version, f => f.Version + 1));
+            await db.Reports.Where(r => r.CreatedBy == id).ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.CreatedBy, target.Id)
+                .SetProperty(r => r.Version, r => r.Version + 1));
+            await db.Datasets.Where(d => d.CreatedBy == id).ExecuteUpdateAsync(s => s
+                .SetProperty(d => d.CreatedBy, (int?)target.Id)
+                .SetProperty(d => d.Version, d => d.Version + 1));
+            await audit.LogAsync(CurrentUserId, "TRANSFER_OWNERSHIP", "User", id.ToString(),
+                $"{ownedFolders} folder(s), {ownedReports} report(s), {ownedDatasets} dataset(s) → {target.UserName}");
+        }
+
+        // Personal artifacts (subscriptions, alerts, saved views, favorites, share/embed
+        // capabilities, refresh tokens) die with the user. Subscription rows cascade with the
+        // user row; remove their Orchestrator jobs and generated trigger scripts now so nothing
+        // keeps firing until the next startup reconciliation (which remains the recovery path).
+        var subscriptions = await db.Subscriptions
+            .Include(s => s.Report)
+            .Where(s => s.UserId == id)
+            .ToListAsync();
+        if (subscriptions.Count > 0)
+        {
+            var orchDbPath = orchestratorDb.Resolve();
+            ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore? jobStore = null;
+            if (orchDbPath is not null)
+            {
+                jobStore = new ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore(orchDbPath);
+                await jobStore.InitializeAsync();
+            }
+
+            foreach (var sub in subscriptions)
+            {
+                if (jobStore is not null)
+                    await jobStore.DeleteJobAsync(SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name));
+                if (!string.IsNullOrWhiteSpace(sub.ScriptPath)
+                    && PortalPathGuard.TryResolveScript(config, sub.ScriptPath, out var script)
+                    && System.IO.File.Exists(script))
+                    System.IO.File.Delete(script);
+            }
+        }
 
         // Revoke all tokens and remove group memberships
         var tokens = await db.RefreshTokens.Where(t => t.UserId == id && t.RevokedAt == null).ToListAsync();

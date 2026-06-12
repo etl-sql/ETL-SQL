@@ -1,6 +1,8 @@
 # ETL-SQL Development TODO List
 
-Use this list to track and prioritize outstanding roadmap items, architecture modernization tasks, and documentation improvements.
+Use this list to track active-release bugs, features, hardening tasks, and verification work.
+Future-version planning belongs in `ROADMAP.md`; move a roadmap phase here only when work on that
+release begins.
 
 ---
 
@@ -13,16 +15,30 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 > work executes, recoverable cross-resource operations, and a script-first way to reconstruct the portal.
 >
 > Priority convention: **P0** security/data-exposure blocker, **P1** correctness/recovery required before
-> an enterprise claim, **P2** verification and operational hardening, **P3** larger enterprise capability
-> or an explicitly documented deployment boundary.
+> an enterprise claim, and **P2** verification and operational hardening.
 
 ### Priority 1 — Multi-user correctness and recoverability
 
-- [ ] **P1.5 Fix ownership lifecycle and folder-owner semantics.**
+- [x] **P1.5 Fix ownership lifecycle and folder-owner semantics.**
   `Folder.OwnerId` is recorded but does not grant effective permission. Decide whether ownership implies
   Manage or remove the misleading field. Add explicit ownership transfer/reassignment for folders,
   reports, datasets, subscriptions, alerts, and other user-owned objects before deleting a user. Define
   behavior for LDAP users and groups that disappear during synchronization.
+  *(done — v0.11.0)* **Decision: folder ownership implies Manage** (the field already anchors the
+  system-publish dataset ownership fallback, so removal was off the table). The rule lives centrally
+  in `FolderPermissionService` (userId threaded through the group overloads, including the batch
+  path), so controllers, dataset permission evaluation, and subscription delivery reauthorization
+  all agree. **Deletion lifecycle:** `DELETE /api/admin/users/{id}` now 409s with an owned-resource
+  inventory when the user owns folders/reports/datasets; `?reassignTo=<userId>` transfers all three
+  (version-bumped, audited as `TRANSFER_OWNERSHIP`). Personal artifacts die with the user, and the
+  subscriptions' Orchestrator jobs + trigger scripts are removed inline rather than waiting for
+  startup reconciliation. **LDAP boundary documented:** sync is login-time-only convergence of
+  LDAP-provider group memberships; vanished directory users keep their rows (they just can't bind)
+  until an admin acts, and vanished groups drain per-login — nothing is auto-deleted. Tests:
+  `OwnershipLifecycleTests` (owner-Manage without ACL, 409→transfer→audit, invalid targets,
+  job/script/capability cleanup); the delivery-security fixture now separates folder owner from
+  subscription owner since owners can no longer lose access via ACL revocation. Docs: admin guide
+  §4.7/§4.8/§5.2 + architecture ownership-semantics note.
 - [ ] **P1.6 Make audit recording part of the operation contract.**
   Mutations and their audit rows are generally separate commits. Ensure security-sensitive changes cannot
   succeed without a durable audit event, add operation/correlation IDs for background work, and define
@@ -112,61 +128,3 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   executions, queue depth, job/SMTP failure rates, and disk usage of dataset/snapshot storage — via
   expanded health checks or a metrics endpoint (OpenTelemetry if warranted). Extend the
   no-credentials-in-logs guarantee from a dataset-test-only scan to a portal-wide log-hygiene rule.
-
-### Priority 3 — Enterprise capability decisions
-
-- [ ] **P3.1 Decide the HA/cluster roadmap (Multi-Path Practical HA).**
-  SQLite and local/process state are suitable for a single-node deployment but not an unqualified HA
-  claim. Provide three supported topologies to satisfy different enterprise deployment sizes:
-  - **Path A (Relational DB):** Switch EF Core providers to support PostgreSQL or Microsoft SQL Server (easily supported in domain-managed SMB infrastructures).
-  - **Path B (Zero-DBA Distributed SQLite):** Integrate `rqlite` (SQLite replicated via Raft) running as a local sidecar process, allowing nodes to cluster directly via command-line flags without external DBMS administration.
-  - **Path C (Shared Storage Abstraction):** Abstract disk-writes behind `IStorageProvider` and support:
-    - On-Premise SMB: Windows UNC Shares (`\\fileserver\etl-sql\storage`) running under Domain Service Accounts.
-    - Cloud-Native: S3-compatible object storage (MinIO, AWS S3, or Backblaze B2).
-  - **Path D (Infrastructure-Free Coordination):** Replace process-local semaphores and memory caches:
-    - Use database-backed leases (`ExpiresAt` and `LockedByNode` records) for scheduled run claims (no Redis).
-    - Use a database-driven invalidation table (`SystemEvents` polling) to synchronize cache evictions across nodes.
-- [ ] **P3.2 Add or explicitly defer OIDC/SAML and MFA.**
-  Local Identity and LDAP do not cover common enterprise SSO, conditional-access, and MFA requirements.
-  Document the supported identity boundary until federated authentication is implemented.
-- [ ] **P3.3 Review the authorization model for inheritance, deny, and direct grants.**
-  Current group-based highest-permission-wins ACLs may be sufficient, but enterprise deployments often
-  require inherited folder permissions, explicit deny, direct user/service-account grants, nested groups,
-  and a permission-change impact preview. Decide intentionally and add effective-permission tests.
-- [ ] **P3.4 Decide departmental/tenant isolation and naming boundaries (Multi-Tenancy Options).**
-  Dataset names are globally unique and portal state is shared. Provide isolated namespaces, storage, encryption keys, and scheduler coordination:
-  - **Path A (Soft Multi-Tenancy):** Add `TenantId` columns to all tables (users, groups, reports, datasets, audit logs) and apply EF Core Global Query Filters. Change unique database constraints from `Name` to `(TenantId, Name)`.
-  - **Path B (Hard Multi-Tenancy - Recommended for SQLite):** Deploy a database-per-tenant model. Since SQLite databases are simple local files, the portal dynamically resolves and connects to a separate `<tenant>.db` file based on subdomain/URL prefix/header context (zero DBMS administration overhead).
-  - **Path C (Storage Directory Isolation):** Partition the filesystem storage roots to include the tenant ID (`ScriptRootPath/tenant_A/`, `DatasetRootPath/tenant_A/`) and update `PortalPathGuard` to enforce tenant boundary checks.
-  - **Path D (Scheduler Tenant Context):** Ensure the background Orchestrator scheduler propagates tenant contexts (loading the correct DB connection, storage path, and keys) during scheduled job runs.
-- [ ] **P3.5 Add change approval where production governance requires it (Four-Eyes Approval).**
-  Consider optional four-eyes approval for report publication, job changes, subscription recipient
-  changes, SMTP/secret changes, and high-impact ACL grants. Preserve script-first operation by making
-  approval state and promotion scriptable and auditable:
-  - **Path A (Propose-Review-Promote Schema):** Store proposed alterations in an `ApprovalRequest` outbox table containing the serialized target states (`PendingStateJson`) rather than modifying active tables immediately.
-  - **Path B (Scriptable Approvals):** Add new declarative ETL-SQL syntax to configuration scripts (`PROPOSE UPDATE...` and `APPROVE PROPOSAL... BY '<reviewer>' WITH SIGNATURE = '...'`) so that approval histories and promotions remain reproducible and auditable in reconstruction bootstraps.
-  - **Path C (API Interception & Validation):** Configure ASP.NET Core controllers to intercept mutations on gated resources, return a `202 Accepted` with a proposal ID, and enforce the dual-control constraint **`ProposerId != ReviewerId`** upon approval.
-- [ ] **P3.6 Decide the self-service password recovery boundary.**
-  Only administrator password reset exists today. That may be the right answer for an LDAP-centric
-  deployment, but document it as an explicit boundary alongside the P3.2 SSO/MFA decision (and note
-  that email-based self-service reset would depend on the trusted SMTP path) so it reads as a choice
-  rather than an omission.
-- [ ] **P3.7 Centralized Policy Enforcement & Remote Auditing.**
-  Workstation local executions can bypass config policies, override guards via `SET` commands, and alter
-  local logs. Enable enterprise-locked parameters and remote audit telemetry:
-  - **Path A (Immutable Central Config):** Allow the CLI to resolve configuration via environment variables, a secured network mount path, or a cryptographically signed HTTPS policy endpoint, failing closed if the server is unreachable or the signature validation fails.
-  - **Path B (Locked Guardrails & Blocked SET Commands):** Reject compilation/linting of scripts containing explicitly blacklisted `SET` commands (e.g. `DisabledSetCommands`), and block runtime execution if a `SET` command attempts to modify a `LockedSettings` parameter.
-  - **Path C (Tamper-Proof Audit Sinks):** Stream telemetry events (invocations, rule bypasses, failures) in real time over HTTPS/Syslog using cross-platform Serilog remote sinks to write-only SIEM/centralized loggers (e.g., Elasticsearch, Splunk).
-- [ ] **P3.8 Asymmetric & KMS-Based Script Encryption.**
-  Symmetric password-based script encryption requires sharing and rotating passwords. Move to certificate or vault-backed options to protect scripts in collaborative environments:
-  - **Path A (Asymmetric Key/Certificate Decryption):** Allow scripts (or script-specific secrets) to be encrypted with an enterprise public key. The local CLI decrypts them at runtime using a private key or certificate installed in the workstation's local Certificate Store or secure Keychain.
-  - **Path B (KMS / Envelope Decryption):** Integrate the CLI with corporate Key Management Services (e.g., HashiCorp Vault, AWS KMS). The data key is wrapped by the KMS, allowing central auditing of decryption operations and instant revocation of a user's decryption rights.
-
-### Recommended execution order
-
-1. **P1.7-P1.11:** script-first configuration export/import and clean-server round-trip.
-2. **P1.3-P1.6:** multi-admin conflicts, durable portal state, ownership, and audit guarantees.
-3. **P2 lane:** hosted-service, multi-process, delivery, fault-injection, restore, upgrade,
-   observability, and workload tests.
-4. **P3 decisions:** publish explicit deployment, identity, isolation, and recovery boundaries before
-   making an enterprise or HA support claim.

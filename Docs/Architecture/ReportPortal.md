@@ -262,6 +262,15 @@ All endpoints require a `Bearer` JWT token unless marked **Public**.
 | POST | `/api/folders/{id}/acl` | Admin | Add ACL entry |
 | DELETE | `/api/folders/{id}/acl/{groupId}` | Admin | Remove ACL entry |
 
+**Ownership semantics:** `Folder.OwnerId` (the creator, or a transfer target) implies effective
+`Manage`, resolved centrally in `FolderPermissionService` alongside group ACLs — the same rule
+applies on every path that knows the caller (controllers, dataset permission evaluation,
+subscription delivery reauthorization). Deleting a user requires explicitly reassigning their
+folders, reports, and datasets via `DELETE /api/admin/users/{id}?reassignTo=<userId>` (409 with an
+owned-resource inventory otherwise); personal artifacts — subscriptions (plus their Orchestrator
+jobs/trigger scripts), alerts, saved views, favorites, share/embed capabilities, refresh tokens —
+are deleted with the user.
+
 ### Reports
 
 | Method | Path | Auth | Description |
