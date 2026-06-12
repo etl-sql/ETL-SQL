@@ -15,7 +15,7 @@ public class PortalBrandingSettingsService
 
     public string? DisplayName { get; private set; }
     public string? FooterText { get; private set; }
-    public string? LogoUrl { get; private set; }
+    public string? LogoUrl { get; private set; } = "/img/logo.png";
 
     public PortalBrandingSettingsService(PortalConfig config, ILogger<PortalBrandingSettingsService> logger)
     {

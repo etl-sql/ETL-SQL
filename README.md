@@ -1,4 +1,8 @@
-# ETL-SQL
+# ETL-SQL™
+
+<p align="center">
+  <img src="Docs/assets/logo.png" alt="ETL-SQL Logo" width="160" />
+</p>
 
 ![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.10.0-blue?style=for-the-badge&logo=dotnet)
 ![Language](https://img.shields.io/badge/Language-C%23-green?style=for-the-badge)
@@ -333,6 +337,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, branching, testing
 
 ---
 
-© 2026 ETL-SQL Team. Built for speed, designed for clarity.
+© 2026 Charles Clemens. All rights reserved.
 
-**Commercial Use & Licensing** — This software is free for personal, non-commercial use only. For commercial licensing or service agreements, contact [etlsqlsoftware@gmail.com](mailto:etlsqlsoftware@gmail.com).
+**Licensing** — This software is licensed under the PolyForm Noncommercial License 1.0.0. Commercial use of this software requires a separate license. For commercial licensing or service agreements, contact [etlsqlsoftware@gmail.com](mailto:etlsqlsoftware@gmail.com).
+
+**Trademarks** — ETL-SQL™ and the ETL-SQL logo are trademarks of Charles Clemens. Use of these trademarks is governed by our [Trademark Policy](TRADEMARK.md).
