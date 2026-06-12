@@ -280,6 +280,10 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   - **Path A (Immutable Central Config):** Allow the CLI to resolve configuration via environment variables, a secured network mount path, or a cryptographically signed HTTPS policy endpoint, failing closed if the server is unreachable or the signature validation fails.
   - **Path B (Locked Guardrails & Blocked SET Commands):** Reject compilation/linting of scripts containing explicitly blacklisted `SET` commands (e.g. `DisabledSetCommands`), and block runtime execution if a `SET` command attempts to modify a `LockedSettings` parameter.
   - **Path C (Tamper-Proof Audit Sinks):** Stream telemetry events (invocations, rule bypasses, failures) in real time over HTTPS/Syslog using cross-platform Serilog remote sinks to write-only SIEM/centralized loggers (e.g., Elasticsearch, Splunk).
+- [ ] **P3.8 Asymmetric & KMS-Based Script Encryption.**
+  Symmetric password-based script encryption requires sharing and rotating passwords. Move to certificate or vault-backed options to protect scripts in collaborative environments:
+  - **Path A (Asymmetric Key/Certificate Decryption):** Allow scripts (or script-specific secrets) to be encrypted with an enterprise public key. The local CLI decrypts them at runtime using a private key or certificate installed in the workstation's local Certificate Store or secure Keychain.
+  - **Path B (KMS / Envelope Decryption):** Integrate the CLI with corporate Key Management Services (e.g., HashiCorp Vault, AWS KMS). The data key is wrapped by the KMS, allowing central auditing of decryption operations and instant revocation of a user's decryption rights.
 
 ### Recommended execution order
 
