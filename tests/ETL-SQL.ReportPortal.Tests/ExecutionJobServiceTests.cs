@@ -75,6 +75,54 @@ public class ExecutionJobServiceTests : IDisposable
         await WaitForTerminalAsync(service, third);
     }
 
+    /// <summary>
+    /// Regression for unbounded job-table growth: terminal jobs older than the retention
+    /// window are evicted on the next enqueue, while recent terminal jobs stay queryable.
+    /// </summary>
+    [Fact]
+    public async Task Enqueue_EvictsTerminalJobsPastRetention_KeepsRecentOnes()
+    {
+        var scriptPath = Path.Combine(_tempDir, "scripts", "report.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "PRINT 'never executed';");
+
+        var config = new PortalConfig
+        {
+            DatabasePath = Path.Combine(_tempDir, "portal.db"),
+            ScriptRootPath = Path.Combine(_tempDir, "scripts"),
+            SnapshotDirectory = Path.Combine(_tempDir, "snapshots"),
+            DatasetRootPath = Path.Combine(_tempDir, "datasets"),
+            Resources = new ResourcesConfig
+            {
+                MaxConcurrentReportExecutions = 1,
+                ExecutionTimeoutSeconds = 1
+            }
+        };
+
+        var scopeFactory = new ServiceCollection()
+            .BuildServiceProvider()
+            .GetRequiredService<IServiceScopeFactory>();
+        var sessions = new SessionCache(config, scopeFactory, NullLogger<SessionCache>.Instance);
+        var channel = new HttpJobChannelClient(
+            new HttpClient(new NeverRespondingHandler()) { BaseAddress = new Uri("http://localhost:9") },
+            NullLogger<HttpJobChannelClient>.Instance);
+        using var service = new ExecutionJobService(
+            config, scopeFactory, NullLogger<ExecutionJobService>.Instance, sessions, channel);
+
+        var old = service.EnqueueRefresh(reportId: 1, userId: 7, scriptPath);
+        await WaitForTerminalAsync(service, old);
+        service.Get(old)!.CompletedAt =
+            DateTime.UtcNow - ExecutionJobService.CompletedJobRetention - TimeSpan.FromMinutes(1);
+
+        var recent = service.EnqueueRefresh(reportId: 2, userId: 7, scriptPath);
+        await WaitForTerminalAsync(service, recent);
+
+        var trigger = service.EnqueueRefresh(reportId: 3, userId: 7, scriptPath);
+
+        Assert.Null(service.Get(old));        // past retention — evicted
+        Assert.NotNull(service.Get(recent));  // recent terminal job — still queryable
+        await WaitForTerminalAsync(service, trigger);
+    }
+
     private static async Task WaitForTerminalAsync(ExecutionJobService service, string jobId)
     {
         var deadline = DateTime.UtcNow.AddSeconds(15);

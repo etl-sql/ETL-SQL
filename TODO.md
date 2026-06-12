@@ -703,15 +703,20 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   `UpdateReportRefreshStatusAsync` swallows-and-logs DB failures so a transient SQLite busy error can
   no longer leak the gate or strand the job. Regression:
   `ExecutionJobServiceTests.RefreshTimedOutWhileQueued_ReachesTerminalStateAndFreesGateAndDebounce`.
-- [ ] **R7 (P2). `EnqueueRefresh` debounce race can throw.**
+- [x] **R7 (P2). `EnqueueRefresh` debounce race can throw.**
   `if (!_activeRefreshes.TryAdd(...)) return _activeRefreshes[reportId];`
   (`ExecutionJobService.cs:97-99`) — if the in-flight refresh completes between the failed `TryAdd`
   and the indexer read, the indexer throws `KeyNotFoundException` → 500 to the caller. Use
   `TryGetValue` with a retry/fall-through to enqueue.
-- [ ] **R8 (P2). `_jobs` dictionary is never evicted.**
+  *(done — v0.11.0)* The claim is now a `TryAdd`/`TryGetValue` loop: if the in-flight refresh
+  completes between the two, the enqueue retries the claim instead of throwing.
+- [x] **R8 (P2). `_jobs` dictionary is never evicted.**
   Completed/failed `ExecutionJob` entries live forever in `ExecutionJobService._jobs` — unbounded
   memory growth on a long-running portal. Evict completed jobs after a retention window (keep the
   status queryable for, say, 24h). Related to P1.4 (durable job state) but worth fixing in-process now.
+  *(done — v0.11.0)* Terminal jobs older than `CompletedJobRetention` (24h) are evicted on each
+  enqueue; running/pending jobs are never evicted. Regression:
+  `ExecutionJobServiceTests.Enqueue_EvictsTerminalJobsPastRetention_KeepsRecentOnes`.
 - [ ] **R9 (P2). `SessionCache.GetOrCreate` races leak DashboardServices.**
   Two concurrent requests for the same (report, user) both construct a `DashboardService`; the loser
   is overwritten in `_sessions[key] = entry` and **never disposed** (`SessionCache.cs:43-66`). The

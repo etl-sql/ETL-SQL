@@ -63,8 +63,22 @@ public class ExecutionJobService : IDisposable
                                        config.Resources.MaxConcurrentReportExecutions);
     }
 
+    /// <summary>Terminal jobs stay queryable for this window, then are evicted so the
+    /// in-memory job table cannot grow without bound on a long-running portal.</summary>
+    internal static readonly TimeSpan CompletedJobRetention = TimeSpan.FromHours(24);
+
     public ExecutionJob? Get(string jobId) =>
         _jobs.TryGetValue(jobId, out var j) ? j : null;
+
+    private void EvictExpiredJobs()
+    {
+        var cutoff = DateTime.UtcNow - CompletedJobRetention;
+        foreach (var (id, job) in _jobs)
+        {
+            if (job.CompletedAt is { } completedAt && completedAt < cutoff)
+                _jobs.TryRemove(id, out _);
+        }
+    }
 
     /// <summary>Returns the in-progress jobId for a report if a refresh is already running.</summary>
     public string? GetActiveRefreshJobId(int reportId) =>
@@ -75,6 +89,7 @@ public class ExecutionJobService : IDisposable
         Dictionary<string, string>? parameters = null,
         bool isAdministrator = false)
     {
+        EvictExpiredJobs();
         var jobId = Guid.NewGuid().ToString("N");
         var job = new ExecutionJob(jobId, reportId, userId, IsAdministrator: isAdministrator);
         _jobs[jobId] = job;
@@ -94,9 +109,15 @@ public class ExecutionJobService : IDisposable
         bool isAdministrator = false,
         bool trustedDatasetExecution = false)
     {
+        EvictExpiredJobs();
         var jobId = Guid.NewGuid().ToString("N");
-        if (!_activeRefreshes.TryAdd(reportId, jobId))
-            return _activeRefreshes[reportId];
+        while (!_activeRefreshes.TryAdd(reportId, jobId))
+        {
+            // The in-flight refresh can complete between the failed TryAdd and this read;
+            // fall through and retry the claim instead of throwing on a missing key.
+            if (_activeRefreshes.TryGetValue(reportId, out var existingJobId))
+                return existingJobId;
+        }
 
         var job = new ExecutionJob(
             jobId,
