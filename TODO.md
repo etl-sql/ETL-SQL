@@ -689,10 +689,16 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   `DatasetControllerTests.Update_AccessLevelChangeRequiresManage_NotEdit`. Rode along: the scripted
   `ALTER DATASET` connector path sent `PUT api/datasets/{id}` but the portal only exposes PATCH
   (every scripted alter 405'd); the connector now sends PATCH, so it shares the same gate.
-- [ ] **R5 (P2). Purge expired/revoked refresh tokens and detect reuse.**
+- [x] **R5 (P2). Purge expired/revoked refresh tokens and detect reuse.**
   Nothing deletes `RefreshTokens` rows — the table grows forever, and presenting an already-revoked
   token is not treated as a theft signal (standard response: revoke the user's whole token family).
   Add a periodic cleanup and reuse detection alongside the P0.3 invalidation work.
+  *(done — v0.11.0)* Replaying a revoked-but-live refresh token now invalidates every session and
+  refresh token for the user (via `SecuritySessionService`) and writes a `REFRESH_TOKEN_REUSE` audit
+  event; the response stays a generic 401. `RefreshTokenMaintenanceService` purges expired rows
+  hourly; revoked-but-unexpired rows are retained deliberately as the reuse-detection evidence.
+  Regression: `AuthSessionInvalidationTests.RefreshTokens_AreHashedAtRestAndRotateOnUse` (family
+  revocation on replay) + `RefreshTokenMaintenanceTests.PurgeExpired_DeletesOnlyExpiredRows`.
 
 ### Bugs / correctness
 
@@ -765,14 +771,24 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   their path-guarded manifest files; pruning is best-effort and never fails a completed run.
   Documented in the administrators guide. Disk-usage surfacing remains under P2.8. Regression:
   `ExecutionJobServiceTests.PruneSnapshots_KeepsNewestPerReport_DeletesRowsAndFiles`.
-- [ ] **R14 (P2). Per-request DB hit in `OnTokenValidated`.**
+- [x] **R14 (P2). Per-request DB hit in `OnTokenValidated`.**
   Every authenticated request runs a `Users.AnyAsync` query (`Program.cs:123-135`); the P0.3 role/
   security-stamp reload will make this heavier. Add a short (~30s) memory-cache of the user's active/
   stamp state so revocation latency stays bounded without a DB roundtrip per request.
-- [ ] **R15 (P3). Dataset listing is N+1.**
+  *(done — v0.11.0)* New `UserSecurityStateCache` (30s TTL over `IMemoryCache`) serves the
+  active-flag/stamp check; `SecuritySessionService` evicts on stamp rotation, so in-process
+  revocation is immediate and cross-process staleness is bounded by the TTL. Regression:
+  `RefreshTokenMaintenanceTests.UserSecurityStateCache_CachesUntilEvicted`.
+- [x] **R15 (P3). Dataset listing is N+1.**
   `DatasetController.GetAll` and `DatasetRegistryService.ListAll` load all datasets then await a
   permission check per dataset (each potentially hitting folder ACLs). Fine at dozens of datasets;
   precompute group→folder permissions once per request before scaling the catalog.
+  *(done — v0.11.0)* `DatasetPermissionService.GetEffectivePermissionsAsync` resolves the caller's
+  group ids once and all referenced folder permissions in a single grouped ACL query
+  (`FolderPermissionService.GetEffectivePermissionsAsync`), then evaluates each dataset in memory via
+  the same `Evaluate` core the single-dataset path uses — decisions are identical by construction.
+  Both listing callers use the batch path; the existing portal/registry permission-matrix tests are
+  the behavioral regression.
 
 ### Tooling / standards / docs
 

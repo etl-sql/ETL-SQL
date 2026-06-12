@@ -146,14 +146,13 @@ namespace ETL_SQL.ReportPortal.Services
                 .Include(d => d.Acls)
                 .ToListAsync();
 
-            var allowed = new List<Dataset>();
-            foreach (var dataset in list)
-            {
-                if (await CanReadAsync(dataset, caller))
-                    allowed.Add(dataset);
-            }
+            var permissions = await _permissions.GetEffectivePermissionsAsync(
+                list, caller.UserId, caller.IsAdmin);
 
-            return allowed.Select(MapIfSafe).Where(m => m is not null)!;
+            return list
+                .Where(d => permissions[d.Id] is not null)
+                .Select(MapIfSafe)
+                .Where(m => m is not null)!;
         }
 
         public async Task Delete(string name)

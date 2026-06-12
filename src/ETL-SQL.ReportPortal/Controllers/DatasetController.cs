@@ -49,22 +49,13 @@ public class DatasetController(
             .Include(d => d.Acls)
             .ToListAsync();
 
-        var groupIds = IsAdmin
-            ? new HashSet<int>()
-            : await datasetPermissions.GetUserGroupIdsAsync(CurrentUserId);
-        var result = new List<DatasetDto>();
-        foreach (var dataset in datasets)
-        {
-            var permission = await datasetPermissions.GetEffectivePermissionAsync(
-                dataset,
-                CurrentUserId,
-                IsAdmin,
-                groupIds);
-            if (CanView(permission))
-                result.Add(ToDto(dataset));
-        }
+        var permissions = await datasetPermissions.GetEffectivePermissionsAsync(
+            datasets, CurrentUserId, IsAdmin);
 
-        return Ok(result);
+        return Ok(datasets
+            .Where(d => CanView(permissions[d.Id]))
+            .Select(ToDto)
+            .ToList());
     }
 
     // ── GET /api/datasets/{id} ────────────────────────────────────────────────
