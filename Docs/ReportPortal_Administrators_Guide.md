@@ -760,6 +760,27 @@ SMTP connections are named credentials used by subscriptions to send email. Open
 
 SMTP passwords are encrypted at rest using the .NET Data Protection API with the machine key. Moving the portal to a new host requires re-entering SMTP passwords because the encrypted values cannot be decrypted on a different machine without transferring the Data Protection key ring.
 
+### 7.3 Scripted Management
+
+SMTP connections can also be managed from an ETL-SQL script inside an `EXECUTE portal` block (Admin role required), which keeps mail configuration reproducible alongside the rest of a portal bootstrap script:
+
+```sql
+EXECUTE portal BEGIN
+    CREATE SMTP CONNECTION 'corporate' WITH (
+        HOST         = 'smtp.corp.example',
+        PORT         = 587,
+        USERNAME     = 'mailer',
+        PASSWORD     = ENC:...,            -- expression position: ENC:/variables accepted
+        FROM_ADDRESS = 'reports@corp.example',
+        USE_SSL      = TRUE
+    );
+    SHOW SMTP CONNECTIONS;                 -- never returns passwords
+    DROP SMTP CONNECTION 'corporate';
+END;
+```
+
+The password travels once over the authenticated HTTPS channel and is stored encrypted exactly as if entered in **Admin → SMTP**; no SMTP secret is persisted in the script's execution history or portal audit log.
+
 ---
 
 ## 8. Subscriptions

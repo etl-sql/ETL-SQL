@@ -114,6 +114,56 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
+        public void CreateSmtpConnection_ParsesAllOptions()
+        {
+            var script = TestHelpers.Parse(
+                "CREATE SMTP CONNECTION 'corporate' WITH (HOST = 'smtp.corp.local', PORT = 2525, " +
+                "USERNAME = 'mailer', PASSWORD = 'secret', FROM_ADDRESS = 'reports@corp.local', USE_SSL = FALSE);");
+            var stmt = Assert.IsType<CreatePortalSmtpConnectionStatement>(Assert.Single(script.Statements));
+
+            Assert.Equal("corporate", stmt.Alias);
+            Assert.Equal("smtp.corp.local", stmt.Host);
+            Assert.Equal(2525, stmt.Port);
+            Assert.Equal("mailer", stmt.Username);
+            Assert.NotNull(stmt.Password);
+            Assert.Equal("reports@corp.local", stmt.FromAddress);
+            Assert.False(stmt.UseSsl);
+        }
+
+        [Fact]
+        public void CreateSmtpConnection_AppliesDefaultsAndRequiresHost()
+        {
+            var script = TestHelpers.Parse("CREATE SMTP CONNECTION 'minimal' WITH (HOST = 'smtp.local');");
+            var stmt = Assert.IsType<CreatePortalSmtpConnectionStatement>(Assert.Single(script.Statements));
+
+            Assert.Equal(587, stmt.Port);
+            Assert.True(stmt.UseSsl);
+            Assert.Null(stmt.Username);
+            Assert.Null(stmt.Password);
+
+            var missingHost = TestHelpers.Parse("CREATE SMTP CONNECTION 'broken' WITH (PORT = 25);");
+            Assert.Contains(missingHost.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("HOST", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void DropAndShowSmtpConnections_Parse()
+        {
+            var drop = TestHelpers.Parse("DROP SMTP CONNECTION 'corporate';");
+            var dropStmt = Assert.IsType<DropPortalSmtpConnectionStatement>(Assert.Single(drop.Statements));
+            Assert.Equal("corporate", dropStmt.Alias);
+
+            var show = TestHelpers.Parse("SHOW SMTP CONNECTIONS;");
+            var showStmt = Assert.IsType<ShowPortalSmtpConnectionsStatement>(Assert.Single(show.Statements));
+            Assert.Null(showStmt.IntoTable);
+
+            var showInto = TestHelpers.Parse("SHOW SMTP CONNECTIONS INTO #smtp;");
+            var showIntoStmt = Assert.IsType<ShowPortalSmtpConnectionsStatement>(Assert.Single(showInto.Statements));
+            Assert.Equal("#smtp", showIntoStmt.IntoTable);
+        }
+
+        [Fact]
         public void PortalDatasetNames_RequireStringLiterals()
         {
             var script = TestHelpers.Parse("REFRESH DATASET SalesSummary IN FOLDER '/Finance';");

@@ -112,6 +112,10 @@ namespace ETL_SQL.Connectors.ReportPortal
                 case DropPortalGroupStatement s: await DropGroupAsync(s, context); break;
                 case AddUserToPortalGroupStatement s: await AddUserToGroupAsync(s, context); break;
 
+                case CreatePortalSmtpConnectionStatement s: await CreateSmtpConnectionAsync(s, context); break;
+                case DropPortalSmtpConnectionStatement s: await DropSmtpConnectionAsync(s, context); break;
+                case ShowPortalSmtpConnectionsStatement s: await ShowSmtpConnectionsAsync(s, context); break;
+
                 case CreatePortalFolderStatement s: await CreateFolderAsync(s, context); break;
                 case AlterPortalFolderStatement s: await AlterFolderAsync(s, context); break;
                 case DropPortalFolderStatement s: await DropFolderAsync(s, context); break;
@@ -293,6 +297,53 @@ namespace ETL_SQL.Connectors.ReportPortal
             var req = new { Username = stmt.Username };
             await CallAsync(HttpMethod.Post, $"api/admin/groups/{groupId}/members", req,
                 $"User '{stmt.Username}' added to group '{stmt.GroupName}'.");
+        }
+
+        // ── SMTP connections ──────────────────────────────────────────────────────
+
+        private async Task CreateSmtpConnectionAsync(CreatePortalSmtpConnectionStatement stmt, IExecutionContext context)
+        {
+            // The password expression is evaluated once and sent over the authenticated channel;
+            // the portal stores it encrypted (SmtpPasswordProtector) and never returns it.
+            var password = stmt.Password is not null
+                ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString()
+                : null;
+
+            var req = new
+            {
+                Alias = stmt.Alias,
+                Host = stmt.Host,
+                Port = stmt.Port,
+                Username = stmt.Username,
+                Password = password,
+                FromAddress = stmt.FromAddress,
+                UseSsl = stmt.UseSsl
+            };
+            await CallAsync(HttpMethod.Post, "api/admin/smtp", req,
+                $"SMTP connection '{stmt.Alias}' created.");
+        }
+
+        private async Task DropSmtpConnectionAsync(DropPortalSmtpConnectionStatement stmt, IExecutionContext context)
+        {
+            var smtpId = await LookupSmtpConnectionIdAsync(stmt.Alias);
+            await CallAsync(HttpMethod.Delete, $"api/admin/smtp/{smtpId}", null,
+                $"SMTP connection '{stmt.Alias}' deleted.");
+        }
+
+        private async Task ShowSmtpConnectionsAsync(ShowPortalSmtpConnectionsStatement stmt, IExecutionContext context) =>
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, "api/admin/smtp", null), stmt.IntoTable, context);
+
+        private async Task<int> LookupSmtpConnectionIdAsync(string alias)
+        {
+            var resp = await _http.GetAsync("api/admin/smtp");
+            resp.EnsureSuccessStatusCode();
+            var connections = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
+            var match = connections.FirstOrDefault(c =>
+                c.TryGetProperty("alias", out var v) &&
+                v.GetString()?.Equals(alias, StringComparison.OrdinalIgnoreCase) == true);
+            if (match.ValueKind == JsonValueKind.Undefined)
+                throw new ExecutionException($"Portal SMTP connection '{alias}' not found.");
+            return match.GetProperty("id").GetInt32();
         }
 
         // ── Folders ───────────────────────────────────────────────────────────────

@@ -2342,6 +2342,22 @@ namespace ETL_SQL.Core
 
     public record AddUserToPortalGroupStatement(string Username, string GroupName) : Statement;
 
+    /// <summary>Registers a portal-managed SMTP connection (named credential used by subscription
+    /// and alert delivery). Password is an expression so ENC: values and variables work; it is sent
+    /// to the portal once and stored encrypted — never echoed by SHOW.</summary>
+    public record CreatePortalSmtpConnectionStatement(
+        string Alias,
+        string Host,
+        int Port,
+        string? Username,
+        Expression? Password,
+        string? FromAddress,
+        bool UseSsl) : Statement;
+
+    public record DropPortalSmtpConnectionStatement(string Alias) : Statement;
+
+    public record ShowPortalSmtpConnectionsStatement(string? IntoTable = null) : Statement;
+
     public record CreatePortalFolderStatement(string Path) : Statement;
 
     public record AlterPortalFolderStatement(string Path, string? NewName, string? NewParentPath) : Statement;

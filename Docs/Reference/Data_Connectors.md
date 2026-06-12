@@ -1284,6 +1284,13 @@ EXECUTE portal BEGIN
         SCHEDULE '0 2 * * *' AT orch;
     DROP REFRESH JOB FOR REPORT 'Monthly Sales';
 
+    -- SMTP connections (portal-managed mail credentials for subscriptions/alerts)
+    CREATE SMTP CONNECTION 'corporate' WITH (
+        HOST = 'smtp.corp.example', USERNAME = 'mailer',
+        PASSWORD = ENC:U2FsdGVkX1+..., FROM_ADDRESS = 'reports@corp.example');
+    SHOW SMTP CONNECTIONS;   -- never returns passwords
+    DROP SMTP CONNECTION 'corporate';
+
     -- Discovery
     SHOW USERS;
     SHOW REPORTS IN FOLDER '/Finance/Reports';

@@ -637,6 +637,12 @@ namespace ETL_SQL.Core.Parser.Components
                 var reportName = Consume(TokenType.STRING_LITERAL, "Expected report name string literal").Value;
                 stmt = new ShowPortalAlertsStatement(reportName);
             }
+            else if (Match(TokenType.SMTP))
+            {
+                if (!Match(TokenType.CONNECTION) && !Match(TokenType.CONNECTIONS))
+                    throw new SyntaxException("Expected CONNECTIONS after SHOW SMTP", _parser.Current.Line, _parser.Current.Column);
+                stmt = new ShowPortalSmtpConnectionsStatement();
+            }
             else if (MatchIdentifier("RECENT"))
             {
                 ConsumeIdentifierValue("REPORTS", "Expected REPORTS after SHOW RECENT");
@@ -751,6 +757,7 @@ namespace ETL_SQL.Core.Parser.Components
                     ShowEffectivePortalPermissionsStatement sepp => sepp with { IntoTable = tempTable },
                     ShowPortalUsageMetricsStatement spum => spum with { IntoTable = tempTable },
                     ShowActivePortalSessionsStatement saps => saps with { IntoTable = tempTable },
+                    ShowPortalSmtpConnectionsStatement ssmtp => ssmtp with { IntoTable = tempTable },
                     LineageStatement lin => lin with { IntoTable = tempTable },
                     ShowLineageHistoryForTableStatement slht => slht with { IntoTable = tempTable },
                     ShowLineageHistoryForTagStatement slhg => slhg with { IntoTable = tempTable },

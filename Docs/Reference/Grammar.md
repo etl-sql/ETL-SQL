@@ -2881,6 +2881,24 @@ EXECUTE portal BEGIN
     DROP DATASET 'Sales Summary' IN FOLDER '/Finance';
 
     -- =========================================================
+    -- SMTP CONNECTIONS
+    -- Portal-managed mail credentials referenced by subscriptions
+    -- and alerts via AT <alias>. The password is sent once over the
+    -- authenticated channel and stored encrypted; SHOW never returns it.
+    -- =========================================================
+    CREATE SMTP CONNECTION 'corporate' WITH (
+        HOST         = 'smtp.corp.local',     -- required
+        PORT         = 587,                   -- optional, default 587
+        USERNAME     = 'mailer',              -- optional
+        PASSWORD     = ENC:...,               -- optional; expression (ENC:/variables OK)
+        FROM_ADDRESS = 'reports@corp.local',  -- optional
+        USE_SSL      = TRUE                   -- optional, default TRUE
+    );
+
+    SHOW SMTP CONNECTIONS [INTO #smtp];   -- never includes passwords
+    DROP SMTP CONNECTION 'corporate';
+
+    -- =========================================================
     -- SUBSCRIPTIONS
     -- Group membership is evaluated at delivery time, not creation time.
     -- PARAMETERS values are stored as-is; RELDATE expressions are resolved

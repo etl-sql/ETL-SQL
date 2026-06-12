@@ -147,6 +147,77 @@ namespace ETL_SQL.Core.Parser.Components
             { Line = start.Line, Column = start.Column };
         }
 
+        // ── SMTP connections ──────────────────────────────────────────────────
+
+        // CREATE SMTP CONNECTION 'alias' WITH (HOST=..., [PORT=...,] [USERNAME=...,]
+        //     [PASSWORD=...,] [FROM_ADDRESS=...,] [USE_SSL=TRUE|FALSE])
+        public Statement ParseCreateSmtpConnection(Token start)
+        {
+            Consume(TokenType.CONNECTION, "Expected CONNECTION after CREATE SMTP");
+            string alias = ConsumeStringLiteral("Expected SMTP alias string literal");
+            Consume(TokenType.WITH, "Expected WITH after SMTP alias");
+            Consume(TokenType.LPAREN, "Expected '('");
+
+            string? host = null, username = null, fromAddress = null;
+            int port = 587;
+            bool useSsl = true;
+            Expression? password = null;
+
+            ParseOptionList(() =>
+            {
+                string key = Advance().Value;
+                Consume(TokenType.EQUALS, "Expected '='");
+                switch (key.ToUpperInvariant())
+                {
+                    case "HOST":
+                        host = ConsumeStringLiteral("Expected host string literal");
+                        break;
+                    case "PORT":
+                        var portToken = Advance();
+                        if (!int.TryParse(portToken.Value, out port))
+                            throw new SyntaxException("Expected numeric PORT value", portToken.Line, portToken.Column);
+                        break;
+                    case "USERNAME":
+                        username = ConsumeStringLiteral("Expected username string literal");
+                        break;
+                    case "PASSWORD":
+                        password = ParseExpression();
+                        break;
+                    case "FROM_ADDRESS":
+                        fromAddress = ConsumeStringLiteral("Expected from-address string literal");
+                        break;
+                    case "USE_SSL":
+                        var sslToken = Advance();
+                        useSsl = sslToken.Value.ToUpperInvariant() switch
+                        {
+                            "TRUE" or "ON" or "1" => true,
+                            "FALSE" or "OFF" or "0" => false,
+                            _ => throw new SyntaxException(
+                                "Expected TRUE or FALSE for USE_SSL", sslToken.Line, sslToken.Column)
+                        };
+                        break;
+                    default:
+                        ParseExpression(); // skip unknown
+                        break;
+                }
+            });
+
+            if (host is null)
+                throw new SyntaxException("CREATE SMTP CONNECTION requires HOST", start.Line, start.Column);
+
+            return new CreatePortalSmtpConnectionStatement(alias, host, port, username, password, fromAddress, useSsl)
+            { Line = start.Line, Column = start.Column };
+        }
+
+        // DROP SMTP CONNECTION 'alias'
+        public Statement ParseDropSmtpConnection(Token start)
+        {
+            Consume(TokenType.CONNECTION, "Expected CONNECTION after DROP SMTP");
+            string alias = ConsumeStringLiteral("Expected SMTP alias string literal");
+            return new DropPortalSmtpConnectionStatement(alias)
+            { Line = start.Line, Column = start.Column };
+        }
+
         // ── Folders ───────────────────────────────────────────────────────────
 
         // CREATE FOLDER '/path'

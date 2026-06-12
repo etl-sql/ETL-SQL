@@ -160,6 +160,7 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.EMBED)) return _parent.PortalParser.ParseCreateEmbedToken(startToken);
             if (Match(TokenType.SAVED)) return _parent.PortalParser.ParseCreateSavedView(startToken);
             if (Match(TokenType.ALERT)) return _parent.PortalParser.ParseCreateAlert(startToken);
+            if (Match(TokenType.SMTP)) return _parent.PortalParser.ParseCreateSmtpConnection(startToken);
 
             throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, VIEW, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, TEMPLATE, or THEME after CREATE", _parser.Current.Line, _parser.Current.Column);
         }
@@ -412,6 +413,8 @@ namespace ETL_SQL.Core.Parser.Components
                 return _parent.PortalParser.ParseDropSavedView(startToken);
             if (Match(TokenType.ALERT))
                 return _parent.PortalParser.ParseDropAlert(startToken);
+            if (Match(TokenType.SMTP))
+                return _parent.PortalParser.ParseDropSmtpConnection(startToken);
             if (_parser.Current.Type == TokenType.IDENTIFIER &&
                 _parser.Current.Value.Equals("SNAPSHOT", StringComparison.OrdinalIgnoreCase))
                 return _parent.PortalParser.ParseDropSnapshot(startToken);

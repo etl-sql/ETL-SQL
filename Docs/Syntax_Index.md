@@ -136,6 +136,8 @@ Statements are the top-level actions in an ETL-SQL script.
 | `DROP SAVED VIEW` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SAVEDVIEW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SAVEDVIEW.md) |
 | `CREATE ALERT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_ALERT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_ALERT.md) |
 | `DROP ALERT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_ALERT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_ALERT.md) |
+| `CREATE SMTP CONNECTION` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SMTP.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SMTP.md) |
+| `DROP SMTP CONNECTION` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SMTP.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SMTP.md) |
 | `CREATE SUBSCRIPTION` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SUBSCRIPTION.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SUBSCRIPTION.md) |
 | `DROP SUBSCRIPTION` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_SUBSCRIPTION.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_SUBSCRIPTION.md) |
 | `REFRESH DATASET` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_DATASET.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_DATASET.md) |
@@ -883,6 +885,9 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `DROP REFRESH JOB` | Portal | Removes a refresh schedule |
 | `REBUILD SNAPSHOT` | Portal | Forces a data refresh |
 | `DROP SNAPSHOT` | Portal | Not supported — no portal endpoint exists; use REBUILD SNAPSHOT |
+| `CREATE SMTP CONNECTION` | Portal | Registers a portal-managed SMTP credential (password stored encrypted) |
+| `SHOW SMTP CONNECTIONS` | Portal | Lists portal SMTP connections (never includes passwords) |
+| `DROP SMTP CONNECTION` | Portal | Deletes a portal SMTP connection by alias |
 | `CREATE SUBSCRIPTION`| Portal | Schedules email/PDF report delivery |
 | `ALTER SUBSCRIPTION` | Portal | Modifies subscription settings |
 | `DROP SUBSCRIPTION` | Portal | Deletes a subscription |
