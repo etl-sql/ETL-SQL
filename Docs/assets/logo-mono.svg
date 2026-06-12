@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">ETL-SQL monochrome logo</title>
+  <desc id="desc">Three data streams enter an E-shaped processing pipeline and leave through one output arrow.</desc>
+  <g fill="none" stroke="currentColor" stroke-width="72" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M116 350h188c76 0 92 92 164 92h44"/>
+    <path d="M116 512h396"/>
+    <path d="M116 674h188c76 0 92-92 164-92h44"/>
+    <path d="M512 442V350l188-116 188 116v324L700 790 512 674v-92"/>
+    <path d="M512 384h198"/>
+    <path d="M512 512h166"/>
+    <path d="M512 640h198"/>
+    <path d="M888 512h92"/>
+    <path d="M936 464l48 48-48 48"/>
+  </g>
+</svg>

@@ -1,6 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="ETL-SQL">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">ETL-SQL application icon</title>
+  <desc id="desc">Two data streams enter a compact E-shaped pipeline and leave through one output arrow.</desc>
   <defs>
-    <linearGradient id="etl-icon-gradient" x1="24" y1="128" x2="244" y2="128" gradientUnits="userSpaceOnUse">
+    <linearGradient id="etl-icon-gradient" x1="24" y1="128" x2="238" y2="128" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#1457e6"/>
       <stop offset="0.5" stop-color="#7b2ff7"/>
       <stop offset="1" stop-color="#08d9e8"/>
