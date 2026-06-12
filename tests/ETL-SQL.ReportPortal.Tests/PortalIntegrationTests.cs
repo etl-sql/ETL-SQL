@@ -99,10 +99,10 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var accessToken = activeLogin!["token"]!.GetValue<string>();
         var refreshToken = activeLogin!["refreshToken"]!.GetValue<string>();
 
-        // Deactivate the user via admin PUT.
+        // Deactivate the user via admin PUT (versioned mutations return 200 with the new version).
         var deactivateRes = await AuthPut(adminToken, $"/api/admin/users/{userId}",
             new { isActive = false });
-        Assert.Equal(HttpStatusCode.NoContent, deactivateRes.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, deactivateRes.StatusCode);
 
         // Login attempt on inactive account must return 401 (not 500 or 403).
         var loginRes = await _client.PostAsJsonAsync("/api/auth/login", new
@@ -277,9 +277,10 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var userPage2Body = await userPage2.Content.ReadFromJsonAsync<PagedResult<UserDto>>(_json);
         Assert.Single(userPage2Body!.Items);
 
+        // Bulk operations carry per-item {id, version} so stale items conflict individually.
         var disableRes = await AuthPost(token, "/api/admin/users/bulk-status", new
         {
-            userIds = userIds.Take(2).ToArray(),
+            users = userIds.Take(2).Select(id => new { id, version = 1 }).ToArray(),
             isActive = false
         });
         Assert.Equal(HttpStatusCode.OK, disableRes.StatusCode);
@@ -325,7 +326,10 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
             var emptyGroup = await emptyGroupRes.Content.ReadFromJsonAsync<JsonObject>(_json);
             emptyGroupIds.Add(emptyGroup!["id"]!.GetValue<int>());
         }
-        var deleteGroupsRes = await AuthPost(token, "/api/admin/groups/bulk-delete", new { groupIds = emptyGroupIds });
+        var deleteGroupsRes = await AuthPost(token, "/api/admin/groups/bulk-delete", new
+        {
+            groups = emptyGroupIds.Select(id => new { id, version = 1 }).ToArray()
+        });
         Assert.Equal(HttpStatusCode.OK, deleteGroupsRes.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await AuthGet(token, $"/api/admin/groups/{emptyGroupIds[0]}")).StatusCode);
 
@@ -369,7 +373,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
 
         var pauseRes = await AuthPost(token, "/api/admin/subscriptions/bulk-status", new
         {
-            subscriptionIds,
+            subscriptions = subscriptionIds.Select(id => new { id, version = 1 }).ToArray(),
             isActive = false
         });
         Assert.Equal(HttpStatusCode.OK, pauseRes.StatusCode);
@@ -2040,7 +2044,7 @@ CREATE PAGE Main AS DASHBOARD(
         var userId = user!["id"]!.GetValue<int>();
 
         var memberRes = await AuthPost(adminToken, $"/api/admin/groups/{groupId}/members", new { userId });
-        Assert.Equal(HttpStatusCode.NoContent, memberRes.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, memberRes.StatusCode);
 
         var folderName = $"Permission Edge {suffix}";
         var folderRes = await AuthPost(adminToken, "/api/folders", new { name = folderName, parentId = (int?)null });
@@ -2102,7 +2106,7 @@ CREATE VISUAL EdgeRows AS TABLE (
             groupId,
             permission = 0
         });
-        Assert.Equal(HttpStatusCode.NoContent, grantReadRes.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, grantReadRes.StatusCode);
 
         var loginRes = await _client.PostAsJsonAsync("/api/auth/login", new { username, password = initialPassword });
         Assert.Equal(HttpStatusCode.OK, loginRes.StatusCode);
@@ -2960,27 +2964,30 @@ CREATE VISUAL Summary AS TABLE (
         return _client.SendAsync(req);
     }
 
-    private Task<HttpResponseMessage> AuthPost(string token, string url, object body)
+    private async Task<HttpResponseMessage> AuthPost(string token, string url, object body)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, url);
         req.Headers.Authorization = new("Bearer", token);
         req.Content = JsonContent.Create(body);
-        return _client.SendAsync(req);
+        await IfMatchVersioning.StampAsync(_client, req, await GetAdminTokenAsync());
+        return await _client.SendAsync(req);
     }
 
-    private Task<HttpResponseMessage> AuthPut(string token, string url, object body)
+    private async Task<HttpResponseMessage> AuthPut(string token, string url, object body)
     {
         var req = new HttpRequestMessage(HttpMethod.Put, url);
         req.Headers.Authorization = new("Bearer", token);
         req.Content = JsonContent.Create(body);
-        return _client.SendAsync(req);
+        await IfMatchVersioning.StampAsync(_client, req, await GetAdminTokenAsync());
+        return await _client.SendAsync(req);
     }
 
-    private Task<HttpResponseMessage> AuthDelete(string token, string url)
+    private async Task<HttpResponseMessage> AuthDelete(string token, string url)
     {
         var req = new HttpRequestMessage(HttpMethod.Delete, url);
         req.Headers.Authorization = new("Bearer", token);
-        return _client.SendAsync(req);
+        await IfMatchVersioning.StampAsync(_client, req, await GetAdminTokenAsync());
+        return await _client.SendAsync(req);
     }
 
     private async Task<JsonObject> WaitForJobAsync(string token, string jobId)

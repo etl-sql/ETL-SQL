@@ -24,8 +24,9 @@ public class AnonymousReportAccessTests
 
         var user = await CreateReadyUserAsync(client, adminToken, $"cap_{suffix}", "Publisher");
         var groupId = await CreateGroupAsync(client, adminToken, $"cap_group_{suffix}");
+        // Versioned membership/ACL/user mutations return 200 with the resource's bumped version.
         Assert.Equal(
-            HttpStatusCode.NoContent,
+            HttpStatusCode.OK,
             (await AuthPost(client, adminToken, $"/api/admin/groups/{groupId}/members",
                 new { userId = user.UserId })).StatusCode);
 
@@ -37,7 +38,7 @@ public class AnonymousReportAccessTests
         Assert.Equal(HttpStatusCode.Created, folderResponse.StatusCode);
         var folderId = (await folderResponse.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
         Assert.Equal(
-            HttpStatusCode.NoContent,
+            HttpStatusCode.OK,
             (await AuthPost(client, adminToken, $"/api/folders/{folderId}/acl",
                 new { groupId, permission = FolderPermission.Manage })).StatusCode);
 
@@ -151,7 +152,7 @@ public class AnonymousReportAccessTests
 
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"/api/share/{shareToken}")).StatusCode);
         Assert.Equal(
-            HttpStatusCode.NoContent,
+            HttpStatusCode.OK,
             (await AuthPut(client, adminToken, $"/api/admin/users/{user.UserId}",
                 new { role = "Viewer" })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/share/{shareToken}")).StatusCode);
@@ -229,7 +230,7 @@ public class AnonymousReportAccessTests
     private static Task<HttpResponseMessage> AuthPut(HttpClient client, string token, string url, object body) =>
         SendAsync(client, HttpMethod.Put, token, url, body);
 
-    private static Task<HttpResponseMessage> SendAsync(
+    private static async Task<HttpResponseMessage> SendAsync(
         HttpClient client,
         HttpMethod method,
         string token,
@@ -240,6 +241,7 @@ public class AnonymousReportAccessTests
         request.Headers.Authorization = new("Bearer", token);
         if (body is not null)
             request.Content = JsonContent.Create(body);
-        return client.SendAsync(request);
+        await IfMatchVersioning.StampAsync(client, request, token);
+        return await client.SendAsync(request);
     }
 }

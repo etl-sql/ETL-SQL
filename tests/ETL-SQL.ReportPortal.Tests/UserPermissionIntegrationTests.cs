@@ -455,27 +455,30 @@ namespace ETL_SQL.ReportPortal.Tests
             return _client.SendAsync(req);
         }
 
-        private Task<HttpResponseMessage> AuthPost(string token, string url, object body)
+        private async Task<HttpResponseMessage> AuthPost(string token, string url, object body)
         {
             var req = new HttpRequestMessage(HttpMethod.Post, url);
             req.Headers.Authorization = new("Bearer", token);
             req.Content = JsonContent.Create(body);
-            return _client.SendAsync(req);
+            await IfMatchVersioning.StampAsync(_client, req, await GetAdminTokenAsync());
+            return await _client.SendAsync(req);
         }
 
-        private Task<HttpResponseMessage> AuthPut(string token, string url, object body)
+        private async Task<HttpResponseMessage> AuthPut(string token, string url, object body)
         {
             var req = new HttpRequestMessage(HttpMethod.Put, url);
             req.Headers.Authorization = new("Bearer", token);
             req.Content = JsonContent.Create(body);
-            return _client.SendAsync(req);
+            await IfMatchVersioning.StampAsync(_client, req, await GetAdminTokenAsync());
+            return await _client.SendAsync(req);
         }
 
-        private Task<HttpResponseMessage> AuthDelete(string token, string url)
+        private async Task<HttpResponseMessage> AuthDelete(string token, string url)
         {
             var req = new HttpRequestMessage(HttpMethod.Delete, url);
             req.Headers.Authorization = new("Bearer", token);
-            return _client.SendAsync(req);
+            await IfMatchVersioning.StampAsync(_client, req, await GetAdminTokenAsync());
+            return await _client.SendAsync(req);
         }
 
         // ── Test Cases ─────────────────────────────────────────────────────────────
@@ -1022,7 +1025,7 @@ namespace ETL_SQL.ReportPortal.Tests
             var createdGroup = await createGroupRes.Content.ReadFromJsonAsync<JsonObject>(_json);
             var groupId = createdGroup!["id"]!.GetValue<int>();
 
-            Assert.Equal(HttpStatusCode.NoContent, (await AuthPut(adminToken, $"/api/admin/users/{createdUserId}", new
+            Assert.Equal(HttpStatusCode.OK, (await AuthPut(adminToken, $"/api/admin/users/{createdUserId}", new
             {
                 firstName = "Updated Audit"
             })).StatusCode);
@@ -1044,13 +1047,13 @@ namespace ETL_SQL.ReportPortal.Tests
             });
             Assert.True(grantRes.StatusCode == HttpStatusCode.NoContent || grantRes.StatusCode == HttpStatusCode.OK);
 
-            Assert.Equal(HttpStatusCode.NoContent, (await AuthPost(adminToken, $"/api/admin/groups/{groupId}/members", new
+            Assert.Equal(HttpStatusCode.OK, (await AuthPost(adminToken, $"/api/admin/groups/{groupId}/members", new
             {
                 userId = createdUserId
             })).StatusCode);
-            Assert.Equal(HttpStatusCode.NoContent, (await AuthDelete(adminToken, $"/api/admin/groups/{groupId}/members/{createdUserId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await AuthDelete(adminToken, $"/api/admin/groups/{groupId}/members/{createdUserId}")).StatusCode);
             Assert.Equal(HttpStatusCode.NoContent, (await AuthPost(adminToken, $"/api/admin/users/{createdUserId}/revoke-tokens", new { })).StatusCode);
-            Assert.Equal(HttpStatusCode.NoContent, (await AuthDelete(adminToken, $"/api/folders/{folderId}/acl/{groupId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await AuthDelete(adminToken, $"/api/folders/{folderId}/acl/{groupId}")).StatusCode);
 
             var publishRes = await AuthPost(adminToken, "/api/reports", new
             {

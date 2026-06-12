@@ -409,6 +409,8 @@ INTO mail_conn.Email;
 
             using var triggerReq = Authorized(HttpMethod.Post, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/trigger");
             using var disableReq = Authorized(HttpMethod.Put, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}", new { IsEnabled = false });
+            disableReq.Headers.TryAddWithoutValidation(
+                "If-Match", $"\"{(await store.GetJobAsync(jobName))!.Version}\"");
             var controlResponses = await Task.WhenAll(client.SendAsync(triggerReq), client.SendAsync(disableReq));
             Assert.Contains(controlResponses, r => r.StatusCode == HttpStatusCode.Accepted);
             Assert.Contains(controlResponses, r => r.StatusCode == HttpStatusCode.OK);
@@ -447,6 +449,8 @@ INTO mail_conn.Email;
             Assert.Contains(await store.GetHistoryAsync(jobName, 10), h => h.Status == "RUNNING" && h.EndTime == null);
 
             using var deleteReq = Authorized(HttpMethod.Delete, $"/api/scheduled-jobs/{Uri.EscapeDataString(jobName)}");
+            deleteReq.Headers.TryAddWithoutValidation(
+                "If-Match", $"\"{(await store.GetJobAsync(jobName))!.Version}\"");
             var deleteRes = await client.SendAsync(deleteReq);
             Assert.Equal(HttpStatusCode.OK, deleteRes.StatusCode);
 

@@ -28,7 +28,7 @@ public class AuthSessionInvalidationTests
 
         var demote = await AuthPut(
             client, adminToken, $"/api/admin/users/{userId}", new { role = "Viewer" });
-        Assert.Equal(HttpStatusCode.NoContent, demote.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, demote.StatusCode);
 
         Assert.Equal(
             HttpStatusCode.Unauthorized,
@@ -81,7 +81,7 @@ public class AuthSessionInvalidationTests
 
         var addMember = await AuthPost(
             client, adminToken, $"/api/admin/groups/{groupId}/members", new { userId });
-        Assert.Equal(HttpStatusCode.NoContent, addMember.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, addMember.StatusCode);
         Assert.Equal(
             HttpStatusCode.Unauthorized,
             (await AuthGet(client, accessToken, "/api/folders")).StatusCode);
@@ -101,7 +101,7 @@ public class AuthSessionInvalidationTests
             groupId,
             permission = FolderPermission.Read
         });
-        Assert.Equal(HttpStatusCode.NoContent, grant.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, grant.StatusCode);
         Assert.Equal(
             HttpStatusCode.Unauthorized,
             (await AuthGet(client, relogin.AccessToken, "/api/folders")).StatusCode);
@@ -232,7 +232,7 @@ public class AuthSessionInvalidationTests
         return client.SendAsync(request);
     }
 
-    private static Task<HttpResponseMessage> AuthPost(
+    private static async Task<HttpResponseMessage> AuthPost(
         HttpClient client,
         string token,
         string url,
@@ -241,10 +241,11 @@ public class AuthSessionInvalidationTests
         var request = new HttpRequestMessage(HttpMethod.Post, url);
         request.Headers.Authorization = new("Bearer", token);
         request.Content = JsonContent.Create(body);
-        return client.SendAsync(request);
+        await IfMatchVersioning.StampAsync(client, request, token);
+        return await client.SendAsync(request);
     }
 
-    private static Task<HttpResponseMessage> AuthPut(
+    private static async Task<HttpResponseMessage> AuthPut(
         HttpClient client,
         string token,
         string url,
@@ -253,6 +254,7 @@ public class AuthSessionInvalidationTests
         var request = new HttpRequestMessage(HttpMethod.Put, url);
         request.Headers.Authorization = new("Bearer", token);
         request.Content = JsonContent.Create(body);
-        return client.SendAsync(request);
+        await IfMatchVersioning.StampAsync(client, request, token);
+        return await client.SendAsync(request);
     }
 }

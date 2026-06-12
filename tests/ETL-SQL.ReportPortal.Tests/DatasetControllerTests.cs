@@ -938,9 +938,10 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.Contains(aclList2!, a => a!["groupId"]!.GetValue<int>() == groupId
                                        && a["permission"]!.GetValue<string>() == "Editor");
 
-        // Revoke
+        // Revoke — ACL mutations return 200 with the dataset's bumped version (ETag) so the
+        // client can chain further versioned mutations.
         var revokeRes = await AuthDelete(adminToken, $"/api/datasets/{id}/acl/{groupId}");
-        Assert.Equal(HttpStatusCode.NoContent, revokeRes.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, revokeRes.StatusCode);
 
         var listRes3 = await AuthGet(adminToken, $"/api/datasets/{id}/acl");
         var aclList3 = await listRes3.Content.ReadFromJsonAsync<JsonArray>(_json);
@@ -1293,26 +1294,29 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         return _client.SendAsync(req);
     }
 
-    private Task<HttpResponseMessage> AuthPost(string token, string url, object body)
+    private async Task<HttpResponseMessage> AuthPost(string token, string url, object body)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, url);
         req.Headers.Authorization = new("Bearer", token);
         req.Content = JsonContent.Create(body);
-        return _client.SendAsync(req);
+        await IfMatchVersioning.StampAsync(_client, req, await GetAdminTokenAsync());
+        return await _client.SendAsync(req);
     }
 
-    private Task<HttpResponseMessage> AuthPatch(string token, string url, object body)
+    private async Task<HttpResponseMessage> AuthPatch(string token, string url, object body)
     {
         var req = new HttpRequestMessage(HttpMethod.Patch, url);
         req.Headers.Authorization = new("Bearer", token);
         req.Content = JsonContent.Create(body);
-        return _client.SendAsync(req);
+        await IfMatchVersioning.StampAsync(_client, req, await GetAdminTokenAsync());
+        return await _client.SendAsync(req);
     }
 
-    private Task<HttpResponseMessage> AuthDelete(string token, string url)
+    private async Task<HttpResponseMessage> AuthDelete(string token, string url)
     {
         var req = new HttpRequestMessage(HttpMethod.Delete, url);
         req.Headers.Authorization = new("Bearer", token);
-        return _client.SendAsync(req);
+        await IfMatchVersioning.StampAsync(_client, req, await GetAdminTokenAsync());
+        return await _client.SendAsync(req);
     }
 }

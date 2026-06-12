@@ -7,6 +7,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
@@ -900,22 +901,17 @@ namespace ETL_SQL.Connectors.ReportPortal
             HttpResponseMessage resp;
             try
             {
+                using var req = new HttpRequestMessage(method, url);
                 if (body is not null)
                 {
-                    var req = new HttpRequestMessage(method, url)
-                    {
-                        Content = new StringContent(
-                            JsonSerializer.Serialize(body, _json),
-                            Encoding.UTF8,
-                            "application/json")
-                    };
-                    resp = await _http.SendAsync(req);
+                    req.Content = new StringContent(
+                        JsonSerializer.Serialize(body, _json),
+                        Encoding.UTF8,
+                        "application/json");
                 }
-                else
-                {
-                    var req = new HttpRequestMessage(method, url);
-                    resp = await _http.SendAsync(req);
-                }
+
+                await ApplyVersionHeaderAsync(req);
+                resp = await _http.SendAsync(req);
             }
             catch (HttpRequestException ex)
             {
@@ -943,7 +939,11 @@ namespace ETL_SQL.Connectors.ReportPortal
             }
 
             HttpResponseMessage resp;
-            try { resp = await _http.SendAsync(req); }
+            try
+            {
+                await ApplyVersionHeaderAsync(req);
+                resp = await _http.SendAsync(req);
+            }
             catch (HttpRequestException ex) { throw new ExecutionException($"Portal connection error: {ex.Message}", ex); }
             using var _ = resp;
             var bodyText = await resp.Content.ReadAsStringAsync();
@@ -959,6 +959,110 @@ namespace ETL_SQL.Connectors.ReportPortal
             using var doc = JsonDocument.Parse(bodyText);
             return doc.RootElement.Clone();
         }
+
+        // ── Optimistic concurrency (portal v0.12) ─────────────────────────────────
+        // Mutations on versioned portal resources require If-Match with the version from the
+        // latest read (428 otherwise; 409 when stale). Scripted statements are single-writer
+        // imperative commands, so the connector reads the target's current version immediately
+        // before each mutation. URLs that are not versioned mutations are sent unchanged.
+
+        private static readonly Regex[] VersionedRoutes =
+        [
+            new(@"^(?<r>api/admin/users/\d+)(/reset-password|/revoke-tokens)?$", RegexOptions.Compiled),
+            new(@"^(?<r>api/admin/groups/\d+)(/members(/bulk-add|/bulk-remove|/\d+)?)?$", RegexOptions.Compiled),
+            new(@"^(?<r>api/datasets/\d+)(/acl(/\d+)?|/move)?$", RegexOptions.Compiled),
+            new(@"^(?<r>api/folders/\d+)(/acl(/\d+)?)?$", RegexOptions.Compiled),
+            new(@"^(?<r>api/reports/\d+)(/script-content)?$", RegexOptions.Compiled),
+            new(@"^(?<r>api/subscriptions/\d+)$", RegexOptions.Compiled),
+            new(@"^(?<r>api/admin/smtp/\d+)$", RegexOptions.Compiled)
+        ];
+
+        private async Task ApplyVersionHeaderAsync(HttpRequestMessage req)
+        {
+            if (req.Method == HttpMethod.Get || req.Headers.Contains("If-Match"))
+                return;
+
+            var path = (req.RequestUri?.OriginalString ?? "").Split('?')[0].TrimStart('/');
+            string? resourceUrl = null;
+            foreach (var route in VersionedRoutes)
+            {
+                var match = route.Match(path);
+                if (match.Success)
+                {
+                    resourceUrl = match.Groups["r"].Value;
+                    break;
+                }
+            }
+
+            if (resourceUrl is null)
+                return;
+
+            var version = await TryReadVersionAsync(resourceUrl)
+                ?? await TryReadVersionFromListAsync(resourceUrl);
+            if (version is not null)
+                req.Headers.TryAddWithoutValidation("If-Match", $"\"{version.Value}\"");
+        }
+
+        private async Task<long?> TryReadVersionAsync(string resourceUrl)
+        {
+            using var resp = await _http.GetAsync(resourceUrl);
+            if (!resp.IsSuccessStatusCode)
+                return null;
+
+            var etag = resp.Headers.ETag?.Tag?.Trim('"');
+            if (long.TryParse(etag, out var fromEtag) && fromEtag > 0)
+                return fromEtag;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                return ReadVersionProperty(doc.RootElement);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>Fallback for resources without a single-item GET (e.g. api/admin/smtp/{id}).</summary>
+        private async Task<long?> TryReadVersionFromListAsync(string resourceUrl)
+        {
+            var lastSlash = resourceUrl.LastIndexOf('/');
+            if (lastSlash <= 0 || !long.TryParse(resourceUrl[(lastSlash + 1)..], out var id))
+                return null;
+
+            using var resp = await _http.GetAsync(resourceUrl[..lastSlash]);
+            if (!resp.IsSuccessStatusCode)
+                return null;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                    return null;
+
+                foreach (var item in doc.RootElement.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.Object
+                        && item.TryGetProperty("id", out var itemId)
+                        && itemId.ValueKind == JsonValueKind.Number
+                        && itemId.GetInt64() == id)
+                        return ReadVersionProperty(item);
+                }
+            }
+            catch (JsonException)
+            {
+            }
+
+            return null;
+        }
+
+        private static long? ReadVersionProperty(JsonElement element) =>
+            element.ValueKind == JsonValueKind.Object
+                && element.TryGetProperty("version", out var version)
+                && version.ValueKind == JsonValueKind.Number
+            ? version.GetInt64()
+            : null;
 
         private async Task PublishJsonResultAsync(JsonElement json, string? intoTable, IExecutionContext context)
         {

@@ -71,27 +71,30 @@ namespace ETL_SQL.ReportPortal.Tests
             return client.SendAsync(req);
         }
 
-        private Task<HttpResponseMessage> AuthPost(HttpClient client, string token, string url, object body)
+        private async Task<HttpResponseMessage> AuthPost(HttpClient client, string token, string url, object body)
         {
             var req = new HttpRequestMessage(HttpMethod.Post, url);
             req.Headers.Authorization = new("Bearer", token);
             req.Content = JsonContent.Create(body);
-            return client.SendAsync(req);
+            await IfMatchVersioning.StampAsync(client, req, token);
+            return await client.SendAsync(req);
         }
 
-        private Task<HttpResponseMessage> AuthPut(HttpClient client, string token, string url, object body)
+        private async Task<HttpResponseMessage> AuthPut(HttpClient client, string token, string url, object body)
         {
             var req = new HttpRequestMessage(HttpMethod.Put, url);
             req.Headers.Authorization = new("Bearer", token);
             req.Content = JsonContent.Create(body);
-            return client.SendAsync(req);
+            await IfMatchVersioning.StampAsync(client, req, token);
+            return await client.SendAsync(req);
         }
 
-        private Task<HttpResponseMessage> AuthDelete(HttpClient client, string token, string url)
+        private async Task<HttpResponseMessage> AuthDelete(HttpClient client, string token, string url)
         {
             var req = new HttpRequestMessage(HttpMethod.Delete, url);
             req.Headers.Authorization = new("Bearer", token);
-            return client.SendAsync(req);
+            await IfMatchVersioning.StampAsync(client, req, token);
+            return await client.SendAsync(req);
         }
 
         private async Task<List<JobHistoryEntry>> PollHistoryUntilCountAsync(SQLiteJobHistoryStore store, string jobName, int expectedCount, int timeoutSeconds = 15)
