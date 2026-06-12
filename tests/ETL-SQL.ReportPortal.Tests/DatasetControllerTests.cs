@@ -619,6 +619,62 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
 
     [Fact]
     [Trait("Category", "Smoke.Security")]
+    public async Task Update_AccessLevelChangeRequiresManage_NotEdit()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var username = $"dseditor_{suffix}";
+        var name = $"#lvl_{suffix}";
+        var folder = $"/lvl_{suffix}";
+
+        var userRes = await AuthPost(adminToken, "/api/admin/users", new
+        {
+            username,
+            email = $"{username}@test.local",
+            password = "Editor@1234!",
+            role = "Viewer"
+        });
+        userRes.EnsureSuccessStatusCode();
+        var userId = (await userRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        await LoginAndChangePasswordAsync(username, "Editor@1234!", "Editor@Changed9!");
+
+        var groupRes = await AuthPost(
+            adminToken,
+            "/api/admin/groups",
+            new { name = $"dseditors_{suffix}" });
+        groupRes.EnsureSuccessStatusCode();
+        var groupId = (await groupRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        (await AuthPost(adminToken, $"/api/admin/groups/{groupId}/members", new { userId }))
+            .EnsureSuccessStatusCode();
+
+        await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Private);
+        var id = await GetDatasetIdAsync(name, folder);
+        var grantRes = await AuthPost(
+            adminToken,
+            $"/api/datasets/{id}/acl",
+            new { groupId, permission = "Editor" });
+        Assert.Equal(HttpStatusCode.OK, grantRes.StatusCode);
+        var userToken = await LoginExistingUserAsync(username, "Editor@Changed9!");
+
+        // Editor may update metadata...
+        var ttlRes = await AuthPatch(userToken, $"/api/datasets/{id}", new { ttl = "2h" });
+        Assert.Equal(HttpStatusCode.OK, ttlRes.StatusCode);
+
+        // ...and may re-state the current access level (no exposure change)...
+        var sameRes = await AuthPatch(userToken, $"/api/datasets/{id}", new { accessLevel = "Private" });
+        Assert.Equal(HttpStatusCode.OK, sameRes.StatusCode);
+
+        // ...but widening Private→Public is an ACL-class operation requiring Manage.
+        var flipRes = await AuthPatch(userToken, $"/api/datasets/{id}", new { accessLevel = "Public" });
+        Assert.Equal(HttpStatusCode.Forbidden, flipRes.StatusCode);
+
+        var detail = await AuthGet(adminToken, $"/api/datasets/{id}");
+        var dto = await detail.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal("Private", dto!["accessLevel"]!.GetValue<string>());
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
     public async Task Move_RequiresManageOnSourceAndDestination_AndPreservesFileIdentity()
     {
         var adminToken = await GetAdminTokenAsync();

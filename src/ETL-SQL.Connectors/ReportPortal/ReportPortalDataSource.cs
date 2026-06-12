@@ -761,7 +761,8 @@ namespace ETL_SQL.Connectors.ReportPortal
         {
             var datasetId = await LookupDatasetIdAsync(stmt.DatasetName, stmt.FolderPath);
             var req = new { AccessLevel = stmt.AccessLevel, Ttl = stmt.Ttl };
-            await CallAsync(HttpMethod.Put, $"api/datasets/{datasetId}", req,
+            // The portal exposes PATCH (not PUT) for dataset metadata updates.
+            await CallAsync(HttpMethod.Patch, $"api/datasets/{datasetId}", req,
                 $"Dataset '{stmt.DatasetName}' updated.");
         }
 

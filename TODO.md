@@ -679,11 +679,16 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   Seeding now reads the DI-resolved `PortalConfig` so test hosts can pin the password; the
   WebApplicationFactory fixtures, the Docker portal fixture (`Portal__FirstRun__AdminPassword` env),
   the administrators guide, and QUICKSTART were updated accordingly.
-- [ ] **R4 (P1). Dataset access-level change should require Manage, not Edit.**
+- [x] **R4 (P1). Dataset access-level change should require Manage, not Edit.**
   `PATCH /api/datasets/{id}` lets a dataset **Editor** flip `AccessLevel` Private→Public
   (`DatasetController.cs:325-339`), widening exposure to every folder reader. ACL grant/revoke
   correctly requires Manage; the access-level flip is the same class of operation and should be gated
   the same. Keep TTL/metadata edits at Editor.
+  *(done — v0.11.0)* An actual access-level change now requires Manage; re-stating the current level
+  and TTL/metadata edits remain Editor-level. Regression:
+  `DatasetControllerTests.Update_AccessLevelChangeRequiresManage_NotEdit`. Rode along: the scripted
+  `ALTER DATASET` connector path sent `PUT api/datasets/{id}` but the portal only exposes PATCH
+  (every scripted alter 405'd); the connector now sends PATCH, so it shares the same gate.
 - [ ] **R5 (P2). Purge expired/revoked refresh tokens and detect reuse.**
   Nothing deletes `RefreshTokens` rows — the table grows forever, and presenting an already-revoked
   token is not treated as a theft signal (standard response: revoke the user's whole token family).

@@ -336,6 +336,12 @@ public class DatasetController(
         {
             if (!Enum.TryParse<DatasetAccessLevel>(req.AccessLevel, ignoreCase: true, out var level))
                 return BadRequest(new { error = "accessLevel must be 'Public' or 'Private'." });
+
+            // Changing exposure (Private→Public widens access to every folder reader) is the
+            // same class of operation as ACL grant/revoke and requires Manage, not Edit.
+            if (level != dataset.AccessLevel && !CanManage(perm))
+                return Forbid();
+
             dataset.AccessLevel = level;
         }
 
