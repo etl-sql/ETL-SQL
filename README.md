@@ -337,8 +337,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, branching, testing
 
 ---
 
-© 2026 Charles Clemens. All rights reserved.
+Copyright 2026 Charles Clemens and ETL-SQL contributors.
 
-**Licensing** — This software is licensed under the PolyForm Noncommercial License 1.0.0. Commercial use of this software requires a separate license. For commercial licensing or service agreements, contact [etlsqlsoftware@gmail.com](mailto:etlsqlsoftware@gmail.com).
+**Licensing** — ETL-SQL is open-source software licensed under the [Apache License 2.0](LICENSE.md), including commercial use, modification, and redistribution subject to the license terms. Paid support, implementation, training, and development services may be available by contacting [etlsqlsoftware@gmail.com](mailto:etlsqlsoftware@gmail.com).
 
 **Trademarks** — ETL-SQL™ and the ETL-SQL logo are trademarks of Charles Clemens. Use of these trademarks is governed by our [Trademark Policy](TRADEMARK.md).

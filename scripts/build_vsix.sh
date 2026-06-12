@@ -29,6 +29,7 @@ cd ..
 
 # 3. Prep metadata
 cp "$ROOT/LICENSE.md" "$EXTENSION_DIR/LICENSE.md"
+cp "$ROOT/NOTICE.md" "$EXTENSION_DIR/NOTICE.md"
 
 # 4. Package VSIX
 echo "  Packaging VSIX..."

@@ -26,6 +26,7 @@ Pop-Location
 
 # 3. Prep Metadata
 Copy-Item (Join-Path $PSScriptRoot "..\LICENSE.md") (Join-Path $ExtensionDir "LICENSE.md") -Force
+Copy-Item (Join-Path $PSScriptRoot "..\NOTICE.md") (Join-Path $ExtensionDir "NOTICE.md") -Force
 
 # 4. Package VSIX
 Write-Host "Packaging VSIX..." -ForegroundColor Gray

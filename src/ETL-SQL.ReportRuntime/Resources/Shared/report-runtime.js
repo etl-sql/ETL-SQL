@@ -1,8 +1,6 @@
 /**
- * Copyright (c) 2026 Charles Clemens
- * Licensed under the PolyForm Noncommercial License 1.0.0
- * Commercial use of this software requires a separate license.
- * Contact etlsqlsoftware@gmail.com for commercial inquiries.
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
  *
  * report-runtime.js — Phase 9E
  *

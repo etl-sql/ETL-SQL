@@ -13,9 +13,10 @@ Thank you for your interest in contributing! This document explains how to set u
 5. [Writing Tests](#5-writing-tests)
 6. [Documentation Standards](#6-documentation-standards)
 7. [AI-Assisted Development](#7-ai-assisted-development)
-8. [Pull Request Checklist](#8-pull-request-checklist)
-9. [Reporting a Bug](#9-reporting-a-bug)
-10. [Feature Requests](#10-feature-requests)
+8. [Contribution Certification](#8-contribution-certification)
+9. [Pull Request Checklist](#9-pull-request-checklist)
+10. [Reporting a Bug](#10-reporting-a-bug)
+11. [Feature Requests](#11-feature-requests)
 
 ---
 
@@ -242,7 +243,25 @@ AI-generated engine code must pass the same review bar as human-written code. "A
 
 ---
 
-## 8. Pull Request Checklist
+## 8. Contribution Certification
+
+ETL-SQL uses the [Developer Certificate of Origin 1.1](https://developercertificate.org/) instead of a
+Contributor License Agreement. By adding a `Signed-off-by` line, you certify that you have the right to
+submit the contribution under the project's Apache License 2.0 terms.
+
+Sign each commit with:
+
+```bash
+git commit -s -m "Describe the change"
+```
+
+The sign-off must use your real name and an email address you control:
+
+```text
+Signed-off-by: Your Name <you@example.com>
+```
+
+## 9. Pull Request Checklist
 
 Before opening a PR, verify:
 
@@ -255,11 +274,12 @@ Before opening a PR, verify:
 - [ ] Connector exceptions are caught and re-thrown as `ExecutionException`
 - [ ] Documentation updated per Section 6 above
 - [ ] `CHANGELOG.md` updated with your change under `[Unreleased]`
+- [ ] Every commit includes a valid DCO `Signed-off-by` line
 - [ ] PR description explains *why* the change is needed, not just *what* it does
 
 ---
 
-## 9. Reporting a Bug
+## 10. Reporting a Bug
 
 Open a GitHub Issue with:
 
@@ -273,7 +293,7 @@ For **security vulnerabilities**, do **not** open a public issue. See [SECURITY.
 
 ---
 
-## 10. Feature Requests
+## 11. Feature Requests
 
 Open a GitHub Issue with the **[Feature Request]** label. Include:
 

@@ -55,7 +55,11 @@ You must obtain written permission from Charles Clemens before using the tradema
 
 ## 4. How to Ask for Permission
 
-If you wish to use the ETL-SQL trademark in a way not explicitly permitted by this policy, please contact us at **etlsqlsoftware@gmail.com** to request permission. We are happy to discuss licensing and official partnerships.
+If you wish to use the ETL-SQL trademark in a way not explicitly permitted by this policy, please contact us at **etlsqlsoftware@gmail.com** to request permission. We are happy to discuss trademark permission and official partnerships.
+
+The software license and trademark policy are separate. Apache License 2.0 permits commercial use,
+modification, and redistribution of the code, but it does not grant broad rights to the ETL-SQL name or
+logos.
 
 ---
 

@@ -14,6 +14,7 @@
         <!-- Everything installs into a single flat folder (the 5 executables + one appsettings.json).
              Each sub-feature is turned off (Level 0) when its checkbox property is not "1". -->
         <Feature Id="ProductFeature" Title="ETL-SQL" Level="1" ConfigurableDirectory="INSTALLFOLDER" Display="expand">
+            <ComponentRef Id="LegalNotices" />
             <Feature Id="Feature_SDK" Title="Client Tools" Level="1" Absent="allow" AllowAdvertise="no"
                      Description="CLI, Language Server, and Report CLI for developers (adds the install folder to PATH).">
                 <Condition Level="0"><![CDATA[INSTALL_SDK <> "1"]]></Condition>
@@ -59,6 +60,12 @@
         </ComponentGroup>
 
         <DirectoryRef Id="INSTALLFOLDER">
+            <Component Id="LegalNotices" Guid="*" Win64="yes">
+                <File Id="license_md" Source="..\..\LICENSE.md" KeyPath="yes" />
+                <File Id="notice_md" Source="..\..\NOTICE.md" />
+                <File Id="third_party_notices_md" Source="..\..\THIRD-PARTY-NOTICES.md" />
+            </Component>
+
             <!-- Single shared configuration file -->
             <Component Id="AppSettings" Guid="*" Win64="yes">
                 <File Id="appsettings_json" Source="publish\win-x64\bin\appsettings.json" KeyPath="yes" />
@@ -173,7 +180,7 @@
                  action (Yes/No message box) rather than an authored dialog, so it also works when
                  Settings > Apps runs the uninstall in basic UI with no wizard. -->
         </UI>
-        <!-- Real EULA (PolyForm Noncommercial License 1.0.0); overrides WiX's placeholder License.rtf -->
+        <!-- Apache License 2.0; overrides WiX's placeholder License.rtf -->
         <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
     </Product>
 </Wix>

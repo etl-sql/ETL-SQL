@@ -176,14 +176,14 @@ Commercial Windows code-signing certificates and other paid signing services are
 not a prerequisite for an honest 1.0 release. Add them when download volume, customer policy, or revenue
 justifies the cost.
 
-#### Decision 7: Select and Reconcile Licensing - Before Accepting Significant External Contributions
+#### Decision 7: Apache License 2.0 Selected - June 12, 2026
 
-The repository currently has conflicting signals: the repository and VS Code extension carry PolyForm
-Noncommercial terms while the extension package metadata says MIT. Resolve every source directory,
-package manifest, installer, About page, and README in one licensing change.
+ETL-SQL is licensed as a fully open-source project under Apache License 2.0. Keep the repository,
+package manifests, installers, bundled source notices, About pages, and release artifacts consistent
+with that decision.
 
-This decision must occur before accepting substantial outside code. Relicensing becomes harder when
-copyright is shared among contributors.
+Use a separate trademark policy for the ETL-SQL name and logos. Require Developer Certificate of Origin
+sign-off for outside contributions; do not require a CLA unless a future need and legal review justify it.
 
 #### Decision 8: Decide Version Numbering - Before Starting the Planned HA Release
 
@@ -220,6 +220,10 @@ Do not publish 1.0 until:
 This section records product direction, not legal or tax advice. Avoid writing a custom license without
 professional review. Prefer an established, unmodified license whose meaning is already understood.
 
+**Decision:** On June 12, 2026, ETL-SQL selected Model A: the full project is licensed under Apache
+License 2.0. Models B and C remain documented only as rejected alternatives and should not be presented
+as current licensing options.
+
 ### What True Open Source Means
 
 A true open-source license permits commercial use. It cannot require ordinary commercial users to buy a
@@ -231,7 +235,7 @@ may run or redistribute the open-source code.
 
 ### Available Models
 
-#### Model A: Fully Open Source - Recommended While Maintainer Resources Are Limited
+#### Model A: Fully Open Source - Selected
 
 Release the full repository under Apache License 2.0.
 
@@ -272,7 +276,7 @@ Risks:
 Mitigations are product velocity, documentation, community, trademark clarity, official release trust,
 and customer relationships rather than legal restriction.
 
-#### Model B: Open Core
+#### Model B: Open Core - Not Selected
 
 License the language, engine, CLI, TUI, VS Code extension, ReportPlayer, and local report tooling under
 Apache-2.0. Keep selected server-side enterprise modules under a commercial or source-available license.
@@ -297,9 +301,9 @@ Do not select this model until there is evidence that customers will pay for lic
 or implementation. If selected, use professional legal review before selling the first commercial
 license.
 
-#### Model C: Source-Available Noncommercial
+#### Model C: Source-Available Noncommercial - Replaced
 
-Continue using PolyForm Noncommercial and sell commercial permission.
+This was the previous approach: use PolyForm Noncommercial and sell commercial permission.
 
 Advantages:
 
@@ -322,8 +326,7 @@ value only when enough users adopt the product and are willing to purchase remov
 
 #### Stage 1: Adoption - Now Through 1.0
 
-- Choose and apply one consistent license.
-- Recommended default: Apache-2.0 for the full project.
+- Apply Apache-2.0 consistently to the full project and all distributed artifacts.
 - Publish a simple trademark statement.
 - Add GitHub Sponsors when eligible; consider Open Collective only if community funding and transparent
   project expenses become meaningful.
@@ -381,17 +384,12 @@ Make these only when triggered:
 - **Licensing server:** avoid unless license abuse creates a demonstrated business problem.
 - **Hosted service:** only after self-hosted operations are stable and recurring demand exists.
 
-### Sustainability Decision Gate
+### Sustainability Decision
 
-Before the 1.0 release branch, choose:
-
-1. full Apache-2.0 open source with services/support revenue;
-2. carefully separated open core; or
-3. continued PolyForm source-available commercial licensing.
-
-The current recommendation is option 1. It has the lowest legal, engineering, administrative, and
-adoption burden for one maintainer. Revisit open core only after actual users request paid operational
-capabilities and demonstrate willingness to fund them.
+The project selected full Apache-2.0 open source with services and support revenue. This has the lowest
+legal, engineering, administrative, and adoption burden for one maintainer. Revisit open core only after
+actual users request paid operational capabilities, demonstrate willingness to fund them, and legal
+review is affordable. Do not retroactively restrict code already released under Apache-2.0.
 
 ### Reference Material
 

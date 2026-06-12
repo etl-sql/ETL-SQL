@@ -15,6 +15,7 @@ echo "--- ETL-SQL Linux Package Builder ---"
 rm -rf "$BUILD_ROOT"
 mkdir -p "$BUILD_ROOT/usr/bin"
 mkdir -p "$BUILD_ROOT/usr/lib/etl-sql/bin"
+mkdir -p "$BUILD_ROOT/usr/share/doc/etl-sql"
 mkdir -p "$BUILD_ROOT/etc/systemd/system"
 mkdir -p "$BUILD_ROOT/DEBIAN"
 
@@ -37,6 +38,9 @@ echo "Copying published linux-x64 binaries from $PUBLISHED_BIN_DIR..."
 # hosts directly from bin/ (see the *.service ExecStart paths) while keeping
 # their own empty working directories below for runtime-writable state.
 cp -a "$PUBLISHED_BIN_DIR/." "$BUILD_ROOT/usr/lib/etl-sql/bin/"
+cp "LICENSE.md" "$BUILD_ROOT/usr/share/doc/etl-sql/LICENSE.md"
+cp "NOTICE.md" "$BUILD_ROOT/usr/share/doc/etl-sql/NOTICE.md"
+cp "THIRD-PARTY-NOTICES.md" "$BUILD_ROOT/usr/share/doc/etl-sql/THIRD-PARTY-NOTICES.md"
 
 ln -s /usr/lib/etl-sql/bin/ETL-SQL "$BUILD_ROOT/usr/bin/etl-sql"
 ln -s /usr/lib/etl-sql/bin/ETL-SQL-Report "$BUILD_ROOT/usr/bin/etl-sql-report"

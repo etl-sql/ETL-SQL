@@ -132,6 +132,9 @@ foreach ($Platform in $Platforms) {
     Copy-Item (Join-Path $DocsSource "QUICKSTART.txt") $DocFolder
     Copy-Item (Join-Path $DocsSource "ReportPortal_Administrators_Guide.md") (Join-Path $DocFolder "ReportPortal_Guide.txt")
     Copy-Item (Join-Path $RepoRoot "CHANGELOG.md") (Join-Path $DocFolder "CHANGELOG.txt") # Rename to txt for portability
+    Copy-Item (Join-Path $RepoRoot "LICENSE.md") (Join-Path $DocFolder "LICENSE.md")
+    Copy-Item (Join-Path $RepoRoot "NOTICE.md") (Join-Path $DocFolder "NOTICE.md")
+    Copy-Item (Join-Path $RepoRoot "THIRD-PARTY-NOTICES.md") (Join-Path $DocFolder "THIRD-PARTY-NOTICES.md")
     
     # 5. Copy Curated Samples (Top 15)
     $SampleList = @(
