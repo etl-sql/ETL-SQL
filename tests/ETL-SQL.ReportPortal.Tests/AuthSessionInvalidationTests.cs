@@ -133,12 +133,21 @@ public class AuthSessionInvalidationTests
         var refreshed = await refreshResponse.Content.ReadFromJsonAsync<JsonObject>(Json);
         var rotatedRefresh = refreshed!["refreshToken"]!.GetValue<string>();
 
+        // Rotation works: the successor refreshes successfully and rotates again.
+        var secondResponse = await client.PostAsJsonAsync(
+            "/api/auth/refresh", new { refreshToken = rotatedRefresh });
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        var second = await secondResponse.Content.ReadFromJsonAsync<JsonObject>(Json);
+        var secondRotated = second!["refreshToken"]!.GetValue<string>();
+
+        // Replaying the original (already-rotated) token is a theft signal: it is rejected
+        // AND the whole token family is revoked, so the latest successor stops working too.
         Assert.Equal(
             HttpStatusCode.Unauthorized,
             (await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken })).StatusCode);
         Assert.Equal(
-            HttpStatusCode.OK,
-            (await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = rotatedRefresh })).StatusCode);
+            HttpStatusCode.Unauthorized,
+            (await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = secondRotated })).StatusCode);
     }
 
     [Fact]

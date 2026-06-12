@@ -241,11 +241,28 @@ public class AuthController(
         var tokenHash = TokenService.HashRefreshToken(req.RefreshToken);
         var token = await db.RefreshTokens
             .Include(t => t.User)
-            .FirstOrDefaultAsync(t => t.Token == tokenHash
-                && t.RevokedAt == null
-                && t.ExpiresAt > DateTime.UtcNow);
+            .FirstOrDefaultAsync(t => t.Token == tokenHash);
 
         if (token is null)
+            return Unauthorized(new { error = "Invalid or expired refresh token" });
+
+        if (token.RevokedAt is not null)
+        {
+            // Presenting an already-rotated/revoked token is a theft signal: the legitimate
+            // client holds the rotated successor, so someone else replayed this one. Standard
+            // response is to revoke the user's whole session/token family. Only meaningful
+            // while the replayed token would otherwise still be live.
+            if (token.ExpiresAt > DateTime.UtcNow)
+            {
+                await securitySessions.InvalidateUserAsync(token.UserId);
+                await auditService.LogAsync(token.UserId, "REFRESH_TOKEN_REUSE", "User",
+                    token.UserId.ToString(),
+                    "A revoked refresh token was presented; all sessions were invalidated.");
+            }
+            return Unauthorized(new { error = "Invalid or expired refresh token" });
+        }
+
+        if (token.ExpiresAt <= DateTime.UtcNow)
             return Unauthorized(new { error = "Invalid or expired refresh token" });
 
         if (token.User is null || !token.User.IsActive)

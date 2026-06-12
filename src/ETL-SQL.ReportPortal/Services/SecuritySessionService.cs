@@ -7,7 +7,7 @@ namespace ETL_SQL.ReportPortal.Services;
 /// Invalidates issued access tokens by rotating the Identity security stamp and revokes
 /// outstanding refresh tokens for the affected users.
 /// </summary>
-public class SecuritySessionService(PortalDbContext db)
+public class SecuritySessionService(PortalDbContext db, UserSecurityStateCache securityStateCache)
 {
     public Task InvalidateUserAsync(int userId, CancellationToken ct = default) =>
         InvalidateUsersAsync([userId], ct);
@@ -31,6 +31,10 @@ public class SecuritySessionService(PortalDbContext db)
             token.RevokedAt = now;
 
         await db.SaveChangesAsync(ct);
+
+        // Make in-process revocation immediate; cross-process latency stays bounded by the TTL.
+        foreach (var id in ids)
+            securityStateCache.Evict(id);
     }
 
     public async Task InvalidateGroupMembersAsync(int groupId, CancellationToken ct = default)

@@ -1134,6 +1134,7 @@ Every significant action is written to the audit log. Open **Admin → Audit Log
 | `DELETE_SUBSCRIPTION` | Subscription deleted |
 | `CREATE_SMTP` | SMTP connection added |
 | `DELETE_SMTP` | SMTP connection removed |
+| `REFRESH_TOKEN_REUSE` | A revoked refresh token was replayed (theft signal); all of the user's sessions were invalidated |
 | `UPDATE_ORCHESTRATOR_SETTINGS` | Admin changed the Orchestrator URL or API key via the Settings tab |
 
 ### 10.2 Exporting the Audit Log
@@ -1149,10 +1150,16 @@ Click **Export CSV** to download up to 10,000 most-recent entries as a UTF-8 CSV
 The portal uses **JWT Bearer tokens** with HMAC-SHA256 signing.
 
 - Access tokens expire after `Jwt.ExpiryMinutes` (default 60 min).
-- Every access token contains the user's Identity security stamp. Validation reloads current account
-  state and rejects the token immediately when the stamp no longer matches.
+- Every access token contains the user's Identity security stamp. Validation checks current account
+  state (active flag + stamp) through a 30-second in-memory cache, so revocation takes effect
+  immediately in-process and within 30 seconds across processes, without a database read per request.
 - Refresh tokens expire after `Jwt.RefreshExpiryDays` (default 7 days), are stored only as SHA-256
   digests, and are single-use. Each successful refresh revokes the old token and returns a replacement.
+- Replaying an already-rotated refresh token is treated as a theft signal: the request is rejected,
+  every session and refresh token for that user is invalidated, and a `REFRESH_TOKEN_REUSE` audit
+  event is written.
+- Expired refresh-token rows are purged hourly. Revoked-but-unexpired rows are retained on purpose —
+  they are the evidence reuse detection needs.
 - Role, group, folder/dataset ACL, active-state, password, and LDAP mapping changes rotate the stamp and
   revoke outstanding refresh tokens for affected users.
 - **Logout**, **Disconnect User**, and **Revoke Tokens** invalidate all current sessions for that user,

@@ -135,11 +135,10 @@ builder.Services.AddAuthentication(opt =>
                 return;
             }
 
-            var portalDb = context.HttpContext.RequestServices.GetRequiredService<PortalDbContext>();
-            var user = await portalDb.Users
-                .Where(candidate => candidate.Id == userId)
-                .Select(candidate => new { candidate.IsActive, candidate.SecurityStamp })
-                .FirstOrDefaultAsync();
+            var services = context.HttpContext.RequestServices;
+            var user = await services
+                .GetRequiredService<ETL_SQL.ReportPortal.Services.UserSecurityStateCache>()
+                .GetAsync(userId, services.GetRequiredService<PortalDbContext>());
             if (user is null || !user.IsActive)
             {
                 context.Fail("User account is disabled.");
@@ -218,6 +217,7 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
     .SetApplicationName("ETL-SQL.ReportPortal");
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.TokenService>();
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.UserSecurityStateCache>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SecuritySessionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionDeliveryStatusService>();
@@ -273,6 +273,9 @@ builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.OrchestratorPoll
 
 // JWT secret validation (runs after WebApplicationFactory can inject test configuration)
 builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.JwtSecretValidationService>();
+
+// Hourly purge of expired refresh tokens (revoked-but-live rows are kept for reuse detection)
+builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.RefreshTokenMaintenanceService>();
 
 // Dataset at-rest key validation: fail closed if Portal:Dataset:AtRestKey is missing/weak in production
 // (unless Portal:Dataset:AllowMachineFallback is deliberately set for dev/standalone).
