@@ -103,6 +103,11 @@ namespace ETL_SQL.Core.Parser
                     _parser.Advance();
                     return ReportParser.ParseExportDataset(t);
                 }
+                if (_parser.Current.Type == TokenType.PORTAL)
+                {
+                    _parser.Advance();
+                    return PortalParser.ParseExportPortalConfiguration(t);
+                }
                 if (_parser.Current.Type == TokenType.SCRIPT || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("SCRIPT", StringComparison.OrdinalIgnoreCase)))
                 {
                     _parser.Advance();

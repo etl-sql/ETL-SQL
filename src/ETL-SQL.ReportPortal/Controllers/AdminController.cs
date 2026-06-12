@@ -1222,6 +1222,23 @@ public class AdminController(
             filename);
     }
 
+    // ── Configuration export (P1.7) ───────────────────────────────────────────
+
+    /// <summary>Generates the declarative configuration bootstrap script (admin-only). Secrets
+    /// are emitted as ${...} placeholders and unsupported resources are listed in the summary.</summary>
+    [HttpGet("configuration/export")]
+    public async Task<IActionResult> ExportConfiguration(
+        [FromServices] ConfigurationExportService exporter)
+    {
+        var export = await exporter.GenerateAsync(HttpContext.RequestAborted);
+        await audit.LogAsync(CurrentUserId, "EXPORT_PORTAL_CONFIGURATION", "System", null,
+            $"{export.RequiredSecrets.Count} secret placeholder(s), {export.Skipped.Count} skipped item(s)");
+        return File(
+            Encoding.UTF8.GetBytes(export.Script),
+            "text/plain; charset=utf-8",
+            $"portal_bootstrap_{DateTime.UtcNow:yyyyMMdd_HHmm}.etlsql.txt");
+    }
+
     // ── Orchestrator connection settings ──────────────────────────────────────
 
     [HttpGet("settings/orchestrator")]

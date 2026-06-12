@@ -135,6 +135,19 @@ namespace ETL_SQL.Core.Parser.Components
             { Line = start.Line, Column = start.Column };
         }
 
+        // EXPORT PORTAL CONFIGURATION TO '<file>'  (arrived after EXPORT PORTAL)
+        public Statement ParseExportPortalConfiguration(Token start)
+        {
+            if (!MatchIdentifier("CONFIGURATION"))
+                throw new SyntaxException(
+                    "Expected CONFIGURATION after EXPORT PORTAL",
+                    _parser.Current.Line, _parser.Current.Column);
+            Consume(TokenType.TO, "Expected TO");
+            string path = ConsumeStringLiteral("Expected target file path string literal");
+            return new ExportPortalConfigurationStatement(path)
+            { Line = start.Line, Column = start.Column };
+        }
+
         // ADD USER 'username' TO GROUP 'groupname'
         public Statement ParseAddUserToGroup(Token start)
         {

@@ -64,7 +64,7 @@ release begins.
 
 ### Priority 1 — Script-first clean-server reconstruction
 
-- [ ] **P1.7 Add `EXPORT PORTAL CONFIGURATION` as an admin-only ETL-SQL operation.**
+- [x] **P1.7 Add `EXPORT PORTAL CONFIGURATION` as an admin-only ETL-SQL operation.**
   Export the current declarative setup as a readable, versioned, idempotent `.etlsql` bootstrap script.
   Emit logical names and paths rather than database IDs, in dependency order:
   portal settings that are safe to export; groups; users; group memberships; folders; folder ACLs;
@@ -72,6 +72,23 @@ release begins.
   saved administrative definitions; and other scriptable portal resources discovered during inventory.
   Do not silently omit an unsupported resource: produce an export summary listing emitted, skipped,
   runtime-only, and secret-required items.
+  *(done — v0.11.0)* New scripted statement `EXPORT PORTAL CONFIGURATION TO '<file>'`
+  (AST/parser/connector) fetches the bootstrap from the new admin-only
+  `GET /api/admin/configuration/export` (audited) and writes it path-guarded.
+  `ConfigurationExportService` emits, in dependency order and by logical name: groups, users
+  (LDAP-aware; inactive users re-disabled), memberships, folders (parents first), folder ACLs, SMTP
+  connections, report publications, dataset metadata/grants, scheduled PDF/CSV subscriptions (with
+  parameters), and alerts. Secrets never leave the portal: `${PORTAL_USER_*_PASSWORD}`/
+  `${SMTP_*_PASSWORD}` placeholders are collected into a `REQUIRED SECRETS` header (groundwork for
+  P1.8), and the trailing summary lists emitted, skipped/manual (deliver-on-refresh and multi-
+  recipient subscriptions, non-PDF/CSV formats, folderless published datasets, refresh jobs needing
+  an orchestrator alias, file-provisioned portal settings), and runtime-only items.
+  `ConfigurationExportTests` proves the generated script parses with the real ETL-SQL parser,
+  contains the expected statements/placeholders, leaks no seeded credential or hash, and that the
+  endpoint is admin-gated. Residuals: deeper secret-exclusion sweep (P1.8), deterministic
+  import/WHAT_IF semantics (P1.9 — CREATE-based statements are not yet rerun-safe), companion
+  content manifest (P1.10), round-trip proof (P1.11), and Grammar.md/completion-surface docs to
+  ride with the P1.9 import work.
 - [ ] **P1.8 Exclude secrets and ephemeral/security artifacts from configuration export.**
   Never export password hashes, encrypted ciphertext, JWT/dataset-at-rest keys, SMTP passwords,
   Orchestrator API keys, refresh/share/embed tokens, sessions, job history, audit rows, cached dataset

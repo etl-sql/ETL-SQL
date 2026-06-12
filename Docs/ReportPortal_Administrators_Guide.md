@@ -1011,6 +1011,33 @@ END;
 
 Result-producing commands can write to a temp table with `INTO #table` and also update `@@RESULT` / `@@RESULTSETS`.
 
+### 9.0 Configuration Export (Script-First Reconstruction)
+
+```sql
+EXECUTE portal BEGIN
+    EXPORT PORTAL CONFIGURATION TO 'portal_bootstrap.txt';
+END;
+```
+
+Admin-only. Writes the portal's declarative configuration as a replayable bootstrap script in
+dependency order: groups, users, group memberships, folders, folder ACLs, SMTP connections, report
+publications, dataset metadata and grants, subscriptions, and alerts — by logical name, never
+database id. Secrets are **never** exported: password-bearing statements carry `${...}`
+placeholders collected in a `REQUIRED SECRETS` header, and a trailing summary lists every emitted,
+skipped, and runtime-only item so nothing is omitted silently. The same script is available from
+`GET /api/admin/configuration/export`, and each export writes an `EXPORT_PORTAL_CONFIGURATION`
+audit event.
+
+Notes:
+
+- The engine write-blocks script extensions (`.etlsql`, `.sql`) as control-plane protection, so
+  export to a data extension such as `.txt` and rename after review when committing to source control.
+- The script reconstructs **configuration only** — report `.rptsql` files, dataset caches, and
+  snapshots are content and travel separately (see the export summary and §10.3 of the security model).
+- Replay against a fresh portal requires substituting every `${...}` placeholder first; scheduled
+  refresh jobs are listed in the summary for manual re-creation because they need an Orchestrator
+  connection alias.
+
 ### 9.1 Report Operations
 
 ```sql

@@ -2462,6 +2462,11 @@ namespace ETL_SQL.Core
 
     public record RestartPortalStatement : Statement;
 
+    /// <summary>EXPORT PORTAL CONFIGURATION TO '&lt;file&gt;' — admin-only: writes the portal's
+    /// declarative configuration as a replayable bootstrap script (secrets excluded; the portal
+    /// emits placeholders and an export summary).</summary>
+    public record ExportPortalConfigurationStatement(string TargetPath) : Statement;
+
     public record ShutdownPortalStatement : Statement;
 
     public record ShowPortalUsersStatement : Statement;

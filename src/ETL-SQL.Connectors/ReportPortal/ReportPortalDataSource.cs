@@ -101,6 +101,7 @@ namespace ETL_SQL.Connectors.ReportPortal
             await EnsureAuthenticatedAsync();
             switch (statement)
             {
+                case ExportPortalConfigurationStatement s: await ExportConfigurationAsync(s, context); break;
                 case CreatePortalUserStatement s: await CreateUserAsync(s, context); break;
                 case AlterPortalUserStatement s: await AlterUserAsync(s, context); break;
                 case DropPortalUserStatement s: await DropUserAsync(s, context); break;
@@ -796,6 +797,40 @@ namespace ETL_SQL.Connectors.ReportPortal
             var groupId = await LookupGroupIdAsync(stmt.GroupName);
             await CallAsync(HttpMethod.Delete, $"api/datasets/{datasetId}/acl/{groupId}", null,
                 $"Revoked {stmt.Permission} on dataset '{stmt.DatasetName}' from group '{stmt.GroupName}'.");
+        }
+
+        // ── Configuration export (P1.7) ──────────────────────────────────────────
+
+        /// <summary>EXPORT PORTAL CONFIGURATION TO '&lt;file&gt;' — fetches the admin-only bootstrap
+        /// script (secrets replaced by ${...} placeholders, summary appended) and writes it to a
+        /// path-guarded local file. Script extensions (.etlsql/.sql) are write-blocked by the
+        /// engine's control-plane protection — export to a data extension such as .txt and rename
+        /// when placing the reviewed script into source control.</summary>
+        private async Task ExportConfigurationAsync(
+            ExportPortalConfigurationStatement stmt, IExecutionContext context)
+        {
+            HttpResponseMessage resp;
+            try { resp = await _http.GetAsync("api/admin/configuration/export"); }
+            catch (HttpRequestException ex)
+            {
+                throw new ExecutionException($"Portal connection error: {ex.Message}", ex);
+            }
+
+            using var _ = resp;
+            if (!resp.IsSuccessStatusCode)
+            {
+                var bodyText = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException(
+                    $"Portal API error ({(int)resp.StatusCode} {resp.StatusCode}): {SanitizeBody(bodyText)}");
+            }
+
+            var script = await resp.Content.ReadAsStringAsync();
+            var targetPath = context.ResolvePath(stmt.TargetPath);
+            await File.WriteAllTextAsync(targetPath, script);
+            _logger.WriteLine(
+                $"Portal configuration exported to '{targetPath}' ({script.Length:N0} characters). " +
+                "Review the REQUIRED SECRETS header and export summary before replaying.",
+                ConsoleColor.Green);
         }
 
         // ── Lookup helpers ────────────────────────────────────────────────────────
