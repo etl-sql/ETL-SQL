@@ -717,13 +717,17 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   *(done — v0.11.0)* Terminal jobs older than `CompletedJobRetention` (24h) are evicted on each
   enqueue; running/pending jobs are never evicted. Regression:
   `ExecutionJobServiceTests.Enqueue_EvictsTerminalJobsPastRetention_KeepsRecentOnes`.
-- [ ] **R9 (P2). `SessionCache.GetOrCreate` races leak DashboardServices.**
+- [x] **R9 (P2). `SessionCache.GetOrCreate` races leak DashboardServices.**
   Two concurrent requests for the same (report, user) both construct a `DashboardService`; the loser
   is overwritten in `_sessions[key] = entry` and **never disposed** (`SessionCache.cs:43-66`). The
   script-path-change branch also overwrites without disposing the old entry. Use `GetOrAdd`-with-lazy
   or dispose the displaced entry. Also note: the session key is (reportId, userId) but the caller
   context now embeds `IsAdmin` — an admin-elevated session created before role removal keeps serving
   with admin dataset context until eviction (P0.3-adjacent; document or key on the role too).
+  *(done — v0.11.0)* `GetOrCreate` is now an optimistic `TryAdd`/`TryUpdate` loop: every displaced or
+  race-losing service is disposed, and the caller context is part of the session identity, so a role
+  flip (admin↔user) replaces the session instead of serving stale admin dataset context. Regression:
+  `SessionCacheTests` (same-instance reuse, role/script replacement, concurrent convergence).
 - [x] **R10 (P2). `OrchestratorPollerService` watermark can skip completions.**
   `_lastPollTime = DateTime.UtcNow` is set after processing (`OrchestratorPollerService.cs:115`), so
   any job that completed between the query and the assignment is never observed; a mid-loop exception
@@ -733,15 +737,21 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   `DateTime.TryParse` is culture/kind-sensitive against the "o"-format value the query compares.
   *(done — v0.11.0)* Polls use a bounded absolute-time window via SQLite `julianday`, parse timestamps
   with invariant round-trip semantics, and advance only through each successfully handled completion.
-- [ ] **R11 (P2). Dead write in `DatasetRegistryService.RegisterOrUpdate`.**
+- [x] **R11 (P2). Dead write in `DatasetRegistryService.RegisterOrUpdate`.**
   Line 57 sets `existing.EncryptionMode = MachineBound` when a portal key is configured, then line 68
   unconditionally overwrites it with `metadata.EncryptionMode`. Harmless today only because the viewer
   decrypts by config (2g), but the stored mode stays misleading and the 2i rotation normalization
   relies on accurate metadata. Reorder or delete one of the writes.
-- [ ] **R12 (P3). `DatasetDto.IsEncrypted` reports the wrong fact.**
+  *(done — v0.11.0)* The stored mode now describes the cache at rest: with a portal key configured a
+  cache-bearing row is stamped `MachineBound` (matching rotation normalization) and the statement's
+  transport clause cannot overwrite it; without a portal key the statement's mode applies. Regression:
+  `DatasetRegistryMetadataTests`.
+- [x] **R12 (P3). `DatasetDto.IsEncrypted` reports the wrong fact.**
   `IsEncrypted: !string.IsNullOrWhiteSpace(d.ParquetFilePath)` (`DatasetController.cs:519`) means
   "has a cache file," not "encrypted." Derive from encryption mode/at-rest key state or rename the
   DTO field.
+  *(done — v0.11.0)* `IsEncrypted` now additionally requires `EncryptionMode != None`, which is
+  accurate once R11 keeps the stored mode truthful.
 
 ### Performance / operational
 

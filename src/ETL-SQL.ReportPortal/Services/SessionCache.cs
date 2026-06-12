@@ -12,7 +12,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
 {
     private readonly record struct SessionKey(int ReportId, int UserId);
 
-    private readonly record struct Entry(DashboardService Service, string ScriptPath)
+    private readonly record struct Entry(DashboardService Service, string ScriptPath, string CallerContext)
     {
         public DateTime LastAccess { get; init; } = DateTime.UtcNow;
         public Entry Touch() => this with { LastAccess = DateTime.UtcNow };
@@ -39,19 +39,52 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
         bool isAdministrator = false)
     {
         var key = new SessionKey(reportId, userId);
-
-        if (_sessions.TryGetValue(key, out var existing) && existing.ScriptPath == scriptPath)
-        {
-            _sessions[key] = existing.Touch();
-            return existing.Service;
-        }
-
-        var timeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
         // Interactive viewing runs as the real user so dataset ACLs (CanReadAsync) are enforced;
         // reportId links any datasets the script CREATEs to this report (and thus its folder).
         var callerContext = isAdministrator
             ? $"UserId={userId};IsAdmin=true"
             : $"UserId={userId}";
+
+        while (true)
+        {
+            if (_sessions.TryGetValue(key, out var existing))
+            {
+                // A session is reusable only for the same script *and* caller context — a role
+                // change must not keep serving through a previously admin-elevated session.
+                if (existing.ScriptPath == scriptPath && existing.CallerContext == callerContext)
+                {
+                    _sessions.TryUpdate(key, existing.Touch(), existing); // best-effort LRU touch
+                    return existing.Service;
+                }
+
+                var replacement = CreateEntry(reportId, scriptPath, callerContext);
+                if (_sessions.TryUpdate(key, replacement, existing))
+                {
+                    _ = existing.Service.DisposeAsync();
+                    Evict();
+                    return replacement.Service;
+                }
+
+                // Lost the replace race — discard our fresh service and re-evaluate.
+                _ = replacement.Service.DisposeAsync();
+                continue;
+            }
+
+            var entry = CreateEntry(reportId, scriptPath, callerContext);
+            if (_sessions.TryAdd(key, entry))
+            {
+                Evict();
+                return entry.Service;
+            }
+
+            // Lost the add race — discard our fresh service and reuse the winner's.
+            _ = entry.Service.DisposeAsync();
+        }
+    }
+
+    private Entry CreateEntry(int reportId, string scriptPath, string callerContext)
+    {
+        var timeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
         var svc = new DashboardService(
             scriptPath,
             _scopeFactory,
@@ -59,11 +92,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
             callerContext,
             reportId,
             _config.Dataset.AtRestKey);
-        var entry = new Entry(svc, scriptPath);
-        _sessions[key] = entry;
-
-        Evict();
-        return svc;
+        return new Entry(svc, scriptPath, callerContext);
     }
 
     /// <summary>Removes all sessions for a report (called on snapshot invalidation).</summary>
