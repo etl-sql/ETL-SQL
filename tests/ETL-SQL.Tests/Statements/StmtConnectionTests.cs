@@ -1,12 +1,12 @@
-﻿using Xunit;
+﻿using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
-using System.Threading.Tasks;
 using ETL_SQL.Tests;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements.Statements
 {
@@ -109,7 +109,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             try { await Execute("SEND_EMAIL TO 'test@test.com' SUBJECT 'Hi' BODY 'Hello' AT smtp;", evaluator); }
             catch (Exception ex) when (ex.Message.Contains("Unexpected token")) { throw; }
             catch { /* Ignore connection/execution errors */ }
-            
+
             // Testing SEND_FILE / RECEIVE_FILE parsing
             try { await Execute("SEND_FILE 'local.txt', smtp, 'remote.txt';", evaluator); }
             catch (Exception ex) when (ex.Message.Contains("Unexpected token")) { throw; }

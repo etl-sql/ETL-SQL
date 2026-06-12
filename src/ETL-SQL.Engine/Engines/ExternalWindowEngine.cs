@@ -5,10 +5,10 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Data;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -133,7 +133,7 @@ namespace ETL_SQL.Engine.Engines
             foreach (var info in partitionInfos)
             {
                 bool useDeepSpill = info.RowCount > _context.WindowSpillThreshold;
-                
+
                 if (useDeepSpill && IsDeepSpillCompatible(group))
                 {
                     _logger.WriteLine($"[magenta]     * DEEP-SPILL: Partition has {info.RowCount:N0} rows (threshold: {_context.WindowSpillThreshold:N0}). Processing via streaming.[/]");
@@ -159,15 +159,15 @@ namespace ETL_SQL.Engine.Engines
 
         private bool IsDeepSpillCompatible(WindowGroup group)
         {
-            return group.Columns.All(c => 
-                c.Expression is FunctionCallExpression f && 
+            return group.Columns.All(c =>
+                c.Expression is FunctionCallExpression f &&
                 new[] { "ROW_NUMBER", "RANK", "DENSE_RANK" }.Contains(f.FunctionName.ToUpperInvariant()));
         }
 
         private async IAsyncEnumerable<Row> ProcessBucketDeepSpill(string name, WindowGroup group, SelectStatement stmt)
         {
             var bucketRows = ReadPartitionStream(name);
-            
+
             var sortCriteria = new List<OrderByClause>();
             if (group.Signature.PartitionBy != null)
             {

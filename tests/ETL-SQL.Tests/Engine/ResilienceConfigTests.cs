@@ -1,12 +1,12 @@
-using Xunit;
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
-using ETL_SQL.Connectors.Shared;
-using ETL_SQL.Services;
-using ETL_SQL.Common;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
 using System.Collections.Generic;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using ETL_SQL.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 
 
@@ -48,7 +48,8 @@ namespace ETL_SQL.Tests.Engine
             int joinSpillThreshold = int.TryParse(configuration["Engine:JoinSpillThreshold"], out var jst) ? jst : 100000;
             int externalHashPartitions = int.TryParse(configuration["Engine:ExternalHashPartitions"], out var ehp) ? ehp : 32;
 
-            services.AddTransient<Evaluator>(sp => {
+            services.AddTransient<Evaluator>(sp =>
+            {
                 var evaluator = ActivatorUtilities.CreateInstance<Evaluator>(sp);
                 evaluator.JoinSpillThreshold = joinSpillThreshold;
                 evaluator.ExternalHashPartitions = externalHashPartitions;
@@ -69,7 +70,8 @@ namespace ETL_SQL.Tests.Engine
         public void ConnectorRetryPolicy_RespectsInitialization()
         {
             // Arrange
-            var options = new ConnectorRetryOptions {
+            var options = new ConnectorRetryOptions
+            {
                 MaxAttempts = 99,
                 BaseDelaySeconds = 2.5
             };
@@ -82,7 +84,7 @@ namespace ETL_SQL.Tests.Engine
             // (this at least ensures no crashes during init).
             var pipeline = ConnectorRetryPolicy.ForSqlServer(new LoggerService());
             Assert.NotNull(pipeline);
-            
+
             // Cleanup - Reset to defaults for other tests
             ConnectorRetryPolicy.Initialize(new ConnectorRetryOptions());
         }

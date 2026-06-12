@@ -11,7 +11,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
     /// </summary>
     public class CreateDirectoryInReportRule : ILintRule
     {
-        public string Name        => "CreateDirectoryInReport";
+        public string Name => "CreateDirectoryInReport";
         public string Description => "Errors when CREATE DIRECTORY is used in a report script. Use CREATE FOLDER to organise reports in the portal.";
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
@@ -37,11 +37,11 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 {
                     results.Add(new LintResult
                     {
-                        RuleName     = Name,
-                        Severity     = LintSeverity.Error,
-                        Message      = "CREATE DIRECTORY is a file-system operation and has no effect inside a report script. " +
+                        RuleName = Name,
+                        Severity = LintSeverity.Error,
+                        Message = "CREATE DIRECTORY is a file-system operation and has no effect inside a report script. " +
                                        "To organise reports in the Report Portal, use CREATE FOLDER instead.",
-                        LineNumber   = stmt.Line,
+                        LineNumber = stmt.Line,
                         ColumnNumber = stmt.Column
                     });
                 }

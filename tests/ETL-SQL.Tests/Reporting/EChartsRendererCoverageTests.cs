@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
-using Xunit;
 using ETL_SQL.Reporting;
+using Xunit;
 
 namespace ETL_SQL.Tests.Reporting
 {
@@ -376,9 +376,9 @@ namespace ETL_SQL.Tests.Reporting
                 },
                 new Dictionary<string, string>
                 {
-                    ["mapping:row"]    = "Region",
-                    ["mapping:col"]    = "Quarter",
-                    ["mapping:value"]  = "Revenue",
+                    ["mapping:row"] = "Region",
+                    ["mapping:col"] = "Quarter",
+                    ["mapping:value"] = "Revenue",
                     ["mapping:value2"] = "Units"
                 });
             var json = R().Render(v);
@@ -401,10 +401,10 @@ namespace ETL_SQL.Tests.Reporting
                 },
                 new Dictionary<string, string>
                 {
-                    ["mapping:row"]   = "Cat",
-                    ["mapping:col"]   = "Region",
+                    ["mapping:row"] = "Cat",
+                    ["mapping:col"] = "Region",
                     ["mapping:value"] = "Revenue",
-                    ["AXIS_SORT"]     = "DESC"
+                    ["AXIS_SORT"] = "DESC"
                 });
             var json = R().Render(v);
             // West total = 800, East total = 300 — West should appear first in colKeys
@@ -425,10 +425,10 @@ namespace ETL_SQL.Tests.Reporting
                 },
                 new Dictionary<string, string>
                 {
-                    ["mapping:row"]   = "Cat",
-                    ["mapping:col"]   = "Region",
+                    ["mapping:row"] = "Cat",
+                    ["mapping:col"] = "Region",
                     ["mapping:value"] = "Revenue",
-                    ["SUBTOTALS"]     = "ON"
+                    ["SUBTOTALS"] = "ON"
                 });
             var json = R().Render(v);
             Assert.Contains("\"subtotalsEnabled\":true", json);
@@ -458,12 +458,12 @@ namespace ETL_SQL.Tests.Reporting
                 new[] { new[] { "Group A", "5", "10", "15", "20", "25" } },
                 new Dictionary<string, string>
                 {
-                    ["mapping:x"]      = "Cat",
-                    ["mapping:min"]    = "Min",
-                    ["mapping:q1"]     = "Q1",
+                    ["mapping:x"] = "Cat",
+                    ["mapping:min"] = "Min",
+                    ["mapping:q1"] = "Q1",
                     ["mapping:median"] = "Median",
-                    ["mapping:q3"]     = "Q3",
-                    ["mapping:max"]    = "Max"
+                    ["mapping:q3"] = "Q3",
+                    ["mapping:max"] = "Max"
                 });
             var json = R().Render(v);
             Assert.NotNull(json);

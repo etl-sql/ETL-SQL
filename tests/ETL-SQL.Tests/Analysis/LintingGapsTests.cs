@@ -1,11 +1,11 @@
-﻿using Xunit;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
-using System.Threading.Tasks;
 using System.Linq;
-using ETL_SQL.Core;
+using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Core;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis
 {

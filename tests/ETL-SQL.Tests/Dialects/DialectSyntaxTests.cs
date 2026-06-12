@@ -1,8 +1,8 @@
 using System;
 using System.Linq;
-using Xunit;
 using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Connectors.Oracle;
+using Xunit;
 
 namespace ETL_SQL.Tests.Dialects.Dialects
 {

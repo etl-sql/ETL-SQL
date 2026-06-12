@@ -1,14 +1,14 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
 using ETL_SQL.Connectors.MockDb;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -40,7 +40,7 @@ SELECT * FROM #temp;";
             // In MockSqlDataSource, if source is not found it returns a dummy table with ParameterValue and ProcessedSql
             // But here ds.Employees exists in MockSqlDataSource? 
             // Wait, MockSqlDataSource has "Employee" by default usually.
-            
+
             // Let's check if it actually executed.
             Assert.True(evaluator.Connections.ContainsKey("#temp"), "Temp table #temp should exist");
         }

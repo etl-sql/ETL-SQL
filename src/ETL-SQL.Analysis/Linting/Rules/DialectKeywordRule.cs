@@ -133,7 +133,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                         if (select.OrderBy != null) foreach (var o in select.OrderBy) AnalyzeExpression(o.Expression, connName, dialect.ConnType ?? "", dialect.Excluded, results);
                     }
                 }
-                
+
                 // Recurse into subqueries in FROM and JOINs
                 if (select.FromTable?.Subquery != null) AnalyzeStatement(select.FromTable.Subquery, connMap, registry, results, context);
                 foreach (var join in select.Joins)

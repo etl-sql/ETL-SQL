@@ -11,7 +11,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
     /// </summary>
     public class UnusedConnectionRule : ILintRule
     {
-        public string Name        => "UnusedConnection";
+        public string Name => "UnusedConnection";
         public string Description => "Warns when a connection is created but never used in the script.";
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
@@ -44,10 +44,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 {
                     results.Add(new LintResult
                     {
-                        RuleName     = Name,
-                        Severity     = LintSeverity.Warning,
-                        Message      = $"Connection '{name}' is defined at line {line} but never used in this script.",
-                        LineNumber   = line,
+                        RuleName = Name,
+                        Severity = LintSeverity.Warning,
+                        Message = $"Connection '{name}' is defined at line {line} but never used in this script.",
+                        LineNumber = line,
                         ColumnNumber = 0
                     });
                 }
@@ -111,7 +111,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
         {
             if (table == null) return;
             if (table.ConnectionName != null) names.Add(table.ConnectionName);
-            else if (!string.IsNullOrEmpty(table.TableName) && !table.TableName.StartsWith("#")) 
+            else if (!string.IsNullOrEmpty(table.TableName) && !table.TableName.StartsWith("#"))
                 names.Add(table.TableName);
         }
     }

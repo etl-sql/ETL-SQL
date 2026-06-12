@@ -42,9 +42,9 @@ namespace ETL_SQL.Connectors.ReportPortal
         public HashSet<string> GetSupportedKeywords() => [];
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
-            ["HOST"]     = [],
-            ["PORT"]     = [],
-            ["USER"]     = [],
+            ["HOST"] = [],
+            ["PORT"] = [],
+            ["USER"] = [],
             ["PASSWORD"] = []
         };
         public Dictionary<string, string[]> GetOptionValues() => [];
@@ -72,7 +72,7 @@ namespace ETL_SQL.Connectors.ReportPortal
             // If HOST doesn't include a port but PORT is specified, append it
             if (options.TryGetValue("PORT", out var port) &&
                 !string.IsNullOrWhiteSpace(port) &&
-                !host.Contains(':',  StringComparison.Ordinal))
+                !host.Contains(':', StringComparison.Ordinal))
             {
                 host = host.TrimEnd('/') + $":{port}";
             }

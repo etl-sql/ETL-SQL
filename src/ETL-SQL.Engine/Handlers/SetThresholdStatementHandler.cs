@@ -1,8 +1,8 @@
 using System;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
@@ -15,7 +15,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var s = (SetThresholdStatement)statement;
             var val = await context.EvaluateValue(s.Value, new Row());
-            
+
             if (val == null) return;
 
             context.SecurityService.ValidateThresholdOverride(s.Type, val, context);
@@ -25,7 +25,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 intVal = Convert.ToInt32(val);
             }
-            
+
             if (s.Type != ThresholdType.LineageNamespace)
             {
                 if (s.Type == ThresholdType.ExternalHashPartitions && intVal < 1)
@@ -33,9 +33,9 @@ namespace ETL_SQL.Engine.Handlers
                     throw new ExecutionException("EXTERNAL_HASH_PARTITIONS must be at least 1.");
                 }
 
-                if ((s.Type == ThresholdType.BatchSize || 
-                     s.Type == ThresholdType.ForeachPageSize || 
-                     s.Type == ThresholdType.ExternalSortChunkSize || 
+                if ((s.Type == ThresholdType.BatchSize ||
+                     s.Type == ThresholdType.ForeachPageSize ||
+                     s.Type == ThresholdType.ExternalSortChunkSize ||
                      s.Type == ThresholdType.MaxMessages) && intVal < 1)
                 {
                     throw new ExecutionException($"{s.Type.ToString().ToUpperInvariant()} must be at least 1.");

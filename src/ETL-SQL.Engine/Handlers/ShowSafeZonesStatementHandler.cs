@@ -22,7 +22,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ShowSafeZonesStatement)statement;
-            
+
             var table = new DataTable();
             table.AddColumn("Path");
             table.AddColumn("IsSystemPath");

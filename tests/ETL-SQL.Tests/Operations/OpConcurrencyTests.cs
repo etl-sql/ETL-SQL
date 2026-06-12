@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Xunit;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Operations.Operations
 {
@@ -107,7 +107,7 @@ INSERT INTO #T{id} (V) VALUES ({id});
                 Assert.True(waitSuccessful, $"Barrier wait timed out for session {id}");
 
                 // Each evaluator should only see its own table
-                bool hasOwn  = ev.Connections.ContainsKey($"#T{id}");
+                bool hasOwn = ev.Connections.ContainsKey($"#T{id}");
                 bool hasOther = ev.Connections.ContainsKey($"#T{(id == 1 ? 2 : 1)}");
                 return hasOwn && !hasOther;
             }

@@ -1,10 +1,10 @@
-using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -15,7 +15,7 @@ namespace ETL_SQL.Engine.Handlers
     {
         private readonly ILogger _logger = logger;
         public Type SupportedStatementType => typeof(UpdateStatement);
- 
+
         /// <summary>Executes the UPDATE statement against the target data source.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
@@ -32,11 +32,13 @@ namespace ETL_SQL.Engine.Handlers
                 _logger.Debug("Strategy: Remote SQL UPDATE");
                 var allParams = new Dictionary<string, object?>();
                 int paramIdx = 0;
-                
-                string CompileAndMerge(Expression e) {
+
+                string CompileAndMerge(Expression e)
+                {
                     var compiled = context.CompileExpression(e, sqlConn.Dialect);
                     string sqlPart = compiled.Sql;
-                    foreach(var p in compiled.Parameters.OrderByDescending(x => x.Key.Length)) {
+                    foreach (var p in compiled.Parameters.OrderByDescending(x => x.Key.Length))
+                    {
                         string newName = $"@up{paramIdx++}";
                         sqlPart = sqlPart.Replace(p.Key, newName);
                         allParams[newName] = p.Value;
@@ -47,18 +49,18 @@ namespace ETL_SQL.Engine.Handlers
                 var assignments = stmt.Assignments.Select(a => $"{a.ColumnName} = {CompileAndMerge(a.Value)}").ToList();
                 var sql = $"UPDATE {context.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)} SET {string.Join(", ", assignments)}";
                 if (stmt.WhereClause != null) sql += $"\nWHERE {CompileAndMerge(stmt.WhereClause)}";
-                
+
                 if (context.IsWhatIf)
                 {
                     var whatIfAssignments = stmt.Assignments.Select(a => $"{a.ColumnName} = {context.CompileExpression(a.Value, sqlConn.Dialect).ToEscapedSql(sqlConn.Dialect)}");
                     var whatIfSql = $"UPDATE {context.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)} SET {string.Join(", ", whatIfAssignments)}";
                     if (stmt.WhereClause != null) whatIfSql += $"\nWHERE {context.CompileExpression(stmt.WhereClause, sqlConn.Dialect).ToEscapedSql(sqlConn.Dialect)}";
-                    
+
                     _logger.WriteLine($"WHAT IF: Would execute remote SQL update on {connName}:\n{whatIfSql}", ConsoleColor.Yellow);
                 }
                 else
                 {
-                    await foreach (var batch in sqlConn.ExecuteRawSql(sql, allParams.Values)) 
+                    await foreach (var batch in sqlConn.ExecuteRawSql(sql, allParams.Values))
                     {
                         if (batch.RowsAffected >= 0) context.Telemetry.RowsProcessed += batch.RowsAffected;
                     }
@@ -67,7 +69,7 @@ namespace ETL_SQL.Engine.Handlers
             else
             {
                 _logger.Debug("Strategy: Engine-side Batch UPDATE (Streaming)");
-                
+
                 if (context.IsWhatIf)
                 {
                     _logger.WriteLine($"WHAT IF: Would update rows in {connName} via engine-side streaming.", ConsoleColor.Yellow);
@@ -81,7 +83,7 @@ namespace ETL_SQL.Engine.Handlers
                 int updatedCount = 0;
                 var batches = connection.ReadBatches(context.BatchSize);
                 var rowInfos = new List<(Row? Before, Row? After, string? Action)>();
-                
+
                 async IAsyncEnumerable<DataTable> ProcessBatches()
                 {
                     await foreach (var batch in batches)
@@ -91,17 +93,17 @@ namespace ETL_SQL.Engine.Handlers
                             if (stmt.WhereClause == null || await context.EvaluateCondition(stmt.WhereClause, row))
                             {
                                 var before = stmt.Output != null ? row.Clone() : null;
-                                
+
                                 foreach (var a in stmt.Assignments)
                                 {
                                     row[a.ColumnName] = await context.EvaluateValue(a.Value, row);
                                 }
-                                
+
                                 if (stmt.Output != null)
                                 {
                                     rowInfos.Add((before, row.Clone(), "UPDATE"));
                                 }
-                                
+
                                 updatedCount++;
                             }
                         }
@@ -112,7 +114,7 @@ namespace ETL_SQL.Engine.Handlers
                 // For large files, writing to memory first then back to source is safer to avoid access violations.
                 // If it's too large for memory, we should have used a temp file, but IDataSource.WriteBatches on file sources
                 // usually overwrites anyway.
-                
+
                 var processed = ProcessBatches();
                 var materialized = new List<DataTable>();
                 await foreach (var b in processed) materialized.Add(b);
@@ -126,7 +128,7 @@ namespace ETL_SQL.Engine.Handlers
 
                 context.IncrementOperationCount(OperationType.EngineInternal, count: updatedCount);
                 context.Telemetry.RowsProcessed += updatedCount;
-                
+
                 if (context.IsVerbose) _logger.WriteLine($"Finished updating {updatedCount} rows in {connName}");
             }
         }

@@ -1,17 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using ETL_SQL.Common;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Parser;
 using System.Text.RegularExpressions;
+using ETL_SQL.Common;
 using ETL_SQL.Core.Formatting;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Core
 {
     /// <summary>Base class for all Abstract Syntax Tree nodes, tracking source locations.</summary>
-    public abstract record AstNode 
-    { 
+    public abstract record AstNode
+    {
         /// <summary>Starting line number in the source script.</summary>
         public int Line { get; init; }
         /// <summary>Starting column position in the source script.</summary>
@@ -26,7 +26,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>Base class for all executable SQL statements.</summary>
-    public abstract record Statement : AstNode 
+    public abstract record Statement : AstNode
     {
         /// <summary>Common Table Expressions (WITH clause) applied to this statement.</summary>
         public List<CteDefinition>? Ctes { get; init; }
@@ -53,10 +53,11 @@ namespace ETL_SQL.Core
     {
         public string ConnectionName { get; } = name;
         public string? ConnectionType { get; } = type; // FILE, DATABASE, EXCEL
-        public Expression? TargetExpression { get; } = target; 
+        public Expression? TargetExpression { get; } = target;
         public Dictionary<string, Expression>? Options { get; } = options;
         public ObjectCreationMode Mode { get; } = mode;
-    }    public record CreateSshKeyPairStatement(Expression path, Expression? bits = null, Expression? algorithm = null, Expression? passphrase = null, Expression? comment = null) : Statement
+    }
+    public record CreateSshKeyPairStatement(Expression path, Expression? bits = null, Expression? algorithm = null, Expression? passphrase = null, Expression? comment = null) : Statement
     {
         public Expression Path { get; } = path;
         public Expression? Bits { get; } = bits;
@@ -185,7 +186,7 @@ namespace ETL_SQL.Core
     }
 
     public enum JoinHint { None, Hash, Loop, Merge }
-    
+
     public record JoinClause : AstNode
     {
         public string JoinType { get; }
@@ -352,7 +353,7 @@ namespace ETL_SQL.Core
         public Expression? ConnectionName { get; set; }
         public TableReference? IntoTable { get; set; }
         public List<Expression> Parameters { get; } = new();
-        
+
         public ExecStatement(Expression sqlExpression, Expression? connectionName = null, TableReference? intoTable = null, List<Expression>? parameters = null)
         {
             SqlExpression = sqlExpression;
@@ -399,7 +400,7 @@ namespace ETL_SQL.Core
             var sources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var cteNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var tokens = TokenizeSql(SqlText);
-            
+
             // 1. Identify CTE names to exclude them from sources
             for (int i = 0; i < tokens.Count - 2; i++)
             {
@@ -441,7 +442,7 @@ namespace ETL_SQL.Core
                     while (j < tokens.Count)
                     {
                         var tblToken = tokens[j];
-                        
+
                         // Skip common JOIN hints
                         if (tblToken.ToUpperInvariant() == "HASH" || tblToken.ToUpperInvariant() == "LOOP" || tblToken.ToUpperInvariant() == "MERGE")
                         {
@@ -467,7 +468,7 @@ namespace ETL_SQL.Core
                         }
 
                         var cleanTbl = tblToken.Replace("[", "").Replace("]", "").Replace("\"", "");
-                        
+
                         // Avoid system keywords and variables, and ensure it's not a CTE
                         if (!cteNames.Contains(cleanTbl) && !cleanTbl.StartsWith("@") && !cleanTbl.Equals("DUAL", StringComparison.OrdinalIgnoreCase))
                         {
@@ -705,8 +706,8 @@ namespace ETL_SQL.Core
     public record MergeNotMatchedClause : MergeActionClause
     {
         public MergeSourceOrTarget Option { get; init; }
-        public MergeNotMatchedClause(Expression? condition, MergeSourceOrTarget option = MergeSourceOrTarget.Target) 
-            : base(MergeActionType.INSERT, condition) 
+        public MergeNotMatchedClause(Expression? condition, MergeSourceOrTarget option = MergeSourceOrTarget.Target)
+            : base(MergeActionType.INSERT, condition)
         {
             Option = option;
         }
@@ -733,7 +734,7 @@ namespace ETL_SQL.Core
     {
         public TableReference TargetTable { get; init; }
         public string? TargetAlias { get; init; }
-        public TableReference SourceTable { get; init; } 
+        public TableReference SourceTable { get; init; }
         public string? SourceAlias { get; init; }
         public Expression OnCondition { get; init; }
         public List<MergeMatchedClause> MatchedClauses { get; init; }
@@ -741,12 +742,12 @@ namespace ETL_SQL.Core
         public OutputClause? Output { get; set; }
 
         public MergeStatement(
-            TableReference targetTable, 
-            string? targetAlias, 
-            TableReference sourceTable, 
-            string? sourceAlias, 
-            Expression onCondition, 
-            List<MergeMatchedClause> matchedClauses, 
+            TableReference targetTable,
+            string? targetAlias,
+            TableReference sourceTable,
+            string? sourceAlias,
+            Expression onCondition,
+            List<MergeMatchedClause> matchedClauses,
             List<MergeNotMatchedClause> notMatchedClauses,
             OutputClause? output = null)
         {
@@ -912,10 +913,10 @@ namespace ETL_SQL.Core
 
         public AlterConnectionStatement(string name, string? type, Expression? target, Dictionary<string, Expression>? options)
         {
-            ConnectionName   = name;
-            ConnectionType   = type;
+            ConnectionName = name;
+            ConnectionType = type;
             TargetExpression = target;
-            Options          = options;
+            Options = options;
         }
     }
 
@@ -1235,8 +1236,8 @@ namespace ETL_SQL.Core
     public record ExpectedSchemaColumn
     {
         public required string ColumnName { get; init; }
-        public required string DataType   { get; init; }
-        public bool NotNull               { get; init; }
+        public required string DataType { get; init; }
+        public bool NotNull { get; init; }
     }
 
     /// <summary>
@@ -1246,9 +1247,9 @@ namespace ETL_SQL.Core
     /// </summary>
     public record ExpectSchemaStatement : Statement
     {
-        public required string Target                         { get; init; }
-        public required List<ExpectedSchemaColumn> Columns   { get; init; }
-        public bool WarnOnDrift                              { get; init; }
+        public required string Target { get; init; }
+        public required List<ExpectedSchemaColumn> Columns { get; init; }
+        public bool WarnOnDrift { get; init; }
     }
 
     public record ExecuteParameter(Expression Expression, string? Name = null, bool IsOutput = false, bool IsInput = false) : AstNode;
@@ -1464,7 +1465,7 @@ namespace ETL_SQL.Core
 
 
     /// <summary>Base class for all expressions that return a value.</summary>
-    public abstract record Expression : AstNode 
+    public abstract record Expression : AstNode
     {
         public virtual IEnumerable<string> GetSourceTables() => Enumerable.Empty<string>();
         public virtual IEnumerable<string> GetSourceColumns() => Enumerable.Empty<string>();
@@ -1616,9 +1617,9 @@ namespace ETL_SQL.Core
     /// <summary>EXPORT REPORT 'path.rptsql' FORMAT PDF|CSV|MARKDOWN TO 'output.pdf' [WITH (...)]</summary>
     public record ExportReportStatement(
         Expression ReportPath,
-        string     Format,
+        string Format,
         Expression OutputPath,
-        string?    PdfMode = null,
+        string? PdfMode = null,
         Expression? Host = null,
         Expression? BrowserPath = null) : Statement;
 
@@ -1868,7 +1869,7 @@ namespace ETL_SQL.Core
         public Expression Start { get; }
         public Expression? Length { get; }
 
-        public SubstringExpression(Expression str, Expression start, Expression? length = null) 
+        public SubstringExpression(Expression str, Expression start, Expression? length = null)
             : base("SUBSTRING", new List<Expression> { str, start, length ?? new LiteralExpression(null, TokenType.NULL) })
         {
             String = str;
@@ -2236,7 +2237,7 @@ namespace ETL_SQL.Core
         public bool Prompt { get; }
         public UsePasswordStatement(string password) { Password = password; }
         public UsePasswordStatement(bool prompt) { Prompt = prompt; }
-        
+
         public string ToSql(bool mask) => Prompt
             ? "USE PASSWORD PROMPT;"
             : $"USE PASSWORD = '{(mask ? "********" : (Password ?? "").Replace("'", "''"))}';";
@@ -2417,9 +2418,9 @@ namespace ETL_SQL.Core
     public record CreatePortalSubscriptionStatement(
         string ReportPath,
         string Recipient,        // username or group name
-        bool   IsGroup,
+        bool IsGroup,
         string? Schedule,
-        bool   OnRefresh,
+        bool OnRefresh,
         PortalSubscriptionFormat Format,
         string SmtpAlias,
         string? Name,

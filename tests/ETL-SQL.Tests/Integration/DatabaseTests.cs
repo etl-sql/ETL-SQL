@@ -1,13 +1,13 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration
 {
@@ -35,15 +35,15 @@ namespace ETL_SQL.Tests.Integration
         public async Task TestMockDatabase()
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             // 1. Create MOCKDB connection
             await Execute(eval, "CREATE CONNECTION MyMock AS MOCKDB();");
-            
+
             // 2. Query mock table
             var sql = "SELECT UserName FROM MyMock.Users WHERE UserID = 1;";
             var res = await EvalFunc(eval, sql);
             Assert.Equal("User_1", res?.ToString());
-            
+
             // 3. Query another table
             var res2 = await EvalFunc(eval, "SELECT ProductName FROM MyMock.Products WHERE ProductID = 101;");
             Assert.Equal("Product_101", res2?.ToString());

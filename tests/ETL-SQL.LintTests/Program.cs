@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.LintTests
 {
@@ -13,7 +13,8 @@ namespace ETL_SQL.LintTests
     {
         static async Task Main(string[] args)
         {
-            try {
+            try
+            {
                 string sql = @"
 SELECT * FROM
 -- Missing table (Syntax Error recovery test)
@@ -29,7 +30,7 @@ SELECT InvalidCol FROM NonExistentTable;
                 Console.WriteLine("\n--- Testing Parser & Error Recovery ---");
                 var parser = new ETL_SQL.Core.Parser.Parser(tokens);
                 var script = parser.Parse();
-                
+
                 Console.WriteLine($"Parsed {script.Statements.Count} statements.");
                 foreach (var diag in script.Diagnostics)
                 {
@@ -37,13 +38,14 @@ SELECT InvalidCol FROM NonExistentTable;
                 }
 
                 Console.WriteLine("\n--- Testing Schema Linter ---");
-                var context = new DefaultLintContext {
+                var context = new DefaultLintContext
+                {
                     Metadata = new MockMetadataProvider()
                 };
-                
+
                 var linter = new Linter();
                 linter.AddRule(new SchemaValidationRule());
-                
+
                 var results = await linter.AnalyzeAsync(script, context);
                 foreach (var res in results)
                 {

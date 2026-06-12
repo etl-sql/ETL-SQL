@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Metadata;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -47,7 +47,7 @@ namespace ETL_SQL.TUI.UI
             var line = _buffer.Lines[_buffer.CursorLine].Substring(0, _buffer.CursorColumn);
             var lastWordMatch = Regex.Match(line, @"[\$\w.#@./\\\""']*$");
             var lastWord = lastWordMatch.Value.Trim('\'', '\"');
-            
+
             if (string.IsNullOrEmpty(lastWord) && !line.EndsWith("=") && !line.EndsWith("("))
             {
                 _renderer.AutocompleteVisible = false;
@@ -286,7 +286,7 @@ namespace ETL_SQL.TUI.UI
                     }
 
                     if (!string.IsNullOrEmpty(info.Alias))
-                         allCols.AddRange(cols.Select(c => $"{info.Alias}.{c}"));
+                        allCols.AddRange(cols.Select(c => $"{info.Alias}.{c}"));
                     else allCols.AddRange(cols);
                 }
 
@@ -299,7 +299,7 @@ namespace ETL_SQL.TUI.UI
                     return;
                 }
             }
-            
+
             // If no special expansion, just show regular suggestions
             await UpdateAsync();
         }

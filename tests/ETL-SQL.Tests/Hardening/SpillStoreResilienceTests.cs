@@ -2,14 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.App;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.App;
-using ETL_SQL.Common;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -42,7 +42,7 @@ namespace ETL_SQL.Tests.Hardening
             await writer.DisposeAsync();
 
             var reader = await store.CreateReaderAsync("test_matrix");
-            
+
             int count = 0;
             await foreach (var row in reader.AsEnumerableAsync())
             {
@@ -92,7 +92,7 @@ namespace ETL_SQL.Tests.Hardening
             var writer = await store.CreateWriterAsync("integ_test");
 
             var baseDate = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-            
+
             for (int i = 0; i < 100000; i++) // 100k row scale test
             {
                 var r = new Row(schema);
@@ -101,13 +101,13 @@ namespace ETL_SQL.Tests.Hardening
                 r["StrCol"] = "Str_" + i;
                 r["DateCol"] = baseDate.AddMinutes(i);
                 r["NullCol"] = null;
-                
+
                 await writer.WriteRowAsync(r);
             }
             await writer.DisposeAsync();
 
             var reader = await store.CreateReaderAsync("integ_test");
-            
+
             int count = 0;
             await foreach (var row in reader.AsEnumerableAsync())
             {

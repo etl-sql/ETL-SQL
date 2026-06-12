@@ -29,13 +29,13 @@ namespace ETL_SQL.Tests
         // ── Engine: valid day names ────────────────────────────────────────────
 
         [Theory]
-        [InlineData("Monday",    DayOfWeek.Monday)]
-        [InlineData("Tuesday",   DayOfWeek.Tuesday)]
+        [InlineData("Monday", DayOfWeek.Monday)]
+        [InlineData("Tuesday", DayOfWeek.Tuesday)]
         [InlineData("Wednesday", DayOfWeek.Wednesday)]
-        [InlineData("Thursday",  DayOfWeek.Thursday)]
-        [InlineData("Friday",    DayOfWeek.Friday)]
-        [InlineData("Saturday",  DayOfWeek.Saturday)]
-        [InlineData("Sunday",    DayOfWeek.Sunday)]
+        [InlineData("Thursday", DayOfWeek.Thursday)]
+        [InlineData("Friday", DayOfWeek.Friday)]
+        [InlineData("Saturday", DayOfWeek.Saturday)]
+        [InlineData("Sunday", DayOfWeek.Sunday)]
         public async Task Engine_AllSevenDays_SetCorrectly(string dayName, DayOfWeek expected)
         {
             var eval = ETL_SQL.Program.ServiceProvider!.GetService(typeof(Evaluator)) as Evaluator

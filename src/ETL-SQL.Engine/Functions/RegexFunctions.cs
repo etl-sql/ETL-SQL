@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Functions;
-using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Functions;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Functions
@@ -72,7 +72,7 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 2 || args[0] == null || args[1] == null) return null;
             string input = args[0]?.ToString() ?? "";
             string pattern = args[1]?.ToString() ?? "";
-            
+
             if (args.Count >= 3 && args[2] == null) return null;
             if (args.Count >= 4 && args[3] == null) return null;
 
@@ -114,7 +114,7 @@ namespace ETL_SQL.Engine.Functions
             string input = args[0]?.ToString() ?? "";
             string pattern = args[1]?.ToString() ?? "";
             string replacement = args[2]?.ToString() ?? "";
-            
+
             if (args.Count >= 4 && args[3] == null) return null;
             if (args.Count >= 5 && args[4] == null) return null;
 
@@ -165,7 +165,7 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 2 || args[0] == null || args[1] == null) return null;
             string input = args[0]?.ToString() ?? "";
             string pattern = args[1]?.ToString() ?? "";
-            
+
             if (args.Count >= 3 && args[2] == null) return null;
             if (args.Count >= 4 && args[3] == null) return null;
 
@@ -206,7 +206,7 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 2 || args[0] == null || args[1] == null) return null;
             string input = args[0]?.ToString() ?? "";
             string pattern = args[1]?.ToString() ?? "";
-            
+
             if (args.Count >= 3 && args[2] == null) return null;
 
             int pos = 1;

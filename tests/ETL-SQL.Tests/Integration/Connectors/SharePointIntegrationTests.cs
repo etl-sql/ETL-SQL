@@ -7,12 +7,12 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
-using Moq;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Services;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
@@ -34,7 +34,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public async Task SharePointConnector_GetVersionAsync_Success()
         {
             var ctx = MakeContext();
-            
+
             // Start local loopback SharePoint mock server
             await using var server = new LocalSpServer(req =>
             {

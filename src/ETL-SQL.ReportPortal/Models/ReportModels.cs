@@ -20,7 +20,7 @@ public record PublishReportRequest(
 public record UpdateReportRequest(
     string? Name,
     string? Description,
-    int?    FolderId,
+    int? FolderId,
     string? ScriptPath,
     string? Owner = null,
     string? Contact = null,

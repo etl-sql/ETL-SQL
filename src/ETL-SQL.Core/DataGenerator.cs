@@ -68,11 +68,11 @@ namespace ETL_SQL.Core
         private string[] ParseArgs(string argsContent)
         {
             if (string.IsNullOrWhiteSpace(argsContent)) return Array.Empty<string>();
-            
+
             var args = new List<string>();
             bool inQuotes = false;
             int start = 0;
-            
+
             for (int i = 0; i < argsContent.Length; i++)
             {
                 if (argsContent[i] == '\'' || argsContent[i] == '\"') inQuotes = !inQuotes;
@@ -83,7 +83,7 @@ namespace ETL_SQL.Core
                 }
             }
             args.Add(argsContent.Substring(start).Trim());
-            
+
             return args.ToArray();
         }
 
@@ -91,14 +91,14 @@ namespace ETL_SQL.Core
         {
             // SEQUENCE(start, step, unit)
             if (args.Length == 0) return index => index;
-            
+
             string startStr = args[0].Trim('\'', '\"');
             decimal step = args.Length > 1 && decimal.TryParse(args[1], out var s) ? s : 1;
             string unit = args.Length > 2 ? args[2].ToUpperInvariant().Trim('\'', '\"') : "";
 
             if (DateTime.TryParse(startStr, out var startDate))
             {
-                return index => 
+                return index =>
                 {
                     double currentOffset = (double)(index * step);
                     switch (unit)

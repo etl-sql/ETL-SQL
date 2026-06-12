@@ -1,9 +1,9 @@
-using Xunit;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.TUI.UI;
-using ETL_SQL.Data;
 using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.TUI.UI;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {

@@ -193,7 +193,8 @@ namespace ETL_SQL.Core.Parser.Components
                 return new ParallelForStatement(varToken.Value, startExpr, endExpr, stepExpr, forBody, concurrencyLimit)
                 {
                     IsStartImplicit = isImplicit,
-                    Line = startToken.Line, Column = startToken.Column
+                    Line = startToken.Line,
+                    Column = startToken.Column
                 };
             }
 
@@ -294,7 +295,7 @@ namespace ETL_SQL.Core.Parser.Components
             var columns = new List<ExpectedSchemaColumn>();
             while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
             {
-                var colName  = ConsumeIdentifier("Expected column name").Value;
+                var colName = ConsumeIdentifier("Expected column name").Value;
                 string dataType = "VARCHAR";
                 if (_parser.IsIdentifier(_parser.Current))
                 {
@@ -334,11 +335,11 @@ namespace ETL_SQL.Core.Parser.Components
             Match(TokenType.SEMICOLON);
             return new ExpectSchemaStatement
             {
-                Target      = target,
-                Columns     = columns,
+                Target = target,
+                Columns = columns,
                 WarnOnDrift = warnOnDrift,
-                Line        = startToken.Line,
-                Column      = startToken.Column
+                Line = startToken.Line,
+                Column = startToken.Column
             };
         }
     }

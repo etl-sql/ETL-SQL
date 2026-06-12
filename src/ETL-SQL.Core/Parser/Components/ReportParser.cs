@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Core.Parser.Components
 {
@@ -10,13 +10,13 @@ namespace ETL_SQL.Core.Parser.Components
         public ReportParser(IParser parser, StatementParser parent) : base(parser, parent) { }
 
         private bool ReportCheck(TokenType t) => _parser.Current.Type == t;
-        private bool ReportAtEnd()            => _parser.Current.Type == TokenType.EOF;
+        private bool ReportAtEnd() => _parser.Current.Type == TokenType.EOF;
 
         // ── CREATE VISUAL ─────────────────────────────────────────────────────
 
         public Statement ParseCreateVisual(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
         {
-            var name       = ConsumeIdentifier("Expected visual name after CREATE VISUAL").Value;
+            var name = ConsumeIdentifier("Expected visual name after CREATE VISUAL").Value;
             Consume(TokenType.AS, "Expected AS after visual name");
             var visualType = ParseVisualType();
             Consume(TokenType.LPAREN, "Expected '(' after visual type");
@@ -28,16 +28,16 @@ namespace ETL_SQL.Core.Parser.Components
             string? styleName = null;
             Expression? placeholder = null;
             TooltipDefinition? tooltip = null;
-            var mappings        = new List<VisualMapping>();
-            var options         = new List<VisualOption>();
-            var axisOptions     = new List<AxisOptions>();
-            var actions         = new List<VisualAction>();
-            var interactions    = new List<VisualInteraction>();
-            var styles          = new Dictionary<string, string>();
-            var typedSeries     = new List<TypedSeries>();
+            var mappings = new List<VisualMapping>();
+            var options = new List<VisualOption>();
+            var axisOptions = new List<AxisOptions>();
+            var actions = new List<VisualAction>();
+            var interactions = new List<VisualInteraction>();
+            var styles = new Dictionary<string, string>();
+            var typedSeries = new List<TypedSeries>();
             var formattingRules = new List<FormattingRule>();
-            var overlays        = new List<VisualOverlay>();
-            var summaries       = new List<TableSummaryItem>();
+            var overlays = new List<VisualOverlay>();
+            var summaries = new List<TableSummaryItem>();
             string? labelPosition = null;
             double? min = null, max = null;
             int? decimals = null;
@@ -191,36 +191,36 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new CreateVisualStatement
             {
-                Name            = name,
-                VisualType      = visualType,
-                Title           = title,
+                Name = name,
+                VisualType = visualType,
+                Title = title,
                 TitleIsMarkdown = titleMd,
-                Subtitle        = subtitle,
+                Subtitle = subtitle,
                 SubtitleIsMarkdown = subtitleMd,
-                DefaultValue    = defaultValue,
-                LabelPosition   = labelPosition,
-                Min             = min,
-                Max             = max,
-                Decimals        = decimals,
-                Placeholder     = placeholder,
-                Source          = source,
-                Mappings        = mappings,
-                Options         = options,
-                AxisOptions     = axisOptions,
-                Actions         = actions,
-                Interactions    = interactions,
-                TypedSeries     = typedSeries,
+                DefaultValue = defaultValue,
+                LabelPosition = labelPosition,
+                Min = min,
+                Max = max,
+                Decimals = decimals,
+                Placeholder = placeholder,
+                Source = source,
+                Mappings = mappings,
+                Options = options,
+                AxisOptions = axisOptions,
+                Actions = actions,
+                Interactions = interactions,
+                TypedSeries = typedSeries,
                 FormattingRules = formattingRules,
-                Overlays        = overlays,
-                Summaries       = summaries,
-                SummaryOptions  = summaryOptions,
-                Styles          = styles,
-                FetchMode       = fetchMode,
-                StyleName       = styleName,
-                Tooltip         = tooltip,
-                Mode            = mode,
-                Line            = startToken.Line,
-                Column          = startToken.Column
+                Overlays = overlays,
+                Summaries = summaries,
+                SummaryOptions = summaryOptions,
+                Styles = styles,
+                FetchMode = fetchMode,
+                StyleName = styleName,
+                Tooltip = tooltip,
+                Mode = mode,
+                Line = startToken.Line,
+                Column = startToken.Column
             };
         }
 
@@ -244,10 +244,10 @@ namespace ETL_SQL.Core.Parser.Components
 
             var pageMode = ParsePageMode();
             Consume(TokenType.LPAREN, "Expected '(' after page mode");
-            
+
             string? visibility = "ON";
             string? structure = null;
-            var slotMap    = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var pageStyles = new Dictionary<string, string>();
             string? pageStyleName = null;
             Expression? title = null, subtitle = null;
@@ -267,7 +267,7 @@ namespace ETL_SQL.Core.Parser.Components
                     Consume(TokenType.LPAREN, "Expected '(' after MAP");
                     while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
                     {
-                        var slot   = Consume(TokenType.STRING_LITERAL, "Expected slot letter (e.g. 'A')").Value;
+                        var slot = Consume(TokenType.STRING_LITERAL, "Expected slot letter (e.g. 'A')").Value;
                         Consume(TokenType.EQUALS, "Expected '=' in MAP entry");
                         var visual = ConsumeIdentifier("Expected visual name after '='").Value;
                         slotMap[slot] = visual;
@@ -333,22 +333,22 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new CreatePageStatement
             {
-                Name            = name,
-                PageMode        = pageMode,
-                Structure       = structure,
-                SlotMap         = slotMap,
-                Styles          = pageStyles,
-                StyleName       = pageStyleName,
-                Title           = title,
+                Name = name,
+                PageMode = pageMode,
+                Structure = structure,
+                SlotMap = slotMap,
+                Styles = pageStyles,
+                StyleName = pageStyleName,
+                Title = title,
                 TitleIsMarkdown = titleMd,
-                Subtitle        = subtitle,
+                Subtitle = subtitle,
                 SubtitleIsMarkdown = subtitleMd,
-                Tooltip         = tooltip,
-                Visibility      = visibility,
+                Tooltip = tooltip,
+                Visibility = visibility,
                 RefreshIntervalSeconds = refreshSecs,
-                Mode            = mode,
-                Line            = startToken.Line,
-                Column          = startToken.Column
+                Mode = mode,
+                Line = startToken.Line,
+                Column = startToken.Column
             };
         }
 
@@ -360,13 +360,13 @@ namespace ETL_SQL.Core.Parser.Components
             if (!tableName.StartsWith("&"))
                 throw new SyntaxException("CREATE DATASET names must use the &dataset form", startToken.Line, startToken.Column);
 
-            string? refreshInterval    = null;
-            string? ttl                = null;
-            bool    compress           = false;
-            var     encryptionMode     = DatasetEncryptionMode.MachineBound;
+            string? refreshInterval = null;
+            string? ttl = null;
+            bool compress = false;
+            var encryptionMode = DatasetEncryptionMode.MachineBound;
             string? encryptionPassword = null;
-            string? keyFile            = null;
-            var     accessLevel        = ETL_SQL.Core.Data.DatasetAccessLevel.Private;
+            string? keyFile = null;
+            var accessLevel = ETL_SQL.Core.Data.DatasetAccessLevel.Private;
 
             while (!ReportCheck(TokenType.AS) && !ReportAtEnd())
             {
@@ -392,9 +392,9 @@ namespace ETL_SQL.Core.Parser.Components
                     _parser.Advance();
                     encryptionMode = modeVal switch
                     {
-                        "MACHINE"  => DatasetEncryptionMode.MachineBound,
+                        "MACHINE" => DatasetEncryptionMode.MachineBound,
                         "PASSWORD" => DatasetEncryptionMode.Password,
-                        "KEYFILE"  => DatasetEncryptionMode.KeyFile,
+                        "KEYFILE" => DatasetEncryptionMode.KeyFile,
                         "ON" or "TRUE" or "1" => DatasetEncryptionMode.MachineBound,
                         _ => DatasetEncryptionMode.None
                     };
@@ -450,18 +450,18 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new CreateDatasetStatement
             {
-                TempTableName      = tableName,
-                RefreshInterval    = refreshInterval,
-                Ttl                = ttl,
-                Compress           = compress,
-                EncryptionMode     = encryptionMode,
+                TempTableName = tableName,
+                RefreshInterval = refreshInterval,
+                Ttl = ttl,
+                Compress = compress,
+                EncryptionMode = encryptionMode,
                 EncryptionPassword = encryptionPassword,
-                KeyFile            = keyFile,
-                AccessLevel        = accessLevel,
-                SourceQuery        = sourceSelect,
-                Mode               = mode,
-                Line               = startToken.Line,
-                Column             = startToken.Column
+                KeyFile = keyFile,
+                AccessLevel = accessLevel,
+                SourceQuery = sourceSelect,
+                Mode = mode,
+                Line = startToken.Line,
+                Column = startToken.Column
             };
         }
 
@@ -476,9 +476,9 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.TO, "Expected TO after EXPORT DATASET name");
             var targetPath = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
 
-            var     encryptionMode = DatasetEncryptionMode.None;
-            string? password       = null;
-            string? keyFile        = null;
+            var encryptionMode = DatasetEncryptionMode.None;
+            string? password = null;
+            string? keyFile = null;
 
             while (!ReportCheck(TokenType.SEMICOLON) && !ReportAtEnd())
             {
@@ -490,7 +490,7 @@ namespace ETL_SQL.Core.Parser.Components
                     encryptionMode = modeVal switch
                     {
                         "PASSWORD" => DatasetEncryptionMode.Password,
-                        "KEYFILE"  => DatasetEncryptionMode.KeyFile,
+                        "KEYFILE" => DatasetEncryptionMode.KeyFile,
                         _ => throw new SyntaxException(
                             "EXPORT DATASET requires ENCRYPT = PASSWORD or KEYFILE (a transport credential)",
                             _parser.Previous.Line, _parser.Previous.Column)
@@ -518,13 +518,13 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new ExportDatasetStatement
             {
-                DatasetName        = name,
-                TargetPath         = targetPath,
-                EncryptionMode     = encryptionMode,
+                DatasetName = name,
+                TargetPath = targetPath,
+                EncryptionMode = encryptionMode,
                 EncryptionPassword = password,
-                KeyFile            = keyFile,
-                Line               = startToken.Line,
-                Column             = startToken.Column
+                KeyFile = keyFile,
+                Line = startToken.Line,
+                Column = startToken.Column
             };
         }
 
@@ -540,11 +540,11 @@ namespace ETL_SQL.Core.Parser.Components
             if (!name.StartsWith("&"))
                 throw new SyntaxException("PUBLISH DATASET names must use the &dataset form", startToken.Line, startToken.Column);
 
-            string? targetFolder   = null;
-            var     accessLevel    = ETL_SQL.Core.Data.DatasetAccessLevel.Private;
-            var     encryptionMode = DatasetEncryptionMode.None;
-            string? password       = null;
-            string? keyFile        = null;
+            string? targetFolder = null;
+            var accessLevel = ETL_SQL.Core.Data.DatasetAccessLevel.Private;
+            var encryptionMode = DatasetEncryptionMode.None;
+            string? password = null;
+            string? keyFile = null;
 
             while (!ReportCheck(TokenType.SEMICOLON) && !ReportAtEnd())
             {
@@ -572,7 +572,7 @@ namespace ETL_SQL.Core.Parser.Components
                     encryptionMode = modeVal switch
                     {
                         "PASSWORD" => DatasetEncryptionMode.Password,
-                        "KEYFILE"  => DatasetEncryptionMode.KeyFile,
+                        "KEYFILE" => DatasetEncryptionMode.KeyFile,
                         _ => throw new SyntaxException(
                             "PUBLISH DATASET requires ENCRYPT = PASSWORD or KEYFILE (the transport credential the file was exported with)",
                             _parser.Previous.Line, _parser.Previous.Column)
@@ -600,15 +600,15 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new PublishDatasetStatement
             {
-                SourcePath         = sourcePath,
-                DatasetName        = name,
-                TargetFolder       = targetFolder,
-                AccessLevel        = accessLevel,
-                EncryptionMode     = encryptionMode,
+                SourcePath = sourcePath,
+                DatasetName = name,
+                TargetFolder = targetFolder,
+                AccessLevel = accessLevel,
+                EncryptionMode = encryptionMode,
                 EncryptionPassword = password,
-                KeyFile            = keyFile,
-                Line               = startToken.Line,
-                Column             = startToken.Column
+                KeyFile = keyFile,
+                Line = startToken.Line,
+                Column = startToken.Column
             };
         }
 
@@ -624,10 +624,10 @@ namespace ETL_SQL.Core.Parser.Components
             Match(TokenType.SEMICOLON);
             return new CreateStyleStatement
             {
-                Name   = name,
+                Name = name,
                 Styles = styles,
-                Mode   = mode,
-                Line   = startToken.Line,
+                Mode = mode,
+                Line = startToken.Line,
                 Column = startToken.Column
             };
         }
@@ -638,14 +638,14 @@ namespace ETL_SQL.Core.Parser.Components
             string? styleName = null;
             ParseStyleClause(styles, ref styleName);
             Match(TokenType.SEMICOLON);
-            
+
             return new CreateStyleStatement
             {
-                Name   = "GLOBAL",
+                Name = "GLOBAL",
                 Styles = styles,
                 StyleName = styleName,
-                Mode   = ObjectCreationMode.Create,
-                Line   = startToken.Line,
+                Mode = ObjectCreationMode.Create,
+                Line = startToken.Line,
                 Column = startToken.Column
             };
         }
@@ -673,11 +673,11 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new CreateTemplateStatement
             {
-                Name    = name,
+                Name = name,
                 Options = options,
-                Mode    = mode,
-                Line    = startToken.Line,
-                Column  = startToken.Column
+                Mode = mode,
+                Line = startToken.Line,
+                Column = startToken.Column
             };
         }
 
@@ -704,11 +704,11 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new CreateThemeStatement
             {
-                Name       = name,
+                Name = name,
                 Properties = properties,
-                Mode       = mode,
-                Line       = startToken.Line,
-                Column     = startToken.Column
+                Mode = mode,
+                Line = startToken.Line,
+                Column = startToken.Column
             };
         }
 
@@ -720,8 +720,8 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.AS, "Expected AS after container name");
 
             string containerType;
-            if (Match(TokenType.BOX))         containerType = "BOX";
-            else if (Match(TokenType.SCROLL))  containerType = "SCROLL";
+            if (Match(TokenType.BOX)) containerType = "BOX";
+            else if (Match(TokenType.SCROLL)) containerType = "SCROLL";
             else
             {
                 var raw = ConsumeIdentifier("Expected container type after AS").Value.ToUpperInvariant();
@@ -741,7 +741,7 @@ namespace ETL_SQL.Core.Parser.Components
             TooltipDefinition? tooltip = null;
             string? structure = null;
             var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var styles  = new Dictionary<string, string>();
+            var styles = new Dictionary<string, string>();
             bool isCollapsible = containerType == "DRAWER";
             bool isPinnable = true;
             string? visibility = "ON";
@@ -802,24 +802,24 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new CreateContainerStatement
             {
-                Name               = name,
-                ContainerType      = containerType,
-                Structure          = structure,
-                SlotMap            = slotMap,
-                Styles             = styles,
-                StyleName          = containerStyleName,
-                Title              = title,
-                TitleIsMarkdown     = titleMd,
-                Subtitle           = subtitle,
-                SubtitleIsMarkdown  = subtitleMd,
-                Tooltip            = tooltip,
-                IsCollapsible      = isCollapsible,
-                Visibility         = visibility,
-                Icon               = icon,
-                IsPinnable         = isPinnable,
-                Mode               = mode,
-                Line               = startToken.Line,
-                Column             = startToken.Column
+                Name = name,
+                ContainerType = containerType,
+                Structure = structure,
+                SlotMap = slotMap,
+                Styles = styles,
+                StyleName = containerStyleName,
+                Title = title,
+                TitleIsMarkdown = titleMd,
+                Subtitle = subtitle,
+                SubtitleIsMarkdown = subtitleMd,
+                Tooltip = tooltip,
+                IsCollapsible = isCollapsible,
+                Visibility = visibility,
+                Icon = icon,
+                IsPinnable = isPinnable,
+                Mode = mode,
+                Line = startToken.Line,
+                Column = startToken.Column
             };
         }
 
@@ -897,18 +897,18 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.AS, "Expected AS after navigation name");
 
             NavigationType navType;
-            if (Match(TokenType.NAV_TAB))       navType = NavigationType.Tab;
-            else if (Match(TokenType.BUTTON))   navType = NavigationType.Button;
+            if (Match(TokenType.NAV_TAB)) navType = NavigationType.Tab;
+            else if (Match(TokenType.BUTTON)) navType = NavigationType.Button;
             else if (Match(TokenType.LINK_NAV)) navType = NavigationType.Link;
             else
             {
                 var raw = ConsumeIdentifier("Expected TAB, BUTTON, or LINK after AS").Value.ToUpperInvariant();
                 navType = raw switch
                 {
-                    "TAB"    => NavigationType.Tab,
+                    "TAB" => NavigationType.Tab,
                     "BUTTON" => NavigationType.Button,
-                    "LINK"   => NavigationType.Link,
-                    _        => NavigationType.Tab
+                    "LINK" => NavigationType.Link,
+                    _ => NavigationType.Tab
                 };
             }
 
@@ -975,14 +975,14 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new CreateNavigationStatement
             {
-                Name        = name,
-                NavType     = navType,
+                Name = name,
+                NavType = navType,
                 Orientation = orientation,
                 DefaultPage = defaultPage,
-                Pages       = pages,
-                Mode        = mode,
-                Line        = startToken.Line,
-                Column      = startToken.Column
+                Pages = pages,
+                Mode = mode,
+                Line = startToken.Line,
+                Column = startToken.Column
             };
         }
 
@@ -996,12 +996,12 @@ namespace ETL_SQL.Core.Parser.Components
             const string buttonType = "BUTTON";
             Consume(TokenType.LPAREN, "Expected '(' after AS. Put behavior in ACTIONS (ON_CLICK = ...).");
 
-            Expression? title      = null;
+            Expression? title = null;
             TooltipDefinition? tooltip = null;
             string? styleName = null;
             var options = new List<VisualOption>();
             var actions = new List<VisualAction>();
-            var styles  = new Dictionary<string, string>();
+            var styles = new Dictionary<string, string>();
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
@@ -1044,17 +1044,17 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new CreateButtonStatement
             {
-                Name       = name,
+                Name = name,
                 ButtonType = buttonType,
-                Title      = title,
-                Tooltip    = tooltip,
-                Options    = options,
-                Actions    = actions,
-                Styles     = styles,
-                StyleName  = styleName,
-                Mode       = mode,
-                Line       = startToken.Line,
-                Column     = startToken.Column
+                Title = title,
+                Tooltip = tooltip,
+                Options = options,
+                Actions = actions,
+                Styles = styles,
+                StyleName = styleName,
+                Mode = mode,
+                Line = startToken.Line,
+                Column = startToken.Column
             };
         }
 
@@ -1067,11 +1067,11 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.LPAREN, $"Expected '(' after {type} name");
 
             VisualSourceExpression? source = null;
-            var mappings    = new List<VisualMapping>();
-            var options     = new List<VisualOption>();
+            var mappings = new List<VisualMapping>();
+            var options = new List<VisualOption>();
             var axisOptions = new List<AxisOptions>();
-            var actions     = new List<VisualAction>();
-            var styles      = new Dictionary<string, string>();
+            var actions = new List<VisualAction>();
+            var styles = new Dictionary<string, string>();
             string? styleName = null;
             Expression? title = null, subtitle = null;
             bool titleMd = false, subtitleMd = false;
@@ -1132,22 +1132,22 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new AlterReportObjectStatement
             {
-                ObjectType         = type,
-                Name               = name,
-                Source             = source,
-                Mappings           = mappings.Count > 0 ? mappings : null,
-                Options            = options.Count > 0 ? options : null,
-                AxisOptions        = axisOptions.Count > 0 ? axisOptions : null,
-                Actions            = actions.Count > 0 ? actions : null,
-                Styles             = styles.Count > 0 ? styles : null,
-                StyleName          = styleName,
-                Title              = title,
-                TitleIsMarkdown     = titleMd,
-                Subtitle           = subtitle,
-                SubtitleIsMarkdown  = subtitleMd,
-                Tooltip            = tooltip,
-                Line               = startToken.Line,
-                Column             = startToken.Column
+                ObjectType = type,
+                Name = name,
+                Source = source,
+                Mappings = mappings.Count > 0 ? mappings : null,
+                Options = options.Count > 0 ? options : null,
+                AxisOptions = axisOptions.Count > 0 ? axisOptions : null,
+                Actions = actions.Count > 0 ? actions : null,
+                Styles = styles.Count > 0 ? styles : null,
+                StyleName = styleName,
+                Title = title,
+                TitleIsMarkdown = titleMd,
+                Subtitle = subtitle,
+                SubtitleIsMarkdown = subtitleMd,
+                Tooltip = tooltip,
+                Line = startToken.Line,
+                Column = startToken.Column
             };
         }
 
@@ -1155,46 +1155,46 @@ namespace ETL_SQL.Core.Parser.Components
 
         private VisualType ParseVisualType()
         {
-            if (Match(TokenType.BAR))          return VisualType.Bar;
-            if (Match(TokenType.LINE))         return VisualType.Line;
-            if (Match(TokenType.SCATTER))      return VisualType.Scatter;
-            if (Match(TokenType.PIE))          return VisualType.Pie;
+            if (Match(TokenType.BAR)) return VisualType.Bar;
+            if (Match(TokenType.LINE)) return VisualType.Line;
+            if (Match(TokenType.SCATTER)) return VisualType.Scatter;
+            if (Match(TokenType.PIE)) return VisualType.Pie;
             if (Match(TokenType.TABLE_VISUAL)) return VisualType.Table;
-            if (Match(TokenType.TABLE))        return VisualType.Table;
-            if (Match(TokenType.CARD))         return VisualType.Card;
-            if (Match(TokenType.SLICER))       return VisualType.Slicer;
-            if (Match(TokenType.HEATMAP))      return VisualType.HeatMap;
-            if (Match(TokenType.DONUT))        return VisualType.Donut;
-            if (Match(TokenType.HBAR))         return VisualType.HorizontalBar;
-            if (Match(TokenType.BOXPLOT))      return VisualType.BoxPlot;
-            if (Match(TokenType.TREEMAP))      return VisualType.Treemap;
-            if (Match(TokenType.TEXT))         return VisualType.Text;
-            if (Match(TokenType.COMBO))        return VisualType.Combo;
-            if (Match(TokenType.DATEPICKER))    return VisualType.DatePicker;
+            if (Match(TokenType.TABLE)) return VisualType.Table;
+            if (Match(TokenType.CARD)) return VisualType.Card;
+            if (Match(TokenType.SLICER)) return VisualType.Slicer;
+            if (Match(TokenType.HEATMAP)) return VisualType.HeatMap;
+            if (Match(TokenType.DONUT)) return VisualType.Donut;
+            if (Match(TokenType.HBAR)) return VisualType.HorizontalBar;
+            if (Match(TokenType.BOXPLOT)) return VisualType.BoxPlot;
+            if (Match(TokenType.TREEMAP)) return VisualType.Treemap;
+            if (Match(TokenType.TEXT)) return VisualType.Text;
+            if (Match(TokenType.COMBO)) return VisualType.Combo;
+            if (Match(TokenType.DATEPICKER)) return VisualType.DatePicker;
             if (Match(TokenType.RELDATEPICKER)) return VisualType.RelDatePicker;
-            if (Match(TokenType.SLIDER))       return VisualType.Slider;
-            if (Match(TokenType.MULTISELECT))  return VisualType.MultiSelect;
-            if (Match(TokenType.SEARCH))       return VisualType.Search;
-            if (Match(TokenType.GAUGE))        return VisualType.Gauge;
-            if (Match(TokenType.FUNNEL))       return VisualType.Funnel;
-            if (Match(TokenType.WATERFALL))    return VisualType.Waterfall;
-            if (Match(TokenType.IMAGE))        return VisualType.Image;
-            if (Match(TokenType.BUBBLE))       return VisualType.Bubble;
-            if (Match(TokenType.RADAR))        return VisualType.Radar;
-            if (Match(TokenType.CANDLESTICK))  return VisualType.Candlestick;
-            if (Match(TokenType.GANTT))        return VisualType.Gantt;
-            if (Match(TokenType.SANKEY))       return VisualType.Sankey;
-            if (Match(TokenType.SUNBURST))     return VisualType.Sunburst;
-            if (Match(TokenType.NETWORK))      return VisualType.Network;
-            if (Match(TokenType.TRELLIS))      return VisualType.Trellis;
-            if (Match(TokenType.MATRIX))       return VisualType.Matrix;
-            if (Match(TokenType.CHECKBOX))     return VisualType.Checkbox;
-            if (Match(TokenType.TEXTBOX))      return VisualType.Textbox;
-            if (Match(TokenType.NUMBERBOX))    return VisualType.Numberbox;
+            if (Match(TokenType.SLIDER)) return VisualType.Slider;
+            if (Match(TokenType.MULTISELECT)) return VisualType.MultiSelect;
+            if (Match(TokenType.SEARCH)) return VisualType.Search;
+            if (Match(TokenType.GAUGE)) return VisualType.Gauge;
+            if (Match(TokenType.FUNNEL)) return VisualType.Funnel;
+            if (Match(TokenType.WATERFALL)) return VisualType.Waterfall;
+            if (Match(TokenType.IMAGE)) return VisualType.Image;
+            if (Match(TokenType.BUBBLE)) return VisualType.Bubble;
+            if (Match(TokenType.RADAR)) return VisualType.Radar;
+            if (Match(TokenType.CANDLESTICK)) return VisualType.Candlestick;
+            if (Match(TokenType.GANTT)) return VisualType.Gantt;
+            if (Match(TokenType.SANKEY)) return VisualType.Sankey;
+            if (Match(TokenType.SUNBURST)) return VisualType.Sunburst;
+            if (Match(TokenType.NETWORK)) return VisualType.Network;
+            if (Match(TokenType.TRELLIS)) return VisualType.Trellis;
+            if (Match(TokenType.MATRIX)) return VisualType.Matrix;
+            if (Match(TokenType.CHECKBOX)) return VisualType.Checkbox;
+            if (Match(TokenType.TEXTBOX)) return VisualType.Textbox;
+            if (Match(TokenType.NUMBERBOX)) return VisualType.Numberbox;
 
             // MAP token already exists for container MAP() clauses; match it here only when
             // ParseVisualType() is called (i.e. after AS in CREATE VISUAL ... AS MAP).
-            if (Match(TokenType.MAP))          return VisualType.Map;
+            if (Match(TokenType.MAP)) return VisualType.Map;
 
             if (_parser.Current.Type == TokenType.IDENTIFIER)
             {
@@ -1202,41 +1202,41 @@ namespace ETL_SQL.Core.Parser.Components
                 Advance();
                 return val switch
                 {
-                    "BAR"          => VisualType.Bar,
-                    "LINE"         => VisualType.Line,
-                    "SCATTER"      => VisualType.Scatter,
-                    "PIE"          => VisualType.Pie,
-                    "TABLE"        => VisualType.Table,
-                    "CARD"         => VisualType.Card,
-                    "SLICER"       => VisualType.Slicer,
-                    "HEATMAP"      => VisualType.HeatMap,
-                    "DONUT"        => VisualType.Donut,
-                    "HBAR"         => VisualType.HorizontalBar,
-                    "BOXPLOT"      => VisualType.BoxPlot,
-                    "TREEMAP"      => VisualType.Treemap,
-                    "TEXT"         => VisualType.Text,
-                    "COMBO"        => VisualType.Combo,
-                    "DATEPICKER"    => VisualType.DatePicker,
+                    "BAR" => VisualType.Bar,
+                    "LINE" => VisualType.Line,
+                    "SCATTER" => VisualType.Scatter,
+                    "PIE" => VisualType.Pie,
+                    "TABLE" => VisualType.Table,
+                    "CARD" => VisualType.Card,
+                    "SLICER" => VisualType.Slicer,
+                    "HEATMAP" => VisualType.HeatMap,
+                    "DONUT" => VisualType.Donut,
+                    "HBAR" => VisualType.HorizontalBar,
+                    "BOXPLOT" => VisualType.BoxPlot,
+                    "TREEMAP" => VisualType.Treemap,
+                    "TEXT" => VisualType.Text,
+                    "COMBO" => VisualType.Combo,
+                    "DATEPICKER" => VisualType.DatePicker,
                     "RELDATEPICKER" => VisualType.RelDatePicker,
-                    "SLIDER"       => VisualType.Slider,
-                    "MULTISELECT"  => VisualType.MultiSelect,
-                    "SEARCH"       => VisualType.Search,
-                    "GAUGE"        => VisualType.Gauge,
-                    "FUNNEL"       => VisualType.Funnel,
-                    "WATERFALL"    => VisualType.Waterfall,
-                    "BUBBLE"       => VisualType.Bubble,
-                    "RADAR"        => VisualType.Radar,
-                    "CANDLESTICK"  => VisualType.Candlestick,
-                    "MAP"          => VisualType.Map,
-                    "GANTT"        => VisualType.Gantt,
-                    "SANKEY"       => VisualType.Sankey,
-                    "SUNBURST"     => VisualType.Sunburst,
-                    "NETWORK"      => VisualType.Network,
-                    "TRELLIS"      => VisualType.Trellis,
-                    "MATRIX"       => VisualType.Matrix,
-                    "CHECKBOX"     => VisualType.Checkbox,
-                    "TEXTBOX"      => VisualType.Textbox,
-                    "NUMBERBOX"    => VisualType.Numberbox,
+                    "SLIDER" => VisualType.Slider,
+                    "MULTISELECT" => VisualType.MultiSelect,
+                    "SEARCH" => VisualType.Search,
+                    "GAUGE" => VisualType.Gauge,
+                    "FUNNEL" => VisualType.Funnel,
+                    "WATERFALL" => VisualType.Waterfall,
+                    "BUBBLE" => VisualType.Bubble,
+                    "RADAR" => VisualType.Radar,
+                    "CANDLESTICK" => VisualType.Candlestick,
+                    "MAP" => VisualType.Map,
+                    "GANTT" => VisualType.Gantt,
+                    "SANKEY" => VisualType.Sankey,
+                    "SUNBURST" => VisualType.Sunburst,
+                    "NETWORK" => VisualType.Network,
+                    "TRELLIS" => VisualType.Trellis,
+                    "MATRIX" => VisualType.Matrix,
+                    "CHECKBOX" => VisualType.Checkbox,
+                    "TEXTBOX" => VisualType.Textbox,
+                    "NUMBERBOX" => VisualType.Numberbox,
                     _ => throw new SyntaxException(
                              $"Unknown visual type '{val}'.",
                              _parser.Previous.Line, _parser.Previous.Column)
@@ -1338,7 +1338,7 @@ namespace ETL_SQL.Core.Parser.Components
                 var val = _parser.Previous.Value;
                 if (val.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
                 {
-                    var subLexer  = new Lexer(val);
+                    var subLexer = new Lexer(val);
                     var subParser = new Parser(subLexer.Tokenize(), val);
                     var subScript = subParser.Parse();
                     if (subScript.Statements.Count > 0 && subScript.Statements[0] is SelectStatement sel)
@@ -1438,11 +1438,11 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new VisualMapping
             {
-                Role            = "SPARKLINE",
-                Column          = "$sparkline",
+                Role = "SPARKLINE",
+                Column = "$sparkline",
                 SparklineColumns = cols,
-                SparklineType   = sparklineType,
-                DisplayName     = displayName
+                SparklineType = sparklineType,
+                DisplayName = displayName
             };
         }
 
@@ -1555,17 +1555,17 @@ namespace ETL_SQL.Core.Parser.Components
                     }
                     result.Add(new VisualMapping
                     {
-                        Role          = name.ToUpperInvariant(),
-                        Column        = name,
-                        Format        = format,
-                        Align         = align,
-                        DisplayName   = displayName,
-                        DataBar       = dataBar,
-                        DataBarColor  = dataBarColor,
+                        Role = name.ToUpperInvariant(),
+                        Column = name,
+                        Format = format,
+                        Align = align,
+                        DisplayName = displayName,
+                        DataBar = dataBar,
+                        DataBarColor = dataBarColor,
                         ColorScaleFrom = colorScaleFrom,
-                        ColorScaleTo  = colorScaleTo,
-                        CellRenderer  = cellRenderer,
-                        ImageWidth    = imageWidth,
+                        ColorScaleTo = colorScaleTo,
+                        CellRenderer = cellRenderer,
+                        ImageWidth = imageWidth,
                         HyperlinkLabel = hyperlinkLabel
                     });
                 }
@@ -1722,24 +1722,24 @@ namespace ETL_SQL.Core.Parser.Components
         {
             var t = _parser.Current.Type;
             if (_parser.IsIdentifier(_parser.Current) ||
-                t == TokenType.STRING_LITERAL || t == TokenType.NUMBER  ||
-                t == TokenType.TRUE           || t == TokenType.FALSE   ||
-                t == TokenType.ON             || t == TokenType.OFF     ||
-                t == TokenType.FILTER         ||
-                t == TokenType.TOP            || t == TokenType.BOTTOM  ||
-                t == TokenType.LEFT           || t == TokenType.RIGHT   ||
-                t == TokenType.GRID           || t == TokenType.DATA_LABELS ||
-                t == TokenType.NONE           || t == TokenType.HEADER  || t == TokenType.FOOTER ||
-                t == TokenType.ALL            ||
-                t == TokenType.CENTER         || t == TokenType.FONT_SIZE ||
-                t == TokenType.INSIDE         || t == TokenType.INSIDE_TOP || t == TokenType.INSIDE_BOTTOM ||
-                t == TokenType.INSIDE_LEFT    || t == TokenType.INSIDE_RIGHT ||
+                t == TokenType.STRING_LITERAL || t == TokenType.NUMBER ||
+                t == TokenType.TRUE || t == TokenType.FALSE ||
+                t == TokenType.ON || t == TokenType.OFF ||
+                t == TokenType.FILTER ||
+                t == TokenType.TOP || t == TokenType.BOTTOM ||
+                t == TokenType.LEFT || t == TokenType.RIGHT ||
+                t == TokenType.GRID || t == TokenType.DATA_LABELS ||
+                t == TokenType.NONE || t == TokenType.HEADER || t == TokenType.FOOTER ||
+                t == TokenType.ALL ||
+                t == TokenType.CENTER || t == TokenType.FONT_SIZE ||
+                t == TokenType.INSIDE || t == TokenType.INSIDE_TOP || t == TokenType.INSIDE_BOTTOM ||
+                t == TokenType.INSIDE_LEFT || t == TokenType.INSIDE_RIGHT ||
                 t == TokenType.INSIDE_TOP_LEFT || t == TokenType.INSIDE_TOP_RIGHT ||
                 t == TokenType.INSIDE_BOTTOM_LEFT || t == TokenType.INSIDE_BOTTOM_RIGHT ||
                 t == TokenType.DATA_LABELS_POSITION || t == TokenType.FONT_FAMILY ||
-                t == TokenType.FONT_WEIGHT    || t == TokenType.GAUGE_STYLE ||
+                t == TokenType.FONT_WEIGHT || t == TokenType.GAUGE_STYLE ||
                 t == TokenType.SHOW_NO_DATA_PLACEHOLDER ||
-                t == TokenType.VISIBLE        ||
+                t == TokenType.VISIBLE ||
                 _overlayKeywordTokens.Contains(t))
             {
                 var value = _parser.Current.Value;
@@ -1754,9 +1754,9 @@ namespace ETL_SQL.Core.Parser.Components
         private static string NormalizeBoolOptionValue(string val) =>
             val.ToUpperInvariant() switch
             {
-                "TRUE" or "ON" or "1"   => "ON",
+                "TRUE" or "ON" or "1" => "ON",
                 "FALSE" or "OFF" or "0" => "OFF",
-                _                       => val
+                _ => val
             };
 
         private string ParseOnOffValue()
@@ -1786,7 +1786,7 @@ namespace ETL_SQL.Core.Parser.Components
 
         private Token ConsumeIdentifierOrString(string message)
         {
-            if (ReportCheck(TokenType.IDENTIFIER) || ReportCheck(TokenType.STRING_LITERAL) || 
+            if (ReportCheck(TokenType.IDENTIFIER) || ReportCheck(TokenType.STRING_LITERAL) ||
                 ReportCheck(TokenType.VARIABLE) || ReportCheck(TokenType.VALUE) ||
                 ReportCheck(TokenType.ON) || ReportCheck(TokenType.OFF)) return _parser.Advance();
             throw new SyntaxException(message, _parser.Current.Line, _parser.Current.Column);
@@ -1798,7 +1798,7 @@ namespace ETL_SQL.Core.Parser.Components
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
                 string trigger;
-                if (Match(TokenType.ON_CLICK))       trigger = "ON_CLICK";
+                if (Match(TokenType.ON_CLICK)) trigger = "ON_CLICK";
                 else if (Match(TokenType.ON_CHANGE)) trigger = "ON_CHANGE";
                 else throw new SyntaxException(
                     $"Expected ON_CLICK or ON_CHANGE in ACTIONS but got '{_parser.Current.Value}'",
@@ -1833,166 +1833,166 @@ namespace ETL_SQL.Core.Parser.Components
             VisualAction? action = null;
             if (Match(TokenType.DRILL_DOWN))
             {
-                    Consume(TokenType.LPAREN, "Expected '(' after DRILL_DOWN");
-                    Advance();
-                    Consume(TokenType.EQUALS, "Expected '=' after Target");
-                    var target = ConsumeIdentifier("Expected target visual name").Value;
-                    Match(TokenType.COMMA);
-                    Advance();
-                    Consume(TokenType.EQUALS, "Expected '=' after Key");
-                    string[] keys;
-                    if (Match(TokenType.LPAREN))
-                    {
-                        var keyList = new List<string>();
+                Consume(TokenType.LPAREN, "Expected '(' after DRILL_DOWN");
+                Advance();
+                Consume(TokenType.EQUALS, "Expected '=' after Target");
+                var target = ConsumeIdentifier("Expected target visual name").Value;
+                Match(TokenType.COMMA);
+                Advance();
+                Consume(TokenType.EQUALS, "Expected '=' after Key");
+                string[] keys;
+                if (Match(TokenType.LPAREN))
+                {
+                    var keyList = new List<string>();
+                    keyList.Add(ConsumeIdentifier("Expected key column name").Value);
+                    while (Match(TokenType.COMMA))
                         keyList.Add(ConsumeIdentifier("Expected key column name").Value);
-                        while (Match(TokenType.COMMA))
-                            keyList.Add(ConsumeIdentifier("Expected key column name").Value);
-                        Consume(TokenType.RPAREN, "Expected ')' to close key list");
-                        keys = keyList.ToArray();
-                    }
-                    else
-                    {
-                        keys = new[] { ConsumeIdentifier("Expected key column name").Value };
-                    }
-                    Consume(TokenType.RPAREN, "Expected ')' to close DRILL_DOWN");
-                    action = new DrillDownAction { Trigger = trigger, TargetVisual = target, KeyColumns = keys };
+                    Consume(TokenType.RPAREN, "Expected ')' to close key list");
+                    keys = keyList.ToArray();
                 }
-                else if (Match(TokenType.DRILL_IN))
+                else
                 {
-                    Consume(TokenType.LPAREN, "Expected '(' after DRILL_IN");
-                    Advance(); // skip "HIERARCHY" identifier
-                    Consume(TokenType.EQUALS, "Expected '=' after HIERARCHY");
-                    Consume(TokenType.LPAREN, "Expected '(' to open hierarchy list");
-                    var hierarchy = new List<string>();
+                    keys = new[] { ConsumeIdentifier("Expected key column name").Value };
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close DRILL_DOWN");
+                action = new DrillDownAction { Trigger = trigger, TargetVisual = target, KeyColumns = keys };
+            }
+            else if (Match(TokenType.DRILL_IN))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after DRILL_IN");
+                Advance(); // skip "HIERARCHY" identifier
+                Consume(TokenType.EQUALS, "Expected '=' after HIERARCHY");
+                Consume(TokenType.LPAREN, "Expected '(' to open hierarchy list");
+                var hierarchy = new List<string>();
+                hierarchy.Add(ConsumeIdentifier("Expected column name").Value);
+                while (Match(TokenType.COMMA))
                     hierarchy.Add(ConsumeIdentifier("Expected column name").Value);
-                    while (Match(TokenType.COMMA))
-                        hierarchy.Add(ConsumeIdentifier("Expected column name").Value);
-                    Consume(TokenType.RPAREN, "Expected ')' to close hierarchy list");
-                    Consume(TokenType.RPAREN, "Expected ')' to close DRILL_IN");
-                    action = new DrillInAction { Trigger = trigger, Hierarchy = hierarchy.ToArray() };
-                }
-                else if (Match(TokenType.SET_PARAMETER))
+                Consume(TokenType.RPAREN, "Expected ')' to close hierarchy list");
+                Consume(TokenType.RPAREN, "Expected ')' to close DRILL_IN");
+                action = new DrillInAction { Trigger = trigger, Hierarchy = hierarchy.ToArray() };
+            }
+            else if (Match(TokenType.SET_PARAMETER))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after SET_PARAMETER");
+                var paramName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
+                if (!paramName.StartsWith("@")) paramName = "@" + paramName;
+                Match(TokenType.COMMA);
+                var valueExpr = ConsumeValueExpr("Expected value expression").Value;
+                Consume(TokenType.RPAREN, "Expected ')' to close SET_PARAMETER");
+                action = new SetParameterAction { Trigger = trigger, ParameterName = paramName, ValueExpression = valueExpr };
+            }
+            else if (Match(TokenType.RUN_SCRIPT))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after RUN_SCRIPT");
+                var scriptPath = ConsumeReportOptionValue();
+                var actionParams = new Dictionary<string, string>();
+                while (Match(TokenType.COMMA))
                 {
-                    Consume(TokenType.LPAREN, "Expected '(' after SET_PARAMETER");
-                    var paramName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
-                    if (!paramName.StartsWith("@")) paramName = "@" + paramName;
-                    Match(TokenType.COMMA);
-                    var valueExpr = ConsumeValueExpr("Expected value expression").Value;
-                    Consume(TokenType.RPAREN, "Expected ')' to close SET_PARAMETER");
-                    action = new SetParameterAction { Trigger = trigger, ParameterName = paramName, ValueExpression = valueExpr };
+                    var pName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
+                    if (!pName.StartsWith("@")) pName = "@" + pName;
+                    Consume(TokenType.EQUALS, "Expected '=' after parameter name");
+                    var pVal = ConsumeValueExpr("Expected column name or expression").Value;
+                    actionParams[pName] = pVal;
                 }
-                else if (Match(TokenType.RUN_SCRIPT))
+                Consume(TokenType.RPAREN, "Expected ')' to close RUN_SCRIPT");
+                action = new RunScriptAction { Trigger = trigger, ScriptPath = scriptPath, Parameters = actionParams };
+            }
+            else if (Match(TokenType.DRILL_REPORT))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after DRILL_REPORT");
+                Advance(); // skip "FILE" identifier
+                Consume(TokenType.EQUALS, "Expected '=' after FILE");
+                var targetReport = ConsumeReportOptionValue();
+                var actionParams = new Dictionary<string, string>();
+                if (Match(TokenType.COMMA))
                 {
-                    Consume(TokenType.LPAREN, "Expected '(' after RUN_SCRIPT");
-                    var scriptPath = ConsumeReportOptionValue();
-                    var actionParams = new Dictionary<string, string>();
-                    while (Match(TokenType.COMMA))
+                    Advance(); // skip "PARAMETERS"
+                    Consume(TokenType.LPAREN, "Expected '(' to open parameter list");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
                     {
                         var pName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
                         if (!pName.StartsWith("@")) pName = "@" + pName;
                         Consume(TokenType.EQUALS, "Expected '=' after parameter name");
                         var pVal = ConsumeValueExpr("Expected column name or expression").Value;
                         actionParams[pName] = pVal;
+                        Match(TokenType.COMMA);
                     }
-                    Consume(TokenType.RPAREN, "Expected ')' to close RUN_SCRIPT");
-                    action = new RunScriptAction { Trigger = trigger, ScriptPath = scriptPath, Parameters = actionParams };
+                    Consume(TokenType.RPAREN, "Expected ')' to close parameter list");
                 }
-                else if (Match(TokenType.DRILL_REPORT))
+                Consume(TokenType.RPAREN, "Expected ')' to close DRILL_REPORT");
+                action = new DrillReportAction { Trigger = trigger, TargetReport = targetReport, Parameters = actionParams };
+            }
+            else if (Match(TokenType.CLEAR_FILTERS))
+            {
+                action = new ClearFiltersAction { Trigger = trigger };
+            }
+            else if (Match(TokenType.APPLY_PARAMETERS))
+            {
+                action = new ApplyParametersAction { Trigger = trigger };
+            }
+            else if (TryParseReportCommandAction(trigger, out var commandAction))
+            {
+                action = commandAction;
+            }
+            else if (Match(TokenType.NAVIGATE_PAGE))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after NAVIGATE_PAGE");
+                var targetPage = ConsumeIdentifierOrString("Expected target page name").Value;
+                Consume(TokenType.RPAREN, "Expected ')' to close NAVIGATE_PAGE");
+                action = new NavigatePageAction { Trigger = trigger, TargetPage = targetPage };
+            }
+            else if (Match(TokenType.REFRESH_VISUALS))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after REFRESH_VISUALS");
+                var targets = new List<string>();
+                do
                 {
-                    Consume(TokenType.LPAREN, "Expected '(' after DRILL_REPORT");
-                    Advance(); // skip "FILE" identifier
-                    Consume(TokenType.EQUALS, "Expected '=' after FILE");
-                    var targetReport = ConsumeReportOptionValue();
-                    var actionParams = new Dictionary<string, string>();
-                    if (Match(TokenType.COMMA))
-                    {
-                        Advance(); // skip "PARAMETERS"
-                        Consume(TokenType.LPAREN, "Expected '(' to open parameter list");
-                        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
-                        {
-                            var pName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
-                            if (!pName.StartsWith("@")) pName = "@" + pName;
-                            Consume(TokenType.EQUALS, "Expected '=' after parameter name");
-                            var pVal = ConsumeValueExpr("Expected column name or expression").Value;
-                            actionParams[pName] = pVal;
-                            Match(TokenType.COMMA);
-                        }
-                        Consume(TokenType.RPAREN, "Expected ')' to close parameter list");
-                    }
-                    Consume(TokenType.RPAREN, "Expected ')' to close DRILL_REPORT");
-                    action = new DrillReportAction { Trigger = trigger, TargetReport = targetReport, Parameters = actionParams };
+                    targets.Add(ConsumeIdentifierOrString("Expected visual name").Value);
                 }
-                else if (Match(TokenType.CLEAR_FILTERS))
+                while (Match(TokenType.COMMA));
+                Consume(TokenType.RPAREN, "Expected ')' to close REFRESH_VISUALS");
+                action = new RefreshVisualsAction { Trigger = trigger, Targets = targets };
+            }
+            else if (Match(TokenType.SET_UI_STATE))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after SET_UI_STATE");
+                var targets = new List<string>();
+                if (Match(TokenType.LPAREN))
                 {
-                    action = new ClearFiltersAction { Trigger = trigger };
-                }
-                else if (Match(TokenType.APPLY_PARAMETERS))
-                {
-                    action = new ApplyParametersAction { Trigger = trigger };
-                }
-                else if (TryParseReportCommandAction(trigger, out var commandAction))
-                {
-                    action = commandAction;
-                }
-                else if (Match(TokenType.NAVIGATE_PAGE))
-                {
-                    Consume(TokenType.LPAREN, "Expected '(' after NAVIGATE_PAGE");
-                    var targetPage = ConsumeIdentifierOrString("Expected target page name").Value;
-                    Consume(TokenType.RPAREN, "Expected ')' to close NAVIGATE_PAGE");
-                    action = new NavigatePageAction { Trigger = trigger, TargetPage = targetPage };
-                }
-                else if (Match(TokenType.REFRESH_VISUALS))
-                {
-                    Consume(TokenType.LPAREN, "Expected '(' after REFRESH_VISUALS");
-                    var targets = new List<string>();
-                    do
-                    {
-                        targets.Add(ConsumeIdentifierOrString("Expected visual name").Value);
-                    }
-                    while (Match(TokenType.COMMA));
-                    Consume(TokenType.RPAREN, "Expected ')' to close REFRESH_VISUALS");
-                    action = new RefreshVisualsAction { Trigger = trigger, Targets = targets };
-                }
-                else if (Match(TokenType.SET_UI_STATE))
-                {
-                    Consume(TokenType.LPAREN, "Expected '(' after SET_UI_STATE");
-                    var targets = new List<string>();
-                    if (Match(TokenType.LPAREN))
-                    {
-                        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
-                        {
-                            targets.Add(ConsumeIdentifierOrString("Expected target name or TAG:name").Value);
-                            Match(TokenType.COMMA);
-                        }
-                        Consume(TokenType.RPAREN, "Expected ')' to close target list");
-                    }
-                    else
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
                     {
                         targets.Add(ConsumeIdentifierOrString("Expected target name or TAG:name").Value);
+                        Match(TokenType.COMMA);
                     }
-
-                    Consume(TokenType.COMMA, "Expected ',' after targets");
-                    var key = ConsumeIdentifierOrString("Expected state key (e.g. VISIBLE)").Value;
-                    Consume(TokenType.COMMA, "Expected ',' after key");
-                    var val = ConsumeIdentifierOrString("Expected state value (e.g. ON)").Value;
-                    Consume(TokenType.RPAREN, "Expected ')' to close SET_UI_STATE");
-
-                    action = new SetUiStateAction
-                    {
-                        Trigger = trigger,
-                        Targets = targets,
-                        Key = key,
-                        Value = val
-                    };
+                    Consume(TokenType.RPAREN, "Expected ')' to close target list");
                 }
                 else
                 {
-                    throw new SyntaxException(
-                        $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, CLEAR_FILTERS, APPLY_PARAMETERS, BACK, REFRESH_REPORT, REFRESH_VISUALS, EXPORT_CSV, EXPORT_EXCEL, EXPORT_PDF, NAVIGATE_PAGE, or SET_UI_STATE after {trigger} =",
-                        _parser.Current.Line, _parser.Current.Column);
+                    targets.Add(ConsumeIdentifierOrString("Expected target name or TAG:name").Value);
                 }
 
-                return action;
+                Consume(TokenType.COMMA, "Expected ',' after targets");
+                var key = ConsumeIdentifierOrString("Expected state key (e.g. VISIBLE)").Value;
+                Consume(TokenType.COMMA, "Expected ',' after key");
+                var val = ConsumeIdentifierOrString("Expected state value (e.g. ON)").Value;
+                Consume(TokenType.RPAREN, "Expected ')' to close SET_UI_STATE");
+
+                action = new SetUiStateAction
+                {
+                    Trigger = trigger,
+                    Targets = targets,
+                    Key = key,
+                    Value = val
+                };
+            }
+            else
+            {
+                throw new SyntaxException(
+                    $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, CLEAR_FILTERS, APPLY_PARAMETERS, BACK, REFRESH_REPORT, REFRESH_VISUALS, EXPORT_CSV, EXPORT_EXCEL, EXPORT_PDF, NAVIGATE_PAGE, or SET_UI_STATE after {trigger} =",
+                    _parser.Current.Line, _parser.Current.Column);
+            }
+
+            return action;
         }
 
         private bool TryParseReportCommandAction(string trigger, out ReportCommandAction? action)
@@ -2024,7 +2024,7 @@ namespace ETL_SQL.Core.Parser.Components
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
                 string seriesType;
-                if (Match(TokenType.BAR))       seriesType = "bar";
+                if (Match(TokenType.BAR)) seriesType = "bar";
                 else if (Match(TokenType.LINE)) seriesType = "line";
                 else
                 {
@@ -2066,7 +2066,7 @@ namespace ETL_SQL.Core.Parser.Components
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
                 OverlayType overlayType;
-                double?     parameter = null;
+                double? parameter = null;
 
                 if (Match(TokenType.GOAL))
                 {
@@ -2076,7 +2076,7 @@ namespace ETL_SQL.Core.Parser.Components
                         System.Globalization.CultureInfo.InvariantCulture);
                     Consume(TokenType.RPAREN, "Expected ')' after GOAL value");
                 }
-                else if (Match(TokenType.AVERAGE))     { overlayType = OverlayType.Average; }
+                else if (Match(TokenType.AVERAGE)) { overlayType = OverlayType.Average; }
                 else if (Match(TokenType.MOVING_AVG))
                 {
                     overlayType = OverlayType.MovingAvg;
@@ -2085,10 +2085,10 @@ namespace ETL_SQL.Core.Parser.Components
                         System.Globalization.CultureInfo.InvariantCulture);
                     Consume(TokenType.RPAREN, "Expected ')' after MOVING_AVG window");
                 }
-                else if (Match(TokenType.LINEAR))      { overlayType = OverlayType.Linear; }
+                else if (Match(TokenType.LINEAR)) { overlayType = OverlayType.Linear; }
                 else if (Match(TokenType.EXPONENTIAL)) { overlayType = OverlayType.Exponential; }
                 else if (Match(TokenType.LOGARITHMIC)) { overlayType = OverlayType.Logarithmic; }
-                else if (Match(TokenType.POWER))       { overlayType = OverlayType.Power; }
+                else if (Match(TokenType.POWER)) { overlayType = OverlayType.Power; }
                 else if (Match(TokenType.POLYNOMIAL))
                 {
                     overlayType = OverlayType.Polynomial;
@@ -2103,7 +2103,7 @@ namespace ETL_SQL.Core.Parser.Components
 
                 Consume(TokenType.AS, "Expected AS after overlay type");
                 OverlayLineStyle lineStyle;
-                if      (Match(TokenType.SOLID))  lineStyle = OverlayLineStyle.Solid;
+                if (Match(TokenType.SOLID)) lineStyle = OverlayLineStyle.Solid;
                 else if (Match(TokenType.DASHED)) lineStyle = OverlayLineStyle.Dashed;
                 else if (Match(TokenType.DOTTED)) lineStyle = OverlayLineStyle.Dotted;
                 else throw new SyntaxException(
@@ -2137,10 +2137,10 @@ namespace ETL_SQL.Core.Parser.Components
                 result.Add(new VisualOverlay
                 {
                     OverlayType = overlayType,
-                    Parameter   = parameter,
-                    LineStyle   = lineStyle,
-                    Color       = color,
-                    Label       = label
+                    Parameter = parameter,
+                    LineStyle = lineStyle,
+                    Color = color,
+                    Label = label
                 });
                 Match(TokenType.COMMA);
             }

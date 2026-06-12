@@ -25,13 +25,13 @@ namespace ETL_SQL.Tests.Statements
         // ── GOTO ─────────────────────────────────────────────────────────────
 
         [Theory]
-        [InlineData("GOTO ;",   "GOTO",  "identifier")]
-        [InlineData("GOTO 42;", "GOTO",  "identifier")]
+        [InlineData("GOTO ;", "GOTO", "identifier")]
+        [InlineData("GOTO 42;", "GOTO", "identifier")]
         public void GotoError_MessageNamesConstructAndExpectedToken(
             string sql, string construct, string expectedToken)
         {
             var msg = GetFirstErrorMessage(sql);
-            Assert.Contains(construct,     msg, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(construct, msg, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(expectedToken, msg, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -52,7 +52,7 @@ namespace ETL_SQL.Tests.Statements
             string sql, string construct, string expectedToken)
         {
             var msg = GetFirstErrorMessage(sql);
-            Assert.Contains(construct,     msg, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(construct, msg, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(expectedToken, msg, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -71,7 +71,7 @@ namespace ETL_SQL.Tests.Statements
             string sql, string construct, string missingClause)
         {
             var msg = GetFirstErrorMessage(sql);
-            Assert.Contains(construct,     msg, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(construct, msg, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(missingClause, msg, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -90,20 +90,20 @@ namespace ETL_SQL.Tests.Statements
             string sql, string construct, string expectedToken)
         {
             var msg = GetFirstErrorMessage(sql);
-            Assert.Contains(construct,     msg, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(construct, msg, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(expectedToken, msg, StringComparison.OrdinalIgnoreCase);
         }
 
         // ── BEGIN / END block ─────────────────────────────────────────────────
 
         [Theory]
-        [InlineData("BEGIN PRINT 'hello';",           "BEGIN", "END")]
+        [InlineData("BEGIN PRINT 'hello';", "BEGIN", "END")]
         [InlineData("BEGIN\nIF 1=1\nBEGIN PRINT 'x';", "BEGIN", "END")]
         public void BeginEndError_MessageNamesConstructAndExpectedToken(
             string sql, string construct, string expectedToken)
         {
             var msg = GetFirstErrorMessage(sql);
-            Assert.Contains(construct,     msg, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(construct, msg, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(expectedToken, msg, StringComparison.OrdinalIgnoreCase);
         }
     }

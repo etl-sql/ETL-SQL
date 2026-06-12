@@ -1,15 +1,15 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -23,10 +23,10 @@ namespace ETL_SQL.Tests.Statements
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("DECLARE @T1 LIST = ['A', 'B'];"));
             await ev.Evaluate(Parse("DECLARE @T2 LIST = [1, 2];"));
-            
+
             var res = await ev.ExecuteQuery(Parse("SELECT * FROM @T1 AS t1 CROSS JOIN @T2 AS t2;").Statements[0]).ToListAsync();
             var allRows = res.SelectMany(b => b.Rows).ToList();
-            
+
             Assert.Equal(4, allRows.Count);
         }
 
@@ -36,7 +36,7 @@ namespace ETL_SQL.Tests.Statements
         {
             string testDir = Path.Combine(Path.GetTempPath(), "ETL_SQL_Tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(testDir);
-            
+
             try
             {
                 var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -44,16 +44,16 @@ namespace ETL_SQL.Tests.Statements
                 var data2 = "ID\n2\n3";
                 string path1 = Path.Combine(testDir, "rj1.csv").Replace("\\", "/");
                 string path2 = Path.Combine(testDir, "rj2.csv").Replace("\\", "/");
-                
+
                 await File.WriteAllTextAsync(path1, data1);
                 await File.WriteAllTextAsync(path2, data2);
-                
+
                 await ev.Evaluate(Parse($"CREATE CONNECTION rj1 AS FLATFILE('{path1}');"));
                 await ev.Evaluate(Parse($"CREATE CONNECTION rj2 AS FLATFILE('{path2}');"));
-                
+
                 var res = await ev.ExecuteQuery(Parse("SELECT rj1.ID as L, rj2.ID as R FROM rj1 RIGHT JOIN rj2 ON rj1.ID = rj2.ID;").Statements[0]).ToListAsync();
                 var rows = res.SelectMany(b => b.Rows).ToList();
-                
+
                 Assert.Equal(2, rows.Count);
                 Assert.Contains(rows, r => r["L"] == null && r["R"]?.ToString() == "3");
                 Assert.Contains(rows, r => r["L"]?.ToString() == "2" && r["R"]?.ToString() == "2");
@@ -80,14 +80,14 @@ namespace ETL_SQL.Tests.Statements
 
                 await File.WriteAllTextAsync(path1, data1);
                 await File.WriteAllTextAsync(path2, data2);
-                
+
                 await ev.Evaluate(Parse($"CREATE CONNECTION fj1 AS FLATFILE('{path1}');"));
                 await ev.Evaluate(Parse($"CREATE CONNECTION fj2 AS FLATFILE('{path2}');"));
-                
+
                 var sql = "SELECT fj1.ID as L, fj2.ID as R FROM fj1 FULL JOIN fj2 ON fj1.ID = fj2.ID;";
                 var res = await ev.ExecuteQuery(Parse(sql).Statements[0]).ToListAsync();
                 var rows = res.SelectMany(b => b.Rows).ToList();
-                
+
                 Assert.Equal(3, rows.Count);
                 Assert.Contains(rows, r => r["L"]?.ToString() == "1" && r["R"] == null);
                 Assert.Contains(rows, r => r["L"]?.ToString() == "2" && r["R"]?.ToString() == "2");
@@ -112,11 +112,11 @@ namespace ETL_SQL.Tests.Statements
                 string path = Path.Combine(testDir, "ca.csv").Replace("\\", "/");
                 await File.WriteAllTextAsync(path, data1);
                 await ev.Evaluate(Parse($"CREATE CONNECTION c1 AS FLATFILE('{path}');"));
-                
+
                 var sql = "SELECT c1.ID, s.Val FROM c1 CROSS APPLY (SELECT 10 as Val UNION ALL SELECT 20) s;";
                 var res = await ev.ExecuteQuery(Parse(sql).Statements[0]).ToListAsync();
                 var rows = res.SelectMany(b => b.Rows).ToList();
-                
+
                 Assert.Equal(4, rows.Count);
             }
             finally
@@ -138,11 +138,11 @@ namespace ETL_SQL.Tests.Statements
                 string path = Path.Combine(testDir, "oa.csv").Replace("\\", "/");
                 await File.WriteAllTextAsync(path, data1);
                 await ev.Evaluate(Parse($"CREATE CONNECTION c1 AS FLATFILE('{path}');"));
-                
+
                 var sql = "SELECT c1.ID, s.Val FROM c1 OUTER APPLY (SELECT 10 as Val WHERE 1=0) s;";
                 var res = await ev.ExecuteQuery(Parse(sql).Statements[0]).ToListAsync();
                 var rows = res.SelectMany(b => b.Rows).ToList();
-                
+
                 Assert.Single(rows);
                 Assert.Null(rows[0]["Val"]);
             }
@@ -323,11 +323,11 @@ namespace ETL_SQL.Tests.Statements
                 string path = Path.Combine(testDir, "sj.csv").Replace("\\", "/");
                 await File.WriteAllTextAsync(path, data1);
                 await ev.Evaluate(Parse($"CREATE CONNECTION c AS FLATFILE('{path}');"));
-                
+
                 var sql = "SELECT * FROM c JOIN (SELECT '1' as SubID) s ON c.ID = s.SubID;";
                 var res = await ev.ExecuteQuery(Parse(sql).Statements[0]).ToListAsync();
                 var rows = res.SelectMany(b => b.Rows).ToList();
-                
+
                 Assert.Single(rows);
                 Assert.Equal("Alice", rows[0]["Name"]?.ToString());
             }

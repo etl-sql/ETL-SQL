@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
-using Microsoft.AspNetCore.Identity;
 using ETL_SQL.ReportPortal.Data;
+using Microsoft.AspNetCore.Identity;
 
 namespace ETL_SQL.ReportPortal.Middleware;
 
@@ -26,17 +26,17 @@ public class MustChangePasswordMiddleware(RequestDelegate next)
             && !_allowed.Contains(ctx.Request.Path.Value ?? ""))
         {
             var userMgr = ctx.RequestServices.GetRequiredService<UserManager<PortalUser>>();
-            var nameId  = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var nameId = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (nameId is not null)
             {
                 var user = await userMgr.FindByIdAsync(nameId);
                 if (user?.MustChangePassword == true)
                 {
-                    ctx.Response.StatusCode  = StatusCodes.Status403Forbidden;
+                    ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
                     ctx.Response.ContentType = "application/json";
                     await ctx.Response.WriteAsync(JsonSerializer.Serialize(new
                     {
-                        error    = "Password change required before continuing.",
+                        error = "Password change required before continuing.",
                         redirect = "/login.html?changePassword=true"
                     }));
                     return;

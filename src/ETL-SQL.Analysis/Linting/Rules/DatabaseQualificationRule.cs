@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Linq;
+using System.Threading.Tasks;
 using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Analysis.Linting.Rules
@@ -31,7 +31,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
             // Identify which connections are database-type
             // Note: This requires the MetadataProvider to expose connection types if possible, 
             // or we look at the currently registered connections in the script.
-            
+
             // For now, we'll check the statements to see what connections are declared
             foreach (var statement in script.Statements)
             {
@@ -47,7 +47,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
             {
                 if (select.FromTable != null) await ValidateTableRefAsync(select.FromTable, context, results, dbTypes);
                 foreach (var join in select.Joins) await ValidateTableRefAsync(join.Table, context, results, dbTypes);
-                
+
                 if (select.FromTable?.Subquery != null) await AnalyzeStatementAsync(select.FromTable.Subquery, context, results, dbTypes);
                 foreach (var join in select.Joins) if (join.Table.Subquery != null) await AnalyzeStatementAsync(join.Table.Subquery, context, results, dbTypes);
             }
@@ -89,9 +89,9 @@ namespace ETL_SQL.Analysis.Linting.Rules
         private async Task ValidateTableRefAsync(TableReference tableRef, ILintContext context, List<LintResult> results, HashSet<string> dbTypes)
         {
             if (tableRef.Subquery != null) return;
-            
+
             var tableName = tableRef.TableName;
-            
+
             // Skip temp tables and variables
             if (tableName.StartsWith("#") || tableName.StartsWith("@") || tableName.Equals("DUAL", StringComparison.OrdinalIgnoreCase)) return;
 
@@ -105,7 +105,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
             // If we have multiple connections, we look for the "default" connection or check types
             // In ETL-SQL, if not qualified, it often defaults to the first declared connection 
             // but for safety in multi-source scripts, we want to encourage qualification.
-            
+
             bool isDbConnection = false;
             foreach (var conn in connections)
             {

@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
-using Spectre.Console;
 using ETL_SQL.Core;
+using Spectre.Console;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -44,12 +44,12 @@ namespace ETL_SQL.TUI.UI
 
             // 2. Telemetry Table
             var statsTableColor = TuiTheme.Instance.GetColor(
-                _renderer.Focus == EditorFocus.Performance ? TuiTheme.Instance.Ui.PanelFocusedBorder : TuiTheme.Instance.Ui.PanelUnfocusedBorder, 
+                _renderer.Focus == EditorFocus.Performance ? TuiTheme.Instance.Ui.PanelFocusedBorder : TuiTheme.Instance.Ui.PanelUnfocusedBorder,
                 _renderer.Focus == EditorFocus.Performance ? Color.Grey37 : Color.Grey);
             var statsTable = new Table().Border(TerminalCapabilities.Current.Table()).BorderColor(statsTableColor);
             statsTable.AddColumn("Metric");
             statsTable.AddColumn("Value");
-            
+
             // Script-level performance metrics
             statsTable.AddRow("Lexing", $"{_evaluator.LastLexTimeMs} ms");
             statsTable.AddRow("Parsing", $"{_evaluator.LastParseTimeMs} ms");
@@ -60,16 +60,16 @@ namespace ETL_SQL.TUI.UI
             long scriptRps = 0;
             if (_evaluator.LastExecTimeMs > 0)
                 scriptRps = totalRows * 1000 / _evaluator.LastExecTimeMs;
-            
+
             statsTable.AddRow("Rows/s", $"[green]{scriptRps:N0}[/]");
-            
+
             // Show peak memory consistent with @@PEAK_MEMORY_MB
             double peakMem = Math.Round((double)System.Diagnostics.Process.GetCurrentProcess().PeakWorkingSet64 / (1024 * 1024), 2);
             statsTable.AddRow("Memory (Peak)", $"{peakMem} MB");
-            
+
             if (lastMetrics != null && lastMetrics.SpilledBytes > 0)
                 statsTable.AddRow("Disk Spilled", $"[yellow]{Math.Round((double)lastMetrics.SpilledBytes / (1024 * 1024), 2)} MB[/]");
-            
+
             if (lastMetrics != null && lastMetrics.PartitionsCount > 0)
                 statsTable.AddRow("Partitions", lastMetrics.PartitionsCount.ToString());
 

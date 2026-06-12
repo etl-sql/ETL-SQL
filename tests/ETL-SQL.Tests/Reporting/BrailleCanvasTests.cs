@@ -1,6 +1,6 @@
-using Xunit;
-using Spectre.Console;
 using ETL_SQL.Reporting.Renderers;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Reporting
 {

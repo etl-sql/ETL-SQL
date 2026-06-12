@@ -13,12 +13,12 @@ namespace ETL_SQL.Reporting
     /// </summary>
     public class EChartsRenderer
     {
-        private readonly CartesianRenderer    _cartesian    = new();
-        private readonly CircularRenderer     _circular     = new();
+        private readonly CartesianRenderer _cartesian = new();
+        private readonly CircularRenderer _circular = new();
         private readonly HierarchicalRenderer _hierarchical = new();
-        private readonly StatisticalRenderer  _statistical  = new();
-        private readonly SpecializedRenderer  _specialized  = new();
-        private readonly GeographicRenderer   _geographic   = new();
+        private readonly StatisticalRenderer _statistical = new();
+        private readonly SpecializedRenderer _specialized = new();
+        private readonly GeographicRenderer _geographic = new();
 
         /// <summary>
         /// Returns an ECharts option JSON string, or null for non-chart visual types.
@@ -26,36 +26,36 @@ namespace ETL_SQL.Reporting
         public string? Render(VisualManifest visual) =>
             visual.VisualType.ToUpperInvariant() switch
             {
-                "BAR"                     => _cartesian.Render(visual, "bar"),
-                "LINE"                    => _cartesian.Render(visual, "line"),
+                "BAR" => _cartesian.Render(visual, "bar"),
+                "LINE" => _cartesian.Render(visual, "line"),
                 "HBAR" or "HORIZONTALBAR" => _cartesian.RenderHorizontalBar(visual),
-                "COMBO"                   => _cartesian.RenderCombo(visual),
-                
-                "PIE"                     => _circular.RenderPie(visual, donut: false),
-                "DONUT"                   => _circular.RenderPie(visual, donut: true),
-                
-                "TREEMAP"                 => _hierarchical.RenderTreemap(visual),
-                
-                "BOXPLOT"                 => _statistical.RenderBoxPlot(visual),
-                
-                "SCATTER"                 => _specialized.RenderScatter(visual),
-                "HEATMAP"                 => _specialized.RenderHeatMap(visual),
-                "GAUGE"                   => _specialized.RenderGauge(visual),
-                "FUNNEL"                  => _specialized.RenderFunnel(visual),
-                "WATERFALL"               => _specialized.RenderWaterfall(visual),
-                "BUBBLE"                  => _specialized.RenderBubble(visual),
-                "RADAR"                   => _specialized.RenderRadar(visual),
-                "CANDLESTICK"             => _specialized.RenderCandlestick(visual),
-                "GANTT"                   => _specialized.RenderGantt(visual),
-                "SANKEY"                  => _specialized.RenderSankey(visual),
-                "SUNBURST"                => _specialized.RenderSunburst(visual),
-                "NETWORK"                 => _specialized.RenderNetwork(visual),
-                "TRELLIS"                 => _specialized.RenderTrellis(visual),
-                "MATRIX"                  => _specialized.RenderMatrix(visual),
+                "COMBO" => _cartesian.RenderCombo(visual),
 
-                "MAP"                     => _geographic.RenderMap(visual),
+                "PIE" => _circular.RenderPie(visual, donut: false),
+                "DONUT" => _circular.RenderPie(visual, donut: true),
 
-                _                         => null   // TABLE, CARD, SLICER, TEXT — rendered client-side
+                "TREEMAP" => _hierarchical.RenderTreemap(visual),
+
+                "BOXPLOT" => _statistical.RenderBoxPlot(visual),
+
+                "SCATTER" => _specialized.RenderScatter(visual),
+                "HEATMAP" => _specialized.RenderHeatMap(visual),
+                "GAUGE" => _specialized.RenderGauge(visual),
+                "FUNNEL" => _specialized.RenderFunnel(visual),
+                "WATERFALL" => _specialized.RenderWaterfall(visual),
+                "BUBBLE" => _specialized.RenderBubble(visual),
+                "RADAR" => _specialized.RenderRadar(visual),
+                "CANDLESTICK" => _specialized.RenderCandlestick(visual),
+                "GANTT" => _specialized.RenderGantt(visual),
+                "SANKEY" => _specialized.RenderSankey(visual),
+                "SUNBURST" => _specialized.RenderSunburst(visual),
+                "NETWORK" => _specialized.RenderNetwork(visual),
+                "TRELLIS" => _specialized.RenderTrellis(visual),
+                "MATRIX" => _specialized.RenderMatrix(visual),
+
+                "MAP" => _geographic.RenderMap(visual),
+
+                _ => null   // TABLE, CARD, SLICER, TEXT — rendered client-side
             };
     }
 }

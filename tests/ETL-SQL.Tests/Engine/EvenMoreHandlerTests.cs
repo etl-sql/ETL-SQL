@@ -2,12 +2,12 @@
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Engine;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.App;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Engine
 {

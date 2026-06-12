@@ -25,7 +25,7 @@ namespace ETL_SQL.Connectors.Odbc
         public static HashSet<string> GetSupportedKeywords() => new(StringComparer.OrdinalIgnoreCase)
         {
             "SELECT", "FROM", "WHERE", "GROUP", "BY", "ORDER", "HAVING", "LIMIT", "OFFSET",
-            "INSERT", "INTO", "UPDATE", "SET", "DELETE", "TRUNCATE", "DROP", "CREATE", "TABLE", 
+            "INSERT", "INTO", "UPDATE", "SET", "DELETE", "TRUNCATE", "DROP", "CREATE", "TABLE",
             "JOIN", "LEFT", "RIGHT", "INNER", "OUTER", "ON", "UNION", "ALL"
         };
 

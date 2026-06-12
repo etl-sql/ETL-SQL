@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.App;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Orchestrator.Storage;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
-using ETL_SQL.Core;
-using ETL_SQL.App;
-using ETL_SQL.Core.Data;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Orchestrator.Storage;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
@@ -27,14 +27,14 @@ namespace ETL_SQL.Tests.Hardening.Performance
         {
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var store = services.GetRequiredService<IJobHistoryStore>();
-            
+
             // Clean/Initialize
             await store.InitializeAsync();
-            
+
             // 1. Log Start
             _output.WriteLine("Logging job start...");
             var entryId = await store.LogJobStartAsync("TelemetryTestJob");
-            
+
             // 2. Log End with telemetry
             _output.WriteLine("Logging job end with telemetry...");
             const long rows = 500000;
@@ -50,7 +50,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             Assert.Equal(ram, saved.PeakMemoryBytes);
             Assert.Equal(cpu, saved.CpuTimeSeconds);
             Assert.Equal(rows, saved.RowsProcessed);
-            
+
             _output.WriteLine($"Verified Telemetry: RAM={saved.PeakMemoryBytes / (1024 * 1024):N0} MB, CPU={saved.CpuTimeSeconds:N1} s");
         }
     }

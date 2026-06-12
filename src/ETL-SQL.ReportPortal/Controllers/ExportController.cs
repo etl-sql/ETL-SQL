@@ -1,12 +1,12 @@
 using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text;
+using ETL_SQL.Reporting;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using ETL_SQL.ReportPortal.Data;
-using ETL_SQL.ReportPortal.Services;
-using ETL_SQL.Reporting;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -14,9 +14,9 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [Route("api/reports/{id:int}/export")]
 [Authorize]
 public class ExportController(
-    PortalDbContext  db,
-    PortalConfig     portalConfig,
-    AuditService     audit) : ControllerBase
+    PortalDbContext db,
+    PortalConfig portalConfig,
+    AuditService audit) : ControllerBase
 {
     // ── Per-user PDF rate limit (tokens per minute) ────────────────────────────
     private static readonly ConcurrentDictionary<int, (int Count, DateTime WindowStart)> _pdfBucket = new();
@@ -31,7 +31,7 @@ public class ExportController(
     private async Task<bool> CanReadAsync(int reportId)
     {
         if (IsAdmin) return true;
-        var userId   = CurrentUserId;
+        var userId = CurrentUserId;
         var groupIds = await db.UserGroups
             .Where(ug => ug.UserId == userId)
             .Select(ug => ug.GroupId)
@@ -62,7 +62,7 @@ public class ExportController(
         if (!System.IO.File.Exists(resolvedManifestPath))
             return (null, "No snapshot available", false);
 
-        var store    = new SnapshotStore();
+        var store = new SnapshotStore();
         var manifest = await store.LoadAsync(resolvedManifestPath);
         return manifest is null ? (null, "Failed to load snapshot", false) : (manifest, null, false);
     }
@@ -86,7 +86,7 @@ public class ExportController(
         var csv = renderer.Render(manifest, visual, includeVisualNamesWhenMultiple: true);
 
         var reportName = manifest.Title ?? System.IO.Path.GetFileNameWithoutExtension(manifest.Source);
-        var filename   = $"{SanitizeFilename(reportName)}_{DateTime.UtcNow:yyyyMMdd}.csv";
+        var filename = $"{SanitizeFilename(reportName)}_{DateTime.UtcNow:yyyyMMdd}.csv";
 
         await audit.LogAsync(CurrentUserId, "EXPORT_CSV", "Report", id.ToString(), visual);
         return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
@@ -111,7 +111,7 @@ public class ExportController(
         var bytes = await new XlsxExporter().ExportAsync(visuals);
 
         var reportName = manifest.Title ?? System.IO.Path.GetFileNameWithoutExtension(manifest.Source);
-        var filename   = $"{SanitizeFilename(reportName)}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
+        var filename = $"{SanitizeFilename(reportName)}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
 
         await audit.LogAsync(CurrentUserId, "EXPORT_XLSX", "Report", id.ToString(), visual);
         return File(bytes,
@@ -129,7 +129,7 @@ public class ExportController(
         var userId = CurrentUserId;
         if (!IsAdmin)
         {
-            var now    = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
             var bucket = _pdfBucket.GetOrAdd(userId, _ => (0, now));
 
             if ((now - bucket.WindowStart).TotalMinutes >= 1)
@@ -167,7 +167,7 @@ public class ExportController(
         }
 
         var reportName = manifest.Title ?? System.IO.Path.GetFileNameWithoutExtension(manifest.Source);
-        var filename   = $"{SanitizeFilename(reportName)}_{DateTime.UtcNow:yyyyMMdd}.pdf";
+        var filename = $"{SanitizeFilename(reportName)}_{DateTime.UtcNow:yyyyMMdd}.pdf";
 
         await audit.LogAsync(CurrentUserId, "EXPORT_PDF", "Report", id.ToString());
         return File(pdfBytes, "application/pdf", filename);

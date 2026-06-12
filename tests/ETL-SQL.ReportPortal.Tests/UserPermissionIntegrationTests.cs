@@ -11,10 +11,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
-using ETL_SQL.Reporting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -391,7 +391,7 @@ namespace ETL_SQL.ReportPortal.Tests
                 cpReq.Content = JsonContent.Create(new
                 {
                     currentPassword = "Admin@12345!",
-                    newPassword     = "Admin@Tests99!"
+                    newPassword = "Admin@Tests99!"
                 });
                 var cpRes = await _client.SendAsync(cpReq);
                 cpRes.EnsureSuccessStatusCode();

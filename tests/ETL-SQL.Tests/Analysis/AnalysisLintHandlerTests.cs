@@ -2,13 +2,13 @@
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Xunit;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis.Analysis
 {

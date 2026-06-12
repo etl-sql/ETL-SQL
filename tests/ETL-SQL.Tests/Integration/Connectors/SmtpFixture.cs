@@ -34,7 +34,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
             await _container.StartAsync();
             SmtpPort = _container.GetMappedPublicPort(1025);
-            ApiPort  = _container.GetMappedPublicPort(8025);
+            ApiPort = _container.GetMappedPublicPort(8025);
         }
 
         public async Task DisposeAsync()

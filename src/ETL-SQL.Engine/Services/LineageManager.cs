@@ -34,7 +34,7 @@ namespace ETL_SQL.Engine.Services
                 foreach (var col in select.Columns)
                 {
                     string targetCol = col.Alias ?? (col.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"Expr{select.Columns.IndexOf(col)}");
-                    
+
                     var resolvedSources = col.Expression.GetSourceTables()
                         .Select(s => aliases.TryGetValue(s, out var real) ? real : s)
                         .ToList();
@@ -47,7 +47,7 @@ namespace ETL_SQL.Engine.Services
                     // Inherit descriptions and amalgamate
                     var sourceCols = col.Expression.GetSourceColumns().ToList();
                     var inherited = _tracker.InheritMetadata(resolvedSources, sourceCols, out var derived);
-                    
+
                     col.DerivedFromDescriptions = derived;
                     foreach (var m in inherited)
                     {
@@ -55,10 +55,10 @@ namespace ETL_SQL.Engine.Services
                     }
 
                     _tracker.Record(
-                        intoName, 
-                        resolvedSources, 
-                        "SELECT INTO", 
-                        targetColumn: targetCol, 
+                        intoName,
+                        resolvedSources,
+                        "SELECT INTO",
+                        targetColumn: targetCol,
                         sourceColumns: sourceCols,
                         metadata: col.Metadata,
                         derivedFromDescriptions: col.DerivedFromDescriptions,
@@ -75,10 +75,10 @@ namespace ETL_SQL.Engine.Services
                     {
                         string targetCol = col.Alias ?? (col.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"Expr{leftSelect.Columns.IndexOf(col)}");
                         _tracker.Record(
-                            intoName, 
-                            leftSelect.GetSourceTables(), 
-                            $"SELECT INTO ({setOp.Operation})", 
-                            targetColumn: targetCol, 
+                            intoName,
+                            leftSelect.GetSourceTables(),
+                            $"SELECT INTO ({setOp.Operation})",
+                            targetColumn: targetCol,
                             metadata: col.Metadata,
                             derivedFromDescriptions: col.DerivedFromDescriptions,
                             line: statement.Line,

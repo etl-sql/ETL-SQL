@@ -1,12 +1,12 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 
 namespace ETL_SQL.Tests.Statements
@@ -99,7 +99,8 @@ namespace ETL_SQL.Tests.Statements
             "));
 
             var res = await ev.ExecuteQuery(Parse("SELECT X, NTILE(1) OVER(ORDER BY X) AS B FROM #t;").Statements[0]).FirstAsync();
-            Assert.All(res.Rows, r => {
+            Assert.All(res.Rows, r =>
+            {
                 Assert.NotNull(r["B"]);
                 Assert.Equal(1m, Convert.ToDecimal(r["B"]));
             });
@@ -116,7 +117,7 @@ namespace ETL_SQL.Tests.Statements
 
             var res = await ev.ExecuteQuery(Parse("SELECT Grp, ID, NTILE(2) OVER(PARTITION BY Grp ORDER BY ID) AS B FROM #t;").Statements[0]).FirstAsync();
             Assert.Equal(4, res.Rows.Count);
-            
+
             // Grp A
             var rA1 = res.Rows.First(r => r["Grp"]?.ToString() == "A" && Convert.ToDecimal(r["ID"]) == 1m);
             Assert.NotNull(rA1["B"]);
@@ -125,7 +126,7 @@ namespace ETL_SQL.Tests.Statements
             var rA2 = res.Rows.First(r => r["Grp"]?.ToString() == "A" && Convert.ToDecimal(r["ID"]) == 2m);
             Assert.NotNull(rA2["B"]);
             Assert.Equal(2m, Convert.ToDecimal(rA2["B"]));
-            
+
             // Grp B
             var rB1 = res.Rows.First(r => r["Grp"]?.ToString() == "B" && Convert.ToDecimal(r["ID"]) == 3m);
             Assert.NotNull(rB1["B"]);

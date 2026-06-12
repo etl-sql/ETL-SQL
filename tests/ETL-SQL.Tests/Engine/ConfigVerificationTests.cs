@@ -1,11 +1,10 @@
 using System;
 using System.Collections.Generic;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Services;
 using Microsoft.Extensions.Configuration;
 using Xunit;
-using ETL_SQL.Services;
-using ETL_SQL.Common;
-
-using ETL_SQL.Core;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -32,7 +31,7 @@ namespace ETL_SQL.Tests.Engine
             // 3. Assert
             Assert.Equal(500, securityService.MaxFileOperations);
             Assert.Equal(20, securityService.MaxRecursiveDepth);
-            
+
             // Verify logic reflects these values
             // 501 should fail, 500 should pass (if not in safe zone and not allowed large count)
             var ex = Assert.Throws<SecurityException>(() => securityService.CheckRunawayProtection(OperationType.FileSystem, 501, 0, false, false, "C:\\external\\path.csv"));

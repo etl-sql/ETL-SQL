@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core;
 using ETL_SQL.Connectors.Json;
 using ETL_SQL.Connectors.Xml;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.FlatFile
 {
@@ -110,7 +110,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
         public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
-        public string BuildConnectionString(Dictionary<string, string> properties) => 
+        public string BuildConnectionString(Dictionary<string, string> properties) =>
             ConnectionStringBuilder.Build(Name, properties);
     }
 }

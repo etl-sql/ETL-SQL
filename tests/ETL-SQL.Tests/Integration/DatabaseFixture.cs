@@ -1,9 +1,9 @@
 using System.Threading.Tasks;
-using Xunit;
 using Testcontainers.MsSql;
-using Testcontainers.PostgreSql;
-using Testcontainers.Oracle;
 using Testcontainers.MySql;
+using Testcontainers.Oracle;
+using Testcontainers.PostgreSql;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration
 {

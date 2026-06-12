@@ -22,7 +22,7 @@ namespace ETL_SQL.Core.Data
         {
             return value == DBNull.Value ? null : value;
         }
-        
+
         /// <summary>
         /// Convers a null value to DBNull.Value for database providers.
         /// </summary>

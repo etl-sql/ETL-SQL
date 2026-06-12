@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
 using ETL_SQL.Reporting;
+using Xunit;
 
 namespace ETL_SQL.Tests.Reporting.Reporting
 {
@@ -38,7 +38,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         [InlineData("SLICER")]
         public void EChartsRenderer_ReturnsNull_ForNonChartVisualTypes(string visualType)
         {
-            var visual   = MakeSampleVisual(visualType);
+            var visual = MakeSampleVisual(visualType);
             var renderer = new EChartsRenderer();
 
             Assert.Null(renderer.Render(visual));
@@ -48,9 +48,9 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         [Trait("Category", "Smoke.Reporting")]
         public void EChartsRenderer_Bar_ContainsCorrectChartType()
         {
-            var visual   = MakeSampleVisual("BAR");
+            var visual = MakeSampleVisual("BAR");
             var renderer = new EChartsRenderer();
-            var config   = renderer.Render(visual)!;
+            var config = renderer.Render(visual)!;
 
             Assert.Contains("\"type\":\"bar\"", config);
         }
@@ -59,9 +59,9 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         public void EChartsRenderer_Pie_ContainsBackgroundColors()
         {
             // ECharts uses itemStyle.color for pie slices
-            var visual   = MakeSampleVisual("PIE");
+            var visual = MakeSampleVisual("PIE");
             var renderer = new EChartsRenderer();
-            var config   = renderer.Render(visual)!;
+            var config = renderer.Render(visual)!;
 
             Assert.Contains("color", config);
         }
@@ -69,9 +69,9 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         [Fact]
         public void EChartsRenderer_Scatter_ContainsSeries()
         {
-            var visual   = MakeSampleVisual("SCATTER");
+            var visual = MakeSampleVisual("SCATTER");
             var renderer = new EChartsRenderer();
-            var config   = renderer.Render(visual)!;
+            var config = renderer.Render(visual)!;
 
             Assert.Contains("\"type\":\"scatter\"", config);
             Assert.Contains("\"data\"", config);
@@ -113,10 +113,10 @@ namespace ETL_SQL.Tests.Reporting.Reporting
             // a dual Y-axis array so the two scales don't crush each other.
             var visual = new VisualManifest
             {
-                Name       = "ComboChart",
+                Name = "ComboChart",
                 VisualType = "COMBO",
-                Columns    = new List<string> { "Month", "Revenue", "ReturnRate" },
-                Rows       = new List<List<string?>>
+                Columns = new List<string> { "Month", "Revenue", "ReturnRate" },
+                Rows = new List<List<string?>>
                 {
                     new List<string?> { "Jan", "100000", "5.2" },
                     new List<string?> { "Feb", "120000", "4.8" }
@@ -148,10 +148,10 @@ namespace ETL_SQL.Tests.Reporting.Reporting
             // Regression guard: earlier case-insensitive lookup issue could drop colors.
             var visual = new VisualManifest
             {
-                Name       = "WaterfallChart",
+                Name = "WaterfallChart",
                 VisualType = "WATERFALL",
-                Columns    = new List<string> { "Step", "Amount" },
-                Rows       = new List<List<string?>>
+                Columns = new List<string> { "Step", "Amount" },
+                Rows = new List<List<string?>>
                 {
                     new List<string?> { "Start",    "1000" },
                     new List<string?> { "Increase",  "500" },
@@ -189,9 +189,9 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         {
             var manifest = new ReportManifest
             {
-                Source   = "test.rptsql",
-                BuiltAt  = DateTime.UtcNow,
-                Visuals  = new List<VisualManifest>
+                Source = "test.rptsql",
+                BuiltAt = DateTime.UtcNow,
+                Visuals = new List<VisualManifest>
                 {
                     new VisualManifest
                     {
@@ -215,7 +215,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         {
             var manifest = new ReportManifest
             {
-                Source  = "test.rptsql",
+                Source = "test.rptsql",
                 BuiltAt = DateTime.UtcNow,
                 Visuals = new List<VisualManifest>
                 {
@@ -246,7 +246,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         {
             var manifest = new ReportManifest
             {
-                Source  = "test.rptsql",
+                Source = "test.rptsql",
                 BuiltAt = DateTime.UtcNow,
                 Visuals = new List<VisualManifest>
                 {
@@ -337,7 +337,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
             var manifest = MakeSampleManifest("sample.rptsql");
             manifest.Visuals.Add(MakeSampleVisual("BAR"));
 
-            var path  = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"snapshot_{Guid.NewGuid()}.json");
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"snapshot_{Guid.NewGuid()}.json");
             var store = new SnapshotStore();
 
             try
@@ -368,10 +368,10 @@ namespace ETL_SQL.Tests.Reporting.Reporting
 
         private static VisualManifest MakeSampleVisual(string visualType) => new VisualManifest
         {
-            Name       = "SampleVisual",
+            Name = "SampleVisual",
             VisualType = visualType,
-            Columns    = new List<string> { "x", "y" },
-            Rows       = new List<List<string?>>
+            Columns = new List<string> { "x", "y" },
+            Rows = new List<List<string?>>
             {
                 new List<string?> { "A", "10" },
                 new List<string?> { "B", "20" },
@@ -387,7 +387,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
 
         private static ReportManifest MakeSampleManifest(string source) => new ReportManifest
         {
-            Source  = source,
+            Source = source,
             BuiltAt = DateTime.UtcNow
         };
     }

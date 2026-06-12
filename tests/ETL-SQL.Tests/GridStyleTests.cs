@@ -1,9 +1,9 @@
-using Xunit;
+using System.Collections.Generic;
+using System.Linq;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Parser.Components;
-using ETL_SQL.Core;
-using System.Linq;
-using System.Collections.Generic;
+using Xunit;
 
 namespace ETL_SQL.Tests
 {
@@ -29,7 +29,7 @@ namespace ETL_SQL.Tests
 
             var cv = (CreateVisualStatement)statements[0];
             var gridOpt = cv.Options.First(o => o.Key == "GRID");
-            
+
             Assert.Equal("HEADER,FOOTER,LEFT", gridOpt.Value);
         }
 
@@ -52,10 +52,10 @@ namespace ETL_SQL.Tests
 
             var cv = (CreateVisualStatement)statements[0];
             var gridOpt = cv.Options.First(o => o.Key == "GRID");
-            
+
             Assert.Equal("ALL", gridOpt.Value);
         }
-        
+
         [Fact]
         public void CreateVisual_ShouldParseGridNone()
         {
@@ -75,7 +75,7 @@ namespace ETL_SQL.Tests
 
             var cv = (CreateVisualStatement)statements[0];
             var gridOpt = cv.Options.First(o => o.Key == "GRID");
-            
+
             Assert.Equal("NONE", gridOpt.Value);
         }
     }

@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Core.Parser;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis
 {
@@ -65,7 +65,7 @@ namespace ETL_SQL.Tests.Analysis
             var results = await Lint(rule, sql);
             Assert.Empty(results);
         }
-        
+
         [Fact]
         public async Task VisualSourceExists_UnionSource_NoWarning()
         {

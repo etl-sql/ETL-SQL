@@ -51,7 +51,7 @@ namespace ETL_SQL.Engine.Handlers
         private void SaveTemplateToDisk(CreateTemplateStatement stmt, IExecutionContext context)
         {
             var templateDir = context.ReportContext.TemplatePath;
-            
+
             // Ensure directory exists
             if (!Directory.Exists(templateDir))
             {
@@ -67,14 +67,14 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             string filePath = Path.Combine(templateDir, fileName);
-            
+
             // Security: Resolve and validate path
             string resolvedPath = context.ResolvePath(filePath);
-            
+
             // Security: Enforce .json extension even after joining
             if (!resolvedPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             {
-                 throw new ExecutionException($"Security Violation: Template files must have .json extension. Target: {resolvedPath}", null, stmt.Line, stmt.Column);
+                throw new ExecutionException($"Security Violation: Template files must have .json extension. Target: {resolvedPath}", null, stmt.Line, stmt.Column);
             }
 
             context.IncrementOperationCount(OperationType.FileSystem, resolvedPath);

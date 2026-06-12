@@ -1,6 +1,6 @@
 using System;
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Parser;
@@ -27,17 +27,17 @@ namespace ETL_SQL.Analysis.Linting
         public async Task<List<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {
             var results = new List<LintResult>();
-            
+
             // 1. Discovery Pass (populate in-script metadata)
             var overlay = new ScriptMetadataOverlay(context.Metadata);
             DiscoverScriptMetadata(script, overlay);
-            
+
             // 2. Wrap context with overlay
             if (context is DefaultLintContext defaultContext)
             {
                 defaultContext.Metadata = overlay;
             }
-            
+
             // 3. Execute Rules
             foreach (var rule in _rules)
             {
@@ -61,19 +61,19 @@ namespace ETL_SQL.Analysis.Linting
 
             switch (statement)
             {
-                case CreateConnectionStatement conn:    DiscoverCreateConnection(conn, overlay);    break;
-                case CreateTableStatement create:       DiscoverCreateTable(create, overlay);       break;
-                case ExecutePushdownStatement pushdown: DiscoverPushdown(pushdown, overlay);        break;
-                case BlockStatement block:              DiscoverBlock(block, overlay);              break;
-                case IfStatement ifStmt:                DiscoverIf(ifStmt, overlay);                break;
-                case WhileStatement whileStmt:          DiscoverFromStatement(whileStmt.Body, overlay);     break;
-                case ForStatement forStmt:              DiscoverFromStatement(forStmt.Body, overlay);       break;
-                case ForeachStatement foreachStmt:      DiscoverFromStatement(foreachStmt.Body, overlay);   break;
-                case TryCatchStatement tryCatch:        DiscoverTryCatch(tryCatch, overlay);        break;
-                case CreateProcedureStatement proc:     DiscoverFromStatement(proc.Body, overlay);  break;
-                case CreateFunctionStatement func:      DiscoverFromStatement(func.Body, overlay);  break;
-                case ParallelStatement parallel:        DiscoverFromStatement(parallel.Body, overlay);      break;
-                case ParallelForStatement parallelFor:  DiscoverFromStatement(parallelFor.Body, overlay);   break;
+                case CreateConnectionStatement conn: DiscoverCreateConnection(conn, overlay); break;
+                case CreateTableStatement create: DiscoverCreateTable(create, overlay); break;
+                case ExecutePushdownStatement pushdown: DiscoverPushdown(pushdown, overlay); break;
+                case BlockStatement block: DiscoverBlock(block, overlay); break;
+                case IfStatement ifStmt: DiscoverIf(ifStmt, overlay); break;
+                case WhileStatement whileStmt: DiscoverFromStatement(whileStmt.Body, overlay); break;
+                case ForStatement forStmt: DiscoverFromStatement(forStmt.Body, overlay); break;
+                case ForeachStatement foreachStmt: DiscoverFromStatement(foreachStmt.Body, overlay); break;
+                case TryCatchStatement tryCatch: DiscoverTryCatch(tryCatch, overlay); break;
+                case CreateProcedureStatement proc: DiscoverFromStatement(proc.Body, overlay); break;
+                case CreateFunctionStatement func: DiscoverFromStatement(func.Body, overlay); break;
+                case ParallelStatement parallel: DiscoverFromStatement(parallel.Body, overlay); break;
+                case ParallelForStatement parallelFor: DiscoverFromStatement(parallelFor.Body, overlay); break;
             }
         }
 
@@ -93,8 +93,8 @@ namespace ETL_SQL.Analysis.Linting
 
         private void DiscoverCreateTable(CreateTableStatement create, ScriptMetadataOverlay overlay)
         {
-            string connName   = create.TargetTable.ConnectionName ?? "DEFAULT";
-            string tableName  = NormalizeName(create.TargetTable.TableName);
+            string connName = create.TargetTable.ConnectionName ?? "DEFAULT";
+            string tableName = NormalizeName(create.TargetTable.TableName);
             overlay.RegisterTable(connName, tableName);
             foreach (var col in create.Columns)
                 overlay.RegisterColumn(connName, tableName, col.ColumnName);

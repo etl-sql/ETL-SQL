@@ -16,7 +16,7 @@ namespace ETL_SQL.Tests
     {
         private static string LoadEcharts()
         {
-            var asm  = typeof(PdfExporter).Assembly;
+            var asm = typeof(PdfExporter).Assembly;
             var name = Array.Find(asm.GetManifestResourceNames(),
                            n => n.EndsWith("echarts.min.js", StringComparison.OrdinalIgnoreCase))
                        ?? throw new InvalidOperationException("echarts.min.js embedded resource not found");
@@ -26,7 +26,7 @@ namespace ETL_SQL.Tests
         }
 
         [Theory]
-        [InlineData("bar",   "{\"xAxis\":{\"type\":\"category\",\"data\":[\"A\",\"B\",\"C\",\"D\"]},\"yAxis\":{\"type\":\"value\"},\"series\":[{\"type\":\"bar\",\"data\":[5,20,36,10]}]}")]
+        [InlineData("bar", "{\"xAxis\":{\"type\":\"category\",\"data\":[\"A\",\"B\",\"C\",\"D\"]},\"yAxis\":{\"type\":\"value\"},\"series\":[{\"type\":\"bar\",\"data\":[5,20,36,10]}]}")]
         [InlineData("gauge", "{\"series\":[{\"type\":\"gauge\",\"data\":[{\"value\":70,\"name\":\"Score\"}]}]}")]
         public void EChartsSsr_InV8_ProducesSvg_ThatRasterizes(string label, string optionJson)
         {

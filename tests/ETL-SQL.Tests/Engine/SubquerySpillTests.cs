@@ -1,21 +1,21 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Engine;
-using ETL_SQL.Core.Parser;
-using Xunit;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Common;
-using System.Linq; 
 using ETL_SQL.Common;
-using ETL_SQL.Services;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Engine.Services;
-using System.IO;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Execution;
+using ETL_SQL.Services;
+using Xunit;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -39,22 +39,22 @@ namespace ETL_SQL.Tests.Engine
             var sessions = new Moq.Mock<ISessionStateManager>();
             var languageHelp = new Moq.Mock<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry>();
             var variableScopeManager = new VariableScopeManager();
-            
+
             var registry = new EvaluatorComponentRegistry();
 
             var handlers = new List<IStatementHandler> { new SelectStatementHandler(logger.Object) };
 
             _evaluator = new Evaluator(
-                handlers, 
-                services.Object, 
-                functions.Object, 
-                tracker.Object, 
-                docker.Object, 
-                connectors.Object, 
-                sessions.Object, 
-                security, 
-                logger.Object, 
-                languageHelp.Object, 
+                handlers,
+                services.Object,
+                functions.Object,
+                tracker.Object,
+                docker.Object,
+                connectors.Object,
+                sessions.Object,
+                security,
+                logger.Object,
+                languageHelp.Object,
                 registry,
                 variableScopeManager: variableScopeManager)
             {
@@ -78,13 +78,13 @@ namespace ETL_SQL.Tests.Engine
             var schema = new TableSchema(columnNames);
             var source = new InMemoryDataSource();
             source.SetSchema(columnNames.Select(c => new ColumnDefinition(c, "INT", false)).ToList());
-            
+
             var rows = new List<Row>();
             for (int i = 0; i < 500; i++) rows.Add(new Row(schema, new object[] { i }));
             var dt = new DataTable { Schema = schema };
             dt.Rows.AddRange(rows);
             await source.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { dt }));
-            
+
             _evaluator.Connections["SourceTable"] = source;
 
             // Query: SELECT SourceTable.ID FROM SourceTable WHERE SourceTable.ID IN (SELECT SourceTable.ID FROM SourceTable)
@@ -95,7 +95,7 @@ namespace ETL_SQL.Tests.Engine
                 new List<JoinClause>(),
                 null
             );
-            
+
             var inExpr = new InExpression(new LiteralExpression(250m, TokenType.NUMBER), new SubqueryExpression(selectSubq), false);
             var contextRow = new Row(new TableSchema(new string[0]), new object[0]);
 
@@ -126,13 +126,13 @@ namespace ETL_SQL.Tests.Engine
             var schema = new TableSchema(columnNames);
             var source = new InMemoryDataSource();
             source.SetSchema(columnNames.Select(c => new ColumnDefinition(c, "INT", false)).ToList());
-            
+
             var rows = new List<Row>();
             for (int i = 0; i < 50; i++) rows.Add(new Row(schema, new object[] { i }));
             var dt = new DataTable { Schema = schema };
             dt.Rows.AddRange(rows);
             await source.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { dt }));
-            
+
             _evaluator.Connections["SmallTable"] = source;
 
             var selectSubq = new SelectStatement(
@@ -142,13 +142,13 @@ namespace ETL_SQL.Tests.Engine
                 new List<JoinClause>(),
                 null
             );
-            
+
             var inExpr = new InExpression(new LiteralExpression(25m, TokenType.NUMBER), new SubqueryExpression(selectSubq), false);
             var contextRow = new Row(new TableSchema(new string[0]), new object[0]);
 
             // Execution
             await _evaluator.ExpressionEvaluator.EvaluateInternal(inExpr, contextRow);
-            
+
             // Verify it used InSet (HashSet) because 50 < 100
             var key = new SubqueryCacheKey(selectSubq, new CompoundKey(new object[0]), SubqueryResultType.Stream);
             Assert.True(_evaluator.SubqueryCache.TryGetValue(key, out var cached));
@@ -175,7 +175,7 @@ namespace ETL_SQL.Tests.Engine
                 new List<JoinClause>(),
                 null
             );
-            
+
             var existsExpr = new ExistsExpression(selectSubq, false);
             var contextRow = new Row(new TableSchema(new string[0]), new object[0]);
 

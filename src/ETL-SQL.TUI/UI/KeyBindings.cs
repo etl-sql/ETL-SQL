@@ -46,12 +46,12 @@ namespace ETL_SQL.TUI.UI
         public static readonly IReadOnlyDictionary<KeyCategory, string> CategoryTitles =
             new Dictionary<KeyCategory, string>
             {
-                [KeyCategory.FileTabs]   = "File & Tabs",
-                [KeyCategory.Edit]       = "Edit",
-                [KeyCategory.Navigate]   = "Navigate",
-                [KeyCategory.Run]        = "Run",
+                [KeyCategory.FileTabs] = "File & Tabs",
+                [KeyCategory.Edit] = "Edit",
+                [KeyCategory.Navigate] = "Navigate",
+                [KeyCategory.Run] = "Run",
                 [KeyCategory.ViewPanels] = "View & Panels",
-                [KeyCategory.Explorer]   = "File Explorer",
+                [KeyCategory.Explorer] = "File Explorer",
             };
 
         /// <summary>
@@ -131,19 +131,19 @@ namespace ETL_SQL.TUI.UI
 
         private static string FocusAnnotation(EditorRenderer r) => r.Focus switch
         {
-            EditorFocus.Editor        => "now: EDITOR",
-            EditorFocus.Results       => "now: RESULTS",
-            EditorFocus.Performance   => "now: PERF",
-            EditorFocus.Messages      => "now: MESSAGES",
+            EditorFocus.Editor => "now: EDITOR",
+            EditorFocus.Results => "now: RESULTS",
+            EditorFocus.Performance => "now: PERF",
+            EditorFocus.Messages => "now: MESSAGES",
             EditorFocus.ExecutionTree => "now: PIPELINE",
-            EditorFocus.Sidebar       => "now: EXPLORER",
-            _                         => "now: EDITOR"
+            EditorFocus.Sidebar => "now: EXPLORER",
+            _ => "now: EDITOR"
         };
 
         private static string PanelAnnotation(EditorRenderer r) =>
               r.PerformanceVisible ? "now: PERF"
-            : r.ResultsVisible     ? "now: RESULTS"
-            :                        "now: PIPELINE";
+            : r.ResultsVisible ? "now: RESULTS"
+            : "now: PIPELINE";
 
         /// <summary>Bindings under a single category, in catalog order.</summary>
         public static IEnumerable<KeyBinding> InCategory(KeyCategory category) =>

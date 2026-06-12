@@ -2,12 +2,12 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Engine;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.App;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -55,7 +55,7 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal(2m, Convert.ToDecimal(row["r7"]));
             Assert.Equal(64m, Convert.ToDecimal(row["r8"]));
         }
-        
+
         [Fact]
         public async Task TestBitCountFunction()
         {
@@ -158,10 +158,10 @@ namespace ETL_SQL.Tests.Engine
                 var row = result.Rows[0];
 
                 Assert.Equal(13m, Convert.ToDecimal(row["r1"]));
-                
+
                 // MD5 of "Hello ETL-SQL" is: d5dc69873f2942a0fe13613d4b85d7c7
                 Assert.Equal("d5dc69873f2942a0fe13613d4b85d7c7", row["r2"]?.ToString()?.ToLowerInvariant());
-                
+
                 // SHA256 of "Hello ETL-SQL" is: d192f9f0fad9d6098342e795119a5a5b1f1205ef65119b5ad06e5acc587bb06d
                 Assert.Equal("d192f9f0fad9d6098342e795119a5a5b1f1205ef65119b5ad06e5acc587bb06d", row["r3"]?.ToString()?.ToLowerInvariant());
 

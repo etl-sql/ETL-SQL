@@ -39,7 +39,7 @@ namespace ETL_SQL.Engine
             bool isUtc = false;
 
             // Parse anchor — longest match first to avoid partial matches (e.g. WE before W).
-            if (upper.StartsWith("NU", StringComparison.Ordinal))      { baseAnchor = 'N'; isUtc = true; pos = 2; }
+            if (upper.StartsWith("NU", StringComparison.Ordinal)) { baseAnchor = 'N'; isUtc = true; pos = 2; }
             else if (upper.StartsWith("WE", StringComparison.Ordinal)) { baseAnchor = 'W'; isEnd = true; pos = 2; }
             else if (upper.StartsWith("WS", StringComparison.Ordinal)) { baseAnchor = 'W'; pos = 2; }
             else if (upper.StartsWith("ME", StringComparison.Ordinal)) { baseAnchor = 'M'; isEnd = true; pos = 2; }
@@ -107,52 +107,52 @@ namespace ETL_SQL.Engine
                     return today.AddDays(shift);
 
                 case 'N':
-                {
-                    // For NU: use UTC. If now is explicitly provided (tests), use it directly.
-                    var refTime = isUtc ? (now.HasValue ? now.Value : DateTime.UtcNow) : localNow;
-                    if (shift == 0) return refTime;
-                    return unit switch
                     {
-                        'H' => refTime.AddHours(shift),
-                        'I' => refTime.AddMinutes(shift),
-                        'S' => refTime.AddSeconds(shift),
-                        _ => refTime  // unreachable — validated above
-                    };
-                }
+                        // For NU: use UTC. If now is explicitly provided (tests), use it directly.
+                        var refTime = isUtc ? (now.HasValue ? now.Value : DateTime.UtcNow) : localNow;
+                        if (shift == 0) return refTime;
+                        return unit switch
+                        {
+                            'H' => refTime.AddHours(shift),
+                            'I' => refTime.AddMinutes(shift),
+                            'S' => refTime.AddSeconds(shift),
+                            _ => refTime  // unreachable — validated above
+                        };
+                    }
 
                 case 'W':
-                {
-                    // Critical rule: shift the period first, then apply start/end.
-                    var weekStartDate = GetWeekStart(today, weekStart).AddDays(shift * 7);
-                    return isEnd ? weekStartDate.AddDays(6) : weekStartDate;
-                }
+                    {
+                        // Critical rule: shift the period first, then apply start/end.
+                        var weekStartDate = GetWeekStart(today, weekStart).AddDays(shift * 7);
+                        return isEnd ? weekStartDate.AddDays(6) : weekStartDate;
+                    }
 
                 case 'M':
-                {
-                    var monthStart = new DateTime(today.Year, today.Month, 1).AddMonths(shift);
-                    if (isEnd)
-                        return new DateTime(monthStart.Year, monthStart.Month,
-                            DateTime.DaysInMonth(monthStart.Year, monthStart.Month));
-                    return monthStart;
-                }
+                    {
+                        var monthStart = new DateTime(today.Year, today.Month, 1).AddMonths(shift);
+                        if (isEnd)
+                            return new DateTime(monthStart.Year, monthStart.Month,
+                                DateTime.DaysInMonth(monthStart.Year, monthStart.Month));
+                        return monthStart;
+                    }
 
                 case 'Q':
-                {
-                    int qStartMonth = ((today.Month - 1) / 3) * 3 + 1;
-                    var qStart = new DateTime(today.Year, qStartMonth, 1).AddMonths(shift * 3);
-                    if (isEnd)
                     {
-                        int endMonth = qStart.Month + 2;
-                        return new DateTime(qStart.Year, endMonth, DateTime.DaysInMonth(qStart.Year, endMonth));
+                        int qStartMonth = ((today.Month - 1) / 3) * 3 + 1;
+                        var qStart = new DateTime(today.Year, qStartMonth, 1).AddMonths(shift * 3);
+                        if (isEnd)
+                        {
+                            int endMonth = qStart.Month + 2;
+                            return new DateTime(qStart.Year, endMonth, DateTime.DaysInMonth(qStart.Year, endMonth));
+                        }
+                        return qStart;
                     }
-                    return qStart;
-                }
 
                 case 'Y':
-                {
-                    var yearStart = new DateTime(today.Year, 1, 1).AddYears(shift);
-                    return isEnd ? new DateTime(yearStart.Year, 12, 31) : yearStart;
-                }
+                    {
+                        var yearStart = new DateTime(today.Year, 1, 1).AddYears(shift);
+                        return isEnd ? new DateTime(yearStart.Year, 12, 31) : yearStart;
+                    }
 
                 default:
                     throw new ExecutionException($"Unhandled RELDATE anchor '{baseAnchor}'.");

@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using System.IO;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
@@ -152,7 +152,8 @@ namespace ETL_SQL.Core.Services
                 results.AddRange(LanguageMetadata.GetAllKeywords().Where(k => k.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase)).Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 100)));
                 results.AddRange(LanguageMetadata.Functions.Where(f => f.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase)).Select(f => new Suggestion(f, SuggestionType.Function, Priority: 110)));
                 results.AddRange(LanguageMetadata.DataTypes.Where(d => d.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase)).Select(d => new Suggestion(d, SuggestionType.Keyword, Priority: 120)));
-            } catch {}
+            }
+            catch { }
             return results;
         }
 
@@ -175,7 +176,7 @@ namespace ETL_SQL.Core.Services
             string searchPattern = pathPrefix;
             if (pathPrefix.Contains("/")) { int lastSlash = pathPrefix.LastIndexOf('/'); dir = pathPrefix.Substring(0, lastSlash); if (string.IsNullOrEmpty(dir)) dir = "/"; else if (dir.Length == 2 && dir[1] == ':' && char.IsLetter(dir[0])) dir += "/"; searchPattern = pathPrefix.Substring(lastSlash + 1); }
             else if (pathPrefix.Length == 2 && pathPrefix[1] == ':' && char.IsLetter(pathPrefix[0])) { dir = pathPrefix + "/"; searchPattern = ""; }
-            if (Directory.Exists(dir)) { try { foreach (var entry in Directory.GetFileSystemEntries(dir, string.IsNullOrEmpty(searchPattern) ? "*" : searchPattern + "*")) { var name = Path.GetFileName(entry); if (string.IsNullOrEmpty(name) || name.StartsWith("$")) continue; string res = (dir == "." || dir == "./") ? name : (dir.EndsWith("/") ? dir + name : dir + "/" + name); if (Directory.Exists(entry)) res += "/"; if (res.StartsWith("./")) res = res.Substring(2); results.Add(new Suggestion(res, SuggestionType.Path, Priority: 0)); } } catch {} }
+            if (Directory.Exists(dir)) { try { foreach (var entry in Directory.GetFileSystemEntries(dir, string.IsNullOrEmpty(searchPattern) ? "*" : searchPattern + "*")) { var name = Path.GetFileName(entry); if (string.IsNullOrEmpty(name) || name.StartsWith("$")) continue; string res = (dir == "." || dir == "./") ? name : (dir.EndsWith("/") ? dir + name : dir + "/" + name); if (Directory.Exists(entry)) res += "/"; if (res.StartsWith("./")) res = res.Substring(2); results.Add(new Suggestion(res, SuggestionType.Path, Priority: 0)); } } catch { } }
             return results;
         }
 
@@ -197,12 +198,12 @@ namespace ETL_SQL.Core.Services
                 {
                     var conns = _metadata.GetConnections(context.DocumentUri);
                     results.AddRange(conns.Select(c => new Suggestion(c.Name, SuggestionType.Connection, Priority: 1)));
-                    foreach (var conn in conns) 
-                    { 
-                        try 
-                        { 
-                            var tables = await _metadata.GetTablesAsync(conn.Name, context.DocumentUri); 
-                            
+                    foreach (var conn in conns)
+                    {
+                        try
+                        {
+                            var tables = await _metadata.GetTablesAsync(conn.Name, context.DocumentUri);
+
                             if (context.Prefix.StartsWith($"{conn.Name}.", StringComparison.OrdinalIgnoreCase))
                             {
                                 var prefRest = context.Prefix.Substring(conn.Name.Length + 1);
@@ -211,11 +212,12 @@ namespace ETL_SQL.Core.Services
                             }
                             else
                             {
-                                var filteredTables = tables.Where(t => string.IsNullOrEmpty(context.Prefix) || t.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase)).ToList(); 
-                                results.AddRange(filteredTables.Select(t => new Suggestion(t, SuggestionType.Table, Priority: 5))); 
-                                results.AddRange(filteredTables.Select(t => new Suggestion($"{conn.Name}.{t}", SuggestionType.Table, Priority: 8))); 
+                                var filteredTables = tables.Where(t => string.IsNullOrEmpty(context.Prefix) || t.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase)).ToList();
+                                results.AddRange(filteredTables.Select(t => new Suggestion(t, SuggestionType.Table, Priority: 5)));
+                                results.AddRange(filteredTables.Select(t => new Suggestion($"{conn.Name}.{t}", SuggestionType.Table, Priority: 8)));
                             }
-                        } catch {} 
+                        }
+                        catch { }
                     }
                 }
                 else if (last.Text.Equals("SET", StringComparison.OrdinalIgnoreCase)) results.AddRange(new[] { "WHAT_IF", "PROFILING", "REPORT", "BATCH_SIZE", "STRICT_SCHEMA", "MAX_ERRORS" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
@@ -229,35 +231,36 @@ namespace ETL_SQL.Core.Services
                         .Select(t => new Suggestion("@" + t, SuggestionType.Keyword, Priority: 0,
                             Documentation: GetTagDocumentation(t))));
                 }
-            } catch {}
+            }
+            catch { }
             return results;
         }
 
         private static string? GetTagDocumentation(string tag) => tag switch
         {
-            "pii"               => "**@pii** `true|false` — Personal Identifiable Information. Inherits `true` from any source column.",
-            "phi"               => "**@phi** `true|false` — Protected Health Information (HIPAA).",
-            "pci"               => "**@pci** `true|false` — Payment Card data (PCI-DSS).",
-            "sensitive"         => "**@sensitive** `true|false` — Sensitive data requiring access controls.",
-            "classification"    => "**@classification** `Public|Internal|Confidential|Restricted` — Data classification tier.",
+            "pii" => "**@pii** `true|false` — Personal Identifiable Information. Inherits `true` from any source column.",
+            "phi" => "**@phi** `true|false` — Protected Health Information (HIPAA).",
+            "pci" => "**@pci** `true|false` — Payment Card data (PCI-DSS).",
+            "sensitive" => "**@sensitive** `true|false` — Sensitive data requiring access controls.",
+            "classification" => "**@classification** `Public|Internal|Confidential|Restricted` — Data classification tier.",
             "encrypted_at_rest" => "**@encrypted_at_rest** `true|false` — Column is stored encrypted.",
-            "owner"             => "**@owner** `team or person` — Accountable owner of this data.",
-            "domain"            => "**@domain** `Finance|HR|Sales|...` — Business domain.",
-            "steward"           => "**@steward** `name` — Person responsible for data quality.",
-            "contact"           => "**@contact** `email or handle` — Point of contact for questions.",
-            "freshness"         => "**@freshness** `daily|hourly|real-time|...` — How often this data is refreshed.",
-            "sla"               => "**@sla** `4h|T+1|...` — Delivery SLA.",
-            "quality"           => "**@quality** `high|medium|low|unverified` — Confidence in data quality.",
-            "nullable"          => "**@nullable** `true|false` — Whether this column can contain NULLs.",
-            "d"                 => "**@d** — Human-readable description (inherits to derived columns as DerivedFromDescriptions).",
-            "example"           => "**@example** `sample value` — Representative example value.",
-            "unit"              => "**@unit** `USD|ms|rows|...` — Unit of measurement.",
-            "format"            => "**@format** `YYYY-MM-DD|E.164|...` — Expected format or pattern.",
-            "source_system"     => "**@source_system** `Salesforce|SAP|...` — Originating system.",
-            "source_table"      => "**@source_table** `dbo.Orders` — Originating table.",
-            "source_column"     => "**@source_column** `cust_id` — Original column name in the source system before any ETL renaming.",
-            "load_pattern"      => "**@load_pattern** `full_load|incremental|streaming` — How data is loaded.",
-            _                   => null
+            "owner" => "**@owner** `team or person` — Accountable owner of this data.",
+            "domain" => "**@domain** `Finance|HR|Sales|...` — Business domain.",
+            "steward" => "**@steward** `name` — Person responsible for data quality.",
+            "contact" => "**@contact** `email or handle` — Point of contact for questions.",
+            "freshness" => "**@freshness** `daily|hourly|real-time|...` — How often this data is refreshed.",
+            "sla" => "**@sla** `4h|T+1|...` — Delivery SLA.",
+            "quality" => "**@quality** `high|medium|low|unverified` — Confidence in data quality.",
+            "nullable" => "**@nullable** `true|false` — Whether this column can contain NULLs.",
+            "d" => "**@d** — Human-readable description (inherits to derived columns as DerivedFromDescriptions).",
+            "example" => "**@example** `sample value` — Representative example value.",
+            "unit" => "**@unit** `USD|ms|rows|...` — Unit of measurement.",
+            "format" => "**@format** `YYYY-MM-DD|E.164|...` — Expected format or pattern.",
+            "source_system" => "**@source_system** `Salesforce|SAP|...` — Originating system.",
+            "source_table" => "**@source_table** `dbo.Orders` — Originating table.",
+            "source_column" => "**@source_column** `cust_id` — Original column name in the source system before any ETL renaming.",
+            "load_pattern" => "**@load_pattern** `full_load|incremental|streaming` — How data is loaded.",
+            _ => null
         };
 
         private async Task<List<Suggestion>> GetWithClauseSuggestionsAsync(SuggestionContext context)
@@ -329,11 +332,11 @@ namespace ETL_SQL.Core.Services
 
         private List<Suggestion> GetConnectionNameSuggestions(SuggestionContext context)
         {
-            try 
-            { 
+            try
+            {
                 return _metadata.GetConnections(context.DocumentUri)
                     .Select(c => new Suggestion(c.Name, SuggestionType.Connection, Priority: 150))
-                    .ToList(); 
+                    .ToList();
             }
             catch { return new List<Suggestion>(); }
         }
@@ -350,7 +353,8 @@ namespace ETL_SQL.Core.Services
                     var tables = await _metadata.GetTablesAsync(connName, context.DocumentUri);
                     results.AddRange(tables.Where(t => t.StartsWith(parts[1], StringComparison.OrdinalIgnoreCase)).Select(t => new Suggestion($"{connName}.{t}", SuggestionType.Table, Priority: 0)));
                 }
-            } catch {}
+            }
+            catch { }
             return results;
         }
 
@@ -393,7 +397,7 @@ namespace ETL_SQL.Core.Services
                             {
                                 prefix = prefixAlias;
                             }
-                                
+
                             string qualifiedCols = string.Join(", ", cols.Select(c => string.IsNullOrEmpty(prefix) ? c : $"{prefix}.{c}"));
                             allCols.Add(qualifiedCols);
                         }
@@ -415,7 +419,7 @@ namespace ETL_SQL.Core.Services
                     if (context.Aliases.TryGetValue(alias, out var infoAlias))
                     {
                         var cols = await _metadata.GetColumnsAsync(infoAlias.ConnectionName ?? infoAlias.TableName, infoAlias.BaseTableName ?? infoAlias.TableName, context.DocumentUri);
-                        
+
                         if (pref == "*")
                         {
                             if (cols.Any())
@@ -428,7 +432,7 @@ namespace ETL_SQL.Core.Services
                         {
                             results.AddRange(cols.Where(c => c.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
                                                .Select(c => new Suggestion($"{alias}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column)));
-                            
+
                             if (context.VirtualSchemas.TryGetValue(infoAlias.TableName, out var vCols))
                             {
                                 results.AddRange(vCols.Where(c => c.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
@@ -445,7 +449,7 @@ namespace ETL_SQL.Core.Services
                         {
                             // Avoid suggesting columns if we are likely in a FROM/JOIN context where tables are expected
                             var lastTokens = GetLastTokens(context.ScriptBefore, 5);
-                            bool inTableContext = lastTokens.Any(t => t.Text.Equals("FROM", StringComparison.OrdinalIgnoreCase) || 
+                            bool inTableContext = lastTokens.Any(t => t.Text.Equals("FROM", StringComparison.OrdinalIgnoreCase) ||
                                                                     t.Text.Equals("JOIN", StringComparison.OrdinalIgnoreCase) ||
                                                                     t.Text.Equals("INTO", StringComparison.OrdinalIgnoreCase) ||
                                                                     t.Text.Equals("UPDATE", StringComparison.OrdinalIgnoreCase));
@@ -459,7 +463,8 @@ namespace ETL_SQL.Core.Services
                         }
                     }
                 }
-            } catch {}
+            }
+            catch { }
             return results;
         }
 

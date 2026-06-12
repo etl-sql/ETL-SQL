@@ -169,63 +169,63 @@ namespace ETL_SQL.Reporting
                     break;
 
                 case "IMAGE":
-                {
-                    var src = v.Options.GetValueOrDefault("SRC") ?? v.Options.GetValueOrDefault("src");
-                    if (!string.IsNullOrWhiteSpace(src))
                     {
-                        // Attribute-safe (entities decode back to the original data URI / URL).
-                        var safe = src.Replace("&", "&amp;").Replace("\"", "&quot;");
-                        sb.AppendLine($"<img src=\"{safe}\" alt=\"{EscapeCell(v.Name)}\" />");
-                        sb.AppendLine();
+                        var src = v.Options.GetValueOrDefault("SRC") ?? v.Options.GetValueOrDefault("src");
+                        if (!string.IsNullOrWhiteSpace(src))
+                        {
+                            // Attribute-safe (entities decode back to the original data URI / URL).
+                            var safe = src.Replace("&", "&amp;").Replace("\"", "&quot;");
+                            sb.AppendLine($"<img src=\"{safe}\" alt=\"{EscapeCell(v.Name)}\" />");
+                            sb.AppendLine();
+                        }
+                        break;
                     }
-                    break;
-                }
 
                 case "TEXT":
-                {
-                    // Resolve via the shared resolver so PDF and Markdown agree on TEXT content
-                    // (CONTENT/VALUE/DefaultValue/mapping:content), rather than each renderer
-                    // checking a different subset of keys.
-                    var textContent = ReportVisualContent.ResolveTextContent(v);
-                    v.Options.TryGetValue("ALIGN", out var align);
-                    if (!string.IsNullOrWhiteSpace(textContent))
                     {
-                        // Emit as a block-quote to give visual separation; honour alignment hint in HTML
-                        if (align != null && !align.Equals("left", StringComparison.OrdinalIgnoreCase))
-                            sb.AppendLine($"<div align='{align.ToLowerInvariant()}'>");
-                        
-                        if (v.IsMarkdown) sb.AppendLine(textContent);
-                        else sb.AppendLine(EscapeCell(textContent));
+                        // Resolve via the shared resolver so PDF and Markdown agree on TEXT content
+                        // (CONTENT/VALUE/DefaultValue/mapping:content), rather than each renderer
+                        // checking a different subset of keys.
+                        var textContent = ReportVisualContent.ResolveTextContent(v);
+                        v.Options.TryGetValue("ALIGN", out var align);
+                        if (!string.IsNullOrWhiteSpace(textContent))
+                        {
+                            // Emit as a block-quote to give visual separation; honour alignment hint in HTML
+                            if (align != null && !align.Equals("left", StringComparison.OrdinalIgnoreCase))
+                                sb.AppendLine($"<div align='{align.ToLowerInvariant()}'>");
 
-                        if (align != null && !align.Equals("left", StringComparison.OrdinalIgnoreCase))
-                            sb.AppendLine("</div>");
+                            if (v.IsMarkdown) sb.AppendLine(textContent);
+                            else sb.AppendLine(EscapeCell(textContent));
+
+                            if (align != null && !align.Equals("left", StringComparison.OrdinalIgnoreCase))
+                                sb.AppendLine("</div>");
+                        }
+                        sb.AppendLine();
+                        break;
                     }
-                    sb.AppendLine();
-                    break;
-                }
 
                 default:
-                {
-                    // Embed ECharts option as a comment for tooling / VS Code preview
-                    if (v.ChartConfig != null)
                     {
-                        sb.AppendLine($"<!-- ECHART:{v.ChartConfig} -->");
-                        sb.AppendLine();
+                        // Embed ECharts option as a comment for tooling / VS Code preview
+                        if (v.ChartConfig != null)
+                        {
+                            sb.AppendLine($"<!-- ECHART:{v.ChartConfig} -->");
+                            sb.AppendLine();
+                        }
+                        // Embed SVG image for static export. Prefer real ECharts (SSR);
+                        // fall back to the static renderer when there's no option or SSR fails.
+                        var svgStr = EChartsSsrRenderer.Shared.RenderSvg(v) ?? _svg.Render(v);
+                        if (svgStr != null)
+                        {
+                            var uri = SvgEmbed.ToDataUri(svgStr);
+                            sb.AppendLine($"<img src=\"{uri}\" alt=\"{EscapeCell(v.Name)}\" width=\"600\" height=\"350\" />");
+                            sb.AppendLine();
+                        }
+                        // Fallback data table for readability without images
+                        if (v.Rows.Count > 0)
+                            RenderTable(sb, v);
+                        break;
                     }
-                    // Embed SVG image for static export. Prefer real ECharts (SSR);
-                    // fall back to the static renderer when there's no option or SSR fails.
-                    var svgStr = EChartsSsrRenderer.Shared.RenderSvg(v) ?? _svg.Render(v);
-                    if (svgStr != null)
-                    {
-                        var uri = SvgEmbed.ToDataUri(svgStr);
-                        sb.AppendLine($"<img src=\"{uri}\" alt=\"{EscapeCell(v.Name)}\" width=\"600\" height=\"350\" />");
-                        sb.AppendLine();
-                    }
-                    // Fallback data table for readability without images
-                    if (v.Rows.Count > 0)
-                        RenderTable(sb, v);
-                    break;
-                }
             }
         }
 
@@ -276,7 +276,7 @@ namespace ETL_SQL.Reporting
 
                 if (labelIdx >= 0 && row.Count > labelIdx)
                     label = row[labelIdx] ?? label;
-                
+
                 var rawValue = (valueIdx >= 0 && row.Count > valueIdx) ? row[valueIdx] : row.FirstOrDefault();
                 value = rawValue ?? "0";
             }

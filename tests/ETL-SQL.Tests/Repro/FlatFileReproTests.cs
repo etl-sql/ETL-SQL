@@ -1,13 +1,13 @@
-﻿using Xunit;
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Repro
 {
@@ -33,7 +33,7 @@ namespace ETL_SQL.Tests.Repro
 
                 var serviceProvider = DependencyInjectionSetup.BuildServiceProvider();
                 var evaluator = serviceProvider.GetRequiredService<Evaluator>();
-                
+
                 // Execute
                 await evaluator.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
 
@@ -41,10 +41,10 @@ namespace ETL_SQL.Tests.Repro
                 Assert.True(File.Exists(csvPath), "File should be created");
                 var content = await File.ReadAllTextAsync(csvPath);
                 Assert.NotEmpty(content);
-                
+
                 // Check headers (from MockDataSeeder)
                 Assert.Contains("UserID,UserName,Email", content);
-                
+
                 // Check row count (MockDataSeeder seeds 150 users)
                 var lines = content.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
                 Assert.Equal(151, lines.Length); // 150 rows + 1 header
@@ -73,14 +73,14 @@ namespace ETL_SQL.Tests.Repro
 
                 var serviceProvider = DependencyInjectionSetup.BuildServiceProvider();
                 var evaluator = serviceProvider.GetRequiredService<Evaluator>();
-                
+
                 // Execute
                 await evaluator.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
 
                 // Verify
                 Assert.True(File.Exists(csvPath), "File should be created");
                 var content = await File.ReadAllTextAsync(csvPath);
-                
+
                 Assert.Contains("ID,Name", content);
                 Assert.Contains("1,Alice", content);
                 Assert.Contains("2,Bob", content);
@@ -111,7 +111,7 @@ namespace ETL_SQL.Tests.Repro
 
                 var serviceProvider = DependencyInjectionSetup.BuildServiceProvider();
                 var evaluator = serviceProvider.GetRequiredService<Evaluator>();
-                
+
                 // Execute
                 await evaluator.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
 

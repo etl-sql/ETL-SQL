@@ -1,13 +1,12 @@
-using ETL_SQL.Core;
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
-
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 using ETL_SQL.App;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
-using System.Threading.Tasks;
-using System.Linq;
-using System;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -39,7 +38,7 @@ namespace ETL_SQL.Tests.Statements
             var result = evaluator.LastResult;
 
             Assert.Equal(2, result.Rows.Count);
-            
+
             // Row 1: Defaults applied
             Assert.Equal(1, Convert.ToInt32(result.Rows[0]["Id"]));
             Assert.Equal("Unknown", result.Rows[0]["Name"]);
@@ -78,7 +77,7 @@ namespace ETL_SQL.Tests.Statements
         [Fact]
         public async Task CreateTable_WithDefault_OmittedInInsert()
         {
-             var evaluator = _serviceProvider.GetRequiredService<Evaluator>();
+            var evaluator = _serviceProvider.GetRequiredService<Evaluator>();
             var script = @"
                 CREATE TABLE #Partial (
                     A INT DEFAULT 1,

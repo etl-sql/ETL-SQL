@@ -1,14 +1,14 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -31,7 +31,7 @@ namespace ETL_SQL.Tests.Statements
 
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse($"CREATE CONNECTION c AS FLATFILE('{tempCsv}', START_AT=2, COUNT_AT_END='Footer: COUNT');"));
-            
+
             var res = await ev.ExecuteQuery(Parse("SELECT * FROM c;").Statements[0]).FirstAsync();
             Assert.Equal(3, res.Rows.Count);
             File.Delete(tempCsv);
@@ -47,7 +47,7 @@ namespace ETL_SQL.Tests.Statements
 
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse($"CREATE CONNECTION c AS FLATFILE('{dataFile.Replace("\\", "/")}', HEADER='{headerFile.Replace("\\", "/")}');"));
-            
+
             var res = await ev.ExecuteQuery(Parse("SELECT * FROM c;").Statements[0]).FirstAsync();
             Assert.True(res.ColumnNames.Contains("ExtID", StringComparer.OrdinalIgnoreCase), $"External header failed. Found columns: {string.Join(", ", res.ColumnNames)}");
             File.Delete(dataFile);
@@ -61,7 +61,7 @@ namespace ETL_SQL.Tests.Statements
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE T1 (ID INT, Name STRING);"));
             await ev.Evaluate(Parse("INSERT INTO T1 (ID, Name) VALUES (1, 'Smith');"));
-            
+
             var res = await ev.ExecuteQuery(Parse("SELECT T1.Name AS Name FROM T1 WHERE T1.ID = 1;").Statements[0]).FirstAsync();
             Assert.Equal("Smith", res.Rows[0]["Name"]?.ToString());
         }
@@ -82,11 +82,11 @@ namespace ETL_SQL.Tests.Statements
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #A (ID INT); INSERT INTO #A (ID) VALUES (1);"));
             await ev.Evaluate(Parse("CREATE TABLE #B (ID INT); INSERT INTO #B (ID) VALUES (1); INSERT INTO #B (ID) VALUES (2);"));
-            
+
             // LEFT JOIN
             var resLeft = await ev.ExecuteQuery(Parse("SELECT #A.ID, #B.ID AS BID FROM #A LEFT JOIN #B ON #A.ID = #B.ID;").Statements[0]).FirstAsync();
             Assert.Single(resLeft.Rows);
-            
+
             // RIGHT JOIN (Now supported)
             var resRight = await ev.ExecuteQuery(Parse("SELECT #A.ID, #B.ID AS BID FROM #A RIGHT JOIN #B ON #A.ID = #B.ID;").Statements[0]).FirstAsync();
             Assert.Equal(2, resRight.Rows.Count);
@@ -98,7 +98,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #W (V INT); INSERT INTO #W (V) VALUES (10); INSERT INTO #W (V) VALUES (20);"));
-            
+
             var res = await ev.ExecuteQuery(Parse("SELECT V, ROW_NUMBER() OVER(ORDER BY V) AS RN FROM #W;").Statements[0]).FirstAsync();
             Assert.Equal(1m, res.Rows[0]["RN"]);
             Assert.Equal(2m, res.Rows[1]["RN"]);
@@ -111,7 +111,7 @@ namespace ETL_SQL.Tests.Statements
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #T1 (ID INT, Name STRING); INSERT INTO #T1 VALUES (1, 'Alice'), (2, 'Bob');"));
             await ev.Evaluate(Parse("CREATE TABLE #T2 (PID INT); INSERT INTO #T2 VALUES (1);"));
-            
+
             var res = await ev.ExecuteQuery(Parse("SELECT Name FROM #T1 WHERE EXISTS (SELECT 1 FROM #T2 WHERE #T2.PID = #T1.ID);").Statements[0]).FirstAsync();
             Assert.Single(res.Rows);
             Assert.Equal("Alice", res.Rows[0]["Name"]?.ToString());
@@ -123,7 +123,7 @@ namespace ETL_SQL.Tests.Statements
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #T1 (ID INT, Name STRING); INSERT INTO #T1 VALUES (1, 'Alice'), (2, 'Bob');"));
             await ev.Evaluate(Parse("CREATE TABLE #T2 (PID INT); INSERT INTO #T2 VALUES (1);"));
-            
+
             var res = await ev.ExecuteQuery(Parse("SELECT Name FROM #T1 WHERE ID IN (SELECT PID FROM #T2);").Statements[0]).FirstAsync();
             Assert.Single(res.Rows);
             Assert.Equal("Alice", res.Rows[0]["Name"]?.ToString());
@@ -135,15 +135,15 @@ namespace ETL_SQL.Tests.Statements
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #T1 (ID INT); INSERT INTO #T1 VALUES (1), (2), (3);"));
             await ev.Evaluate(Parse("CREATE TABLE #T2 (ID INT); INSERT INTO #T2 VALUES (1), (2);"));
-            
+
             // SEMI JOIN
             var resSemi = await ev.ExecuteQuery(Parse("SELECT #T1.ID AS ID FROM #T1 SEMI JOIN #T2 ON #T1.ID = #T2.ID;").Statements[0]).FirstAsync();
             Assert.Equal(2, resSemi.Rows.Count);
-            
+
             // LEFT SEMI JOIN
             var resLeftSemi = await ev.ExecuteQuery(Parse("SELECT #T1.ID AS ID FROM #T1 LEFT SEMI JOIN #T2 ON #T1.ID = #T2.ID;").Statements[0]).FirstAsync();
             Assert.Equal(2, resLeftSemi.Rows.Count);
-            
+
             // ANTI JOIN
             var resAnti = await ev.ExecuteQuery(Parse("SELECT #T1.ID AS ID FROM #T1 ANTI JOIN #T2 ON #T1.ID = #T2.ID;").Statements[0]).FirstAsync();
             Assert.Single(resAnti.Rows);
@@ -161,13 +161,13 @@ namespace ETL_SQL.Tests.Statements
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             eval.AutoRollbackOnFinish = false; // Allow transaction state to persist across Execute calls for this test
             await Execute(eval, "CREATE TABLE #t (ID INT);");
-            
+
             // 1. Rollback test
             await Execute(eval, "BEGIN TRANSACTION;");
             await Execute(eval, "INSERT INTO #t (ID) VALUES (1);");
             var res1 = await eval.ExecuteQuery(Parse("SELECT COUNT(*) AS C FROM #t;").Statements[0]).FirstAsync();
             Assert.Equal(1, Convert.ToInt32(res1.Rows[0]["C"]));
-            
+
             await Execute(eval, "ROLLBACK TRANSACTION;");
             var res2 = await eval.ExecuteQuery(Parse("SELECT COUNT(*) AS C FROM #t;").Statements[0]).FirstAsync();
             Assert.Equal(0, Convert.ToInt32(res2.Rows[0]["C"]));
@@ -183,7 +183,7 @@ namespace ETL_SQL.Tests.Statements
             await Execute(eval, "BEGIN TRANSACTION;");
             await Execute(eval, "BEGIN TRANSACTION;");
             Assert.Equal(2, Convert.ToInt32(eval.GetVariable("@@TRANCOUNT")));
-            
+
             await Execute(eval, "ROLLBACK;");
             Assert.Equal(0, Convert.ToInt32(eval.GetVariable("@@TRANCOUNT")));
         }
@@ -204,6 +204,6 @@ namespace ETL_SQL.Tests.Statements
             return new Parser(tokens).Parse();
         }
 
-        
+
     }
 }

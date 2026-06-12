@@ -1,13 +1,13 @@
-using Xunit;
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
-using Microsoft.Extensions.DependencyInjection;
-using System.Threading.Tasks;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using System;
+using System.Threading.Tasks;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -37,19 +37,19 @@ GENERATE 5 ROWS INTO #temp AS (
 SELECT * FROM #temp;
 ";
             await evaluator.Evaluate(Parse(sql));
-            
+
             // Verify rows processed (5 from generate)
             Assert.True(evaluator.Telemetry.RowsProcessed >= 5);
-            
+
             var results = await evaluator.ExecuteQuery(((Script)Parse("SELECT * FROM #temp;")).Statements[0]).ToListAsync();
             var table = results.FirstOrDefault();
-            
+
             Assert.NotNull(table);
             Assert.Equal(5, table.Rows.Count);
             Assert.Equal(2, table.ColumnNames.Count);
             Assert.Contains("id", table.ColumnNames);
             Assert.Contains("val", table.ColumnNames);
-            
+
             // Verify sequence
             Assert.Equal(1, Convert.ToInt32(table.Rows[0]["id"]));
             Assert.Equal(5, Convert.ToInt32(table.Rows[4]["id"]));
@@ -67,14 +67,14 @@ GENERATE 3 ROWS INTO @v AS (
 SELECT * FROM @v;
 ";
             await evaluator.Evaluate(Parse(sql));
-            
+
             var results = await evaluator.ExecuteQuery(((Script)Parse("SELECT * FROM @v;")).Statements[0]).ToListAsync();
             var table = results.FirstOrDefault();
-            
+
             Assert.NotNull(table);
             Assert.Equal(3, table.Rows.Count);
             Assert.Contains("msg", table.ColumnNames);
-            
+
             foreach (var row in table.Rows)
             {
                 var msg = row["msg"].ToString();
@@ -91,10 +91,10 @@ GENERATE 10 ROWS INTO #a WITH (SEED = 123) AS ( val = 'RANDOM_INT(1, 1000)' );
 GENERATE 10 ROWS INTO #b WITH (SEED = 123) AS ( val = 'RANDOM_INT(1, 1000)' );
 ";
             await evaluator.Evaluate(Parse(sql));
-            
+
             var resA = (await evaluator.ExecuteQuery(((Script)Parse("SELECT * FROM #a;")).Statements[0]).ToListAsync()).First();
             var resB = (await evaluator.ExecuteQuery(((Script)Parse("SELECT * FROM #b;")).Statements[0]).ToListAsync()).First();
-            
+
             Assert.Equal(10, resA.Rows.Count);
             Assert.Equal(10, resB.Rows.Count);
 
@@ -122,7 +122,7 @@ GENERATE 1 ROWS INTO #test AS (
 ";
             await evaluator.Evaluate(Parse(sql));
             var row = (await evaluator.ExecuteQuery(((Script)Parse("SELECT * FROM #test;")).Statements[0]).ToListAsync()).First().Rows[0];
-            
+
             Assert.Equal(100, Convert.ToInt32(row["seq"]));
             Assert.Equal("Choice", row["rnd"].ToString());
             Assert.Equal(5, Convert.ToInt32(row["ri"]));
@@ -141,10 +141,10 @@ INSERT INTO @v (ID, Name) VALUES (1, 'Test');
 SELECT * FROM @v;
 ";
             await evaluator.Evaluate(Parse(sql));
-            
+
             var results = await evaluator.ExecuteQuery(((Script)Parse("SELECT * FROM @v;")).Statements[0]).ToListAsync();
             var table = results.FirstOrDefault();
-            
+
             Assert.NotNull(table);
             Assert.Single(table.Rows);
             Assert.Contains("Name", table.ColumnNames);

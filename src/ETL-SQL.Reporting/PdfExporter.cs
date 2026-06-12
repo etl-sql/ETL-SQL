@@ -20,16 +20,16 @@ namespace ETL_SQL.Reporting
     /// </summary>
     public class PdfExporter
     {
-        private static readonly Color _greyDark2  = Color.FromRgb(0x61, 0x61, 0x61);
-        private static readonly Color _greyDark1  = Color.FromRgb(0x75, 0x75, 0x75);
+        private static readonly Color _greyDark2 = Color.FromRgb(0x61, 0x61, 0x61);
+        private static readonly Color _greyDark1 = Color.FromRgb(0x75, 0x75, 0x75);
         private static readonly Color _greyLight3 = Color.FromRgb(0xF5, 0xF5, 0xF5);
         private static readonly Color _greyLight2 = Color.FromRgb(0xEE, 0xEE, 0xEE);
         private static readonly Color _greyMedium = Color.FromRgb(0x9E, 0x9E, 0x9E);
-        private static readonly Color _redDark2   = Color.FromRgb(0xC6, 0x28, 0x28);
+        private static readonly Color _redDark2 = Color.FromRgb(0xC6, 0x28, 0x28);
 
-        private const double ContentWidthPt  = 500.0;
-        private const int    SvgNativeWidth  = 600;
-        private const int    SvgNativeHeight = 350;
+        private const double ContentWidthPt = 500.0;
+        private const int SvgNativeWidth = 600;
+        private const int SvgNativeHeight = 350;
         private static readonly object _fontInitLock = new();
         private static bool _fontsInitialized;
 
@@ -84,7 +84,7 @@ namespace ETL_SQL.Reporting
         private sealed class ReportFontResolver : IFontResolver
         {
             private const string Regular = "report-sans";
-            private const string Bold    = "report-sans-bold";
+            private const string Bold = "report-sans-bold";
 
             private static readonly string[] RegularCandidates =
             {
@@ -136,16 +136,16 @@ namespace ETL_SQL.Reporting
         private Document BuildDocument(ReportManifest manifest, List<string> tempFiles)
         {
             var document = new Document();
-            var style    = document.Styles["Normal"]!;
+            var style = document.Styles["Normal"]!;
             style.Font.Name = "Arial";
             style.Font.Size = Unit.FromPoint(10);
 
             var section = document.AddSection();
-            section.PageSetup.PageFormat   = PageFormat.A4;
-            section.PageSetup.TopMargin    = Unit.FromPoint(36);
+            section.PageSetup.PageFormat = PageFormat.A4;
+            section.PageSetup.TopMargin = Unit.FromPoint(36);
             section.PageSetup.BottomMargin = Unit.FromPoint(36);
-            section.PageSetup.LeftMargin   = Unit.FromPoint(36);
-            section.PageSetup.RightMargin  = Unit.FromPoint(36);
+            section.PageSetup.LeftMargin = Unit.FromPoint(36);
+            section.PageSetup.RightMargin = Unit.FromPoint(36);
 
             // ── Report header ─────────────────────────────────────────────────
             var titlePara = section.AddParagraph(
@@ -157,19 +157,19 @@ namespace ETL_SQL.Reporting
             {
                 var descPara = section.AddParagraph(manifest.Description);
                 descPara.Format.SpaceBefore = Unit.FromPoint(4);
-                descPara.Format.Font.Color  = _greyDark2;
+                descPara.Format.Font.Color = _greyDark2;
             }
 
             var tsPara = section.AddParagraph($"Generated: {manifest.BuiltAt:yyyy-MM-dd HH:mm} UTC");
             tsPara.Format.SpaceBefore = Unit.FromPoint(4);
-            tsPara.Format.Font.Size   = Unit.FromPoint(8);
-            tsPara.Format.Font.Color  = _greyDark1;
+            tsPara.Format.Font.Size = Unit.FromPoint(8);
+            tsPara.Format.Font.Color = _greyDark1;
 
             var sep = section.AddParagraph();
-            sep.Format.SpaceBefore              = Unit.FromPoint(10);
-            sep.Format.SpaceAfter               = Unit.FromPoint(10);
-            sep.Format.Borders.Bottom.Width     = Unit.FromPoint(1);
-            sep.Format.Borders.Bottom.Color     = _greyLight2;
+            sep.Format.SpaceBefore = Unit.FromPoint(10);
+            sep.Format.SpaceAfter = Unit.FromPoint(10);
+            sep.Format.Borders.Bottom.Width = Unit.FromPoint(1);
+            sep.Format.Borders.Bottom.Color = _greyLight2;
 
             // ── Visuals ───────────────────────────────────────────────────────
             foreach (var visual in GetVisualsInOrder(manifest))
@@ -182,7 +182,7 @@ namespace ETL_SQL.Reporting
         {
             if (manifest.Pages.Count == 0) return manifest.Visuals;
 
-            var seen   = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var result = new List<VisualManifest>();
 
             foreach (var page in manifest.Pages)
@@ -204,23 +204,23 @@ namespace ETL_SQL.Reporting
         {
             var heading = section.AddParagraph(v.Name);
             heading.Format.SpaceBefore = Unit.FromPoint(16);
-            heading.Format.Font.Size   = Unit.FromPoint(13);
-            heading.Format.Font.Bold   = true;
+            heading.Format.Font.Size = Unit.FromPoint(13);
+            heading.Format.Font.Bold = true;
 
             if (v.Error != null)
             {
                 var errPara = section.AddParagraph($"Error: {v.Error}");
                 errPara.Format.SpaceBefore = Unit.FromPoint(4);
-                errPara.Format.Font.Color  = _redDark2;
+                errPara.Format.Font.Color = _redDark2;
                 return;
             }
 
             switch (v.VisualType.ToUpperInvariant())
             {
-                case "TABLE":  RenderTable(section, v);             break;
-                case "CARD":   RenderCard(section, v);              break;
-                case "TEXT":   RenderText(section, v);              break;
-                case "IMAGE":  RenderImage(section, v, tempFiles);  break;
+                case "TABLE": RenderTable(section, v); break;
+                case "CARD": RenderCard(section, v); break;
+                case "TEXT": RenderText(section, v); break;
+                case "IMAGE": RenderImage(section, v, tempFiles); break;
 
                 // Filter/input controls: render the selection that was in effect at
                 // export time, so the reader knows how the report was filtered.
@@ -268,7 +268,7 @@ namespace ETL_SQL.Reporting
                     File.WriteAllBytes(tmp, png);
                     tempFiles.Add(tmp);
                     var img = section.AddImage(tmp);
-                    img.Width           = Unit.FromPoint(ContentWidthPt);
+                    img.Width = Unit.FromPoint(ContentWidthPt);
                     img.LockAspectRatio = true;
                 }
             }
@@ -281,7 +281,7 @@ namespace ETL_SQL.Reporting
                 var nd = section.AddParagraph("No data");
                 nd.Format.SpaceBefore = Unit.FromPoint(4);
                 nd.Format.Font.Italic = true;
-                nd.Format.Font.Color  = _greyMedium;
+                nd.Format.Font.Color = _greyMedium;
             }
         }
 
@@ -292,7 +292,7 @@ namespace ETL_SQL.Reporting
                 var nd = section.AddParagraph("No data");
                 nd.Format.SpaceBefore = Unit.FromPoint(4);
                 nd.Format.Font.Italic = true;
-                nd.Format.Font.Color  = _greyMedium;
+                nd.Format.Font.Color = _greyMedium;
                 return;
             }
 
@@ -304,7 +304,7 @@ namespace ETL_SQL.Reporting
             // more room and short ones (ids, codes) don't force everything to wrap.
             // Weights are clamped so a single very-long column can't starve the rest.
             var weights = new double[v.Columns.Count];
-            int sample  = Math.Min(cap, 50);
+            int sample = Math.Min(cap, 50);
             for (int ci = 0; ci < v.Columns.Count; ci++)
             {
                 int maxLen = (v.Columns[ci] ?? "").Length;
@@ -332,7 +332,7 @@ namespace ETL_SQL.Reporting
 
             for (int i = 0; i < cap; i++)
             {
-                var row  = v.Rows[i];
+                var row = v.Rows[i];
                 var dRow = table.AddRow();
                 dRow.Borders.Bottom.Width = Unit.FromPoint(0.5);
                 dRow.Borders.Bottom.Color = _greyLight2;
@@ -348,9 +348,9 @@ namespace ETL_SQL.Reporting
                 var moreRow = table.AddRow();
                 moreRow.Cells[0].MergeRight = v.Columns.Count - 1;
                 var p = moreRow.Cells[0].AddParagraph($"… {v.Rows.Count - cap:N0} more rows not shown");
-                p.Format.Font.Size   = Unit.FromPoint(8);
+                p.Format.Font.Size = Unit.FromPoint(8);
                 p.Format.Font.Italic = true;
-                p.Format.Font.Color  = _greyDark1;
+                p.Format.Font.Color = _greyDark1;
             }
         }
 
@@ -365,8 +365,8 @@ namespace ETL_SQL.Reporting
 
                 var labelPara = section.AddParagraph(label);
                 labelPara.Format.SpaceBefore = Unit.FromPoint(8);
-                labelPara.Format.Font.Size   = Unit.FromPoint(9);
-                labelPara.Format.Font.Color  = _greyDark1;
+                labelPara.Format.Font.Size = Unit.FromPoint(9);
+                labelPara.Format.Font.Color = _greyDark1;
 
                 var valuePara = section.AddParagraph(value);
                 valuePara.Format.Font.Size = Unit.FromPoint(22);
@@ -377,7 +377,7 @@ namespace ETL_SQL.Reporting
                 var nd = section.AddParagraph("No data");
                 nd.Format.SpaceBefore = Unit.FromPoint(4);
                 nd.Format.Font.Italic = true;
-                nd.Format.Font.Color  = _greyMedium;
+                nd.Format.Font.Color = _greyMedium;
             }
         }
 
@@ -390,8 +390,8 @@ namespace ETL_SQL.Reporting
             {
                 var p = section.AddParagraph(text);
                 p.Format.SpaceBefore = Unit.FromPoint(heading ? 8 : 2);
-                p.Format.Font.Size   = Unit.FromPoint(heading ? 12 : 10);
-                p.Format.Font.Bold   = heading;
+                p.Format.Font.Size = Unit.FromPoint(heading ? 12 : 10);
+                p.Format.Font.Bold = heading;
             }
         }
 
@@ -412,12 +412,12 @@ namespace ETL_SQL.Reporting
 
         private static void RenderImage(Section section, VisualManifest v, List<string> tempFiles)
         {
-            var src  = v.Options.GetValueOrDefault("SRC") ?? v.Options.GetValueOrDefault("src");
+            var src = v.Options.GetValueOrDefault("SRC") ?? v.Options.GetValueOrDefault("src");
             var path = string.IsNullOrWhiteSpace(src) ? null : DataUriToTempImage(src!, tempFiles);
             if (path != null)
             {
                 var img = section.AddImage(path);
-                img.Width           = Unit.FromPoint(ContentWidthPt);
+                img.Width = Unit.FromPoint(ContentWidthPt);
                 img.LockAspectRatio = true;
             }
             else
@@ -426,7 +426,7 @@ namespace ETL_SQL.Reporting
                     ? "No image source." : "[Image could not be embedded in the PDF]");
                 nd.Format.SpaceBefore = Unit.FromPoint(4);
                 nd.Format.Font.Italic = true;
-                nd.Format.Font.Color  = _greyDark1;
+                nd.Format.Font.Color = _greyDark1;
             }
         }
 
@@ -438,10 +438,10 @@ namespace ETL_SQL.Reporting
             int comma = src.IndexOf(',');
             if (comma < 0) return null;
 
-            var meta    = src.Substring(5, comma - 5);
+            var meta = src.Substring(5, comma - 5);
             var payload = src.Substring(comma + 1);
             bool isBase64 = meta.Contains("base64", StringComparison.OrdinalIgnoreCase);
-            bool isSvg    = meta.Contains("svg", StringComparison.OrdinalIgnoreCase);
+            bool isSvg = meta.Contains("svg", StringComparison.OrdinalIgnoreCase);
 
             byte[] bytes;
             string ext;
@@ -477,7 +477,7 @@ namespace ETL_SQL.Reporting
 
         private static byte[] RasterizeSvg(string svgContent, bool preserveAspect)
         {
-            using var svg    = new SKSvg();
+            using var svg = new SKSvg();
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(svgContent));
             if (svg.Load(stream) == null) return Array.Empty<byte>();
 
@@ -489,7 +489,7 @@ namespace ETL_SQL.Reporting
             {
                 const float maxW = 1200f; // render at native aspect, capped for size
                 float scale = bounds.Width > maxW ? maxW / bounds.Width : 1f;
-                outW = Math.Max(1, (int)Math.Ceiling(bounds.Width  * scale));
+                outW = Math.Max(1, (int)Math.Ceiling(bounds.Width * scale));
                 outH = Math.Max(1, (int)Math.Ceiling(bounds.Height * scale));
                 scaleX = scaleY = scale;
             }
@@ -497,7 +497,7 @@ namespace ETL_SQL.Reporting
             {
                 outW = SvgNativeWidth;
                 outH = SvgNativeHeight;
-                scaleX = bounds.Width  > 0 ? SvgNativeWidth  / bounds.Width  : 1f;
+                scaleX = bounds.Width > 0 ? SvgNativeWidth / bounds.Width : 1f;
                 scaleY = bounds.Height > 0 ? SvgNativeHeight / bounds.Height : 1f;
             }
 
@@ -512,7 +512,7 @@ namespace ETL_SQL.Reporting
             surface.Canvas.Restore();
 
             using var image = surface.Snapshot();
-            using var data  = image.Encode(SKEncodedImageFormat.Png, 100);
+            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
             return data?.ToArray() ?? Array.Empty<byte>();
         }
     }

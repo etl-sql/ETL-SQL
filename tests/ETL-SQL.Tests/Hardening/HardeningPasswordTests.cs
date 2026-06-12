@@ -1,23 +1,23 @@
-﻿using Xunit;
-using System;
-using System.IO;
-using System.Linq;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Handlers;
-using ETL_SQL.Orchestrator.Execution;
-using ETL_SQL.Core.Execution;
-using ETL_SQL.Common;
-using ETL_SQL.Services;
 using ETL_SQL.Engine.Services;
-using ETL_SQL.Core.Common;
-using Moq;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -73,9 +73,9 @@ namespace ETL_SQL.Tests.Hardening
         public async Task Handler_UsesExplicitPassword()
         {
             var stmt = new FileOperationStatement(
-                FileOpType.Encrypt, 
-                new LiteralExpression(_sourceFile, TokenType.STRING), 
-                new LiteralExpression(_destFile, TokenType.STRING), 
+                FileOpType.Encrypt,
+                new LiteralExpression(_sourceFile, TokenType.STRING),
+                new LiteralExpression(_destFile, TokenType.STRING),
                 new LiteralExpression("ON", TokenType.IDENTIFIER),
                 new LiteralExpression("ExplicitPass!", TokenType.STRING)
             );
@@ -84,7 +84,7 @@ namespace ETL_SQL.Tests.Hardening
             await handler.Execute(stmt, _mockContext.Object);
 
             Assert.True(File.Exists(_destFile));
-            
+
             string decrypted = Path.Combine(_testDir, "decrypted.txt");
             var decryptStmt = new FileOperationStatement(
                 FileOpType.Decrypt,
@@ -94,7 +94,7 @@ namespace ETL_SQL.Tests.Hardening
                 new LiteralExpression("ExplicitPass!", TokenType.STRING)
             );
             await handler.Execute(decryptStmt, _mockContext.Object);
-            
+
             Assert.Equal("Confidential Content", File.ReadAllText(decrypted));
         }
 
@@ -103,7 +103,7 @@ namespace ETL_SQL.Tests.Hardening
         {
             var ctx = new CliContext { SessionId = "TEST-SES" };
             var serviceCollection = new ServiceCollection();
-            
+
             // Register dummy services needed by Evaluator
             serviceCollection.AddSingleton(_mockLogger.Object);
             // Use a real list to avoid NullRef in foreach
@@ -117,11 +117,11 @@ namespace ETL_SQL.Tests.Hardening
             serviceCollection.AddSingleton(Microsoft.Extensions.Options.Options.Create(new ETL_SQL.Core.Execution.BufferManagerOptions()));
             serviceCollection.AddSingleton<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
             serviceCollection.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
-            
+
             var realSessionManager = new SessionStateManager(_mockLogger.Object, _securityService, new ConfigurationBuilder().Build());
             serviceCollection.AddSingleton<ISessionStateManager>(realSessionManager);
             serviceCollection.AddSingleton<SessionStateManager>(realSessionManager);
-            
+
             serviceCollection.AddSingleton(_securityService);
 
             var sp = serviceCollection.BuildServiceProvider();

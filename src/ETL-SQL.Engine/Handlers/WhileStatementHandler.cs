@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -22,14 +22,14 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (WhileStatement)statement;
-            
+
             _logger.Debug("Starting WHILE loop");
             while (true)
             {
                 _logger.Debug("Evaluating WHILE condition");
                 var conditionResult = await context.EvaluateValue(stmt.Condition, new Row());
                 bool condition = conditionResult is bool b && b;
-                
+
                 if (!condition) break;
 
                 try

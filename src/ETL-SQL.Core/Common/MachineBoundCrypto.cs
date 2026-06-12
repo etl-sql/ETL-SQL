@@ -103,7 +103,7 @@ namespace ETL_SQL.Core.Common
 
             using var aes = Aes.Create();
             aes.Key = key;
-            aes.IV  = iv;
+            aes.IV = iv;
 
             using var ms = new MemoryStream();
             using (var cs = new CryptoStream(ms, aes.CreateDecryptor(), CryptoStreamMode.Write))

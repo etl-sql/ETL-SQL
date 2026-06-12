@@ -2,14 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Xunit;
 using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Engines;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Operations.Operations
 {
@@ -66,13 +66,13 @@ namespace ETL_SQL.Tests.Operations.Operations
                 new Row {["cat"]="B", ["sub"]=1, ["val"]=1m},
                 new Row {["cat"]="B", ["sub"]=2, ["val"]=1m},
             }.ToAsyncEnumerable();
-            
+
             var groupBy = new List<Expression> { new IdentifierExpression("cat"), new IdentifierExpression("sub") };
-            
+
             // ROLLUP(cat, sub)
-            var groupingSet = new GroupingSetClause(GroupingSetType.Rollup, new List<List<Expression>> 
-            { 
-                new List<Expression> { new IdentifierExpression("cat"), new IdentifierExpression("sub") } 
+            var groupingSet = new GroupingSetClause(GroupingSetType.Rollup, new List<List<Expression>>
+            {
+                new List<Expression> { new IdentifierExpression("cat"), new IdentifierExpression("sub") }
             });
 
             var finalColumns = new List<SelectColumn>
@@ -114,11 +114,11 @@ namespace ETL_SQL.Tests.Operations.Operations
             // 4 rows: cat A, sub 1
             var rows = MakeRows(4, new[] { "A" }, new[] { 1 });
             var groupBy = new List<Expression> { new IdentifierExpression("cat"), new IdentifierExpression("sub") };
-            
+
             // CUBE(cat, sub)
-            var groupingSet = new GroupingSetClause(GroupingSetType.Cube, new List<List<Expression>> 
-            { 
-                new List<Expression> { new IdentifierExpression("cat"), new IdentifierExpression("sub") } 
+            var groupingSet = new GroupingSetClause(GroupingSetType.Cube, new List<List<Expression>>
+            {
+                new List<Expression> { new IdentifierExpression("cat"), new IdentifierExpression("sub") }
             });
 
             var finalColumns = new List<SelectColumn>
@@ -152,10 +152,10 @@ namespace ETL_SQL.Tests.Operations.Operations
 
             var rows = MakeRows(10, new[] { "A", "B" }, new[] { 1, 2 });
             var groupBy = new List<Expression> { new IdentifierExpression("cat") };
-            
+
             // GROUPING SETS ((cat), ())
-            var groupingSet = new GroupingSetClause(GroupingSetType.GroupingSets, new List<List<Expression>> 
-            { 
+            var groupingSet = new GroupingSetClause(GroupingSetType.GroupingSets, new List<List<Expression>>
+            {
                 new List<Expression> { new IdentifierExpression("cat") },
                 new List<Expression> { } // Grand total
             });
@@ -184,11 +184,11 @@ namespace ETL_SQL.Tests.Operations.Operations
 
             // Small amount of rows but many sets to force intermediate data volume
             var rows = MakeRows(100, new[] { "A", "B", "C" }, new[] { 1, 2, 3 });
-            
+
             // CUBE of 3 columns = 8 sets per row
-            var groupingSet = new GroupingSetClause(GroupingSetType.Cube, new List<List<Expression>> 
-            { 
-                new List<Expression> { new IdentifierExpression("cat"), new IdentifierExpression("sub"), new IdentifierExpression("val") } 
+            var groupingSet = new GroupingSetClause(GroupingSetType.Cube, new List<List<Expression>>
+            {
+                new List<Expression> { new IdentifierExpression("cat"), new IdentifierExpression("sub"), new IdentifierExpression("val") }
             });
 
             var finalColumns = new List<SelectColumn>

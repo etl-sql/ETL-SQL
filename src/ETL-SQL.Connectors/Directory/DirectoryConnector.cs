@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Directory
 {
@@ -27,7 +27,7 @@ namespace ETL_SQL.Connectors.Directory
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);
 
-        public string GetHelp() => 
+        public string GetHelp() =>
             "DIRECTORY Connector: Represents a file system directory.\n" +
             "Used to list files and perform file system operations (COPY, MOVE, etc.).";
 
@@ -42,7 +42,7 @@ namespace ETL_SQL.Connectors.Directory
         public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
         /// <summary>Builds a directory path from named properties.</summary>
-        public string BuildConnectionString(Dictionary<string, string> properties) => 
+        public string BuildConnectionString(Dictionary<string, string> properties) =>
             ConnectionStringBuilder.Build(Name, properties);
     }
 }

@@ -1,7 +1,7 @@
-using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 using System;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -15,7 +15,7 @@ namespace ETL_SQL.Engine.Handlers
         public Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (CreateFunctionStatement)statement;
-            
+
             bool exists = context.VarContext.TryGetFunction(stmt.FunctionName, out _);
             if (stmt.Mode == ObjectCreationMode.Alter && !exists)
                 throw new ExecutionException($"Function {stmt.FunctionName} does not exist.");

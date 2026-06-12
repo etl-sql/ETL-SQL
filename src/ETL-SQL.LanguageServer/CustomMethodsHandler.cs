@@ -1,15 +1,15 @@
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
-using MediatR;
-using OmniSharp.Extensions.JsonRpc;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Reporting;
+using MediatR;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using OmniSharp.Extensions.JsonRpc;
 
 namespace ETL_SQL.LSP
 {
@@ -181,8 +181,8 @@ namespace ETL_SQL.LSP
                 var manifestBuilder = new ManifestBuilder(evaluator);
                 var manifest = await manifestBuilder.BuildAsync(request.text);
 
-                response.manifestJson = System.Text.Json.JsonSerializer.Serialize(manifest, new System.Text.Json.JsonSerializerOptions 
-                { 
+                response.manifestJson = System.Text.Json.JsonSerializer.Serialize(manifest, new System.Text.Json.JsonSerializerOptions
+                {
                     WriteIndented = true,
                     PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
                 });

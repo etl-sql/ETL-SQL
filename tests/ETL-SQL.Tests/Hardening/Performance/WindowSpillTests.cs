@@ -1,13 +1,13 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
@@ -28,7 +28,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
         {
             var sp = DependencyInjectionSetup.BuildServiceProvider();
             var eval = sp.GetRequiredService<Evaluator>();
-            
+
             // Set threshold very low to force spilling
             eval.WindowSpillThreshold = 20;
             eval.IsVerbose = true;
@@ -56,7 +56,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var result = eval.LastResult;
             Assert.NotNull(result);
             Assert.True(result.Rows.Count > 0);
-            
+
             // Verify metrics
             Assert.True(eval.Telemetry.TotalSpilledBytes > 0, $"Expected spill to disk, but TotalSpilledBytes is {eval.Telemetry.TotalSpilledBytes}");
             Assert.True(eval.Telemetry.PartitionsCount > 0, "Expected partition buckets to be used.");
@@ -67,7 +67,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             Assert.True(firstRow.Columns.ContainsKey("region_rank"));
             Assert.True(firstRow.Columns.ContainsKey("prod_qty"));
             Assert.True(firstRow.Columns.ContainsKey("region_count"));
-            
+
             // Output spill stats for debugging
             Console.WriteLine($"Total Spilled Bytes: {eval.Telemetry.TotalSpilledBytes}");
             Console.WriteLine($"Partitions Count: {eval.Telemetry.PartitionsCount}");

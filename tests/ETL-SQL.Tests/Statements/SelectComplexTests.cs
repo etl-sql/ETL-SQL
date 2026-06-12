@@ -1,12 +1,12 @@
-using Xunit;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
-using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Tests.Core;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -227,9 +227,9 @@ namespace ETL_SQL.Tests.Statements
                 FULL OUTER JOIN #right AS r ON l.id = r.id
                 ORDER BY COALESCE(l.id, r.id);");
             Assert.Equal(3, r.Rows.Count);
-            Assert.Equal("A",  r.Rows[0]["name"]);  Assert.Null(r.Rows[0]["score"]);
-            Assert.Equal("B",  r.Rows[1]["name"]);  Assert.Equal(200m, r.Rows[1]["score"]);
-            Assert.Null(r.Rows[2]["name"]);          Assert.Equal(300m, r.Rows[2]["score"]);
+            Assert.Equal("A", r.Rows[0]["name"]); Assert.Null(r.Rows[0]["score"]);
+            Assert.Equal("B", r.Rows[1]["name"]); Assert.Equal(200m, r.Rows[1]["score"]);
+            Assert.Null(r.Rows[2]["name"]); Assert.Equal(300m, r.Rows[2]["score"]);
         }
 
         [Fact]
@@ -315,8 +315,8 @@ namespace ETL_SQL.Tests.Statements
             Assert.Equal(300m, r.Rows[0]["val"]); Assert.Equal(1m, r.Rows[0]["rnk"]);
             Assert.Equal(200m, r.Rows[1]["val"]); Assert.Equal(2m, r.Rows[1]["rnk"]);
             // grp 2: val 20 (rnk=1), 10 (rnk=2)
-            Assert.Equal(20m,  r.Rows[2]["val"]); Assert.Equal(1m, r.Rows[2]["rnk"]);
-            Assert.Equal(10m,  r.Rows[3]["val"]); Assert.Equal(2m, r.Rows[3]["rnk"]);
+            Assert.Equal(20m, r.Rows[2]["val"]); Assert.Equal(1m, r.Rows[2]["rnk"]);
+            Assert.Equal(10m, r.Rows[3]["val"]); Assert.Equal(2m, r.Rows[3]["rnk"]);
         }
 
         // ─── Group 7: CUBE grouping set ───────────────────────────────────────────
@@ -339,7 +339,7 @@ namespace ETL_SQL.Tests.Statements
             // Grand total row: region=null, cat=null, total=100
             var grand = r.Rows.FirstOrDefault(row =>
                 (row["region"] == null || row["region"] == DBNull.Value) &&
-                (row["cat"]    == null || row["cat"]    == DBNull.Value));
+                (row["cat"] == null || row["cat"] == DBNull.Value));
             Assert.NotNull(grand);
             Assert.Equal(100m, grand["total"]);
         }

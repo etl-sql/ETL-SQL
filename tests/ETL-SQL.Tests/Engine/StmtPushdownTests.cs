@@ -1,13 +1,13 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -30,7 +30,7 @@ namespace ETL_SQL.Tests.Engine
                 EXECUTE MyDb BEGIN SELECT UserID, UserName FROM Users END;
             ";
             await ev.Evaluate(Parse(script));
-            
+
             // Verification: Verify the SQL actually hit the mock
             Assert.Single(mock.ExecutedSql);
             Assert.Contains("SELECT UserID, UserName FROM Users", mock.ExecutedSql[0]);
@@ -45,7 +45,7 @@ namespace ETL_SQL.Tests.Engine
                 EXECUTE MyDb INTO #RemoteUsers BEGIN SELECT UserID, UserName FROM Users END;
             ";
             await ev.Evaluate(Parse(script));
-            
+
             // Verify table exists and has data
             Assert.True(ev.Connections.ContainsKey("#RemoteUsers"));
             var ds = ev.Connections["#RemoteUsers"];
@@ -58,18 +58,18 @@ namespace ETL_SQL.Tests.Engine
         public async Task TestInsertIntoExecutePushdown()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             var mock = new MockDatabaseSource();
             ev.Connections["MyDb"] = mock;
 
             var dt = new DataTable();
             dt.SetColumns(new[] { "UserID", "UserName" });
-            
+
             var row1 = dt.NewRow();
             row1["UserID"] = 1;
             row1["UserName"] = "Alice";
             dt.Rows.Add(row1);
-            
+
             var row2 = dt.NewRow();
             row2["UserID"] = 2;
             row2["UserName"] = "Bob";
@@ -81,7 +81,7 @@ namespace ETL_SQL.Tests.Engine
                 INSERT INTO #TargetUsers (UID, UName)
                 EXECUTE MyDb BEGIN SELECT UserID, UserName FROM Users END;
             "));
-            
+
             // Verify #TargetUsers has data
             var ds = ev.Connections["#TargetUsers"];
             var batches = ds.ReadBatches();
@@ -97,7 +97,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task TestComplexNestedPushdown()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             // User's provided complex block
             string script = @"
                 CREATE CONNECTION m AS MOCKDB();
@@ -120,19 +120,19 @@ namespace ETL_SQL.Tests.Engine
                 END
                 END
             ";
-            
+
             var parsed = Parse(script);
             var pushdownStmt = parsed.Statements.OfType<ExecutePushdownStatement>().FirstOrDefault();
-            
+
             Assert.NotNull(pushdownStmt);
-            
+
             // Verify the captured SQL block contains the nested BEGIN/ENDs
             string capturedSql = pushdownStmt.SqlText.Trim();
             Assert.Contains("IF 1=0", capturedSql);
             Assert.Contains("WHILE (@id < 3)", capturedSql);
             Assert.Contains("BEGIN", capturedSql); // Nested BEGINs
             Assert.Contains("END", capturedSql);   // Nested ENDs
-            
+
             // Execute it (mock will just return dummy results but verify no crash)
             await ev.Evaluate(parsed);
             Assert.True(ev.Connections.ContainsKey("#temp"));

@@ -19,7 +19,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ShowConnectionsStatement)statement;
-            
+
             var table = new DataTable();
             table.AddColumn("Name");
             table.AddColumn("Type");

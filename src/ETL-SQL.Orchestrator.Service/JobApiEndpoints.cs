@@ -1,14 +1,23 @@
 using System;
-using System.Security.Cryptography;
-using System.Text;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Reporting;
+using ETL_SQL.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -16,15 +25,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Orchestrator.Channels;
-using ETL_SQL.Orchestrator.Execution;
-using ETL_SQL.Orchestrator.Scheduling;
-using ETL_SQL.Reporting;
-using ETL_SQL.Engine.Handlers;
-using ETL_SQL.Services;
 
 namespace ETL_SQL.Orchestrator.Service
 {
@@ -69,10 +69,10 @@ namespace ETL_SQL.Orchestrator.Service
                 var m = scheduler.GetMetrics();
                 return Results.Ok(new
                 {
-                    active_jobs      = m.ActiveJobs,
-                    queued_jobs      = m.QueuedJobs,
-                    max_jobs         = m.MaxJobs,
-                    available_slots  = m.AvailableSlots,
+                    active_jobs = m.ActiveJobs,
+                    queued_jobs = m.QueuedJobs,
+                    max_jobs = m.MaxJobs,
+                    available_slots = m.AvailableSlots,
                     active_processes = tracker.ActiveCount
                 });
             }).WithName("getMetrics");
@@ -83,7 +83,7 @@ namespace ETL_SQL.Orchestrator.Service
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
 
                 var jobId = Guid.NewGuid().ToString("N")[..8];
-                var cts   = new CancellationTokenSource();
+                var cts = new CancellationTokenSource();
                 var entry = new JobEntry(jobId, cts);
                 _jobs[jobId] = entry;
 
@@ -116,11 +116,11 @@ namespace ETL_SQL.Orchestrator.Service
                 var includeSensitivePayload = ApiKeyAcceptedForSensitivePayload(ctx, cfg);
                 return Results.Ok(new JobStatusResponse
                 {
-                    JobId           = entry.JobId,
-                    Status          = entry.Status,
-                    RowsProcessed   = entry.RowsProcessed,
+                    JobId = entry.JobId,
+                    Status = entry.Status,
+                    RowsProcessed = entry.RowsProcessed,
                     ExecutionTimeMs = entry.ExecutionTimeMs,
-                    ErrorMessage    = entry.ErrorMessage,
+                    ErrorMessage = entry.ErrorMessage,
                     ReportManifestJson = includeSensitivePayload ? entry.ReportManifestJson : null
                 });
             }).WithName("getJobStatus");
@@ -182,14 +182,14 @@ namespace ETL_SQL.Orchestrator.Service
                 var pinnedScript = req.ScriptText != null ? await PinBundlePathsAsync(req.ScriptText, bundleStore) : null;
                 var updated = existing with
                 {
-                    Script            = pinnedScript          ?? existing.Script,
-                    Interval          = req.Interval          ?? existing.Interval,
-                    Unit              = req.Unit != null ? req.Unit.ToUpperInvariant() : existing.Unit,
-                    AtTime            = req.AtTime            ?? existing.AtTime,
-                    IsEnabled         = req.IsEnabled         ?? existing.IsEnabled,
-                    MaxRetries        = req.MaxRetries        ?? existing.MaxRetries,
+                    Script = pinnedScript ?? existing.Script,
+                    Interval = req.Interval ?? existing.Interval,
+                    Unit = req.Unit != null ? req.Unit.ToUpperInvariant() : existing.Unit,
+                    AtTime = req.AtTime ?? existing.AtTime,
+                    IsEnabled = req.IsEnabled ?? existing.IsEnabled,
+                    MaxRetries = req.MaxRetries ?? existing.MaxRetries,
                     RetryDelaySeconds = req.RetryDelaySeconds ?? existing.RetryDelaySeconds,
-                    HashPolicy        = req.HashPolicy        ?? existing.HashPolicy
+                    HashPolicy = req.HashPolicy ?? existing.HashPolicy
                 };
 
                 await store.SaveJobAsync(updated);
@@ -379,11 +379,11 @@ namespace ETL_SQL.Orchestrator.Service
                 var proc = Process.GetCurrentProcess();
                 return Results.Ok(new
                 {
-                    Status    = "Running",
+                    Status = "Running",
                     UptimeSeconds = (DateTime.UtcNow - _startTime).TotalSeconds,
                     ProcessId = proc.Id,
                     StartedAt = _startTime,
-                    Version   = typeof(JobApiEndpoints).Assembly.GetName().Version?.ToString() ?? "unknown"
+                    Version = typeof(JobApiEndpoints).Assembly.GetName().Version?.ToString() ?? "unknown"
                 });
             }).WithName("serviceStatus");
 
@@ -470,8 +470,8 @@ namespace ETL_SQL.Orchestrator.Service
                     ct,
                     request.GetLineageJobName(entry.JobId));
                 entry.RowsProcessed = result.RowsProcessed;
-                entry.Status        = result.Success ? JobRunStatus.Completed : JobRunStatus.Failed;
-                entry.ErrorMessage  = result.ErrorMessage;
+                entry.Status = result.Success ? JobRunStatus.Completed : JobRunStatus.Failed;
+                entry.ErrorMessage = result.ErrorMessage;
 
                 if (result.Success && request.Metadata != null &&
                     request.Metadata.TryGetValue("IsReport", out var isReport) && isReport == "true")
@@ -488,7 +488,7 @@ namespace ETL_SQL.Orchestrator.Service
 
                             var snapshotDir = "Snapshots";
                             Directory.CreateDirectory(snapshotDir);
-                            var reportId  = request.Metadata.GetValueOrDefault("ReportId", "unknown");
+                            var reportId = request.Metadata.GetValueOrDefault("ReportId", "unknown");
                             var sessionId = request.SessionId ?? entry.JobId;
                             if (reportId.Contains("..") || reportId.Contains('/') || reportId.Contains('\\') ||
                                 sessionId.Contains("..") || sessionId.Contains('/') || sessionId.Contains('\\'))
@@ -514,7 +514,7 @@ namespace ETL_SQL.Orchestrator.Service
             }
             catch (Exception ex)
             {
-                entry.Status       = JobRunStatus.Failed;
+                entry.Status = JobRunStatus.Failed;
                 entry.ErrorMessage = ex.Message;
                 logger.LogError(ex, "Job {JobId} failed unexpectedly: {Message}. StackTrace: {Stack}",
                     entry.JobId, ex.Message, ex.StackTrace);
@@ -531,23 +531,23 @@ namespace ETL_SQL.Orchestrator.Service
         private sealed record CreateScheduledJobRequest(
             string Name,
             string ScriptText,
-            int    Interval,
+            int Interval,
             string Unit,
-            string? AtTime            = null,
-            int    MaxRetries         = 0,
-            int    RetryDelaySeconds  = 30,
-            string? HashPolicy        = "Warn"
+            string? AtTime = null,
+            int MaxRetries = 0,
+            int RetryDelaySeconds = 30,
+            string? HashPolicy = "Warn"
         );
 
         private sealed record UpdateScheduledJobRequest(
-            string? ScriptText        = null,
-            int?    Interval          = null,
-            string? Unit              = null,
-            string? AtTime            = null,
-            bool?   IsEnabled         = null,
-            int?    MaxRetries        = null,
-            int?    RetryDelaySeconds = null,
-            string? HashPolicy        = null
+            string? ScriptText = null,
+            int? Interval = null,
+            string? Unit = null,
+            string? AtTime = null,
+            bool? IsEnabled = null,
+            int? MaxRetries = null,
+            int? RetryDelaySeconds = null,
+            string? HashPolicy = null
         );
 
         private sealed record PublishBundleApiRequest(
@@ -557,13 +557,13 @@ namespace ETL_SQL.Orchestrator.Service
 
         private sealed class JobEntry(string jobId, CancellationTokenSource cts)
         {
-            public string                  JobId           { get; } = jobId;
-            public CancellationTokenSource Cts             { get; } = cts;
-            public JobRunStatus            Status          { get; set; } = JobRunStatus.Queued;
-            public long                    RowsProcessed   { get; set; }
-            public long                    ExecutionTimeMs { get; set; }
-            public string?                 ErrorMessage    { get; set; }
-            public string?                 ReportManifestJson { get; set; }
+            public string JobId { get; } = jobId;
+            public CancellationTokenSource Cts { get; } = cts;
+            public JobRunStatus Status { get; set; } = JobRunStatus.Queued;
+            public long RowsProcessed { get; set; }
+            public long ExecutionTimeMs { get; set; }
+            public string? ErrorMessage { get; set; }
+            public string? ReportManifestJson { get; set; }
         }
     }
 }

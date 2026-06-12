@@ -1,11 +1,11 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Engine.Handlers;
-using ETL_SQL.Common;
 using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -19,7 +19,7 @@ namespace ETL_SQL.Tests.Hardening
             // Arrange
             var handler = new CreateSshKeyPairStatementHandler(_logger.Object);
             string tempPath = Path.Combine(Path.GetTempPath(), "ETL-SQL-SSH", Guid.NewGuid().ToString());
-            
+
             var mockContext = new Mock<IExecutionContext>();
             mockContext.Setup(c => c.ResolvePath(It.IsAny<string>())).Returns(tempPath);
             mockContext.Setup(c => c.EvaluateValue(It.IsAny<Expression>(), It.IsAny<Row>(), It.IsAny<bool>()))
@@ -62,11 +62,12 @@ namespace ETL_SQL.Tests.Hardening
             // Arrange
             var handler = new CreateSshKeyPairStatementHandler(_logger.Object);
             string tempPath = Path.Combine(Path.GetTempPath(), "ETL-SQL-SSH-Pass", Guid.NewGuid().ToString());
-            
+
             var mockContext = new Mock<IExecutionContext>();
             mockContext.Setup(c => c.ResolvePath(It.IsAny<string>())).Returns(tempPath);
             mockContext.Setup(c => c.EvaluateValue(It.IsAny<Expression>(), It.IsAny<Row>(), It.IsAny<bool>()))
-                .ReturnsAsync((Expression e, Row r, bool d) => {
+                .ReturnsAsync((Expression e, Row r, bool d) =>
+                {
                     if (e is LiteralExpression l) return l.Value;
                     return null;
                 });

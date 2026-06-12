@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
@@ -20,7 +20,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (SetSecurityOverrideStatement)statement;
-            
+
             string overrideName = "";
             switch (stmt.Override)
             {
@@ -57,7 +57,7 @@ namespace ETL_SQL.Engine.Handlers
 
             string state = stmt.Enabled ? "ON" : "OFF";
             if (stmt.Override == SecurityOverride.FileTypeExtension) state = "ADDED";
-            
+
             // Mandatory audit log for security overrides
             _logger.WriteLine($"Audit: Security override {overrideName} turned {state} by script.", ConsoleColor.Yellow);
         }

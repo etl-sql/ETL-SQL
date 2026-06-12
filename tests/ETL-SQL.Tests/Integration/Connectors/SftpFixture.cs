@@ -4,9 +4,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
 using Xunit;
-using DotNet.Testcontainers.Configurations;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {

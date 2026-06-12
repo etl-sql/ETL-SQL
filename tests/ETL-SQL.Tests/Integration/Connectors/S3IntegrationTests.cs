@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using Moq;
 using Amazon.S3;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.S3;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Services;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {

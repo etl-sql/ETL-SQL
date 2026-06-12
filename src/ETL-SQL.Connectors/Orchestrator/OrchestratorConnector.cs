@@ -39,11 +39,11 @@ namespace ETL_SQL.Connectors.Orchestrator
         public HashSet<string> GetSupportedKeywords() => [];
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
-            ["HOST"]     = [],
-            ["PORT"]     = [],
-            ["USER"]     = [],
+            ["HOST"] = [],
+            ["PORT"] = [],
+            ["USER"] = [],
             ["PASSWORD"] = [],
-            ["API_KEY"]  = []
+            ["API_KEY"] = []
         };
         public Dictionary<string, string[]> GetOptionValues() => [];
         public string GetHelp() =>

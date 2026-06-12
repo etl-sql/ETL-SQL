@@ -1,7 +1,7 @@
-using ETL_SQL.Data;
 using System;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -16,7 +16,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (DropTableStatement)statement;
-            
+
             _logger.Debug("Dropping table {TableName} on {ConnectionName}", stmt.TargetTable.TableName, stmt.TargetTable.ConnectionName ?? "local");
             if (context.EngineContext is Evaluator eval)
             {

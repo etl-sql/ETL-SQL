@@ -1,11 +1,11 @@
 using System;
 using System.IO;
 using System.Text.RegularExpressions;
+using ETL_SQL.Common;
 using PdfSharp.Pdf;
-using PdfSharp.Pdf.IO;
 using PdfSharp.Pdf.Content;
 using PdfSharp.Pdf.Content.Objects;
-using ETL_SQL.Common;
+using PdfSharp.Pdf.IO;
 
 namespace ETL_SQL.App
 {
@@ -22,7 +22,7 @@ namespace ETL_SQL.App
                 }
 
                 logger.WriteLine($"Scanning specification: {inputPath}");
-                
+
                 // Open the source PDF document in import mode
                 using var inputDocument = PdfReader.Open(inputPath, PdfDocumentOpenMode.Import);
                 using var outputDocument = new PdfDocument();
@@ -32,9 +32,9 @@ namespace ETL_SQL.App
                 {
                     var page = inputDocument.Pages[i];
                     string pageText = ExtractTextFromPage(page);
-                    
+
                     int score = CalculateSchemaScore(pageText);
-                    
+
                     // If the page contains a high density of schema/dictionary content, keep it
                     if (score >= 15)
                     {

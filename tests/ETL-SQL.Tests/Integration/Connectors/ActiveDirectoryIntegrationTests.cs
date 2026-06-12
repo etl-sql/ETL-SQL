@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using Moq;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Services;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
@@ -81,7 +81,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
             Assert.Single(batches);
             var table = batches[0];
-            
+
             // Check that the seeded test user "john" exists in results
             Assert.Contains(table.Rows, r => r["cn"]?.ToString() == "john" && r["mail"]?.ToString() == "john@etl-sql.org");
         }

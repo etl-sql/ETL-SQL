@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Data.Odbc;
-using ETL_SQL.Data;
+using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Odbc
 {
@@ -66,7 +66,8 @@ namespace ETL_SQL.Connectors.Odbc
             if (host != null) context.SecurityService.ValidateHost(host);
 
             var procs = new List<string>();
-            try {
+            try
+            {
                 using var conn = new OdbcConnection(connectionString);
                 await Task.Run(() => conn.Open());
                 using var schemaTable = conn.GetSchema("Procedures");
@@ -75,7 +76,8 @@ namespace ETL_SQL.Connectors.Odbc
                     var proc = row["PROCEDURE_NAME"].ToString();
                     if (!string.IsNullOrEmpty(proc)) procs.Add(proc);
                 }
-            } catch { /* Suppress errors for schema discovery */ }
+            }
+            catch { /* Suppress errors for schema discovery */ }
             return procs;
         }
 
@@ -107,7 +109,7 @@ Supported Options:
         public static string? GetHostStatic(string connectionString, Dictionary<string, string>? options = null)
         {
             if (options != null && options.TryGetValue("SERVER", out var server)) return server;
-            
+
             try
             {
                 var builder = new OdbcConnectionStringBuilder(connectionString);

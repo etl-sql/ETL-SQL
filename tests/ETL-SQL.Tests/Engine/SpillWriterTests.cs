@@ -1,15 +1,15 @@
-using Xunit;
-using ETL_SQL.Orchestrator.Execution;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Spill;
+using ETL_SQL.Orchestrator.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using Xunit;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -34,7 +34,7 @@ namespace ETL_SQL.Tests.Engine
                 MaxGlobalMemoryMB = 10, // 10MB limit
                 ResourceWaitTimeoutSeconds = 5
             };
-            
+
             var mockSys = new Mock<ISystemResources>();
             mockSys.Setup(s => s.GetAvailableMemoryBytes()).Returns(1024 * 1024 * 1024); // 1GB available (above floor)
 
@@ -55,7 +55,7 @@ namespace ETL_SQL.Tests.Engine
                 }));
 
             var bufferManager = new BufferManager(Options.Create(options), mockLogger.Object, mockSys.Object);
-            
+
             var mockServiceProvider = new Mock<IServiceProvider>();
             mockServiceProvider.Setup(s => s.GetService(typeof(IBufferManager))).Returns(bufferManager);
 
@@ -67,17 +67,17 @@ namespace ETL_SQL.Tests.Engine
             mockContext.Setup(c => c.ServiceProvider).Returns(mockServiceProvider.Object);
             mockContext.Setup(c => c.SpillStore).Returns(mockSpill.Object);
             mockContext.Setup(c => c.Logger).Returns(mockContextLogger.Object);
-            mockContext.Setup(c => c.TempTableSpillThresholdRows).Returns(100_000);  
+            mockContext.Setup(c => c.TempTableSpillThresholdRows).Returns(100_000);
 
             // 2. Create a spillable data source that holds 8MB
             var ds = new InMemoryDataSource();
             ds.ExecutionContext = mockContext.Object; // Registers with BufferManager
-            
+
             // Add some data to make it 'large'
             var table = new DataTable();
             table.SetColumns(new[] { "col1" });
-            
-            for (int i = 0; i < 20000; i++) 
+
+            for (int i = 0; i < 20000; i++)
             {
                 var row = new Row(table.Schema);
                 row["col1"] = new string('x', 512); // approx 0.5KB per row
@@ -90,15 +90,15 @@ namespace ETL_SQL.Tests.Engine
                 await Task.CompletedTask;
             }
             await ds.WriteBatches(GetBatches());
-            
+
             var initialUsage = ds.MemoryUsageBytes;
             Assert.True(initialUsage > 4 * 1024 * 1024, $"Initial usage should be > 4MB, got {initialUsage}");
 
             // 3. Request more memory to trigger pressure
-            try 
+            try
             {
                 long reclaimed = await bufferManager.TriggerSpillsUnderPressureAsync(11 * 1024 * 1024);
-                
+
                 Assert.Equal(0, ds.MemoryUsageBytes);
             }
             catch (Exception ex)

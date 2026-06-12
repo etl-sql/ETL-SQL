@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using Microsoft.Extensions.Configuration;
 using ETL_SQL.Orchestrator.Service;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace ETL_SQL.ReportPortal.Tests;

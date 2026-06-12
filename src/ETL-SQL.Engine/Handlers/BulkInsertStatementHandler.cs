@@ -1,10 +1,10 @@
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -23,7 +23,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (BulkInsertStatement)statement;
-            
+
 
             // 1. Resolve Target
             var destination = await context.ResolveDataSourceAsync(stmt.TargetTable);
@@ -31,30 +31,30 @@ namespace ETL_SQL.Engine.Handlers
                 throw new ExecutionException($"Target table {stmt.TargetTable.TableName} not found.");
 
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
-            
+
             if (stmt.Columns != null && stmt.Columns.Count > 0)
             {
                 foreach (var col in stmt.Columns)
                 {
                     context.LineageTracker.Record(
-                        connName, 
-                        stmt.GetSourceTables(), 
-                        "BULK INSERT", 
-                        targetColumn: col, 
+                        connName,
+                        stmt.GetSourceTables(),
+                        "BULK INSERT",
+                        targetColumn: col,
                         sourceColumns: new List<string> { col },
                         metadata: stmt.Metadata,
-                        line: stmt.Line, 
+                        line: stmt.Line,
                         column: stmt.Column);
                 }
             }
             else
             {
                 context.LineageTracker.Record(
-                    connName, 
-                    stmt.GetSourceTables(), 
-                    "BULK INSERT", 
+                    connName,
+                    stmt.GetSourceTables(),
+                    "BULK INSERT",
                     metadata: stmt.Metadata,
-                    line: stmt.Line, 
+                    line: stmt.Line,
                     column: stmt.Column);
             }
 
@@ -68,7 +68,7 @@ namespace ETL_SQL.Engine.Handlers
 
             // 3. Map Bulk Options to FlatFile Options
             var ffOptions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            
+
             string Unescape(string s)
             {
                 if (string.IsNullOrEmpty(s)) return s;
@@ -81,7 +81,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 ffOptions["START_AT"] = Math.Max(0, firstRow - 1).ToString();
             }
-            
+
             // For BULK INSERT, we handle headers manually via positional mapping or FIRSTROW.
             // Setting HEADER to FALSE prevents FlatFileDataSource from skipping an extra row.
             ffOptions["HEADER"] = "FALSE";
@@ -102,7 +102,7 @@ namespace ETL_SQL.Engine.Handlers
             try
             {
                 _logger.Debug("Bulk loading from {FilePath} into {TableName}", stmt.FilePath, stmt.TargetTable.TableName);
-                
+
                 int batchSize = context.BatchSize;
                 if (options.TryGetValue("BATCHSIZE", out var bs) && int.TryParse(bs, out var bsv))
                     batchSize = bsv;
@@ -112,11 +112,11 @@ namespace ETL_SQL.Engine.Handlers
                     maxErrors = mev;
 
                 var batches = context.InterceptProgress(source.ReadBatches(batchSize));
-                
+
 
                 // Get destination columns for metadata validation
                 var destColumns = (await destination.GetColumnsAsync()).ToList();
-                
+
                 // Determine mapping: use explicit columns if provided, otherwise positional mapping to destination columns
                 var mapping = stmt.Columns ?? destColumns;
 
@@ -156,7 +156,7 @@ namespace ETL_SQL.Engine.Handlers
                             {
                                 context.SecurityService.ValidateWriteAccess(destination.Path);
                             }
-                            
+
                             await destination.WriteBatches(new[] { mappedBatch }.ToAsyncEnumerable(), append: true);
                         }
                         count += mappedBatch.Rows.Count;
@@ -192,7 +192,7 @@ namespace ETL_SQL.Engine.Handlers
                         }
                     }
                 }
-                
+
 
                 _logger.WriteLine($"Bulk insert completed. {count} rows loaded. {errorCount} errors skipped.");
             }

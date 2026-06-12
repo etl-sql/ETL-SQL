@@ -21,27 +21,27 @@ namespace ETL_SQL.Core.Data
 
     public class DatasetMetadata
     {
-        public int                   Id              { get; set; }
-        public string                Name            { get; set; } = "";
-        public string                FolderPath      { get; set; } = "";
-        public int?                  FolderId        { get; set; }
-        public int?                  CreatedBy       { get; set; }
-        public string                ParquetFilePath { get; set; } = "";
-        public string?               AtRestKeyVersion { get; set; }
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string FolderPath { get; set; } = "";
+        public int? FolderId { get; set; }
+        public int? CreatedBy { get; set; }
+        public string ParquetFilePath { get; set; } = "";
+        public string? AtRestKeyVersion { get; set; }
         /// <summary>Resolved in-memory decryption key; registry implementations must never persist it.</summary>
-        public string?               AtRestDecryptionKey { get; set; }
-        public int?                  OwningReportId  { get; set; }
-        public string                SourceQuery     { get; set; } = "";
-        public DatasetAccessLevel    AccessLevel     { get; set; } = DatasetAccessLevel.Private;
-        public DatasetEncryptionMode EncryptionMode  { get; set; } = DatasetEncryptionMode.MachineBound;
-        public DateTime?             LastRefresh     { get; set; }
-        public string?               Ttl             { get; set; }
-        public TimeSpan?             CachedTtl       { get; set; } // Parsed from Ttl at registration; avoids repeated string parsing
-        public string?               RefreshInterval { get; set; }
-        public long                  RowCount        { get; set; }
-        public string?               ColumnSchema    { get; set; } // JSON
-        public DateTime              CreatedAt       { get; set; } = DateTime.UtcNow;
-        public DateTime              UpdatedAt       { get; set; } = DateTime.UtcNow;
+        public string? AtRestDecryptionKey { get; set; }
+        public int? OwningReportId { get; set; }
+        public string SourceQuery { get; set; } = "";
+        public DatasetAccessLevel AccessLevel { get; set; } = DatasetAccessLevel.Private;
+        public DatasetEncryptionMode EncryptionMode { get; set; } = DatasetEncryptionMode.MachineBound;
+        public DateTime? LastRefresh { get; set; }
+        public string? Ttl { get; set; }
+        public TimeSpan? CachedTtl { get; set; } // Parsed from Ttl at registration; avoids repeated string parsing
+        public string? RefreshInterval { get; set; }
+        public long RowCount { get; set; }
+        public string? ColumnSchema { get; set; } // JSON
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 
     public interface IDatasetRegistry

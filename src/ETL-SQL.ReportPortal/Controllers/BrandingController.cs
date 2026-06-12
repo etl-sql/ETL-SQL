@@ -1,6 +1,6 @@
+using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using ETL_SQL.ReportPortal.Services;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 

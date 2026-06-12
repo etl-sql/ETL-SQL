@@ -1,12 +1,12 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Core;
 using ETL_SQL.Analysis.Linting;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
 using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis
 {
@@ -44,7 +44,7 @@ EXECUTE [MockDB]
     SELECT * FROM TestTable
 END;
 "; // Missing BEGIN before the block
-            
+
             // This is actually a parser SyntaxException because EXECUTE <conn> must be followed by BEGIN or a string literal.
             // But if it's treated as a generic block error:
             var lexer = new Lexer(sql);
@@ -97,13 +97,13 @@ END;
             Assert.NotNull(execStmt);
             Assert.False(execStmt.HasUnbalancedBlocks);
             Assert.Equal(2, execStmt.Parameters.Count);
-            
+
             var p1 = Assert.IsType<VariableExpression>(execStmt.Parameters[0]);
             Assert.Equal("@id", p1.Name);
-            
+
             var p2 = Assert.IsType<VariableExpression>(execStmt.Parameters[1]);
             Assert.Equal("@name", p2.Name);
-            
+
             Assert.Contains("SELECT * FROM Users WHERE Id = ? AND Name = ?", execStmt.SqlText);
         }
     }

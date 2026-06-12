@@ -2,9 +2,9 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
-using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -25,11 +25,11 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (FileTransferStatement)statement;
-            
+
             string localPathVal = (await context.EvaluateValue(stmt.LocalPath, new Row()))?.ToString() ?? "";
             string localPath = context.ResolvePath(localPathVal);
             string remotePath = (await context.EvaluateValue(stmt.RemotePath, new Row()))?.ToString() ?? "";
-            
+
             bool overwrite = true;
             if (stmt.Overwrite != null)
             {
@@ -97,7 +97,7 @@ namespace ETL_SQL.Engine.Handlers
                     _logger.WriteLine($"SENDING: {localPath} -> {stmt.ConnectionName}:{remotePath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
 
                     context.SecurityService.ValidateFileType(localPath);
-                    
+
                     if (context.IsWhatIf)
                     {
                         _logger.WriteLine($"WHAT IF: Would send local file {localPath} to {stmt.ConnectionName}:{remotePath}", ConsoleColor.Yellow);
@@ -173,7 +173,7 @@ namespace ETL_SQL.Engine.Handlers
                 else
                 {
                     _logger.WriteLine($"RECEIVING: {stmt.ConnectionName}:{remotePath} -> {localPath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
-                    
+
                     // Security Hardening: Block writing to script files and dangerous local file types.
                     context.SecurityService.ValidateWriteAccess(localPath);
                     context.SecurityService.ValidateFileType(localPath);

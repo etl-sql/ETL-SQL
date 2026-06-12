@@ -1,11 +1,11 @@
 using System;
-using ETL_SQL.Core.Common.Exceptions;
 using System.IO;
-using System.Threading.Tasks;
 using System.IO.Compression;
-using ETL_SQL.Data;
+using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -26,7 +26,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (FileOperationStatement)statement;
-            
+
             if (!string.IsNullOrEmpty(stmt.ConnectionName))
             {
                 // Remote execution context
@@ -74,7 +74,7 @@ namespace ETL_SQL.Engine.Handlers
                         case FileOpType.Rename:
                             if (remoteDest == null)
                                 throw new ExecutionException($"{stmt.Type}_FILE requires a destination name.");
-                            
+
                             string finalDest = remoteDest;
                             if (stmt.Type == FileOpType.Rename && !remoteDest.Contains("/") && !remoteDest.Contains("\\"))
                             {
@@ -112,7 +112,7 @@ namespace ETL_SQL.Engine.Handlers
                 context.Log($"WHAT IF: Would perform {stmt.Type}_FILE", ConsoleColor.Yellow);
                 return;
             }
-            
+
             bool overwrite = true; // Default to true for backward compatibility with underscore functions
             if (stmt.Overwrite != null)
             {
@@ -148,7 +148,7 @@ namespace ETL_SQL.Engine.Handlers
                         context.SecurityService.ValidateWriteAccess(source);
                         context.SecurityService.ValidateFileType(source);
 
-                        if (File.Exists(source)) 
+                        if (File.Exists(source))
                         {
                             File.Delete(source);
                             context.Log($"File deleted: {source}", ConsoleColor.Green);
@@ -200,11 +200,11 @@ namespace ETL_SQL.Engine.Handlers
                             var fileName = Path.GetFileName(source);
                             var dir = Path.GetDirectoryName(source) ?? "";
                             var newPath = Path.Combine(dir, dest);
-                            
+
                             // Security Hardening: Validate the constructed rename path
                             context.SecurityService.ValidatePath(newPath);
                             context.SecurityService.ValidateWriteAccess(newPath);
-                            
+
                             if (File.Exists(newPath))
                             {
                                 if (overwrite) File.Delete(newPath);

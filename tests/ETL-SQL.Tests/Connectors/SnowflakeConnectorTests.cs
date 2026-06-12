@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Snowflake;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Services;
 using Moq;
 using Xunit;
@@ -438,8 +438,8 @@ namespace ETL_SQL.Tests.Connectors
             var connector = new SnowflakeConnector();
             var cs = connector.BuildConnectionString(new Dictionary<string, string>
             {
-                ["HOST"]             = "myorg-myaccount",
-                ["USERNAME"]         = "alice",
+                ["HOST"] = "myorg-myaccount",
+                ["USERNAME"] = "alice",
                 ["PRIVATE_KEY_FILE"] = "/certs/rsa_key.p8"
             });
 
@@ -454,7 +454,7 @@ namespace ETL_SQL.Tests.Connectors
             var connector = new SnowflakeConnector();
             var cs = connector.BuildConnectionString(new Dictionary<string, string>
             {
-                ["HOST"]     = "myorg-myaccount",
+                ["HOST"] = "myorg-myaccount",
                 ["USERNAME"] = "alice",
                 ["PASSWORD"] = "mysecret"
             });

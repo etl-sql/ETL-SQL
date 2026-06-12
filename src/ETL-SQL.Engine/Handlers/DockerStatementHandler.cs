@@ -1,7 +1,7 @@
 using System;
-using ETL_SQL.Core.Common.Exceptions;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -23,7 +23,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             if (statement is not DockerStatement dockerStmt) return;
 
-            
+
             var imageName = (await context.EvaluateValue(dockerStmt.ImageName, new Data.Row()))?.ToString();
 
             if (string.IsNullOrEmpty(imageName))
@@ -33,7 +33,7 @@ namespace ETL_SQL.Engine.Handlers
 
             // Start the container and track it in the evaluator's manager
             _logger.WriteLine($"Initializing Docker container: {imageName} with alias {dockerStmt.Alias ?? "none"}...", ConsoleColor.Cyan);
-            
+
             if (context.IsWhatIf)
             {
                 _logger.WriteLine($"WHAT IF: Would start Docker container: {imageName}", ConsoleColor.Yellow);
@@ -41,7 +41,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             await context.DockerManager.StartContainer(imageName, dockerStmt.Alias);
-            
+
             _logger.WriteLine($"Docker container started: {imageName}", ConsoleColor.Green);
         }
     }

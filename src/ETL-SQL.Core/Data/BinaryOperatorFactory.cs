@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Core.Data
 {
@@ -46,10 +46,13 @@ namespace ETL_SQL.Core.Data
             }
 
             decimal da, db;
-            try {
+            try
+            {
                 da = Convert.ToDecimal(a, System.Globalization.CultureInfo.InvariantCulture);
                 db = Convert.ToDecimal(b, System.Globalization.CultureInfo.InvariantCulture);
-            } catch {
+            }
+            catch
+            {
                 return op == "+" ? a?.ToString() + b?.ToString() : null;
             }
             try

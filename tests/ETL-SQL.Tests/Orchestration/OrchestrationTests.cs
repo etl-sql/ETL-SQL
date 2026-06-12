@@ -1,15 +1,15 @@
-using Xunit;
 using System;
-using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.IO;
-using ETL_SQL.Core;
+using System.Threading.Tasks;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using Spectre.Console;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {
@@ -37,7 +37,7 @@ RUN SCRIPT '{subScriptPath}' WITH (@input = @val);
 SET @result = @output;
 ";
                 var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                                await evaluator.Evaluate(TestHelpers.Parse(mainScript));
+                await evaluator.Evaluate(TestHelpers.Parse(mainScript));
 
 
                 var result = evaluator.GetVariable("@result");
@@ -67,7 +67,7 @@ SET @diff = @a - @b;
 RUN SCRIPT '{subScriptPath}' WITH (@a = 100, @b = 30);
 ";
                 var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                                await evaluator.Evaluate(TestHelpers.Parse(mainScript));
+                await evaluator.Evaluate(TestHelpers.Parse(mainScript));
 
 
                 var sum = evaluator.GetVariable("@sum");
@@ -92,7 +92,7 @@ RUN SCRIPT '{subScriptPath}' WITH (@a = 100, @b = 30);
             {
                 string mainScript = $"RUN SCRIPT '{subScriptPath}';";
                 var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                                var script = TestHelpers.Parse(mainScript);
+                var script = TestHelpers.Parse(mainScript);
 
 
                 var ex = await Assert.ThrowsAsync<ExecutionException>(async () => await evaluator.Evaluate(script));

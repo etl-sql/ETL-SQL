@@ -1,15 +1,14 @@
-using Xunit;
-using ETL_SQL.Engine.Engines;
-
-using ETL_SQL.Core;
-using ETL_SQL.Data;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.App;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Engines;
 using ETL_SQL.Engine.Handlers;
 using Microsoft.Extensions.DependencyInjection;
-using System;
-using ETL_SQL.App;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -25,7 +24,7 @@ namespace ETL_SQL.Tests.Connectors
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens);
             var stmt = parser.ParseStatement();
-            
+
             await evaluator.EvaluateStatement(stmt);
             return evaluator.LastResult;
         }
@@ -35,7 +34,7 @@ namespace ETL_SQL.Tests.Connectors
         {
             string sql = "SELECT 1 as [Id.Val], 'Test' as [Name] FOR JSON PATH, WITHOUT_ARRAY_WRAPPER";
             var result = await ExecuteSelect(sql);
-            
+
             Assert.Single(result.Rows);
             string json = result.Rows[0].Columns.Values.First().ToString();
             Assert.DoesNotContain("[", json);
@@ -49,7 +48,7 @@ namespace ETL_SQL.Tests.Connectors
         {
             string sql = "SELECT 1 as Id, 'Test' as Name FOR XML RAW, ELEMENTS";
             var result = await ExecuteSelect(sql);
-            
+
             Assert.Single(result.Rows);
             string xml = result.Rows[0].Columns.Values.First().ToString();
             Assert.Contains("<Id>1</Id>", xml);
@@ -62,7 +61,7 @@ namespace ETL_SQL.Tests.Connectors
         {
             string sql = "SELECT 1 as Id, 'Test' as Name FOR XML AUTO";
             var result = await ExecuteSelect(sql);
-            
+
             Assert.Single(result.Rows);
             string xml = result.Rows[0].Columns.Values.First().ToString();
             Assert.Contains("Id=\"1\"", xml);
@@ -75,7 +74,7 @@ namespace ETL_SQL.Tests.Connectors
         {
             string sql = "SELECT 1 as [User.Id], 'Alice' as [User.Name] FOR XML PATH('Root')";
             var result = await ExecuteSelect(sql);
-            
+
             Assert.Single(result.Rows);
             string xml = result.Rows[0].Columns.Values.First().ToString();
             Assert.Contains("<User>", xml);
@@ -89,7 +88,7 @@ namespace ETL_SQL.Tests.Connectors
             // We need a way to select NULL with a name
             string sql = "SELECT 1 as Id, CAST(NULL AS STRING) as Name FOR XML RAW, ELEMENTS, INCLUDE_NULL_VALUES";
             var result = await ExecuteSelect(sql);
-            
+
             Assert.Single(result.Rows);
             string xml = result.Rows[0].Columns.Values.First().ToString();
             Assert.Contains("xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"", xml);

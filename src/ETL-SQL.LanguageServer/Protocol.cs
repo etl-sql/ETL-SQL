@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using ETL_SQL.Data;
 using ETL_SQL.Core;
+using ETL_SQL.Data;
 using MediatR;
 
 namespace ETL_SQL.LSP

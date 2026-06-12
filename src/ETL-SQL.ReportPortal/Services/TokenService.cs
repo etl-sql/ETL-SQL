@@ -2,8 +2,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.IdentityModel.Tokens;
 using ETL_SQL.ReportPortal.Data;
+using Microsoft.IdentityModel.Tokens;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -24,10 +24,10 @@ public class TokenService(PortalConfig config)
         foreach (var role in roles)
             claims.Add(new Claim(ClaimTypes.Role, role));
 
-        var key   = JwtSigningKeyRing.Current(config.Jwt);
+        var key = JwtSigningKeyRing.Current(config.Jwt);
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
-            claims:  claims,
+            claims: claims,
             expires: DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes),
             signingCredentials: creds);
 

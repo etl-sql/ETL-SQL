@@ -1,10 +1,10 @@
-using ETL_SQL.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Spill;
+using ETL_SQL.Data;
 using ETL_SQL.Engine.Planning;
 
 namespace ETL_SQL.Engine.Engines
@@ -421,7 +421,7 @@ namespace ETL_SQL.Engine.Engines
             }
 
             JoinHint algorithm = GetBestAlgorithm(join, -1, joinRows.Count, hasEquality); // -1 means unknown (stream)
-            
+
             _logger.Debug("Join Strategy (Streaming): {Algorithm} Join between {LeftAlias} and {RightAlias}", algorithm, leftAlias, rightAlias);
 
             if (algorithm == JoinHint.Hash)
@@ -669,12 +669,12 @@ namespace ETL_SQL.Engine.Engines
                     {
                         foundMatch = true;
                         if (IsSemiJoin(join.JoinType) || IsAntiJoin(join.JoinType)) break;
-                        
+
                         yield return combined;
                         matchedRight.Add(right);
                     }
                 }
-                
+
                 if (IsSemiJoin(join.JoinType) && foundMatch) yield return left.Clone();
                 else if (IsAntiJoin(join.JoinType) && !foundMatch) yield return left.Clone();
                 else if (!foundMatch && IsLeftOuter(join.JoinType)) yield return left.Clone();

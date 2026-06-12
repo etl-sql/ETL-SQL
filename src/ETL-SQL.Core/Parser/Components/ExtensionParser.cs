@@ -14,7 +14,7 @@ namespace ETL_SQL.Core.Parser.Components
             var startToken = _parser.Previous;
             Expression? to = null, from = null, subject = null, body = null, connectionName = null;
             var attachments = new List<Expression>();
-            var cc  = new List<Expression>();
+            var cc = new List<Expression>();
             var bcc = new List<Expression>();
 
             if (!isSqlStyle && _parser.Current.Type != TokenType.LPAREN) isSqlStyle = true;
@@ -59,19 +59,19 @@ namespace ETL_SQL.Core.Parser.Components
                     else break;
                 }
 
-                if (to == null)      throw new SyntaxException("SEND EMAIL requires a TO clause", _parser.Current.Line, _parser.Current.Column);
-                if (from == null)    throw new SyntaxException("SEND EMAIL requires a FROM clause", _parser.Current.Line, _parser.Current.Column);
+                if (to == null) throw new SyntaxException("SEND EMAIL requires a TO clause", _parser.Current.Line, _parser.Current.Column);
+                if (from == null) throw new SyntaxException("SEND EMAIL requires a FROM clause", _parser.Current.Line, _parser.Current.Column);
                 if (subject == null) throw new SyntaxException("SEND EMAIL requires a SUBJECT clause", _parser.Current.Line, _parser.Current.Column);
-                if (body == null)    throw new SyntaxException("SEND EMAIL requires a BODY clause", _parser.Current.Line, _parser.Current.Column);
+                if (body == null) throw new SyntaxException("SEND EMAIL requires a BODY clause", _parser.Current.Line, _parser.Current.Column);
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             }
             else
             {
                 Consume(TokenType.LPAREN, "Expected '('");
                 connectionName = ParseExpression(); Consume(TokenType.COMMA, "Expected ','");
-                to = ParseExpression();             Consume(TokenType.COMMA, "Expected ','");
-                from = ParseExpression();           Consume(TokenType.COMMA, "Expected ','");
-                subject = ParseExpression();        Consume(TokenType.COMMA, "Expected ','");
+                to = ParseExpression(); Consume(TokenType.COMMA, "Expected ','");
+                from = ParseExpression(); Consume(TokenType.COMMA, "Expected ','");
+                subject = ParseExpression(); Consume(TokenType.COMMA, "Expected ','");
                 body = ParseExpression();
 
                 if (Match(TokenType.COMMA))
@@ -109,12 +109,12 @@ namespace ETL_SQL.Core.Parser.Components
 
             var stmt = new EmailStatement(to, from, subject, body, connectionName)
             {
-                IsSqlStyle  = isSqlStyle,
-                Cc          = cc,
-                Bcc         = bcc,
+                IsSqlStyle = isSqlStyle,
+                Cc = cc,
+                Bcc = bcc,
                 Attachments = attachments,
-                Line        = startToken.Line,
-                Column      = startToken.Column
+                Line = startToken.Line,
+                Column = startToken.Column
             };
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return stmt;
@@ -159,11 +159,11 @@ namespace ETL_SQL.Core.Parser.Components
                     else break;
                 }
 
-                if (localPath == null && type == FileTransferType.Send)    throw new SyntaxException("Local source path is mandatory for SEND FILE", _parser.Current.Line, _parser.Current.Column);
+                if (localPath == null && type == FileTransferType.Send) throw new SyntaxException("Local source path is mandatory for SEND FILE", _parser.Current.Line, _parser.Current.Column);
                 if (remotePath == null && type == FileTransferType.Receive) throw new SyntaxException("Remote source path is mandatory for RECEIVE FILE", _parser.Current.Line, _parser.Current.Column);
                 if (connectionName == null) throw new SyntaxException("Connection name (using AT) is mandatory", _parser.Current.Line, _parser.Current.Column);
-                if (remotePath == null && type == FileTransferType.Send)   throw new SyntaxException("Remote destination path (using TO) is mandatory for SEND FILE", _parser.Current.Line, _parser.Current.Column);
-                if (localPath == null && type == FileTransferType.Receive)  throw new SyntaxException("Local destination path is mandatory for RECEIVE FILE", _parser.Current.Line, _parser.Current.Column);
+                if (remotePath == null && type == FileTransferType.Send) throw new SyntaxException("Remote destination path (using TO) is mandatory for SEND FILE", _parser.Current.Line, _parser.Current.Column);
+                if (localPath == null && type == FileTransferType.Receive) throw new SyntaxException("Local destination path is mandatory for RECEIVE FILE", _parser.Current.Line, _parser.Current.Column);
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             }
             else
@@ -171,14 +171,14 @@ namespace ETL_SQL.Core.Parser.Components
                 Consume(TokenType.LPAREN, "Expected '('");
                 if (type == FileTransferType.Send)
                 {
-                    localPath = ParseExpression();       Consume(TokenType.COMMA, "Expected ',' after local path");
+                    localPath = ParseExpression(); Consume(TokenType.COMMA, "Expected ',' after local path");
                     connectionName = ConsumeIdentifier("Expected connection name").Value; Consume(TokenType.COMMA, "Expected ',' after connection name");
                     remotePath = ParseExpression();
                 }
                 else
                 {
                     connectionName = ConsumeIdentifier("Expected connection name").Value; Consume(TokenType.COMMA, "Expected ',' after connection name");
-                    remotePath = ParseExpression();      Consume(TokenType.COMMA, "Expected ',' after remote path");
+                    remotePath = ParseExpression(); Consume(TokenType.COMMA, "Expected ',' after remote path");
                     localPath = ParseExpression();
                 }
                 if (Match(TokenType.COMMA)) overwrite = ParseExpression();
@@ -187,14 +187,14 @@ namespace ETL_SQL.Core.Parser.Components
 
             var stmt = new FileTransferStatement
             {
-                Type           = type,
-                LocalPath      = localPath!,
+                Type = type,
+                LocalPath = localPath!,
                 ConnectionName = connectionName!,
-                RemotePath     = remotePath!,
-                Overwrite      = overwrite,
-                IsSqlStyle     = isSqlStyle,
-                Line           = startToken.Line,
-                Column         = startToken.Column
+                RemotePath = remotePath!,
+                Overwrite = overwrite,
+                IsSqlStyle = isSqlStyle,
+                Line = startToken.Line,
+                Column = startToken.Column
             };
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return stmt;
@@ -204,10 +204,10 @@ namespace ETL_SQL.Core.Parser.Components
         {
             FileOpType type = startToken.Type switch
             {
-                TokenType.COPY_FILE or TokenType.COPY       => FileOpType.Copy,
-                TokenType.MOVE_FILE or TokenType.MOVE       => FileOpType.Move,
-                TokenType.RENAME_FILE or TokenType.RENAME   => FileOpType.Rename,
-                TokenType.DELETE_FILE or TokenType.DELETE   => FileOpType.Delete,
+                TokenType.COPY_FILE or TokenType.COPY => FileOpType.Copy,
+                TokenType.MOVE_FILE or TokenType.MOVE => FileOpType.Move,
+                TokenType.RENAME_FILE or TokenType.RENAME => FileOpType.Rename,
+                TokenType.DELETE_FILE or TokenType.DELETE => FileOpType.Delete,
                 TokenType.COMPRESS_FILE or TokenType.COMPRESS => FileOpType.Compress,
                 TokenType.DECOMPRESS_FILE or TokenType.DECOMPRESS => FileOpType.Decompress,
                 TokenType.ENCRYPT_FILE or TokenType.ENCRYPT => FileOpType.Encrypt,
@@ -279,16 +279,16 @@ namespace ETL_SQL.Core.Parser.Components
         {
             DirectoryOpType type = startToken.Type switch
             {
-                TokenType.CREATE_DIRECTORY                          => DirectoryOpType.Create,
-                TokenType.DELETE_DIRECTORY or TokenType.DELETE      => DirectoryOpType.Delete,
-                TokenType.RENAME_DIRECTORY or TokenType.RENAME      => DirectoryOpType.Rename,
-                TokenType.MOVE_DIRECTORY or TokenType.MOVE          => DirectoryOpType.Move,
-                TokenType.COPY_DIRECTORY or TokenType.COPY          => DirectoryOpType.Copy,
-                TokenType.DELETE_DIRECTORY_CONTENTS                 => DirectoryOpType.DeleteContents,
-                TokenType.COMPRESS_DIRECTORY or TokenType.COMPRESS  => DirectoryOpType.Compress,
+                TokenType.CREATE_DIRECTORY => DirectoryOpType.Create,
+                TokenType.DELETE_DIRECTORY or TokenType.DELETE => DirectoryOpType.Delete,
+                TokenType.RENAME_DIRECTORY or TokenType.RENAME => DirectoryOpType.Rename,
+                TokenType.MOVE_DIRECTORY or TokenType.MOVE => DirectoryOpType.Move,
+                TokenType.COPY_DIRECTORY or TokenType.COPY => DirectoryOpType.Copy,
+                TokenType.DELETE_DIRECTORY_CONTENTS => DirectoryOpType.DeleteContents,
+                TokenType.COMPRESS_DIRECTORY or TokenType.COMPRESS => DirectoryOpType.Compress,
                 TokenType.DECOMPRESS_DIRECTORY or TokenType.DECOMPRESS => DirectoryOpType.Decompress,
-                TokenType.ENCRYPT_DIRECTORY or TokenType.ENCRYPT    => DirectoryOpType.Encrypt,
-                TokenType.DECRYPT_DIRECTORY or TokenType.DECRYPT    => DirectoryOpType.Decrypt,
+                TokenType.ENCRYPT_DIRECTORY or TokenType.ENCRYPT => DirectoryOpType.Encrypt,
+                TokenType.DECRYPT_DIRECTORY or TokenType.DECRYPT => DirectoryOpType.Decrypt,
                 _ => throw new SyntaxException($"Unexpected directory operation: {startToken.Type}", startToken.Line, startToken.Column)
             };
 
@@ -386,7 +386,7 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 // Legacy: DOCKER CLOSE [<alias>], DOCKER STOP, etc.
                 if (Match(TokenType.START)) action = DockerAction.Start;
-                else if (Match(TokenType.STOP))  action = DockerAction.Stop;
+                else if (Match(TokenType.STOP)) action = DockerAction.Stop;
                 else if (Match(TokenType.PAUSE)) action = DockerAction.Pause;
                 else if (Match(TokenType.CLOSE)) action = DockerAction.Close;
 
@@ -400,7 +400,7 @@ namespace ETL_SQL.Core.Parser.Components
                     alias = Advance().Value.Trim('\'', '\"');
                     mode = DockerTargetMode.Single;
                 }
-                
+
                 _parser.Match(TokenType.SEMICOLON);
                 return new DockerActionStatement(action, alias, mode) { Line = startToken.Line, Column = startToken.Column };
             }
@@ -527,7 +527,7 @@ namespace ETL_SQL.Core.Parser.Components
             var path = ParseExpression();
             Expression? timeout = null;
             Expression? pollInterval = null;
-            
+
             if (Match(TokenType.WITH))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after WITH");
@@ -661,7 +661,7 @@ namespace ETL_SQL.Core.Parser.Components
                 catch (SyntaxException) { unbalanced = true; }
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new ExecutePushdownStatement(identifierExpr, sqlText, remoteIntoTable, remoteParameters)
-                    { Line = startToken.Line, Column = startToken.Column, HasUnbalancedBlocks = unbalanced };
+                { Line = startToken.Line, Column = startToken.Column, HasUnbalancedBlocks = unbalanced };
             }
 
             if (_parser.Current.Type == TokenType.LPAREN)
@@ -746,7 +746,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             bool isOutput = Match(TokenType.OUTPUT);
-            bool isInput  = Match(TokenType.INPUT);
+            bool isInput = Match(TokenType.INPUT);
             return new ExecuteParameter(expr, name, isOutput, isInput);
         }
 
@@ -757,11 +757,11 @@ namespace ETL_SQL.Core.Parser.Components
             var source = ParseExpression();
             Consume(TokenType.TO, "Expected TO after source file path");
             var destination = ParseExpression();
-            
+
             Expression? fromEncoding = null;
             Expression? toEncoding = null;
             Expression? overwrite = null;
-            
+
             if (Match(TokenType.WITH))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after WITH");
@@ -777,10 +777,10 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 Consume(TokenType.RPAREN, "Expected ')' after WITH options");
             }
-            
+
             if (fromEncoding == null) throw new SyntaxException("FROM_ENCODING option is mandatory in CONVERT FILE ENCODING", startToken.Line, startToken.Column);
             if (toEncoding == null) throw new SyntaxException("TO_ENCODING option is mandatory in CONVERT FILE ENCODING", startToken.Line, startToken.Column);
-            
+
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new ConvertFileEncodingStatement(source, destination, fromEncoding, toEncoding, overwrite) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -791,12 +791,12 @@ namespace ETL_SQL.Core.Parser.Components
             var source = ParseExpression();
             Consume(TokenType.TO, "Expected TO after source file path");
             var destDir = ParseExpression();
-            
+
             Expression? limitType = null;
             Expression? limitValue = null;
             Expression? prefix = null;
             Expression? overwrite = null;
-            
+
             Consume(TokenType.WITH, "Expected WITH after destination path in SPLIT FILE");
             Consume(TokenType.LPAREN, "Expected '(' after WITH");
             while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
@@ -811,10 +811,10 @@ namespace ETL_SQL.Core.Parser.Components
                 if (!Match(TokenType.COMMA)) break;
             }
             Consume(TokenType.RPAREN, "Expected ')' after WITH options");
-            
+
             if (limitType == null) throw new SyntaxException("LIMIT_TYPE option is mandatory in SPLIT FILE", startToken.Line, startToken.Column);
             if (limitValue == null) throw new SyntaxException("LIMIT_VALUE option is mandatory in SPLIT FILE", startToken.Line, startToken.Column);
-            
+
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new SplitFileStatement(source, destDir, limitType, limitValue, prefix, overwrite) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -824,10 +824,10 @@ namespace ETL_SQL.Core.Parser.Components
             var source = ParseExpression();
             Consume(TokenType.TO, "Expected TO after source in MERGE FILES");
             var destination = ParseExpression();
-            
+
             Expression? header = null;
             Expression? overwrite = null;
-            
+
             if (Match(TokenType.WITH))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after WITH");
@@ -842,7 +842,7 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 Consume(TokenType.RPAREN, "Expected ')' after WITH options");
             }
-            
+
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new MergeFilesStatement(source, destination, header, overwrite) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -853,11 +853,11 @@ namespace ETL_SQL.Core.Parser.Components
             var source = ParseExpression();
             Consume(TokenType.TO, "Expected TO after source directory path");
             var destination = ParseExpression();
-            
+
             Expression? deleteExtra = null;
             Expression? overwrite = null;
             Expression? recursive = null;
-            
+
             if (Match(TokenType.WITH))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after WITH");
@@ -873,7 +873,7 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 Consume(TokenType.RPAREN, "Expected ')' after WITH options");
             }
-            
+
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new SyncDirectoryStatement(source, destination, deleteExtra, overwrite, recursive) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -883,11 +883,11 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.FILE, "Expected FILE after VERIFY");
             Consume(TokenType.INTEGRITY, "Expected INTEGRITY after VERIFY FILE");
             var source = ParseExpression();
-            
+
             Expression? hashFile = null;
             Expression? expectedHash = null;
             Expression? algorithm = null;
-            
+
             Consume(TokenType.WITH, "Expected WITH after file path in VERIFY FILE INTEGRITY");
             Consume(TokenType.LPAREN, "Expected '(' after WITH");
             while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
@@ -901,10 +901,10 @@ namespace ETL_SQL.Core.Parser.Components
                 if (!Match(TokenType.COMMA)) break;
             }
             Consume(TokenType.RPAREN, "Expected ')' after WITH options");
-            
+
             if (hashFile == null && expectedHash == null)
                 throw new SyntaxException("Either HASH_FILE or EXPECTED_HASH must be specified in VERIFY FILE INTEGRITY", startToken.Line, startToken.Column);
-            
+
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new VerifyFileIntegrityStatement(source, hashFile, expectedHash, algorithm) { Line = startToken.Line, Column = startToken.Column };
         }

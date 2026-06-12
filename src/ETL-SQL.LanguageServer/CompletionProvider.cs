@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Text.RegularExpressions;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Metadata;
+using ETL_SQL.Core.Services;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
-using ETL_SQL.Core.Services;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Metadata;
 
 namespace ETL_SQL.LSP
 {
@@ -31,7 +31,7 @@ namespace ETL_SQL.LSP
         public async Task<CompletionList> Handle(CompletionParams request, CancellationToken cancellationToken)
         {
             var line = (int)request.Position.Line;
-            var col  = (int)request.Position.Character;
+            var col = (int)request.Position.Character;
 
             if (!_store.TryGetState(request.TextDocument.Uri, out var state))
                 return new CompletionList();
@@ -39,7 +39,7 @@ namespace ETL_SQL.LSP
             var text = state.Text;
             var prefixStr = _store.GetNotebookPrefix(request.TextDocument.Uri.ToString());
             var prefixLines = 0;
-            
+
             if (!string.IsNullOrEmpty(prefixStr))
             {
                 prefixLines = prefixStr.Count(c => c == '\n');
@@ -49,7 +49,7 @@ namespace ETL_SQL.LSP
             var lines = text.Split('\n');
             var adjustedLine = line + prefixLines;
             var currentLine = lines.Length > adjustedLine ? lines[adjustedLine] : "";
-            
+
             // Calculate prefix and script before.
             // Include & so that &datasetName is captured as a single prefix token.
             var prefix = "";
@@ -78,12 +78,13 @@ namespace ETL_SQL.LSP
             var suggestions = await _languageService.GetSuggestionsAsync(context);
 
             // Inject dataset-name suggestions when context is USE DATASET or prefix starts with &
-            var datasetItems  = GetDatasetCompletions(scriptBefore, prefix, line, startCol, col);
-            var snippetItems  = GetSnippetCompletions(scriptBefore, prefix, line, startCol, col);
+            var datasetItems = GetDatasetCompletions(scriptBefore, prefix, line, startCol, col);
+            var snippetItems = GetSnippetCompletions(scriptBefore, prefix, line, startCol, col);
 
-            var items = suggestions.Select(s => {
+            var items = suggestions.Select(s =>
+            {
                 bool isExpansion = s.Type == SuggestionType.Column && s.Text.Contains(",");
-                
+
                 return new CompletionItem
                 {
                     Label = isExpansion ? "Expand columns" : s.Text,
@@ -93,9 +94,10 @@ namespace ETL_SQL.LSP
                     SortText = s.Priority.ToString("D4") + "_" + s.Text,
                     FilterText = isExpansion ? prefix : s.Text,
                     InsertText = s.Text,
-                    TextEdit = new TextEditOrInsertReplaceEdit(new TextEdit { 
-                        Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(line, startCol, line, col), 
-                        NewText = s.Text 
+                    TextEdit = new TextEditOrInsertReplaceEdit(new TextEdit
+                    {
+                        Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(line, startCol, line, col),
+                        NewText = s.Text
                     })
                 };
             }).ToList();
@@ -115,17 +117,17 @@ namespace ETL_SQL.LSP
             {
                 items.Add(new CompletionItem
                 {
-                    Label             = snippet.Trigger,
-                    Kind              = CompletionItemKind.Snippet,
-                    Detail            = snippet.Label,
-                    Documentation     = new MarkupContent { Kind = MarkupKind.Markdown, Value = snippet.Description },
-                    SortText          = "0001_" + snippet.Trigger,
-                    FilterText        = snippet.Trigger,
-                    InsertText        = snippet.LspBody,
-                    InsertTextFormat  = InsertTextFormat.Snippet,
-                    TextEdit          = new TextEditOrInsertReplaceEdit(new TextEdit
+                    Label = snippet.Trigger,
+                    Kind = CompletionItemKind.Snippet,
+                    Detail = snippet.Label,
+                    Documentation = new MarkupContent { Kind = MarkupKind.Markdown, Value = snippet.Description },
+                    SortText = "0001_" + snippet.Trigger,
+                    FilterText = snippet.Trigger,
+                    InsertText = snippet.LspBody,
+                    InsertTextFormat = InsertTextFormat.Snippet,
+                    TextEdit = new TextEditOrInsertReplaceEdit(new TextEdit
                     {
-                        Range   = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(line, startCol, line, col),
+                        Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(line, startCol, line, col),
                         NewText = snippet.LspBody
                     })
                 });
@@ -160,7 +162,7 @@ namespace ETL_SQL.LSP
             var items = new List<CompletionItem>();
             foreach (var entry in all)
             {
-                var rawName  = entry.Name.StartsWith('&') ? entry.Name : "&" + entry.Name.TrimStart('#');
+                var rawName = entry.Name.StartsWith('&') ? entry.Name : "&" + entry.Name.TrimStart('#');
                 var stripped = rawName.TrimStart('&');
 
                 if (!string.IsNullOrEmpty(nameFilter)
@@ -168,19 +170,19 @@ namespace ETL_SQL.LSP
                     continue;
 
                 var staleBadge = entry.IsStale ? " ⚠ stale" : "";
-                var detail     = $"{entry.FolderPath}  ·  {entry.RowCount:N0} rows  ·  {entry.AccessLevel}{staleBadge}";
+                var detail = $"{entry.FolderPath}  ·  {entry.RowCount:N0} rows  ·  {entry.AccessLevel}{staleBadge}";
 
                 items.Add(new CompletionItem
                 {
-                    Label         = rawName,
-                    Kind          = CompletionItemKind.Reference,
-                    Detail        = detail,
-                    SortText      = "0000_" + rawName,
-                    FilterText    = rawName,
-                    InsertText    = rawName,
-                    TextEdit      = new TextEditOrInsertReplaceEdit(new TextEdit
+                    Label = rawName,
+                    Kind = CompletionItemKind.Reference,
+                    Detail = detail,
+                    SortText = "0000_" + rawName,
+                    FilterText = rawName,
+                    InsertText = rawName,
+                    TextEdit = new TextEditOrInsertReplaceEdit(new TextEdit
                     {
-                        Range   = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(line, startCol, line, col),
+                        Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(line, startCol, line, col),
                         NewText = rawName
                     })
                 });
@@ -218,7 +220,7 @@ namespace ETL_SQL.LSP
             => new CompletionRegistrationOptions
             {
                 DocumentSelector = TextDocumentSelector.ForLanguage("etlsql"),
-                ResolveProvider  = false,
+                ResolveProvider = false,
                 TriggerCharacters = new Container<string>(" ", ".", "*", "$")
             };
     }

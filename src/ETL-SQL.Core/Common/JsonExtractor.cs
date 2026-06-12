@@ -17,9 +17,9 @@ namespace ETL_SQL.Core.Common
     /// </summary>
     public static class JsonExtractor
     {
-        private static readonly JsonSerializerOptions DefaultOptions = new JsonSerializerOptions 
-        { 
-            AllowTrailingCommas = true, 
+        private static readonly JsonSerializerOptions DefaultOptions = new JsonSerializerOptions
+        {
+            AllowTrailingCommas = true,
             PropertyNameCaseInsensitive = true,
             ReadCommentHandling = JsonCommentHandling.Skip
         };
@@ -31,7 +31,7 @@ namespace ETL_SQL.Core.Common
         {
             // 1. Resolve the target element(s) via streaming if possible
             var elements = StreamElementsInternal(stream, rootPath);
-            
+
             // 2. Process elements into DataTables
             await foreach (var batch in ProcessElementsAsync(elements, batchSize, trimStrings))
             {
@@ -61,9 +61,9 @@ namespace ETL_SQL.Core.Common
             // Deep path navigation requires a more custom approach to stay streaming
             // For simplicity in this engine version, we navigate to the start of the target path
             // and then stream from there.
-            
+
             var pathParts = rootPath.Split('.', StringSplitOptions.RemoveEmptyEntries);
-            
+
             // We use a small buffer to find the target property start without loading everything.
             // If the structure is complex, we might still need to buffer the branch, but not the whole document.
             using (var doc = await JsonDocument.ParseAsync(stream))
@@ -102,7 +102,7 @@ namespace ETL_SQL.Core.Common
                     row[property.Name] = GetJsonValue(property.Value, trimStrings);
                     allColumns.Add(property.Name);
                 }
-                
+
                 await currentBatch.AddRowAsync(row);
 
                 if (currentBatch.Rows.Count >= batchSize)
@@ -138,8 +138,8 @@ namespace ETL_SQL.Core.Common
                 }
             }
 
-            var elements = root.ValueKind == JsonValueKind.Array 
-                ? root.EnumerateArray().ToAsyncEnumerable() 
+            var elements = root.ValueKind == JsonValueKind.Array
+                ? root.EnumerateArray().ToAsyncEnumerable()
                 : new[] { root }.ToAsyncEnumerable();
 
             await foreach (var b in ProcessElementsAsync(elements, batchSize, trimStrings)) yield return b;

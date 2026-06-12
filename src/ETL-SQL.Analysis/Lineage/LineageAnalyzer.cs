@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.Common;
 
 namespace ETL_SQL.Analysis.Lineage
 {
@@ -110,7 +110,7 @@ namespace ETL_SQL.Analysis.Lineage
                     ?? (sel.IntoTable?.ConnectionName != null ? sel.IntoTable.ConnectionName + "." + sel.IntoTable.TableName : sel.IntoTable?.TableName)
                     ?? "RESULTSET";
                 _selectTargetOverride = null;   // applies only to this immediate SELECT
-                
+
                 // Create table mapping for alias/unqualified resolution
                 var tableMapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 if (sel.FromTable != null) tableMapping[sel.FromTable.Alias ?? sel.FromTable.TableName] = sel.FromTable.TableName;
@@ -191,7 +191,7 @@ namespace ETL_SQL.Analysis.Lineage
             {
                 string t = (upd.TargetTable.ConnectionName != null ? upd.TargetTable.ConnectionName + "." + upd.TargetTable.TableName : upd.TargetTable.TableName);
                 var aliases = AliasScanner.Scan(upd.ToSql());
-                
+
                 // Ensure target table and from/join tables are in the alias map
                 void AddToAliases(TableReference tbl)
                 {
@@ -208,7 +208,7 @@ namespace ETL_SQL.Analysis.Lineage
                 {
                     foreach (var join in upd.Joins) AddToAliases(join.Table);
                 }
-                
+
                 Tracker.Record(t, Enumerable.Empty<string>(), "UPDATE", line: upd.Line, column: upd.Column, endLine: upd.EndLine, endColumn: upd.EndColumn);
 
                 // Column-level lineage for assignments
@@ -248,7 +248,7 @@ namespace ETL_SQL.Analysis.Lineage
 
                 // Static column-level lineage for MERGE actions
                 var sTable = merge.SourceTable.Alias ?? merge.SourceTable.TableName;
-                
+
                 var allClauses = merge.MatchedClauses.Cast<MergeActionClause>()
                     .Concat(merge.NotMatchedClauses);
 

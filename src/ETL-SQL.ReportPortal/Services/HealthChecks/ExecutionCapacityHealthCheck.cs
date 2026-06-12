@@ -1,6 +1,6 @@
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace ETL_SQL.ReportPortal.Services.HealthChecks;
 
@@ -16,14 +16,14 @@ public class ExecutionCapacityHealthCheck(
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
 
-        int smtpCount   = await db.SmtpConnections.CountAsync(ct);
-        int activeSubs  = await db.Subscriptions.CountAsync(s => s.IsActive, ct);
+        int smtpCount = await db.SmtpConnections.CountAsync(ct);
+        int activeSubs = await db.Subscriptions.CountAsync(s => s.IsActive, ct);
 
         var data = new Dictionary<string, object>
         {
-            ["execution_cap"]         = cap,
-            ["smtp_connections"]      = smtpCount,
-            ["active_subscriptions"]  = activeSubs
+            ["execution_cap"] = cap,
+            ["smtp_connections"] = smtpCount,
+            ["active_subscriptions"] = activeSubs
         };
 
         return HealthCheckResult.Healthy(

@@ -10,7 +10,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
     /// </summary>
     public class DatasetEncryptWithoutKeyRule : ILintRule
     {
-        public string Name        => "DatasetEncryptWithoutKey";
+        public string Name => "DatasetEncryptWithoutKey";
         public string Description => "Errors when EXPORT/PUBLISH DATASET is missing the transport credential its ENCRYPT mode requires.";
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
@@ -21,8 +21,8 @@ namespace ETL_SQL.Analysis.Linting.Rules
             {
                 (string verb, string name, DatasetEncryptionMode mode, string? password, string? keyFile, int line, int col)? t = stmt switch
                 {
-                    ExportDatasetStatement ex  => ("EXPORT",  ex.DatasetName,  ex.EncryptionMode,  ex.EncryptionPassword,  ex.KeyFile,  ex.Line,  ex.Column),
-                    PublishDatasetStatement pb => ("PUBLISH", pb.DatasetName,  pb.EncryptionMode,  pb.EncryptionPassword,  pb.KeyFile,  pb.Line,  pb.Column),
+                    ExportDatasetStatement ex => ("EXPORT", ex.DatasetName, ex.EncryptionMode, ex.EncryptionPassword, ex.KeyFile, ex.Line, ex.Column),
+                    PublishDatasetStatement pb => ("PUBLISH", pb.DatasetName, pb.EncryptionMode, pb.EncryptionPassword, pb.KeyFile, pb.Line, pb.Column),
                     _ => null
                 };
                 if (t is null) continue;
@@ -32,10 +32,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 {
                     results.Add(new LintResult
                     {
-                        RuleName     = Name,
-                        Severity     = LintSeverity.Error,
-                        Message      = $"Dataset '{name}': {verb} DATASET with ENCRYPT = PASSWORD requires PASSWORD = '...' to be specified.",
-                        LineNumber   = line,
+                        RuleName = Name,
+                        Severity = LintSeverity.Error,
+                        Message = $"Dataset '{name}': {verb} DATASET with ENCRYPT = PASSWORD requires PASSWORD = '...' to be specified.",
+                        LineNumber = line,
                         ColumnNumber = col
                     });
                 }
@@ -43,10 +43,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 {
                     results.Add(new LintResult
                     {
-                        RuleName     = Name,
-                        Severity     = LintSeverity.Error,
-                        Message      = $"Dataset '{name}': {verb} DATASET with ENCRYPT = KEYFILE requires KEYFILE = '...' to be specified.",
-                        LineNumber   = line,
+                        RuleName = Name,
+                        Severity = LintSeverity.Error,
+                        Message = $"Dataset '{name}': {verb} DATASET with ENCRYPT = KEYFILE requires KEYFILE = '...' to be specified.",
+                        LineNumber = line,
                         ColumnNumber = col
                     });
                 }

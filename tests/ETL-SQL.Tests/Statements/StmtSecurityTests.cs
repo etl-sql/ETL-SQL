@@ -1,12 +1,12 @@
-﻿using Xunit;
+﻿using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.Engine;
-using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Common;
 using ETL_SQL.Data;
-using ETL_SQL.Connectors.MockDb;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements.Statements
 {
@@ -16,7 +16,7 @@ namespace ETL_SQL.Tests.Statements.Statements
         {
             // Use the shared service provider from TestSetup
             var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();
-            
+
             // Reset state between tests (SecurityService is a singleton)
             eval.SecurityService.MasterPassword = null;
             eval.ScriptPassword = null;
@@ -24,7 +24,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             eval.NoSaveSensitive = false;
             eval.NoSaveConnection = false;
             eval.ConnectionEncryption = false;
-            
+
             return eval;
         }
 
@@ -34,10 +34,10 @@ namespace ETL_SQL.Tests.Statements.Statements
         {
             var eval = CreateEvaluator();
             var sql = "USE PASSWORD = 'secret_key';";
-            
+
             var script = TestHelpers.Parse(sql);
             await eval.Evaluate(script);
-            
+
             Assert.Equal("secret_key", eval.ScriptPassword);
         }
 
@@ -113,7 +113,7 @@ namespace ETL_SQL.Tests.Statements.Statements
         public void TestUsePassword_ToSql_Masking()
         {
             var stmt = new UsePasswordStatement("my_pass");
-            
+
             Assert.Equal("USE PASSWORD = '********';", stmt.ToSql(true));
             Assert.Equal("USE PASSWORD = 'my_pass';", stmt.ToSql(false));
         }
@@ -126,23 +126,23 @@ namespace ETL_SQL.Tests.Statements.Statements
             var plain = "Server=myServer;Database=myDb;";
             var pass = "script_pass";
             var enc = CryptoUtils.Encrypt(plain, pass);
-            
+
             // We need to ensure MOCKDB is registered, which it should be in TestSetup/DependencyInjectionSetup
             var sql = $@"
                 USE PASSWORD = '{pass}';
                 CREATE CONNECTION test_security_conn AS MOCKDB('{enc}');
             ";
-            
+
             var script = TestHelpers.Parse(sql);
             await eval.Evaluate(script);
-            
+
             Assert.True(eval.Connections.ContainsKey("test_security_conn"));
             var ds = eval.Connections["test_security_conn"];
             Assert.NotNull(ds);
-            
+
             // Cast to MockSqlDataSource to verify the decrypted connection string
             var mockDs = Assert.IsType<MockSqlDataSource>(ds);
-            Assert.Equal(plain, mockDs.ConnectionString); 
+            Assert.Equal(plain, mockDs.ConnectionString);
         }
 
         [Fact]
@@ -151,12 +151,12 @@ namespace ETL_SQL.Tests.Statements.Statements
             var eval = CreateEvaluator();
             var plain = "Server=myServer;Database=myDb;";
             var enc = CryptoUtils.Encrypt(plain, "right_pass");
-            
+
             var sql = $@"
                 USE PASSWORD = 'wrong_pass';
                 CREATE CONNECTION test_fail_conn AS MOCKDB('{enc}');
             ";
-            
+
             var script = TestHelpers.Parse(sql);
             var ex = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => eval.Evaluate(script));
             Assert.Contains("Failed to decrypt", ex.Message);

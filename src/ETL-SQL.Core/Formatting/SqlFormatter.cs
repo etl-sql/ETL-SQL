@@ -23,14 +23,14 @@ namespace ETL_SQL.Core.Formatting
     public static class SqlFormatter
     {
         private static readonly string[] ClauseKeywords = {
-            "SELECT", "INTO", "FROM", "WHERE", "GROUP BY", "HAVING", "ORDER BY", 
-            "INSERT", "UPDATE", "DELETE", "CREATE", "JOIN", "LEFT JOIN", 
+            "SELECT", "INTO", "FROM", "WHERE", "GROUP BY", "HAVING", "ORDER BY",
+            "INSERT", "UPDATE", "DELETE", "CREATE", "JOIN", "LEFT JOIN",
             "RIGHT JOIN", "INNER JOIN", "OUTER JOIN", "EXEC", "EXECUTE", "WITH",
-            "DECLARE", "SET", "PRINT", "RUN", "IF", "WHILE", "FOR", "FOREACH", 
+            "DECLARE", "SET", "PRINT", "RUN", "IF", "WHILE", "FOR", "FOREACH",
             "BEGIN", "COMMIT", "ROLLBACK", "RAISEERROR", "THROW", "RETURN",
-            "TRUNCATE", "DROP", "ALTER", "MERGE", "MERGE INTO", "USING", 
-            "WHEN MATCHED THEN UPDATE", "WHEN MATCHED THEN DELETE", 
-            "WHEN NOT MATCHED THEN INSERT", "WHEN NOT MATCHED BY SOURCE THEN UPDATE", 
+            "TRUNCATE", "DROP", "ALTER", "MERGE", "MERGE INTO", "USING",
+            "WHEN MATCHED THEN UPDATE", "WHEN MATCHED THEN DELETE",
+            "WHEN NOT MATCHED THEN INSERT", "WHEN NOT MATCHED BY SOURCE THEN UPDATE",
             "WHEN NOT MATCHED BY SOURCE THEN DELETE",
             "BULK INSERT", "LINEAGE", "SEND_EMAIL", "SEND_FILE", "RECEIVE_FILE", "DOCKER", "USE", "EXPLAIN"
         };
@@ -47,19 +47,19 @@ namespace ETL_SQL.Core.Formatting
 
             // Normalize line endings and cleanup
             string input = script.Replace("\r\n", "\n").Replace("\r", "\n");
-            
+
             // Extract clauses
             var clauses = ParseClauses(input);
-            
+
             var sb = new StringBuilder();
             bool firstStatement = true;
             foreach (var clause in clauses)
             {
                 if (string.IsNullOrEmpty(clause.Content) && clause.Name == "START") continue;
-                
+
                 string name = clause.Name;
                 string content = clause.Content;
-                
+
                 if (name == "START")
                 {
                     if (!string.IsNullOrWhiteSpace(content)) sb.AppendLine(content.Trim());
@@ -86,10 +86,10 @@ namespace ETL_SQL.Core.Formatting
             var clauses = new List<(string Name, string Content)>();
             string currentClause = "START";
             var currentContent = new StringBuilder();
-            
+
             // Split by tokens but preserve separators
             var tokens = Regex.Split(input, @"(\s+|[(),;])").Where(t => t.Length > 0).ToArray();
-            
+
             int i = 0;
             while (i < tokens.Length)
             {
@@ -160,13 +160,13 @@ namespace ETL_SQL.Core.Formatting
             string formattedName = options.UpperCaseKeywords ? name.ToUpper() : name;
             string indent = new string(' ', options.IndentSize);
             string padding = options.RightAlignKeywords ? new string(' ', 15) : "";
-            
+
             // Sub-clauses that should be indented (when not right-aligning)
             // Note: FROM is only indented when it's part of BULK INSERT or similar
             // For now, we'll indent these specifically.
-            string[] subClauses = { 
-                "USING", "WHEN MATCHED THEN UPDATE", "WHEN MATCHED THEN DELETE", 
-                "WHEN NOT MATCHED THEN INSERT", "WHEN NOT MATCHED BY SOURCE THEN UPDATE", 
+            string[] subClauses = {
+                "USING", "WHEN MATCHED THEN UPDATE", "WHEN MATCHED THEN DELETE",
+                "WHEN NOT MATCHED THEN INSERT", "WHEN NOT MATCHED BY SOURCE THEN UPDATE",
                 "WHEN NOT MATCHED BY SOURCE THEN DELETE"
             };
             bool isSubClause = subClauses.Contains(name) && !options.RightAlignKeywords;
@@ -200,14 +200,14 @@ namespace ETL_SQL.Core.Formatting
                     sb.Append(" " + (options.UpperCaseKeywords ? words[idx].ToUpper() : words[idx]));
                     idx++;
                 }
-                
+
                 var remaining = string.Join(" ", words.Skip(idx));
                 var columns = SplitByCommaOutsideParens(remaining);
-                
+
                 if (columns.Count > 0)
                 {
                     string colPadding = options.RightAlignKeywords ? new string(' ', 16) : "";
-                    
+
                     if (options.LeadingCommas)
                     {
                         sb.AppendLine();
@@ -242,7 +242,7 @@ namespace ETL_SQL.Core.Formatting
                 foreach (var part in subParts)
                 {
                     string trimmed = part.Trim();
-                    if (string.Equals(trimmed, "AND", StringComparison.OrdinalIgnoreCase) || 
+                    if (string.Equals(trimmed, "AND", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(trimmed, "OR", StringComparison.OrdinalIgnoreCase))
                     {
                         sb.Append(wherePadding + indent + (options.UpperCaseKeywords ? trimmed.ToUpper() : trimmed) + " ");
@@ -264,7 +264,7 @@ namespace ETL_SQL.Core.Formatting
                     string conditionPart = content.Substring(onIdx + 4).Trim();
                     sb.Append(" " + tablePart);
                     sb.AppendLine();
-                    
+
                     string joinPadding = options.RightAlignKeywords ? new string(' ', 16) : "";
                     sb.Append(joinPadding + indent + (options.UpperCaseKeywords ? "ON " : "on ") + conditionPart);
                 }
@@ -286,8 +286,8 @@ namespace ETL_SQL.Core.Formatting
                     {
                         if (isSubClause)
                         {
-                             // Already appended indent + formattedName + " "
-                             sb.AppendLine(content.Trim());
+                            // Already appended indent + formattedName + " "
+                            sb.AppendLine(content.Trim());
                         }
                         else
                         {
@@ -323,7 +323,7 @@ namespace ETL_SQL.Core.Formatting
                     current.Append(c);
                 }
             }
-            
+
             if (current.Length > 0) result.Add(current.ToString());
             return result;
         }

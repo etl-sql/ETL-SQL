@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Functions;
 
 namespace ETL_SQL.Engine.Functions
 {

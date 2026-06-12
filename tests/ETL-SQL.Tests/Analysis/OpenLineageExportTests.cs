@@ -5,13 +5,13 @@ using System.Linq;
 using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Core;
-using ETL_SQL.Engine.Lineage;
-using ETL_SQL.Common;
-using ETL_SQL.Engine;
 using ETL_SQL.App;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Engine;
+using ETL_SQL.Engine.Lineage;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis
 {

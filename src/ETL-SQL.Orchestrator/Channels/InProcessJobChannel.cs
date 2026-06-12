@@ -21,13 +21,13 @@ namespace ETL_SQL.Orchestrator.Channels
         public InProcessJobChannel(IScriptExecutor executor, ILogger<InProcessJobChannel> logger)
         {
             _executor = executor;
-            _logger   = logger;
+            _logger = logger;
         }
 
         public Task<string> SubmitJobAsync(JobSubmitRequest request, CancellationToken ct = default)
         {
             var jobId = Guid.NewGuid().ToString("N")[..8];
-            var cts   = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var entry = new JobEntry(jobId, cts);
             _jobs[jobId] = entry;
 
@@ -56,11 +56,11 @@ namespace ETL_SQL.Orchestrator.Channels
 
             return Task.FromResult(new JobStatusResponse
             {
-                JobId          = jobId,
-                Status         = entry.Status,
-                RowsProcessed  = entry.RowsProcessed,
+                JobId = jobId,
+                Status = entry.Status,
+                RowsProcessed = entry.RowsProcessed,
                 ExecutionTimeMs = entry.ExecutionTimeMs,
-                ErrorMessage   = entry.ErrorMessage
+                ErrorMessage = entry.ErrorMessage
             });
         }
 
@@ -75,9 +75,9 @@ namespace ETL_SQL.Orchestrator.Channels
                     request.SessionId,
                     ct,
                     request.GetLineageJobName(entry.JobId));
-                entry.RowsProcessed  = result.RowsProcessed;
-                entry.Status         = result.Success ? JobRunStatus.Completed : JobRunStatus.Failed;
-                entry.ErrorMessage   = result.ErrorMessage;
+                entry.RowsProcessed = result.RowsProcessed;
+                entry.Status = result.Success ? JobRunStatus.Completed : JobRunStatus.Failed;
+                entry.ErrorMessage = result.ErrorMessage;
                 _logger.LogInformation("InProcess job {JobId} {Status} in {ElapsedMs}ms", entry.JobId, entry.Status, sw.ElapsedMilliseconds);
             }
             catch (OperationCanceledException)
@@ -87,7 +87,7 @@ namespace ETL_SQL.Orchestrator.Channels
             }
             catch (Exception ex)
             {
-                entry.Status       = JobRunStatus.Failed;
+                entry.Status = JobRunStatus.Failed;
                 entry.ErrorMessage = ex.Message;
                 _logger.LogError(ex, "InProcess job {JobId} failed", entry.JobId);
             }
@@ -100,12 +100,12 @@ namespace ETL_SQL.Orchestrator.Channels
 
         private sealed class JobEntry(string jobId, CancellationTokenSource cts)
         {
-            public string                  JobId          { get; } = jobId;
-            public CancellationTokenSource Cts            { get; } = cts;
-            public JobRunStatus            Status         { get; set; } = JobRunStatus.Queued;
-            public long                    RowsProcessed  { get; set; }
-            public long                    ExecutionTimeMs { get; set; }
-            public string?                 ErrorMessage   { get; set; }
+            public string JobId { get; } = jobId;
+            public CancellationTokenSource Cts { get; } = cts;
+            public JobRunStatus Status { get; set; } = JobRunStatus.Queued;
+            public long RowsProcessed { get; set; }
+            public long ExecutionTimeMs { get; set; }
+            public string? ErrorMessage { get; set; }
         }
     }
 }

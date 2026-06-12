@@ -1,21 +1,21 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis
 {
     public class ExplainTests
     {
         private static Script Parse(string sql) => new Lexer(sql).TokenizeToScript();
-        
+
 
 
 
@@ -111,20 +111,20 @@ namespace ETL_SQL.Tests.Analysis
         public async Task TestExplainIndexSeek()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             // Create table and index
             await ev.Evaluate(Parse("CREATE TABLE #IdxTest (Id INT, Name STRING);"));
             await ev.Evaluate(Parse("CREATE INDEX IX_Id ON #IdxTest (Id);"));
-            
+
             // Explain a query that should use the index
             var script = Parse("EXPLAIN SELECT * FROM #IdxTest WHERE Id = 1;");
             await ev.Evaluate(script);
-            
+
             var plan = ev.LastResult as DataTable;
             Assert.NotNull(plan);
-            
+
             // Check for Index Seek operation
-            Assert.True(plan!.Rows.Any(r => r["Operation"]?.ToString() == "Index Seek" && r["Details"]?.ToString()?.Contains("Index: Id") == true), 
+            Assert.True(plan!.Rows.Any(r => r["Operation"]?.ToString() == "Index Seek" && r["Details"]?.ToString()?.Contains("Index: Id") == true),
                 "Should show Index Seek for column Id");
         }
     }

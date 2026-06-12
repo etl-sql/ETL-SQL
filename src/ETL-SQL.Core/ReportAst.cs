@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Formatting;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Core
 {
@@ -19,9 +19,9 @@ namespace ETL_SQL.Core
     /// </summary>
     public record TooltipDefinition
     {
-        public Expression? PlainText     { get; init; }
-        public string? ContainerRef  { get; init; }
-        public string? InlineMarkdown{ get; init; }
+        public Expression? PlainText { get; init; }
+        public string? ContainerRef { get; init; }
+        public string? InlineMarkdown { get; init; }
         public List<string>? InlineVisuals { get; init; }
 
         public static TooltipDefinition Text(Expression text) =>
@@ -58,11 +58,11 @@ namespace ETL_SQL.Core
 
     public record VisualOverlay : AstNode
     {
-        public required OverlayType  OverlayType { get; init; }
-        public double?               Parameter   { get; init; }  // GOAL value, MOVING_AVG window, POLYNOMIAL degree
-        public OverlayLineStyle      LineStyle   { get; init; } = OverlayLineStyle.Dashed;
-        public string?               Color       { get; init; }
-        public string?               Label       { get; init; }
+        public required OverlayType OverlayType { get; init; }
+        public double? Parameter { get; init; }  // GOAL value, MOVING_AVG window, POLYNOMIAL degree
+        public OverlayLineStyle LineStyle { get; init; } = OverlayLineStyle.Dashed;
+        public string? Color { get; init; }
+        public string? Label { get; init; }
     }
 
     public enum VisualType
@@ -107,50 +107,50 @@ namespace ETL_SQL.Core
     public record VisualSourceExpression : AstNode
     {
         public Statement? InlineSelect { get; init; }
-        public string? TempTableName  { get; init; }
-        public bool IsInlineSelect    => InlineSelect != null;
+        public string? TempTableName { get; init; }
+        public bool IsInlineSelect => InlineSelect != null;
         public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record VisualMapping : AstNode
     {
-        public required string Role        { get; init; }
-        public required new string Column  { get; init; }
-        public string? Format              { get; init; }
-        public string? Align               { get; init; }
-        public string? DisplayName         { get; init; }
-        public bool DataBar                { get; init; }
-        public string? DataBarColor        { get; init; }
-        public string? ColorScaleFrom      { get; init; }
-        public string? ColorScaleTo        { get; init; }
+        public required string Role { get; init; }
+        public required new string Column { get; init; }
+        public string? Format { get; init; }
+        public string? Align { get; init; }
+        public string? DisplayName { get; init; }
+        public bool DataBar { get; init; }
+        public string? DataBarColor { get; init; }
+        public string? ColorScaleFrom { get; init; }
+        public string? ColorScaleTo { get; init; }
         // Phase 3A: cell renderers
-        public string? CellRenderer        { get; init; }  // "image" | "hyperlink"
-        public int? ImageWidth             { get; init; }
-        public string? HyperlinkLabel      { get; init; }
+        public string? CellRenderer { get; init; }  // "image" | "hyperlink"
+        public int? ImageWidth { get; init; }
+        public string? HyperlinkLabel { get; init; }
         // Phase 3B: sparkline virtual column
         public List<string>? SparklineColumns { get; init; }
-        public string? SparklineType       { get; init; }  // "line" | "bar" | "area"
+        public string? SparklineType { get; init; }  // "line" | "bar" | "area"
         public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record VisualOption : AstNode
     {
-        public required string Key   { get; init; }
+        public required string Key { get; init; }
         public required string Value { get; init; }
         public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record VisualInteraction : AstNode
     {
-        public required string Key   { get; init; }
+        public required string Key { get; init; }
         public required string Value { get; init; }
         public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record AxisOptions : AstNode
     {
-        public required string Axis             { get; init; }  // "X" or "Y"
-        public List<VisualOption> Options       { get; init; } = new();
+        public required string Axis { get; init; }  // "X" or "Y"
+        public List<VisualOption> Options { get; init; } = new();
         public override string ToSql() => AstSerializer.Format(this);
     }
 
@@ -162,15 +162,15 @@ namespace ETL_SQL.Core
 
     public record SetParameterAction : VisualAction
     {
-        public required string ParameterName   { get; init; }
+        public required string ParameterName { get; init; }
         public required string ValueExpression { get; init; }
         public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record DrillDownAction : VisualAction
     {
-        public required string   TargetVisual { get; init; }
-        public required string[] KeyColumns   { get; init; }
+        public required string TargetVisual { get; init; }
+        public required string[] KeyColumns { get; init; }
         public override string ToSql() => AstSerializer.Format(this);
     }
 
@@ -225,8 +225,8 @@ namespace ETL_SQL.Core
     public record SetUiStateAction : VisualAction
     {
         public required List<string> Targets { get; init; }
-        public required string Key           { get; init; }
-        public required string Value         { get; init; }
+        public required string Key { get; init; }
+        public required string Value { get; init; }
         public override string ToSql() => AstSerializer.Format(this);
     }
 
@@ -234,18 +234,18 @@ namespace ETL_SQL.Core
 
     public record TableSummaryOptions : AstNode
     {
-        public bool GrandTotalRow    { get; init; }
+        public bool GrandTotalRow { get; init; }
         public bool GrandTotalColumn { get; init; }
-        public bool SummarizeRow     { get; init; }
-        public bool SummarizeColumn  { get; init; }
+        public bool SummarizeRow { get; init; }
+        public bool SummarizeColumn { get; init; }
         public List<string>? SpecificColumns { get; init; }
     }
 
     public record FormattingRule : AstNode
     {
         public required Expression Condition { get; init; }
-        public required string Color         { get; init; }
-        public string? FontColor             { get; init; }
+        public required string Color { get; init; }
+        public string? FontColor { get; init; }
     }
 
     public record TypedSeries : AstNode
@@ -257,58 +257,58 @@ namespace ETL_SQL.Core
     /// <summary>CREATE STYLE <name> (key = value, ...)</summary>
     public record CreateStyleStatement : Statement
     {
-        public required string Name                  { get; init; }
-        public Dictionary<string, string> Styles     { get; init; } = new();
-        public string? StyleName                     { get; init; }
-        public ObjectCreationMode Mode               { get; init; } = ObjectCreationMode.Create;
+        public required string Name { get; init; }
+        public Dictionary<string, string> Styles { get; init; } = new();
+        public string? StyleName { get; init; }
+        public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
         public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record CreateButtonStatement : Statement
     {
-        public required string Name                    { get; init; }
-        public required string ButtonType              { get; init; } // BACK, REFRESH, HELP, etc.
-        public Expression? Title                          { get; init; }
-        public TooltipDefinition? Tooltip             { get; init; }
-        public List<VisualOption> Options              { get; init; } = new();
-        public List<VisualAction> Actions              { get; init; } = new();
-        public Dictionary<string, string> Styles       { get; init; } = new();
-        public string? StyleName                       { get; init; }
-        public ObjectCreationMode Mode               { get; init; } = ObjectCreationMode.Create;
+        public required string Name { get; init; }
+        public required string ButtonType { get; init; } // BACK, REFRESH, HELP, etc.
+        public Expression? Title { get; init; }
+        public TooltipDefinition? Tooltip { get; init; }
+        public List<VisualOption> Options { get; init; } = new();
+        public List<VisualAction> Actions { get; init; } = new();
+        public Dictionary<string, string> Styles { get; init; } = new();
+        public string? StyleName { get; init; }
+        public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
         public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record CreateVisualStatement : Statement
     {
-        public required string Name                    { get; init; }
-        public required VisualType VisualType          { get; init; }
-        public Expression? Title                      { get; init; }
-        public bool TitleIsMarkdown                  { get; init; }
-        public Expression? Subtitle                   { get; init; }
-        public bool SubtitleIsMarkdown               { get; init; }
-        public TooltipDefinition? Tooltip             { get; init; }
-        public Expression? DefaultValue               { get; init; }
-        public string? LabelPosition                  { get; init; }
-        public double? Min                            { get; init; }
-        public double? Max                            { get; init; }
-        public int? Decimals                          { get; init; }
-        public Expression? Placeholder                { get; init; }
-        public required VisualSourceExpression Source  { get; init; }
-        public List<VisualMapping> Mappings            { get; init; } = new();
-        public List<VisualOption> Options              { get; init; } = new();
-        public List<AxisOptions> AxisOptions           { get; init; } = new();
-        public List<VisualAction> Actions              { get; init; } = new();
-        public List<VisualInteraction> Interactions     { get; init; } = new();
-        public List<TypedSeries> TypedSeries           { get; init; } = new();
-        public List<FormattingRule> FormattingRules    { get; init; } = new();
-        public List<VisualOverlay> Overlays            { get; init; } = new();
-        public List<TableSummaryItem> Summaries        { get; init; } = new();
-        public TableSummaryOptions? SummaryOptions     { get; init; }
-        public Dictionary<string, string> Styles       { get; init; } = new();
-        public VisualFetchMode FetchMode               { get; init; } = VisualFetchMode.Auto;
+        public required string Name { get; init; }
+        public required VisualType VisualType { get; init; }
+        public Expression? Title { get; init; }
+        public bool TitleIsMarkdown { get; init; }
+        public Expression? Subtitle { get; init; }
+        public bool SubtitleIsMarkdown { get; init; }
+        public TooltipDefinition? Tooltip { get; init; }
+        public Expression? DefaultValue { get; init; }
+        public string? LabelPosition { get; init; }
+        public double? Min { get; init; }
+        public double? Max { get; init; }
+        public int? Decimals { get; init; }
+        public Expression? Placeholder { get; init; }
+        public required VisualSourceExpression Source { get; init; }
+        public List<VisualMapping> Mappings { get; init; } = new();
+        public List<VisualOption> Options { get; init; } = new();
+        public List<AxisOptions> AxisOptions { get; init; } = new();
+        public List<VisualAction> Actions { get; init; } = new();
+        public List<VisualInteraction> Interactions { get; init; } = new();
+        public List<TypedSeries> TypedSeries { get; init; } = new();
+        public List<FormattingRule> FormattingRules { get; init; } = new();
+        public List<VisualOverlay> Overlays { get; init; } = new();
+        public List<TableSummaryItem> Summaries { get; init; } = new();
+        public TableSummaryOptions? SummaryOptions { get; init; }
+        public Dictionary<string, string> Styles { get; init; } = new();
+        public VisualFetchMode FetchMode { get; init; } = VisualFetchMode.Auto;
         /// <summary>Name of a CREATE STYLE to inherit. Merged before inline Styles (inline wins).</summary>
-        public string? StyleName                       { get; init; }
-        public ObjectCreationMode Mode                 { get; init; } = ObjectCreationMode.Create;
+        public string? StyleName { get; init; }
+        public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
         public override string ToSql() => AstSerializer.Format(this);
     }
 
@@ -316,21 +316,21 @@ namespace ETL_SQL.Core
     /// </summary>
     public record CreatePageStatement : Statement
     {
-        public required string Name                           { get; init; }
-        public PageMode PageMode                              { get; init; } = PageMode.Dashboard;
-        public required string Structure                      { get; init; }
-        public Dictionary<string, string> SlotMap             { get; init; } = new();
-        public Dictionary<string, string> Styles              { get; init; } = new();
-        public string? StyleName                              { get; init; }
-        public Expression? Title                              { get; init; }
-        public bool TitleIsMarkdown                          { get; init; }
-        public Expression? Subtitle                           { get; init; }
-        public bool SubtitleIsMarkdown                       { get; init; }
-        public TooltipDefinition? Tooltip                     { get; init; }
-        public string? Visibility                             { get; init; }
+        public required string Name { get; init; }
+        public PageMode PageMode { get; init; } = PageMode.Dashboard;
+        public required string Structure { get; init; }
+        public Dictionary<string, string> SlotMap { get; init; } = new();
+        public Dictionary<string, string> Styles { get; init; } = new();
+        public string? StyleName { get; init; }
+        public Expression? Title { get; init; }
+        public bool TitleIsMarkdown { get; init; }
+        public Expression? Subtitle { get; init; }
+        public bool SubtitleIsMarkdown { get; init; }
+        public TooltipDefinition? Tooltip { get; init; }
+        public string? Visibility { get; init; }
         /// <summary>Auto-refresh interval in seconds (0 = disabled).</summary>
-        public int RefreshIntervalSeconds                     { get; init; }
-        public ObjectCreationMode Mode                         { get; init; } = ObjectCreationMode.Create;
+        public int RefreshIntervalSeconds { get; init; }
+        public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
     }
 
     /// <summary>
@@ -345,7 +345,7 @@ namespace ETL_SQL.Core
     /// <summary>SET REPORT TITLE = '...' / SET REPORT DESCRIPTION = '...'</summary>
     public record SetReportMetadataStatement : Statement
     {
-        public required string Key   { get; init; }  // "TITLE" or "DESCRIPTION"
+        public required string Key { get; init; }  // "TITLE" or "DESCRIPTION"
         public required string Value { get; init; }
     }
 
@@ -385,16 +385,16 @@ namespace ETL_SQL.Core
 
     public record CreateDatasetStatement : Statement
     {
-        public required string TempTableName          { get; init; }
-        public string? RefreshInterval                { get; init; }
-        public string? Ttl                            { get; init; }
-        public bool Compress                          { get; init; }
-        public DatasetEncryptionMode EncryptionMode   { get; init; }
-        public string? EncryptionPassword             { get; init; }
-        public string? KeyFile                        { get; init; }
-        public DatasetAccessLevel AccessLevel         { get; init; } = DatasetAccessLevel.Private;
-        public required Statement SourceQuery         { get; init; }
-        public ObjectCreationMode Mode                { get; init; } = ObjectCreationMode.Create;
+        public required string TempTableName { get; init; }
+        public string? RefreshInterval { get; init; }
+        public string? Ttl { get; init; }
+        public bool Compress { get; init; }
+        public DatasetEncryptionMode EncryptionMode { get; init; }
+        public string? EncryptionPassword { get; init; }
+        public string? KeyFile { get; init; }
+        public DatasetAccessLevel AccessLevel { get; init; } = DatasetAccessLevel.Private;
+        public required Statement SourceQuery { get; init; }
+        public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
         public override string? GetCreatedTable() => TempTableName;
     }
 
@@ -435,11 +435,11 @@ namespace ETL_SQL.Core
     /// </summary>
     public record ExportDatasetStatement : Statement
     {
-        public required string DatasetName            { get; init; }
-        public required string TargetPath             { get; init; }
-        public DatasetEncryptionMode EncryptionMode   { get; init; } = DatasetEncryptionMode.None;
-        public string? EncryptionPassword             { get; init; }
-        public string? KeyFile                        { get; init; }
+        public required string DatasetName { get; init; }
+        public required string TargetPath { get; init; }
+        public DatasetEncryptionMode EncryptionMode { get; init; } = DatasetEncryptionMode.None;
+        public string? EncryptionPassword { get; init; }
+        public string? KeyFile { get; init; }
     }
 
     /// <summary>
@@ -451,13 +451,13 @@ namespace ETL_SQL.Core
     /// </summary>
     public record PublishDatasetStatement : Statement
     {
-        public required string SourcePath             { get; init; }
-        public required string DatasetName            { get; init; }
-        public string? TargetFolder                   { get; init; }
-        public DatasetAccessLevel AccessLevel         { get; init; } = DatasetAccessLevel.Private;
-        public DatasetEncryptionMode EncryptionMode   { get; init; } = DatasetEncryptionMode.None;
-        public string? EncryptionPassword             { get; init; }
-        public string? KeyFile                        { get; init; }
+        public required string SourcePath { get; init; }
+        public required string DatasetName { get; init; }
+        public string? TargetFolder { get; init; }
+        public DatasetAccessLevel AccessLevel { get; init; } = DatasetAccessLevel.Private;
+        public DatasetEncryptionMode EncryptionMode { get; init; } = DatasetEncryptionMode.None;
+        public string? EncryptionPassword { get; init; }
+        public string? KeyFile { get; init; }
         public override string? GetCreatedTable() => DatasetName;
     }
 
@@ -473,20 +473,20 @@ namespace ETL_SQL.Core
 
     public record AlterReportObjectStatement : Statement
     {
-        public required ReportObjectType ObjectType    { get; init; }
-        public required string Name                   { get; init; }
-        public VisualSourceExpression? Source          { get; init; }
-        public List<VisualMapping>? Mappings           { get; init; }
-        public List<VisualOption>? Options             { get; init; }
-        public List<AxisOptions>? AxisOptions          { get; init; }
-        public List<VisualAction>? Actions             { get; init; }
-        public Dictionary<string, string>? Styles      { get; init; }
-        public string? StyleName                       { get; init; }
-        public Expression? Title                       { get; init; }
-        public bool TitleIsMarkdown                   { get; init; }
-        public Expression? Subtitle                    { get; init; }
-        public bool SubtitleIsMarkdown                { get; init; }
-        public TooltipDefinition? Tooltip              { get; init; }
+        public required ReportObjectType ObjectType { get; init; }
+        public required string Name { get; init; }
+        public VisualSourceExpression? Source { get; init; }
+        public List<VisualMapping>? Mappings { get; init; }
+        public List<VisualOption>? Options { get; init; }
+        public List<AxisOptions>? AxisOptions { get; init; }
+        public List<VisualAction>? Actions { get; init; }
+        public Dictionary<string, string>? Styles { get; init; }
+        public string? StyleName { get; init; }
+        public Expression? Title { get; init; }
+        public bool TitleIsMarkdown { get; init; }
+        public Expression? Subtitle { get; init; }
+        public bool SubtitleIsMarkdown { get; init; }
+        public TooltipDefinition? Tooltip { get; init; }
     }
 
     /// <summary>
@@ -494,9 +494,9 @@ namespace ETL_SQL.Core
     /// </summary>
     public record CreateTemplateStatement : Statement
     {
-        public required string Name                  { get; init; }
-        public Dictionary<string, string> Options    { get; init; } = new();
-        public ObjectCreationMode Mode               { get; init; } = ObjectCreationMode.Create;
+        public required string Name { get; init; }
+        public Dictionary<string, string> Options { get; init; } = new();
+        public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
         public override string ToSql() => AstSerializer.Format(this);
     }
 
@@ -506,9 +506,9 @@ namespace ETL_SQL.Core
     /// </summary>
     public record CreateThemeStatement : Statement
     {
-        public required string Name                       { get; init; }
-        public Dictionary<string, string> Properties      { get; init; } = new();
-        public ObjectCreationMode Mode                    { get; init; } = ObjectCreationMode.Create;
+        public required string Name { get; init; }
+        public Dictionary<string, string> Properties { get; init; } = new();
+        public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
         public override string ToSql() => AstSerializer.Format(this);
     }
 }

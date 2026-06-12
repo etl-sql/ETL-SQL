@@ -14,7 +14,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
     /// </summary>
     public class LayerOrderRule : ILintRule
     {
-        public string Name        => "LayerOrder";
+        public string Name => "LayerOrder";
         public string Description => "Warns when CREATE VISUAL or CREATE PAGE statements appear before their dependencies.";
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
@@ -54,10 +54,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
                         {
                             results.Add(new LintResult
                             {
-                                RuleName     = Name,
-                                Severity     = LintSeverity.Warning,
-                                Message      = $"Visual '{visual.Name}' references '{refName}' before it is defined. Move CREATE DATASET / SELECT INTO above this CREATE VISUAL.",
-                                LineNumber   = visual.Line,
+                                RuleName = Name,
+                                Severity = LintSeverity.Warning,
+                                Message = $"Visual '{visual.Name}' references '{refName}' before it is defined. Move CREATE DATASET / SELECT INTO above this CREATE VISUAL.",
+                                LineNumber = visual.Line,
                                 ColumnNumber = visual.Column
                             });
                         }
@@ -84,16 +84,16 @@ namespace ETL_SQL.Analysis.Linting.Rules
                         {
                             results.Add(new LintResult
                             {
-                                RuleName     = Name,
-                                Severity     = LintSeverity.Warning,
-                                Message      = $"Page '{page.Name}': slot '{slot}' references dashboard object '{objectName}' before it is defined. Move its CREATE statement above this CREATE PAGE.",
-                                LineNumber   = page.Line,
+                                RuleName = Name,
+                                Severity = LintSeverity.Warning,
+                                Message = $"Page '{page.Name}': slot '{slot}' references dashboard object '{objectName}' before it is defined. Move its CREATE statement above this CREATE PAGE.",
+                                LineNumber = page.Line,
                                 ColumnNumber = page.Column
                             });
                         }
                     }
                     break;
-                
+
                 // Recurse into blocks and control flow
                 case BlockStatement block:
                     ProcessStatements(block.Statements, definedDatasets, definedDashboardObjects, results);

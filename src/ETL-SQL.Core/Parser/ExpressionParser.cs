@@ -79,7 +79,7 @@ namespace ETL_SQL.Core.Parser
                     _parser.Consume(TokenType.LPAREN, "Expected '(' after EXISTS");
                     var subq = _parser.ParseQuery();
                     _parser.Consume(TokenType.RPAREN, "Expected ')' after subquery");
-                    return new ExistsExpression(subq, true) { Line = notToken.Line, Column = notToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn }; 
+                    return new ExistsExpression(subq, true) { Line = notToken.Line, Column = notToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
                 }
                 var expr = ParseNot();
                 return new UnaryExpression(TokenType.NOT, expr) { Line = notToken.Line, Column = notToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
@@ -115,10 +115,10 @@ namespace ETL_SQL.Core.Parser
                         continue;
                     }
                     if (_parser.Current.Type != TokenType.IN && _parser.Current.Type != TokenType.LIKE &&
-                        _parser.Current.Type != TokenType.ILIKE && _parser.Current.Type != TokenType.BETWEEN) 
+                        _parser.Current.Type != TokenType.ILIKE && _parser.Current.Type != TokenType.BETWEEN)
                     {
                         _parser.Backtrack();
-                        break; 
+                        break;
                     }
                 }
 
@@ -238,7 +238,7 @@ namespace ETL_SQL.Core.Parser
         private Expression ParsePrimary()
         {
             var expr = ParsePrimaryBase();
-            
+
             // Postfix: AT TIME ZONE
             while (true)
             {
@@ -250,9 +250,12 @@ namespace ETL_SQL.Core.Parser
                         _parser.Advance(); // consume TIME
                         _parser.Consume(TokenType.ZONE, "Expected 'ZONE' after 'AT TIME'");
                         var zone = ParsePrimary();
-                        expr = new AtTimeZoneExpression(expr, zone) 
-                        { 
-                            Line = expr.Line, Column = expr.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn 
+                        expr = new AtTimeZoneExpression(expr, zone)
+                        {
+                            Line = expr.Line,
+                            Column = expr.Column,
+                            EndLine = _parser.LastTokenEndLine,
+                            EndColumn = _parser.LastTokenEndColumn
                         };
                         continue;
                     }
@@ -358,7 +361,7 @@ namespace ETL_SQL.Core.Parser
                 _parser.Consume(TokenType.LPAREN, "Expected '(' after CAST/TRY_CAST");
                 var expr = _parser.ParseExpression();
                 _parser.Consume(TokenType.AS, "Expected 'AS' after expression in CAST/TRY_CAST");
-                
+
                 string targetType = _parser.ParseType();
                 _parser.Consume(TokenType.RPAREN, "Expected ')' at end of CAST/TRY_CAST");
                 return new FunctionCallExpression(funcName, new List<Expression> { expr, new LiteralExpression(targetType, TokenType.STRING_LITERAL) }) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
@@ -451,7 +454,7 @@ namespace ETL_SQL.Core.Parser
                     }
                     _parser.Consume(TokenType.RPAREN, "Expected ')' after function arguments");
                     var funcCall = new FunctionCallExpression(name, args) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn, IsDistinct = isFuncDistinct };
-                    
+
                     if (_parser.Match(TokenType.FILTER))
                     {
                         _parser.Consume(TokenType.LPAREN, "Expected '(' after FILTER");
@@ -487,7 +490,7 @@ namespace ETL_SQL.Core.Parser
                                 orderBy.Add(new OrderByClause(orderExpr, descending));
                             } while (_parser.Match(TokenType.COMMA));
                         }
-                        
+
                         // Parse Framing
                         WindowFrame? frame = null;
                         if (_parser.Match(TokenType.ROWS) || _parser.Match(TokenType.RANGE) || _parser.Match(TokenType.GROUPS))
@@ -548,8 +551,8 @@ namespace ETL_SQL.Core.Parser
                     }
                     return funcCall;
                 }
-                
-                
+
+
                 while (_parser.Match(TokenType.DOT))
                 {
                     if (_parser.Match(TokenType.STAR))
@@ -568,10 +571,10 @@ namespace ETL_SQL.Core.Parser
                         break;
                     }
                 }
-                
+
                 return new IdentifierExpression(name) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
-            
+
             if (_parser.Match(TokenType.LPAREN))
             {
                 var parenToken = _parser.Previous;
@@ -581,17 +584,17 @@ namespace ETL_SQL.Core.Parser
                     _parser.Consume(TokenType.RPAREN, "Expected ')' after subquery");
                     return new SubqueryExpression(select) { Line = parenToken.Line, Column = parenToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
                 }
-                
+
                 var exprs = new List<Expression>();
                 exprs.Add(_parser.ParseExpression());
-                
+
                 // Only treat as a ListExpression if a comma follows and we haven't hit the end of the group.
                 // This prevents over-greedy consumption for simple parenthesized expressions.
                 while (_parser.Match(TokenType.COMMA))
                 {
                     exprs.Add(_parser.ParseExpression());
                 }
-                
+
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after group expression");
                 return exprs.Count == 1 ? exprs[0] : new ListExpression(exprs) { Line = parenToken.Line, Column = parenToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
@@ -615,9 +618,9 @@ namespace ETL_SQL.Core.Parser
             //  - followed by other → bare identifier (covers e.g. connector-type names used as table refs)
             // Identifier fallback: allows keywords like POWER, X_AXIS, or SOLID as identifiers/function names
             // but explicitly prevents greedy consumption of structural symbols.
-            if (_parser.Current.Type < TokenType.STAR || (_parser.IsIdentifier(_parser.Current) && 
-                _parser.Current.Type != TokenType.RPAREN && 
-                _parser.Current.Type != TokenType.COMMA && 
+            if (_parser.Current.Type < TokenType.STAR || (_parser.IsIdentifier(_parser.Current) &&
+                _parser.Current.Type != TokenType.RPAREN &&
+                _parser.Current.Type != TokenType.COMMA &&
                 _parser.Current.Type != TokenType.SEMICOLON))
             {
                 var t = _parser.Advance();
@@ -650,7 +653,7 @@ namespace ETL_SQL.Core.Parser
             var t = _parser.Previous;
             _parser.Consume(TokenType.LPAREN, "Expected '(' after SUBSTRING");
             var str = _parser.ParseExpression();
-            
+
             Expression start;
             Expression? length = null;
 
@@ -720,14 +723,14 @@ namespace ETL_SQL.Core.Parser
         {
             var t = _parser.Previous;
             _parser.Consume(TokenType.LPAREN, "Expected '(' after TRIM");
-            
+
             TrimType type = TrimType.BOTH;
             Expression? characters = null;
-            
+
             if (_parser.Match(TokenType.LEADING)) type = TrimType.LEADING;
             else if (_parser.Match(TokenType.TRAILING)) type = TrimType.TRAILING;
             else if (_parser.Match(TokenType.BOTH)) type = TrimType.BOTH;
-            
+
             if (type != TrimType.BOTH || _parser.Current.Type != TokenType.FROM)
             {
                 if (_parser.Current.Type != TokenType.FROM)
@@ -735,7 +738,7 @@ namespace ETL_SQL.Core.Parser
                     characters = _parser.ParseExpression();
                 }
             }
-            
+
             if (_parser.Match(TokenType.FROM))
             {
                 var str = _parser.ParseExpression();
@@ -764,11 +767,11 @@ namespace ETL_SQL.Core.Parser
                 _parser.Consume(TokenType.FOLLOWING, "Expected 'FOLLOWING' after 'UNBOUNDED'");
                 return new WindowFrameBound(WindowFrameBoundType.UNBOUNDED_FOLLOWING);
             }
-            
+
             var val = ParseExpression();
             if (_parser.Match(TokenType.PRECEDING)) return new WindowFrameBound(WindowFrameBoundType.PRECEDING, val);
             if (_parser.Match(TokenType.FOLLOWING)) return new WindowFrameBound(WindowFrameBoundType.FOLLOWING, val);
-            
+
             throw new SyntaxException("Expected PRECEDING, FOLLOWING, CURRENT ROW, or UNBOUNDED", _parser.Current.Line, _parser.Current.Column);
         }
 

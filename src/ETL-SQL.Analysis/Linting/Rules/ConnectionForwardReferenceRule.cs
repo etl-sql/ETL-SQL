@@ -10,7 +10,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
     /// </summary>
     public class ConnectionForwardReferenceRule : ILintRule
     {
-        public string Name        => "ConnectionForwardReference";
+        public string Name => "ConnectionForwardReference";
         public string Description => "Warns when a connection is referenced before its CREATE CONNECTION statement.";
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
@@ -38,10 +38,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
                     {
                         results.Add(new LintResult
                         {
-                            RuleName     = Name,
-                            Severity     = LintSeverity.Warning,
-                            Message      = $"Connection '{refName}' is used at line {stmt.Line} but is not defined until line {defLine}.",
-                            LineNumber   = stmt.Line,
+                            RuleName = Name,
+                            Severity = LintSeverity.Warning,
+                            Message = $"Connection '{refName}' is used at line {stmt.Line} but is not defined until line {defLine}.",
+                            LineNumber = stmt.Line,
                             ColumnNumber = stmt.Column
                         });
                     }

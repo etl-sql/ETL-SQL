@@ -1,18 +1,18 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using ETL_SQL.Connectors.MockDb;
-using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Common;
-using ETL_SQL.TUI.UI;
-using Spectre.Console;
+using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Connectors.MockDb;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Data;
+using ETL_SQL.TUI.UI;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {
@@ -21,7 +21,7 @@ namespace ETL_SQL.Tests.UI
         public SuggestTests()
         {
             // Initialize ConnectorRegistry with mock connectors for suggestion tests
-            var registry = new ConnectorRegistry(new List<IConnector> { 
+            var registry = new ConnectorRegistry(new List<IConnector> {
                 new MockDbConnector(),
                 new FlatFileConnector()
             });
@@ -34,7 +34,7 @@ namespace ETL_SQL.Tests.UI
         {
             string script = "SELECT * FROM #TempTable T; JOIN MyConn AS C ON T.ID = C.ID;";
             var aliases = ETLSuggestEngine.ParseAliases(script);
-            
+
             Assert.Contains("T", aliases.Keys);
             Assert.Equal("#TempTable", aliases["T"].TableName);
             Assert.Contains("C", aliases.Keys);
@@ -58,10 +58,10 @@ namespace ETL_SQL.Tests.UI
             var ds = new InMemoryDataSource();
             ds.SetSchema(new[] { new ColumnDefinition("ID", "INT", false), new ColumnDefinition("Name", "VARCHAR", false) });
             var connections = new Dictionary<string, IDataSource> { { "#Temp", ds } };
-            
+
             string script = "SELECT * FROM #Temp T; WHERE T.";
             var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("T.", script, connections);
-            
+
             Assert.Contains(suggestions, s => s.Text == "T.ID");
             Assert.Contains(suggestions, s => s.Text == "T.Name");
         }
@@ -81,13 +81,13 @@ namespace ETL_SQL.Tests.UI
         [Fact]
         public void TestHighlightLine()
         {
-            var aliases = new Dictionary<string, AliasInfo> { 
-                { "T", new AliasInfo("#T", "T") } 
+            var aliases = new Dictionary<string, AliasInfo> {
+                { "T", new AliasInfo("#T", "T") }
             };
             string line = "SELECT * FROM #T T";
             bool ends;
             string highlighted = ETLSuggestEngine.HighlightLine(line, 0, 1000, false, out ends);
-            
+
             Assert.Contains("[bold blue]SELECT[/]", highlighted);
         }
 
@@ -96,7 +96,7 @@ namespace ETL_SQL.Tests.UI
         {
             var sugg = await ETLSuggestEngine.GetSuggestionsAsync("SEL", "SEL", new Dictionary<string, IDataSource>());
             Assert.True(sugg.Any(s => s.Text == "SELECT"), "Should suggest SELECT from consolidated list");
-            
+
             bool dummy;
             var highlight = ETLSuggestEngine.HighlightLine("SELECT CAST(1 AS INT)", 0, 1000, false, out dummy);
             Assert.True(highlight.Contains("[bold blue]SELECT[/]") && highlight.Contains("[yellow]CAST[/]"), "Should highlight keywords and functions");
@@ -127,7 +127,7 @@ namespace ETL_SQL.Tests.UI
             var options = new Dictionary<string, string> { { "DELIMITER", "PIPE" } };
             // We can't easily mock the file system here for FlatFileDataSource without temp files, 
             // but we can mock the IDataSource return
-            var mock = new MockSqlDataSource(SystemExecutionContext.Instance, "dummy", "CSV"); 
+            var mock = new MockSqlDataSource(SystemExecutionContext.Instance, "dummy", "CSV");
             // InternalMockSqlDataSource.GetColumns is currently hardcoded dummy
             await Task.CompletedTask;
         }
@@ -147,13 +147,13 @@ namespace ETL_SQL.Tests.UI
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens);
             var ast = parser.Parse();
-            
+
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            await evaluator.Evaluate(ast); 
-            
+            await evaluator.Evaluate(ast);
+
             var result = evaluator.Variables["@testVal"];
             Assert.Equal(42m, result);
-            
+
             // Re-run the select statement specifically to get the batch if needed
             var batches = await evaluator.ExecuteQuery(ast.Statements[2]).ToListAsync();
             Assert.Single(batches);
@@ -166,11 +166,11 @@ namespace ETL_SQL.Tests.UI
         {
             var ds = new MockSqlDataSource(SystemExecutionContext.Instance, "DataSource=:memory:", "ORACLE");
             var connections = new Dictionary<string, IDataSource> { { "OraConn", ds } };
-            
+
             // 1. Test table suggestion
             var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("Us", "SELECT * FROM Us", connections);
             Assert.True(suggestions.Any(s => s.Text == "Users"), "Should suggest Users table from Oracle mock data");
-            
+
             // 2. Test column suggestion with alias
             string script = "SELECT * FROM OraConn O; WHERE O.";
             suggestions = await ETLSuggestEngine.GetSuggestionsAsync("O.", script, connections);
@@ -182,11 +182,11 @@ namespace ETL_SQL.Tests.UI
         {
             var ds = new MockSqlDataSource(SystemExecutionContext.Instance, "DataSource=:memory:", "MSSQL");
             var connections = new Dictionary<string, IDataSource> { { "SqlConn", ds } };
-            
+
             // 1. Test table suggestion
             var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("Pr", "SELECT * FROM Pr", connections);
             Assert.True(suggestions.Any(s => s.Text == "Products"), "Should suggest Products table from SQL Server mock data");
-            
+
             // 2. Test column suggestion with connection.table alias
             string script = "SELECT * FROM SqlConn.Products S; WHERE S.";
             suggestions = await ETLSuggestEngine.GetSuggestionsAsync("S.", script, connections);
@@ -198,11 +198,11 @@ namespace ETL_SQL.Tests.UI
         {
             var ds = new MockSqlDataSource(SystemExecutionContext.Instance, "DataSource=:memory:", "POSTGRES");
             var connections = new Dictionary<string, IDataSource> { { "PgConn", ds } };
-            
+
             // 1. Test table suggestion
             var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("Or", "SELECT * FROM Or", connections);
             Assert.True(suggestions.Any(s => s.Text == "Orders"), "Should suggest Orders table from Postgres mock data");
-            
+
             // 2. Test column suggestion with connection.table alias
             string script = "SELECT * FROM PgConn.Orders P; WHERE P.";
             suggestions = await ETLSuggestEngine.GetSuggestionsAsync("P.", script, connections);
@@ -215,7 +215,7 @@ namespace ETL_SQL.Tests.UI
             string script = "SELECT ID, Name INTO #MyTemp FROM Users; SELECT * FROM #MyTemp T; WHERE T.";
             var connections = new Dictionary<string, IDataSource>();
             var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("T.", script, connections);
-            
+
             Assert.True(suggestions.Any(s => s.Text == "T.ID"), "Should suggest T.ID from virtual schema");
             Assert.True(suggestions.Any(s => s.Text == "T.Name"), "Should suggest T.Name from virtual schema");
 
@@ -231,7 +231,7 @@ namespace ETL_SQL.Tests.UI
         {
             string script = "CREATE CONNECTION cs AS FLATFILE('TestData/test_qualified_output.csv', TEXT_QUALIFIER=D";
             var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("D", script, new Dictionary<string, ETL_SQL.Data.IDataSource>());
-            
+
             // Should suggest DOUBLEQUOTE and DOUBLEQUOTES in alpha order
             // AND it should NOT suggest DATABASE (which starts with D)
             Assert.True(suggestions.Count == 2, $"Should have exactly 2 suggestions for TEXT_QUALIFIER starting with D, got {suggestions.Count}");
@@ -240,6 +240,6 @@ namespace ETL_SQL.Tests.UI
             Assert.True(!suggestions.Any(s => s.Text == "DATABASE"), "Should NOT suggest DATABASE after '='");
         }
 
-        
+
     }
 }

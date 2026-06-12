@@ -5,11 +5,11 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using Neo4j.Driver;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Neo4j.Driver;
 
 namespace ETL_SQL.Connectors.Neo4j
 {

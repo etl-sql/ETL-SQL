@@ -1,13 +1,13 @@
-using Xunit;
-using System.Threading.Tasks;
+using System;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.App;
-using System;
-using System.Threading;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -31,7 +31,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestWaitFor_PollingCondition()
         {
             var eval = await GetEvaluator();
-            
+
             // Background task to update a variable after 1.5 seconds.
             // Note: This relies on Evaluator variable thread-safety (resolved in TQ-4).
             _ = Task.Run(async () =>
@@ -58,7 +58,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestWaitUntil_Syntax()
         {
             var eval = await GetEvaluator();
-            
+
             // Background task to set a variable after 1 second
             _ = Task.Run(async () =>
             {
@@ -82,13 +82,13 @@ namespace ETL_SQL.Tests.Statements
         {
             var eval = await GetEvaluator();
             var cts = new CancellationTokenSource();
-            
+
             var sql = @"
                 WAITFOR (1 = 0); -- Infinite wait
             ";
 
             var evalTask = eval.Evaluate(Parse(sql), cts.Token);
-            
+
             await Task.Delay(2000); // Increase wait to 2s to ensure polling logic has started (TQ-7)
             cts.Cancel();
 

@@ -1,7 +1,7 @@
-using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 using System;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -15,7 +15,7 @@ namespace ETL_SQL.Engine.Handlers
         public Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (CreateProcedureStatement)statement;
-            
+
             bool exists = context.VarContext.TryGetProcedure(stmt.ProcedureName, out _);
             if (stmt.Mode == ObjectCreationMode.Alter && !exists)
                 throw new ExecutionException($"Procedure {stmt.ProcedureName} does not exist.");

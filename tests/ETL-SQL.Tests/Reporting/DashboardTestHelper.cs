@@ -1,24 +1,24 @@
 using System;
 using System.Collections.Generic;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
-using Moq;
 using System.Linq;
-using ETL_SQL.Engine;
-using ETL_SQL.Engine.Handlers;
-using ETL_SQL.Services;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Interfaces;
-using ETL_SQL.Core.Functions;
-using ETL_SQL.Core.Metadata;
+using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Core.Execution;
-using ETL_SQL.Engine.Services;
+using ETL_SQL.Core.Functions;
+using ETL_SQL.Core.Interfaces;
+using ETL_SQL.Core.Metadata;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using ETL_SQL.Engine.Functions;
+using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Engine.Services;
 using ETL_SQL.ReportBuilder;
 using ETL_SQL.Reporting;
-using ETL_SQL.Connectors.MockDb;
-using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
 using ILogger = ETL_SQL.Common.ILogger;
 
 namespace ETL_SQL.Tests.Reporting
@@ -54,7 +54,7 @@ namespace ETL_SQL.Tests.Reporting
         /// </summary>
         private static ServiceProvider BuildScopeProvider()
         {
-            var logger   = NullLogger.Instance;
+            var logger = NullLogger.Instance;
             var security = new SecurityService(logger) { IsTestMode = true };
             var sessions = new SessionStateManager(logger, security, new Mock<IConfiguration>().Object, null);
 
@@ -100,12 +100,12 @@ namespace ETL_SQL.Tests.Reporting
                 .Setup(x => x.CreateScope())
                 .Returns(() =>
                 {
-                    var provider  = BuildScopeProvider();
+                    var provider = BuildScopeProvider();
                     var mockScope = new Mock<IServiceScope>();
                     mockScope.As<IAsyncDisposable>()
                         .Setup(s => s.DisposeAsync())
                         .Returns(new ValueTask(Task.CompletedTask));
-                    
+
                     mockScope.Setup(s => s.ServiceProvider).Returns(provider);
                     mockScope.Setup(s => s.Dispose()).Callback(() => provider.Dispose());
                     return mockScope.Object;

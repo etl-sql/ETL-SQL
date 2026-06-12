@@ -1,15 +1,14 @@
-﻿using Xunit;
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
-
-using ETL_SQL.Core;
-using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using System.Threading.Tasks;
+﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using ETL_SQL.App;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -31,16 +30,16 @@ namespace ETL_SQL.Tests.Engine
         public async Task TestMockDbConnectionAndQuery()
         {
             var evaluator = CreateEvaluator();
-            
+
             // 1. Create connection
             await evaluator.Evaluate(Parse("CREATE CONNECTION m AS MOCKDB();"));
-            
+
             Assert.True(evaluator.Connections.ContainsKey("m"), "Connection 'm' should be registered");
-            
+
             // 2. Select * from mock table
             var results = await evaluator.ExecuteQuery(Parse("SELECT * FROM m.Users;").Statements[0]).ToListAsync();
             var result = results.FirstOrDefault();
-            
+
             Assert.NotNull(result);
             Assert.Contains("UserID", result.ColumnNames);
             Assert.Contains("UserName", result.ColumnNames);
@@ -66,13 +65,13 @@ namespace ETL_SQL.Tests.Engine
             {
                 // 1. Create connection
                 await evaluator.Evaluate(Parse($"CREATE CONNECTION c AS FLATFILE('{testCsv.Replace("\\", "/")}');"));
-                
+
                 Assert.True(evaluator.Connections.ContainsKey("c"), "Connection 'c' should be registered");
-                
+
                 // 2. Select columns
                 var results = await evaluator.ExecuteQuery(Parse("SELECT c.id, c.category FROM c;").Statements[0]).ToListAsync();
                 var result = results.FirstOrDefault();
-                
+
                 Assert.NotNull(result);
                 Assert.Equal(2, result.ColumnNames.Count);
                 Assert.Contains("id", result.ColumnNames);
@@ -88,15 +87,15 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task TestAliasColumnSuggestionsScoping()
         {
-             var script = Parse("SELECT u.UserID FROM m.Users u;");
-             var select = script.Statements.OfType<SelectStatement>().First();
-             
-             Assert.Equal("Users", select.FromTable.TableName);
-             Assert.Equal("u", select.FromTable.Alias);
-             
-             var col = select.Columns.First();
-             Assert.IsType<IdentifierExpression>(col.Expression);
-             Assert.Equal("u.UserID", ((IdentifierExpression)col.Expression).Name);
+            var script = Parse("SELECT u.UserID FROM m.Users u;");
+            var select = script.Statements.OfType<SelectStatement>().First();
+
+            Assert.Equal("Users", select.FromTable.TableName);
+            Assert.Equal("u", select.FromTable.Alias);
+
+            var col = select.Columns.First();
+            Assert.IsType<IdentifierExpression>(col.Expression);
+            Assert.Equal("u.UserID", ((IdentifierExpression)col.Expression).Name);
         }
 
         [Fact]
@@ -111,11 +110,11 @@ SELECT * FROM m.Users;
 ";
             var script = Parse(sql);
             var connections = script.Statements.OfType<CreateConnectionStatement>().ToList();
-            
+
             Assert.Equal(2, connections.Count);
             Assert.Equal("c", connections[0].ConnectionName);
             Assert.Equal("m", connections[1].ConnectionName);
-            
+
             var selects = script.Statements.OfType<SelectStatement>().ToList();
             Assert.Equal(2, selects.Count);
         }

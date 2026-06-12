@@ -1,9 +1,9 @@
-﻿using Xunit;
+﻿using System.Collections.Generic;
+using System.Linq;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Parser.Components;
-using ETL_SQL.Core;
-using System.Linq;
-using System.Collections.Generic;
+using Xunit;
 
 namespace ETL_SQL.Tests
 {
@@ -33,7 +33,7 @@ namespace ETL_SQL.Tests
             while (parser.Current.Type != TokenType.EOF) statements.Add(parser.ParseStatement());
 
             var cv = (CreateVisualStatement)statements[0];
-            
+
             Assert.Equal("ON", cv.Options.First(o => o.Key == "DATA_LABELS").Value);
             Assert.Equal("INSIDE_TOP_RIGHT", cv.Options.First(o => o.Key == "DATA_LABELS:POSITION").Value);
             Assert.Equal("14", cv.Options.First(o => o.Key == "DATA_LABELS:FONT_SIZE").Value);

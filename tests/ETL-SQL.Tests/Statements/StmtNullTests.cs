@@ -1,14 +1,14 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -26,7 +26,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await evaluator.Evaluate(Parse("CREATE TABLE #t (id int, val varchar(50)); INSERT INTO #t (id, val) VALUES (1, 'a'), (2, NULL), (3, 'c');"));
-            
+
             var batches = await evaluator.ExecuteQuery(Parse("SELECT * FROM #t WHERE val IS NULL;").Statements[0]).ToListAsync();
             Assert.NotEmpty(batches);
             var totalRows = batches.Sum(b => b.Rows.Count);
@@ -39,7 +39,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await evaluator.Evaluate(Parse("CREATE TABLE #t (id int, val varchar(50)); INSERT INTO #t (id, val) VALUES (1, 'a'), (2, NULL), (3, 'c');"));
-            
+
             var batches = await evaluator.ExecuteQuery(Parse("SELECT * FROM #t WHERE val IS NOT NULL;").Statements[0]).ToListAsync();
             var totalRows = batches.Sum(b => b.Rows.Count);
             Assert.Equal(2, totalRows);
@@ -64,7 +64,7 @@ namespace ETL_SQL.Tests.Statements
                 CREATE TABLE #t2 (id int, val varchar(50));
                 INSERT INTO #t2 (id, val) VALUES (2, NULL);
             "));
-            
+
             var batches = await evaluator.ExecuteQuery(Parse("SELECT * FROM #t1 t1 JOIN #t2 t2 ON t1.val = t2.val;").Statements[0]).ToListAsync();
             var totalRows = batches.Sum(b => b.Rows.Count);
             // In SQL, NULL = NULL is FALSE/UNKNOWN, so join should result in 0 rows

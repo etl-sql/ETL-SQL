@@ -9,7 +9,7 @@ namespace ETL_SQL.Engine.Services
         {
             // Note: All language help is now loaded automatically from 
             // Embedded Markdown resources in ETL-SQL.Core/Resources/Help.
-            
+
             // This method remains as a hook for any legacy or dynamic 
             // help registrations that cannot be handled via static files.
         }

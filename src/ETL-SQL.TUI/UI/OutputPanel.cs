@@ -16,12 +16,12 @@ namespace ETL_SQL.TUI.UI
 
         public string KindLabel => Kind switch
         {
-            OutputKind.Server   => "Serve",
-            OutputKind.Pdf      => "PDF",
+            OutputKind.Server => "Serve",
+            OutputKind.Pdf => "PDF",
             OutputKind.Markdown => "Markdown",
-            OutputKind.Csv      => "CSV",
-            OutputKind.Portal   => "Portal",
-            _                   => "File"
+            OutputKind.Csv => "CSV",
+            OutputKind.Portal => "Portal",
+            _ => "File"
         };
     }
 

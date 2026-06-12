@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using System.Diagnostics;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
-using ETL_SQL.Core.Data;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.TUI.UI
@@ -56,7 +56,7 @@ namespace ETL_SQL.TUI.UI
                 _evaluator.MasterPassword = _ctx.Password;
                 _evaluator.DisplayExecuteTree = true;
                 _evaluator.Telemetry.IsProfiling = true;
-                
+
                 // Inject CLI variables as input parameters
                 foreach (var v in _ctx.Variables)
                 {
@@ -83,7 +83,8 @@ namespace ETL_SQL.TUI.UI
                 };
 
                 // Signal ready — the IDE will now send run commands on stdin.
-                WriteJson(new {
+                WriteJson(new
+                {
                     type = "status",
                     status = "ready",
                     buildId = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "dev",
@@ -157,7 +158,7 @@ namespace ETL_SQL.TUI.UI
                                 _evaluator!.CurrentScriptPath = cmd.ScriptPath;
                             if (!string.IsNullOrEmpty(cmd.MasterPassword))
                                 _evaluator!.MasterPassword = cmd.MasterPassword;
-                            
+
                             _evaluator!.InteractiveMode = cmd.InteractiveMode;
 
                             activeExecutionTask = ExecuteScript(cmd.Script ?? "");
@@ -245,12 +246,12 @@ namespace ETL_SQL.TUI.UI
 
                 // Initialize telemetry timing
                 var execTime = Stopwatch.StartNew();
-                
+
                 lock (_execLock)
                 {
                     _currentCts = new CancellationTokenSource();
                 }
-                
+
                 using var treeCts = new CancellationTokenSource();
 
                 // Start heartbeat for real-time graphical progress (10Hz)
@@ -259,7 +260,7 @@ namespace ETL_SQL.TUI.UI
                 {
                     while (!treeCts.Token.IsCancellationRequested)
                     {
-                        try 
+                        try
                         {
                             WriteJson(new { type = "progress", data = tree.ToSnapshot() });
                             await Task.Delay(100, treeCts.Token);
@@ -272,7 +273,7 @@ namespace ETL_SQL.TUI.UI
                     }
                 });
 
-                try 
+                try
                 {
                     await _evaluator.Evaluate(script, _currentCts.Token);
                 }
@@ -286,7 +287,7 @@ namespace ETL_SQL.TUI.UI
                     _evaluator.LastParseTimeMs = parseTime.ElapsedMilliseconds;
                     _evaluator.OnResultSet = originalOnResultSet;
                     _evaluator.OnMessage = null;
-                    
+
                     lock (_execLock)
                     {
                         _currentCts?.Dispose();
@@ -299,23 +300,27 @@ namespace ETL_SQL.TUI.UI
 
                 // Emit final performance metrics for the IDE dashboard
                 double memUsageMb = Math.Round((double)GC.GetTotalMemory(false) / (1024 * 1024), 2);
-                double rowsPerSec = execTime.Elapsed.TotalSeconds > 0 
-                    ? Math.Round(_evaluator.Telemetry.RowsProcessed / execTime.Elapsed.TotalSeconds, 0) 
+                double rowsPerSec = execTime.Elapsed.TotalSeconds > 0
+                    ? Math.Round(_evaluator.Telemetry.RowsProcessed / execTime.Elapsed.TotalSeconds, 0)
                     : _evaluator.Telemetry.RowsProcessed;
 
-                WriteJson(new { 
-                    type = "performance", 
-                    metrics = new {
+                WriteJson(new
+                {
+                    type = "performance",
+                    metrics = new
+                    {
                         lexerMs = lexTime.ElapsedMilliseconds,
                         parserMs = parseTime.ElapsedMilliseconds,
                         executionMs = execTime.ElapsedMilliseconds,
                         memoryMb = memUsageMb,
                         rowsProcessed = _evaluator.Telemetry.RowsProcessed,
                         rowsPerSecond = rowsPerSec,
-                        statements = _evaluator.Telemetry.ProfileMetrics.Select(m => {
+                        statements = _evaluator.Telemetry.ProfileMetrics.Select(m =>
+                        {
                             string sqlClean = m.Sql?.Trim() ?? "";
                             string type = sqlClean.Length > 0 ? sqlClean.Split(' ', 2)[0].ToUpper() : "UNKNOWN";
-                            return new {
+                            return new
+                            {
                                 type = type,
                                 count = 1,
                                 totalMs = m.DurationMs
@@ -329,7 +334,8 @@ namespace ETL_SQL.TUI.UI
                 // Emit current variable state for the IDE Variable Explorer (User Params only)
                 var userVars = _evaluator.Variables
                     .Where(kvp => kvp.Key.StartsWith("@") && !kvp.Key.StartsWith("@@"))
-                    .Select(kvp => new {
+                    .Select(kvp => new
+                    {
                         name = kvp.Key,
                         value = kvp.Value?.ToString() ?? "NULL",
                         type = kvp.Value?.GetType().Name ?? "Object"
@@ -359,7 +365,7 @@ namespace ETL_SQL.TUI.UI
             var sb = new System.Text.StringBuilder();
             sb.AppendLine("graph LR");
             var nodes = new HashSet<string>();
-            
+
             foreach (var entry in entries)
             {
                 foreach (var src in entry.SourceTables)
@@ -426,7 +432,7 @@ namespace ETL_SQL.TUI.UI
         private async Task ExportToCsv(ETL_SQL.Data.DataTable table, string path)
         {
             using var writer = new System.IO.StreamWriter(path, false, System.Text.Encoding.UTF8);
-            
+
             // Header
             await writer.WriteLineAsync(string.Join(",", table.ColumnNames.Select(EscapeCsv)));
 

@@ -217,9 +217,9 @@ namespace ETL_SQL.Orchestrator.Execution
 
         /// <summary>Current snapshot of resource utilization (local process view).</summary>
         public JobThrottleMetrics GetMetrics() => new(
-            ActiveJobs:     _activeJobs,
-            QueuedJobs:     _queuedJobs,
-            MaxJobs:        _maxConcurrent,
+            ActiveJobs: _activeJobs,
+            QueuedJobs: _queuedJobs,
+            MaxJobs: _maxConcurrent,
             AvailableSlots: Math.Max(0, _maxConcurrent - _activeJobs));
 
         public void Dispose() { }

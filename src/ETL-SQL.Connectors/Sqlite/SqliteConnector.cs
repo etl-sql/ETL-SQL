@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
+using Microsoft.Data.Sqlite;
 
 namespace ETL_SQL.Connectors.Sqlite
 {

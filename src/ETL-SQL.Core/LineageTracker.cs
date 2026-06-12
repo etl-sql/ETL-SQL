@@ -33,7 +33,7 @@ namespace ETL_SQL.Core
             TargetTable = targetTable;
             Operation = operation;
         }
-        
+
         public string GetTarget() => TargetTable;
         public string GetOperation() => Operation;
 
@@ -60,7 +60,7 @@ namespace ETL_SQL.Core
         {
             get { lock (_lock) { return _detectedCycles.ToList(); } }
         }
- 
+
         public LineageTracker(ILogger logger)
         {
             _logger = logger;
@@ -121,19 +121,19 @@ namespace ETL_SQL.Core
                         // Table-level or direct table tags
                         if (!_latestTableMetadata.ContainsKey(target))
                             _latestTableMetadata[target] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                        
+
                         foreach (var kv in entry.Metadata) _latestTableMetadata[target][kv.Key] = kv.Value;
                     }
-                    
+
                     if (!string.IsNullOrEmpty(targetColumn))
                     {
                         // Column-level
                         if (!_latestColumnMetadata.ContainsKey(target))
                             _latestColumnMetadata[target] = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-                        
+
                         if (!_latestColumnMetadata[target].ContainsKey(targetColumn))
                             _latestColumnMetadata[target][targetColumn] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                        
+
                         foreach (var kv in entry.Metadata) _latestColumnMetadata[target][targetColumn][kv.Key] = kv.Value;
                     }
                 }
@@ -224,7 +224,7 @@ namespace ETL_SQL.Core
         {
             lock (_lock)
             {
-                return _entries.Where(e => e.TargetTable.Equals(tableName, StringComparison.OrdinalIgnoreCase) && 
+                return _entries.Where(e => e.TargetTable.Equals(tableName, StringComparison.OrdinalIgnoreCase) &&
                                           (e.TargetColumn == null || e.TargetColumn.Equals(columnName, StringComparison.OrdinalIgnoreCase)))
                                .OrderByDescending(e => e.Timestamp)
                                .ToList();
@@ -291,7 +291,7 @@ namespace ETL_SQL.Core
             for (int i = 0; i < sources.Count; i++)
             {
                 var sTable = sources[i];
-                
+
                 // 1. Table-level metadata (lower priority than columns)
                 var tm = GetTableMetadata(sTable);
                 foreach (var kv in tm)
@@ -331,7 +331,7 @@ namespace ETL_SQL.Core
             }
 
             if (derivedList.Any()) derivedFromDescriptions = string.Join("; ", derivedList.Distinct());
-            
+
             // Apply the final winner for description if not explicitly set elsewhere
             if (lastSeenDescription != null && !result.ContainsKey("d"))
             {

@@ -1,18 +1,18 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using ETL_SQL.Connectors.Avro;
-using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.Avro;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration
 {
@@ -24,7 +24,7 @@ namespace ETL_SQL.Tests.Integration
 
         private static async IAsyncEnumerable<DataTable> ArrayToAsyncEnumerable(DataTable[] data)
         {
-            foreach(var d in data)
+            foreach (var d in data)
             {
                 yield return d;
             }
@@ -40,7 +40,7 @@ namespace ETL_SQL.Tests.Integration
             var ds = new AvroDataSource(SystemExecutionContext.Instance, path);
             var batch = new DataTable();
             batch.SetColumns(new[] { "ID", "Name", "Active" });
-            
+
             var r1 = new Row(); r1["ID"] = 101; r1["Name"] = "X"; r1["Active"] = true;
             var r2 = new Row(); r2["ID"] = 102; r2["Name"] = "Y"; r2["Active"] = false;
             await batch.AddRowAsync(r1);
@@ -52,7 +52,7 @@ namespace ETL_SQL.Tests.Integration
 
             var dsRead = new AvroDataSource(SystemExecutionContext.Instance, path);
             var batches = await dsRead.ReadBatches().ToListAsync();
-            
+
             Assert.True(batches.Count == 1, "Should read 1 batch");
             Assert.True(batches[0].Rows.Count == 2, "Should read 2 rows");
             Assert.True(batches[0].Rows[0]["Name"]?.ToString() == "X", "First row Name should be X");
@@ -101,7 +101,7 @@ namespace ETL_SQL.Tests.Integration
 
             var checkConn = evaluator.Connections["check_avro"];
             var results = await checkConn.ReadBatches().ToListAsync();
-            
+
             Assert.True(results.Count > 0, "Should have results");
             var rows = results[0].Rows;
             Assert.True(rows.Count == 3, "Should have 3 rows");

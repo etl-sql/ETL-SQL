@@ -139,16 +139,16 @@ public class OrchestratorProxyService(
 
     private sealed class RawMetrics
     {
-        public int active_jobs      { get; set; }
-        public int queued_jobs      { get; set; }
-        public int max_jobs         { get; set; }
-        public int available_slots  { get; set; }
+        public int active_jobs { get; set; }
+        public int queued_jobs { get; set; }
+        public int max_jobs { get; set; }
+        public int available_slots { get; set; }
         public int active_processes { get; set; }
     }
 
     private sealed class ScriptContentResponse
     {
-        public string? Path    { get; set; }
+        public string? Path { get; set; }
         public string? Content { get; set; }
     }
 }

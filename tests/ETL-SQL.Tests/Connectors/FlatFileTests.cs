@@ -1,16 +1,16 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Text;
-using ETL_SQL.Core;
-using ETL_SQL.Data;
-using ETL_SQL.Connectors.FlatFile;
-using Spectre.Console;
+using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Data;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -102,7 +102,7 @@ namespace ETL_SQL.Tests.Connectors
                 int rowCount = batches.Sum(b => b.Rows.Count);
                 Assert.Equal(2, rowCount);
 
-                foreach(var batch in batches)
+                foreach (var batch in batches)
                 {
                     Assert.DoesNotContain(batch.Rows, r => r.Columns.Values.Any(v => v?.ToString()?.Contains("Total Rows") == true));
                 }
@@ -126,8 +126,8 @@ namespace ETL_SQL.Tests.Connectors
             await File.WriteAllTextAsync(csvFile, content);
             try
             {
-                var options = new Dictionary<string, string> 
-                { 
+                var options = new Dictionary<string, string>
+                {
                     { "DELIMITER", name == "PIPE" ? "COMMA" : "PIPE" },
                     { "ROW_DELIMITER", delim }
                 };
@@ -143,7 +143,7 @@ namespace ETL_SQL.Tests.Connectors
         public async Task TestCsvTextQualifier()
         {
             string csvFile = "FileTest_Qualifier.csv";
-            
+
             try
             {
                 // Test Single Quote

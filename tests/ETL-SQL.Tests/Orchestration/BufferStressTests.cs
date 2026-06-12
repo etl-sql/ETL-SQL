@@ -4,12 +4,12 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
-using Moq;
+using ETL_SQL.Core.Execution;
+using ETL_SQL.Orchestrator.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using ETL_SQL.Orchestrator.Execution;
-using ETL_SQL.Core.Execution;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {
@@ -35,7 +35,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             var mock = new Mock<ISystemResources>();
             mock.Setup(r => r.GetAvailableMemoryBytes()).Returns(32L * 1024 * 1024 * 1024); // 32GB available
-            
+
             return new BufferManager(options, new NoOpLogger<BufferManager>(), mock.Object);
         }
 
@@ -64,7 +64,7 @@ namespace ETL_SQL.Tests.Orchestration
                         using (await bm.ReserveMemoryAsync($"session_{tid}_{i}", reservationSize))
                         {
                             // Simulate small work
-                             await Task.Yield();
+                            await Task.Yield();
                         }
                     }
                 }));
@@ -76,7 +76,7 @@ namespace ETL_SQL.Tests.Orchestration
             // Verification: Ensure memory was released correctly and there were no deadlocks
             // Accessing internal state if possible, or just checking after WhenAll
             // Check if any requests timed out (they would throw Exception and fail Task.WhenAll)
-            
+
             Console.WriteLine($"Stress Test Complete: {threadCount * iterationsPerThread} operations in {sw.ElapsedMilliseconds}ms ({(threadCount * iterationsPerThread) / (sw.Elapsed.TotalSeconds):F0} ops/sec)");
         }
 
@@ -108,7 +108,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             await Task.WhenAll(tasks);
             sw.Stop();
-            
+
             // If we didn't timeout, it means the queue was processed correctly despite contention.
         }
     }

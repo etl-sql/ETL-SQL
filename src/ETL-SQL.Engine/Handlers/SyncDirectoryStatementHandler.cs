@@ -1,11 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 using ETL_SQL.Services;
 
 namespace ETL_SQL.Engine.Handlers
@@ -138,7 +138,7 @@ namespace ETL_SQL.Engine.Handlers
 
                     context.IncrementOperationCount(OperationType.FileSystem, sourceFile, 1);
                     File.Copy(sourceFile, targetFile, true);
-                    
+
                     if (context.IsVerbose)
                         context.Log($"[SyncDirectory] Copied: {relativePath}");
                 }
@@ -159,7 +159,7 @@ namespace ETL_SQL.Engine.Handlers
                         context.SecurityService.ValidateFileType(destFile);
                         context.IncrementOperationCount(OperationType.FileSystem, destFile, 1);
                         File.Delete(destFile);
-                        
+
                         if (context.IsVerbose)
                             context.Log($"[SyncDirectory] Deleted: {relativePath}");
                     }

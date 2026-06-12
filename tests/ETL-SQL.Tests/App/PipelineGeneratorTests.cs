@@ -4,10 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Xunit;
 using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Parser;
+using Xunit;
 
 namespace ETL_SQL.Tests.App
 {
@@ -384,10 +384,10 @@ namespace ETL_SQL.Tests.App
             // Verify sub-modules generated in subdirectory
             var modulesDir = Path.Combine(_tempDir, "master_pipeline_modules");
             Assert.True(Directory.Exists(modulesDir));
-            
+
             var salesModuleFile = Path.Combine(modulesDir, "sales_feed.etlsql");
             var inventoryModuleFile = Path.Combine(modulesDir, "inventory_feed.etlsql");
-            
+
             Assert.True(File.Exists(salesModuleFile));
             Assert.True(File.Exists(inventoryModuleFile));
 

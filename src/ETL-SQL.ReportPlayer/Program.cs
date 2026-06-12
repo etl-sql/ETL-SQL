@@ -3,20 +3,20 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Text.Json;
+using ETL_SQL.Core;
+using ETL_SQL.Orchestrator;
+using ETL_SQL.ReportHosting;
+using ETL_SQL.Reporting;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using ETL_SQL.Reporting;
-using ETL_SQL.Orchestrator;
-using ETL_SQL.ReportHosting;
-using ETL_SQL.Core;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ReportPlayer — Phase 9F (multi-report hosting)
@@ -25,11 +25,11 @@ using ETL_SQL.Core;
 // Multi-report:   dotnet run -- --manifest reports.json
 // ─────────────────────────────────────────────────────────────────────────────
 
-string? scriptPath   = null;
+string? scriptPath = null;
 string? manifestPath = null;
-int?    portArg      = null;
-bool    noBrowser    = false;
-string  invocationDir = Directory.GetCurrentDirectory(); // capture before ASP.NET Core changes CWD
+int? portArg = null;
+bool noBrowser = false;
+string invocationDir = Directory.GetCurrentDirectory(); // capture before ASP.NET Core changes CWD
 
 for (int i = 0; i < args.Length; i++)
 {
@@ -46,7 +46,7 @@ for (int i = 0; i < args.Length; i++)
 
 // Resolve relative paths against the directory the user ran the command from,
 // not the project/assembly directory (which may differ under `dotnet run`).
-if (scriptPath   != null && !Path.IsPathRooted(scriptPath))   scriptPath   = Path.GetFullPath(scriptPath,   invocationDir);
+if (scriptPath != null && !Path.IsPathRooted(scriptPath)) scriptPath = Path.GetFullPath(scriptPath, invocationDir);
 if (manifestPath != null && !Path.IsPathRooted(manifestPath)) manifestPath = Path.GetFullPath(manifestPath, invocationDir);
 
 bool multiMode = manifestPath != null;
@@ -86,13 +86,13 @@ int idleTimeoutMinutes = builder.Configuration.GetValue<int>("ReportPlayer:IdleT
 if (multiMode)
 {
     // For Multi-mode, we register the factory itself.
-    builder.Services.AddSingleton<DashboardServiceFactory>(sp => 
+    builder.Services.AddSingleton<DashboardServiceFactory>(sp =>
         new DashboardServiceFactory(Path.GetFullPath(manifestPath!), sp.GetRequiredService<IServiceScopeFactory>(), executionTimeout));
 }
 else
 {
     // For Single-mode, we register the service.
-    builder.Services.AddSingleton<DashboardService>(sp => 
+    builder.Services.AddSingleton<DashboardService>(sp =>
         new DashboardService(Path.GetFullPath(scriptPath!), sp.GetRequiredService<IServiceScopeFactory>(), executionTimeout));
 }
 
@@ -100,7 +100,7 @@ else
 var loggerService = new ETL_SQL.Common.LoggerService();
 loggerService.InitializeAppLogger(
     builder.Configuration["Logging:AppLog:Directory"] ?? "logs/player",
-    int.TryParse(builder.Configuration["Logging:AppLog:RetentionDays"],   out var rd) ? rd : 30,
+    int.TryParse(builder.Configuration["Logging:AppLog:RetentionDays"], out var rd) ? rd : 30,
     int.TryParse(builder.Configuration["Logging:AppLog:FileSizeLimitMb"], out var sl) ? sl : 10);
 
 builder.Services.AddSingleton<ETL_SQL.Common.LoggerService>(loggerService);
@@ -174,7 +174,7 @@ if (multiMode)
     {
         var svc = fac.GetService(name);
         if (svc == null) return Results.NotFound();
-        
+
         // Pick up @Parameters from QueryString
         foreach (var q in ctx.Request.Query)
         {
@@ -183,7 +183,7 @@ if (multiMode)
                 await svc.SetParameterAsync(q.Key, q.Value.ToString());
             }
         }
-        
+
         return Results.Json(await svc.GetManifestAsync(), noCache);
     });
 
@@ -389,7 +389,7 @@ app.MapGet("/maps/custom", async (HttpContext ctx) =>
 
     // Only serve GeoJSON files — reject anything else by extension.
     if (!fullPath.EndsWith(".geojson", StringComparison.OrdinalIgnoreCase) &&
-        !fullPath.EndsWith(".json",    StringComparison.OrdinalIgnoreCase))
+        !fullPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
         return Results.BadRequest("Only .geojson / .json files may be served via this route");
 
     ctx.Response.ContentType = "application/geo+json; charset=utf-8";
@@ -420,7 +420,7 @@ if (multiMode)
             return Results.NotFound($"Map file not found: {Path.GetFileName(fullPath)}");
 
         if (!fullPath.EndsWith(".geojson", StringComparison.OrdinalIgnoreCase) &&
-            !fullPath.EndsWith(".json",    StringComparison.OrdinalIgnoreCase))
+            !fullPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             return Results.BadRequest("Only .geojson / .json files may be served via this route");
 
         ctx.Response.ContentType = "application/geo+json; charset=utf-8";
@@ -651,8 +651,8 @@ static string GetCatalogHtml(IReadOnlyList<ReportEntry> reports)
         cards.Append("<div class=\"catalog-grid\">");
         foreach (var r in reports)
         {
-            var href  = "/reports/" + WebUtility.UrlEncode(r.Name);
-            var desc  = r.Description != null ? "<p>" + r.Description + "</p>" : "";
+            var href = "/reports/" + WebUtility.UrlEncode(r.Name);
+            var desc = r.Description != null ? "<p>" + r.Description + "</p>" : "";
             cards.Append($"<a href=\"{href}\" class=\"catalog-card\"><h2>{r.Name}</h2>{desc}</a>");
         }
         cards.Append("</div>");
@@ -694,15 +694,15 @@ static string? FindRepoFile(string fileName)
 // ── DTOs ──────────────────────────────────────────────────────────────────────
 public class ParameterUpdateRequest
 {
-    public string? Name          { get; set; }
-    public string? Value         { get; set; }
-    public bool    IsInteraction { get; set; }
+    public string? Name { get; set; }
+    public string? Value { get; set; }
+    public bool IsInteraction { get; set; }
 }
 
 public class ParameterBatchRequest
 {
     public List<ParameterUpdateRequest>? Params { get; set; }
-    public bool    IsInteraction { get; set; }
+    public bool IsInteraction { get; set; }
     public string? PageName { get; set; }
 }
 
@@ -714,10 +714,10 @@ public class RunScriptRequest
 
 public class DrillRequest
 {
-    public string? VisualName   { get; set; }
-    public string? Direction    { get; set; }  // "IN" or "UP"
+    public string? VisualName { get; set; }
+    public string? Direction { get; set; }  // "IN" or "UP"
     public string? ClickedValue { get; set; }
-    public int     TargetDepth  { get; set; }
+    public int TargetDepth { get; set; }
 }
 
 public class RefreshVisualsRequest

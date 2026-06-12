@@ -4,15 +4,15 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Functions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Functions;
-using JNode = System.Text.Json.Nodes.JsonNode;
-using JValue = System.Text.Json.Nodes.JsonValue;
-using JObject = System.Text.Json.Nodes.JsonObject;
 using JArray = System.Text.Json.Nodes.JsonArray;
+using JNode = System.Text.Json.Nodes.JsonNode;
+using JObject = System.Text.Json.Nodes.JsonObject;
+using JValue = System.Text.Json.Nodes.JsonValue;
 
 namespace ETL_SQL.Engine.Functions
 {
@@ -34,16 +34,16 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Registers all JSON functions into the global function registry.</summary>
         public static void Register(IFunctionRegistry registry)
         {
-            registry.RegisterWithHelp("JSON_VALUE",  JsonValue, "JSON_VALUE(json, path): Extracts a scalar value from a JSON string at the given path.");
-            registry.RegisterWithHelp("JSON_QUERY",  JsonQuery, "JSON_QUERY(json, path): Extracts an object or array fragment from a JSON string.");
+            registry.RegisterWithHelp("JSON_VALUE", JsonValue, "JSON_VALUE(json, path): Extracts a scalar value from a JSON string at the given path.");
+            registry.RegisterWithHelp("JSON_QUERY", JsonQuery, "JSON_QUERY(json, path): Extracts an object or array fragment from a JSON string.");
             registry.RegisterWithHelp("JSON_MODIFY", JsonModify, "JSON_MODIFY(json, path, val): Updates or inserts a value in a JSON string.");
-            registry.RegisterWithHelp("ISJSON",      IsJson, "ISJSON(str): Returns 1 if the string is valid JSON, 0 otherwise.");
+            registry.RegisterWithHelp("ISJSON", IsJson, "ISJSON(str): Returns 1 if the string is valid JSON, 0 otherwise.");
             registry.RegisterWithHelp("JSON_EXISTS", JsonExists, "JSON_EXISTS(json, path): Returns 1 if the path exists in the JSON string.");
             registry.RegisterWithHelp("JSON_OBJECT", JsonObject, "JSON_OBJECT(k1, v1, k2, v2, ...): Constructs a JSON object from key/value pairs.");
-            registry.RegisterWithHelp("JSON_ARRAY",  JsonArray, "JSON_ARRAY(v1, v2, ...): Constructs a JSON array from the provided values.");
-            registry.RegisterWithHelp("JSON_TABLE",  JsonTable, "JSON_TABLE(json, path): Expands a JSON array or object into a table.");
+            registry.RegisterWithHelp("JSON_ARRAY", JsonArray, "JSON_ARRAY(v1, v2, ...): Constructs a JSON array from the provided values.");
+            registry.RegisterWithHelp("JSON_TABLE", JsonTable, "JSON_TABLE(json, path): Expands a JSON array or object into a table.");
             registry.RegisterWithHelp("JSON_EXTRACT", JsonValue, "JSON_EXTRACT(json, path): Alias for JSON_VALUE.");
-            registry.RegisterWithHelp("OPENJSON",    OpenJson, "OPENJSON(json[, path]): Expands JSON into a table (SQL Server style).");
+            registry.RegisterWithHelp("OPENJSON", OpenJson, "OPENJSON(json[, path]): Expands JSON into a table (SQL Server style).");
         }
 
         // ── Scalar helpers ────────────────────────────────────────────────────
@@ -67,11 +67,11 @@ namespace ETL_SQL.Engine.Functions
                 if (element == null) return null;
                 return element.Value.ValueKind switch
                 {
-                    JsonValueKind.String  => element.Value.GetString(),
-                    JsonValueKind.Number  => element.Value.TryGetDecimal(out var d) ? (object?)d : element.Value.GetDouble(),
-                    JsonValueKind.True    => true,
-                    JsonValueKind.False   => false,
-                    JsonValueKind.Null    => null,
+                    JsonValueKind.String => element.Value.GetString(),
+                    JsonValueKind.Number => element.Value.TryGetDecimal(out var d) ? (object?)d : element.Value.GetDouble(),
+                    JsonValueKind.True => true,
+                    JsonValueKind.False => false,
+                    JsonValueKind.Null => null,
                     // Object/Array → return null (use JSON_QUERY for those)
                     _ => null
                 };
@@ -500,23 +500,23 @@ namespace ETL_SQL.Engine.Functions
 
         private static object? ScalarFromElement(JsonElement el) => el.ValueKind switch
         {
-            JsonValueKind.String  => el.GetString(),
-            JsonValueKind.Number  => el.TryGetDecimal(out var d) ? (object?)d : el.GetDouble(),
-            JsonValueKind.True    => true,
-            JsonValueKind.False   => false,
-            JsonValueKind.Null    => null,
+            JsonValueKind.String => el.GetString(),
+            JsonValueKind.Number => el.TryGetDecimal(out var d) ? (object?)d : el.GetDouble(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null => null,
             _ => el.GetRawText() // Object or Array → return raw JSON string
         };
 
         private static int JsonTypeId(JsonElement el) => el.ValueKind switch
         {
-            JsonValueKind.Null    => 0,
-            JsonValueKind.String  => 1,
-            JsonValueKind.Number  => 2,
-            JsonValueKind.True    => 3,
-            JsonValueKind.False   => 3,
-            JsonValueKind.Array   => 4,
-            JsonValueKind.Object  => 5,
+            JsonValueKind.Null => 0,
+            JsonValueKind.String => 1,
+            JsonValueKind.Number => 2,
+            JsonValueKind.True => 3,
+            JsonValueKind.False => 3,
+            JsonValueKind.Array => 4,
+            JsonValueKind.Object => 5,
             _ => 0
         };
 

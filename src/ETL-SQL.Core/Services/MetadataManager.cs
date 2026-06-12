@@ -3,10 +3,10 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
-using ETL_SQL.Common;
 
 namespace ETL_SQL.Core.Services
 {
@@ -136,7 +136,7 @@ namespace ETL_SQL.Core.Services
                         if (found != null) return found;
                     }
                 }
-                
+
                 // Then match across same notebook
                 var basePath = GetBasePath(normalizedUri);
                 if (basePath != normalizedUri)
@@ -154,7 +154,7 @@ namespace ETL_SQL.Core.Services
                     }
                 }
             }
-            
+
             if (_globalConnections.TryGetValue(connectionName, out var global)) return global;
             return null;
         }
@@ -181,7 +181,7 @@ namespace ETL_SQL.Core.Services
 
                 await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
                 var tables = (await source.GetTablesAsync()).ToList();
-                
+
 
                 var normalizedUri = NormalizeUri(uri);
                 if (!string.IsNullOrEmpty(normalizedUri) && _docTempTables.TryGetValue(normalizedUri, out var temps))
@@ -262,7 +262,7 @@ namespace ETL_SQL.Core.Services
             {
                 if (!list.Contains(name, StringComparer.OrdinalIgnoreCase)) list.Add(name);
             }
-            
+
             var cacheKey = GetTempTableCacheKey(normalizedUri, name);
             _columns[cacheKey] = columns;
             _logger.Info("Registered temp table {Name} for {Uri}", name, normalizedUri);
@@ -284,7 +284,7 @@ namespace ETL_SQL.Core.Services
 
         private string GetTempTableCacheKey(string normalizedUri, string tableName)
         {
-             return $"{normalizedUri}:{tableName}".ToUpperInvariant();
+            return $"{normalizedUri}:{tableName}".ToUpperInvariant();
         }
 
         public async Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName, string? uri = null)
@@ -292,13 +292,13 @@ namespace ETL_SQL.Core.Services
             try
             {
                 var normalizedUri = NormalizeUri(uri);
-                
+
                 if (tableName.StartsWith("#") && !string.IsNullOrEmpty(normalizedUri))
                 {
                     // Exact match first
                     var tempKey = GetTempTableCacheKey(normalizedUri, tableName);
                     if (_columns.TryGetValue(tempKey, out var tempCols)) return tempCols;
-                    
+
                     // Match across same notebook
                     var basePath = GetBasePath(normalizedUri);
                     if (basePath != normalizedUri)
@@ -330,7 +330,7 @@ namespace ETL_SQL.Core.Services
 
                 await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
                 var columns = Enumerable.Empty<string>();
-                
+
                 if (source is IDatabaseSource db)
                 {
                     columns = (await db.GetColumnsAsync(tableName)).ToList();
@@ -400,7 +400,7 @@ namespace ETL_SQL.Core.Services
 
                 var viewKeysToRemove = _views.Keys.Where(k => k.StartsWith(prefix)).ToList();
                 foreach (var k in viewKeysToRemove) _views.TryRemove(k, out _);
-                
+
                 var colKeysToRemove = _columns.Keys.Where(k => k.StartsWith(prefix)).ToList();
                 foreach (var k in colKeysToRemove) _columns.TryRemove(k, out _);
 

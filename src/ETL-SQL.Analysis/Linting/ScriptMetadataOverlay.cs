@@ -13,7 +13,7 @@ namespace ETL_SQL.Analysis.Linting
     public class ScriptMetadataOverlay : IMetadataProvider
     {
         private readonly IMetadataProvider? _baseProvider;
-        
+
         // Local metadata stores (case-insensitive keys)
         private readonly Dictionary<string, string> _connections = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, HashSet<string>> _tables = new(StringComparer.OrdinalIgnoreCase);
@@ -33,7 +33,7 @@ namespace ETL_SQL.Analysis.Linting
         {
             if (!_tables.ContainsKey(connection))
                 _tables[connection] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            
+
             _tables[connection].Add(table);
         }
 
@@ -57,7 +57,7 @@ namespace ETL_SQL.Analysis.Linting
         public async Task<IEnumerable<string>> GetTablesAsync(string connectionName)
         {
             var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            
+
             // Start with physical/cached metadata
             if (_baseProvider != null)
             {
@@ -98,7 +98,7 @@ namespace ETL_SQL.Analysis.Linting
                 catch { /* Ignore connectivity errors */ }
             }
 
-            if (_columns.TryGetValue(connectionName, out var tableDict) && 
+            if (_columns.TryGetValue(connectionName, out var tableDict) &&
                 tableDict.TryGetValue(tableName, out var localCols))
             {
                 foreach (var c in localCols) results.Add(c);
@@ -123,7 +123,7 @@ namespace ETL_SQL.Analysis.Linting
 
         public string? GetConnectionType(string connectionName)
         {
-            if (_connections.TryGetValue(connectionName, out var type)) 
+            if (_connections.TryGetValue(connectionName, out var type))
                 return type;
 
             return _baseProvider?.GetConnectionType(connectionName);

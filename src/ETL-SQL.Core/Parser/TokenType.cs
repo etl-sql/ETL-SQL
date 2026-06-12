@@ -66,20 +66,20 @@ namespace ETL_SQL.Core.Parser
         VERIFY, INTEGRITY, SYNC, UNLOCKED, ENCODING, FROM_ENCODING, TO_ENCODING, LIMIT_TYPE, LIMIT_VALUE, HASH_FILE, EXPECTED_HASH, DELETE_EXTRA, FILES, SPLIT, TIMEOUT, POLL_INTERVAL_MS, CONVERT,
         LF, CR, CRLF, TAB,
         SHAREPOINT, ACTIVE_DIRECTORY, SQLITE, S3, MONGODB, KAFKA,
-        
+
         // Joins
         JOIN, INNER, LEFT, RIGHT, OUTER, FULL, CROSS, APPLY, HASH, LOOP, FUZZY, KEEP,
-        
+
         // Set Operations
         UNION, ALL, EXCEPT, INTERSECT,
- 
+
         // Functions
         UPPER, LOWER, CONCAT, CAST, TRUNC, GETDATE,
         CURRENT_TIMESTAMP, CURRENT_DATE, CURRENT_TIME, FORMAT,
         OVER, PARTITION, ORDER, ASC, DESC,
         SUM, AVG, COUNT, MIN, MAX,
         SEQUENCE, RANDOM, RANDOM_INT, RANDOM_DECIMAL,
- 
+
         // Data types
         INT, INTEGER, BIGINT, SMALLINT, TINYINT, BIT, BOOLEAN, BOOL,
         DECIMAL, NUMERIC, MONEY, SMALLMONEY, FLOAT, REAL, DOUBLE,
@@ -94,7 +94,7 @@ namespace ETL_SQL.Core.Parser
         STRING_LITERAL,
         NUMBER,
         DATETIME,   // Common parsed date types
- 
+
         // Symbols / Operators
         STAR,       // *
         COMMA,      // ,
@@ -112,7 +112,7 @@ namespace ETL_SQL.Core.Parser
         NOT_EQUALS, // != or <>
         REGEX_MATCH, // ~
         REGEX_IMATCH, // ~*
- 
+
         PLUS,       // +
         MINUS,      // -
         SLASH,      // /

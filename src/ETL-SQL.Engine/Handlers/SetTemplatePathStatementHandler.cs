@@ -16,19 +16,19 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (SetTemplatePathStatement)statement;
             var val = await context.EvaluateValue(stmt.PathExpression, new Row());
-            
+
             if (val == null)
             {
                 throw new ExecutionException("SET TEMPLATE_PATH: path cannot be null.", null, stmt.Line, stmt.Column);
             }
 
             string path = val.ToString()!;
-            
+
             // Security: Use context.ResolvePath to ensure it's within allowed bounds
             string resolvedPath = context.ResolvePath(path);
-            
+
             context.ReportContext.TemplatePath = resolvedPath;
-            
+
             _logger.Debug("Template path set to '{Path}'", resolvedPath);
             context.Log($"Template path set to '{resolvedPath}'.");
         }

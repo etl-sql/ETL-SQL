@@ -1,22 +1,21 @@
 using System;
-using System.IO;
-using System.Text;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
+using System.Text;
 using System.Text.Json;
-using System.Xml.Linq;
-
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Core.Execution;
+using System.Xml.Linq;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Core.Spill;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Spill;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Data
 {
@@ -157,21 +156,21 @@ namespace ETL_SQL.Data
 
         public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
         public bool ReplaceOnConflict { get; set; } = false;
-        
+
         private readonly List<string> _spillChunkNames = new();
         public int SpillChunkCount => _spillChunkNames.Count;
         public long SpillTotalBytes { get; private set; } = 0;
         private long _totalRowCount = 0;
         public long EstimatedRowCount => _totalRowCount;
         private IExecutionContext? _executionContext;
-        public IExecutionContext? ExecutionContext 
-        { 
+        public IExecutionContext? ExecutionContext
+        {
             get => _executionContext;
             set
             {
                 if (_executionContext != null)
                 {
-                    try 
+                    try
                     {
                         _executionContext.ServiceProvider.GetService<IBufferManager>()?.UnregisterSpillable(this);
                     }
@@ -180,7 +179,7 @@ namespace ETL_SQL.Data
                 _executionContext = value;
                 if (_executionContext != null)
                 {
-                    try 
+                    try
                     {
                         _executionContext.ServiceProvider.GetService<IBufferManager>()?.RegisterSpillable(this);
                     }
@@ -228,7 +227,7 @@ namespace ETL_SQL.Data
 
                 _batches.Clear();
                 _index.Clear();
-                
+
                 return true;
             }
             finally
@@ -493,7 +492,7 @@ namespace ETL_SQL.Data
                 throw new ExecutionException($"Column {col.ColumnName} already exists.");
             Schema[col.ColumnName] = col;
             _columnOrder.Add(col.ColumnName);
-            
+
             foreach (var batch in _batches)
             {
                 batch.AddColumn(col.ColumnName);
@@ -545,7 +544,7 @@ namespace ETL_SQL.Data
                 // The new schema indices will map to the same slots in the row array.
             }
         }
- 
+
         public async Task TruncateAsync()
         {
             await _lock.WaitAsync();
@@ -615,7 +614,7 @@ namespace ETL_SQL.Data
                     await using var reader = await ExecutionContext.SpillStore.CreateReaderAsync(spillName);
                     var batch = new DataTable();
                     batch.SetColumns(_columnOrder);
-                    
+
                     await foreach (var row in reader.AsEnumerableAsync())
                     {
                         await batch.AddRowAsync(row);
@@ -652,7 +651,7 @@ namespace ETL_SQL.Data
                             Schema[col] = new ColumnDefinition(col, "UNKNOWN", false);
                     }
                 }
-                
+
                 await _lock.WaitAsync();
                 try
                 {
@@ -757,7 +756,7 @@ namespace ETL_SQL.Data
                     if (processedBatch.Rows.Count == 0) continue;
 
                     long threshold = ExecutionContext?.TempTableSpillThresholdRows ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
-                    
+
                     if (_totalRowCount + processedBatch.Rows.Count > threshold)
                     {
                         if (ExecutionContext != null)
@@ -772,14 +771,14 @@ namespace ETL_SQL.Data
 
                             if (ExecutionContext.Telemetry.IsProfiling)
                                 ExecutionContext.LoggingContext.Logger.Debug("Temp table threshold reached ({Threshold} rows). Spilled batch to chunk: {ChunkName}", threshold, chunkName);
-                            
+
                             continue;
                         }
                     }
 
                     _batches.Add(processedBatch);
                     _totalRowCount += processedBatch.Rows.Count;
-                    
+
                     if (_index.Count > 0)
                     {
                         foreach (var col in _index.Keys.ToList())
@@ -856,7 +855,7 @@ namespace ETL_SQL.Data
                 if (deleted.Count > 0 && _index.Count > 0)
                 {
                     // Simplest to rebuild indexes for now if rows were deleted
-                    foreach(var col in _index.Keys.ToList()) 
+                    foreach (var col in _index.Keys.ToList())
                     {
                         if (_index.TryGetColumns(col, out var cols))
                         {
@@ -887,10 +886,10 @@ namespace ETL_SQL.Data
                         {
                             var before = row.Clone();
                             var after = row.Clone();
-                            
+
                             // Perform update on the clone to ensure atomicity
                             await updateAction(after);
-                            
+
                             // Swap the row in the batch
                             batch.Rows[i] = after;
                             updated.Add((before, after));
@@ -899,7 +898,7 @@ namespace ETL_SQL.Data
                 }
                 if (updated.Count > 0 && _index.Count > 0)
                 {
-                    foreach(var col in _index.Keys.ToList()) 
+                    foreach (var col in _index.Keys.ToList())
                     {
                         if (_index.TryGetColumns(col, out var cols))
                         {
@@ -930,7 +929,7 @@ namespace ETL_SQL.Data
                 _batches.AddRange(s);
                 if (_index.Count > 0)
                 {
-                    foreach (var col in _index.Keys.ToList()) 
+                    foreach (var col in _index.Keys.ToList())
                     {
                         if (_index.TryGetColumns(col, out var cols))
                         {
@@ -1033,7 +1032,7 @@ namespace ETL_SQL.Data
         public IDataSource WithTable(string tableName) => this;
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException();
         public string ConnectorType => "STREAMING";
- 
+
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             if (_columns != null) return _columns;

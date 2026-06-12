@@ -37,8 +37,8 @@ namespace ETL_SQL.Core
 
         // serve command
         public string? ServeManifest { get; set; }
-        public int?    ServePort     { get; set; }
-        public bool    ServeNoBrowser { get; set; }
+        public int? ServePort { get; set; }
+        public bool ServeNoBrowser { get; set; }
 
         // doctor command
         public bool DoctorStrict { get; set; }

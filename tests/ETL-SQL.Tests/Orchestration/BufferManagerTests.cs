@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using Moq;
+using ETL_SQL.Core.Execution;
+using ETL_SQL.Orchestrator.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using ETL_SQL.Orchestrator.Execution;
-using ETL_SQL.Core.Execution;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {
@@ -48,13 +48,13 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task BufferManager_EnforcesMemoryLimit()
         {
             var bm = CreateBufferManager(maxMemMB: 10); // 10MB limit
-            
+
             // Request 6MB - should succeed
             using var res1 = await bm.ReserveMemoryAsync("session1", 6 * 1024 * 1024);
             Assert.NotNull(res1);
 
             // Request 6MB more - should timeout since 6+6 > 10
-            await Assert.ThrowsAsync<TimeoutException>(() => 
+            await Assert.ThrowsAsync<TimeoutException>(() =>
                 bm.ReserveMemoryAsync("session2", 6 * 1024 * 1024));
         }
 
@@ -62,20 +62,20 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task BufferManager_FifoOrder_Memory()
         {
             var bm = CreateBufferManager(maxMemMB: 10);
-            
+
             // Hold all memory
             var res1 = await bm.ReserveMemoryAsync("session1", 10 * 1024 * 1024);
-            
+
             var task2 = bm.ReserveMemoryAsync("session2", 5 * 1024 * 1024);
             var task3 = bm.ReserveMemoryAsync("session3", 5 * 1024 * 1024);
-            
+
             // Release session 1
             res1.Dispose();
-            
+
             // Task 2 should complete first (FIFO)
             var res2 = await task2;
             Assert.NotNull(res2);
-            
+
             // Task 3 should still be waiting (since task 2 took 5MB and 10 is max)
             // If we release task 2, task 3 is next
             res2.Dispose();
@@ -94,7 +94,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             // Request 20MB with override - should succeed immediately despite limit
             using var res = await bm.ReserveMemoryAsync("unsafe_session", 20 * 1024 * 1024, isOverride: true);
-            
+
             Assert.Contains(logger.Logs, s => s.Contains("[POLICY_OVERRIDE]") && s.Contains("unsafe_session"));
         }
 
@@ -109,7 +109,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             // Request 1MB - should timeout even though engine has 100MB free, 
             // because system memory is below floor.
-            await Assert.ThrowsAsync<TimeoutException>(() => 
+            await Assert.ThrowsAsync<TimeoutException>(() =>
                 bm.ReserveMemoryAsync("session1", 1 * 1024 * 1024));
         }
 
@@ -117,9 +117,9 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task BufferManager_EnforcesCursorLimit()
         {
             var bm = CreateBufferManager(maxCursors: 1);
-            
+
             using var cur1 = await bm.AcquireCursorAsync("session1");
-            
+
             // Second cursor should time out
             await Assert.ThrowsAsync<TimeoutException>(() => bm.AcquireCursorAsync("session2"));
         }

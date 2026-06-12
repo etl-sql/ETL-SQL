@@ -36,14 +36,14 @@ public class ExecutionJobServiceTests : IDisposable
 
         var config = new PortalConfig
         {
-            DatabasePath      = Path.Combine(_tempDir, "portal.db"),
-            ScriptRootPath    = Path.Combine(_tempDir, "scripts"),
+            DatabasePath = Path.Combine(_tempDir, "portal.db"),
+            ScriptRootPath = Path.Combine(_tempDir, "scripts"),
             SnapshotDirectory = Path.Combine(_tempDir, "snapshots"),
-            DatasetRootPath   = Path.Combine(_tempDir, "datasets"),
+            DatasetRootPath = Path.Combine(_tempDir, "datasets"),
             Resources = new ResourcesConfig
             {
                 MaxConcurrentReportExecutions = 1,
-                ExecutionTimeoutSeconds       = 1
+                ExecutionTimeoutSeconds = 1
             }
         };
 
@@ -59,7 +59,7 @@ public class ExecutionJobServiceTests : IDisposable
         using var service = new ExecutionJobService(
             config, scopeFactory, NullLogger<ExecutionJobService>.Instance, sessions, channel);
 
-        var first  = service.EnqueueRefresh(reportId: 1, userId: 7, scriptPath);
+        var first = service.EnqueueRefresh(reportId: 1, userId: 7, scriptPath);
         var second = service.EnqueueRefresh(reportId: 2, userId: 7, scriptPath);
 
         await WaitForTerminalAsync(service, first);

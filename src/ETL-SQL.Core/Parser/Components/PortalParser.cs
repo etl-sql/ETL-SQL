@@ -30,12 +30,12 @@ namespace ETL_SQL.Core.Parser.Components
                 Consume(TokenType.EQUALS, "Expected '='");
                 switch (key.ToUpperInvariant())
                 {
-                    case "EMAIL":      email     = ConsumeStringLiteral("Expected email string literal");   break;
-                    case "PASSWORD":   password  = ParseExpression();                  break;
-                    case "ROLE":       role      = Advance().Value;                    break;
+                    case "EMAIL": email = ConsumeStringLiteral("Expected email string literal"); break;
+                    case "PASSWORD": password = ParseExpression(); break;
+                    case "ROLE": role = Advance().Value; break;
                     case "FIRST_NAME": firstName = ConsumeStringLiteral("Expected first name string literal"); break;
-                    case "LAST_NAME":  lastName  = ConsumeStringLiteral("Expected last name string literal");  break;
-                    case "PROVIDER":   provider  = ConsumeStringLiteral("Expected provider string literal");   break;
+                    case "LAST_NAME": lastName = ConsumeStringLiteral("Expected last name string literal"); break;
+                    case "PROVIDER": provider = ConsumeStringLiteral("Expected provider string literal"); break;
                     default: ParseExpression(); break; // skip unknown
                 }
             });
@@ -63,15 +63,15 @@ namespace ETL_SQL.Core.Parser.Components
             do
             {
                 if (Match(TokenType.DISABLE)) { setActive = false; continue; }
-                if (Match(TokenType.ENABLE))  { setActive = true;  continue; }
+                if (Match(TokenType.ENABLE)) { setActive = true; continue; }
 
                 string key = Advance().Value;
                 Consume(TokenType.EQUALS, "Expected '='");
                 switch (key.ToUpperInvariant())
                 {
-                    case "ROLE":     newRole     = Advance().Value;           break;
-                    case "EMAIL":    newEmail    = ConsumeStringLiteral("Expected email string literal"); break;
-                    case "PASSWORD": newPassword = ParseExpression();          break;
+                    case "ROLE": newRole = Advance().Value; break;
+                    case "EMAIL": newEmail = ConsumeStringLiteral("Expected email string literal"); break;
+                    case "PASSWORD": newPassword = ParseExpression(); break;
                     default: ParseExpression(); break;
                 }
             } while (Match(TokenType.COMMA));
@@ -380,7 +380,7 @@ namespace ETL_SQL.Core.Parser.Components
                 Consume(TokenType.EQUALS, "Expected '='");
                 switch (key.ToUpperInvariant())
                 {
-                    case "FOLDER":      newFolder      = ConsumeStringLiteral("Expected folder path string literal"); break;
+                    case "FOLDER": newFolder = ConsumeStringLiteral("Expected folder path string literal"); break;
                     case "DESCRIPTION": newDescription = ConsumeStringLiteral("Expected description string literal"); break;
                     default: ParseExpression(); break;
                 }
@@ -786,7 +786,7 @@ namespace ETL_SQL.Core.Parser.Components
 
             do
             {
-                if (Match(TokenType.ENABLE))  { setActive = true;  continue; }
+                if (Match(TokenType.ENABLE)) { setActive = true; continue; }
                 if (Match(TokenType.DISABLE)) { setActive = false; continue; }
                 if (MatchIdentifier("PARAMETERS"))
                 {
@@ -938,9 +938,9 @@ namespace ETL_SQL.Core.Parser.Components
         {
             return tok.Value.ToUpperInvariant() switch
             {
-                "READ"    => PortalFolderPermission.Read,
+                "READ" => PortalFolderPermission.Read,
                 "EXECUTE" => PortalFolderPermission.Execute,
-                "MANAGE"  => PortalFolderPermission.Manage,
+                "MANAGE" => PortalFolderPermission.Manage,
                 _ => throw new SyntaxException(
                     $"Expected READ, EXECUTE, or MANAGE, got '{tok.Value}'",
                     tok.Line, tok.Column)
@@ -951,10 +951,10 @@ namespace ETL_SQL.Core.Parser.Components
         {
             return tok.Value.ToUpperInvariant() switch
             {
-                "VIEWER"  => PortalDatasetPermission.Viewer,
+                "VIEWER" => PortalDatasetPermission.Viewer,
                 "REFRESH" => PortalDatasetPermission.Refresh,
-                "EDITOR"  => PortalDatasetPermission.Editor,
-                "OWNER"   => PortalDatasetPermission.Owner,
+                "EDITOR" => PortalDatasetPermission.Editor,
+                "OWNER" => PortalDatasetPermission.Owner,
                 _ => throw new SyntaxException(
                     $"Expected VIEWER, REFRESH, EDITOR, or OWNER, got '{tok.Value}'",
                     tok.Line, tok.Column)
@@ -966,7 +966,7 @@ namespace ETL_SQL.Core.Parser.Components
             var tok = _parser.Advance();
             return tok.Value.ToUpperInvariant() switch
             {
-                "PUBLIC"  => "Public",
+                "PUBLIC" => "Public",
                 "PRIVATE" => "Private",
                 _ => throw new SyntaxException(
                     $"Expected PUBLIC or PRIVATE, got '{tok.Value}'",
@@ -979,8 +979,8 @@ namespace ETL_SQL.Core.Parser.Components
             var tok = _parser.Advance();
             return tok.Value.ToUpperInvariant() switch
             {
-                "PDF"  => PortalSubscriptionFormat.Pdf,
-                "CSV"  => PortalSubscriptionFormat.Csv,
+                "PDF" => PortalSubscriptionFormat.Pdf,
+                "CSV" => PortalSubscriptionFormat.Csv,
                 "BOTH" => PortalSubscriptionFormat.Both,
                 _ => throw new SyntaxException(
                     $"Expected PDF, CSV, or BOTH, got '{tok.Value}'",

@@ -5,16 +5,16 @@ using System.Net;
 using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
-using Moq;
-using MongoDB.Bson;
-using MongoDB.Driver;
 using Confluent.Kafka;
 using ETL_SQL.Common;
-using ETL_SQL.Connectors.Mongodb;
 using ETL_SQL.Connectors.Kafka;
+using ETL_SQL.Connectors.Mongodb;
 using ETL_SQL.Data;
 using ETL_SQL.Services;
+using MongoDB.Bson;
+using MongoDB.Driver;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -128,7 +128,7 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Equal(2, batches[0].Rows.Count);
             Assert.Equal(1, Convert.ToInt32(batches[0].Rows[0]["id"]));
             Assert.Equal("Alice", batches[0].Rows[0]["name"]);
-            
+
             // Nested document serialized to JSON string
             var addressJson = batches[0].Rows[0]["address"]?.ToString();
             Assert.Contains("\"city\" : \"New York\"", addressJson);
@@ -170,7 +170,7 @@ namespace ETL_SQL.Tests.Connectors
             await dataSource.WriteBatches(GetBatches(), append: true);
 
             mockCollection.Verify(c => c.InsertManyAsync(
-                It.Is<IEnumerable<BsonDocument>>(docs => 
+                It.Is<IEnumerable<BsonDocument>>(docs =>
                     docs.Count() == 1 &&
                     docs.First()["id"].AsInt32 == 1 &&
                     docs.First()["name"].AsString == "Alice" &&
@@ -257,7 +257,7 @@ namespace ETL_SQL.Tests.Connectors
             };
 
             var dataSource = new KafkaDataSource(mockContext.Object, "localhost:9092", "alerts", options, mockConsumer.Object);
-            
+
             var batches = new List<DataTable>();
             await foreach (var batch in dataSource.ReadBatches())
             {
@@ -301,8 +301,8 @@ namespace ETL_SQL.Tests.Connectors
 
             mockProducer.Verify(p => p.ProduceAsync(
                 "alerts",
-                It.Is<Message<string, string>>(m => 
-                    m.Key == "alert-id-99" && 
+                It.Is<Message<string, string>>(m =>
+                    m.Key == "alert-id-99" &&
                     m.Value == "High CPU load alert"
                 ),
                 It.IsAny<CancellationToken>()

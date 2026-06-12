@@ -1,17 +1,17 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
-using ETL_SQL.Data;
-using ETL_SQL.Connectors.Json;
-using Spectre.Console;
-using ETL_SQL.Common;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors.Json;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -81,11 +81,11 @@ namespace ETL_SQL.Tests.Connectors
             {
                 var source = @"CREATE CONNECTION src AS JSON('" + jsonFile + @"');
                                SELECT grp, SUM(val) as total FROM src GROUP BY grp ORDER BY grp;";
-                
+
                 var lexer = new Lexer(source);
                 var parser = new Parser(lexer.Tokenize());
                 var script = parser.Parse();
-                
+
                 var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
                 evaluator.IsVerbose = false;
                 await evaluator.Evaluate(script);

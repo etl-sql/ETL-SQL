@@ -1,12 +1,30 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Connectors.MockDb;
+using ETL_SQL.Connectors.MySql;
+using ETL_SQL.Connectors.Oracle;
+using ETL_SQL.Connectors.Postgres;
+using ETL_SQL.Connectors.SqlServer;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Formatting;
+using ETL_SQL.Core.Functions;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Services;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Handlers;
 using MediatR;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
@@ -14,28 +32,10 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Server;
-using ETL_SQL.Core;
-using ETL_SQL.Analysis.Linting;
-using ETL_SQL.Analysis.Linting.Rules;
-using ETL_SQL.Core.Formatting;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Core.Functions;
-using ETL_SQL.Core.Services;
 using LSPRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
+using SaveOptions = OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities.SaveOptions;
 using TextDocumentSelector = OmniSharp.Extensions.LanguageServer.Protocol.Models.TextDocumentSelector;
 using TextDocumentSyncKind = OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities.TextDocumentSyncKind;
-using SaveOptions = OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities.SaveOptions;
-using ETL_SQL.Data;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Execution;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Engine.Handlers;
-using ETL_SQL.Connectors.MockDb;
-using ETL_SQL.Connectors.FlatFile;
-using ETL_SQL.Connectors.SqlServer;
-using ETL_SQL.Connectors.Postgres;
-using ETL_SQL.Connectors.MySql;
-using ETL_SQL.Connectors.Oracle;
 
 namespace ETL_SQL.LSP
 {
@@ -48,7 +48,8 @@ namespace ETL_SQL.LSP
                     .WithInput(Console.OpenStandardInput())
                     .WithOutput(Console.OpenStandardOutput())
                     .ConfigureLogging(lb => lb.AddDebug().AddLanguageProtocolLogging().SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Trace))
-                    .WithServices(services => {
+                    .WithServices(services =>
+                    {
                         var configuration = new ConfigurationBuilder()
                             .SetBasePath(AppContext.BaseDirectory)
                             .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
@@ -102,7 +103,7 @@ namespace ETL_SQL.LSP
                         services.AddSingleton<ILanguageService, LanguageService>();
                         services.AddSingleton<DocumentStateStore>();
                         services.AddSingleton<TextDocumentHandler>();
-                        
+
                         // Engine Services
                         services.AddSingleton<Common.ILogger>(Common.NullLogger.Instance);
                         services.AddSingleton<ILineageTracker, LineageTracker>();
@@ -121,7 +122,7 @@ namespace ETL_SQL.LSP
                         services.AddSingleton<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>();
                         services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>());
                         services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore>());
-                        
+
                         services.AddTransient<IReportContext, Engine.Services.ReportRegistry>();
                         services.AddTransient<Engine.Services.EvaluatorComponentRegistry>();
                         services.AddTransient<Engine.Evaluator>();
@@ -149,7 +150,8 @@ namespace ETL_SQL.LSP
                         services.AddSingleton<UpdateNotebookContextHandler>();
                         services.AddSingleton<DesignerLspHandler>();
                     })
-                    .OnStarted((server, ct) => {
+                    .OnStarted((server, ct) =>
+                    {
                         server.Configuration.AddConfigurationItem(new ConfigurationItem { Section = "etlsql" });
                         return Task.CompletedTask;
                     })

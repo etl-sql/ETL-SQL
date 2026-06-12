@@ -1,8 +1,8 @@
-using ETL_SQL.Data;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -17,11 +17,11 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ParallelStatement)statement;
-            
+
             // Phase 1: Determine concurrency limit (default to all if 0 or negative, capped by global MaxParallelDegree)
             int limit = stmt.ConcurrencyLimit > 0 ? stmt.ConcurrencyLimit : stmt.Body.Statements.Count;
             int safetyLimit = Math.Min(limit, context.MaxParallelDegree);
-            
+
             var semaphore = new System.Threading.SemaphoreSlim(safetyLimit);
 
             // Mark the current tree node so the renderer shows it as a collapsible parallel block.
@@ -32,7 +32,8 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // Phase 2: Launch all statements with throttling and index-based tracking
-            var indexedTasks = stmt.Body.Statements.Select(async (s, index) => {
+            var indexedTasks = stmt.Body.Statements.Select(async (s, index) =>
+            {
                 await semaphore.WaitAsync();
                 try
                 {

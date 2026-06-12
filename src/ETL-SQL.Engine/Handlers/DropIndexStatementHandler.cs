@@ -1,7 +1,7 @@
-using ETL_SQL.Data;
 using System;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -17,7 +17,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (DropIndexStatement)statement;
             string connName = stmt.Table?.ConnectionName ?? stmt.Table?.TableName ?? "local";
-            
+
             _logger.Debug("Dropping index {IndexName} on {ConnectionName}", stmt.IndexName, connName);
             if (context.EngineContext is Evaluator eval)
             {

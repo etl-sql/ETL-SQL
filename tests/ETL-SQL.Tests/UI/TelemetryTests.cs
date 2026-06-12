@@ -49,11 +49,11 @@ namespace ETL_SQL.Tests.UI
             // Assert
             var output = _outWriter.ToString();
             var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            
+
             Assert.Contains(lines, l => l.Contains("\"type\":\"status\"") && l.Contains("\"status\":\"ready\""));
             var readyLine = lines.First(l => l.Contains("\"status\":\"ready\""));
             var readyObj = JsonDocument.Parse(readyLine).RootElement;
-            
+
             Assert.True(readyObj.TryGetProperty("buildId", out _), "ReplUi ready signal must contain buildId for diagnostics");
         }
 
@@ -73,20 +73,20 @@ namespace ETL_SQL.Tests.UI
             // Assert
             var output = _outWriter.ToString();
             var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            
+
             var resultLine = lines.FirstOrDefault(l => l.Contains("\"type\":\"results\""));
             Assert.NotNull(resultLine);
 
             var doc = JsonDocument.Parse(resultLine);
             var root = doc.RootElement;
-            
+
             Assert.Equal("results", root.GetProperty("type").GetString());
             Assert.True(root.TryGetProperty("columns", out var cols), "Results must have columns array");
             Assert.True(root.TryGetProperty("rows", out var rows), "Results must have rows array");
-            
+
             Assert.Equal(2, cols.GetArrayLength());
             Assert.Equal("ID", cols[0].GetString());
-            
+
             var firstRow = rows[0];
             Assert.Equal(1, firstRow.GetProperty("ID").GetInt32());
             Assert.Equal("Test", firstRow.GetProperty("Name").GetString());
@@ -108,13 +108,13 @@ namespace ETL_SQL.Tests.UI
             // Assert
             var output = _outWriter.ToString();
             var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            
+
             var progressLine = lines.FirstOrDefault(l => l.Contains("\"type\":\"progress\""));
             Assert.NotNull(progressLine);
 
             var doc = JsonDocument.Parse(progressLine);
             var root = doc.RootElement;
-            
+
             Assert.Equal("progress", root.GetProperty("type").GetString());
             Assert.True(root.TryGetProperty("data", out var data), "Progress must have root 'data' property");
             Assert.Equal(JsonValueKind.Array, data.ValueKind); // ToSnapshot() returns a List<object>
@@ -126,7 +126,7 @@ namespace ETL_SQL.Tests.UI
             // Arrange
             var ctx = new CliContext { IsJsonMode = true };
             var repl = new ReplUi(ctx, ETL_SQL.TUI.Program.ServiceProvider);
-            var script = "SELECT 1;"; 
+            var script = "SELECT 1;";
             var input = new StringReader($"{{\"action\":\"run\", \"script\":\"{script}\"}}\n{{\"action\":\"exit\"}}\n");
             Console.SetIn(input);
 
@@ -136,13 +136,13 @@ namespace ETL_SQL.Tests.UI
             // Assert
             var output = _outWriter.ToString();
             var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            
+
             var perfLine = lines.FirstOrDefault(l => l.Contains("\"type\":\"performance\""));
             Assert.NotNull(perfLine);
 
             var doc = JsonDocument.Parse(perfLine);
             var root = doc.RootElement;
-            
+
             Assert.Equal("performance", root.GetProperty("type").GetString());
             // ReplUi currently uses "metrics"
             Assert.True(root.TryGetProperty("metrics", out var metrics), "ReplUi performance must have 'metrics' property");
@@ -156,14 +156,14 @@ namespace ETL_SQL.Tests.UI
             // Arrange
             var ctx = new CliContext { IsJsonMode = true };
             var repl = new ReplUi(ctx, ETL_SQL.TUI.Program.ServiceProvider);
-            
+
             // A script that creates and drops a connection
             var script = "DROP CONNECTION IF EXISTS m; CREATE CONNECTION m AS MOCKDB(); SELECT 1;";
-            
+
             // Run it twice sequentially in the SAME session
             var input = new StringReader(
-                  $"{{\"action\":\"run\", \"script\":\"{script}\"}}\n" 
-                + $"{{\"action\":\"run\", \"script\":\"{script}\"}}\n" 
+                  $"{{\"action\":\"run\", \"script\":\"{script}\"}}\n"
+                + $"{{\"action\":\"run\", \"script\":\"{script}\"}}\n"
                 + $"{{\"action\":\"exit\"}}\n");
             Console.SetIn(input);
 
@@ -173,7 +173,7 @@ namespace ETL_SQL.Tests.UI
             // Assert
             var output = _outWriter.ToString();
             var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            
+
             // Should see two "done" messages with exitCode 0
             var doneLines = lines.Where(l => l.Contains("\"type\":\"done\"") && l.Contains("\"exitCode\":0")).ToList();
             Assert.Equal(2, doneLines.Count);

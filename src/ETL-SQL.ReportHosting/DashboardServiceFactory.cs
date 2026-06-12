@@ -23,7 +23,7 @@ namespace ETL_SQL.ReportHosting
         private readonly TimeSpan _executionTimeout;
         private readonly ConcurrentDictionary<string, DashboardService> _services
             = new(StringComparer.OrdinalIgnoreCase);
- 
+
         public DashboardServiceFactory(string manifestPath, IServiceScopeFactory scopeFactory, TimeSpan? executionTimeout = null)
         {
             _manifestDir = Path.GetDirectoryName(Path.GetFullPath(manifestPath))
@@ -37,11 +37,11 @@ namespace ETL_SQL.ReportHosting
             _scopeFactory = scopeFactory;
             _executionTimeout = executionTimeout ?? TimeSpan.FromSeconds(30);
         }
- 
+
         public string ManifestDirectory => _manifestDir;
 
         public IReadOnlyList<ReportEntry> Reports => _reports;
- 
+
         /// <summary>
         /// Returns the <see cref="DashboardService"/> for the named report,
         /// or null if no such report is listed in the manifest.
@@ -51,7 +51,7 @@ namespace ETL_SQL.ReportHosting
             var entry = _reports.FirstOrDefault(r =>
                 string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
             if (entry == null) return null;
- 
+
             return _services.GetOrAdd(entry.Name, _ =>
             {
                 if (!SafePath.TryResolveWithinRoot(_manifestDir, entry.Path, out var fullPath))

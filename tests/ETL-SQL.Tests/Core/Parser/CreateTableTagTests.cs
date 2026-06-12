@@ -1,6 +1,6 @@
-using Xunit;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
+using Xunit;
 
 namespace ETL_SQL.Tests.Core
 {
@@ -14,13 +14,13 @@ namespace ETL_SQL.Tests.Core
                     id INT /* @PK: true */,
                     name VARCHAR(100) /* @PII: Yes */
                 );";
-            
+
             var script = Parse(sql);
             Assert.Single(script.Statements);
             var stmt = script.Statements[0] as CreateTableStatement;
             Assert.NotNull(stmt);
             Assert.Equal(2, stmt.Columns.Count);
-            
+
             var idCol = stmt.Columns[0];
             Assert.Equal("id", idCol.ColumnName);
             Assert.True(idCol.Metadata.ContainsKey("PK"));
@@ -40,19 +40,19 @@ namespace ETL_SQL.Tests.Core
                     id INT PRIMARY KEY /* @PK: true */ /* @Internal: yes */,
                     status VARCHAR(20) NOT NULL /* @State: Active */
                 );";
-            
+
             var script = Parse(sql);
             Assert.Single(script.Statements);
             var stmt = script.Statements[0] as CreateTableStatement;
             Assert.NotNull(stmt);
-            
+
             var idCol = stmt.Columns[0];
             Assert.True(idCol.IsPrimaryKey);
             Assert.True(idCol.Metadata.ContainsKey("PK"));
             Assert.Equal("true", idCol.Metadata["PK"]);
             Assert.True(idCol.Metadata.ContainsKey("Internal"));
             Assert.Equal("yes", idCol.Metadata["Internal"]);
-            
+
             var statusCol = stmt.Columns[1];
             Assert.False(statusCol.IsNullable);
             Assert.True(statusCol.Metadata.ContainsKey("State"));
@@ -66,9 +66,9 @@ namespace ETL_SQL.Tests.Core
             var script = Parse(sql);
             var stmt = script.Statements[0] as CreateTableStatement;
             Assert.NotNull(stmt);
-            
+
             string generatedSql = stmt.ToSql();
-            Assert.Contains("/* @PK: true */", generatedSql);        
+            Assert.Contains("/* @PK: true */", generatedSql);
         }
 
         private static Script Parse(string source)

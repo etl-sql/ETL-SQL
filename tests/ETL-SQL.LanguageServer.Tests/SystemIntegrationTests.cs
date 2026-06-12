@@ -3,17 +3,17 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.LSP;
 using ETL_SQL.Connectors.MockDb;
-using OmniSharp.Extensions.LanguageServer.Protocol.Models;
-using OmniSharp.Extensions.LanguageServer.Protocol.Document;
-using DocumentUri = OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri;
-using Xunit.Abstractions;
-using ETL_SQL.Core.Services;
 using ETL_SQL.Core.Interfaces;
+using ETL_SQL.Core.Services;
+using ETL_SQL.LSP;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using OmniSharp.Extensions.LanguageServer.Protocol.Document;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Xunit;
+using Xunit.Abstractions;
+using DocumentUri = OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri;
 
 namespace ETL_SQL.LanguageServer.Tests
 {
@@ -33,7 +33,7 @@ namespace ETL_SQL.LanguageServer.Tests
             services.AddLogging(builder => builder.AddConsole().AddDebug());
             var serviceProvider = services.BuildServiceProvider();
             var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
-            
+
             var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
             // IMPORTANT: Register the connector manually as Program.cs does
             connectorRegistry.Register(new MockDbConnector());
@@ -46,9 +46,9 @@ namespace ETL_SQL.LanguageServer.Tests
             var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
             var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, languageService, new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()));
             var hoverHandler = new HoverProvider(loggerFactory.CreateLogger<HoverProvider>(), store, functionRegistry, helpRegistry, new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()));
-            
+
             var uri = DocumentUri.From("untitled:Untitled-1");
-            var normalizedUri = uri.ToString(); 
+            var normalizedUri = uri.ToString();
 
             // 1. Analyze script with alias
             var script = "CREATE CONNECTION m AS MOCKDB();\r\nSELECT u. FROM m.Users AS u;";
@@ -71,7 +71,7 @@ namespace ETL_SQL.LanguageServer.Tests
             // Act
             _output.WriteLine("Requesting completion at line 1, col 9...");
             var list = await completionProvider.Handle(completionParams, CancellationToken.None);
-            
+
             _output.WriteLine($"Completion items returned: {list.Count()}");
             foreach (var item in list) _output.WriteLine($" - {item.Label} ({item.Detail})");
 
@@ -79,7 +79,7 @@ namespace ETL_SQL.LanguageServer.Tests
             Assert.Contains(list, i => i.Label == "u.UserID");
             script = "CREATE CONNECTION m AS MOCKDB();\r\nSELECT u.* FROM m.Users AS u;";
             await handler.AnalyzeAsync(uri, script);
-            
+
             completionParams = new CompletionParams
             {
                 TextDocument = new TextDocumentIdentifier(uri),
@@ -87,18 +87,18 @@ namespace ETL_SQL.LanguageServer.Tests
                 Context = new CompletionContext { TriggerKind = CompletionTriggerKind.TriggerCharacter, TriggerCharacter = "." }
             };
             list = await completionProvider.Handle(completionParams, CancellationToken.None);
-            
-             var expandItem = list.FirstOrDefault(i => i.Label == "Expand columns");
-             Assert.NotNull(expandItem);
-             _output.WriteLine($"Expand columns InsertText: {expandItem.InsertText}");
-             
-             // Verify it contains the aliased columns
-             Assert.Contains("u.UserID, u.UserName, u.Email", expandItem.InsertText);
+
+            var expandItem = list.FirstOrDefault(i => i.Label == "Expand columns");
+            Assert.NotNull(expandItem);
+            _output.WriteLine($"Expand columns InsertText: {expandItem.InsertText}");
+
+            // Verify it contains the aliased columns
+            Assert.Contains("u.UserID, u.UserName, u.Email", expandItem.InsertText);
 
             // 4. Test expansion WITHOUT alias: SELECT * FROM m.Users;
             script = "CREATE CONNECTION m AS MOCKDB();\r\nSELECT * FROM m.Users;";
             await handler.AnalyzeAsync(uri, script);
-            
+
             completionParams = new CompletionParams
             {
                 TextDocument = new TextDocumentIdentifier(uri),
@@ -106,11 +106,11 @@ namespace ETL_SQL.LanguageServer.Tests
                 Context = new CompletionContext { TriggerKind = CompletionTriggerKind.TriggerCharacter, TriggerCharacter = " " }
             };
             list = await completionProvider.Handle(completionParams, CancellationToken.None);
-            
+
             expandItem = list.FirstOrDefault(i => i.Label == "Expand columns");
             Assert.NotNull(expandItem);
             _output.WriteLine($"Expand columns (no alias) InsertText: {expandItem.InsertText}");
-            
+
             // Should expand WITHOUT alias prefix if not aliased and only 1 table.
             Assert.Contains("m.Users.UserID", expandItem.InsertText);
         }
@@ -122,7 +122,7 @@ namespace ETL_SQL.LanguageServer.Tests
             services.AddLogging(builder => builder.AddConsole().AddDebug());
             var serviceProvider = services.BuildServiceProvider();
             var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
-            
+
             var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
             var metadataManager = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, connectorRegistry);
             var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
@@ -130,9 +130,9 @@ namespace ETL_SQL.LanguageServer.Tests
             var store = new DocumentStateStore();
             var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
             var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, languageService, new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()));
-            
+
             var uri = DocumentUri.From("untitled:Untitled-2");
-            
+
             // Script with nested loops and declarations
             var script = "DECLARE @global_var INT = 100;\r\nFOR @i = 1 TO 10\r\nBEGIN\r\n    PRINT @i;\r\n    FOREACH @item IN [1, 2, 3]\r\n    BEGIN\r\n        PRINT @item;\r\n    END\r\nEND";
             await handler.AnalyzeAsync(uri, script);
@@ -147,7 +147,7 @@ namespace ETL_SQL.LanguageServer.Tests
 
             // Act
             var list = await completionProvider.Handle(completionParams, CancellationToken.None);
-            
+
             // Assert: Should see @global_var and @i, but NOT @item
             Assert.Contains(list, i => i.Label == "@global_var");
             Assert.Contains(list, i => i.Label == "@i");
@@ -162,13 +162,13 @@ namespace ETL_SQL.LanguageServer.Tests
             };
 
             list = await completionProvider.Handle(completionParams, CancellationToken.None);
-            
+
             // Assert: Should see @global_var, @i, AND @item
             Assert.Contains(list, i => i.Label == "@global_var");
             Assert.Contains(list, i => i.Label == "@i");
             Assert.Contains(list, i => i.Label == "@item");
         }
-        
+
         [Fact]
         public async Task Hover_Should_Return_Keyword_Help()
         {
@@ -177,17 +177,17 @@ namespace ETL_SQL.LanguageServer.Tests
             services.AddLogging(builder => builder.AddConsole().AddDebug());
             var serviceProvider = services.BuildServiceProvider();
             var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
-            
+
             var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
             var functionRegistry = new Engine.Functions.FunctionRegistry();
             var metadataManager = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, connectorRegistry);
             var store = new DocumentStateStore();
             var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
             ETL_SQL.Engine.Services.LanguageHelpService.Initialize(helpRegistry);
-            
+
             var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
             var hoverProvider = new HoverProvider(loggerFactory.CreateLogger<HoverProvider>(), store, functionRegistry, helpRegistry, new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()));
-            
+
             var uri = DocumentUri.From("untitled:Untitled-3");
             var script = "SELECT * FROM CONNECTION MSSQL;";
             await handler.AnalyzeAsync(uri, script);
@@ -206,16 +206,16 @@ namespace ETL_SQL.LanguageServer.Tests
             Assert.NotNull(hover);
             var md = hover.Contents.MarkupContent;
             Assert.Contains("Connections link ETL-SQL", md.Value);
-            
+
             // 2. Hover over MSSQL (line 0, col 25)
             hoverParams = new HoverParams
             {
                 TextDocument = new TextDocumentIdentifier(uri),
                 Position = new Position(0, 25)
             };
-            
+
             hover = await hoverProvider.Handle(hoverParams, CancellationToken.None);
-            
+
             // Assert
             Assert.NotNull(hover);
             md = hover.Contents.MarkupContent;
@@ -230,7 +230,7 @@ namespace ETL_SQL.LanguageServer.Tests
             services.AddLogging(builder => builder.AddConsole().AddDebug());
             var serviceProvider = services.BuildServiceProvider();
             var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
-            
+
             var store = new DocumentStateStore();
             var handler = new TextDocumentHandler(loggerFactory, new MetadataManager(ETL_SQL.Common.NullLogger.Instance, new ETL_SQL.Data.ConnectorRegistry()), store);
             var symbolProvider = new DocumentSymbolProvider(store);
@@ -251,7 +251,7 @@ namespace ETL_SQL.LanguageServer.Tests
             Assert.NotNull(container);
             var list = container.Select(s => s.DocumentSymbol).ToList();
             Assert.Equal(2, list.Count);
-            
+
             var cp1 = list.FirstOrDefault(s => s.Name == "checkpoint1");
             Assert.NotNull(cp1);
             Assert.Equal("Top-level Checkpoint", cp1.Detail);
@@ -269,7 +269,7 @@ namespace ETL_SQL.LanguageServer.Tests
             services.AddLogging(builder => builder.AddConsole().AddDebug());
             var serviceProvider = services.BuildServiceProvider();
             var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
-            
+
             var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
             var metadataManager = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, connectorRegistry);
             var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();

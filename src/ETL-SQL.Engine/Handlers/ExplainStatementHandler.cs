@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Explain;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
-using ETL_SQL.Analysis.Explain;
 using ETL_SQL.Data;
-using Spectre.Console.Rendering;
 using Spectre.Console;
+using Spectre.Console.Rendering;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -21,7 +21,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ExplainStatement)statement;
-            
+
             var plan = new DataTable();
             var columns = new List<string> { "ID", "Operation", "Details", "Cost", "Mode", "Est. Rows" };
             if (stmt.IsAnalyze)
@@ -32,9 +32,9 @@ namespace ETL_SQL.Engine.Handlers
                 columns.Add("Spill Count");
             }
             plan.SetColumns(columns.ToArray());
-            
-            var metrics = new ExecutionMetrics 
-            { 
+
+            var metrics = new ExecutionMetrics
+            {
                 Sql = (stmt.IsAnalyze ? "EXPLAIN ANALYZE: " : "EXPLAIN: ") + stmt.Query.ToSql(),
                 Timestamp = DateTime.Now
             };
@@ -108,10 +108,10 @@ namespace ETL_SQL.Engine.Handlers
             // Populate the context's profile metrics so the UI Performance tab can see it
             metrics.DurationMs = plan.Rows.Sum(r => Convert.ToInt64(r["Cost"] ?? 0));
             context.Telemetry.ProfileMetrics.Add(metrics);
-            
+
             context.LastResult = plan;
             context.LastResultSets.Add(plan);
-            
+
             if (stmt.IntoTable != null)
             {
                 var destination = await context.ResolveDataSourceAsync(stmt.IntoTable);

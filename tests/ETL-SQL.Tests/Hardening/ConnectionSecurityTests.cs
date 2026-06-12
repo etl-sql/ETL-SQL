@@ -1,14 +1,14 @@
-﻿using Xunit;
-using ETL_SQL.Analysis.Linting;
-using ETL_SQL.Analysis.Linting.Rules;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Services;
-using ETL_SQL.Common;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Collections.Generic;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Common;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Services;
+using ETL_SQL.Services;
 using Microsoft.Extensions.Configuration;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -107,7 +107,7 @@ namespace ETL_SQL.Tests.Hardening
         public void SecurityService_EncryptScript_Transforms_Plaintext_ApiKeyOptions()
         {
             var service = new SecurityService(NullLogger.Instance);
-            
+
             var sql1 = "CREATE CONNECTION c AS MSSQL(SERVER='.', API_KEY='secret');";
             var encrypted1 = service.EncryptScript(sql1, "master");
             Assert.Contains("API_KEY='ENC:", encrypted1);
@@ -139,7 +139,7 @@ namespace ETL_SQL.Tests.Hardening
         public void SecurityService_NeedsEncryption_Identifies_Plaintext()
         {
             var service = new SecurityService(NullLogger.Instance);
-            
+
             Assert.True(service.NeedsEncryption("CREATE CONNECTION c AS MSSQL('Pwd=p');"));
             Assert.True(service.NeedsEncryption("CREATE CONNECTION c AS MSSQL(PASSWORD='p');"));
             Assert.False(service.NeedsEncryption("CREATE CONNECTION c AS MSSQL('ENC:p');"));

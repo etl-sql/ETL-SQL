@@ -1,8 +1,8 @@
-using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 using System;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -17,7 +17,7 @@ namespace ETL_SQL.Engine.Handlers
         public Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (DropProcedureStatement)statement;
-            
+
             if (context.IsWhatIf)
             {
                 _logger.WriteLine($"WHAT IF: Would drop procedure {stmt.ProcedureName}", ConsoleColor.Yellow);

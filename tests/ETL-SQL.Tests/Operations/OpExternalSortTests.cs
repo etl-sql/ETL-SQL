@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Xunit;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Engines;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Operations.Operations
 {
@@ -102,7 +102,7 @@ namespace ETL_SQL.Tests.Operations.Operations
             var sorted = await engine.SortExternal(rows, orderBy);
 
             Assert.Equal(4, sorted.Count);
-            
+
             // Expected: A/2, A/1, B/2, B/1
             Assert.Equal("A", sorted[0]["cat"]); Assert.Equal(2m, Convert.ToDecimal(sorted[0]["val"]));
             Assert.Equal("A", sorted[1]["cat"]); Assert.Equal(1m, Convert.ToDecimal(sorted[1]["val"]));

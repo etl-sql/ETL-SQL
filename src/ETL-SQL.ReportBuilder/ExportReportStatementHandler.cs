@@ -58,7 +58,7 @@ namespace ETL_SQL.ReportBuilder
             }
 
             // ── Build manifest from current context state ──────────────────────
-            var builder  = new ManifestBuilder(context);
+            var builder = new ManifestBuilder(context);
             var manifest = await builder.BuildAsync(reportPath);
 
             // ── Write the export file ──────────────────────────────────────────

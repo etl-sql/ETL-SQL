@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using MySqlConnector;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Data;
+using MySqlConnector;
 
 namespace ETL_SQL.Connectors.MySql
 {
@@ -15,18 +15,18 @@ namespace ETL_SQL.Connectors.MySql
     {
         public string Name => "MYSQL";
         public IReadOnlyList<string> Aliases => new[] { "MARIADB" };
-        
+
         public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
             var ds = new MySqlDataSource(context, connectionString, null, null);
             return await ds.GetVersionAsync();
         }
-        
+
         public HashSet<string> GetSupportedFunctions() => MySqlSyntax.GetSupportedFunctions();
         public HashSet<string> GetSupportedKeywords() => MySqlSyntax.GetSupportedKeywords();
         public HashSet<string> GetExcludedKeywords() => MySqlSyntax.Exclusions;
-        
-        public string GetHelp() => 
+
+        public string GetHelp() =>
             "MYSQL/MARIADB Connector: Used for MySQL and MariaDB database connections.\n" +
             "Options:\n" +
             "  HOST/SERVER: The target server.\n" +
@@ -63,7 +63,7 @@ namespace ETL_SQL.Connectors.MySql
 
         public Dictionary<string, string[]> GetOptionValues() => new();
 
-        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) 
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
             string? table = null;
             options?.TryGetValue("TABLE", out table);
@@ -100,7 +100,7 @@ namespace ETL_SQL.Connectors.MySql
             }
         }
 
-        public string BuildConnectionString(Dictionary<string, string> properties) => 
+        public string BuildConnectionString(Dictionary<string, string> properties) =>
             ConnectionStringBuilder.Build(Name, properties);
 
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null) => GetHostStatic(connectionString, options);
@@ -109,7 +109,7 @@ namespace ETL_SQL.Connectors.MySql
         {
             if (options != null && options.TryGetValue("HOST", out var host)) return host;
             if (options != null && options.TryGetValue("SERVER", out var server)) return server;
-            
+
             try
             {
                 var builder = new MySqlConnectionStringBuilder(connectionString);

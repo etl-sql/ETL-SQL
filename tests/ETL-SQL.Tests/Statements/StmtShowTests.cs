@@ -3,15 +3,15 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Moq;
-using Xunit;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements.Statements
 {

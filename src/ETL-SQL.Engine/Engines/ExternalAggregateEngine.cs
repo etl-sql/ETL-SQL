@@ -4,10 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Common;
-using ETL_SQL.Core.Spill;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Spill;
+using ETL_SQL.Data;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -43,12 +43,12 @@ namespace ETL_SQL.Engine.Engines
                 // 1. Partition Phase (supports one-pass expansion for grouping sets)
                 string[] partitionPaths;
                 List<List<Expression>>? expandedSets = null;
-                
+
                 if (groupingSet != null && groupingSet.Type != GroupingSetType.None)
                 {
                     expandedSets = _inMemoryEngine.ExpandGroupingSets(groupingSet);
                     partitionPaths = await PartitionStreamMultiSet(inputStream, expandedSets);
-                    
+
                     // Ensure we have a reference list of ALL participating columns for NULL substitution later
                     if (groupBy == null || groupBy.Count == 0)
                     {
@@ -89,10 +89,10 @@ namespace ETL_SQL.Engine.Engines
                         }
                         else key = new ETL_SQL.Data.CompoundKey(setIndex, "GLOBAL");
 
-                        if (!groups.TryGetValue(key, out var bucket)) 
-                        { 
-                            bucket = (new List<Row>(), setIndex); 
-                            groups[key] = bucket; 
+                        if (!groups.TryGetValue(key, out var bucket))
+                        {
+                            bucket = (new List<Row>(), setIndex);
+                            groups[key] = bucket;
                         }
                         bucket.Rows.Add(row);
                     }
@@ -101,7 +101,7 @@ namespace ETL_SQL.Engine.Engines
                     {
                         var activeGroupBy = expandedSets != null ? expandedSets[bucket.SetIndex] : groupBy;
                         var partResults = await _inMemoryEngine.ApplyAggregation(bucket.Rows.ToAsyncEnumerable(), activeGroupBy, finalColumns, colNames, havingClause);
-                        
+
                         _context.Telemetry.AggregateGroupsCount += partResults.Count;
 
                         // Handle GROUPING() / NULL substitution for sub-sets
@@ -116,7 +116,7 @@ namespace ETL_SQL.Engine.Engines
                                     {
                                         var colName = expr is IdentifierExpression id ? id.Name.Split('.').Last() : NormalizedToSql(expr);
                                         var matchIdx = colNames.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
-                                        
+
                                         if (matchIdx == -1)
                                         {
                                             // Fallback 1: match by the expression's SQL representation in the final columns
@@ -141,10 +141,10 @@ namespace ETL_SQL.Engine.Engines
                         }
                         else
                         {
-                            foreach (var resRow in partResults) 
-                            { 
-                                yieldedAny = true; 
-                                yield return resRow; 
+                            foreach (var resRow in partResults)
+                            {
+                                yieldedAny = true;
+                                yield return resRow;
                             }
                         }
                     }
@@ -152,7 +152,7 @@ namespace ETL_SQL.Engine.Engines
 
                 // Handle global aggregation if no rows were found but aggregates exist
                 // Bug Fix: Only yield if we haven't already produced rows (avoids duplicates in partitioned external agg)
-                if (!yieldedAny && finalColumns.Any(c => _inMemoryEngine.IsAggregate(c.Expression)) 
+                if (!yieldedAny && finalColumns.Any(c => _inMemoryEngine.IsAggregate(c.Expression))
                     && (groupBy == null || groupBy.Count == 0) && (groupingSet == null || groupingSet.Type == GroupingSetType.None))
                 {
                     var globals = await _inMemoryEngine.ApplyAggregation(AsyncEnumerable.Empty<Row>(), groupBy, finalColumns, colNames, havingClause);
@@ -169,7 +169,7 @@ namespace ETL_SQL.Engine.Engines
         {
             var names = new string[PartitionCount];
             var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
- 
+
             var prefix = Guid.NewGuid().ToString("N");
             for (int i = 0; i < PartitionCount; i++)
             {
@@ -200,8 +200,8 @@ namespace ETL_SQL.Engine.Engines
             finally
             {
                 int used = 0;
-                foreach (var w in writers) 
-                { 
+                foreach (var w in writers)
+                {
                     if (w != null)
                     {
                         used++;
@@ -262,8 +262,8 @@ namespace ETL_SQL.Engine.Engines
             finally
             {
                 int used = 0;
-                foreach (var w in writers) 
-                { 
+                foreach (var w in writers)
+                {
                     if (w != null)
                     {
                         used++;

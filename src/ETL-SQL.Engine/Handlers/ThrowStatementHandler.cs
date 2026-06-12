@@ -1,7 +1,7 @@
-using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -22,7 +22,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ThrowStatement)statement;
-            
+
             _logger.Debug("Executing THROW");
 
             const string defaultMessage = "An explicit error was thrown.";
@@ -33,12 +33,12 @@ namespace ETL_SQL.Engine.Handlers
                 if (context.LastError != null)
                 {
                     throw new ExecutionException(
-                        context.LastError.Message, 
-                        null, 
-                        context.LastError.Line, 
-                        0, 
-                        context.LastError.Number, 
-                        context.LastError.Severity, 
+                        context.LastError.Message,
+                        null,
+                        context.LastError.Line,
+                        0,
+                        context.LastError.Number,
+                        context.LastError.Severity,
                         context.LastError.State);
                 }
                 throw new ExecutionException(defaultMessage);

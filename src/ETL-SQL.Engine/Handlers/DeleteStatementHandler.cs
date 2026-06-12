@@ -1,11 +1,11 @@
-using ETL_SQL.Data;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Common.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -16,7 +16,7 @@ namespace ETL_SQL.Engine.Handlers
     {
         private readonly ILogger _logger = logger;
         public Type SupportedStatementType => typeof(DeleteStatement);
- 
+
         /// <summary>Executes the DELETE statement against the target data source.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
@@ -33,23 +33,23 @@ namespace ETL_SQL.Engine.Handlers
                 _logger.Debug("Strategy: Remote SQL DELETE");
                 var sql = $"DELETE FROM {context.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)}";
                 CompiledSql? compiledWhere = null;
-                if (stmt.WhereClause != null) 
+                if (stmt.WhereClause != null)
                 {
                     compiledWhere = context.CompileExpression(stmt.WhereClause, sqlConn.Dialect);
                     if (compiledWhere != null)
                         sql += $"\nWHERE {compiledWhere.Sql}";
                 }
-                
+
                 if (context.IsWhatIf)
                 {
                     var whatIfSql = $"DELETE FROM {context.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)}";
-                    if (stmt.WhereClause != null && compiledWhere != null) 
+                    if (stmt.WhereClause != null && compiledWhere != null)
                         whatIfSql += $"\nWHERE {compiledWhere.ToEscapedSql(sqlConn.Dialect)}";
                     _logger.WriteLine($"WHAT IF: Would execute remote SQL delete on {connName}:\n{whatIfSql}", ConsoleColor.Yellow);
                 }
                 else
                 {
-                    await foreach (var batch in sqlConn.ExecuteRawSql(sql, compiledWhere?.Parameters.Values)) 
+                    await foreach (var batch in sqlConn.ExecuteRawSql(sql, compiledWhere?.Parameters.Values))
                     {
                         if (batch.RowsAffected >= 0) context.Telemetry.RowsProcessed += batch.RowsAffected;
                     }
@@ -90,7 +90,7 @@ namespace ETL_SQL.Engine.Handlers
                                 survivingRows.Add(row);
                             }
                         }
-                        
+
                         var filteredBatch = new DataTable();
                         filteredBatch.SetColumns(batch.ColumnNames);
                         foreach (var row in survivingRows) await filteredBatch.AddRowAsync(row);

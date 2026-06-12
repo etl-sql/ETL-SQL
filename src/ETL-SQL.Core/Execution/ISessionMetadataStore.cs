@@ -12,13 +12,13 @@ namespace ETL_SQL.Core.Execution
     public interface ISessionMetadataStore : IDisposable
     {
         Task InitializeAsync();
-        
+
         Task SaveVariablesAsync(IDictionary<string, object?> variables, IDictionary<string, VariableMetadata> metadata);
         Task<(Dictionary<string, object?>, Dictionary<string, VariableMetadata>)> LoadVariablesAsync();
-        
+
         Task SaveLineageAsync(IEnumerable<LineageEntry> entries);
         Task<IEnumerable<LineageEntry>> LoadLineageAsync();
-        
+
         Task<IEnumerable<SavedTempTable>> LoadAllTempTablesAsync();
         Task SaveTempTablesAsync(IEnumerable<SavedTempTable> tables);
 

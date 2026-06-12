@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 using ETL_SQL.Engine.Planning;
 
 namespace ETL_SQL.Engine.Engines
@@ -75,7 +75,8 @@ namespace ETL_SQL.Engine.Engines
 
             _logger.Debug("[PIPELINE] Initializing Multi-Pass Engine Pipeline for {TableName}", fromName);
 
-            var inputStream = sourceBatches.SelectMany(b => b.Rows.Select(r => {
+            var inputStream = sourceBatches.SelectMany(b => b.Rows.Select(r =>
+            {
                 var cloned = r.Clone();
                 foreach (var colName in r.GetColumnNames())
                 {
@@ -347,7 +348,7 @@ namespace ETL_SQL.Engine.Engines
             {
                 if (canDeferWhere && !await _context.EvaluateCondition(stmt.WhereClause!, row)) continue;
                 var resRow = batch.NewRow();
-                
+
                 bool schemaMatches = hasPreEvaluatedColumns && row.Schema != null && row.Schema.ColumnCount == finalColumns.Count;
                 if (schemaMatches)
                 {
@@ -399,7 +400,7 @@ namespace ETL_SQL.Engine.Engines
                 if (seenRows != null)
                 {
                     // Fix DISTINCT collapse: Use a unique sentinel for NULL to distinguish it from empty string
-                    var key = string.Join("\0", Enumerable.Range(0, colNames.Count).Select(i => 
+                    var key = string.Join("\0", Enumerable.Range(0, colNames.Count).Select(i =>
                     {
                         var val = resRow[i];
                         if (val == null || val == DBNull.Value) return "__NULL__";
@@ -427,7 +428,8 @@ namespace ETL_SQL.Engine.Engines
             foreach (var row in rows)
                 rowSortKeys.Add((row, await ExtractSortKeys(row, orderBy, colNames, finalColumns, hasPreEvaluatedColumns)));
 
-            rowSortKeys.Sort((a, b) => {
+            rowSortKeys.Sort((a, b) =>
+            {
                 for (int i = 0; i < orderBy.Count; i++)
                 {
                     var res = _context.CompareConstants(a.Keys[i], b.Keys[i]);
@@ -459,7 +461,8 @@ namespace ETL_SQL.Engine.Engines
             // PriorityQueue is a min-heap, so we invert the output compare.
             // heap.Peek() returns the row that would appear LAST among the kept rows.
             var heap = new PriorityQueue<(Row Row, object?[] Keys), (Row Row, object?[] Keys)>(
-                Comparer<(Row Row, object?[] Keys)>.Create((a, b) => {
+                Comparer<(Row Row, object?[] Keys)>.Create((a, b) =>
+                {
                     for (int i = 0; i < orderBy.Count; i++)
                     {
                         var res = _context.CompareConstants(a.Keys[i], b.Keys[i]);

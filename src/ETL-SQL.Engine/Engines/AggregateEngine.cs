@@ -1,13 +1,13 @@
-using ETL_SQL.Data;
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
-using System.Buffers.Binary;
-using System.Security.Cryptography;
-using System.Text;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -33,7 +33,7 @@ namespace ETL_SQL.Engine.Engines
             {
                 var expandedSets = ExpandGroupingSets(groupingSet);
                 var allResults = new List<Row>();
-                
+
                 // For grouping sets, we must materialize once to avoid multiple enumerations.
                 var allBufferedRows = await inputStream.ToListAsync();
 
@@ -41,10 +41,10 @@ namespace ETL_SQL.Engine.Engines
                 {
                     // Pass the materialized list to avoid further materialization in recursive calls
                     var setRows = await ApplyAggregation(allBufferedRows.ToAsyncEnumerable(), activeGroupBy, finalColumns, colNames, havingClause, null);
-                    
+
                     // Mark which columns were NULL-substituted (GROUPING() support)
                     var activeKeys = new HashSet<string>(activeGroupBy!.Select(e => NormalizedToSql(e)), StringComparer.OrdinalIgnoreCase);
-                    
+
                     foreach (var row in setRows)
                     {
                         // For every groupBy column NOT in this set, null out its output column
@@ -55,16 +55,16 @@ namespace ETL_SQL.Engine.Engines
                                 if (!activeKeys.Contains(NormalizedToSql(expr)))
                                 {
                                     var colName = expr is IdentifierExpression id ? id.Name.Split('.').Last() : NormalizedToSql(expr);
-                                    
+
                                     // Match the output column name
                                     var matchIdx = colNames.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
-                                    
+
                                     if (matchIdx == -1)
                                     {
                                         // Fallback 1: match by the expression's SQL representation in the final columns
                                         matchIdx = finalColumns.FindIndex(fc => NormalizedToSql(fc.Expression).Equals(NormalizedToSql(expr), StringComparison.OrdinalIgnoreCase));
                                     }
-                                    
+
                                     if (matchIdx == -1)
                                     {
                                         // Fallback 2: match by alias if the expression is an identifier
@@ -123,7 +123,7 @@ namespace ETL_SQL.Engine.Engines
 
             // Single-Pass Aggregation
             var groupStates = new Dictionary<CompoundKey, (IAggregateState[] SelectStates, IAggregateState[] HavingStates)>();
-            
+
             await foreach (var row in inputStream)
             {
                 CompoundKey key;
@@ -185,7 +185,7 @@ namespace ETL_SQL.Engine.Engines
                 var states = kvp.Value;
 
                 var resRow = new Row(schema);
-                
+
                 // Finalize aggregates
                 for (int i = 0; i < aggregateSpecs.Count; i++)
                 {
@@ -337,7 +337,7 @@ namespace ETL_SQL.Engine.Engines
             if (expr is FunctionCallExpression f)
             {
                 if (IsAggregateFunction(f)) return true;
-                
+
                 return f.Arguments.Any(a => IsAggregate(a));
             }
             if (expr is BinaryExpression b) return IsAggregate(b.Left) || IsAggregate(b.Right);
@@ -391,7 +391,7 @@ namespace ETL_SQL.Engine.Engines
                 if (IsAggregateFunction(f))
                 {
                     var fSql = f.ToSql();
-                    if (!aggs.Any(a => a.ToSql().Equals(fSql, StringComparison.OrdinalIgnoreCase))) 
+                    if (!aggs.Any(a => a.ToSql().Equals(fSql, StringComparison.OrdinalIgnoreCase)))
                         aggs.Add(f);
                 }
                 else
@@ -454,7 +454,7 @@ namespace ETL_SQL.Engine.Engines
                     }
                     rows = filteredRows;
                 }
-                
+
                 // Collect results for all arguments
                 var valsByArg = new List<List<object?>>();
                 for (int i = 0; i < f.Arguments.Count; i++)
@@ -653,9 +653,9 @@ namespace ETL_SQL.Engine.Engines
                     yNums.Add(SafeToDecimal(yVals[i], _context));
                 }
             }
-            
+
             if (xNums.Count == 0) return null;
-            
+
             double xStd = Math.Sqrt((double)CalculateVariance(xNums.Cast<object?>().ToList(), true)!);
             double yStd = Math.Sqrt((double)CalculateVariance(yNums.Cast<object?>().ToList(), true)!);
 

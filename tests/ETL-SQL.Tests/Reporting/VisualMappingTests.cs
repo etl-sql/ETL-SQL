@@ -1,14 +1,14 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.ReportHosting;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
-using System.Linq;
-using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Engine;
+using ETL_SQL.ReportHosting;
 using ETL_SQL.Reporting;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Reporting.Reporting
 {

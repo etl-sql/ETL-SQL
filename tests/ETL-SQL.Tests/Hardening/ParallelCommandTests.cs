@@ -1,12 +1,12 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Core;
-using ETL_SQL.Engine;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -18,7 +18,7 @@ namespace ETL_SQL.Tests.Hardening
             // Arrange
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = services.GetRequiredService<Evaluator>();
-            
+
             // Initial variables test
 
             // Simple parallel block
@@ -34,7 +34,7 @@ namespace ETL_SQL.Tests.Hardening
             var statements = new Parser(lexer.Tokenize()).Parse().Statements;
 
             // Act
-            foreach(var stmt in statements) await evaluator.EvaluateStatement(stmt);
+            foreach (var stmt in statements) await evaluator.EvaluateStatement(stmt);
 
             // Assert
             // The merge is deterministic and ordered by statement index, so the last statement wins.
@@ -52,7 +52,7 @@ namespace ETL_SQL.Tests.Hardening
             // The engine's indexing ensures branch 0 merges over branch 1's changes if both touch the same new var 
             // (or rather, branch 0 applies, then branch 1 applies sequentially, so branch 1 actually wins in traditional merge,
             // let's verify exact merge behavior: context.Merge(fork) overwrites existing keys in the parent).
-            
+
             string script = @"
             DECLARE @val INT;
             PARALLEL BEGIN
@@ -65,7 +65,7 @@ namespace ETL_SQL.Tests.Hardening
             var statements = new Parser(lexer.Tokenize()).Parse().Statements;
 
             // Act
-            foreach(var stmt in statements) await evaluator.EvaluateStatement(stmt);
+            foreach (var stmt in statements) await evaluator.EvaluateStatement(stmt);
 
             // Assert: Branch 1 (SET @val = 2) should merge last and win due to index ordering.
             Assert.Equal(2L, Convert.ToInt64(evaluator.Variables["@val"]));
@@ -89,9 +89,9 @@ namespace ETL_SQL.Tests.Hardening
             var statements = new Parser(lexer.Tokenize()).Parse().Statements;
 
             // Act & Assert
-            var ex = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () => 
+            var ex = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () =>
             {
-                foreach(var stmt in statements) await evaluator.EvaluateStatement(stmt);
+                foreach (var stmt in statements) await evaluator.EvaluateStatement(stmt);
             });
 
             Assert.Contains("Test Error", ex.Message);

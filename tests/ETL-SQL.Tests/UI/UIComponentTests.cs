@@ -1,16 +1,16 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Spectre.Console;
-using ETL_SQL.TUI.UI;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Data;
+using ETL_SQL.TUI.UI;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {
@@ -25,13 +25,13 @@ namespace ETL_SQL.Tests.UI
             var connections = new Dictionary<string, IDataSource>();
             var metadata = new MetadataManager(SystemExecutionContext.Instance, connections);
             var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
-            
+
             buffer.Load(new[] { "SEL" });
             buffer.CursorLine = 0;
             buffer.CursorColumn = 3;
-            
+
             await controller.UpdateAsync();
-            
+
             Assert.True(renderer.AutocompleteVisible);
             Assert.Contains(renderer.AutocompleteOptions, o => o.Text == "SELECT");
         }
@@ -45,18 +45,18 @@ namespace ETL_SQL.Tests.UI
             var connections = new Dictionary<string, IDataSource>();
             var metadata = new MetadataManager(SystemExecutionContext.Instance, connections);
             var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
-            
+
             buffer.Load(new[] { "S" });
             buffer.CursorLine = 0;
             buffer.CursorColumn = 1;
             await controller.UpdateAsync();
-            
+
             Assert.True(renderer.AutocompleteOptions.Count > 1);
-            
+
             int initialIndex = renderer.AutocompleteIndex;
             controller.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.DownArrow, false, false, false));
             Assert.Equal(initialIndex + 1, renderer.AutocompleteIndex);
-            
+
             controller.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.UpArrow, false, false, false));
             Assert.Equal(initialIndex, renderer.AutocompleteIndex);
         }
@@ -74,12 +74,12 @@ namespace ETL_SQL.Tests.UI
             ETL_SQL.TUI.Program.ServiceProvider = sp;
             var editor = new ConsoleEditor("test.etlsql", connections);
             var handler = new InputHandler(editor, buffer, renderer, controller);
-            
+
             // Test normal character
             var keyInfo = new ConsoleKeyInfo('A', ConsoleKey.A, false, false, false);
             await handler.HandleKey(keyInfo);
             Assert.Equal("A", buffer.GetText());
-            
+
             // Test backspace
             var backspace = new ConsoleKeyInfo('\b', ConsoleKey.Backspace, false, false, false);
             await handler.HandleKey(backspace);
@@ -92,9 +92,9 @@ namespace ETL_SQL.Tests.UI
             var connections = new Dictionary<string, IDataSource>();
             var manager = new MetadataManager(SystemExecutionContext.Instance, connections);
             string script = "CREATE CONNECTION C AS MOCKDB();";
-            
+
             manager.RefreshConnections(script, force: true);
-            
+
             Assert.True(connections.ContainsKey("C"));
         }
     }

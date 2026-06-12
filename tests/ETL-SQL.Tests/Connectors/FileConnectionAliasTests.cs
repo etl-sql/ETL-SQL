@@ -1,15 +1,15 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Engine;
-using ETL_SQL.Common;
 using ETL_SQL.App;
+using ETL_SQL.Common;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
-using System.Collections.Generic;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -53,7 +53,7 @@ namespace ETL_SQL.Tests.Connectors
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens);
             var script = parser.Parse();
-            
+
             // Run linter manually as Parser no longer adds this diagnostic directly
             var lintResults = await ETL_SQL.Analysis.Linting.LinterFactory.CreateWithAllRules()
                 .AnalyzeAsync(script, new ETL_SQL.Analysis.Linting.DefaultLintContext());

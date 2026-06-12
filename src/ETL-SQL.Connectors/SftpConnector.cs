@@ -4,12 +4,12 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 using Renci.SshNet;
 using Renci.SshNet.Common;
-using ETL_SQL.Data;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors
 {
@@ -44,7 +44,8 @@ namespace ETL_SQL.Connectors
 
         public SftpConnector(string host, int port, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, int timeoutSeconds = 30)
              : this(null!, host, port, username, password, keyFilePath, passphrase, timeoutSeconds,
-                   (h, u, p, k, pp) => {
+                   (h, u, p, k, pp) =>
+                   {
                        var info = !string.IsNullOrEmpty(k)
                            ? new Renci.SshNet.ConnectionInfo(h, port, u, new PrivateKeyAuthenticationMethod(u, new PrivateKeyFile(k, pp)))
                            : new Renci.SshNet.ConnectionInfo(h, port, u, new PasswordAuthenticationMethod(u, p ?? ""));
@@ -62,7 +63,8 @@ namespace ETL_SQL.Connectors
 
         public SftpConnector(IExecutionContext context, string host, int port, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, int timeoutSeconds = 30)
             : this(context, host, port, username, password, keyFilePath, passphrase, timeoutSeconds,
-                  (h, u, p, k, pp) => {
+                  (h, u, p, k, pp) =>
+                  {
                       var info = !string.IsNullOrEmpty(k)
                           ? new Renci.SshNet.ConnectionInfo(h, port, u, new PrivateKeyAuthenticationMethod(u, new PrivateKeyFile(k, pp)))
                           : new Renci.SshNet.ConnectionInfo(h, port, u, new PasswordAuthenticationMethod(u, p ?? ""));
@@ -102,7 +104,7 @@ namespace ETL_SQL.Connectors
             if (context != null)
             {
                 context.SecurityService.ValidateHost(host);
-                
+
                 // Validate key file path if provided
                 if (_keyFilePath != null)
                 {
@@ -138,9 +140,9 @@ namespace ETL_SQL.Connectors
         }
         public HashSet<string> GetSupportedFunctions() => new();
         public HashSet<string> GetSupportedKeywords() => new();
-        public Dictionary<string, string[]> GetSupportedOptions() => new() 
-        { 
-            ["USER"] = new[] { "Username for SSH" }, 
+        public Dictionary<string, string[]> GetSupportedOptions() => new()
+        {
+            ["USER"] = new[] { "Username for SSH" },
             ["PASSWORD"] = new[] { "Password for SSH" },
             ["KEYFILE"] = new[] { "Path to the private key file" },
             ["PASSPHRASE"] = new[] { "Passphrase for the private key" },
@@ -165,7 +167,7 @@ namespace ETL_SQL.Connectors
             {
                 passphrase = context.DecryptValue(passphrase);
             }
-            
+
             int timeoutSeconds = 30;
             if (options != null && options.TryGetValue("TIMEOUT_SECONDS", out var timeoutStr) && int.TryParse(timeoutStr, out var parsedTimeout))
             {
@@ -200,7 +202,7 @@ namespace ETL_SQL.Connectors
         public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => throw new NotSupportedException("Use IDataSource.GetColumnsAsync instead.");
         public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
-        public string BuildConnectionString(Dictionary<string, string> properties) => 
+        public string BuildConnectionString(Dictionary<string, string> properties) =>
             ConnectionStringBuilder.Build(Name, properties);
 
         private SftpClient EnsureConnected()

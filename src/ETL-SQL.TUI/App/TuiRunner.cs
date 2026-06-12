@@ -24,15 +24,15 @@ namespace ETL_SQL.TUI
                 if (OperatingSystem.IsWindows())
                 {
                     try { Console.TreatControlCAsInput = true; } catch { }
-                    
+
                     // Stabilize buffer: if buffer > window, TUI will drift/scroll on last line writes
                     if (!Console.IsOutputRedirected)
                     {
-                        try 
-                        { 
+                        try
+                        {
                             if (Console.BufferHeight > Console.WindowHeight)
-                                Console.BufferHeight = Console.WindowHeight; 
-                        } 
+                                Console.BufferHeight = Console.WindowHeight;
+                        }
                         catch { }
                     }
                 }
@@ -42,28 +42,28 @@ namespace ETL_SQL.TUI
             switch (ctx.UiMode?.ToLower())
             {
                 case "repl":
-                {
-                    var repl = new ReplUi(ctx, serviceProvider);
-                    await repl.RunAsync();
-                    return 0;
-                }
+                    {
+                        var repl = new ReplUi(ctx, serviceProvider);
+                        await repl.RunAsync();
+                        return 0;
+                    }
                 case "simple":
-                {
-                    var simpleUi = new SimpleUi(ctx, serviceProvider);
-                    await simpleUi.RunAsync();
-                    return 0;
-                }
+                    {
+                        var simpleUi = new SimpleUi(ctx, serviceProvider);
+                        await simpleUi.RunAsync();
+                        return 0;
+                    }
                 case "ide":
                 default:
-                {
-                    var editor = TuiDependencyInjectionSetup.CreateEditor(
-                        serviceProvider,
-                        ctx.ScriptFile?.FullName ?? "untitled.etlsql",
-                        new System.Collections.Generic.Dictionary<string, IDataSource>());
-                    await editor.InitializeAsync();
-                    await editor.Run();
-                    return 0;
-                }
+                    {
+                        var editor = TuiDependencyInjectionSetup.CreateEditor(
+                            serviceProvider,
+                            ctx.ScriptFile?.FullName ?? "untitled.etlsql",
+                            new System.Collections.Generic.Dictionary<string, IDataSource>());
+                        await editor.InitializeAsync();
+                        await editor.Run();
+                        return 0;
+                    }
             }
         }
     }

@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Threading.Tasks;
-using ExcelDataReader;
 using ETL_SQL.Reporting;
+using ExcelDataReader;
 using Xunit;
 
 namespace ETL_SQL.Tests

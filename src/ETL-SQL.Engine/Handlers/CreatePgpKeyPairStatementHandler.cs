@@ -1,11 +1,11 @@
+using System;
+using System.IO;
+using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using PgpCore;
-using System;
-using System.IO;
-using System.Threading.Tasks;
 
 namespace ETL_SQL.Engine.Handlers
 {

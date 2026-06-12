@@ -1,11 +1,11 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Analysis.Lineage;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.Common;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis.Lineage
 {
@@ -32,11 +32,11 @@ namespace ETL_SQL.Tests.Analysis.Lineage
 
             // Assert
             var entries = tracker.GetFullLineage().ToList();
-            
+
             // Should have 2 entries: 1 for Table Tags, 1 for SELECT
             Assert.Contains(entries, e => e.Operation == "TABLE_TAGS" && e.TargetTable == "SourceTable" && e.Metadata.ContainsKey("owner"));
             Assert.Contains(entries, e => e.Operation == "SELECT" && e.TargetTable == "#Target" && e.TargetColumn == "col1");
-            
+
             var colEntry = entries.First(e => e.TargetColumn == "col1");
             Assert.Equal("SourceTable", colEntry.SourceTables.First());
             Assert.Equal("Source column", colEntry.Metadata["d"]);
@@ -79,7 +79,7 @@ namespace ETL_SQL.Tests.Analysis.Lineage
                 targetColumn: "Amount",
                 metadata: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["d"]   = "Sales amounts",
+                    ["d"] = "Sales amounts",
                     ["pii"] = "true",
                 });
 
@@ -129,7 +129,7 @@ namespace ETL_SQL.Tests.Analysis.Lineage
             var tracker = new LineageTracker(NullLogger.Instance);
             // Pre-seed tracker with source metadata
             tracker.Record("TableA", Enumerable.Empty<string>(), "SEED", "Col1", metadata: new Dictionary<string, string> { ["d"] = "Description1", ["sensitive"] = "true" });
-            
+
             var analyzer = new LineageAnalyzer(tracker);
             var script = Parse("SELECT Col1 + 100 AS Computed INTO #Target FROM TableA;");
 
@@ -165,7 +165,7 @@ namespace ETL_SQL.Tests.Analysis.Lineage
             // Assert
             var allEntries = tracker.GetFullLineage().ToList();
             var tempEntries = tracker.GetLineage("#Temp1").ToList();
-            
+
             // Helpful failure message if empty
             if (!tempEntries.Any())
             {
@@ -184,7 +184,7 @@ namespace ETL_SQL.Tests.Analysis.Lineage
             // Arrange
             var tracker = new LineageTracker(NullLogger.Instance);
             tracker.Record("SourceTbl", Enumerable.Empty<string>(), "SEED", "Price", metadata: new Dictionary<string, string> { ["d"] = "Unit Price" });
-            
+
             var analyzer = new LineageAnalyzer(tracker);
             var sql = "UPDATE #Target SET Price = s.Price * 1.05 FROM SourceTbl AS s;";
             var script = Parse(sql);
@@ -207,7 +207,7 @@ namespace ETL_SQL.Tests.Analysis.Lineage
             // Arrange
             var tracker = new LineageTracker(NullLogger.Instance);
             tracker.Record("S", Enumerable.Empty<string>(), "SEED", "X", metadata: new Dictionary<string, string> { ["d"] = "Val X" });
-            
+
             var analyzer = new LineageAnalyzer(tracker);
             var sql = @"
                 MERGE INTO #T AS T
@@ -222,7 +222,7 @@ namespace ETL_SQL.Tests.Analysis.Lineage
 
             // Assert
             var entries = tracker.GetFullLineage().ToList();
-            
+
             var updateEntry = entries.First(e => e.Operation == "MERGE UPDATE" && e.TargetColumn == "X");
             Assert.Equal("Val X", updateEntry.Metadata["d"]);
 

@@ -1,17 +1,17 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.IO;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using ETL_SQL.Engine.Services;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 using ETL_SQL.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Integration
 {
@@ -40,8 +40,8 @@ namespace ETL_SQL.Tests.Integration.Integration
         {
             var security = new SecurityService(NullLogger.Instance);
             security.IsTestMode = true;
-            
-            
+
+
             var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
             var sessionManager = new SessionStateManager(NullLogger.Instance, security, config, _sessionDir);
 
@@ -50,22 +50,22 @@ namespace ETL_SQL.Tests.Integration.Integration
             evaluator.IsPersistentSession = true;
             evaluator.SessionId = _sessionId;
             evaluator.SessionRoot = _sessionDir;
-            
+
             var state = await sessionManager.LoadSession(_sessionId);
             if (state != null)
             {
                 await evaluator.LoadSessionState(state);
             }
-            
+
             // 2. Run Script
             var lexer = new Lexer(sql);
             var parser = new Parser(lexer.Tokenize(), sql);
             var script = parser.Parse();
-            
-            try 
+
+            try
             {
                 await evaluator.Evaluate(script);
-                
+
                 // 3. Save Session
                 await sessionManager.SaveSession(_sessionId, evaluator, sql);
                 return (evaluator, 0);

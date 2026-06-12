@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Data.SqlClient;
 using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Data;
+using Microsoft.Data.SqlClient;
 
 namespace ETL_SQL.Connectors.SqlServer
 {

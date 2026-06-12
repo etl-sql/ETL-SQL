@@ -1,25 +1,25 @@
-using ETL_SQL.Common;
-using ETL_SQL.Connectors;
-using ETL_SQL.Engine;
-using ETL_SQL.Core;
-using ETL_SQL.Engine.Services;
-using ETL_SQL.Services;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
-using Xunit;
-using Moq;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Options;
-using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Engine.Services;
 using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Services;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -28,7 +28,7 @@ namespace ETL_SQL.Tests.Hardening
         private IServiceProvider CreateServiceProvider(string sessionRoot)
         {
             var services = new ServiceCollection();
-            
+
             var config = new ConfigurationBuilder().Build();
             services.AddSingleton<IConfiguration>(config);
 
@@ -45,8 +45,9 @@ namespace ETL_SQL.Tests.Hardening
 
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager>(new Mock<IDockerManager>().Object);
-            
-            services.AddSingleton<ISessionStateManager>(sp => {
+
+            services.AddSingleton<ISessionStateManager>(sp =>
+            {
                 return new SessionStateManager(logger.Object, security, config, sessionRoot);
             });
             services.AddSingleton<SessionStateManager>(sp => (SessionStateManager)sp.GetRequiredService<ISessionStateManager>());
@@ -119,7 +120,7 @@ namespace ETL_SQL.Tests.Hardening
         {
             string sessionRoot = Path.Combine(Path.GetTempPath(), "ETL-SQL-SpillTests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(sessionRoot);
-            
+
             try
             {
                 var sp = CreateServiceProvider(sessionRoot);
@@ -136,10 +137,10 @@ namespace ETL_SQL.Tests.Hardening
                 // 1. Create data and force spill
                 Console.WriteLine("DEBUG: Create table");
                 await evaluator.EvaluateStatement(new Parser(new Lexer("CREATE TABLE #test (id INT, name TEXT)").Tokenize(), "").ParseStatement());
-                
+
                 Console.WriteLine("DEBUG: Insert row 1");
                 await evaluator.EvaluateStatement(new Parser(new Lexer("INSERT INTO #test (id, name) VALUES (1, 'item 1')").Tokenize(), "").ParseStatement());
-                
+
                 Console.WriteLine("DEBUG: Insert row 2 (triggers spill)");
                 await evaluator.EvaluateStatement(new Parser(new Lexer("INSERT INTO #test (id, name) VALUES (2, 'item 2')").Tokenize(), "").ParseStatement());
 

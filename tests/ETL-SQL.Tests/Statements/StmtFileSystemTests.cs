@@ -1,15 +1,15 @@
-using Xunit;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-using System.Collections.Generic;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements.Statements
 {
@@ -36,7 +36,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             {
                 // SQL-style syntax
                 await ExecuteAsync($"COPY FILE '{src}' TO '{dst}' WITH(OVERWRITE=ON);", evaluator);
-                
+
                 string content = await File.ReadAllTextAsync(dst);
                 Assert.Equal("source content", content);
             }
@@ -59,7 +59,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             try
             {
                 // Should throw if OVERWRITE=OFF
-                await Assert.ThrowsAsync<ExecutionException>(async () => 
+                await Assert.ThrowsAsync<ExecutionException>(async () =>
                 {
                     await ExecuteAsync($"COPY FILE '{src}' TO '{dst}' WITH(OVERWRITE=OFF);", evaluator);
                 });
@@ -74,7 +74,7 @@ namespace ETL_SQL.Tests.Statements.Statements
         [Fact]
         public async Task TestMoveFileWithOverwriteOffThrows()
         {
-             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
             string src = "fs_test_move_src.txt";
             string dst = "fs_test_move_dst.txt";
             await File.WriteAllTextAsync(src, "source");
@@ -82,7 +82,7 @@ namespace ETL_SQL.Tests.Statements.Statements
 
             try
             {
-                await Assert.ThrowsAsync<ExecutionException>(async () => 
+                await Assert.ThrowsAsync<ExecutionException>(async () =>
                 {
                     await ExecuteAsync($"MOVE FILE '{src}' TO '{dst}' WITH(OVERWRITE=OFF);", evaluator);
                 });
@@ -100,7 +100,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
             string dir = "fs_test_dir";
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
-            
+
             try
             {
                 await ExecuteAsync($"CREATE DIRECTORY '{dir}';", evaluator);
@@ -120,7 +120,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "file1.txt"), "test");
-            
+
             try
             {
                 await ExecuteAsync($"DELETE DIRECTORY_CONTENTS '{dir}' WITH(RECURSIVE=ON);", evaluator);
@@ -144,7 +144,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             try
             {
                 // Traditional syntax with 3rd param (OFF)
-                await Assert.ThrowsAsync<ExecutionException>(async () => 
+                await Assert.ThrowsAsync<ExecutionException>(async () =>
                 {
                     await ExecuteAsync($"COPY_FILE('{src}', '{dst}', OFF);", evaluator);
                 });
@@ -162,7 +162,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
             string src = "fs_del_test.txt";
             await File.WriteAllTextAsync(src, "del me");
-            
+
             try
             {
                 await ExecuteAsync($"DELETE FILE '{src}';", evaluator);
@@ -415,7 +415,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             try
             {
                 await File.WriteAllTextAsync(src, "verify my contents");
-                
+
                 byte[] hashBytes;
                 using (var sha = System.Security.Cryptography.SHA256.Create())
                 {

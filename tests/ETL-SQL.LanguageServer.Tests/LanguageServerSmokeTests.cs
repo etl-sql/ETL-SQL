@@ -2,14 +2,14 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
-using OmniSharp.Extensions.LanguageServer.Server;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Interfaces;
+using ETL_SQL.Core.Services;
+using ETL_SQL.LSP;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using ETL_SQL.LSP;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Services;
-using ETL_SQL.Core.Interfaces;
+using OmniSharp.Extensions.LanguageServer.Server;
+using Xunit;
 
 namespace ETL_SQL.LanguageServer.Tests
 {
@@ -23,17 +23,18 @@ namespace ETL_SQL.LanguageServer.Tests
             var output = new MemoryStream();
 
             var cts = new CancellationTokenSource();
-            
+
             // We only want to test the INITIALIZATION/RESOLUTION phase
             // LanguageServer.From will try to resolve all handlers
-            try 
+            try
             {
                 var serverTask = OmniSharp.Extensions.LanguageServer.Server.LanguageServer.From(options =>
                     options
                         .WithInput(input)
                         .WithOutput(output)
                         .ConfigureLogging(lb => lb.AddDebug().SetMinimumLevel(LogLevel.Trace))
-                        .WithServices(services => {
+                        .WithServices(services =>
+                        {
                             services.AddSingleton<ETL_SQL.Data.IConnectorRegistry>(new ETL_SQL.Data.ConnectorRegistry());
                             services.AddSingleton<IMetadataManager, MetadataManager>();
                             services.AddSingleton<ILanguageService, LanguageService>();
@@ -47,12 +48,12 @@ namespace ETL_SQL.LanguageServer.Tests
                 // If it fails with DI error, it will throw here
                 // We'll give it a short timeout in case it hangs waiting for input
                 var completedTask = await Task.WhenAny(serverTask, Task.Delay(2000));
-                
+
                 if (completedTask == serverTask)
                 {
                     var server = await serverTask;
                     Assert.NotNull(server);
-                    
+
                     // Verify MetadataManager is resolved and assigned
                     var metadata = server.Services.GetService<IMetadataManager>();
                     Assert.NotNull(metadata);

@@ -1,10 +1,10 @@
 using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.ReportPortal.Controllers;
@@ -177,23 +177,23 @@ public class OrchestratorController(OrchestratorProxyService proxy, AuditService
 
     private static (string label, string type) ClassifyStatement(Statement stmt) => stmt switch
     {
-        InsertStatement s             => ($"INSERT → {s.TargetTable.TableName}", "io"),
-        SelectStatement s             => s.IntoTable is not null
+        InsertStatement s => ($"INSERT → {s.TargetTable.TableName}", "io"),
+        SelectStatement s => s.IntoTable is not null
                                          ? ($"SELECT INTO {s.IntoTable.TableName}", "io")
                                          : ("SELECT", "statement"),
-        CreateTableStatement s        => ($"CREATE {s.TargetTable.TableName}", "statement"),
-        CreateConnectionStatement s   => ($"CONNECT {s.name}", "connection"),
-        IfStatement _                 => ("IF", "conditional"),
-        WhileStatement _              => ("WHILE", "loop"),
-        ForStatement s                => ($"FOR @{s.VariableName}", "loop"),
-        ForeachStatement s            => ($"FOR EACH @{s.VariableName}", "loop"),
-        ParallelStatement _           => ("PARALLEL", "loop"),
-        ExecuteStatement s            => ($"CALL {s.ProcedureName}", "procedure"),
-        RunScriptStatement _          => ("RUN SCRIPT", "io"),
-        BulkInsertStatement s         => ($"BULK INSERT → {s.TargetTable.TableName}", "io"),
-        CreateDatasetStatement s      => ($"DATASET {s.TempTableName}", "dataset"),
+        CreateTableStatement s => ($"CREATE {s.TargetTable.TableName}", "statement"),
+        CreateConnectionStatement s => ($"CONNECT {s.name}", "connection"),
+        IfStatement _ => ("IF", "conditional"),
+        WhileStatement _ => ("WHILE", "loop"),
+        ForStatement s => ($"FOR @{s.VariableName}", "loop"),
+        ForeachStatement s => ($"FOR EACH @{s.VariableName}", "loop"),
+        ParallelStatement _ => ("PARALLEL", "loop"),
+        ExecuteStatement s => ($"CALL {s.ProcedureName}", "procedure"),
+        RunScriptStatement _ => ("RUN SCRIPT", "io"),
+        BulkInsertStatement s => ($"BULK INSERT → {s.TargetTable.TableName}", "io"),
+        CreateDatasetStatement s => ($"DATASET {s.TempTableName}", "dataset"),
         RefreshPortalDatasetStatement s => ($"REFRESH {s.DatasetName}", "dataset"),
-        _                             => (stmt.GetType().Name.Replace("Statement", ""), "statement"),
+        _ => (stmt.GetType().Name.Replace("Statement", ""), "statement"),
     };
 
     // ── Script browser ────────────────────────────────────────────────────────

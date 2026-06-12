@@ -1,16 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.App;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Core.Common;
-using System.Collections.Generic;
-using ETL_SQL.Common;
-using System.Linq;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.App;
+using Xunit;
 
 namespace ETL_SQL.Tests.Security
 {
@@ -36,12 +36,12 @@ namespace ETL_SQL.Tests.Security
         {
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = services.GetRequiredService<Evaluator>();
-            
+
             var lexer = new Lexer(sql);
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens, sql);
             var script = parser.Parse();
-            
+
             if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
             {
                 var errors = string.Join("\n", script.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => d.Message));
@@ -58,11 +58,11 @@ namespace ETL_SQL.Tests.Security
             Directory.CreateDirectory(keyDir);
             string pubKey = Path.Combine(keyDir, "public.asc");
             string privKey = Path.Combine(keyDir, "private.asc");
-            
+
             string sourceFile = Path.Combine(_testDir, "data.txt");
             string encryptedFile = Path.Combine(_testDir, "data.pgp");
             string decryptedFile = Path.Combine(_testDir, "data.dec.txt");
-            
+
             File.WriteAllText(sourceFile, "This is a PGP secret message.");
 
             string keyDirEsc = keyDir.Replace("\\", "\\\\");
@@ -83,14 +83,14 @@ namespace ETL_SQL.Tests.Security
                 
                 DECRYPT FILE '{encryptedFileEsc}' TO '{decryptedFileEsc}' PGP_KEY '{privKeyEsc}' PASSWORD 'TestPass123';
             ";
-            
+
             await RunScriptAsync(script);
-            
+
             Assert.True(File.Exists(pubKey));
             Assert.True(File.Exists(privKey));
             Assert.True(File.Exists(encryptedFile));
             Assert.True(File.Exists(decryptedFile));
-            
+
             string decryptedContent = File.ReadAllText(decryptedFile);
             Assert.Equal("This is a PGP secret message.", decryptedContent);
         }
@@ -102,11 +102,11 @@ namespace ETL_SQL.Tests.Security
             Directory.CreateDirectory(keyDir);
             string pubKey = Path.Combine(keyDir, "public.asc");
             string privKey = Path.Combine(keyDir, "private.asc");
-            
+
             string sourceFile = Path.Combine(_testDir, "data_no_pass.txt");
             string encryptedFile = Path.Combine(_testDir, "data_no_pass.pgp");
             string decryptedFile = Path.Combine(_testDir, "data_no_pass.dec.txt");
-            
+
             File.WriteAllText(sourceFile, "Message without passphrase.");
 
             string keyDirEsc = keyDir.Replace("\\", "\\\\");
@@ -123,9 +123,9 @@ namespace ETL_SQL.Tests.Security
                 
                 DECRYPT FILE '{encryptedFileEsc}' TO '{decryptedFileEsc}' PGP_KEY '{privKeyEsc}';
             ";
-            
+
             await RunScriptAsync(script);
-            
+
             Assert.Equal("Message without passphrase.", File.ReadAllText(decryptedFile));
         }
     }

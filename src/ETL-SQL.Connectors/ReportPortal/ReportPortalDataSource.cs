@@ -42,15 +42,15 @@ namespace ETL_SQL.Connectors.ReportPortal
 
         public ReportPortalDataSource(string baseUrl, string username, string password, ILogger logger)
         {
-            _baseUrl  = baseUrl.TrimEnd('/');
+            _baseUrl = baseUrl.TrimEnd('/');
             _username = username;
             _password = password;
-            _logger   = logger;
-            _http     = new HttpClient { BaseAddress = new Uri(_baseUrl + "/") };
-            Options   = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            _logger = logger;
+            _http = new HttpClient { BaseAddress = new Uri(_baseUrl + "/") };
+            Options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["HOST"]     = baseUrl,
-                ["USER"]     = username,
+                ["HOST"] = baseUrl,
+                ["USER"] = username,
                 ["PASSWORD"] = "********"
             };
         }
@@ -100,29 +100,29 @@ namespace ETL_SQL.Connectors.ReportPortal
             await EnsureAuthenticatedAsync();
             switch (statement)
             {
-                case CreatePortalUserStatement s:     await CreateUserAsync(s, context); break;
-                case AlterPortalUserStatement s:      await AlterUserAsync(s, context); break;
-                case DropPortalUserStatement s:       await DropUserAsync(s, context); break;
-                case RevokePortalTokensStatement s:   await RevokeTokensAsync(s, context); break;
+                case CreatePortalUserStatement s: await CreateUserAsync(s, context); break;
+                case AlterPortalUserStatement s: await AlterUserAsync(s, context); break;
+                case DropPortalUserStatement s: await DropUserAsync(s, context); break;
+                case RevokePortalTokensStatement s: await RevokeTokensAsync(s, context); break;
                 case DisconnectPortalUserStatement s: await DisconnectUserAsync(s, context); break;
-                case ShowPortalUsersStatement:        await ShowUsersAsync(context); break;
+                case ShowPortalUsersStatement: await ShowUsersAsync(context); break;
                 case ShowActivePortalSessionsStatement s: await ShowActiveSessionsAsync(s, context); break;
 
-                case CreatePortalGroupStatement s:    await CreateGroupAsync(s, context); break;
-                case DropPortalGroupStatement s:      await DropGroupAsync(s, context); break;
+                case CreatePortalGroupStatement s: await CreateGroupAsync(s, context); break;
+                case DropPortalGroupStatement s: await DropGroupAsync(s, context); break;
                 case AddUserToPortalGroupStatement s: await AddUserToGroupAsync(s, context); break;
 
-                case CreatePortalFolderStatement s:   await CreateFolderAsync(s, context); break;
-                case AlterPortalFolderStatement s:    await AlterFolderAsync(s, context); break;
-                case DropPortalFolderStatement s:     await DropFolderAsync(s, context); break;
+                case CreatePortalFolderStatement s: await CreateFolderAsync(s, context); break;
+                case AlterPortalFolderStatement s: await AlterFolderAsync(s, context); break;
+                case DropPortalFolderStatement s: await DropFolderAsync(s, context); break;
                 case GrantPortalPermissionStatement s: await GrantFolderPermissionAsync(s, context); break;
                 case RevokePortalPermissionStatement s: await RevokeFolderPermissionAsync(s, context); break;
 
-                case PublishPortalReportStatement s:  await PublishReportAsync(s, context); break;
-                case AlterPortalReportStatement s:    await AlterReportAsync(s, context); break;
-                case DropPortalReportStatement s:     await DropReportAsync(s, context); break;
-                case ShowPortalReportsStatement s:    await ShowReportsAsync(s, context); break;
-                case ShowPortalReportStatement s:     await ShowReportAsync(s, context); break;
+                case PublishPortalReportStatement s: await PublishReportAsync(s, context); break;
+                case AlterPortalReportStatement s: await AlterReportAsync(s, context); break;
+                case DropPortalReportStatement s: await DropReportAsync(s, context); break;
+                case ShowPortalReportsStatement s: await ShowReportsAsync(s, context); break;
+                case ShowPortalReportStatement s: await ShowReportAsync(s, context); break;
                 case FavoritePortalReportStatement s: await FavoriteReportAsync(s, context); break;
                 case UnfavoritePortalReportStatement s: await UnfavoriteReportAsync(s, context); break;
                 case ValidatePortalReportStatement s: await ValidateReportAsync(s, context); break;
@@ -147,21 +147,21 @@ namespace ETL_SQL.Connectors.ReportPortal
                 case ShowPortalUsageMetricsStatement s: await ShowUsageMetricsAsync(s, context); break;
 
                 case CreatePortalRefreshJobStatement s: await CreatePortalRefreshJobAsync(s, context); break;
-                case DropPortalRefreshJobStatement s:   await DropPortalRefreshJobAsync(s, context); break;
-                case RefreshPortalReportStatement s:  await RefreshReportAsync(s, context); break;
+                case DropPortalRefreshJobStatement s: await DropPortalRefreshJobAsync(s, context); break;
+                case RefreshPortalReportStatement s: await RefreshReportAsync(s, context); break;
                 case RebuildPortalSnapshotStatement s: await RebuildSnapshotAsync(s, context); break;
-                case DropPortalSnapshotStatement s:   await DropSnapshotAsync(s, context); break;
+                case DropPortalSnapshotStatement s: await DropSnapshotAsync(s, context); break;
                 case CreatePortalSubscriptionStatement s: await CreateSubscriptionAsync(s, context); break;
                 case AlterPortalSubscriptionStatement s: await AlterSubscriptionAsync(s, context); break;
                 case DropPortalSubscriptionStatement s: await DropSubscriptionAsync(s, context); break;
 
-                case AlterPortalDatasetStatement s:   await AlterDatasetAsync(s, context); break;
+                case AlterPortalDatasetStatement s: await AlterDatasetAsync(s, context); break;
                 case RefreshPortalDatasetStatement s: await RefreshDatasetAsync(s, context); break;
-                case DropPortalDatasetStatement s:    await DropDatasetAsync(s, context); break;
+                case DropPortalDatasetStatement s: await DropDatasetAsync(s, context); break;
                 case GrantPortalDatasetPermissionStatement s: await GrantDatasetPermissionAsync(s, context); break;
                 case RevokePortalDatasetPermissionStatement s: await RevokeDatasetPermissionAsync(s, context); break;
 
-                case RestartPortalStatement:  await RestartPortalAsync(context); break;
+                case RestartPortalStatement: await RestartPortalAsync(context); break;
                 case ShutdownPortalStatement: await ShutdownPortalAsync(context); break;
 
                 default:
@@ -183,13 +183,13 @@ namespace ETL_SQL.Connectors.ReportPortal
 
             var req = new
             {
-                Username  = stmt.Username,
-                Email     = stmt.Email,
-                Password  = password,
-                Role      = stmt.Role ?? "Viewer",
+                Username = stmt.Username,
+                Email = stmt.Email,
+                Password = password,
+                Role = stmt.Role ?? "Viewer",
                 FirstName = stmt.FirstName,
-                LastName  = stmt.LastName,
-                Provider  = stmt.Provider
+                LastName = stmt.LastName,
+                Provider = stmt.Provider
             };
             await CallAsync(HttpMethod.Post, "api/admin/users", req,
                 $"User '{stmt.Username}' created.");
@@ -204,10 +204,10 @@ namespace ETL_SQL.Connectors.ReportPortal
 
             var req = new
             {
-                Email     = stmt.NewEmail,
-                Role      = stmt.NewRole,
-                IsActive  = stmt.SetActive,
-                Password  = password
+                Email = stmt.NewEmail,
+                Role = stmt.NewRole,
+                IsActive = stmt.SetActive,
+                Password = password
             };
             await CallAsync(HttpMethod.Put, $"api/admin/users/{userId}", req,
                 $"User '{stmt.Username}' updated.");
@@ -300,11 +300,11 @@ namespace ETL_SQL.Connectors.ReportPortal
         private async Task CreateFolderAsync(CreatePortalFolderStatement stmt, IExecutionContext context)
         {
             // Parse /Parent/Child into parent lookup + leaf name
-            var path  = stmt.Path.TrimStart('/');
+            var path = stmt.Path.TrimStart('/');
             var slash = path.LastIndexOf('/');
             string name, parentPath;
             if (slash < 0) { name = path; parentPath = ""; }
-            else           { name = path[(slash + 1)..]; parentPath = "/" + path[..slash]; }
+            else { name = path[(slash + 1)..]; parentPath = "/" + path[..slash]; }
 
             int? parentId = null;
             if (!string.IsNullOrEmpty(parentPath))
@@ -337,9 +337,9 @@ namespace ETL_SQL.Connectors.ReportPortal
         private async Task GrantFolderPermissionAsync(GrantPortalPermissionStatement stmt, IExecutionContext context)
         {
             var folderId = await LookupFolderIdAsync(stmt.FolderPath);
-            var groupId  = await LookupGroupIdAsync(stmt.GroupName);
-            var perm     = MapFolderPermission(stmt.Permission);
-            var req      = new { GroupId = groupId, Permission = perm };
+            var groupId = await LookupGroupIdAsync(stmt.GroupName);
+            var perm = MapFolderPermission(stmt.Permission);
+            var req = new { GroupId = groupId, Permission = perm };
             await CallAsync(HttpMethod.Post, $"api/folders/{folderId}/acl", req,
                 $"Granted {stmt.Permission} on '{stmt.FolderPath}' to group '{stmt.GroupName}'.");
         }
@@ -347,7 +347,7 @@ namespace ETL_SQL.Connectors.ReportPortal
         private async Task RevokeFolderPermissionAsync(RevokePortalPermissionStatement stmt, IExecutionContext context)
         {
             var folderId = await LookupFolderIdAsync(stmt.FolderPath);
-            var groupId  = await LookupGroupIdAsync(stmt.GroupName);
+            var groupId = await LookupGroupIdAsync(stmt.GroupName);
             await CallAsync(HttpMethod.Delete, $"api/folders/{folderId}/acl/{groupId}", null,
                 $"Revoked {stmt.Permission} on '{stmt.FolderPath}' from group '{stmt.GroupName}'.");
         }
@@ -359,9 +359,9 @@ namespace ETL_SQL.Connectors.ReportPortal
             var folderId = await LookupFolderIdAsync(stmt.FolderPath);
             var req = new
             {
-                FolderId    = folderId,
-                Name        = stmt.ReportName,
-                ScriptPath  = stmt.ScriptPath,
+                FolderId = folderId,
+                Name = stmt.ReportName,
+                ScriptPath = stmt.ScriptPath,
                 Description = stmt.Description
             };
             await CallAsync(HttpMethod.Post, "api/reports", req,
@@ -614,8 +614,8 @@ namespace ETL_SQL.Connectors.ReportPortal
         {
             var req = new
             {
-                ReportName        = stmt.ReportName,
-                Schedule          = stmt.Schedule,
+                ReportName = stmt.ReportName,
+                Schedule = stmt.Schedule,
                 OrchestratorAlias = stmt.OrchestratorAlias
             };
             await CallAsync(HttpMethod.Post, "api/subscriptions/refresh-jobs", req,
@@ -731,7 +731,7 @@ namespace ETL_SQL.Connectors.ReportPortal
         private async Task GrantDatasetPermissionAsync(GrantPortalDatasetPermissionStatement stmt, IExecutionContext context)
         {
             var datasetId = await LookupDatasetIdAsync(stmt.DatasetName, stmt.FolderPath);
-            var groupId   = await LookupGroupIdAsync(stmt.GroupName);
+            var groupId = await LookupGroupIdAsync(stmt.GroupName);
             var req = new { GroupId = groupId, Permission = stmt.Permission.ToString() };
             await CallAsync(HttpMethod.Post, $"api/datasets/{datasetId}/acl", req,
                 $"Granted {stmt.Permission} on dataset '{stmt.DatasetName}' to group '{stmt.GroupName}'.");
@@ -740,7 +740,7 @@ namespace ETL_SQL.Connectors.ReportPortal
         private async Task RevokeDatasetPermissionAsync(RevokePortalDatasetPermissionStatement stmt, IExecutionContext context)
         {
             var datasetId = await LookupDatasetIdAsync(stmt.DatasetName, stmt.FolderPath);
-            var groupId   = await LookupGroupIdAsync(stmt.GroupName);
+            var groupId = await LookupGroupIdAsync(stmt.GroupName);
             await CallAsync(HttpMethod.Delete, $"api/datasets/{datasetId}/acl/{groupId}", null,
                 $"Revoked {stmt.Permission} on dataset '{stmt.DatasetName}' from group '{stmt.GroupName}'.");
         }
@@ -1055,21 +1055,21 @@ namespace ETL_SQL.Connectors.ReportPortal
             if (!el.TryGetProperty(prop, out var v)) return null;
             return v.ValueKind switch
             {
-                JsonValueKind.String  => v.GetString(),
-                JsonValueKind.Number  => v.TryGetInt32(out int i) ? (object)i : v.GetDecimal(),
-                JsonValueKind.True    => true,
-                JsonValueKind.False   => false,
-                JsonValueKind.Null    => null,
-                _                    => v.GetRawText()
+                JsonValueKind.String => v.GetString(),
+                JsonValueKind.Number => v.TryGetInt32(out int i) ? (object)i : v.GetDecimal(),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Null => null,
+                _ => v.GetRawText()
             };
         }
 
         private static int MapFolderPermission(PortalFolderPermission perm) => perm switch
         {
-            PortalFolderPermission.Read    => 0,
+            PortalFolderPermission.Read => 0,
             PortalFolderPermission.Execute => 1,
-            PortalFolderPermission.Manage  => 2,
-            _                              => 0
+            PortalFolderPermission.Manage => 2,
+            _ => 0
         };
 
         // ── Internal DTOs ─────────────────────────────────────────────────────────

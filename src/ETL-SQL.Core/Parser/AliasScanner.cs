@@ -19,7 +19,7 @@ namespace ETL_SQL.Core.Parser
         public static Dictionary<string, AliasInfo> Scan(string script, int cursorOffset = -1)
         {
             var aliases = new Dictionary<string, AliasInfo>(StringComparer.OrdinalIgnoreCase);
-            
+
             // Heuristic: identify the statement block containing the cursor
             // Split by GO, semicolon, or double newline
             string activeBlock = script;
@@ -28,7 +28,7 @@ namespace ETL_SQL.Core.Parser
                 var blocks = Regex.Matches(script, @"\bGO\b|;|(?:\r?\n){2,}", RegexOptions.IgnoreCase);
                 int start = 0;
                 int end = script.Length;
-                
+
                 foreach (Match m in blocks)
                 {
                     if (m.Index < cursorOffset)
@@ -48,10 +48,10 @@ namespace ETL_SQL.Core.Parser
                 // Fallback to whole script if no cursor info (e.g. in tests or for global highlighting)
                 activeBlock = script;
             }
-            
+
             // Find FROM/JOIN and the tables following them until next major keyword or separator
             var matches = Regex.Matches(activeBlock, @"\b(FROM|JOIN)\s+([^;]+?)(?=\b(WHERE|GROUP|ORDER|HAVING|LIMIT|OFFSET|JOIN|ON|UNION|EXCEPT|INTERSECT|SELECT)\b|;|SELECT|$)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-            
+
             foreach (Match m in matches)
             {
                 var tablesPart = m.Groups[2].Value;

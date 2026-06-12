@@ -1,15 +1,15 @@
-using ETL_SQL.Core;
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Connectors.Email;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
-using System;
-using System.IO;
-using System.Threading.Tasks;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -22,7 +22,7 @@ namespace ETL_SQL.Tests.Statements
         {
             _serviceProvider = (ServiceProvider)DependencyInjectionSetup.BuildServiceProvider();
             _evaluator = _serviceProvider.GetRequiredService<Evaluator>();
-            
+
         }
 
         [Fact]
@@ -83,7 +83,7 @@ namespace ETL_SQL.Tests.Statements
             var mockSmtp = new MockSmtpDataSource();
             _evaluator.Connections["TestSMTP"] = mockSmtp;
 
-             string script = "SEND EMAIL FROM 'f@f.com' TO 't@t.com' SUBJECT 'S' BODY 'B' AT TestSMTP;";
+            string script = "SEND EMAIL FROM 'f@f.com' TO 't@t.com' SUBJECT 'S' BODY 'B' AT TestSMTP;";
             var tokens = new Lexer(script).Tokenize();
             var parser = new Parser(tokens);
             var program = parser.Parse();

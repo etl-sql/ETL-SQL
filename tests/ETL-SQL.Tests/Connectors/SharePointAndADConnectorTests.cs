@@ -4,16 +4,16 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.Common;
 using ETL_SQL.Connectors;
 using ETL_SQL.Data;
-using Moq;
-using System.Text;
-using ETL_SQL.Common;
 using ETL_SQL.Services;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -54,7 +54,7 @@ namespace ETL_SQL.Tests.Connectors
         public void ActiveDirectoryConnector_ResolveLdapFilter_MapsVirtualTablesCorrectly(string context, string expectedFilter)
         {
             var mockContext = CreateMockContext();
-            
+
             var options = new Dictionary<string, string>
             {
                 { "FILTER_CONTEXT", context }
@@ -147,7 +147,7 @@ namespace ETL_SQL.Tests.Connectors
                 Assert.Contains("_api/web/GetFolderByServerRelativeUrl", uriStr);
                 Assert.Contains("Shared Documents", uriStr);
                 Assert.Contains("/Files", uriStr);
-                
+
                 var payload = new
                 {
                     value = new[]
@@ -276,7 +276,7 @@ namespace ETL_SQL.Tests.Connectors
             mockHandler.Handler = req =>
             {
                 Assert.Contains("/lists/GetByTitle('Tasks')/items", req.RequestUri?.ToString());
-                
+
                 var payload = new
                 {
                     value = new[]
@@ -304,7 +304,7 @@ namespace ETL_SQL.Tests.Connectors
 
             var options = new Dictionary<string, string> { { "LIST_NAME", "Tasks" } };
             var connector = new SharePointConnector(mockContext.Object, "https://company.sharepoint.com/sites/Finance", options, mockHandler);
-            
+
             var batches = await connector.ReadBatches().ToListAsync();
 
             Assert.Single(batches);

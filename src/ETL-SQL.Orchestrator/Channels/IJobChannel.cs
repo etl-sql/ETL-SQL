@@ -24,11 +24,11 @@ namespace ETL_SQL.Orchestrator.Channels
     public class JobSubmitRequest
     {
         /// <summary>The ETL-SQL script text to execute.</summary>
-        public required string ScriptText  { get; set; }
+        public required string ScriptText { get; set; }
         /// <summary>Optional session ID for correlation and logging.</summary>
-        public string? SessionId           { get; set; }
+        public string? SessionId { get; set; }
         /// <summary>Optional human-readable label shown in SHOW JOBS output.</summary>
-        public string? Label               { get; set; }
+        public string? Label { get; set; }
         /// <summary>Optional key-value pairs for job-specific configuration.</summary>
         public Dictionary<string, string>? Metadata { get; set; }
 
@@ -49,13 +49,13 @@ namespace ETL_SQL.Orchestrator.Channels
 
     public class JobStatusResponse
     {
-        public required string JobId       { get; set; }
+        public required string JobId { get; set; }
         public required JobRunStatus Status { get; set; }
-        public long     RowsProcessed      { get; set; }
-        public long     ExecutionTimeMs    { get; set; }
-        public string?  ErrorMessage       { get; set; }
+        public long RowsProcessed { get; set; }
+        public long ExecutionTimeMs { get; set; }
+        public string? ErrorMessage { get; set; }
         /// <summary>Serialized report manifest returned for completed report jobs.</summary>
-        public string?  ReportManifestJson { get; set; }
+        public string? ReportManifestJson { get; set; }
     }
 
     public enum JobRunStatus

@@ -2,9 +2,9 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Common;
 using ETL_SQL.Engine;
 
 namespace ETL_SQL.Orchestrator.Execution
@@ -21,7 +21,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly CliContext _ctx;
         private readonly ILogger _logger;
         private readonly ILineageCatalogStore _catalog;
-        public  Evaluator? LastEvaluator { get; private set; }
+        public Evaluator? LastEvaluator { get; private set; }
 
         public ScriptExecutorAdapter(IServiceProvider serviceProvider, CliContext ctx, ILogger logger, ILineageCatalogStore catalog)
         {

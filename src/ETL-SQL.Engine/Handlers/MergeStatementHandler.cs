@@ -1,11 +1,11 @@
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -17,7 +17,7 @@ namespace ETL_SQL.Engine.Handlers
     {
         private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(MergeStatement);
- 
+
         public MergeStatementHandler(ILogger logger)
         {
             _logger = logger;
@@ -27,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (MergeStatement)statement;
-            
+
 
             string targetConnName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
             _logger.Debug("Merging into {TargetConnName}", targetConnName);
@@ -54,10 +54,10 @@ namespace ETL_SQL.Engine.Handlers
                         var inherited = context.LineageTracker.InheritMetadata(srcTables, srcCols, out var derived);
 
                         context.LineageTracker.Record(
-                            targetConnName, 
-                            srcTables, 
-                            "MERGE UPDATE", 
-                            targetColumn: a.ColumnName, 
+                            targetConnName,
+                            srcTables,
+                            "MERGE UPDATE",
+                            targetColumn: a.ColumnName,
                             sourceColumns: srcCols,
                             metadata: inherited,
                             derivedFromDescriptions: derived,
@@ -80,10 +80,10 @@ namespace ETL_SQL.Engine.Handlers
                         var inherited = context.LineageTracker.InheritMetadata(srcTables, srcCols, out var derived);
 
                         context.LineageTracker.Record(
-                            targetConnName, 
-                            srcTables, 
-                            "MERGE INSERT", 
-                            targetColumn: colNames[i], 
+                            targetConnName,
+                            srcTables,
+                            "MERGE INSERT",
+                            targetColumn: colNames[i],
                             sourceColumns: srcCols,
                             metadata: inherited,
                             derivedFromDescriptions: derived,
@@ -94,8 +94,8 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // Strategy 1: SQL Pushdown (Same connection, MSSQL)
-            if (targetSource is IDatabaseSource targetSql && sourceSource is IDatabaseSource sourceSql && 
-                targetSql.Dialect == "MSSQL" && targetSql.Dialect == sourceSql.Dialect && 
+            if (targetSource is IDatabaseSource targetSql && sourceSource is IDatabaseSource sourceSql &&
+                targetSql.Dialect == "MSSQL" && targetSql.Dialect == sourceSql.Dialect &&
                 string.Equals(targetSql.Path, sourceSql.Path, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.Debug("Strategy: Remote SQL MERGE Pushdown (MSSQL)");
@@ -106,7 +106,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 else
                 {
-                    await foreach (var batch in targetSql.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values)) 
+                    await foreach (var batch in targetSql.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values))
                     {
                         if (batch.RowsAffected >= 0) context.Telemetry.RowsProcessed += batch.RowsAffected;
                     }
@@ -138,7 +138,7 @@ namespace ETL_SQL.Engine.Handlers
 
             // Optimization: Detect equality conditions for O(S+T) join
             var (isEquality, targetCols, sourceCols) = TryExtractEqualityJoin(stmt.OnCondition, tAlias, sAlias);
-            
+
             int processedCount = 0;
             var matchedTargetRows = new HashSet<Row>();
             var rowsToDelete = new HashSet<Row>();
@@ -149,7 +149,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 _logger.Debug("Optimizing merge with O(S+T) Hash Join on columns: [{Columns}]", string.Join(", ", targetCols!));
                 var targetIndex = new Dictionary<CompositeKey, List<Row>>();
-                foreach(var tr in targetRows)
+                foreach (var tr in targetRows)
                 {
                     var key = new CompositeKey(targetCols!.Select(c => tr[c]).ToArray());
                     if (!targetIndex.TryGetValue(key, out var list)) targetIndex[key] = list = new List<Row>();
@@ -219,7 +219,7 @@ namespace ETL_SQL.Engine.Handlers
                             else if (clause.ActionType == MergeActionType.UPDATE)
                             {
                                 var oldRow = tRow.Clone();
-                                foreach (var a in clause.UpdateAssignments!) 
+                                foreach (var a in clause.UpdateAssignments!)
                                     tRow[a.ColumnName] = await context.EvaluateValue(a.Value, tEvalRow);
                                 outputRows.Add(new MergeOutputRow(tRow.Clone(), oldRow, "UPDATE"));
                             }
@@ -271,7 +271,7 @@ namespace ETL_SQL.Engine.Handlers
                         var oldRow = tRow.Clone();
                         foreach (var a in clause.UpdateAssignments!)
                             tRow[a.ColumnName] = await context.EvaluateValue(a.Value, combinedRow);
-                        
+
                         outputRows.Add(new MergeOutputRow(tRow.Clone(), oldRow, "UPDATE"));
                     }
                     else if (clause.ActionType == MergeActionType.DELETE)
@@ -298,7 +298,7 @@ namespace ETL_SQL.Engine.Handlers
                     var colNames = (clause.InsertColumns != null && clause.InsertColumns.Count > 0) ? clause.InsertColumns : targetCols;
                     for (int i = 0; i < colNames.Count && i < clause.InsertValues!.Count; i++)
                         newRow[colNames[i]] = await context.EvaluateValue(clause.InsertValues[i], sEvalRow);
-                    
+
                     rowsToAdd.Add(newRow);
                     outputRows.Add(new MergeOutputRow(newRow.Clone(), null, "INSERT"));
                     onAction();

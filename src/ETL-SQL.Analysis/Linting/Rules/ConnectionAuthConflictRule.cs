@@ -92,18 +92,18 @@ namespace ETL_SQL.Analysis.Linting.Rules
             if (!hasTrustedConnection)
                 return;
 
-            bool hasUserId   = conn.Options.ContainsKey("USER_ID")   || conn.Options.ContainsKey("UID");
+            bool hasUserId = conn.Options.ContainsKey("USER_ID") || conn.Options.ContainsKey("UID");
             bool hasPassword = conn.Options.ContainsKey("PASSWORD");
 
             if (hasUserId)
             {
                 results.Add(new LintResult
                 {
-                    RuleName     = Name,
-                    Severity     = LintSeverity.Error,
-                    Message      = $"Connection '{conn.ConnectionName}': TRUSTED_CONNECTION=TRUE (Windows auth) and USER_ID cannot be combined. " +
+                    RuleName = Name,
+                    Severity = LintSeverity.Error,
+                    Message = $"Connection '{conn.ConnectionName}': TRUSTED_CONNECTION=TRUE (Windows auth) and USER_ID cannot be combined. " +
                                    "Remove TRUSTED_CONNECTION or remove USER_ID/PASSWORD.",
-                    LineNumber   = conn.Line,
+                    LineNumber = conn.Line,
                     ColumnNumber = conn.Column
                 });
             }
@@ -111,11 +111,11 @@ namespace ETL_SQL.Analysis.Linting.Rules
             {
                 results.Add(new LintResult
                 {
-                    RuleName     = Name,
-                    Severity     = LintSeverity.Error,
-                    Message      = $"Connection '{conn.ConnectionName}': TRUSTED_CONNECTION=TRUE (Windows auth) and PASSWORD cannot be combined. " +
+                    RuleName = Name,
+                    Severity = LintSeverity.Error,
+                    Message = $"Connection '{conn.ConnectionName}': TRUSTED_CONNECTION=TRUE (Windows auth) and PASSWORD cannot be combined. " +
                                    "Remove TRUSTED_CONNECTION or remove USER_ID/PASSWORD.",
-                    LineNumber   = conn.Line,
+                    LineNumber = conn.Line,
                     ColumnNumber = conn.Column
                 });
             }

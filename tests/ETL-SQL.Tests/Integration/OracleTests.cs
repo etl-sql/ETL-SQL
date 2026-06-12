@@ -1,18 +1,18 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Testcontainers.Oracle;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Oracle;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using Testcontainers.Oracle;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration
 {
@@ -23,7 +23,7 @@ namespace ETL_SQL.Tests.Integration
     public class OracleTests
     {
         private readonly DatabaseFixture _fixture;
-        
+
         public OracleTests(DatabaseFixture fixture)
         {
             _fixture = fixture;
@@ -34,7 +34,7 @@ namespace ETL_SQL.Tests.Integration
         {
             var connStr = _fixture.OracleConnectionString;
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             await TestDataTypes(eval, connStr);
             await TestFunctions(eval, connStr);
             await TestMetadata(eval, connStr);
@@ -44,7 +44,7 @@ namespace ETL_SQL.Tests.Integration
         {
             AnsiConsole.MarkupLine("  - Testing Oracle Data Types...");
             await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION db AS ORACLE('{connStr}');").Tokenize()).Parse());
-            
+
             string sql = @"
                 CREATE TABLE db.TypeTest (
                     ID NUMBER,
@@ -55,9 +55,9 @@ namespace ETL_SQL.Tests.Integration
                     TimestampCol TIMESTAMP
                 );";
             await eval.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
-            
+
             await eval.Evaluate(new Parser(new Lexer("INSERT INTO db.TypeTest (ID, FloatCol, CharCol, Varchar2Col, DateCol, TimestampCol) VALUES (1, 123.45, 'A', 'Hello', TO_DATE('2023-01-01', 'YYYY-MM-DD'), TO_TIMESTAMP('2023-01-01 12:00:00', 'YYYY-MM-DD HH24:MI:SS'));").Tokenize()).Parse());
-            
+
             await eval.Evaluate(new Parser(new Lexer("SELECT * FROM db.TypeTest;").Tokenize()).Parse());
             var rows = eval.LastResult?.Rows;
             Assert.NotNull(rows);
@@ -70,10 +70,10 @@ namespace ETL_SQL.Tests.Integration
         private async Task TestFunctions(Evaluator eval, string connStr)
         {
             AnsiConsole.MarkupLine("  - Testing Oracle Specific Functions...");
-            
+
             await eval.Evaluate(new Parser(new Lexer("SELECT SUBSTR('Hello World', 7, 5) AS Sub FROM db.TypeTest WHERE ROWNUM <= 1;").Tokenize()).Parse());
             Assert.Equal("World", eval.LastResult?.Rows[0]["SUB"]?.ToString());
-            
+
             await eval.Evaluate(new Parser(new Lexer("SELECT SYSDATE AS Now;").Tokenize()).Parse());
             string sql = "SELECT * FROM db.TypeTest WHERE LENGTH(Varchar2Col) = 5;";
             await eval.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
@@ -87,7 +87,7 @@ namespace ETL_SQL.Tests.Integration
             {
                 var tables = (await db.GetTablesAsync()).ToList();
                 Assert.Contains(tables, t => t.EndsWith(".TYPETEST", StringComparison.OrdinalIgnoreCase) || t.Equals("TYPETEST", StringComparison.OrdinalIgnoreCase));
-                
+
                 var columns = (await db.GetColumnsAsync("typetest")).ToList();
                 Assert.Contains(columns, c => c.Equals("VARCHAR2COL", StringComparison.OrdinalIgnoreCase));
             }

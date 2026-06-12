@@ -27,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (CreateJobStatement)statement;
             var scriptText = await PinBundlePathsAsync(stmt.Script.ToSql(), context);
-            var hashBytes  = SHA256.HashData(Encoding.UTF8.GetBytes(scriptText));
+            var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(scriptText));
             var scriptHash = "sha256:" + Convert.ToHexString(hashBytes).ToLowerInvariant();
 
             var job = new JobDefinition(
@@ -41,8 +41,8 @@ namespace ETL_SQL.Engine.Handlers
                 true,
                 stmt.MaxRetries,
                 stmt.RetryDelaySeconds,
-                ScriptHash:  scriptHash,
-                HashPolicy:  context.ScriptHashPolicy
+                ScriptHash: scriptHash,
+                HashPolicy: context.ScriptHashPolicy
             );
 
             await _store.SaveJobAsync(job);

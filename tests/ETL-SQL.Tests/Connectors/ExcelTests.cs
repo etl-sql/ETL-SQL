@@ -1,15 +1,15 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
-using ETL_SQL.Data;
-using ETL_SQL.Connectors.FlatFile;
-using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Data;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -32,9 +32,9 @@ namespace ETL_SQL.Tests.Connectors
                 Assert.Single(batches);
                 Assert.Single(batches[0].Rows);
             }
-            finally 
-            { 
-                if (File.Exists(excelPlaceholder)) File.Delete(excelPlaceholder); 
+            finally
+            {
+                if (File.Exists(excelPlaceholder)) File.Delete(excelPlaceholder);
             }
         }
 
@@ -46,22 +46,22 @@ namespace ETL_SQL.Tests.Connectors
 
             try
             {
-                var options = new Dictionary<string, string> 
-                { 
+                var options = new Dictionary<string, string>
+                {
                     { "SHEET", "Sheet1" },
                     { "HEADER", "ON" },
-                    { "START_AT", "1" } 
+                    { "START_AT", "1" }
                 };
-                
+
                 // FlatFileDataSource handles START_AT, which simulates finding a sheet/header offset
                 var ds = new FlatFileDataSource(SystemExecutionContext.Instance, excelPlaceholder, options);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Equal("val1", batches[0].Rows[0]["col1"]?.ToString());
             }
-            finally 
-            { 
-                if (File.Exists(excelPlaceholder)) File.Delete(excelPlaceholder); 
+            finally
+            {
+                if (File.Exists(excelPlaceholder)) File.Delete(excelPlaceholder);
             }
         }
     }

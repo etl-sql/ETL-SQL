@@ -27,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
                 var tableName = stmt.Source.TempTableName;
                 bool isQueryString = tableName.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase);
 
-                if (!isQueryString && 
+                if (!isQueryString &&
                     !context.Connections.ContainsKey(tableName) &&
                     !context.LocalSources.ContainsKey(tableName) &&
                     !context.VarContext.TryGetView(tableName, out _))
@@ -42,7 +42,7 @@ namespace ETL_SQL.Engine.Handlers
             bool alreadyExists = context.ReportContext.VisualDefinitions.ContainsKey(stmt.Name);
             if (stmt.Mode == ObjectCreationMode.Create && alreadyExists && !context.InteractiveMode)
             {
-                 throw new ExecutionException($"Visual '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP VISUAL first.", null, stmt.Line, stmt.Column);
+                throw new ExecutionException($"Visual '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP VISUAL first.", null, stmt.Line, stmt.Column);
             }
 
             context.ReportContext.VisualDefinitions[stmt.Name] = stmt;

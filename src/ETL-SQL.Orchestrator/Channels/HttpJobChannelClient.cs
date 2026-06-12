@@ -21,7 +21,7 @@ namespace ETL_SQL.Orchestrator.Channels
 
         public HttpJobChannelClient(HttpClient http, ILogger<HttpJobChannelClient> logger)
         {
-            _http   = http;
+            _http = http;
             _logger = logger;
         }
 

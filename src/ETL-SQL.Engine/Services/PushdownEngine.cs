@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
-using ETL_SQL.Common;
 using ETL_SQL.Engine.Engines;
 
 namespace ETL_SQL.Engine.Services
@@ -21,7 +21,7 @@ namespace ETL_SQL.Engine.Services
 
             connectionName = stmt.FromTable.ConnectionName ?? stmt.FromTable.TableName;
             var targetConn = connectionName;
-            bool allSameConn = (stmt.Joins == null || stmt.Joins.Count == 0) || 
+            bool allSameConn = (stmt.Joins == null || stmt.Joins.Count == 0) ||
                                stmt.Joins.All(j => (j.Table.ConnectionName ?? j.Table.TableName).Equals(targetConn, StringComparison.OrdinalIgnoreCase));
 
             if (!allSameConn) return false;
@@ -38,8 +38,8 @@ namespace ETL_SQL.Engine.Services
                                  (stmt.Joins != null && stmt.Joins.Any(j => HasSubqueries(j.Condition, subqueryAnalyzer)));
 
             bool localEngineRequired = hasSubqueries ||
-                                       stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || 
-                                       stmt.GroupBy != null || 
+                                       stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) ||
+                                       stmt.GroupBy != null ||
                                        stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression)) ||
                                        stmt.IsDistinct ||
                                        (stmt.Joins != null && stmt.Joins.Count > 0);
@@ -53,12 +53,12 @@ namespace ETL_SQL.Engine.Services
             if (expr is SubqueryExpression) return true;
             if (expr is ExistsExpression) return true;
             if (expr is InExpression inExp && inExp.Right is SubqueryExpression) return true;
-            
+
             // Check nested expressions
             if (expr is BinaryExpression bin) return HasSubqueries(bin.Left, analyzer) || HasSubqueries(bin.Right, analyzer);
             if (expr is FunctionCallExpression f) return f.Arguments.Any(a => HasSubqueries(a, analyzer));
             if (expr is CaseExpression c) return c.WhenClauses.Any(w => HasSubqueries(w.Condition, analyzer) || HasSubqueries(w.Result, analyzer)) || HasSubqueries(c.ElseResult, analyzer);
-            
+
             return false;
         }
 
@@ -68,7 +68,7 @@ namespace ETL_SQL.Engine.Services
             var conn = (IDatabaseSource)context.Connections[connectionName];
             var compiled = context.CompileQuery(stmt, conn.Dialect);
             var pushdownBatches = conn.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values);
-            
+
             var result = new DataTable();
             var sw = System.Diagnostics.Stopwatch.StartNew();
             bool isFirst = true;
@@ -96,9 +96,9 @@ namespace ETL_SQL.Engine.Services
                             _logger.Debug("[SELECT] Result buffer reached {MaxLastResultRows} rows. Stopping consumption to prevent memory exhaustion.", context.MaxLastResultRows);
                         }
                         shouldStop = true;
-                        break; 
+                        break;
                     }
-                    else 
+                    else
                     {
                         totalRows++;
                         if (!capped)

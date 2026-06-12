@@ -328,12 +328,12 @@ namespace ETL_SQL.Tests.Scale
             sw.Stop();
 
             var countRow = await AggQuery(ev, "SELECT COUNT(*) AS n FROM #sorted;");
-            var aggRow   = await AggQuery(ev, "SELECT MIN(val) AS mn, MAX(val) AS mx, SUM(val) AS s FROM #sorted;");
+            var aggRow = await AggQuery(ev, "SELECT MIN(val) AS mn, MAX(val) AS mx, SUM(val) AS s FROM #sorted;");
 
-            var n  = Convert.ToInt64(countRow["n"]);
+            var n = Convert.ToInt64(countRow["n"]);
             var mn = Convert.ToDecimal(aggRow["mn"]);
             var mx = Convert.ToDecimal(aggRow["mx"]);
-            var s  = Convert.ToDecimal(aggRow["s"]);
+            var s = Convert.ToDecimal(aggRow["s"]);
 
             Assert.Equal(Rows, n);
             Assert.Equal(1m, mn);
@@ -427,10 +427,10 @@ namespace ETL_SQL.Tests.Scale
             var aggRow = await AggQuery(ev,
                 "SELECT COUNT(*) AS n, MIN(id) AS mn, MAX(id) AS mx, SUM(score) AS s FROM #joined;");
 
-            var n  = Convert.ToInt64(aggRow["n"]);
+            var n = Convert.ToInt64(aggRow["n"]);
             var mn = Convert.ToInt32(aggRow["mn"]);
             var mx = Convert.ToInt32(aggRow["mx"]);
-            var s  = Convert.ToDecimal(aggRow["s"]);
+            var s = Convert.ToDecimal(aggRow["s"]);
 
             Assert.Equal(Rows, n);
             Assert.Equal(1, mn);
@@ -519,10 +519,10 @@ namespace ETL_SQL.Tests.Scale
             var aggRow = await AggQuery(ev,
                 "SELECT COUNT(*) AS n, MIN(rn) AS mn, MAX(rn) AS mx, SUM(rn) AS s FROM #windowed;");
 
-            var n  = Convert.ToInt64(aggRow["n"]);
+            var n = Convert.ToInt64(aggRow["n"]);
             var mn = Convert.ToDecimal(aggRow["mn"]);
             var mx = Convert.ToDecimal(aggRow["mx"]);
-            var s  = Convert.ToDecimal(aggRow["s"]);
+            var s = Convert.ToDecimal(aggRow["s"]);
 
             Assert.Equal(Rows, n);
             Assert.Equal(1m, mn);

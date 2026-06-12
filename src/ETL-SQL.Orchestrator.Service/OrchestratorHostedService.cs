@@ -1,9 +1,9 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Orchestrator.Scheduling;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ETL_SQL.Orchestrator.Scheduling;
 
 namespace ETL_SQL.Orchestrator.Service
 {
@@ -20,7 +20,7 @@ namespace ETL_SQL.Orchestrator.Service
         public OrchestratorHostedService(SchedulerService scheduler, ILogger<OrchestratorHostedService> logger)
         {
             _scheduler = scheduler;
-            _logger    = logger;
+            _logger = logger;
         }
 
         public Task StartAsync(CancellationToken cancellationToken)

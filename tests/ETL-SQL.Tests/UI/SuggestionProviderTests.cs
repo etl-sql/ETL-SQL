@@ -1,17 +1,17 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Spectre.Console;
-using ETL_SQL.TUI.UI;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
-using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Connectors.SqlServer;
-using ETL_SQL.Core.Parser;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.TUI.UI;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {
@@ -36,7 +36,7 @@ namespace ETL_SQL.Tests.UI
             var engine = new SuggestionEngine();
             var context = new SuggestionContext { Prefix = "SEL" };
             var results = await engine.GetSuggestionsAsync(context);
-            
+
             Assert.Contains(results, s => s.Text == "SELECT");
         }
 
@@ -49,12 +49,12 @@ namespace ETL_SQL.Tests.UI
             {
                 Prefix = "A.",
                 Connections = new Dictionary<string, IDataSource> { { "Users", ds } },
-                Aliases = new Dictionary<string, AliasInfo> 
-                { 
-                    { "A", new AliasInfo("Users", "A") } 
+                Aliases = new Dictionary<string, AliasInfo>
+                {
+                    { "A", new AliasInfo("Users", "A") }
                 }
             };
-            
+
             var results = await engine.GetSuggestionsAsync(context);
             Assert.Contains(results, s => s.Text == "A.UserID");
         }
@@ -71,7 +71,7 @@ namespace ETL_SQL.Tests.UI
                 Prefix = "Conn.",
                 Connections = new Dictionary<string, IDataSource> { { "Conn", ds } }
             };
-            
+
             var results = await engine.GetSuggestionsAsync(context);
             Assert.Contains(results, s => s.Text == "Conn.UserID");
         }
@@ -80,11 +80,11 @@ namespace ETL_SQL.Tests.UI
         public async Task FilePathProvider_RecognizesFileContext()
         {
             var engine = new SuggestionEngine();
-            
+
             // Context 2: Inside FLATFILE()
-            var context2 = new SuggestionContext 
-            { 
-                Prefix = "t", 
+            var context2 = new SuggestionContext
+            {
+                Prefix = "t",
                 ScriptBefore = "CREATE CONNECTION C AS FLATFILE('t",
                 FullScript = "CREATE CONNECTION C AS FLATFILE('t"
             };

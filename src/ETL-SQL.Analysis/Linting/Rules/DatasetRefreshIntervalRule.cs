@@ -11,7 +11,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
     /// </summary>
     public class DatasetRefreshIntervalRule : ILintRule
     {
-        public string Name        => "DatasetRefreshInterval";
+        public string Name => "DatasetRefreshInterval";
         public string Description => "Warns when a DATASET REFRESH EVERY interval is not a valid duration string.";
 
         // Accepted format: integer followed by s/m/h/d (seconds/minutes/hours/days)
@@ -30,10 +30,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 {
                     results.Add(new LintResult
                     {
-                        RuleName     = Name,
-                        Severity     = LintSeverity.Warning,
-                        Message      = $"Dataset '{ds.TempTableName}': REFRESH EVERY interval '{ds.RefreshInterval}' is not a recognised duration. Use a number followed by s, m, h, or d (e.g. '30m', '1h', '7d').",
-                        LineNumber   = ds.Line,
+                        RuleName = Name,
+                        Severity = LintSeverity.Warning,
+                        Message = $"Dataset '{ds.TempTableName}': REFRESH EVERY interval '{ds.RefreshInterval}' is not a recognised duration. Use a number followed by s, m, h, or d (e.g. '30m', '1h', '7d').",
+                        LineNumber = ds.Line,
                         ColumnNumber = ds.Column
                     });
                 }

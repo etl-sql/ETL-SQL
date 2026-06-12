@@ -1,8 +1,8 @@
-using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 using System;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -23,7 +23,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (SetVariableStatement)statement;
-            
+
             if (stmt.Target is VariableExpression vExpr)
             {
                 var varName = vExpr.Name;

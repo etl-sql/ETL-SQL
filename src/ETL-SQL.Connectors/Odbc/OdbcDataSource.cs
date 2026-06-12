@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Data.Odbc;
+using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Odbc
 {
@@ -52,11 +52,16 @@ namespace ETL_SQL.Connectors.Odbc
         {
             if (string.IsNullOrWhiteSpace(_connectionString)) return "ODBC (Offline)";
             var (conn, isShared) = await GetConnectionAsync();
-            try {
+            try
+            {
                 return conn.ServerVersion ?? "Unknown ODBC Driver Version";
-            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
                 throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) conn.Dispose();
             }
         }
@@ -72,7 +77,8 @@ namespace ETL_SQL.Connectors.Odbc
                 throw new ExecutionException("No table specified for ODBC data source read.");
 
             var (conn, isShared) = await GetConnectionAsync();
-            try {
+            try
+            {
                 using var cmd = CreateCommand($"SELECT * FROM {OdbcSyntax.QuoteIdentifier(_tableName)}", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 using var reader = cmd.ExecuteReader();
@@ -107,7 +113,9 @@ namespace ETL_SQL.Connectors.Odbc
                 {
                     yield return currentBatch;
                 }
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) conn.Dispose();
             }
         }
@@ -123,7 +131,8 @@ namespace ETL_SQL.Connectors.Odbc
             OdbcTransaction? localTx = null;
             if (_activeTransaction == null) localTx = conn.BeginTransaction();
 
-            try {
+            try
+            {
                 var isFirstBatch = true;
                 OdbcCommand? insertCmd = null;
 
@@ -158,15 +167,18 @@ namespace ETL_SQL.Connectors.Odbc
                 }
                 localTx?.Commit();
             }
-            catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
                 localTx?.Rollback();
                 throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
             }
-            catch {
+            catch
+            {
                 localTx?.Rollback();
                 throw;
             }
-            finally {
+            finally
+            {
                 localTx?.Dispose();
                 if (!isShared) conn.Dispose();
             }
@@ -178,7 +190,8 @@ namespace ETL_SQL.Connectors.Odbc
         private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
         {
             var (conn, isShared) = await GetConnectionAsync();
-            try {
+            try
+            {
                 using var cmd = CreateCommand(sql, conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
 
@@ -235,7 +248,9 @@ namespace ETL_SQL.Connectors.Odbc
                         resultSetIndex++;
                     }
                 } while (reader.NextResult());
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) conn.Dispose();
             }
         }
@@ -250,7 +265,8 @@ namespace ETL_SQL.Connectors.Odbc
         {
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
             var (conn, isShared) = await GetConnectionAsync();
-            try {
+            try
+            {
                 var tables = new List<string>();
                 using var schemaTable = conn.GetSchema("Tables");
                 foreach (System.Data.DataRow row in schemaTable.Rows)
@@ -259,9 +275,13 @@ namespace ETL_SQL.Connectors.Odbc
                     if (!string.IsNullOrEmpty(table)) tables.Add(table);
                 }
                 return tables;
-            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
                 throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) conn.Dispose();
             }
         }
@@ -270,7 +290,8 @@ namespace ETL_SQL.Connectors.Odbc
         {
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
             var (conn, isShared) = await GetConnectionAsync();
-            try {
+            try
+            {
                 var views = new List<string>();
                 using var schemaTable = conn.GetSchema("Views");
                 foreach (System.Data.DataRow row in schemaTable.Rows)
@@ -279,9 +300,13 @@ namespace ETL_SQL.Connectors.Odbc
                     if (!string.IsNullOrEmpty(view)) views.Add(view);
                 }
                 return views;
-            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
                 throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) conn.Dispose();
             }
         }
@@ -290,7 +315,8 @@ namespace ETL_SQL.Connectors.Odbc
         {
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
             var (conn, isShared) = await GetConnectionAsync();
-            try {
+            try
+            {
                 var columns = new List<string>();
                 using var cmd = CreateCommand($"SELECT * FROM {OdbcSyntax.QuoteIdentifier(tableName)} WHERE 1=0", conn);
                 using var reader = cmd.ExecuteReader();
@@ -299,9 +325,13 @@ namespace ETL_SQL.Connectors.Odbc
                     columns.Add(reader.GetName(i));
                 }
                 return columns;
-            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
                 throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) conn.Dispose();
             }
         }
@@ -373,12 +403,13 @@ namespace ETL_SQL.Connectors.Odbc
             if (_transactionalConnection != null) return (_transactionalConnection, true);
             if (string.IsNullOrWhiteSpace(_connectionString))
                 throw new ExecutionException("Connection string is missing for ODBC data source.");
-            
+
             var conn = new OdbcConnection(_connectionString);
             try
             {
                 await ConnectorRetryPolicy.ForOdbc(_logger)
-                    .ExecuteAsync(async ct => {
+                    .ExecuteAsync(async ct =>
+                    {
                         await Task.Run(() => conn.Open(), ct);
                     });
                 return (conn, false);

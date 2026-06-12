@@ -1,11 +1,11 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using Xunit;
-using Moq;
 using ETL_SQL.Common;
-using ETL_SQL.Services;
 using ETL_SQL.Core;
+using ETL_SQL.Services;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -45,16 +45,16 @@ namespace ETL_SQL.Tests.Hardening
             // Only runs if we can create a symlink (might require admin on Windows)
             string tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
             Directory.CreateDirectory(tempDir);
-            
+
             try
             {
                 string linkPath = Path.Combine(tempDir, "evil_link");
-                string targetPath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) 
-                    ? @"C:\Windows" 
+                string targetPath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    ? @"C:\Windows"
                     : "/etc";
 
                 // Attempt to create symlink (might fail if no permission, we skip if so)
-                try 
+                try
                 {
                     Directory.CreateSymbolicLink(linkPath, targetPath);
                 }

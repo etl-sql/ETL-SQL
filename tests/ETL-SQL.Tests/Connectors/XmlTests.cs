@@ -1,16 +1,16 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using ETL_SQL.Connectors.Xml;
-using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.Xml;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -31,7 +31,7 @@ namespace ETL_SQL.Tests.Connectors
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse($"CREATE CONNECTION x AS XML('{tempXml}');"));
             var res = await ev.ExecuteQuery(Parse("SELECT * FROM x;").Statements[0]).FirstAsync();
-            
+
             Assert.Equal(2, res.Rows.Count);
             Assert.Equal("1", res.Rows[0]["ID"]?.ToString());
 
@@ -51,7 +51,7 @@ namespace ETL_SQL.Tests.Connectors
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse($"CREATE CONNECTION x AS XML('{tempXml}');"));
             var res = await ev.ExecuteQuery(Parse("SELECT * FROM x;").Statements[0]).FirstAsync();
-            
+
             Assert.Equal(2, res.Rows.Count);
             Assert.Equal("100", res.Rows[0]["id"]?.ToString());
             Assert.Equal("Active", res.Rows[0]["status"]?.ToString());
@@ -75,7 +75,7 @@ namespace ETL_SQL.Tests.Connectors
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse($"CREATE CONNECTION x AS XML('{tempXml}', ROOT_PATH='Response.Data');"));
             var res = await ev.ExecuteQuery(Parse("SELECT * FROM x;").Statements[0]).FirstAsync();
-            
+
             Assert.Equal(2, res.Rows.Count);
             Assert.Equal("P2", res.Rows[1]["ID"]?.ToString());
 

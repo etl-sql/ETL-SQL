@@ -19,17 +19,17 @@ namespace ETL_SQL.Core.Parser
         private readonly string _source;
         private readonly ExpressionParser _expressionParser;
         private readonly StatementParser _statementParser;
-        
+
         private static readonly HashSet<TokenType> IdentifierTokens = new()
         {
-            TokenType.IDENTIFIER, TokenType.LINEAGE, TokenType.FILE, TokenType.DIRECTORY, 
-            TokenType.SFTP, TokenType.FTP_CONN, TokenType.FLATFILE, TokenType.JSON, TokenType.XML, 
-            TokenType.EXCEL, TokenType.AZURE_BLOB, TokenType.SYSDATE, TokenType.CURRENT_TIMESTAMP, 
-            TokenType.CURRENT_DATE, TokenType.CURRENT_TIME, TokenType.YEAR, TokenType.MONTH, 
+            TokenType.IDENTIFIER, TokenType.LINEAGE, TokenType.FILE, TokenType.DIRECTORY,
+            TokenType.SFTP, TokenType.FTP_CONN, TokenType.FLATFILE, TokenType.JSON, TokenType.XML,
+            TokenType.EXCEL, TokenType.AZURE_BLOB, TokenType.SYSDATE, TokenType.CURRENT_TIMESTAMP,
+            TokenType.CURRENT_DATE, TokenType.CURRENT_TIME, TokenType.YEAR, TokenType.MONTH,
             TokenType.DAY, TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
             TokenType.TELEMETRY, TokenType.POSITION, TokenType.FORMAT, TokenType.TARGET,
             TokenType.TYPE, TokenType.VERSION, TokenType.SOURCE, TokenType.MATCHED,
-            TokenType.TABLE, TokenType.TAG, TokenType.VALUE, TokenType.BITS, 
+            TokenType.TABLE, TokenType.TAG, TokenType.VALUE, TokenType.BITS,
             TokenType.ALGORITHM, TokenType.PASSPHRASE, TokenType.COMMENT, TokenType.DATE,
             TokenType.GETDATE, TokenType.RETURNS, TokenType.CONFIG, TokenType.CLOSE,
             TokenType.MIN, TokenType.MAX, TokenType.SUM, TokenType.AVG, TokenType.COUNT,
@@ -44,14 +44,14 @@ namespace ETL_SQL.Core.Parser
         private static readonly HashSet<TokenType> DataTypeTokens = new()
         {
             TokenType.TIME, TokenType.JSON, TokenType.XML, TokenType.DATETIME, TokenType.CHAR,
-            TokenType.INT, TokenType.INTEGER, TokenType.BIGINT, TokenType.SMALLINT, TokenType.TINYINT, 
-            TokenType.BIT, TokenType.BOOLEAN, TokenType.BOOL, TokenType.DECIMAL, TokenType.NUMERIC, 
-            TokenType.MONEY, TokenType.SMALLMONEY, TokenType.FLOAT, TokenType.REAL, TokenType.DOUBLE, 
-            TokenType.DATE, TokenType.DATETIME2, TokenType.SMALLDATETIME, TokenType.DATETIMEOFFSET, 
-            TokenType.TIMESTAMP, TokenType.VARCHAR, TokenType.NCHAR, TokenType.NVARCHAR, 
-            TokenType.TEXT, TokenType.NTEXT, TokenType.BINARY, TokenType.VARBINARY, TokenType.IMAGE, 
-            TokenType.UNIQUEIDENTIFIER, TokenType.UUID, TokenType.GUID, TokenType.GEOMETRY, 
-            TokenType.GEOGRAPHY, TokenType.HIERARCHYID, TokenType.VARIANT, TokenType.SQL_VARIANT, 
+            TokenType.INT, TokenType.INTEGER, TokenType.BIGINT, TokenType.SMALLINT, TokenType.TINYINT,
+            TokenType.BIT, TokenType.BOOLEAN, TokenType.BOOL, TokenType.DECIMAL, TokenType.NUMERIC,
+            TokenType.MONEY, TokenType.SMALLMONEY, TokenType.FLOAT, TokenType.REAL, TokenType.DOUBLE,
+            TokenType.DATE, TokenType.DATETIME2, TokenType.SMALLDATETIME, TokenType.DATETIMEOFFSET,
+            TokenType.TIMESTAMP, TokenType.VARCHAR, TokenType.NCHAR, TokenType.NVARCHAR,
+            TokenType.TEXT, TokenType.NTEXT, TokenType.BINARY, TokenType.VARBINARY, TokenType.IMAGE,
+            TokenType.UNIQUEIDENTIFIER, TokenType.UUID, TokenType.GUID, TokenType.GEOMETRY,
+            TokenType.GEOGRAPHY, TokenType.HIERARCHYID, TokenType.VARIANT, TokenType.SQL_VARIANT,
             TokenType.ANY, TokenType.TABLE, TokenType.STRING, TokenType.SENSITIVE, TokenType.SECRET,
             TokenType.VARCHAR2, TokenType.MINMAX, TokenType.MARKDOWN, TokenType.PATH, TokenType.RELDATE
         };
@@ -95,7 +95,7 @@ namespace ETL_SQL.Core.Parser
         public Token Advance()
         {
             var token = Current;
-            if (token.Type != TokenType.EOF) 
+            if (token.Type != TokenType.EOF)
             {
                 LastTokenEndLine = token.EndLine;
                 LastTokenEndColumn = token.EndColumn;
@@ -116,7 +116,8 @@ namespace ETL_SQL.Core.Parser
 
         public Token Consume(TokenType type, string message)
         {
-            if (Current.Type == type) {
+            if (Current.Type == type)
+            {
                 var t = Advance();
                 return t;
             }
@@ -230,7 +231,7 @@ namespace ETL_SQL.Core.Parser
         public Script Parse()
         {
             var script = new Script();
-            
+
             // Capture script metadata from header comments (/* @tag: v */ or -- @tag: v)
             while (Current.Type == TokenType.COLUMN_TAG)
             {
@@ -263,8 +264,8 @@ namespace ETL_SQL.Core.Parser
                 catch (Exception ex)
                 {
                     script.Diagnostics.Add(new Diagnostic(ex.Message, Current.Line, Current.Column, DiagnosticSeverity.Error, "INTERNAL"));
-                     // Fallback for unexpected errors
-                     if (Current.Type != TokenType.EOF) Advance();
+                    // Fallback for unexpected errors
+                    if (Current.Type != TokenType.EOF) Advance();
                 }
             }
             ValidateGotoScoping(script);
@@ -321,14 +322,14 @@ namespace ETL_SQL.Core.Parser
             {
                 if (Current.Type == TokenType.BEGIN) depth++;
                 else if (Current.Type == TokenType.END) depth--;
-                
+
                 if (depth == 0) break;
                 tokens.Add(Advance());
             }
 
             var endToken = Consume(TokenType.END, "Expected END");
-            
-            if (!string.IsNullOrEmpty(_source)) 
+
+            if (!string.IsNullOrEmpty(_source))
                 return ReconstructFromSource(startToken, endToken);
 
             // Fallback: reconstruct from tokens if source is missing
@@ -386,24 +387,24 @@ namespace ETL_SQL.Core.Parser
             var columns = new List<SelectColumn>();
             TableReference? intoTable = null;
 
-                if (Match(TokenType.STAR))
-                {
-                    columns.Add(new SelectColumn(new IdentifierExpression("*"), null, null));
-                }
-                else
+            if (Match(TokenType.STAR))
+            {
+                columns.Add(new SelectColumn(new IdentifierExpression("*"), null, null));
+            }
+            else
+            {
+                columns.Add(ParseSelectColumn());
+                while (Match(TokenType.COMMA))
                 {
                     columns.Add(ParseSelectColumn());
-                    while (Match(TokenType.COMMA))
-                    {
-                        columns.Add(ParseSelectColumn());
-                    }
                 }
+            }
 
-                if (Match(TokenType.INTO))
-                {
-                    intoTable = ParseTableReference(allowAlias: false);
-                }
-            
+            if (Match(TokenType.INTO))
+            {
+                intoTable = ParseTableReference(allowAlias: false);
+            }
+
             // Riverside: removed swallowed catch block to expose errors.
             TableReference? fromTable = null;
             var preJoins = new List<JoinClause>();
@@ -438,7 +439,7 @@ namespace ETL_SQL.Core.Parser
 
             var joins = preJoins;
             joins.AddRange(ParseJoins());
-            
+
             Expression? whereClause = null;
             if (Match(TokenType.WHERE))
             {
@@ -590,8 +591,8 @@ namespace ETL_SQL.Core.Parser
 
             if (Match(TokenType.FOR))
             {
-                selectStmt = selectStmt with 
-                { 
+                selectStmt = selectStmt with
+                {
                     ForClause = ParseForClause(),
                     EndLine = LastTokenEndLine,
                     EndColumn = LastTokenEndColumn
@@ -624,15 +625,15 @@ namespace ETL_SQL.Core.Parser
             else if (Match(TokenType.AUTO)) mode = ForMode.AUTO;
             else if (Match(TokenType.RAW)) mode = ForMode.RAW;
             else if (Match(TokenType.EXPLICIT)) mode = ForMode.EXPLICIT;
-            
+
             string? rootName = null;
             bool includeNulls = false;
             bool withoutWrapper = false;
             bool useElements = false;
 
-            while (Match(TokenType.COMMA) || 
-                   Current.Type == TokenType.ROOT || 
-                   Current.Type == TokenType.INCLUDE_NULL_VALUES || 
+            while (Match(TokenType.COMMA) ||
+                   Current.Type == TokenType.ROOT ||
+                   Current.Type == TokenType.INCLUDE_NULL_VALUES ||
                    Current.Type == TokenType.WITHOUT_ARRAY_WRAPPER ||
                    Current.Type == TokenType.ELEMENTS)
             {
@@ -668,9 +669,9 @@ namespace ETL_SQL.Core.Parser
                 }
             }
 
-            return new ForClause(type, mode, rootName) 
-            { 
-                IncludeNullValues = includeNulls, 
+            return new ForClause(type, mode, rootName)
+            {
+                IncludeNullValues = includeNulls,
                 WithoutArrayWrapper = withoutWrapper,
                 UseElements = useElements
             };
@@ -742,9 +743,9 @@ namespace ETL_SQL.Core.Parser
         public TableReference ParseTableReference(bool allowFunction = true, bool allowWithClause = true, bool allowAlias = true)
         {
             var t = Current;
-            
+
             TableReference tableRef;
-            
+
             // Subquery Support: (SELECT ...) [AS] Alias
             if (Match(TokenType.LPAREN))
             {
@@ -752,7 +753,7 @@ namespace ETL_SQL.Core.Parser
                 {
                     var subquery = ParseQuery();
                     Consume(TokenType.RPAREN, "Expected ')' after subquery in FROM/JOIN");
-                    
+
                     string alias = "";
                     if (Match(TokenType.AS))
                     {
@@ -766,7 +767,7 @@ namespace ETL_SQL.Core.Parser
                     {
                         alias = "Sub_" + new Random().Next(1000, 9999);
                     }
-                    
+
                     tableRef = new TableReference("SUBQUERY", null, null, null, alias, subquery);
                 }
                 else if (Current.Type == TokenType.VALUES)
@@ -824,7 +825,7 @@ namespace ETL_SQL.Core.Parser
             else
             {
                 var parts = new List<string>();
-                
+
                 if (Current.Type == TokenType.VARIABLE)
                 {
                     parts.Add(Consume(TokenType.VARIABLE, "Expected variable table reference").Value);
@@ -857,7 +858,7 @@ namespace ETL_SQL.Core.Parser
                     var funcCall = funcName.Equals("JSON_TABLE", StringComparison.OrdinalIgnoreCase)
                         ? ParseJsonTableFunctionCall(funcName, t)
                         : ParseTableFunctionCall(funcName, t);
-                    
+
                     if (parts.Count == 4) tableRef = new TableReference(parts[3], parts[2], parts[1], parts[0], functionCall: funcCall);
                     else if (parts.Count == 3) tableRef = new TableReference(parts[2], parts[1], null, parts[0], functionCall: funcCall);
                     else if (parts.Count == 2) tableRef = new TableReference(parts[1], null, null, parts[0], functionCall: funcCall);
@@ -906,12 +907,12 @@ namespace ETL_SQL.Core.Parser
                 }
             }
 
-            tableRef = tableRef with 
-            { 
-                Line = t.Line, 
-                Column = t.Column, 
-                EndLine = LastTokenEndLine, 
-                EndColumn = LastTokenEndColumn 
+            tableRef = tableRef with
+            {
+                Line = t.Line,
+                Column = t.Column,
+                EndLine = LastTokenEndLine,
+                EndColumn = LastTokenEndColumn
             };
 
             // Handle table-level operators
@@ -920,10 +921,10 @@ namespace ETL_SQL.Core.Parser
                 if (Match(TokenType.PIVOT)) tableRef.TableOperators.Add(ParsePivotClause());
                 else if (Match(TokenType.UNPIVOT)) tableRef.TableOperators.Add(ParseUnpivotClause());
                 else if (MatchWord("MATCH_RECOGNIZE")) tableRef.TableOperators.Add(ParseMatchRecognizeClause());
-                tableRef = tableRef with 
-                { 
-                    EndLine = LastTokenEndLine, 
-                    EndColumn = LastTokenEndColumn 
+                tableRef = tableRef with
+                {
+                    EndLine = LastTokenEndLine,
+                    EndColumn = LastTokenEndColumn
                 };
             }
 
@@ -945,10 +946,10 @@ namespace ETL_SQL.Core.Parser
                     if (!Match(TokenType.COMMA)) break;
                 }
                 Consume(TokenType.RPAREN, "Expected ')' to close WITH options");
-                tableRef = tableRef with 
-                { 
-                    EndLine = LastTokenEndLine, 
-                    EndColumn = LastTokenEndColumn 
+                tableRef = tableRef with
+                {
+                    EndLine = LastTokenEndLine,
+                    EndColumn = LastTokenEndColumn
                 };
             }
 
@@ -957,10 +958,10 @@ namespace ETL_SQL.Core.Parser
             {
                 Advance(); // consume NOT
                 Advance(); // consume INDEXED
-                tableRef = tableRef with 
-                { 
-                    EndLine = LastTokenEndLine, 
-                    EndColumn = LastTokenEndColumn 
+                tableRef = tableRef with
+                {
+                    EndLine = LastTokenEndLine,
+                    EndColumn = LastTokenEndColumn
                 };
             }
             else if (Current.Type == TokenType.IDENTIFIER && Current.Value.Equals("INDEXED", StringComparison.OrdinalIgnoreCase) && Peek.Type == TokenType.BY)
@@ -972,10 +973,10 @@ namespace ETL_SQL.Core.Parser
                 {
                     Advance(); // consume index name
                 }
-                tableRef = tableRef with 
-                { 
-                    EndLine = LastTokenEndLine, 
-                    EndColumn = LastTokenEndColumn 
+                tableRef = tableRef with
+                {
+                    EndLine = LastTokenEndLine,
+                    EndColumn = LastTokenEndColumn
                 };
             }
 
@@ -1104,12 +1105,12 @@ namespace ETL_SQL.Core.Parser
             Consume(TokenType.LPAREN, "Expected '(' after PIVOT");
             var aggFunc = ConsumeIdentifier("Expected aggregate function name").Value;
             Consume(TokenType.LPAREN, "Expected '(' after aggregate function");
-            
+
             // Support both COUNT(*) and COUNT(Col)
             string aggCol = "";
             if (Match(TokenType.STAR)) aggCol = "*";
             else aggCol = ConsumeIdentifier("Expected aggregate column name").Value;
-            
+
             Consume(TokenType.RPAREN, "Expected ')' after aggregate column");
             Consume(TokenType.FOR, "Expected 'FOR' in PIVOT clause");
             var pivotCol = ConsumeIdentifier("Expected pivot column name").Value;
@@ -1123,11 +1124,11 @@ namespace ETL_SQL.Core.Parser
             }
             Consume(TokenType.RPAREN, "Expected ')' after pivot values");
             Consume(TokenType.RPAREN, "Expected ')' to close PIVOT clause");
-            
+
             string? alias = null;
             if (Match(TokenType.AS)) alias = ConsumeIdentifier("Expected alias after PIVOT").Value;
             else if (Current.Type == TokenType.IDENTIFIER && !IsKeyword(Current.Value)) alias = Advance().Value;
-            
+
             return new PivotClause(aggFunc, aggCol, pivotCol, values) { Alias = alias };
         }
 
@@ -1147,11 +1148,11 @@ namespace ETL_SQL.Core.Parser
             }
             Consume(TokenType.RPAREN, "Expected ')' after unpivot columns");
             Consume(TokenType.RPAREN, "Expected ')' to close UNPIVOT clause");
-            
+
             string? alias = null;
             if (Match(TokenType.AS)) alias = ConsumeIdentifier("Expected alias after UNPIVOT").Value;
             else if (Current.Type == TokenType.IDENTIFIER && !IsKeyword(Current.Value)) alias = Advance().Value;
-            
+
             return new UnpivotClause(valCol, nameCol, cols) { Alias = alias };
         }
 
@@ -1324,7 +1325,7 @@ namespace ETL_SQL.Core.Parser
             {
                 expr = ParseExpression();
             }
-            
+
             string? alias = null;
             if (Match(TokenType.AS))
             {
@@ -1366,7 +1367,7 @@ namespace ETL_SQL.Core.Parser
             foreach (var part in parts)
             {
                 if (!part.StartsWith("@")) continue;
-                
+
                 var colonIndex = part.IndexOf(':');
                 if (colonIndex > 0)
                 {
@@ -1423,21 +1424,21 @@ namespace ETL_SQL.Core.Parser
                         Consume(TokenType.JOIN, "Expected 'JOIN'");
                     }
                 }
-                else if (Match(TokenType.RIGHT)) 
-                { 
-                    joinType = "RIGHT"; Match(TokenType.OUTER); 
+                else if (Match(TokenType.RIGHT))
+                {
+                    joinType = "RIGHT"; Match(TokenType.OUTER);
                     if (Match(TokenType.HASH)) hint = JoinHint.Hash;
                     else if (Match(TokenType.LOOP)) hint = JoinHint.Loop;
                     else if (Match(TokenType.MERGE)) hint = JoinHint.Merge;
-                    Consume(TokenType.JOIN, "Expected 'JOIN'"); 
+                    Consume(TokenType.JOIN, "Expected 'JOIN'");
                 }
-                else if (Match(TokenType.FULL)) 
-                { 
-                    joinType = "FULL"; Match(TokenType.OUTER); 
+                else if (Match(TokenType.FULL))
+                {
+                    joinType = "FULL"; Match(TokenType.OUTER);
                     if (Match(TokenType.HASH)) hint = JoinHint.Hash;
                     else if (Match(TokenType.LOOP)) hint = JoinHint.Loop;
                     else if (Match(TokenType.MERGE)) hint = JoinHint.Merge;
-                    Consume(TokenType.JOIN, "Expected 'JOIN'"); 
+                    Consume(TokenType.JOIN, "Expected 'JOIN'");
                 }
                 else if (Match(TokenType.HASH))
                 {
@@ -1454,7 +1455,7 @@ namespace ETL_SQL.Core.Parser
                     hint = JoinHint.Merge;
                     Consume(TokenType.JOIN, "Expected 'JOIN' after MERGE");
                 }
-                else if (Match(TokenType.CROSS)) 
+                else if (Match(TokenType.CROSS))
                 {
                     if (Match(TokenType.APPLY)) joinType = "CROSS APPLY";
                     else if (Match(TokenType.JOIN)) joinType = "CROSS JOIN";

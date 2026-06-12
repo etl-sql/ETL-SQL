@@ -6,10 +6,10 @@ using System.Threading.Tasks;
 using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors
 {
@@ -27,7 +27,7 @@ namespace ETL_SQL.Connectors
         public Dictionary<string, string>? Options => null;
         public string ConnectorType => "AZURE_BLOB";
 
-        private readonly BlobServiceClient? _client; 
+        private readonly BlobServiceClient? _client;
         private readonly string? _containerName;
 
         public AzureBlobConnector()
@@ -54,7 +54,7 @@ namespace ETL_SQL.Connectors
             var host = GetHostStatic(connectionString);
             if (host != null) context.SecurityService.ValidateHost(host);
         }
-    
+
 
         public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
@@ -77,7 +77,7 @@ namespace ETL_SQL.Connectors
 
         public Dictionary<string, string[]> GetOptionValues() => new();
 
-        public string GetHelp() => 
+        public string GetHelp() =>
             "AZURE_BLOB Connector: Connects to Azure Blob Storage containers.\n" +
             "Supports listing blobs as a table and performing file transfers (GET_FILE, PUT_FILE).\n\n" +
             "Options:\n" +
@@ -123,7 +123,7 @@ namespace ETL_SQL.Connectors
 
         public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null)
         {
-             throw new NotSupportedException("Use IDataSource.GetTablesAsync instead or provide a context via a specialized internal call.");
+            throw new NotSupportedException("Use IDataSource.GetTablesAsync instead or provide a context via a specialized internal call.");
         }
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
@@ -167,7 +167,7 @@ namespace ETL_SQL.Connectors
             return string.Empty;
         }
 
-        private BlobContainerClient GetContainer() 
+        private BlobContainerClient GetContainer()
         {
             if (_client == null || _containerName == null) throw new InvalidOperationException("Connector not initialized with connection details.");
             return _client.GetBlobContainerClient(_containerName);

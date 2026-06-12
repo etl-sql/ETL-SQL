@@ -1,15 +1,15 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using ETL_SQL.Engine;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Security
 {
@@ -26,13 +26,13 @@ namespace ETL_SQL.Tests.Security
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens);
             var script = parser.Parse();
-            
+
             if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
             {
                 var errors = string.Join("; ", script.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => d.Message));
                 throw new Exception($"Script parsing failed: {errors}");
             }
-            
+
             await eval.Evaluate(script);
         }
 
@@ -41,25 +41,25 @@ namespace ETL_SQL.Tests.Security
         {
             var eval = CreateEvaluator();
             var context = eval;
-            
+
             // 1. Set password
             await Execute(eval, "USE PASSWORD = 'test-password';");
-            
+
             // 2. Encrypt a value
             string rawValue = "secret-api-key";
             string encrypted = ETL_SQL.Common.CryptoUtils.Encrypt(rawValue, "test-password");
-            
+
             // 3. Create connection using the encrypted value in options (SENSITIVE variable)
             string sql = $@"
                 DECLARE @apiKey SENSITIVE = '{encrypted}';
                 CREATE CONNECTION MySecureApi AS MOCKDB(API_KEY = @apiKey);
             ";
-            
+
             await Execute(eval, sql);
-            
+
             // 4. Verify the decrypted value reached the data source
             Assert.True(context.Connections.TryGetValue("MySecureApi", out var ds));
-            
+
             if (ds.Options["API_KEY"] != rawValue)
             {
                 throw new Exception($"Decryption failed for SENSITIVE variable. Expected: {rawValue}, Actual: {ds.Options["API_KEY"]}.");
@@ -71,18 +71,18 @@ namespace ETL_SQL.Tests.Security
         {
             var eval = CreateEvaluator();
             var context = eval;
-            
+
             await Execute(eval, "USE PASSWORD = 'test-password';");
-            
+
             string encrypted = ETL_SQL.Common.CryptoUtils.Encrypt("new-secret", "test-password");
-            
+
             await Execute(eval, "CREATE CONNECTION MyApi AS MOCKDB();");
             await Execute(eval, $"ALTER CONNECTION MyApi WITH (KEY = '{encrypted}');");
-            
+
             Assert.True(context.Connections.TryGetValue("MyApi", out var ds));
             Assert.Equal("new-secret", ds.Options["KEY"]);
         }
-        
+
         [Fact]
         public async Task Test_BulkInsert_DecryptsOptions()
         {
@@ -114,10 +114,10 @@ namespace ETL_SQL.Tests.Security
         {
             var eval = CreateEvaluator();
             eval.SecurityService.IsTestMode = true;
-            string tmp  = System.IO.Path.GetTempPath();
-            string src  = System.IO.Path.Combine(tmp, $"ef_src_{Guid.NewGuid():N}.csv");
-            string enc  = System.IO.Path.Combine(tmp, $"ef_enc_{Guid.NewGuid():N}.csv");
-            string dec  = System.IO.Path.Combine(tmp, $"ef_dec_{Guid.NewGuid():N}.csv");
+            string tmp = System.IO.Path.GetTempPath();
+            string src = System.IO.Path.Combine(tmp, $"ef_src_{Guid.NewGuid():N}.csv");
+            string enc = System.IO.Path.Combine(tmp, $"ef_enc_{Guid.NewGuid():N}.csv");
+            string dec = System.IO.Path.Combine(tmp, $"ef_dec_{Guid.NewGuid():N}.csv");
             try
             {
                 System.IO.File.WriteAllText(src, "hello-secret");

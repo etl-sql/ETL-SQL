@@ -4,10 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Spill;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Spill;
+using ETL_SQL.Data;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -81,7 +81,7 @@ namespace ETL_SQL.Engine.Engines
                     var val = await _context.EvaluateValue(orderBy[i].Expression, row);
                     keys[i] = ETL_SQL.Data.CompoundKey.NormalizeValue(val);
                 }
-                
+
                 currentChunk.Add((row, keys));
 
                 if (currentChunk.Count >= ChunkSize)
@@ -99,7 +99,7 @@ namespace ETL_SQL.Engine.Engines
                             await writer.WriteRowAsync(entry.Row);
                         }
                     }
-                    
+
                     _context.Telemetry.SortSpillCount++;
                     _context.Telemetry.PartitionsCount++;
                     currentChunk.Clear();
@@ -112,7 +112,7 @@ namespace ETL_SQL.Engine.Engines
                 var prefix = Guid.NewGuid().ToString("N");
                 var chunkName = $"sort_chunk_{prefix}_{chunkCounter++}.tmp";
                 chunkPaths.Add(chunkName);
-                
+
                 await using (var writer = await _context.SpillStore.CreateWriterAsync(chunkName))
                 {
                     foreach (var entry in currentChunk)
@@ -127,11 +127,11 @@ namespace ETL_SQL.Engine.Engines
 
             // 3. K-way Merge and yield
             if (chunkPaths.Count == 0) yield break;
-            
+
             var readers = new List<ISpillReader>();
             try
             {
-                foreach (var path in chunkPaths) 
+                foreach (var path in chunkPaths)
                     readers.Add(await _context.SpillStore.CreateReaderAsync(path));
 
                 var heap = new PriorityQueue<int, (Row Row, object?[] Keys)>(Comparer<(Row, object?[])>.Create(Compare));
@@ -149,8 +149,8 @@ namespace ETL_SQL.Engine.Engines
                         }
                         else
                         {
-                             var keys = keysCol as IEnumerable<object>;
-                             unwrapped = keys?.Select(x => SpillSerializationHelper.UnwrapValue(x)).ToArray() ?? Array.Empty<object?>();
+                            var keys = keysCol as IEnumerable<object>;
+                            unwrapped = keys?.Select(x => SpillSerializationHelper.UnwrapValue(x)).ToArray() ?? Array.Empty<object?>();
                         }
                         heap.Enqueue(i, (row, unwrapped));
                     }
@@ -173,8 +173,8 @@ namespace ETL_SQL.Engine.Engines
                             }
                             else
                             {
-                                 var keys = keysCol as IEnumerable<object>;
-                                 unwrapped = keys?.Select(x => SpillSerializationHelper.UnwrapValue(x)).ToArray() ?? Array.Empty<object?>();
+                                var keys = keysCol as IEnumerable<object>;
+                                unwrapped = keys?.Select(x => SpillSerializationHelper.UnwrapValue(x)).ToArray() ?? Array.Empty<object?>();
                             }
                             heap.Enqueue(chunkIdx, (nextRow, unwrapped));
                         }

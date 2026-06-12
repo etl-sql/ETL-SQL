@@ -1,14 +1,14 @@
-﻿using Xunit;
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -33,7 +33,7 @@ namespace ETL_SQL.Tests.Statements
             ";
 
             await File.WriteAllTextAsync("test_data.json", "[{\"ID\": 0}]");
-            
+
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var tokens = new Lexer(sql).Tokenize();
             var script = new Parser(tokens).Parse();
@@ -68,7 +68,7 @@ namespace ETL_SQL.Tests.Statements
 
             Assert.True(File.Exists("export_adv.json"), "Advanced JSON export file not created");
             var content = await File.ReadAllTextAsync("export_adv.json");
-            
+
             Assert.Contains("\"Users\":", content);
             Assert.Contains("\"User\": {", content);
             Assert.Contains("\"Info\": {", content);
@@ -98,7 +98,7 @@ namespace ETL_SQL.Tests.Statements
 
             Assert.True(File.Exists("export.xml"), "XML export file not created");
             var content = await File.ReadAllTextAsync("export.xml");
-            
+
             Assert.Contains("<People>", content);
             Assert.Contains("<Details>", content);
             Assert.Contains("<Name>Alice</Name>", content);

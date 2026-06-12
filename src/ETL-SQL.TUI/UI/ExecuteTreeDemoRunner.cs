@@ -14,7 +14,7 @@ namespace ETL_SQL.TUI.UI
         public static async Task RunDemoAsync()
         {
             var tree = new ExecutionTree();
-            
+
             // Root
             var script = new ExecutionNode { Name = "Main Pipeline", Status = ExecutionStatus.Running, StartTicks = Stopwatch.GetTimestamp() };
             tree.AddNode(script);
@@ -37,15 +37,17 @@ namespace ETL_SQL.TUI.UI
 
             // Simulate execution
             await Task.Delay(1000);
-            
+
             // Start branches in parallel
             branchA.Status = ExecutionStatus.Running;
             branchA.StartTicks = Stopwatch.GetTimestamp();
             branchB.Status = ExecutionStatus.Running;
             branchB.StartTicks = Stopwatch.GetTimestamp();
 
-            var simA = Task.Run(async () => {
-                for(int i=0; i<50; i++) {
+            var simA = Task.Run(async () =>
+            {
+                for (int i = 0; i < 50; i++)
+                {
                     branchA.IncrementRows(new Random().Next(100, 500));
                     await Task.Delay(150);
                 }
@@ -53,8 +55,10 @@ namespace ETL_SQL.TUI.UI
                 branchA.EndTicks = Stopwatch.GetTimestamp();
             });
 
-            var simB = Task.Run(async () => {
-                for(int i=0; i<30; i++) {
+            var simB = Task.Run(async () =>
+            {
+                for (int i = 0; i < 30; i++)
+                {
                     branchB.IncrementRows(new Random().Next(50, 200));
                     await Task.Delay(250);
                 }
@@ -63,7 +67,7 @@ namespace ETL_SQL.TUI.UI
             });
 
             await Task.WhenAll(simA, simB);
-            
+
             loadStep.Status = ExecutionStatus.Completed;
             loadStep.EndTicks = Stopwatch.GetTimestamp();
             script.Status = ExecutionStatus.Completed;
@@ -72,7 +76,7 @@ namespace ETL_SQL.TUI.UI
             await Task.Delay(500);
             cts.Cancel();
             await renderTask;
-            
+
             Console.WriteLine("\n[Done] Demo complete.");
         }
     }

@@ -1,7 +1,10 @@
 using System.IO;
 using System.Text;
-using Microsoft.AspNetCore.DataProtection;
+using ETL_SQL.ReportPortal;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -11,9 +14,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
-using ETL_SQL.ReportPortal;
-using ETL_SQL.ReportPortal.Data;
-using ETL_SQL.ReportPortal.Services;
 
 namespace ETL_SQL.ReportPortal.Tests;
 
@@ -48,12 +48,12 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        var dbPath       = Path.Combine(TempDir, "portal.db");
-        var scriptRoot   = Path.Combine(TempDir, "scripts");
-        var snapshotDir  = Path.Combine(TempDir, "snapshots");
-        var mapRoot      = Path.Combine(TempDir, "maps");
-        var datasetRoot  = Path.Combine(TempDir, "datasets");
-        var orchDbPath   = Path.Combine(TempDir, "etlsql.db");
+        var dbPath = Path.Combine(TempDir, "portal.db");
+        var scriptRoot = Path.Combine(TempDir, "scripts");
+        var snapshotDir = Path.Combine(TempDir, "snapshots");
+        var mapRoot = Path.Combine(TempDir, "maps");
+        var datasetRoot = Path.Combine(TempDir, "datasets");
+        var orchDbPath = Path.Combine(TempDir, "etlsql.db");
         const string jwtSecret = "integration-test-secret-key-1234567890";
 
         builder.UseEnvironment("Testing");
@@ -63,23 +63,23 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
         {
             cfg.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Portal:DatabasePath"]           = dbPath,
-                ["Portal:ScriptRootPath"]         = scriptRoot,
-                ["Portal:SnapshotDirectory"]      = snapshotDir,
-                ["Portal:MapRootPath"]            = mapRoot,
-                ["Portal:DatasetRootPath"]         = datasetRoot,
-                ["Portal:Jwt:Secret"]             = jwtSecret,
-                ["Portal:Jwt:ExpiryMinutes"]      = "60",
-                ["Portal:Jwt:RefreshExpiryDays"]  = "7",
+                ["Portal:DatabasePath"] = dbPath,
+                ["Portal:ScriptRootPath"] = scriptRoot,
+                ["Portal:SnapshotDirectory"] = snapshotDir,
+                ["Portal:MapRootPath"] = mapRoot,
+                ["Portal:DatasetRootPath"] = datasetRoot,
+                ["Portal:Jwt:Secret"] = jwtSecret,
+                ["Portal:Jwt:ExpiryMinutes"] = "60",
+                ["Portal:Jwt:RefreshExpiryDays"] = "7",
                 ["Portal:RateLimit:AuthPermitLimit"] = authPermitLimit.ToString(),
                 ["Portal:RateLimit:AnonymousTokenPermitLimit"] = anonymousTokenPermitLimit.ToString(),
                 ["Portal:FirstRun:AdminUsername"] = "admin",
                 ["Portal:FirstRun:AdminPassword"] = "Admin@12345!",
                 ["Portal:Resources:MaxConcurrentReportExecutions"] = "2",
-                ["Portal:Resources:ExecutionTimeoutSeconds"]       = "30",
-                ["Portal:Resources:SessionCacheMaxSize"]           = "10",
-                ["Portal:Resources:SessionCacheTtlMinutes"]        = "5",
-                ["Portal:Orchestrator:DatabasePath"]               = orchDbPath,
+                ["Portal:Resources:ExecutionTimeoutSeconds"] = "30",
+                ["Portal:Resources:SessionCacheMaxSize"] = "10",
+                ["Portal:Resources:SessionCacheTtlMinutes"] = "5",
+                ["Portal:Orchestrator:DatabasePath"] = orchDbPath,
             });
         });
 
@@ -95,19 +95,19 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
             services.RemoveAll<PortalConfig>();
             var cfg = new PortalConfig
             {
-                DatabasePath      = dbPath,
-                ScriptRootPath    = scriptRoot,
+                DatabasePath = dbPath,
+                ScriptRootPath = scriptRoot,
                 SnapshotDirectory = snapshotDir,
-                MapRootPath       = mapRoot,
-                DatasetRootPath   = datasetRoot,
+                MapRootPath = mapRoot,
+                DatasetRootPath = datasetRoot,
                 Jwt = new JwtConfig { Secret = jwtSecret, ExpiryMinutes = 60, RefreshExpiryDays = 7 },
                 RateLimit = new PortalRateLimitConfig
                 {
                     AuthPermitLimit = authPermitLimit,
                     AnonymousTokenPermitLimit = anonymousTokenPermitLimit
                 },
-                FirstRun          = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
-                Orchestrator      = new OrchestratorConfig { DatabasePath = orchDbPath },
+                FirstRun = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
+                Orchestrator = new OrchestratorConfig { DatabasePath = orchDbPath },
             };
             services.AddSingleton(cfg);
             services.AddDataProtection()

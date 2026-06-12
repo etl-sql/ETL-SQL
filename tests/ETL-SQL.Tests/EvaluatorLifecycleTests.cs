@@ -1,19 +1,19 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
-using System.Collections.Generic;
-using Microsoft.Extensions.Configuration;
-using Xunit;
-using Moq;
-using ETL_SQL.Engine;
-using ETL_SQL.Engine.Handlers;
-using ETL_SQL.Engine.Services;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Engine.Services;
 using ETL_SQL.Services;
-using ETL_SQL.Common;
+using Microsoft.Extensions.Configuration;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Security
 {
@@ -38,7 +38,7 @@ namespace ETL_SQL.Tests.Security
             Directory.CreateDirectory(tempDir);
             var safeZone = Path.Combine(tempDir, "Safe");
             Directory.CreateDirectory(safeZone);
-            
+
             var targetDir = Path.Combine(tempDir, "Secret");
             Directory.CreateDirectory(targetDir);
             File.WriteAllText(Path.Combine(targetDir, "data.txt"), "secret data");
@@ -59,13 +59,13 @@ namespace ETL_SQL.Tests.Security
             catch (UnauthorizedAccessException) { return; }
 
             var filePathViaLink = Path.Combine(symlinkPath, "data.txt");
-            
+
             // Trigger ResolvePath via Evaluator (which calls SecurityService.ValidatePath)
             var registry = new Mock<ETL_SQL.Core.Functions.IFunctionRegistry>();
             var tracker = new Mock<ILineageTracker>();
             var docker = new Mock<IDockerManager>();
             var sessions = new Mock<SessionStateManager>(_logger.Object, _security, new Mock<IConfiguration>().Object, null);
-            
+
             var handlers = new List<IStatementHandler>();
             var evaluator = new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, _logger.Object, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());
 
@@ -73,7 +73,7 @@ namespace ETL_SQL.Tests.Security
             var resolved = evaluator.ResolvePath(filePathViaLink);
 
             // Assert
-            Assert.Contains("Secret", resolved); 
+            Assert.Contains("Secret", resolved);
             Assert.DoesNotContain("LinkToSecret", resolved);
         }
 
@@ -84,7 +84,7 @@ namespace ETL_SQL.Tests.Security
             var tracker = new Mock<ILineageTracker>();
             var docker = new Mock<IDockerManager>();
             var sessions = new Mock<SessionStateManager>(_logger.Object, _security, new Mock<IConfiguration>().Object, null);
-            
+
             var handlers = new List<IStatementHandler>();
             var evaluator = new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, _logger.Object, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());
 
@@ -96,11 +96,11 @@ namespace ETL_SQL.Tests.Security
             // Note: We need the SelectStatementHandler registered
             var selectHandler = new SelectStatementHandler(_logger.Object);
             handlers.Add(selectHandler);
-            
+
             var sql = "SELECT 1/0";
             var tokens = new ETL_SQL.Core.Parser.Lexer(sql).Tokenize();
             var script = new ETL_SQL.Core.Parser.Parser(tokens, sql).Parse();
-            
+
             // 3. Evaluate - should throw
             await Assert.ThrowsAnyAsync<Exception>(() => evaluator.Evaluate(script));
 

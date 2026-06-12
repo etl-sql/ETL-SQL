@@ -44,31 +44,31 @@ namespace ETL_SQL.Reporting
         {
             var manifest = new ReportManifest
             {
-                Source      = scriptSource,
-                BuiltAt     = DateTime.UtcNow,
+                Source = scriptSource,
+                BuiltAt = DateTime.UtcNow,
                 IsInteraction = (interactionValues != null && interactionValues.Count > 0) || (_ctx.ReportContext.BaselineParameters.Count > 0 && _ctx.VarContext.Variables.Any(v => _ctx.ReportContext.BaselineParameters.TryGetValue(v.Key, out var baseVal) && String.Compare(v.Value?.ToString() ?? "", baseVal ?? "", true) != 0)),
-                Title           = _ctx.ReportContext.ReportTitle,
-                TitleIsMarkdown  = _ctx.ReportContext.ReportTitleIsMarkdown,
-                Description     = _ctx.ReportContext.ReportDescription,
-                Css             = _ctx.ReportContext.ReportCss,
-                Js              = _ctx.ReportContext.ReportJs,
-                HtmlHead        = _ctx.ReportContext.ReportHtmlHead,
-                HtmlBody        = _ctx.ReportContext.ReportHtmlBody,
-                HtmlFooter      = _ctx.ReportContext.ReportHtmlFooter,
-                Favicon         = _ctx.ReportContext.ReportFavicon,
-                Logo            = _ctx.ReportContext.ReportLogo,
-                Background      = _ctx.ReportContext.ReportBackground,
-                Theme           = _ctx.ReportContext.ReportTheme,
-                Navigation      = _ctx.ReportContext.ReportNavigation,
-                Telemetry       = new TelemetryManifest
+                Title = _ctx.ReportContext.ReportTitle,
+                TitleIsMarkdown = _ctx.ReportContext.ReportTitleIsMarkdown,
+                Description = _ctx.ReportContext.ReportDescription,
+                Css = _ctx.ReportContext.ReportCss,
+                Js = _ctx.ReportContext.ReportJs,
+                HtmlHead = _ctx.ReportContext.ReportHtmlHead,
+                HtmlBody = _ctx.ReportContext.ReportHtmlBody,
+                HtmlFooter = _ctx.ReportContext.ReportHtmlFooter,
+                Favicon = _ctx.ReportContext.ReportFavicon,
+                Logo = _ctx.ReportContext.ReportLogo,
+                Background = _ctx.ReportContext.ReportBackground,
+                Theme = _ctx.ReportContext.ReportTheme,
+                Navigation = _ctx.ReportContext.ReportNavigation,
+                Telemetry = new TelemetryManifest
                 {
-                    RowsProcessed       = _ctx.Telemetry.RowsProcessed,
-                    TotalSpilledBytes   = _ctx.Telemetry.TotalSpilledBytes,
-                    SubqueryCacheHits   = _ctx.Telemetry.SubqueryCacheHits,
+                    RowsProcessed = _ctx.Telemetry.RowsProcessed,
+                    TotalSpilledBytes = _ctx.Telemetry.TotalSpilledBytes,
+                    SubqueryCacheHits = _ctx.Telemetry.SubqueryCacheHits,
                     SubqueryCacheMisses = _ctx.Telemetry.SubqueryCacheMisses,
-                    SubquerySpillCount  = _ctx.Telemetry.SubquerySpillCount,
+                    SubquerySpillCount = _ctx.Telemetry.SubquerySpillCount,
                     SubquerySpilledBytes = _ctx.Telemetry.SubquerySpilledBytes,
-                    ExecutionTimeMs     = _ctx.Telemetry.LastExecutionTimeMs
+                    ExecutionTimeMs = _ctx.Telemetry.LastExecutionTimeMs
                 }
             };
             var reportStyles = _styleBuilder.ResolveReportStyles();
@@ -118,20 +118,20 @@ namespace ETL_SQL.Reporting
 
                     manifest.Containers.Add(new ContainerManifest
                     {
-                        Name               = name,
-                        ContainerType      = cStmt.ContainerType,
-                        Structure          = cStmt.Structure,
-                        SlotMap            = cStmt.SlotMap.ToDictionary(kv => kv.Key, kv => kv.Value),
-                        Title              = title,
-                        TitleIsMarkdown    = titleMd,
-                        Subtitle           = subtitle,
+                        Name = name,
+                        ContainerType = cStmt.ContainerType,
+                        Structure = cStmt.Structure,
+                        SlotMap = cStmt.SlotMap.ToDictionary(kv => kv.Key, kv => kv.Value),
+                        Title = title,
+                        TitleIsMarkdown = titleMd,
+                        Subtitle = subtitle,
                         SubtitleIsMarkdown = subtitleMd,
-                        Tooltip            = await _styleBuilder.BuildTooltipManifestAsync(cStmt.Tooltip),
-                        IsCollapsible      = cStmt.IsCollapsible,
-                        Icon               = cStmt.Icon,
-                        IsPinnable         = cStmt.IsPinnable,
-                        IsHidden           = ResolveVisibility(cStmt.Visibility),
-                        Styles             = resolvedStyles.Count > 0 ? resolvedStyles : null
+                        Tooltip = await _styleBuilder.BuildTooltipManifestAsync(cStmt.Tooltip),
+                        IsCollapsible = cStmt.IsCollapsible,
+                        Icon = cStmt.Icon,
+                        IsPinnable = cStmt.IsPinnable,
+                        IsHidden = ResolveVisibility(cStmt.Visibility),
+                        Styles = resolvedStyles.Count > 0 ? resolvedStyles : null
 
                     });
                 }
@@ -151,11 +151,11 @@ namespace ETL_SQL.Reporting
 
                     manifest.Navigations.Add(new NavigationManifest
                     {
-                        Name        = name,
-                        NavType     = nStmt.NavType.ToString().ToUpperInvariant(),
+                        Name = name,
+                        NavType = nStmt.NavType.ToString().ToUpperInvariant(),
                         Orientation = nStmt.Orientation.ToString().ToUpperInvariant(),
                         DefaultPage = nStmt.DefaultPage,
-                        Pages       = visiblePages
+                        Pages = visiblePages
                     });
                 }
             }
@@ -170,11 +170,11 @@ namespace ETL_SQL.Reporting
                     var (bTitle, _) = await _styleBuilder.ResolveMarkdownAsync(bStmt.Title);
                     var bm = new ButtonManifest
                     {
-                        Name       = name,
+                        Name = name,
                         ButtonType = bStmt.ButtonType,
-                        Title      = bTitle,
-                        Tooltip    = await _styleBuilder.BuildTooltipManifestAsync(bStmt.Tooltip),
-                        Styles     = resolvedStyles.Count > 0 ? resolvedStyles : new Dictionary<string, string>()
+                        Title = bTitle,
+                        Tooltip = await _styleBuilder.BuildTooltipManifestAsync(bStmt.Tooltip),
+                        Styles = resolvedStyles.Count > 0 ? resolvedStyles : new Dictionary<string, string>()
                     };
 
                     if (!bm.Styles!.ContainsKey("EXPORT"))
@@ -252,12 +252,12 @@ namespace ETL_SQL.Reporting
                     using var doc = JsonDocument.Parse(themeJson.ToJsonString());
                     manifest.CustomThemes.Add(new ThemeManifest
                     {
-                        Name   = themeName,
+                        Name = themeName,
                         Config = doc.RootElement.Clone()
                     });
                 }
             }
-            
+
             // ── Messages ─────────────────────────────────────────────────────
             manifest.Messages = _ctx.Messages
                 .Select(m => new LogEntryManifest(m.Message, m.Color.ToString().ToLowerInvariant(), m.Timestamp))
@@ -377,29 +377,29 @@ namespace ETL_SQL.Reporting
             {
                 DrillDownAction dd => new VisualActionManifest
                 {
-                    Type         = "DRILL_DOWN",
-                    Trigger      = dd.Trigger,
+                    Type = "DRILL_DOWN",
+                    Trigger = dd.Trigger,
                     TargetVisual = dd.TargetVisual,
-                    KeyColumns   = dd.KeyColumns
+                    KeyColumns = dd.KeyColumns
                 },
                 SetParameterAction sp => new VisualActionManifest
                 {
-                    Type            = "SET_PARAMETER",
-                    Trigger         = sp.Trigger,
-                    ParameterName   = sp.ParameterName,
+                    Type = "SET_PARAMETER",
+                    Trigger = sp.Trigger,
+                    ParameterName = sp.ParameterName,
                     ValueExpression = sp.ValueExpression,
-                    ValueSource     = "LITERAL",
-                    LiteralValue    = sp.ValueExpression
+                    ValueSource = "LITERAL",
+                    LiteralValue = sp.ValueExpression
                 },
                 ClearFiltersAction cf => new VisualActionManifest
                 {
-                    Type    = "CLEAR_FILTERS",
+                    Type = "CLEAR_FILTERS",
                     Trigger = cf.Trigger
                 },
                 RunScriptAction rs => new VisualActionManifest
                 {
-                    Type       = "RUN_SCRIPT",
-                    Trigger    = rs.Trigger,
+                    Type = "RUN_SCRIPT",
+                    Trigger = rs.Trigger,
                     ScriptPath = rs.ScriptPath,
                     Parameters = rs.Parameters,
                     ParameterColumns = rs.Parameters.Where(p => !p.Value.StartsWith("'") && !p.Value.StartsWith("@")).ToDictionary(p => p.Key, p => p.Value),
@@ -407,17 +407,17 @@ namespace ETL_SQL.Reporting
                 },
                 DrillReportAction dr => new VisualActionManifest
                 {
-                    Type         = "DRILL_REPORT",
-                    Trigger      = dr.Trigger,
+                    Type = "DRILL_REPORT",
+                    Trigger = dr.Trigger,
                     TargetReport = dr.TargetReport,
-                    Parameters   = dr.Parameters,
+                    Parameters = dr.Parameters,
                     ParameterColumns = dr.Parameters.Where(p => !p.Value.StartsWith("'") && !p.Value.StartsWith("@")).ToDictionary(p => p.Key, p => p.Value),
                     LiteralParameters = dr.Parameters.Where(p => p.Value.StartsWith("'") || p.Value.StartsWith("@")).ToDictionary(p => p.Key, p => p.Value.Trim('\''))
                 },
                 NavigatePageAction np => new VisualActionManifest
                 {
-                    Type       = "NAVIGATE_PAGE",
-                    Trigger    = np.Trigger,
+                    Type = "NAVIGATE_PAGE",
+                    Trigger = np.Trigger,
                     TargetPage = np.TargetPage
                 },
                 RefreshVisualsAction rv => new VisualActionManifest

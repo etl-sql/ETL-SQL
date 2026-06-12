@@ -79,7 +79,7 @@ namespace ETL_SQL.Reporting.Builders
                 return new TooltipManifest { Type = "container", ContainerRef = tooltip.ContainerRef };
             if (tooltip.InlineVisuals != null)
                 return new TooltipManifest { Type = "inline", Markdown = tooltip.InlineMarkdown, Visuals = tooltip.InlineVisuals };
-            
+
             var (text, isMd) = await ResolveMarkdownAsync(tooltip.PlainText);
             return new TooltipManifest { Type = "text", Text = text, IsMarkdown = isMd };
         }
@@ -87,7 +87,7 @@ namespace ETL_SQL.Reporting.Builders
         public async Task<(string? Value, bool IsMarkdown)> ResolveMarkdownAsync(Expression? input, bool parserFlag = false)
         {
             if (input == null) return (null, false);
-            
+
             // If it's a literal string, check if it's a variable reference first (for backward compatibility)
             if (input is LiteralExpression lit && lit.Value is string s && s.StartsWith("@"))
             {

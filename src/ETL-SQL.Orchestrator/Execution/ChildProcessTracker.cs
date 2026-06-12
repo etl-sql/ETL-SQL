@@ -27,7 +27,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
         public ChildProcessTracker(ILogger<ChildProcessTracker> logger, string? persistPath = null)
         {
-            _logger      = logger;
+            _logger = logger;
             _persistPath = persistPath ?? Path.Combine("logs", "child-pids.json");
         }
 

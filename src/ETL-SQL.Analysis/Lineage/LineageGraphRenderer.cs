@@ -11,7 +11,7 @@ namespace ETL_SQL.Analysis.Lineage
         public string Render(ILineageTracker tracker, string? targetTable = null, string? targetColumn = null)
         {
             var sb = new StringBuilder();
-            var allEntries = targetTable != null 
+            var allEntries = targetTable != null
                 ? tracker.GetAncestors(targetTable, targetColumn).ToList()
                 : tracker.GetFullLineage().ToList();
 
@@ -35,7 +35,7 @@ namespace ETL_SQL.Analysis.Lineage
             foreach (var tableGroup in groupedByTable)
             {
                 sb.AppendLine(FormatGroupHeader(tableGroup.Key));
-                
+
                 var columns = tableGroup.Where(e => e.TargetColumn != null).GroupBy(e => e.TargetColumn!, StringComparer.OrdinalIgnoreCase);
                 if (targetColumn != null) columns = columns.Where(g => g.Key.Equals(targetColumn, StringComparison.OrdinalIgnoreCase));
 
@@ -46,11 +46,11 @@ namespace ETL_SQL.Analysis.Lineage
                     bool isLastCol = ++colIdx == colCount;
                     string prefix = isLastCol ? "└── " : "├── ";
                     sb.AppendLine($"{prefix}{colGroup.Key}");
-                    
+
                     var entry = colGroup.First();
                     RenderSources(sb, tracker, entry, isLastCol ? "    " : "│   ", 1, new HashSet<string>());
                 }
-                
+
                 // Also handle table-level lineage if no columns or specifically asked for table
                 if (!columns.Any() || targetColumn == null)
                 {
@@ -71,7 +71,7 @@ namespace ETL_SQL.Analysis.Lineage
             var sb = new StringBuilder();
             sb.AppendLine("graph TD");
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var entries = targetTable != null 
+            var entries = targetTable != null
                 ? tracker.GetAncestors(targetTable, targetColumn).ToList()
                 : tracker.GetFullLineage().ToList();
 

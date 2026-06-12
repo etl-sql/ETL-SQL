@@ -19,10 +19,10 @@ namespace ETL_SQL.Core.Parser.Components
                 string? type = null;
                 bool isSensitive = false;
 
-                if (_parser.IsIdentifier(_parser.Current)) 
+                if (_parser.IsIdentifier(_parser.Current))
                 {
                     type = _parser.ParseType();
-                    if (type != null && (type.Equals("SENSITIVE", StringComparison.OrdinalIgnoreCase) || 
+                    if (type != null && (type.Equals("SENSITIVE", StringComparison.OrdinalIgnoreCase) ||
                         type.Equals("SECRET", StringComparison.OrdinalIgnoreCase) ||
                         type.Equals("ENCRYPTED", StringComparison.OrdinalIgnoreCase)))
                     {
@@ -31,7 +31,7 @@ namespace ETL_SQL.Core.Parser.Components
                 }
 
                 if (Match(TokenType.PASSWORD)) isSensitive = true;
-                bool isInput  = Match(TokenType.INPUT);
+                bool isInput = Match(TokenType.INPUT);
                 bool isOutput = Match(TokenType.OUTPUT);
                 bool isRequired = Match(TokenType.REQUIRED);
 
@@ -39,7 +39,7 @@ namespace ETL_SQL.Core.Parser.Components
                 if (Match(TokenType.EQUALS)) initialValue = ParseExpression();
 
                 if (!isSensitive) isSensitive = Match(TokenType.PASSWORD);
-                if (!isInput)  isInput  = Match(TokenType.INPUT);
+                if (!isInput) isInput = Match(TokenType.INPUT);
                 if (!isOutput) isOutput = Match(TokenType.OUTPUT);
                 if (!isRequired) isRequired = Match(TokenType.REQUIRED);
 
@@ -54,15 +54,15 @@ namespace ETL_SQL.Core.Parser.Components
 
                 var stmt = new DeclareStatement(varToken.Value, type ?? "", initialValue, isSensitive, isInput, isOutput, isRequired, metadata)
                 {
-                    Line        = varToken.Line,
-                    Column      = varToken.Column,
-                    EndLine     = _parser.LastTokenEndLine,
-                    EndColumn   = _parser.LastTokenEndColumn,
+                    Line = varToken.Line,
+                    Column = varToken.Column,
+                    EndLine = _parser.LastTokenEndLine,
+                    EndColumn = _parser.LastTokenEndColumn,
                     IsSensitive = isSensitive,
-                    IsSecret    = isSecret,
-                    IsInput     = isInput,
-                    IsOutput    = isOutput,
-                    IsRequired  = isRequired
+                    IsSecret = isSecret,
+                    IsInput = isInput,
+                    IsOutput = isOutput,
+                    IsRequired = isRequired
                 };
                 declares.Add(stmt);
             } while (Match(TokenType.COMMA));
@@ -75,7 +75,7 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParseSetVariable()
         {
             var startToken = _parser.Previous; // The 'SET' token
-            
+
             Expression target;
             if (_parser.Current.Type == TokenType.VARIABLE)
             {
@@ -93,14 +93,14 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 target = ParseExpression();
             }
-            
+
             if (target is not VariableExpression && target is not MemberAccessExpression)
                 throw new SyntaxException("The left-hand side of a SET statement must be a variable or a variable property.", startToken.Line, startToken.Column);
 
             Consume(TokenType.EQUALS, "Expected '=' in SET statement");
             var expr = ParseExpression();
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            
+
             return new SetVariableStatement(target, expr) { Line = startToken.Line, Column = startToken.Column };
         }
 
@@ -219,10 +219,10 @@ namespace ETL_SQL.Core.Parser.Components
                     if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                     return new SetThresholdStatement(ThresholdType.MaxFileOperations, expr) { Line = startToken.Line, Column = startToken.Column };
                 }
-                
+
                 if (startToken.Value == "ALLOW_FILE_OPERATIONS")
                     throw new SyntaxException("Expected '=' after ALLOW_FILE_OPERATIONS", startToken.Line, startToken.Column);
-                
+
                 overrideType = SecurityOverride.LargeFileCount;
             }
             else if (val == "ALLOW_RECURSIVE_LAYERS" || (val.StartsWith("ALLOW_RECURSIVE_GREATER_THAN_") && val.EndsWith("_LAYERS")))
@@ -447,7 +447,7 @@ namespace ETL_SQL.Core.Parser.Components
                 else
                     throw new SyntaxException("Expected HISTORY after SHOW JOB", _parser.Current.Line, _parser.Current.Column);
             }
-            else if (Match(TokenType.JOBS))       stmt = new ShowJobsStatement();
+            else if (Match(TokenType.JOBS)) stmt = new ShowJobsStatement();
             else if (MatchIdentifier("PUBLISHED"))
             {
                 ConsumeIdentifierValue("BUNDLES", "Expected BUNDLES after SHOW PUBLISHED");
@@ -699,13 +699,13 @@ namespace ETL_SQL.Core.Parser.Components
                 var atConn = ConsumeIdentifier("Expected connection name after AT").Value;
                 stmt = stmt switch
                 {
-                    ShowJobsStatement j       => j with { At = atConn },
+                    ShowJobsStatement j => j with { At = atConn },
                     ShowJobHistoryStatement h => h with { At = atConn },
                     ShowPublishedBundlesStatement b => b with { At = atConn },
                     ShowBundleVersionsStatement v => v with { At = atConn },
                     ShowBundleFilesStatement f => f with { At = atConn },
                     ShowBundleDependenciesStatement d => d with { At = atConn },
-                    _                        => stmt
+                    _ => stmt
                 };
             }
 
@@ -717,22 +717,22 @@ namespace ETL_SQL.Core.Parser.Components
 
                 stmt = stmt switch
                 {
-                    ShowProfileStatement sps     => sps with { IntoTable = tempTable },
-                    ShowJobHistoryStatement sjh   => sjh with { IntoTable = tempTable },
-                    ShowVariablesStatement v     => v with { IntoTable = tempTable },
-                    ShowConnectionsStatement c   => c with { IntoTable = tempTable },
+                    ShowProfileStatement sps => sps with { IntoTable = tempTable },
+                    ShowJobHistoryStatement sjh => sjh with { IntoTable = tempTable },
+                    ShowVariablesStatement v => v with { IntoTable = tempTable },
+                    ShowConnectionsStatement c => c with { IntoTable = tempTable },
                     ShowConnectionConfigStatement cc => cc with { IntoTable = tempTable },
-                    ShowScriptTagsStatement st   => st with { IntoTable = tempTable },
-                    ShowJobsStatement j          => j with { IntoTable = tempTable },
-                    ShowTablesStatement sts      => sts with { IntoTable = tempTable },
-                    ShowViewsStatement sv        => sv with { IntoTable = tempTable },
-                    ShowColumnsStatement scols   => scols with { IntoTable = tempTable },
-                    ShowTagsStatement stag       => stag with { IntoTable = tempTable },
-                    ShowTagValueStatement stv    => stv with { IntoTable = tempTable },
-                    ShowVersionStatement svs     => svs with { IntoTable = tempTable },
-                    ShowSafeZonesStatement ssz   => ssz with { IntoTable = tempTable },
-                    ShowSessionsStatement sess   => sess with { IntoTable = tempTable },
-                    ShowDatasetsStatement sds    => sds with { IntoTable = tempTable },
+                    ShowScriptTagsStatement st => st with { IntoTable = tempTable },
+                    ShowJobsStatement j => j with { IntoTable = tempTable },
+                    ShowTablesStatement sts => sts with { IntoTable = tempTable },
+                    ShowViewsStatement sv => sv with { IntoTable = tempTable },
+                    ShowColumnsStatement scols => scols with { IntoTable = tempTable },
+                    ShowTagsStatement stag => stag with { IntoTable = tempTable },
+                    ShowTagValueStatement stv => stv with { IntoTable = tempTable },
+                    ShowVersionStatement svs => svs with { IntoTable = tempTable },
+                    ShowSafeZonesStatement ssz => ssz with { IntoTable = tempTable },
+                    ShowSessionsStatement sess => sess with { IntoTable = tempTable },
+                    ShowDatasetsStatement sds => sds with { IntoTable = tempTable },
                     ShowPublishedBundlesStatement spb => spb with { IntoTable = tempTable },
                     ShowBundleVersionsStatement sbv => sbv with { IntoTable = tempTable },
                     ShowBundleFilesStatement sbf => sbf with { IntoTable = tempTable },
@@ -751,11 +751,11 @@ namespace ETL_SQL.Core.Parser.Components
                     ShowEffectivePortalPermissionsStatement sepp => sepp with { IntoTable = tempTable },
                     ShowPortalUsageMetricsStatement spum => spum with { IntoTable = tempTable },
                     ShowActivePortalSessionsStatement saps => saps with { IntoTable = tempTable },
-                    LineageStatement lin         => lin with { IntoTable = tempTable },
+                    LineageStatement lin => lin with { IntoTable = tempTable },
                     ShowLineageHistoryForTableStatement slht => slht with { IntoTable = tempTable },
-                    ShowLineageHistoryForTagStatement slhg  => slhg with { IntoTable = tempTable },
-                    ShowLineageHistoryForJobStatement slhj  => slhj with { IntoTable = tempTable },
-                    _                            => stmt
+                    ShowLineageHistoryForTagStatement slhg => slhg with { IntoTable = tempTable },
+                    ShowLineageHistoryForJobStatement slhj => slhj with { IntoTable = tempTable },
+                    _ => stmt
                 };
             }
 

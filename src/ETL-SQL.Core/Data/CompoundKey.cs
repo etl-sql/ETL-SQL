@@ -15,11 +15,11 @@ namespace ETL_SQL.Data
         private readonly object?[] _values;
         private readonly int _setIndex;
         private readonly int _hashCode;
-        
+
         public int Length => _values.Length;
         public object? this[int index] => _values[index];
 
-        public CompoundKey(object? val1) 
+        public CompoundKey(object? val1)
         {
             _setIndex = 0;
             var n1 = NormalizeValue(val1);
@@ -100,37 +100,37 @@ namespace ETL_SQL.Data
                 {
                     JsonValueKind.Number when je.TryGetDecimal(out var dv) => dv,
                     JsonValueKind.Number => je.GetDouble(),
-                    JsonValueKind.True  => true,
+                    JsonValueKind.True => true,
                     JsonValueKind.False => false,
                     JsonValueKind.String => je.GetString(),
-                    JsonValueKind.Null  => null,
-                    _                   => (object?)je.ToString()
+                    JsonValueKind.Null => null,
+                    _ => (object?)je.ToString()
                 };
                 if (val == null) return null;
             }
-            
+
             // Ensure numeric types hash consistently. 
             // IMPORTANT: In .NET, different scales of decimal (e.g. 1.0m vs 1m) have different hash codes!
             // We normalize all decimals by dividing by 1.000... which strips trailing zeros.
-            if (val is int i)    return (decimal)i / 1.00000000000000000000000000000m;
-            if (val is long l)   return (decimal)l / 1.00000000000000000000000000000m;
+            if (val is int i) return (decimal)i / 1.00000000000000000000000000000m;
+            if (val is long l) return (decimal)l / 1.00000000000000000000000000000m;
             if (val is double d) return (decimal)d / 1.00000000000000000000000000000m;
-            if (val is float f)  return (decimal)f / 1.00000000000000000000000000000m;
+            if (val is float f) return (decimal)f / 1.00000000000000000000000000000m;
             if (val is decimal dec) return dec / 1.00000000000000000000000000000m;
-            
+
             if (val is DateTime dt) return dt;
             if (val is DateTimeOffset dto) return dto.DateTime;
 
             // Ensure dates and numbers in strings are normalized
             if (val is string s)
             {
-                if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var dec2)) 
+                if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var dec2))
                     return dec2 / 1.00000000000000000000000000000m;
-                
+
                 if (EvaluationUtils.SafeTryParseDate(s, out var dt2))
                     return dt2;
 
-                return s.Trim(); 
+                return s.Trim();
             }
 
             return val;

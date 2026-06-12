@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
-using ETL_SQL.Common;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -18,7 +18,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ShowVersionStatement)statement;
-            
+
             var table = new DataTable();
             table.AddColumn("Component");
             table.AddColumn("Version");

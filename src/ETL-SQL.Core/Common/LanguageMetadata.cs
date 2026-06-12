@@ -181,13 +181,13 @@ namespace ETL_SQL.Common
 
         public static string EngineVersion => typeof(LanguageMetadata).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
         public static string GetFullVersionString() => $"ETL-SQL {EngineVersion} (.NET 10.0)";
-        
+
         /// <summary>Default number of batches held in memory before spilling to disk for #temp tables.</summary>
         public const int DefaultMaxInMemoryBatches = 100;
 
         /// <summary>Default number of rows held in memory before #temp tables spill to disk via SpillStore.</summary>
         public const long DefaultTempTableSpillThresholdRows = 1000000;
-        
+
         /// <summary>Default number of rows before in-memory joins spill to disk.</summary>
         public const int DefaultJoinSpillThreshold = 100000;
         /// <summary>Default number of partitions used for external disk-spilling operations.</summary>
@@ -199,15 +199,15 @@ namespace ETL_SQL.Common
 
         /// <summary>Default number of rows before subquery results spill to disk.</summary>
         public const long DefaultSubquerySpillThresholdRows = 100000;
-        
+
         /// <summary>Default maximum concurrency for PARALLEL blocks.</summary>
         public const int DefaultMaxParallelDegree = 32;
         /// <summary>Default maximum size in bytes for a single string function result.</summary>
         public const long DefaultMaxStringResultSize = 100 * 1024 * 1024; // 100 MiB
-        
+
         /// <summary>Default maximum number of rows held in a SELECT result buffer for display.</summary>
         public const int DefaultMaxLastResultRows = 200000;
-        
+
         /// <summary>Maximum number of grouping sets allowed in an aggregate CUBE/ROLLUP.</summary>
         public const int DefaultMaxGroupingSets = 1024;
         /// <summary>Default maximum size in bytes for a persisted session payload.</summary>

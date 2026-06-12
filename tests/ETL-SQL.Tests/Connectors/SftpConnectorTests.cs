@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using Xunit;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors;
+using ETL_SQL.Core.Common;
 using Moq;
 using Renci.SshNet;
-using ETL_SQL.Connectors;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -43,12 +43,13 @@ namespace ETL_SQL.Tests.Connectors
             string user = "testuser";
             string keyFile = "path/to/key.pem";
             string passphrase = "secret";
-            
+
             bool factoryCalled = false;
             string capturedKeyFile = null;
             string capturedPassphrase = null;
 
-            var connector = new SftpConnector(SystemExecutionContext.Instance, host, user, null, keyFile, passphrase, (h, u, p, k, pp) => {
+            var connector = new SftpConnector(SystemExecutionContext.Instance, host, user, null, keyFile, passphrase, (h, u, p, k, pp) =>
+            {
                 factoryCalled = true;
                 capturedKeyFile = k;
                 capturedPassphrase = pp;
@@ -69,11 +70,12 @@ namespace ETL_SQL.Tests.Connectors
             string host = "sftp.example.com";
             string user = "testuser";
             string pass = "mypassword";
-            
+
             bool factoryCalled = false;
             string capturedPass = null;
 
-            var connector = new SftpConnector(SystemExecutionContext.Instance, host, user, pass, null, null, (h, u, p, k, pp) => {
+            var connector = new SftpConnector(SystemExecutionContext.Instance, host, user, pass, null, null, (h, u, p, k, pp) =>
+            {
                 factoryCalled = true;
                 capturedPass = p;
                 return null; // Don't actually create a client

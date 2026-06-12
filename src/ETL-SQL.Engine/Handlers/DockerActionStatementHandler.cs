@@ -49,7 +49,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 string? alias = actionStmt.TargetMode == DockerTargetMode.Single ? actionStmt.Alias : context.DockerManager.LastAlias;
                 _logger.Debug("Docker Action: {Action} on {Alias}", actionStmt.Action, alias ?? "(last)");
-                
+
                 if (context.IsWhatIf)
                 {
                     _logger.WriteLine($"WHAT IF: Would execute Docker {actionStmt.Action} on {alias ?? "last container"}", ConsoleColor.Yellow);

@@ -1,11 +1,11 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.CommandLine;
 using System.Linq;
 using System.Threading.Tasks;
-using Spectre.Console;
 using ETL_SQL.App;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {
@@ -15,14 +15,14 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task CliOrchestrator_ParsesPerfFlag()
         {
             CliContext? capturedContext = null;
-            var root = CliOrchestrator.BuildRootCommand(async (ctx) => 
+            var root = CliOrchestrator.BuildRootCommand(async (ctx) =>
             {
                 capturedContext = ctx;
                 return 0;
             });
 
             await root.Parse(new[] { "run", "script.sql", "--perf" }, null).InvokeAsync(new InvocationConfiguration(), default);
-            
+
             Assert.NotNull(capturedContext);
             Assert.True(capturedContext!.IsPerfMode);
         }
@@ -31,14 +31,14 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task CliOrchestrator_ParsesTestFlag()
         {
             CliContext? capturedContext = null;
-            var root = CliOrchestrator.BuildRootCommand(async (ctx) => 
+            var root = CliOrchestrator.BuildRootCommand(async (ctx) =>
             {
                 capturedContext = ctx;
                 return 0;
             });
 
             await root.Parse(new[] { "test", "unit" }, null).InvokeAsync(new InvocationConfiguration(), default);
-            
+
             Assert.NotNull(capturedContext);
             Assert.True(capturedContext!.IsTestMode);
             Assert.Equal("unit", capturedContext.TestVal);
@@ -48,14 +48,14 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task CliOrchestrator_ParsesBatchSize()
         {
             CliContext? capturedContext = null;
-            var root = CliOrchestrator.BuildRootCommand(async (ctx) => 
+            var root = CliOrchestrator.BuildRootCommand(async (ctx) =>
             {
                 capturedContext = ctx;
                 return 0;
             });
 
             await root.Parse(new[] { "run", "script.sql", "-b", "5000" }, null).InvokeAsync(new InvocationConfiguration(), default);
-            
+
             Assert.NotNull(capturedContext);
             Assert.Equal(5000, capturedContext!.BatchSize);
         }

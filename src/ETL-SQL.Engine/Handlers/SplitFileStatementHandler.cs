@@ -3,8 +3,8 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -109,7 +109,7 @@ namespace ETL_SQL.Engine.Handlers
                         }
 
                         await writer.WriteLineAsync(line);
-                        
+
                         if (limitType == "ROWS")
                         {
                             currentCount++;
@@ -179,7 +179,7 @@ namespace ETL_SQL.Engine.Handlers
             if (sizeStr.EndsWith("GB") || sizeStr.EndsWith("G")) { multiplier = 1024L * 1024L * 1024L; sizeStr = sizeStr.TrimEnd('G', 'B'); }
             else if (sizeStr.EndsWith("MB") || sizeStr.EndsWith("M")) { multiplier = 1024L * 1024L; sizeStr = sizeStr.TrimEnd('M', 'B'); }
             else if (sizeStr.EndsWith("KB") || sizeStr.EndsWith("K")) { multiplier = 1024L; sizeStr = sizeStr.TrimEnd('K', 'B'); }
-            
+
             if (double.TryParse(sizeStr, out var val))
             {
                 return (long)(val * multiplier);

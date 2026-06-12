@@ -27,8 +27,8 @@ namespace ETL_SQL.Tests.Reporting
         public void UseDataset_WithAmpersandSigil_ParsesName()
         {
             var script = Parse("USE DATASET &salesData;");
-            var stmt   = Assert.Single(script.Statements);
-            var use    = Assert.IsType<UseDatasetStatement>(stmt);
+            var stmt = Assert.Single(script.Statements);
+            var use = Assert.IsType<UseDatasetStatement>(stmt);
             Assert.Equal("&salesData", use.DatasetName);
         }
 
@@ -58,8 +58,8 @@ namespace ETL_SQL.Tests.Reporting
         public void ShowDatasets_Singular_ParsesStatement()
         {
             var script = Parse("SHOW DATASET;");
-            var stmt   = Assert.Single(script.Statements);
-            var show   = Assert.IsType<ShowDatasetsStatement>(stmt);
+            var stmt = Assert.Single(script.Statements);
+            var show = Assert.IsType<ShowDatasetsStatement>(stmt);
             Assert.Null(show.IntoTable);
         }
 
@@ -68,7 +68,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             // DATASETS is parsed as IDENTIFIER, MatchIdentifier("DATASETS") handles it
             var script = Parse("SHOW DATASETS;");
-            var stmt   = Assert.Single(script.Statements);
+            var stmt = Assert.Single(script.Statements);
             Assert.IsType<ShowDatasetsStatement>(stmt);
         }
 
@@ -76,8 +76,8 @@ namespace ETL_SQL.Tests.Reporting
         public void ShowDatasets_IntoTemp_ParsesIntoTable()
         {
             var script = Parse("SHOW DATASETS INTO #result;");
-            var stmt   = Assert.Single(script.Statements);
-            var show   = Assert.IsType<ShowDatasetsStatement>(stmt);
+            var stmt = Assert.Single(script.Statements);
+            var show = Assert.IsType<ShowDatasetsStatement>(stmt);
             Assert.Equal("#result", show.IntoTable);
         }
 
@@ -87,7 +87,7 @@ namespace ETL_SQL.Tests.Reporting
         public void RefreshDataset_WithAmpersandSigil_ParsesName()
         {
             var script = Parse("REFRESH DATASET &sales;");
-            var stmt   = Assert.Single(script.Statements);
+            var stmt = Assert.Single(script.Statements);
             var refresh = Assert.IsType<RefreshDatasetStatement>(stmt);
             Assert.Equal("&sales", refresh.DatasetName);
         }

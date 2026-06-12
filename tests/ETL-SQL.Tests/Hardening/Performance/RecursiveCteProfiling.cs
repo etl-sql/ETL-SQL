@@ -1,12 +1,12 @@
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
-using Xunit;
-using Xunit.Abstractions;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+using Xunit.Abstractions;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
@@ -46,7 +46,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             // Assert
             _output.WriteLine($"Recursion Depth: {depth}");
             _output.WriteLine($"Execution Time: {sw.ElapsedMilliseconds}ms");
-            
+
             // Basic sanity check: should at least finish in a reasonable time
             Assert.True(sw.ElapsedMilliseconds < 10000, $"Recursion depth {depth} took too long: {sw.ElapsedMilliseconds}ms");
         }

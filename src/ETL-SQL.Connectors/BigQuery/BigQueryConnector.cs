@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.BigQuery
 {
@@ -59,9 +59,9 @@ namespace ETL_SQL.Connectors.BigQuery
         public string BuildConnectionString(Dictionary<string, string> properties)
         {
             var parts = new List<string>();
-            if (properties.TryGetValue("PROJECT_ID",      out var proj)) parts.Add($"project={proj}");
-            if (properties.TryGetValue("DATASET",         out var ds))   parts.Add($"dataset={ds}");
-            if (properties.TryGetValue("LOCATION",        out var loc))  parts.Add($"location={loc}");
+            if (properties.TryGetValue("PROJECT_ID", out var proj)) parts.Add($"project={proj}");
+            if (properties.TryGetValue("DATASET", out var ds)) parts.Add($"dataset={ds}");
+            if (properties.TryGetValue("LOCATION", out var loc)) parts.Add($"location={loc}");
             if (properties.TryGetValue("CREDENTIAL_FILE", out var cred) && !string.IsNullOrWhiteSpace(cred))
                 parts.Add($"credential_file={cred}");
             return string.Join(";", parts) + ";";

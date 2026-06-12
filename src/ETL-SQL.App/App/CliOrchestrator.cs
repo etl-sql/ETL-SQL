@@ -1,11 +1,11 @@
 using System;
-using System.IO;
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
-using Spectre.Console;
+using System.IO;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using Spectre.Console;
 
 namespace ETL_SQL.App
 {
@@ -80,7 +80,7 @@ namespace ETL_SQL.App
         {
             Description = "Update the local appsettings.json file with the new secret."
         };
-        
+
         private static readonly Argument<string> RunScriptArg = new("script")
         {
             Description = "The ETL-SQL script to execute."
@@ -233,7 +233,7 @@ namespace ETL_SQL.App
             uiCommand.Add(simpleSubcommand);
             uiCommand.Add(editSubcommand);
             uiCommand.Add(oldSubcommand);
-            
+
             // 7. DOCTOR Command (Health Check)
             var doctorCommand = new Command("doctor", "Perform a system health check to verify the environment")
             {
@@ -361,8 +361,8 @@ namespace ETL_SQL.App
                 var scriptInput = res.GetValue(ServeScriptArg);
                 if (!string.IsNullOrWhiteSpace(scriptInput))
                     cliContext.ScriptFile = new FileInfo(scriptInput.Trim('"', '\'', ' '));
-                cliContext.ServeManifest  = res.GetValue(ServeManifestOption);
-                cliContext.ServePort      = res.GetValue(ServePortOption);
+                cliContext.ServeManifest = res.GetValue(ServeManifestOption);
+                cliContext.ServePort = res.GetValue(ServePortOption);
                 cliContext.ServeNoBrowser = res.GetValue(ServeNoBrowserOption);
             }
             else if (commandName == "doctor")
@@ -425,7 +425,7 @@ namespace ETL_SQL.App
             AnsiConsole.Write(new FigletText("ETL-SQL").Centered().Color(Color.DeepSkyBlue1));
             AnsiConsole.Write(new Rule("[yellow]ETL-SQL Engine CLI Subcommands[/]").RuleStyle("grey"));
             Console.WriteLine();
-            
+
             var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey);
             table.AddColumn("[bold yellow]Command[/]");
             table.AddColumn("[bold white]Description[/]");

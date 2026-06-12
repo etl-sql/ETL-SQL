@@ -163,16 +163,16 @@ namespace ETL_SQL.Engine.Handlers
             foreach (var e in entries)
             {
                 var row = new Row();
-                row["Id"]           = e.Id;
-                row["RunAt"]        = e.RunAt;
-                row["JobName"]      = e.JobName;
-                row["TargetTable"]  = e.TargetTable;
+                row["Id"] = e.Id;
+                row["RunAt"] = e.RunAt;
+                row["JobName"] = e.JobName;
+                row["TargetTable"] = e.TargetTable;
                 row["TargetColumn"] = e.TargetColumn;
                 row["SourceTables"] = string.Join(", ", e.SourceTables);
-                row["Operation"]    = e.Operation;
-                row["Tags"]         = System.Text.Json.JsonSerializer.Serialize(e.Tags);
-                row["SourceFile"]   = e.SourceFile;
-                row["Line"]         = e.Line;
+                row["Operation"] = e.Operation;
+                row["Tags"] = System.Text.Json.JsonSerializer.Serialize(e.Tags);
+                row["SourceFile"] = e.SourceFile;
+                row["Line"] = e.Line;
                 await table.AddRowAsync(row);
             }
             return table;

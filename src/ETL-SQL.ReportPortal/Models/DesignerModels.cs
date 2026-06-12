@@ -9,7 +9,7 @@ public record GenerateDesignerRequest(DesignerStateDto DesignState);
 public record GenerateDesignerResponse(string Script);
 
 public record DesignerStateDto(
-    List<DesignerPageDto>    Pages,
+    List<DesignerPageDto> Pages,
     List<DesignerDatasetDto> Datasets);
 
 public record DesignerPageDto(
@@ -22,10 +22,10 @@ public record DesignerVisualDto(
     string Id,
     string Name,
     string Type,
-    int    GridCol,
-    int    GridRow,
-    int    GridColSpan,
-    int    GridRowSpan,
+    int GridCol,
+    int GridRow,
+    int GridColSpan,
+    int GridRowSpan,
     string? Title,
     string? Dataset,
     Dictionary<string, string> Mappings,

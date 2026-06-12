@@ -1,11 +1,11 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.Common;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -18,12 +18,12 @@ namespace ETL_SQL.Tests.Statements
                            VALUES (1, 101, '2024-01-01'), 
                                   (2, 102, '2024-01-02'), 
                                   (3, 103, '2024-01-03');";
-            
+
             var lexer = new Lexer(source);
             var tokens = lexer.Tokenize();
             var parser = new ETL_SQL.Core.Parser.Parser(tokens);
             var script = parser.Parse();
-            
+
             Assert.Empty(script.Diagnostics);
             Assert.Single(script.Statements);
             var insert = Assert.IsType<InsertStatement>(script.Statements[0]);
@@ -37,12 +37,12 @@ namespace ETL_SQL.Tests.Statements
             var source = @"INSERT INTO Orders (OrderId) 
                            VALUES (1), (2) 
                            VALUES (3), (4);";
-            
+
             var lexer = new Lexer(source);
             var tokens = lexer.Tokenize();
             var parser = new ETL_SQL.Core.Parser.Parser(tokens);
             var script = parser.Parse();
-            
+
             Assert.Empty(script.Diagnostics);
             Assert.Single(script.Statements);
             var insert = Assert.IsType<InsertStatement>(script.Statements[0]);
@@ -54,12 +54,12 @@ namespace ETL_SQL.Tests.Statements
         {
             var source = @"WITH SourceData AS (SELECT 1 AS ID)
                            INSERT INTO Orders (OrderId) SELECT ID FROM SourceData;";
-            
+
             var lexer = new Lexer(source);
             var tokens = lexer.Tokenize();
             var parser = new ETL_SQL.Core.Parser.Parser(tokens);
             var script = parser.Parse();
-            
+
             Assert.Empty(script.Diagnostics);
             Assert.Single(script.Statements);
             var insert = Assert.IsType<InsertStatement>(script.Statements[0]);
@@ -73,11 +73,11 @@ namespace ETL_SQL.Tests.Statements
         {
             // Testing the exact string from TODO #3
             var source = "INSERT INTO (OrderId, UserId, OrderDate) VALUES (1, 101, '2024-01-01'), (2, 102, '2024-01-02'), (3, 103, '2024-01-03');";
-            
+
             var lexer = new Lexer(source);
             var tokens = lexer.Tokenize();
             var parser = new ETL_SQL.Core.Parser.Parser(tokens);
-            
+
             // This should throw or have diagnostics because 'Orders' is missing
             var script = parser.Parse();
             Assert.NotEmpty(script.Diagnostics);

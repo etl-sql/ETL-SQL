@@ -1,7 +1,7 @@
-using Xunit;
 using System.Collections.Generic;
 using ETL_SQL.Core;
 using ETL_SQL.TUI.UI;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {

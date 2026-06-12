@@ -5,8 +5,8 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
 using ETL_SQL.Engine.Storage;
 
 namespace ETL_SQL.Engine.Handlers
@@ -63,8 +63,8 @@ namespace ETL_SQL.Engine.Handlers
                 // Ensure temp table exists if it starts with #
                 if (stmt.Target.TableName.StartsWith("#") && !context.Connections.ContainsKey(stmt.Target.TableName))
                 {
-                    context.Connections[stmt.Target.TableName] = new InMemoryDataSource 
-                    { 
+                    context.Connections[stmt.Target.TableName] = new InMemoryDataSource
+                    {
                         Validator = context as IDataValidator,
                         ExecutionContext = context,
                         MaxInMemoryBatches = context.MaxInMemoryBatches
@@ -88,7 +88,7 @@ namespace ETL_SQL.Engine.Handlers
 
             int currentBatchCount = 0;
             int totalWritten = 0;
-            
+
             foreach (var rowDict in generatedRows)
             {
                 var row = batch.NewRow();
@@ -116,7 +116,7 @@ namespace ETL_SQL.Engine.Handlers
 
             context.Telemetry.RowsProcessed += totalWritten;
             context.IncrementOperationCount(OperationType.MockData, count: totalWritten);
-            
+
             _logger.Info("Generated {RowCount} rows into {Target}", totalWritten, stmt.Target.TableName);
         }
     }

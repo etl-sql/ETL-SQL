@@ -9,7 +9,7 @@ public enum SubscriptionDeliveryOutcome { Delivered, Denied, Failed, Skipped }
 
 public sealed record SubscriptionDeliveryResult(SubscriptionDeliveryOutcome Outcome, string? Reason)
 {
-    public static SubscriptionDeliveryResult Delivered()           => new(SubscriptionDeliveryOutcome.Delivered, null);
+    public static SubscriptionDeliveryResult Delivered() => new(SubscriptionDeliveryOutcome.Delivered, null);
     public static SubscriptionDeliveryResult Denied(string reason) => new(SubscriptionDeliveryOutcome.Denied, reason);
     public static SubscriptionDeliveryResult Failed(string reason) => new(SubscriptionDeliveryOutcome.Failed, reason);
     public static SubscriptionDeliveryResult Skipped(string reason) => new(SubscriptionDeliveryOutcome.Skipped, reason);
@@ -126,7 +126,7 @@ public class SubscriptionDeliveryService(
                 return await RecordFailureAsync(sub, Sanitize(error, smtpPassword), ct);
 
             sub.LastSentAt = DateTime.UtcNow;
-            sub.FailCount  = 0;
+            sub.FailCount = 0;
             await db.SaveChangesAsync(ct);
             await audit.LogAsync(sub.UserId, "SUBSCRIPTION_DELIVERED", "Subscription",
                 sub.Id.ToString(), $"Report {sub.ReportId} ({sub.Format}) to {sub.Recipients}");
@@ -208,9 +208,9 @@ public class SubscriptionDeliveryService(
         {
             var (ext, formatName) = sub.Format switch
             {
-                SubscriptionFormat.CSV      => ("csv", "CSV"),
+                SubscriptionFormat.CSV => ("csv", "CSV"),
                 SubscriptionFormat.Markdown => ("md", "MARKDOWN"),
-                _                           => ("pdf", "PDF")
+                _ => ("pdf", "PDF")
             };
             exportPath = Path.Combine(Path.GetTempPath(), $"sub_{sub.Id}_{Guid.NewGuid():N}.{ext}");
 

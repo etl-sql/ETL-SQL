@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine
 {
@@ -20,16 +20,16 @@ namespace ETL_SQL.Engine
             return await EvaluateValue(expr, context ?? new Row(), decryptSensitive);
         }
 
-        public ValueTask<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false) 
+        public ValueTask<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false)
             => _expressionEvaluator.Evaluate(expr, context, decryptSensitive);
-            
-        public IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context) 
+
+        public IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context)
             => _expressionEvaluator.EvaluateStream(expr, context);
-            
-        public CompiledSql CompileExpression(Expression e, string d = "MSSQL") 
+
+        public CompiledSql CompileExpression(Expression e, string d = "MSSQL")
             => _queryCompiler.CompileExpression(e, d);
-            
-        public CompiledSql CompileQuery(Statement s, string d = "MSSQL") 
+
+        public CompiledSql CompileQuery(Statement s, string d = "MSSQL")
             => _queryCompiler.CompileQuery(s, d);
 
         public string GetSqlTableName(TableReference t, string dialect = "MSSQL")
@@ -37,7 +37,7 @@ namespace ETL_SQL.Engine
             var parts = new List<string>();
             if (t.DatabaseName != null) parts.Add(t.DatabaseName);
             if (t.SchemaName != null) parts.Add(t.SchemaName);
-            
+
             if (t.TableName.Contains(".") && t.SchemaName == null)
             {
                 parts.AddRange(t.TableName.Split('.'));
@@ -57,7 +57,7 @@ namespace ETL_SQL.Engine
             return string.Join(".", parts.Select(quote));
         }
 
-        private static string QuoteIdentifierMssql(string s) => 
+        private static string QuoteIdentifierMssql(string s) =>
             s.StartsWith("[") ? s : $"[{s.Replace("]", "]]")}]";
 
         private static string QuoteIdentifierStandard(string s)
@@ -120,10 +120,10 @@ namespace ETL_SQL.Engine
         }
 
         public object? CastToType(object? value, string dataType) => _expressionEvaluator.CastToType(value, dataType);
-        public bool IsSqlPushdown(string conn) 
-            => !string.Equals(conn, "DUAL", StringComparison.OrdinalIgnoreCase) 
-               && _connections.TryGetValue(conn, out var ds) 
-               && ds is IDatabaseSource db 
+        public bool IsSqlPushdown(string conn)
+            => !string.Equals(conn, "DUAL", StringComparison.OrdinalIgnoreCase)
+               && _connections.TryGetValue(conn, out var ds)
+               && ds is IDatabaseSource db
                && db.SupportsSqlPushdown;
     }
 }

@@ -1,19 +1,19 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.IO;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.App;
-using ETL_SQL.Engine.Services;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Tests.Core;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Data;
-using ETL_SQL.Services;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
+using ETL_SQL.Services;
+using ETL_SQL.Tests.Core;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {

@@ -1,9 +1,9 @@
 using System;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -24,7 +24,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (TryCatchStatement)statement;
-            
+
             _logger.Debug("Entering TRY block");
             try
             {
@@ -33,7 +33,7 @@ namespace ETL_SQL.Engine.Handlers
             catch (Exception ex) when (ex is not BreakException && ex is not ContinueException && ex is not ReturnException && ex is not GotoException)
             {
                 _logger.Debug("Exception caught in TRY block: {Message}", ex.Message);
-                
+
                 int number = 50000;
                 int severity = 16;
                 int state = 1;

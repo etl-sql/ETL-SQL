@@ -1,13 +1,13 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Linq;
-using ETL_SQL.Core;
+using System.Threading.Tasks;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration
 {
@@ -138,7 +138,7 @@ namespace ETL_SQL.Tests.Integration
                         Assert.NotNull(res);
                         Assert.Single(res.Rows);
                         Assert.Equal(1, Convert.ToInt32(res.Rows[0]["VAL"]));
-                        
+
                         return; // Success
                     }
                     catch (Exception e)
@@ -161,7 +161,7 @@ namespace ETL_SQL.Tests.Integration
         [Fact]
         public async Task TestVariableConnectionTarget()
         {
-             var sql = @"
+            var sql = @"
                 DECLARE @path varchar(200) = 'test_var.csv';
                 CREATE CONNECTION ds AS FLATFILE(@path);
                 SELECT 100 AS ID, 'VarTest' AS Name INTO #t;

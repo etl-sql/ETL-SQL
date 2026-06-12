@@ -1,14 +1,13 @@
-using ETL_SQL.Core;
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
-
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using ETL_SQL.App;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
-using System.Threading.Tasks;
-using System.Linq;
-using System.Collections.Generic;
-using System;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -40,7 +39,7 @@ namespace ETL_SQL.Tests.Statements
             ";
 
             await evaluator.Evaluate(new Lexer(script).TokenizeToScript());
-            
+
             var auditTable = evaluator.LastResult;
             Assert.NotNull(auditTable);
             Assert.Equal(2, auditTable.Rows.Count);

@@ -1,9 +1,9 @@
-using ETL_SQL.Common;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -60,13 +60,13 @@ namespace ETL_SQL.Engine.Handlers
                     _logger.WriteLine(helpText ?? "List of connection types not found.");
                     return;
                 }
-                
+
                 var connector = _connectorRegistry.GetConnector(subTopic);
                 if (connector != null)
                 {
                     _logger.WriteLine($"HELP: CONNECTION {connector.Name}", ConsoleColor.Cyan);
                     _logger.WriteLine(connector.GetHelp());
-                    
+
                     var options = connector.GetSupportedOptions();
                     if (options.Any())
                     {
@@ -160,7 +160,7 @@ namespace ETL_SQL.Engine.Handlers
                 _logger.WriteLine(help);
                 return;
             }
-            
+
             // 8. Shorthand Fallback (e.g. HELP BAR or HELP MSSQL)
             if (string.IsNullOrEmpty(subTopic))
             {
@@ -175,7 +175,7 @@ namespace ETL_SQL.Engine.Handlers
                         return;
                     }
                 }
-                
+
                 // Try direct topic search in registry (for things like DECLARE, SET, etc.)
                 var directHelp = context.LanguageHelp.GetHelp(topic);
                 if (directHelp != null)

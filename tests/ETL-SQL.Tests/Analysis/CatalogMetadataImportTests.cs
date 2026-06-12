@@ -3,14 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
-using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.App;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis
 {
@@ -192,9 +192,9 @@ namespace ETL_SQL.Tests.Analysis
         {
             var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["db_type"]     = col.DataType,
+                ["db_type"] = col.DataType,
                 ["db_nullable"] = col.IsNullable ? "true" : "false",
-                ["db_is_pk"]    = col.IsPrimaryKey ? "true" : "false",
+                ["db_is_pk"] = col.IsPrimaryKey ? "true" : "false",
             };
             if (!string.IsNullOrEmpty(col.Description))
                 meta["d"] = col.Description;   // column comment → lineage description

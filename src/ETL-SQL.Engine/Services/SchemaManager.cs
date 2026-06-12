@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Services
 {
@@ -44,7 +44,7 @@ namespace ETL_SQL.Engine.Services
                 if (connections.TryGetValue(connName, out var conn) && conn is IDatabaseSource sqlConn)
                 {
                     var cols = stmt.Columns.Select(c => $"{c.ColumnName} {c.DataType}{(c.IsIdentity ? " IDENTITY" : "")}{(c.DefaultExpression != null ? $" DEFAULT {c.DefaultExpression.ToSql()}" : "")}");
-                    await foreach(var _ in sqlConn.ExecuteRawSql($"CREATE TABLE {_evaluator.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)} (\n  {string.Join(",\n  ", cols)}\n);")){}
+                    await foreach (var _ in sqlConn.ExecuteRawSql($"CREATE TABLE {_evaluator.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)} (\n  {string.Join(",\n  ", cols)}\n);")) { }
                 }
             }
         }
@@ -75,7 +75,7 @@ namespace ETL_SQL.Engine.Services
                 if (conn is IDatabaseSource sqlConn)
                 {
                     var ifExists = stmt.IfExists ? "IF EXISTS " : "";
-                    await foreach(var _ in sqlConn.ExecuteRawSql($"DROP TABLE {ifExists}{_evaluator.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)};")){}
+                    await foreach (var _ in sqlConn.ExecuteRawSql($"DROP TABLE {ifExists}{_evaluator.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)};")) { }
                 }
                 else
                 {
@@ -155,7 +155,7 @@ namespace ETL_SQL.Engine.Services
                 else if (connection is IDatabaseSource sqlConn)
                 {
                     var ifExists = stmt.IfExists ? "IF EXISTS " : "";
-                    await foreach(var _ in sqlConn.ExecuteRawSql($"DROP INDEX {ifExists}{stmt.IndexName} ON {_evaluator.GetSqlTableName(stmt.Table, sqlConn.Dialect)};")){}
+                    await foreach (var _ in sqlConn.ExecuteRawSql($"DROP INDEX {ifExists}{stmt.IndexName} ON {_evaluator.GetSqlTableName(stmt.Table, sqlConn.Dialect)};")) { }
                 }
             }
             else
@@ -177,7 +177,7 @@ namespace ETL_SQL.Engine.Services
                             continue;
                         }
                         var ifExists = stmt.IfExists ? "IF EXISTS " : "";
-                        await foreach (var _ in sqlConn.ExecuteRawSql($"DROP INDEX {ifExists}{stmt.IndexName};")) {}
+                        await foreach (var _ in sqlConn.ExecuteRawSql($"DROP INDEX {ifExists}{stmt.IndexName};")) { }
                         executedAny = true;
                     }
                 }
@@ -194,7 +194,7 @@ namespace ETL_SQL.Engine.Services
         {
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
             if (!connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown connection: {connName}");
-            
+
             if (_evaluator.IsWhatIf)
             {
                 _logger.WriteLine($"WHAT IF: Would create index {stmt.IndexName} on {connName} ({string.Join(", ", stmt.Columns)})", ConsoleColor.Yellow);

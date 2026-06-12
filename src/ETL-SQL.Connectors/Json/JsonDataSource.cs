@@ -1,15 +1,15 @@
 using System;
-using System.IO;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
-using System.IO.Compression;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Json
 {
@@ -31,7 +31,7 @@ namespace ETL_SQL.Connectors.Json
 
         public string Path => _filePath;
         public Dictionary<string, string>? Options => _options;
-        
+
         public IDataSource WithTable(string tableName) => this;
         public string ConnectorType => "JSON";
         public object? Snapshot() => null;
@@ -42,7 +42,7 @@ namespace ETL_SQL.Connectors.Json
             _context = context;
             _logger = context.Logger;
             _filePath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
-            
+
             // Security Hardening: Defense in depth
             context.SecurityService.ValidatePath(_filePath);
             context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
@@ -64,7 +64,7 @@ namespace ETL_SQL.Connectors.Json
                 }
                 if (options.TryGetValue("TRIM", out var tr)) _trim = tr.ToUpperInvariant() == "ON" || tr.ToUpperInvariant() == "TRUE";
             }
-            
+
             _encryption = new EncryptionOptions(options);
         }
 

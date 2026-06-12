@@ -1,15 +1,15 @@
+using System.Security.Cryptography;
+using System.Text;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors;
+using ETL_SQL.Core;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
-using ETL_SQL.Core;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Xunit;
-using System.Text;
-using System.Security.Cryptography;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -24,7 +24,7 @@ namespace ETL_SQL.Tests.Hardening
 
             // Act
             string encrypted = CryptoUtils.Encrypt(plainText, password);
-            
+
             // Assert
             Assert.StartsWith("ENC:", encrypted);
             byte[] fullBytes = Convert.FromBase64String(encrypted.Substring(4));
@@ -65,12 +65,12 @@ namespace ETL_SQL.Tests.Hardening
             // Arrange
             var logger = new Mock<ILogger>();
             var security = new SecurityService(logger.Object);
-            
+
             string sessionId = "test-session-" + Guid.NewGuid();
             string testDir = Path.Combine(Path.GetTempPath(), "ETL-SQL-Tests", sessionId);
             Directory.CreateDirectory(testDir);
-            
-            try 
+
+            try
             {
                 var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
                 var mgr = new SessionStateManager(logger.Object, security, config, testDir);

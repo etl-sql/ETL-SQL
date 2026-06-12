@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -19,7 +19,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ShowTablesStatement)statement;
-            
+
             var table = new DataTable();
             table.AddColumn("TableName");
             table.AddColumn("Type");

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using Microsoft.Extensions.Configuration;
 using ETL_SQL.Services;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Common
 {
@@ -45,7 +45,7 @@ namespace ETL_SQL.Common
             public override void Load()
             {
                 var machineKey = SecurityService.GetMachineKey();
-                
+
                 foreach (var pair in _existingConfig.AsEnumerable())
                 {
                     if (pair.Value != null && pair.Value.StartsWith("ENC:"))

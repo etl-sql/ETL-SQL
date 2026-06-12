@@ -1,12 +1,12 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Functions;
-using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Functions.Functions
 {

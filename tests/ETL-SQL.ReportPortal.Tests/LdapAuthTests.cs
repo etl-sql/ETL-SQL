@@ -5,14 +5,14 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Models;
+using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.EntityFrameworkCore;
 using Xunit;
-using ETL_SQL.ReportPortal.Data;
-using ETL_SQL.ReportPortal.Services;
-using ETL_SQL.ReportPortal.Models;
 
 namespace ETL_SQL.ReportPortal.Tests
 {
@@ -43,7 +43,7 @@ namespace ETL_SQL.ReportPortal.Tests
 
                     // Re-register PortalConfig with LDAP enabled
                     services.RemoveAll<PortalConfig>();
-                    
+
                     var dbPath = System.IO.Path.Combine(TempDir, "portal.db");
                     var scriptRoot = System.IO.Path.Combine(TempDir, "scripts");
                     var snapshotDir = System.IO.Path.Combine(TempDir, "snapshots");
@@ -54,14 +54,14 @@ namespace ETL_SQL.ReportPortal.Tests
 
                     var cfg = new PortalConfig
                     {
-                        DatabasePath      = dbPath,
-                        ScriptRootPath    = scriptRoot,
+                        DatabasePath = dbPath,
+                        ScriptRootPath = scriptRoot,
                         SnapshotDirectory = snapshotDir,
-                        MapRootPath       = mapRoot,
-                        DatasetRootPath   = datasetRoot,
+                        MapRootPath = mapRoot,
+                        DatasetRootPath = datasetRoot,
                         Jwt = new JwtConfig { Secret = jwtSecret, ExpiryMinutes = 60, RefreshExpiryDays = 7 },
-                        FirstRun          = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
-                        Orchestrator      = new OrchestratorConfig { DatabasePath = orchDbPath },
+                        FirstRun = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
+                        Orchestrator = new OrchestratorConfig { DatabasePath = orchDbPath },
                         Identity = new IdentityConfig
                         {
                             Provider = "Local",
@@ -120,7 +120,7 @@ namespace ETL_SQL.ReportPortal.Tests
                 cpReq.Content = JsonContent.Create(new
                 {
                     currentPassword = "Admin@12345!",
-                    newPassword     = "Admin@Tests99!"
+                    newPassword = "Admin@Tests99!"
                 });
                 (await _client.SendAsync(cpReq)).EnsureSuccessStatusCode();
 
@@ -178,7 +178,7 @@ namespace ETL_SQL.ReportPortal.Tests
             using (var scope = _factory.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-                
+
                 // Mapped group via AdGroup
                 db.Groups.Add(new Group
                 {
@@ -331,7 +331,7 @@ namespace ETL_SQL.ReportPortal.Tests
         {
             var suffix = Guid.NewGuid().ToString("N")[..8];
             var username = $"ldappw_{suffix}";
-            
+
             _factory.MockLdap.AuthenticateFunc = (u, p) => new LdapUserResult
             {
                 Username = username,
@@ -397,7 +397,7 @@ namespace ETL_SQL.ReportPortal.Tests
             using (var scope = _factory.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-                
+
                 var user = await db.Users.FirstOrDefaultAsync(u => u.UserName == $"new_ldap_{suffix}");
                 Assert.NotNull(user);
                 Assert.Equal("LDAP", user.Provider);

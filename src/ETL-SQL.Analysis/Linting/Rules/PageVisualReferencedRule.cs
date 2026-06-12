@@ -13,14 +13,14 @@ namespace ETL_SQL.Analysis.Linting.Rules
     /// </summary>
     public class PageVisualReferencedRule : ILintRule
     {
-        public string Name        => "PageVisualReferenced";
+        public string Name => "PageVisualReferenced";
         public string Description => "Warns when CREATE PAGE MAP slots and STRUCTURE letters are inconsistent, or a referenced visual is not defined.";
 
         private static readonly Regex _slotLetters = new(@"[A-Za-z]+", RegexOptions.Compiled);
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {
-            var results     = new List<LintResult>();
+            var results = new List<LintResult>();
             var objectNames = new HashSet<string>(
                 script.Statements.OfType<CreateVisualStatement>().Select(v => v.Name)
                 .Concat(script.Statements.OfType<CreateContainerStatement>().Select(c => c.Name))
@@ -38,10 +38,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
                     if (!objectNames.Contains(objectName))
                         results.Add(new LintResult
                         {
-                            RuleName     = Name,
-                            Severity     = LintSeverity.Warning,
-                            Message      = $"Page '{page.Name}': slot '{slot}' references object '{objectName}' which is not defined in this script.",
-                            LineNumber   = page.Line,
+                            RuleName = Name,
+                            Severity = LintSeverity.Warning,
+                            Message = $"Page '{page.Name}': slot '{slot}' references object '{objectName}' which is not defined in this script.",
+                            LineNumber = page.Line,
                             ColumnNumber = page.Column
                         });
                 }
@@ -56,20 +56,20 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 foreach (var letter in structureSlots.Where(s => !mapKeys.Contains(s)))
                     results.Add(new LintResult
                     {
-                        RuleName     = Name,
-                        Severity     = LintSeverity.Warning,
-                        Message      = $"Page '{page.Name}': STRUCTURE slot '{letter}' has no entry in MAP.",
-                        LineNumber   = page.Line,
+                        RuleName = Name,
+                        Severity = LintSeverity.Warning,
+                        Message = $"Page '{page.Name}': STRUCTURE slot '{letter}' has no entry in MAP.",
+                        LineNumber = page.Line,
                         ColumnNumber = page.Column
                     });
 
                 foreach (var key in mapKeys.Where(k => !structureSlots.Contains(k)))
                     results.Add(new LintResult
                     {
-                        RuleName     = Name,
-                        Severity     = LintSeverity.Warning,
-                        Message      = $"Page '{page.Name}': MAP key '{key}' does not appear in STRUCTURE.",
-                        LineNumber   = page.Line,
+                        RuleName = Name,
+                        Severity = LintSeverity.Warning,
+                        Message = $"Page '{page.Name}': MAP key '{key}' does not appear in STRUCTURE.",
+                        LineNumber = page.Line,
                         ColumnNumber = page.Column
                     });
             }

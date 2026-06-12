@@ -20,12 +20,12 @@ namespace ETL_SQL.Reporting.Renderers
         private static readonly Dictionary<string, string> BuiltinMapKeys =
             new(StringComparer.OrdinalIgnoreCase)
             {
-                ["WORLD"]             = "world",
-                ["US_STATES"]         = "us-states",
-                ["US_COUNTIES"]       = "us-counties",
-                ["MN_COUNTIES"]       = "mn-counties",
-                ["CANADA_PROVINCES"]  = "canada-provinces",
-                ["EUROPE"]            = "europe",
+                ["WORLD"] = "world",
+                ["US_STATES"] = "us-states",
+                ["US_COUNTIES"] = "us-counties",
+                ["MN_COUNTIES"] = "mn-counties",
+                ["CANADA_PROVINCES"] = "canada-provinces",
+                ["EUROPE"] = "europe",
             };
 
         public string RenderMap(VisualManifest v)
@@ -40,39 +40,39 @@ namespace ETL_SQL.Reporting.Renderers
 
         private string RenderChoropleth(VisualManifest v)
         {
-            var mapKey  = ResolveMapKey(v);
+            var mapKey = ResolveMapKey(v);
             var matchBy = (v.Options.GetValueOrDefault("MATCH_BY") ?? "NAME").ToUpperInvariant();
 
             var regionCol = FindRole(v, "region") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
-            var valueCol  = FindRole(v, "value")  ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var valueCol = FindRole(v, "value") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
 
             int ri = regionCol != null ? v.Columns.FindIndex(c => string.Equals(c, regionCol, StringComparison.OrdinalIgnoreCase)) : 0;
-            int vi = valueCol  != null ? v.Columns.FindIndex(c => string.Equals(c, valueCol,  StringComparison.OrdinalIgnoreCase)) : 1;
+            int vi = valueCol != null ? v.Columns.FindIndex(c => string.Equals(c, valueCol, StringComparison.OrdinalIgnoreCase)) : 1;
 
             var data = v.Rows.Select(r =>
             {
                 var region = ri >= 0 && ri < r.Count ? r[ri] ?? "" : "";
-                var num    = vi >= 0 && vi < r.Count ? ToDouble(r[vi]) : null;
+                var num = vi >= 0 && vi < r.Count ? ToDouble(r[vi]) : null;
                 return (object)new { name = region, value = num };
             }).ToList();
 
             var (minVal, maxVal) = DataRange(v, vi);
-            var colorLow  = v.Options.GetValueOrDefault("COLOR_LOW")  ?? "#e0f3f8";
+            var colorLow = v.Options.GetValueOrDefault("COLOR_LOW") ?? "#e0f3f8";
             var colorHigh = v.Options.GetValueOrDefault("COLOR_HIGH") ?? "#08306b";
             var showLabels = IsOn(v.Options.GetValueOrDefault("SHOW_LABELS"));
 
             var option = new Dictionary<string, object?>
             {
-                ["title"]     = TitleOpt(v),
-                ["tooltip"]   = new { trigger = "item", formatter = "{b}<br/>{c}" },
+                ["title"] = TitleOpt(v),
+                ["tooltip"] = new { trigger = "item", formatter = "{b}<br/>{c}" },
                 ["visualMap"] = new
                 {
-                    min        = minVal,
-                    max        = maxVal,
-                    left       = "right",
+                    min = minVal,
+                    max = maxVal,
+                    left = "right",
                     calculable = true,
-                    realtime   = false,
-                    inRange    = new { color = new[] { colorLow, colorHigh } }
+                    realtime = false,
+                    inRange = new { color = new[] { colorLow, colorHigh } }
                 },
                 ["series"] = new[]
                 {
@@ -89,7 +89,7 @@ namespace ETL_SQL.Reporting.Renderers
                 },
                 // Signal client to fetch + register the GeoJSON before echarts.init().
                 // __matchBy tells the client whether region values are names or FIPS ids.
-                ["__mapKey"]  = mapKey,
+                ["__mapKey"] = mapKey,
                 ["__matchBy"] = matchBy,
             };
 
@@ -103,14 +103,14 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var mapKey = ResolveMapKey(v);
 
-            var lonCol   = FindRole(v, "lon")   ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
-            var latCol   = FindRole(v, "lat")   ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var lonCol = FindRole(v, "lon") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var latCol = FindRole(v, "lat") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
             var valueCol = FindRole(v, "value") ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
             var labelCol = FindRole(v, "label") ?? (v.Columns.Count > 3 ? v.Columns[3] : null);
 
-            int loni  = ColIdx(v, lonCol);
-            int lati  = ColIdx(v, latCol);
-            int vi    = ColIdx(v, valueCol);
+            int loni = ColIdx(v, lonCol);
+            int lati = ColIdx(v, latCol);
+            int vi = ColIdx(v, valueCol);
             int labli = ColIdx(v, labelCol);
 
             double maxSize = vi >= 0
@@ -120,36 +120,36 @@ namespace ETL_SQL.Reporting.Renderers
 
             var data = v.Rows.Select(r =>
             {
-                double lon   = ToDouble(loni  >= 0 && loni  < r.Count ? r[loni]  : null) ?? 0.0;
-                double lat   = ToDouble(lati  >= 0 && lati  < r.Count ? r[lati]  : null) ?? 0.0;
-                double raw   = vi    >= 0 && vi    < r.Count ? ToDouble(r[vi])    ?? 0.0 : 0.0;
-                double sized = vi    >= 0 ? raw / maxSize * 40 + 5 : 10.0;
+                double lon = ToDouble(loni >= 0 && loni < r.Count ? r[loni] : null) ?? 0.0;
+                double lat = ToDouble(lati >= 0 && lati < r.Count ? r[lati] : null) ?? 0.0;
+                double raw = vi >= 0 && vi < r.Count ? ToDouble(r[vi]) ?? 0.0 : 0.0;
+                double sized = vi >= 0 ? raw / maxSize * 40 + 5 : 10.0;
                 string label = labli >= 0 && labli < r.Count ? r[labli] ?? "" : "";
                 return (object)new { value = new object[] { lon, lat, sized, raw }, name = label };
             }).ToList();
 
             var (minVal, maxVal) = DataRange(v, vi);
-            var colorLow  = v.Options.GetValueOrDefault("COLOR_LOW")  ?? "#e0f3f8";
+            var colorLow = v.Options.GetValueOrDefault("COLOR_LOW") ?? "#e0f3f8";
             var colorHigh = v.Options.GetValueOrDefault("COLOR_HIGH") ?? "#08306b";
 
             var option = new Dictionary<string, object?>
             {
-                ["title"]   = TitleOpt(v),
+                ["title"] = TitleOpt(v),
                 ["tooltip"] = new { trigger = "item", formatter = "{b}: {c}" },
-                ["geo"]     = new
+                ["geo"] = new
                 {
-                    map  = mapKey,
+                    map = mapKey,
                     roam = true,
                     label = new { show = false },
                     itemStyle = new { areaColor = "#f3f4f6", borderColor = "#d1d5db" }
                 },
                 ["visualMap"] = new
                 {
-                    min        = minVal,
-                    max        = maxVal,
-                    left       = "right",
+                    min = minVal,
+                    max = maxVal,
+                    left = "right",
                     calculable = true,
-                    inRange    = new { color = new[] { colorLow, colorHigh } }
+                    inRange = new { color = new[] { colorLow, colorHigh } }
                 },
                 ["series"] = new[]
                 {

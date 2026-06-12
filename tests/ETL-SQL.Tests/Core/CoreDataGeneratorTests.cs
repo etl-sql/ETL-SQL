@@ -1,8 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
-using Xunit;
 using ETL_SQL;
+using Xunit;
 
 namespace ETL_SQL.Tests.Core.Core
 {

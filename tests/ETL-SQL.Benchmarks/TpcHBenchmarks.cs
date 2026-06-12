@@ -1,26 +1,26 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors;
+using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Metadata;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
-using ETL_SQL.Services;
-using ETL_SQL.Common;
 using ETL_SQL.Engine;
+using ETL_SQL.Engine.Functions;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Engine.Services;
-using ETL_SQL.Engine.Functions;
-using ETL_SQL.Connectors;
-using ETL_SQL.Connectors.MockDb;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 
 namespace ETL_SQL.Benchmarks
@@ -60,27 +60,27 @@ namespace ETL_SQL.Benchmarks
                 var security = new SecurityService(l) { IsTestMode = true };
                 var registry = new FunctionRegistry();
                 StandardFunctions.Register(registry);
-                
+
                 var tracker = new Mock<ILineageTracker>();
                 tracker.Setup(t => t.GlobalMetadata).Returns(new Dictionary<string, string>());
-                
+
                 var config = new ConfigurationBuilder()
                     .AddInMemoryCollection(new Dictionary<string, string?> { { "Session:PersistentSessionTTLHours", "1" } })
                     .Build();
-                
+
                 var tempSessionDir = Path.Combine(Path.GetTempPath(), "ETL-SQL-Benchmarks-" + Guid.NewGuid());
                 Directory.CreateDirectory(tempSessionDir);
-                
+
                 var sessions = new SessionStateManager(l, security, config, tempSessionDir);
                 var pushdown = new Mock<ExecutePushdownStatementHandler>(l);
                 var bufferManager = new Mock<IBufferManager>();
-                
+
                 var connectors = new ConnectorRegistry();
                 var tpcHSeeder = new TpcHMockDataSeeder(_scaleFactor);
                 connectors.Register(new TpcHMockConnector(tpcHSeeder));
 
                 var docker = new Mock<IDockerManager>();
-                
+
                 var handlers = new List<IStatementHandler>
                 {
                     new SelectStatementHandler(l),
@@ -97,7 +97,7 @@ namespace ETL_SQL.Benchmarks
                 services.AddSingleton(config);
                 services.AddSingleton(pushdown.Object);
                 services.AddSingleton(bufferManager.Object);
-                
+
                 var sp = services.BuildServiceProvider();
 
                 _evaluator = new Evaluator(handlers, sp, registry, tracker.Object, docker.Object, connectors, sessions, security, l, new LanguageHelpRegistry(), new EvaluatorComponentRegistry());
@@ -200,10 +200,10 @@ namespace ETL_SQL.Benchmarks
                     WHERE l_shipdate >= '1995-09-01'
                         AND l_shipdate < '1995-10-01';";
 
-                _q1Script  = new Parser(new Lexer(_q1).Tokenize()).Parse();
-                _q6Script  = new Parser(new Lexer(_q6).Tokenize()).Parse();
-                _q3Script  = new Parser(new Lexer(_q3).Tokenize()).Parse();
-                _q5Script  = new Parser(new Lexer(_q5).Tokenize()).Parse();
+                _q1Script = new Parser(new Lexer(_q1).Tokenize()).Parse();
+                _q6Script = new Parser(new Lexer(_q6).Tokenize()).Parse();
+                _q3Script = new Parser(new Lexer(_q3).Tokenize()).Parse();
+                _q5Script = new Parser(new Lexer(_q5).Tokenize()).Parse();
                 _q12Script = new Parser(new Lexer(_q12).Tokenize()).Parse();
                 _q14Script = new Parser(new Lexer(_q14).Tokenize()).Parse();
             }
@@ -280,20 +280,20 @@ namespace ETL_SQL.Benchmarks
         public Dictionary<string, string[]> GetSupportedOptions() => new();
         public Dictionary<string, string[]> GetOptionValues() => new();
         public string GetHelp() => "TPC-H Mock Connector";
-        
+
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
-             var ds = new ETL_SQL.Connectors.MockDb.MockSqlDataSource(context, connectionString, "MockDB", options, _seeder);
-             return new PushdownDisabledDataSource(ds);
+            var ds = new ETL_SQL.Connectors.MockDb.MockSqlDataSource(context, connectionString, "MockDB", options, _seeder);
+            return new PushdownDisabledDataSource(ds);
         }
-        
-        public async Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) 
+
+        public async Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString)
         {
             var ds = new ETL_SQL.Connectors.MockDb.MockSqlDataSource(context, connectionString, "MockDB", null, _seeder);
             return await ds.GetTablesAsync();
         }
         public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
-        public async Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) 
+        public async Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName)
         {
             var ds = new ETL_SQL.Connectors.MockDb.MockSqlDataSource(context, connectionString, "MockDB", null, _seeder);
             return await ds.GetColumnsAsync(tableName);
@@ -322,7 +322,7 @@ namespace ETL_SQL.Benchmarks
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) => _inner.ExecuteRawSql(sql, parameters);
         public object? Snapshot() => _inner.Snapshot();
         public void Restore(object? snapshot) => _inner.Restore(snapshot);
-        public IDataSource WithTable(string tableName) 
+        public IDataSource WithTable(string tableName)
         {
             var tableDs = _inner.WithTable(tableName);
             if (tableDs is IDatabaseSource dbDs) return new PushdownDisabledDataSource(dbDs);

@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.App;
+using Xunit;
 
 namespace ETL_SQL.Tests.Operations
 {
@@ -30,7 +30,7 @@ FOREACH @row IN (SELECT Id FROM remote.Users ORDER BY Id)
 BEGIN
     UPDATE remote.Users SET Name = 'Modified' WHERE Id = @row.Id;
 END";
-            
+
             var tokens = new Lexer(script).Tokenize();
             var program = new Parser(tokens).Parse();
             await e.Evaluate(program);
@@ -54,7 +54,7 @@ FOREACH @row IN (SELECT Id FROM remote.Users ORDER BY Id)
 BEGIN
     PRINT @row.Id;
 END";
-            
+
             var tokens = new Lexer(script).Tokenize();
             var program = new Parser(tokens).Parse();
             await e.Evaluate(program);
@@ -81,10 +81,10 @@ FOREACH @row IN (SELECT Id FROM remote.Users ORDER BY Id)
 BEGIN
     EXECUTE some_proc; 
 END";
-            
+
             var tokens = new Lexer(script).Tokenize();
             var program = new Parser(tokens).Parse();
-            
+
             // To avoid "Table not found" for other_table, we add it to mock connections
             e.Connections["other_table"] = mockDb;
 
@@ -110,7 +110,7 @@ END";
                 CapturedSql.Add(sql);
                 var dt = new DataTable();
                 dt.SetColumns(new[] { "Id" });
-                
+
                 if (sql.Trim().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
                 {
                     // Return 1 row for the first page, empty for subsequent pages to terminate loop
@@ -121,7 +121,7 @@ END";
                         await dt.AddRowAsync(r);
                     }
                 }
-                
+
                 yield return dt;
             }
 

@@ -1,7 +1,7 @@
-using Xunit;
 using System;
-using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
+using Xunit;
 
 namespace ETL_SQL.Tests.Core
 {
@@ -16,7 +16,7 @@ namespace ETL_SQL.Tests.Core
         public void TestSuccessfulCasts(object value, string typeName, object expected)
         {
             var result = TypeConverter.Cast(value, typeName);
-            
+
             if (typeName == "DATE")
             {
                 Assert.Equal(DateTime.Parse(expected.ToString()), (DateTime)result);

@@ -1,15 +1,15 @@
-using Xunit;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using Spectre.Console;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -46,7 +46,7 @@ namespace ETL_SQL.Tests.Statements
                 
                 CREATE INDEX idx_name ON #data (Name);
             ");
-            
+
             var results = await Query(eval, "SELECT * FROM #data WHERE Name = 'Bob'");
             Assert.Single(results);
             Assert.Single(results[0].Rows);
@@ -85,9 +85,9 @@ namespace ETL_SQL.Tests.Statements
 
             var results = await Query(eval, "SELECT * FROM #joined ORDER BY OrderID");
             var rows = results[0].Rows;
-            
+
             Assert.Equal(3, rows.Count);
-            
+
             var aliceOrders = rows.Where(r => r["USERNAME"]?.ToString() == "Alice").Select(r => Convert.ToInt32(r["ORDERID"])).ToList();
             var bobOrders = rows.Where(r => r["USERNAME"]?.ToString() == "Bob").Select(r => Convert.ToInt32(r["ORDERID"])).ToList();
 

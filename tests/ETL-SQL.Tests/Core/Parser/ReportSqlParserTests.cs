@@ -1,9 +1,9 @@
 using System;
 using System.Linq;
-using Xunit;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
+using Xunit;
 
 namespace ETL_SQL.Tests.Core.Parsing
 {
@@ -95,12 +95,12 @@ CREATE VISUAL LineChart AS LINE (
         }
 
         [Theory]
-        [InlineData("BAR",     VisualType.Bar)]
-        [InlineData("LINE",    VisualType.Line)]
+        [InlineData("BAR", VisualType.Bar)]
+        [InlineData("LINE", VisualType.Line)]
         [InlineData("SCATTER", VisualType.Scatter)]
-        [InlineData("PIE",     VisualType.Pie)]
-        [InlineData("CARD",    VisualType.Card)]
-        [InlineData("SLICER",  VisualType.Slicer)]
+        [InlineData("PIE", VisualType.Pie)]
+        [InlineData("CARD", VisualType.Card)]
+        [InlineData("SLICER", VisualType.Slicer)]
         public void ParseCreateVisual_AllVisualTypes_ParseCorrectly(string typeName, VisualType expected)
         {
             var sql = $"CREATE VISUAL V AS {typeName} (SOURCE = #t);";
@@ -499,13 +499,13 @@ CREATE CONTAINER FilterDrawer AS DRAWER (
 SET REPORT TITLE = 'Sales Dashboard';
 SET REPORT DESCRIPTION = 'Regional and product-level revenue by month.';";
             var script = Parse(sql);
-            
+
             var statements = script.Statements.OfType<SetReportMetadataStatement>().ToList();
             Assert.Equal(2, statements.Count);
-            
+
             Assert.Equal("TITLE", statements[0].Key);
             Assert.Equal("Sales Dashboard", statements[0].Value);
-            
+
             Assert.Equal("DESCRIPTION", statements[1].Key);
             Assert.Equal("Regional and product-level revenue by month.", statements[1].Value);
         }
@@ -740,7 +740,7 @@ CREATE VISUAL SalesPivot AS MATRIX (
 
             Assert.Equal(VisualType.Matrix, stmt.VisualType);
             Assert.Equal("revenue", stmt.Mappings.First(m => m.Role == "VALUE").Column);
-            Assert.Equal("units",   stmt.Mappings.First(m => m.Role == "VALUE2").Column);
+            Assert.Equal("units", stmt.Mappings.First(m => m.Role == "VALUE2").Column);
         }
 
         [Fact]

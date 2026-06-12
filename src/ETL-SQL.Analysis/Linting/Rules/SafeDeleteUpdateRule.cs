@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace ETL_SQL.Analysis.Linting.Rules
 {
@@ -43,7 +43,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                     ColumnNumber = update.Column
                 });
             }
-            
+
             // Recurse into blocks/conditionals
             if (statement is BlockStatement block)
             {

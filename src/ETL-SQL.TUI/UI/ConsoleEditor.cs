@@ -4,19 +4,19 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Spectre.Console;
-using ETL_SQL.Core;
-using ETL_SQL.Data;
-using ETL_SQL.Common;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Core.Formatting;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
-using ETL_SQL.Core.Common;
-using ETL_SQL.Services;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Formatting;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Services;
+using ETL_SQL.Data;
+using ETL_SQL.Services;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -216,8 +216,8 @@ namespace ETL_SQL.TUI.UI
             try
             {
                 // Perform a robust full-screen clear to purge artifacts from previous CLI statements
-                try 
-                { 
+                try
+                {
                     if (OperatingSystem.IsWindows() && !Console.IsOutputRedirected)
                     {
                         Console.BufferHeight = Console.WindowHeight;
@@ -232,10 +232,10 @@ namespace ETL_SQL.TUI.UI
                     if (!OperatingSystem.IsWindows())
                         AnsiConsole.Console.Write("\x1b[?1000h\x1b[?1006h");
                     AnsiConsole.Console.Write("\x1b[H\x1b[2J\x1b[3J");
-                    AnsiConsole.Console.Clear(); 
+                    AnsiConsole.Console.Clear();
                     AnsiConsole.Console.Cursor.SetPosition(1, 1);
                     _renderer.ForceFullRepaint();
-                } 
+                }
                 catch { }
 
                 // Silently restore the previous session (and offer crash recovery) before the loop.
@@ -728,7 +728,7 @@ namespace ETL_SQL.TUI.UI
         {
             _renderer.HelpVisible = true;
             _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
-            
+
             while (true)
             {
                 var keyOpt = await ReadKeyOrHandleMouse();
@@ -782,12 +782,12 @@ namespace ETL_SQL.TUI.UI
 
                     switch (keyOpt.Value.Key)
                     {
-                        case ConsoleKey.UpArrow:   _renderer.InfoScrollRow--; continue;
+                        case ConsoleKey.UpArrow: _renderer.InfoScrollRow--; continue;
                         case ConsoleKey.DownArrow: _renderer.InfoScrollRow++; continue;
-                        case ConsoleKey.PageUp:    _renderer.InfoScrollRow -= 10; continue;
-                        case ConsoleKey.PageDown:  _renderer.InfoScrollRow += 10; continue;
-                        case ConsoleKey.Home:      _renderer.InfoScrollRow = 0; continue;
-                        case ConsoleKey.End:       _renderer.InfoScrollRow = int.MaxValue; continue;
+                        case ConsoleKey.PageUp: _renderer.InfoScrollRow -= 10; continue;
+                        case ConsoleKey.PageDown: _renderer.InfoScrollRow += 10; continue;
+                        case ConsoleKey.Home: _renderer.InfoScrollRow = 0; continue;
+                        case ConsoleKey.End: _renderer.InfoScrollRow = int.MaxValue; continue;
                     }
                     break; // any other key closes
                 }
@@ -960,8 +960,8 @@ namespace ETL_SQL.TUI.UI
                     if (IsModifierKey(vk)) continue;          // ignore lone modifier presses
 
                     bool shift = (k.dwControlKeyState & SHIFT_PRESSED) != 0;
-                    bool alt   = (k.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED)) != 0;
-                    bool ctrl  = (k.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) != 0;
+                    bool alt = (k.dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED)) != 0;
+                    bool ctrl = (k.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) != 0;
 
                     return new ConsoleKeyInfo((char)k.UnicodeChar, (ConsoleKey)vk, shift, alt, ctrl);
                 }
@@ -1803,7 +1803,7 @@ namespace ETL_SQL.TUI.UI
                     {
                         var text = _buffer.GetSelectedText();
                         if (string.IsNullOrEmpty(text)) text = _buffer.Lines[_buffer.CursorLine];
-                        
+
                         if (!string.IsNullOrEmpty(text))
                         {
                             await _clipboard.SetTextAsync(text);
@@ -1855,7 +1855,7 @@ namespace ETL_SQL.TUI.UI
         public async Task Cut()
         {
             if (_renderer.ResultsFocus) return; // Cannot cut from results
-            
+
             var text = _buffer.GetSelectedText();
             if (!string.IsNullOrEmpty(text))
             {
@@ -1871,7 +1871,7 @@ namespace ETL_SQL.TUI.UI
         public async Task Paste()
         {
             if (_renderer.ResultsFocus) return; // Cannot paste into results
-            
+
             var text = await _clipboard.GetTextAsync();
             if (!string.IsNullOrEmpty(text))
             {
@@ -2105,7 +2105,7 @@ namespace ETL_SQL.TUI.UI
                 _renderer.ScrollCol = tab.ScrollCol;
                 _analysisCts?.Cancel(); // drop any pending analysis from the previous tab
                 _diagnostics = new List<EditorDiagnostic>(tab.Diagnostics);
-                
+
                 // Restore results & telemetry state
                 _evaluator.LastResultSets.Clear();
                 _evaluator.LastResultSets.AddRange(tab.LastResultSets);
@@ -2155,7 +2155,7 @@ namespace ETL_SQL.TUI.UI
                         return;
                     }
                 }
-                catch {}
+                catch { }
             }
 
             var tab = new TabState { FilePath = filePath };

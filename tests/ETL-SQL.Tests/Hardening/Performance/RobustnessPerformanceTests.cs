@@ -4,16 +4,16 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Handlers;
-using ETL_SQL.Common;
-using ETL_SQL.Analysis.Linting;
-using ETL_SQL.Analysis.Linting.Rules;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
@@ -36,10 +36,10 @@ namespace ETL_SQL.Tests.Hardening.Performance
             sb.Append("]");
 
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sb.ToString()));
-            
+
             var batchCount = 0;
             var rowCount = 0;
-            
+
             await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, "$", batchSize: 1000))
             {
                 batchCount++;
@@ -58,7 +58,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
 
             var results = await JsonExtractor.ExtractBatchesAsync(stream, "items", batchSize: 10).ToListAsync();
-            
+
             Assert.Single(results);
             Assert.Equal(2, results[0].Rows.Count);
             Assert.Equal((decimal)1, results[0].Rows[0]["id"]);
@@ -71,7 +71,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
         {
             var customKeywords = new[] { "topsecret", "ultra-confidential" };
             var rule = new CredentialLeakRule(customKeywords);
-            
+
             var linter = new Linter();
             linter.AddRule(rule);
 
@@ -81,9 +81,9 @@ PRINT @topsecret_val;";
 
             var tokens = new Lexer(source).Tokenize();
             var script = new Parser(tokens).Parse();
-            
+
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
-            
+
             Assert.Contains(results, r => r.Message.Contains("topsecret_val") && r.RuleName == "CredentialLeak");
         }
 
@@ -98,7 +98,7 @@ PRINT @topsecret_val;";
             var sp = services.BuildServiceProvider();
 
             var linter = LinterFactory.CreateWithAllRules(sp);
-            
+
             // Should have CredentialLeakRule (from DI) and others (from reflection like SpillSecurityRule)
             Assert.True(linter.HasRuleOfType(typeof(CredentialLeakRule)));
             Assert.True(linter.HasRuleOfType(typeof(SpillSecurityRule)));
@@ -115,7 +115,7 @@ PRINT @topsecret_val;";
         {
             var logger = new Mock<ILogger>();
             var handler = new EmailStatementHandler(logger.Object);
-            
+
             var stmt = new EmailStatement(
                 new LiteralExpression(emailList, TokenType.STRING),
                 new LiteralExpression("from@me.com", TokenType.STRING),
@@ -126,7 +126,7 @@ PRINT @topsecret_val;";
             var context = new Mock<IExecutionContext>();
             context.Setup(c => c.EvaluateValue(It.IsAny<Expression>(), It.IsAny<Row>(), It.IsAny<bool>()))
                    .ReturnsAsync((Expression e, Row r, bool d) => (e as LiteralExpression)?.Value);
-            
+
             // Mock connection for handler
             var mockSource = new Mock<IDataSource>();
             var connections = new Dictionary<string, IDataSource> { { "smtp", mockSource.Object } };

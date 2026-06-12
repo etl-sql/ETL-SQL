@@ -9,19 +9,19 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         IdentityUserClaim<int>, IdentityUserRole<int>, IdentityUserLogin<int>,
         IdentityRoleClaim<int>, IdentityUserToken<int>>(options)
 {
-    public DbSet<Group>          Groups          => Set<Group>();
-    public DbSet<UserGroup>      UserGroups      => Set<UserGroup>();
-    public DbSet<Folder>         Folders         => Set<Folder>();
-    public DbSet<FolderAcl>      FolderAcls      => Set<FolderAcl>();
-    public DbSet<Report>         Reports         => Set<Report>();
+    public DbSet<Group> Groups => Set<Group>();
+    public DbSet<UserGroup> UserGroups => Set<UserGroup>();
+    public DbSet<Folder> Folders => Set<Folder>();
+    public DbSet<FolderAcl> FolderAcls => Set<FolderAcl>();
+    public DbSet<Report> Reports => Set<Report>();
     public DbSet<ReportSnapshot> ReportSnapshots => Set<ReportSnapshot>();
-    public DbSet<Subscription>   Subscriptions   => Set<Subscription>();
+    public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<SmtpConnection> SmtpConnections => Set<SmtpConnection>();
-    public DbSet<AuditLog>       AuditLogs       => Set<AuditLog>();
-    public DbSet<DatasetJob>     DatasetJobs     => Set<DatasetJob>();
-    public DbSet<RefreshToken>   RefreshTokens   => Set<RefreshToken>();
-    public DbSet<Dataset>        Datasets        => Set<Dataset>();
-    public DbSet<DatasetAcl>     DatasetAcls     => Set<DatasetAcl>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<DatasetJob> DatasetJobs => Set<DatasetJob>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<Dataset> Datasets => Set<Dataset>();
+    public DbSet<DatasetAcl> DatasetAcls => Set<DatasetAcl>();
     public DbSet<ReportFavorite> ReportFavorites => Set<ReportFavorite>();
     public DbSet<ReportShareLink> ReportShareLinks => Set<ReportShareLink>();
     public DbSet<ReportEmbedToken> ReportEmbedTokens => Set<ReportEmbedToken>();

@@ -3,8 +3,8 @@ using System.IO;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Engine.Handlers
 {

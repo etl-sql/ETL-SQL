@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using ETL_SQL.Reporting;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using ETL_SQL.Reporting;
 
 namespace ETL_SQL.Reporting.Renderers
 {
@@ -135,7 +135,7 @@ namespace ETL_SQL.Reporting.Renderers
         /// </summary>
         public static IRenderable RenderVisual(VisualManifest visual, ReportManifest? manifest = null)
         {
-            try 
+            try
             {
                 return visual.VisualType.ToUpperInvariant() switch
                 {
@@ -350,7 +350,7 @@ namespace ETL_SQL.Reporting.Renderers
             {
                 if (x0 >= 0 && x0 < canvas.Width && y0 >= 0 && y0 < canvas.Height)
                     canvas.SetPixel(x0, y0, color);
-                
+
                 if (x0 == x1 && y0 == y1) break;
                 e2 = 2 * err;
                 if (e2 >= dy) { err += dy; x0 += sx; }
@@ -373,13 +373,13 @@ namespace ETL_SQL.Reporting.Renderers
 
             int width = 30;
             int filled = (int)(width * pct);
-            
+
             // Zero-allocation progress bar creation
             char[] chars = new char[width];
             Array.Fill(chars, '█', 0, filled);
             Array.Fill(chars, '░', filled, width - filled);
             string bar = new string(chars);
-            
+
             Color color = Color.Green;
             if (pct > 0.7) color = Color.Yellow;
             if (pct > 0.9) color = Color.Red;
@@ -458,7 +458,7 @@ namespace ETL_SQL.Reporting.Renderers
             if (rows.Count == 0) return RenderPlaceholder(visual);
 
             var content = new List<IRenderable>();
-            
+
             // Recalculate max properly (removed dead maxVal calculation and LINQ)
             double rolling = 0;
             double absoluteMax = 0;
@@ -717,16 +717,17 @@ namespace ETL_SQL.Reporting.Renderers
 
             // A slicer in terminal shows options as selectable tags
             var items = rows.Select(r => r.FirstOrDefault()?.Trim() ?? "").Where(s => !string.IsNullOrEmpty(s)).ToList();
-            
+
             // Highlight options (simulated in TUI preview)
-            var tags = items.Select(i => {
+            var tags = items.Select(i =>
+            {
                 bool isSelected = selectedValue != null && i.Equals(selectedValue, StringComparison.OrdinalIgnoreCase);
                 var style = isSelected ? "white on green" : "white on blue";
                 return $"[{style}] {Markup.Escape(i)} [/]";
             });
 
             var markup = string.Join("  ", tags);
-            
+
             // If we have a selected value, add it to the footer for visibility
             var debugInfo = $"[grey]Param: {pName} | Value: {Markup.Escape(selectedValue ?? "NULL")}[/]";
             var content = new Rows(
@@ -771,7 +772,7 @@ namespace ETL_SQL.Reporting.Renderers
             // Priority: Options["TITLE"] -> Styles["TITLE"] -> visual.Name
             if (visual.Options.TryGetValue("TITLE", out var optTitle) && !string.IsNullOrEmpty(optTitle))
                 return optTitle;
-            
+
             if (visual.Styles != null && visual.Styles.TryGetValue("TITLE", out var styleTitle) && !string.IsNullOrEmpty(styleTitle))
                 return styleTitle;
 
@@ -786,7 +787,7 @@ namespace ETL_SQL.Reporting.Renderers
 
             // Set up a standard 50x12 grid canvas as approved in plan
             var canvas = new Canvas(50, 12);
-            
+
             // X, Y and Size values
             var points = new List<(double x, double y, double size)>();
             double minX = double.MaxValue, maxX = double.MinValue;
@@ -917,7 +918,7 @@ namespace ETL_SQL.Reporting.Renderers
                 double start = 0, end = 0;
                 if (row.Count > 1) double.TryParse(row[1], NumberStyles.Any, CultureInfo.InvariantCulture, out start);
                 if (row.Count > 2) double.TryParse(row[2], NumberStyles.Any, CultureInfo.InvariantCulture, out end);
-                
+
                 tasks.Add((name, start, end));
                 minTime = Math.Min(minTime, start);
                 maxTime = Math.Max(maxTime, end);
@@ -992,7 +993,7 @@ namespace ETL_SQL.Reporting.Renderers
             {
                 var candle = candles[i];
                 int cx = i * candleSpacing + (candleSpacing / 2);
-                
+
                 int yHigh = 10 - (int)((candle.high - minVal) / (maxVal - minVal) * 10);
                 int yLow = 10 - (int)((candle.low - minVal) / (maxVal - minVal) * 10);
                 int yOpen = 10 - (int)((candle.open - minVal) / (maxVal - minVal) * 10);
@@ -1144,7 +1145,7 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             bool isChecked = false;
-            
+
             var pName = visual.Actions.FirstOrDefault(a => a.Type == "SET_PARAMETER")?.ParameterName ?? "none";
             if (manifest != null && !string.IsNullOrEmpty(pName))
             {
@@ -1308,7 +1309,7 @@ namespace ETL_SQL.Reporting.Renderers
         {
             var title = GetVisualTitle(visual);
             var rows = visual.Rows;
-            
+
             var content = new List<IRenderable>
             {
                 new Markup("🌳 [bold yellow]Treemap Visual[/] [grey](Flat hierarchy breakdown)[/]"),
@@ -1407,7 +1408,7 @@ namespace ETL_SQL.Reporting.Renderers
                 if (limit++ >= 5) break;
                 var path = r.Count > 0 ? r[0] ?? "Root" : "Root";
                 var val = r.Count > 1 ? r[1] ?? "0" : "0";
-                
+
                 var cleanPath = path.Replace(">", " ──▶ ");
                 content.Add(new Markup($"  [grey]•[/] {cleanPath} [bold green]({val})[/]\n"));
             }
@@ -1455,7 +1456,7 @@ namespace ETL_SQL.Reporting.Renderers
                     int level = 0;
                     while (level < trimmed.Length && trimmed[level] == '#') level++;
                     var text = trimmed.Substring(level).Trim();
-                    
+
                     string style = level switch
                     {
                         1 => "bold blue underline",
@@ -1463,7 +1464,7 @@ namespace ETL_SQL.Reporting.Renderers
                         3 => "bold cyan",
                         _ => "bold"
                     };
-                    
+
                     result.Add(new Markup($"[{style}]{Markup.Escape(text)}[/]"));
                     result.Add(new Text("\n"));
                     continue;

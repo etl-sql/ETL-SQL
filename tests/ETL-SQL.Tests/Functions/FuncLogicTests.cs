@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Engine;
+using ETL_SQL.App;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
-using ETL_SQL.App;
+using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Functions
 {
@@ -23,7 +23,7 @@ namespace ETL_SQL.Tests.Functions
             // TRUE OR FALSE AND FALSE 
             // If AND is higher: TRUE OR (FALSE) = TRUE
             // If Left-to-right: (TRUE OR FALSE) AND FALSE = FALSE
-            
+
             var res = await ev.ExecuteValue("TRUE OR FALSE AND FALSE", new Row());
             Assert.Equal(true, res);
         }
@@ -43,7 +43,7 @@ namespace ETL_SQL.Tests.Functions
             var ev = NewEvaluator();
             await TestHelpers.Execute(ev, "CREATE TABLE #t (v INT);");
             await TestHelpers.Execute(ev, "INSERT INTO #t VALUES (NULL);");
-            
+
             // In SQL 3VL: NOT UNKNOWN is UNKNOWN. 
             // WHERE NOT (v = 1) where v is NULL => NOT (UNKNOWN) => UNKNOWN => NO ROW
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT * FROM #t WHERE NOT (v = 1);").Statements[0]).FirstAsync();
@@ -56,7 +56,7 @@ namespace ETL_SQL.Tests.Functions
             var ev = NewEvaluator();
             await TestHelpers.Execute(ev, "CREATE TABLE #t (a INT, b INT);");
             await TestHelpers.Execute(ev, "INSERT INTO #t VALUES (1, NULL);");
-            
+
             // NOT (a=1 OR b=1)  vs  (NOT a=1) AND (NOT b=1)
             // a=1 is TRUE, b=1 is UNKNOWN. 
             // TRUE OR UNKNOWN is TRUE. NOT TRUE is FALSE.
@@ -119,7 +119,7 @@ namespace ETL_SQL.Tests.Functions
             // NULL OR FALSE = NULL
             var res2 = await ev.ExecuteValue("NULL OR FALSE", new Row());
             Assert.Null(res2);
-            
+
             // NULL OR NULL = NULL
             var res3 = await ev.ExecuteValue("NULL OR NULL", new Row());
             Assert.Null(res3);

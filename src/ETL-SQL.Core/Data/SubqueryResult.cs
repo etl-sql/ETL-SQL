@@ -22,7 +22,7 @@ namespace ETL_SQL.Core.Data
 
         /// <summary>True if this result represents a single scalar value.</summary>
         public bool IsScalar => StreamData == null && InSet == null;
-        
+
         public long MemoryUsageBytes
         {
             get

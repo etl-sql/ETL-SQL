@@ -10,7 +10,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
     /// </summary>
     public class UseDatasetRedundantRule : ILintRule
     {
-        public string Name        => "UseDatasetRedundant";
+        public string Name => "UseDatasetRedundant";
         public string Description => "Hints when USE DATASET is redundant because the dataset was already created in the same script.";
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
@@ -29,10 +29,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 {
                     results.Add(new LintResult
                     {
-                        RuleName     = Name,
-                        Severity     = LintSeverity.Info,
-                        Message      = $"USE DATASET '{use.DatasetName}' is not required here — '{use.DatasetName}' was created earlier in this script and is already available as a temp table.",
-                        LineNumber   = use.Line,
+                        RuleName = Name,
+                        Severity = LintSeverity.Info,
+                        Message = $"USE DATASET '{use.DatasetName}' is not required here — '{use.DatasetName}' was created earlier in this script and is already available as a temp table.",
+                        LineNumber = use.Line,
                         ColumnNumber = use.Column
                     });
                 }

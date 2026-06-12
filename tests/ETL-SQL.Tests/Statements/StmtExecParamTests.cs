@@ -1,14 +1,14 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -38,17 +38,17 @@ namespace ETL_SQL.Tests.Statements
                 END;
             ";
             await ev.Evaluate(Parse(script));
-            
+
             // The mock datasource returns the processed SQL in the ResultSets when parameters are used.
             var lastResult = ev.LastResult;
             Assert.NotNull(lastResult);
-            
+
             string processedSql = lastResult.Rows[0]["ProcessedSql"]?.ToString() ?? "";
-            
+
             // Verify ?1 was replaced by @p0 in both places
             Assert.Contains("@p0", processedSql);
             Assert.DoesNotContain("?1", processedSql);
-            
+
             // Count occurrences of @p0
             int count = (processedSql.Length - processedSql.Replace("@p0", "").Length) / "@p0".Length;
             Assert.Equal(2, count);
@@ -67,10 +67,10 @@ namespace ETL_SQL.Tests.Statements
                 END;
             ";
             await ev.Evaluate(Parse(script));
-            
+
             var lastResult = ev.LastResult;
             string processedSql = lastResult?.Rows[0]["ProcessedSql"]?.ToString() ?? "";
-            
+
             // ? maps to @p0
             // ?2 maps to @p1
             // ?1 maps to @p0
@@ -91,11 +91,11 @@ namespace ETL_SQL.Tests.Statements
                 ) AT MyDb INTO #target WITH (@cat_id);
             ";
             await ev.Evaluate(Parse(script));
-            
+
             // Verify #target exists and was loaded
             Assert.True(ev.Connections.ContainsKey("#target"));
             var ds = ev.Connections["#target"];
-            
+
             // Check the value loaded
             var batches = ds.ReadBatches();
             await foreach (var batch in batches)

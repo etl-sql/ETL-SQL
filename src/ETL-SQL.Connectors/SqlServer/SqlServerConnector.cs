@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using Microsoft.Data.SqlClient;
-using ETL_SQL.Data;
+using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.MockDb;
-using System.Threading.Tasks;
+using ETL_SQL.Data;
+using Microsoft.Data.SqlClient;
 
 namespace ETL_SQL.Connectors.SqlServer
 {
@@ -15,18 +15,18 @@ namespace ETL_SQL.Connectors.SqlServer
     {
         public string Name => "MSSQL";
         public IReadOnlyList<string> Aliases => new[] { "SQLSERVER" };
-        
+
         public Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
             var ds = new SqlServerDataSource(context, connectionString, null, null);
             return ds.GetVersionAsync();
         }
-        
+
         public HashSet<string> GetSupportedFunctions() => SqlServerSyntax.GetSupportedFunctions();
         public HashSet<string> GetSupportedKeywords() => SqlServerSyntax.GetSupportedKeywords();
         public HashSet<string> GetExcludedKeywords() => SqlServerSyntax.Exclusions;
-        
-        public string GetHelp() => 
+
+        public string GetHelp() =>
             "MSSQL Connector: Connects to Microsoft SQL Server.\n" +
             "Options:\n" +
             "  SERVER: The target server.\n" +
@@ -64,7 +64,7 @@ namespace ETL_SQL.Connectors.SqlServer
 
         public Dictionary<string, string[]> GetOptionValues() => new();
 
-        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) 
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
             string? table = null;
             options?.TryGetValue("TABLE", out table);
@@ -90,7 +90,7 @@ namespace ETL_SQL.Connectors.SqlServer
             return procs;
         }
 
-        public string BuildConnectionString(Dictionary<string, string> properties) => 
+        public string BuildConnectionString(Dictionary<string, string> properties) =>
             ConnectionStringBuilder.Build(Name, properties);
 
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null) => GetHostStatic(connectionString, options);
@@ -98,7 +98,7 @@ namespace ETL_SQL.Connectors.SqlServer
         public static string? GetHostStatic(string connectionString, Dictionary<string, string>? options = null)
         {
             if (options != null && options.TryGetValue("SERVER", out var server)) return server;
-            
+
             try
             {
                 var builder = new SqlConnectionStringBuilder(connectionString);

@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Spectre.Console;
 using ETL_SQL.Data;
+using Spectre.Console;
 
 namespace ETL_SQL.TUI.UI
 {

@@ -1,12 +1,12 @@
 ﻿using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Core;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Connectors;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
-using ETL_SQL.Connectors;
+using Xunit;
 
 
 namespace ETL_SQL.Tests.Analysis.Statements
@@ -26,8 +26,8 @@ namespace ETL_SQL.Tests.Analysis.Statements
         private static async Task<System.Collections.Generic.List<LintResult>> Lint(string sql)
         {
             // Ensure connectors are registered for the linter
-            var connectors = new System.Collections.Generic.List<IConnector> 
-            { 
+            var connectors = new System.Collections.Generic.List<IConnector>
+            {
                 new ETL_SQL.Connectors.SqlServer.SqlServerConnector(),
                 new ETL_SQL.Connectors.Postgres.PostgresConnector()
             };
@@ -144,9 +144,9 @@ SELECT id FROM ss_conn.users LIMIT 10;";
         public async Task DialectKeyword_Allows_ROWNUM_In_Oracle_Select()
         {
             // Register oracle for this test
-            var connectors = new System.Collections.Generic.List<IConnector> 
-            { 
-                new ETL_SQL.Connectors.Oracle.OracleConnector() 
+            var connectors = new System.Collections.Generic.List<IConnector>
+            {
+                new ETL_SQL.Connectors.Oracle.OracleConnector()
             };
             new ConnectorRegistry(connectors);
 

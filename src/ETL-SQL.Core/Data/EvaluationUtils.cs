@@ -16,7 +16,8 @@ namespace ETL_SQL.Core.Data
             if (a.IsNull() && b.IsNull()) return true;
             if (a.IsNull() || b.IsNull()) return false;
 
-            try {
+            try
+            {
                 if (a is Row ra && b is Row rb)
                 {
                     if (ra.Columns.Count != rb.Columns.Count) return false;
@@ -47,16 +48,16 @@ namespace ETL_SQL.Core.Data
                     return false;
                 }
 
-                if (a.IsNull() || b.IsNull()) 
+                if (a.IsNull() || b.IsNull())
                     return a.IsNull() && b.IsNull();
 
                 if (a is decimal da && b is decimal db) return da == db;
                 if (a is int ia && b is int ib) return ia == ib;
                 if (a is long la && b is long lb) return la == lb;
                 if (a is double dbla && b is double dblb) return dbla == dblb;
-                
+
                 if (a is DateTime dta && b is DateTime dtb) return dta.Year == dtb.Year && dta.Month == dtb.Month && dta.Day == dtb.Day && dta.Hour == dtb.Hour && dta.Minute == dtb.Minute && dta.Second == dtb.Second;
-                
+
                 // Support ON/OFF boolean literals vs string equivalents
                 if (a is bool ba && b is string sb1 && (sb1.Equals("ON", StringComparison.OrdinalIgnoreCase) || sb1.Equals("OFF", StringComparison.OrdinalIgnoreCase)))
                     return ba == sb1.Equals("ON", StringComparison.OrdinalIgnoreCase);
@@ -64,11 +65,11 @@ namespace ETL_SQL.Core.Data
                     return bb == sa1.Equals("ON", StringComparison.OrdinalIgnoreCase);
 
                 if (decimal.TryParse(a?.ToString(), out var m1) && decimal.TryParse(b?.ToString(), out var m2)) return m1 == m2;
-                
+
                 if (DateTime.TryParse(a?.ToString(), out var dt1) && DateTime.TryParse(b?.ToString(), out var dt2)) return dt1.Year == dt2.Year && dt1.Month == dt2.Month && dt1.Day == dt2.Day && dt1.Hour == dt2.Hour && dt1.Minute == dt2.Minute && dt1.Second == dt2.Second;
             }
-            catch (Exception ex) 
-            { 
+            catch (Exception ex)
+            {
                 if (logger != null) logger.Debug($"[EvaluationUtils.IsSoftEqual] Type coercion failed, falling back to string compare: {ex.Message}");
             }
 
@@ -94,7 +95,7 @@ namespace ETL_SQL.Core.Data
                     }
                     return ba.Length.CompareTo(bb.Length);
                 }
-                return a is byte[] ? 1 : -1;
+                return a is byte[]? 1 : -1;
             }
 
             string sa = a?.ToString() ?? "";
@@ -209,8 +210,8 @@ namespace ETL_SQL.Core.Data
                 }
                 if (escaped)
                 {
-                     // hanging escape character
-                     sb.Append(Regex.Escape(esc.ToString()));
+                    // hanging escape character
+                    sb.Append(Regex.Escape(esc.ToString()));
                 }
                 sb.Append("$");
                 regexPattern = sb.ToString();

@@ -1,10 +1,10 @@
 using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -72,9 +72,9 @@ public class FoldersController(
         var folder = new Folder
         {
             ParentId = req.ParentId,
-            Name     = req.Name,
-            Path     = path,
-            OwnerId  = CurrentUserId
+            Name = req.Name,
+            Path = path,
+            OwnerId = CurrentUserId
         };
         db.Folders.Add(folder);
         await db.SaveChangesAsync();
@@ -115,11 +115,11 @@ public class FoldersController(
         if (req.ParentId.HasValue && req.ParentId != folder.ParentId)
         {
             if (req.ParentId == id) return BadRequest("Folder cannot be its own parent.");
-            
+
             // Check for circular reference
             var p = await db.Folders.FindAsync(req.ParentId.Value);
             if (p is null) return NotFound("Target parent folder not found");
-            
+
             var curr = p;
             while (curr != null)
             {
@@ -149,7 +149,7 @@ public class FoldersController(
                 parentPath = parent!.Path;
             }
             folder.Path = parentPath == "" ? $"/{folder.Name}" : $"{parentPath}/{folder.Name}";
-            
+
             // Recursively update all children's paths
             await UpdatePathsRecursiveAsync(folder);
         }

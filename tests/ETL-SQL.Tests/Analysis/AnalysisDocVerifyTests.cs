@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.App;
-using ETL_SQL.Core.Common;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis
 {
@@ -18,15 +18,15 @@ namespace ETL_SQL.Tests.Analysis
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = services.GetRequiredService<Evaluator>();
             string script = $"DECLARE @result = {expression};";
-            
+
             var lexer = new Lexer(script);
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens, script);
             var parsedScript = parser.Parse();
-            
+
             if (parsedScript.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
                 throw new Exception(parsedScript.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error).Message);
-                
+
             await evaluator.Evaluate(parsedScript);
             return evaluator.Variables["@result"];
         }
@@ -35,15 +35,15 @@ namespace ETL_SQL.Tests.Analysis
         {
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = services.GetRequiredService<Evaluator>();
-            
+
             var lexer = new Lexer(script);
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens, script);
             var parsedScript = parser.Parse();
-            
+
             if (parsedScript.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
                 throw new Exception(parsedScript.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error).Message);
-                
+
             await evaluator.Evaluate(parsedScript);
         }
 
@@ -110,9 +110,12 @@ namespace ETL_SQL.Tests.Analysis
             // Just verify it doesn't crash during parsing/initial handling
             // We use a temp path to avoid polluting the workspace too much
             string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "test_id_rsa");
-            try {
+            try
+            {
                 await RunScriptAsync($"CREATE SSH_KEY_PAIR '{path}' WITH(BITS=1024);");
-            } finally {
+            }
+            finally
+            {
                 if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
                 if (System.IO.File.Exists(path + ".pub")) System.IO.File.Delete(path + ".pub");
             }

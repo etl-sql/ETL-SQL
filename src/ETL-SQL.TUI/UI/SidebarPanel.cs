@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Spectre.Console;
 using ETL_SQL.Core;
+using Spectre.Console;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -124,7 +124,9 @@ namespace ETL_SQL.TUI.UI
                     foreach (var table in (await _metadata.GetTablesAsync(node.Path)).OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
                         node.Children.Add(new SidebarNode
                         {
-                            Name = table, Path = node.Path, Kind = SidebarNodeKind.Table,
+                            Name = table,
+                            Path = node.Path,
+                            Kind = SidebarNodeKind.Table,
                             InsertText = isTemp ? table : $"{node.Path}.{table}"
                         });
 
@@ -136,7 +138,9 @@ namespace ETL_SQL.TUI.UI
                         foreach (var view in views)
                             group.Children.Add(new SidebarNode
                             {
-                                Name = view, Path = node.Path, Kind = SidebarNodeKind.View,
+                                Name = view,
+                                Path = node.Path,
+                                Kind = SidebarNodeKind.View,
                                 InsertText = $"{node.Path}.{view}"
                             });
                         node.Children.Add(group);
@@ -380,13 +384,13 @@ namespace ETL_SQL.TUI.UI
                 string prefix = item.Node.Kind switch
                 {
                     SidebarNodeKind.ModeToggle => "",
-                    SidebarNodeKind.Refresh    => "",
+                    SidebarNodeKind.Refresh => "",
                     SidebarNodeKind.Connection => $"{open} {cap.Glyph("🔌", "#")} ",
-                    SidebarNodeKind.TempTable  => $"{open} {cap.Glyph("🧪", "~")} ",
-                    SidebarNodeKind.Table      => $"{open} {cap.Glyph("▤", "=")} ",
-                    SidebarNodeKind.View       => $"{open} {cap.Glyph("👁", "v")} ",
-                    SidebarNodeKind.Group      => $"{open} {cap.Glyph("📂", ">")} ",
-                    SidebarNodeKind.Column     => "  " + cap.Glyph("•", "-") + " ",
+                    SidebarNodeKind.TempTable => $"{open} {cap.Glyph("🧪", "~")} ",
+                    SidebarNodeKind.Table => $"{open} {cap.Glyph("▤", "=")} ",
+                    SidebarNodeKind.View => $"{open} {cap.Glyph("👁", "v")} ",
+                    SidebarNodeKind.Group => $"{open} {cap.Glyph("📂", ">")} ",
+                    SidebarNodeKind.Column => "  " + cap.Glyph("•", "-") + " ",
                     _ when item.Node.IsParentNav => cap.Glyph("↑ .. ", "^ .. "),
                     _ when item.Node.IsDirectory => $"{open} {cap.Glyph("📁", "/")} ",
                     _ => "  " + cap.Glyph("📄", ".") + " "
@@ -415,13 +419,13 @@ namespace ETL_SQL.TUI.UI
                     string colorStyle = item.Node.Kind switch
                     {
                         SidebarNodeKind.ModeToggle => "bold cyan",
-                        SidebarNodeKind.Refresh    => "cyan",
+                        SidebarNodeKind.Refresh => "cyan",
                         SidebarNodeKind.Connection => "bold blue",
-                        SidebarNodeKind.TempTable  => "magenta",
-                        SidebarNodeKind.Table      => "yellow",
-                        SidebarNodeKind.View       => "green",
-                        SidebarNodeKind.Group      => "grey",
-                        SidebarNodeKind.Column     => "white",
+                        SidebarNodeKind.TempTable => "magenta",
+                        SidebarNodeKind.Table => "yellow",
+                        SidebarNodeKind.View => "green",
+                        SidebarNodeKind.Group => "grey",
+                        SidebarNodeKind.Column => "white",
                         _ => item.Node.IsDirectory ? "yellow" : "white"
                     };
                     contentBuilder.AppendLine($"[{colorStyle}]{Markup.Escape(lineContent)}[/]");

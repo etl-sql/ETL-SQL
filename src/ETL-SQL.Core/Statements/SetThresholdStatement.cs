@@ -1,5 +1,5 @@
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Formatting;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Core
 {

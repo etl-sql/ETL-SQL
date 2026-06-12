@@ -1,15 +1,14 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Data;
-
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Reporting;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,9 +66,9 @@ namespace ETL_SQL.ReportHosting
                 await asyncScope.DisposeAsync();
             else
                 _currentScope?.Dispose();
-            
+
             _currentScope = null;
-            
+
             if (_evaluator != null)
             {
                 await _evaluator.DisposeAsync();
@@ -196,12 +195,12 @@ namespace ETL_SQL.ReportHosting
                     return await RebuildAsync();
                 }
             }
-            
+
             // If we have an active evaluator and manifest from a previous run, try selective refresh
             if (_evaluator != null && _manifest != null)
             {
                 await _lock.WaitAsync();
-                try 
+                try
                 {
                     if (!isInteraction)
                     {
@@ -237,12 +236,12 @@ namespace ETL_SQL.ReportHosting
                     return ($"Script file not found: {scriptPath}", false);
 
                 var source = await File.ReadAllTextAsync(fullPath);
-                
+
                 // We use the existing evaluator if it exists to share context (temp tables, etc.)
                 bool ownsEvaluator = false;
                 var evaluator = _evaluator;
                 IServiceScope? tempScope = null;
-                
+
                 if (evaluator == null)
                 {
                     ownsEvaluator = true;
@@ -262,13 +261,13 @@ namespace ETL_SQL.ReportHosting
                             evaluator.SetVariable(varName, pValue);
                     }
 
-                    var lexer  = new Lexer(source);
+                    var lexer = new Lexer(source);
                     var tokens = lexer.Tokenize();
                     var parser = new Parser(tokens, source);
                     var script = parser.Parse();
 
                     await evaluator.Evaluate(script);
-                    
+
                     // Heuristic: refresh if script looks like it modified data
                     bool needsRefresh = source.Contains("INSERT", StringComparison.OrdinalIgnoreCase) ||
                                        source.Contains("UPDATE", StringComparison.OrdinalIgnoreCase) ||
@@ -340,10 +339,10 @@ namespace ETL_SQL.ReportHosting
                 _drillStates.Clear();
                 var source = await File.ReadAllTextAsync(_scriptPath);
 
-                var lexer    = new Lexer(source);
-                var tokens   = lexer.Tokenize();
-                var parser   = new Parser(tokens, source);
-                var script   = parser.Parse();
+                var lexer = new Lexer(source);
+                var tokens = lexer.Tokenize();
+                var parser = new Parser(tokens, source);
+                var script = parser.Parse();
 
                 if (_currentScope != null)
                 {
@@ -351,7 +350,7 @@ namespace ETL_SQL.ReportHosting
                         await ad.DisposeAsync();
                     else
                         _currentScope.Dispose();
-                        
+
                     _currentScope = null;
                 }
 
@@ -384,7 +383,7 @@ namespace ETL_SQL.ReportHosting
                 }
 
                 using var cts = new CancellationTokenSource(_executionTimeout);
-                
+
                 try
                 {
                     await evaluator.Evaluate(script, cts.Token);
@@ -393,15 +392,15 @@ namespace ETL_SQL.ReportHosting
                 {
                     // Build a "failure" manifest that still contains the logs and execution tree
                     var failBuilder = new ManifestBuilder(evaluator);
-                    _evaluator       = evaluator;
-                    _manifest        = await failBuilder.BuildAsync(_scriptPath);
-                    _manifest.Error  = ex.Message;
+                    _evaluator = evaluator;
+                    _manifest = await failBuilder.BuildAsync(_scriptPath);
+                    _manifest.Error = ex.Message;
                     return _manifest;
                 }
 
-                var builder   = new ManifestBuilder(evaluator);
-                _evaluator    = evaluator;
-                _manifest     = await builder.BuildAsync(_scriptPath, runPages: _runPages);
+                var builder = new ManifestBuilder(evaluator);
+                _evaluator = evaluator;
+                _manifest = await builder.BuildAsync(_scriptPath, runPages: _runPages);
 
                 ScheduleRefresh(_manifest);
                 return _manifest;
@@ -423,13 +422,13 @@ namespace ETL_SQL.ReportHosting
                 await GetManifestAsync();
             if (_manifest == null || _evaluator == null) return null;
 
-            var vm     = _manifest.Visuals.FirstOrDefault(v => v.Name.Equals(visualName, StringComparison.OrdinalIgnoreCase));
+            var vm = _manifest.Visuals.FirstOrDefault(v => v.Name.Equals(visualName, StringComparison.OrdinalIgnoreCase));
             var action = vm?.Actions?.FirstOrDefault(a => a.Type == "DRILL_IN");
             if (vm == null || action?.Hierarchy == null) return null;
 
             var hierarchy = action.Hierarchy;
             _drillStates.TryGetValue(visualName, out var existing);
-            var path     = existing?.Path.ToList() ?? new List<(string, string)>();
+            var path = existing?.Path.ToList() ?? new List<(string, string)>();
             var curLevel = hierarchy[path.Count];
             path.Add((curLevel, clickedValue));
 
@@ -547,7 +546,7 @@ namespace ETL_SQL.ReportHosting
                 "m" => TimeSpan.FromMinutes(amount),
                 "h" => TimeSpan.FromHours(amount),
                 "d" => TimeSpan.FromDays(amount),
-                _   => null
+                _ => null
             };
         }
     }

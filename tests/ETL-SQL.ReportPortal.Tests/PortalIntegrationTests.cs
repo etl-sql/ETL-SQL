@@ -4,9 +4,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
-using ETL_SQL.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -25,13 +25,13 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     private static readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
 
     // Shared across all test instances so password-change and lockout don't accumulate.
-    private static string?  _adminToken;
+    private static string? _adminToken;
     private static readonly SemaphoreSlim _tokenLock = new(1, 1);
 
     public PortalIntegrationTests(PortalWebFactory factory)
     {
         _factory = factory;
-        _client  = factory.CreateClient();
+        _client = factory.CreateClient();
     }
 
     // ── 1. Health endpoint ─────────────────────────────────────────────────────
@@ -81,13 +81,13 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var createRes = await AuthPost(adminToken, "/api/admin/users", new
         {
             username,
-            email    = $"{username}@test.local",
+            email = $"{username}@test.local",
             password = "Active@Test1!",
-            role     = "Viewer"
+            role = "Viewer"
         });
         Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
         var created = await createRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var userId  = created!["id"]!.GetValue<int>();
+        var userId = created!["id"]!.GetValue<int>();
 
         var activeLoginRes = await _client.PostAsJsonAsync("/api/auth/login", new
         {
@@ -129,9 +129,9 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var createRes = await AuthPost(adminToken, "/api/admin/users", new
         {
             username,
-            email    = $"{username}@test.local",
+            email = $"{username}@test.local",
             password = "Lockout@Test1!",
-            role     = "Viewer"
+            role = "Viewer"
         });
         Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
 
@@ -168,9 +168,9 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var createRes = await AuthPost(token, "/api/admin/users", new
         {
             username = newUser,
-            email    = $"{newUser}@test.local",
+            email = $"{newUser}@test.local",
             password = "MustChange@1!",
-            role     = "Viewer"
+            role = "Viewer"
         });
         Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
 
@@ -196,7 +196,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         cpReq.Content = JsonContent.Create(new
         {
             currentPassword = "MustChange@1!",
-            newPassword     = "Changed@9999!"
+            newPassword = "Changed@9999!"
         });
         var cpRes = await _client.SendAsync(cpReq);
         Assert.Equal(HttpStatusCode.NoContent, cpRes.StatusCode);
@@ -209,7 +209,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         });
         Assert.Equal(HttpStatusCode.OK, reloginRes.StatusCode);
         var reloginBody = await reloginRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var freshToken  = reloginBody!["token"]!.GetValue<string>();
+        var freshToken = reloginBody!["token"]!.GetValue<string>();
 
         // Should be able to reach /api/folders with fresh token
         var foldersRes2 = await AuthGet(freshToken, "/api/folders");
@@ -227,16 +227,16 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var createUserRes = await AuthPost(token, "/api/admin/users", new
         {
             username = $"viewer_{Guid.NewGuid():N}",
-            email    = "viewer@test.local",
+            email = "viewer@test.local",
             password = "Viewer@1234!",
-            role     = "Viewer"
+            role = "Viewer"
         });
         Assert.Equal(HttpStatusCode.Created, createUserRes.StatusCode);
 
         // Create a folder
         var folderRes = await AuthPost(token, "/api/folders", new
         {
-            name     = "Test Folder",
+            name = "Test Folder",
             parentId = (int?)null
         });
         Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
@@ -388,8 +388,8 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
 
         // Create folder
         var folderRes = await AuthPost(token, "/api/folders", new { name = "Rpt Folder", parentId = (int?)null });
-        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var folderId  = folder!["id"]!.GetValue<int>();
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
 
         // Write a dummy .rptsql file in the temp script root
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "dummy_report.rptsql");
@@ -399,13 +399,13 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
 
         var publishRes = await AuthPost(token, "/api/reports", new
         {
-            folderId    = folderId,
-            name        = "Dummy Report",
+            folderId = folderId,
+            name = "Dummy Report",
             description = "Integration test report",
-            scriptPath  = scriptPath
+            scriptPath = scriptPath
         });
         Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
-        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
         Assert.True(reportId > 0);
         Assert.Equal("Finance BI", report["owner"]!.GetValue<string>());
@@ -498,16 +498,16 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
             var catalog = scope.ServiceProvider.GetRequiredService<ILineageCatalogStore>();
             var stageEntry = new LineageEntry(stageName, "SELECT")
             {
-                TargetColumn             = "OrderId",
-                SourceTables             = new List<string> { $"sales.Orders_{suffix}" },
-                SourceColumns            = new List<string> { "order_id" },
-                TransformationKind       = TransformationKind.Cast,
+                TargetColumn = "OrderId",
+                SourceTables = new List<string> { $"sales.Orders_{suffix}" },
+                SourceColumns = new List<string> { "order_id" },
+                TransformationKind = TransformationKind.Cast,
                 TransformationExpression = "CAST(order_id AS INT)",
-                FunctionsApplied         = new List<string> { "CAST" },
-                DerivedFromDescriptions  = "order_id: ERP order key",
-                Metadata                 = new Dictionary<string, string> { ["pii"] = "true", ["owner"] = "SalesOps" },
-                SourceFile               = scriptPath,
-                Line                     = 3
+                FunctionsApplied = new List<string> { "CAST" },
+                DerivedFromDescriptions = "order_id: ERP order key",
+                Metadata = new Dictionary<string, string> { ["pii"] = "true", ["owner"] = "SalesOps" },
+                SourceFile = scriptPath,
+                Line = 3
             };
             var visualEntry = new LineageEntry(visualTarget, "CREATE VISUAL")
             {
@@ -558,7 +558,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Equal("OrderId", columnHit!["targetColumn"]!.GetValue<string>());
         // Rich persisted fields surface through the catalog lineage DTO.
         Assert.Equal("CAST(order_id AS INT)", columnHit["transformationExpression"]!.GetValue<string>());
-        Assert.Equal("Cast",                  columnHit["transformationKind"]!.GetValue<string>());
+        Assert.Equal("Cast", columnHit["transformationKind"]!.GetValue<string>());
         Assert.Equal("order_id: ERP order key", columnHit["derivedFromDescriptions"]!.GetValue<string>());
         Assert.Contains(columnHit["sourceColumns"]!.AsArray(), n => n!.GetValue<string>() == "order_id");
 
@@ -706,7 +706,7 @@ CREATE VISUAL {visualName} AS CARD (
 
         Assert.NotNull(job);
         var jobStatus = job!["status"]!.GetValue<string>();
-        var jobError  = job["error"]?.GetValue<string>() ?? "(no error)";
+        var jobError = job["error"]?.GetValue<string>() ?? "(no error)";
         Assert.True(jobStatus == "Completed", $"Expected Completed but job ended with {jobStatus}: {jobError}");
 
         var snapshotRes = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=true");
@@ -912,9 +912,9 @@ CREATE VISUAL Total AS CARD (
     [Trait("Category", "Smoke.Portal")]
     public async Task Structure_BridgesDatasetReferenceAcrossScripts()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var dsRef  = $"&sales_snap_{suffix}";
+        var dsRef = $"&sales_snap_{suffix}";
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = $"XScript {suffix}", parentId = (int?)null });
         Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
@@ -948,33 +948,33 @@ CREATE VISUAL Total AS CARD (
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
             db.Datasets.Add(new Dataset
             {
-                Name            = dsRef,
-                FolderPath      = $"/XScript {suffix}",
+                Name = dsRef,
+                FolderPath = $"/XScript {suffix}",
                 ParquetFilePath = Path.Combine(_factory.TempDir, "datasets", $"{suffix}.parquet"),
-                OwningReportId  = reportId,
-                SourceQuery     = "SELECT Date, Vendor, SUM(Amount) AS total FROM edw.Sales",
-                AccessLevel     = DatasetAccessLevel.Private,
+                OwningReportId = reportId,
+                SourceQuery = "SELECT Date, Vendor, SUM(Amount) AS total FROM edw.Sales",
+                AccessLevel = DatasetAccessLevel.Private,
             });
             await db.SaveChangesAsync();
 
             var catalog = scope.ServiceProvider.GetRequiredService<ILineageCatalogStore>();
             var totalEntry = new LineageEntry($"dataset:{dsRef}", "CREATE DATASET")
             {
-                TargetColumn             = "total",
-                SourceTables             = new List<string> { "Sales" },
-                SourceColumns            = new List<string> { "Amount" },
-                TransformationKind       = TransformationKind.Aggregation,
+                TargetColumn = "total",
+                SourceTables = new List<string> { "Sales" },
+                SourceColumns = new List<string> { "Amount" },
+                TransformationKind = TransformationKind.Aggregation,
                 TransformationExpression = "SUM(Amount)",
-                FunctionsApplied         = new List<string> { "SUM" },
-                DerivedFromDescriptions  = "Amount: Sales amounts",
-                Metadata                 = new Dictionary<string, string> { ["d"] = "Sales amounts", ["pii"] = "true" },
+                FunctionsApplied = new List<string> { "SUM" },
+                DerivedFromDescriptions = "Amount: Sales amounts",
+                Metadata = new Dictionary<string, string> { ["d"] = "Sales amounts", ["pii"] = "true" },
             };
             await catalog.SaveLineageAsync(new[] { totalEntry }, $"dataset:{dsRef}:build", "build_sales_snap.rptsql", DateTime.UtcNow);
         }
 
         var res = await AuthGet(token, $"/api/reports/{reportId}/structure");
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
-        var dag   = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var dag = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
         var nodes = dag!["nodes"]!.AsArray();
 
         string Norm(string s) => s.TrimStart('&', '#');
@@ -984,9 +984,9 @@ CREATE VISUAL Total AS CARD (
             n!["type"]!.GetValue<string>() == "dataset" &&
             string.Equals(Norm(n["label"]!.GetValue<string>()), Norm(dsRef), StringComparison.OrdinalIgnoreCase));
         var total = dsNode!["meta"]!["columnLineage"]!["total"]!;
-        Assert.Equal("SUM(Amount)",   total["transform"]!.GetValue<string>());
+        Assert.Equal("SUM(Amount)", total["transform"]!.GetValue<string>());
         Assert.Equal("Sales amounts", total["description"]!.GetValue<string>());
-        Assert.Equal("true",          total["tags"]!["pii"]!.GetValue<string>());
+        Assert.Equal("true", total["tags"]!["pii"]!.GetValue<string>());
         // Source resolves to the fully-qualified EDW table from the dataset's SourceQuery.
         Assert.Contains(total["sources"]!.AsArray(), s =>
             s!["table"]!.GetValue<string>().EndsWith("Sales", StringComparison.OrdinalIgnoreCase) &&
@@ -1008,7 +1008,7 @@ CREATE VISUAL Total AS CARD (
     [Trait("Category", "Smoke.Portal")]
     public async Task Structure_ExpandsRawSelectStarFromPersistedCatalogLineage()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var source = $"edw.Sales_{suffix}";
 
@@ -1073,7 +1073,7 @@ CREATE VISUAL Total AS CARD (
     [Trait("Category", "Smoke.Portal")]
     public async Task Structure_UsesPageLayoutForVisualEdges_WhenVisualsDeclaredBeforePages()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = $"Layout {suffix}", parentId = (int?)null });
@@ -1105,7 +1105,7 @@ CREATE PAGE Main AS DASHBOARD(
 
         var res = await AuthGet(token, $"/api/reports/{reportId}/structure");
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
-        var dag   = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var dag = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
         var nodes = dag!["nodes"]!.AsArray();
         var edges = dag["edges"]!.AsArray();
 
@@ -1121,9 +1121,9 @@ CREATE PAGE Main AS DASHBOARD(
     [Trait("Category", "Smoke.Portal")]
     public async Task Structure_ReportColumnTags_OverrideDescriptionButPreserveDatasetHistory()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var dsRef  = $"&sales_snap_{suffix}";
+        var dsRef = $"&sales_snap_{suffix}";
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = $"Tagged {suffix}", parentId = (int?)null });
         Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
@@ -1161,12 +1161,12 @@ CREATE PAGE Main AS DASHBOARD(
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
             db.Datasets.Add(new Dataset
             {
-                Name            = dsRef,
-                FolderPath      = $"/Tagged {suffix}",
+                Name = dsRef,
+                FolderPath = $"/Tagged {suffix}",
                 ParquetFilePath = Path.Combine(_factory.TempDir, "datasets", $"{suffix}.parquet"),
-                OwningReportId  = reportId,
-                SourceQuery     = "SELECT Date, Vendor, SUM(Amount) AS total FROM edw.Sales",
-                AccessLevel     = DatasetAccessLevel.Private,
+                OwningReportId = reportId,
+                SourceQuery = "SELECT Date, Vendor, SUM(Amount) AS total FROM edw.Sales",
+                AccessLevel = DatasetAccessLevel.Private,
             });
             await db.SaveChangesAsync();
 
@@ -1217,9 +1217,9 @@ CREATE PAGE Main AS DASHBOARD(
             n!["type"]!.GetValue<string>() == "dataset" &&
             string.Equals(Norm(n["label"]!.GetValue<string>()), Norm(dsRef), StringComparison.OrdinalIgnoreCase));
         var dsTotal = dsNode!["meta"]!["columnLineage"]!["total"]!;
-        Assert.Equal("SUM(Amount)",   dsTotal["transform"]!.GetValue<string>());
+        Assert.Equal("SUM(Amount)", dsTotal["transform"]!.GetValue<string>());
         Assert.Equal("Sales amounts", dsTotal["description"]!.GetValue<string>());
-        Assert.Equal("true",          dsTotal["tags"]!["pii"]!.GetValue<string>());
+        Assert.Equal("true", dsTotal["tags"]!["pii"]!.GetValue<string>());
         Assert.Contains(dsTotal["sources"]!.AsArray(), s =>
             s!["table"]!.GetValue<string>().EndsWith("Sales", StringComparison.OrdinalIgnoreCase) &&
             s["column"]!.GetValue<string>() == "Amount");
@@ -1333,8 +1333,8 @@ CREATE PAGE Main AS DASHBOARD(
         var token = await GetAdminTokenAsync();
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = "Sibling Publish", parentId = (int?)null });
-        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var folderId  = folder!["id"]!.GetValue<int>();
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
 
         var siblingRoot = Path.Combine(_factory.TempDir, "scripts2");
         Directory.CreateDirectory(siblingRoot);
@@ -1344,9 +1344,9 @@ CREATE PAGE Main AS DASHBOARD(
         var publishRes = await AuthPost(token, "/api/reports", new
         {
             folderId,
-            name        = "Outside Report",
+            name = "Outside Report",
             description = "Should be rejected",
-            scriptPath  = siblingScript
+            scriptPath = siblingScript
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, publishRes.StatusCode);
@@ -1359,8 +1359,8 @@ CREATE PAGE Main AS DASHBOARD(
         var token = await GetAdminTokenAsync();
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = "Sibling Update", parentId = (int?)null });
-        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var folderId  = folder!["id"]!.GetValue<int>();
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "inside_update.rptsql");
         await File.WriteAllTextAsync(scriptPath, "-- inside script root\n");
@@ -1368,12 +1368,12 @@ CREATE PAGE Main AS DASHBOARD(
         var publishRes = await AuthPost(token, "/api/reports", new
         {
             folderId,
-            name        = "Inside Report",
+            name = "Inside Report",
             description = "",
             scriptPath
         });
         Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
-        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
         var siblingRoot = Path.Combine(_factory.TempDir, "scripts2");
@@ -1396,8 +1396,8 @@ CREATE PAGE Main AS DASHBOARD(
         var token = await GetAdminTokenAsync();
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = "Validate Publish", parentId = (int?)null });
-        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var folderId  = folder!["id"]!.GetValue<int>();
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
 
         var invalidPath = Path.Combine(_factory.TempDir, "scripts", $"invalid_{Guid.NewGuid():N}.rptsql");
         await File.WriteAllTextAsync(invalidPath, "SET REPORT TITLE = 'unterminated;");
@@ -1426,7 +1426,7 @@ CREATE PAGE Main AS DASHBOARD(
             scriptPath = validPath
         });
         Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
-        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
         var updateRes = await AuthPut(token, $"/api/reports/{reportId}", new { scriptPath = invalidPath });
@@ -1445,8 +1445,8 @@ CREATE PAGE Main AS DASHBOARD(
         var token = await GetAdminTokenAsync();
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = "Tampered Script", parentId = (int?)null });
-        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var folderId  = folder!["id"]!.GetValue<int>();
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "inside_params.rptsql");
         await File.WriteAllTextAsync(scriptPath, "DECLARE @Region STRING INPUT = 'All';");
@@ -1459,7 +1459,7 @@ CREATE PAGE Main AS DASHBOARD(
             scriptPath
         });
         Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
-        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
         var siblingRoot = Path.Combine(_factory.TempDir, "scripts2");
@@ -1488,8 +1488,8 @@ CREATE PAGE Main AS DASHBOARD(
         var token = await GetAdminTokenAsync();
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = "Tampered Snapshot", parentId = (int?)null });
-        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var folderId  = folder!["id"]!.GetValue<int>();
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "inside_snapshot.rptsql");
         await File.WriteAllTextAsync(scriptPath, "-- snapshot tamper test\n");
@@ -1502,7 +1502,7 @@ CREATE PAGE Main AS DASHBOARD(
             scriptPath
         });
         Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
-        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
         var siblingRoot = Path.Combine(_factory.TempDir, "snapshots2");
@@ -1525,7 +1525,7 @@ CREATE PAGE Main AS DASHBOARD(
 
         var snapshotRes = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=true");
         var manifestRes = await AuthGet(token, $"/api/reports/{reportId}/snapshot/manifest");
-        var exportRes   = await AuthGet(token, $"/api/reports/{reportId}/export/csv");
+        var exportRes = await AuthGet(token, $"/api/reports/{reportId}/export/csv");
 
         Assert.Equal(HttpStatusCode.Forbidden, snapshotRes.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, manifestRes.StatusCode);
@@ -1840,7 +1840,7 @@ CREATE PAGE Main AS DASHBOARD(
 
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var granted = new PortalUser { UserName = $"fg_granted_{suffix}", Email = $"fg_granted_{suffix}@test.local" };
-        var denied  = new PortalUser { UserName = $"fg_denied_{suffix}",  Email = $"fg_denied_{suffix}@test.local" };
+        var denied = new PortalUser { UserName = $"fg_denied_{suffix}", Email = $"fg_denied_{suffix}@test.local" };
         db.Users.AddRange(granted, denied);
         await db.SaveChangesAsync();
 
@@ -1857,10 +1857,10 @@ CREATE PAGE Main AS DASHBOARD(
 
         var report = new Report
         {
-            FolderId   = folder.Id,
-            Name       = $"FG Report {suffix}",
+            FolderId = folder.Id,
+            Name = $"FG Report {suffix}",
             ScriptPath = Path.Combine(_factory.TempDir, "scripts", $"fg_{suffix}.rptsql"),
-            CreatedBy  = granted.Id
+            CreatedBy = granted.Id
         };
         db.Reports.Add(report);
         await db.SaveChangesAsync();
@@ -1868,11 +1868,11 @@ CREATE PAGE Main AS DASHBOARD(
         var name = $"#fg_{suffix}";
         await registry.RegisterOrUpdate(new DatasetMetadata
         {
-            Name           = name,
-            FolderPath     = folder.Path,
+            Name = name,
+            FolderPath = folder.Path,
             ParquetFilePath = $"fg_{suffix}.parquet",
-            SourceQuery    = "SELECT 1",
-            AccessLevel    = DatasetAccessLevel.Public,
+            SourceQuery = "SELECT 1",
+            AccessLevel = DatasetAccessLevel.Public,
             OwningReportId = report.Id
         });
 
@@ -1898,11 +1898,11 @@ CREATE PAGE Main AS DASHBOARD(
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
 
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var owner   = new PortalUser { UserName = $"ed_owner_{suffix}",   Email = $"ed_owner_{suffix}@test.local" };
+        var owner = new PortalUser { UserName = $"ed_owner_{suffix}", Email = $"ed_owner_{suffix}@test.local" };
         var refresher = new PortalUser { UserName = $"ed_refresh_{suffix}", Email = $"ed_refresh_{suffix}@test.local" };
-        var editor  = new PortalUser { UserName = $"ed_editor_{suffix}",  Email = $"ed_editor_{suffix}@test.local" };
-        var viewer  = new PortalUser { UserName = $"ed_viewer_{suffix}",  Email = $"ed_viewer_{suffix}@test.local" };
-        var outsider = new PortalUser { UserName = $"ed_out_{suffix}",    Email = $"ed_out_{suffix}@test.local" };
+        var editor = new PortalUser { UserName = $"ed_editor_{suffix}", Email = $"ed_editor_{suffix}@test.local" };
+        var viewer = new PortalUser { UserName = $"ed_viewer_{suffix}", Email = $"ed_viewer_{suffix}@test.local" };
+        var outsider = new PortalUser { UserName = $"ed_out_{suffix}", Email = $"ed_out_{suffix}@test.local" };
         db.Users.AddRange(owner, refresher, editor, viewer, outsider);
         await db.SaveChangesAsync();
 
@@ -1912,8 +1912,10 @@ CREATE PAGE Main AS DASHBOARD(
 
         var report = new Report
         {
-            FolderId = folder.Id, Name = $"ED Report {suffix}",
-            ScriptPath = Path.Combine(_factory.TempDir, "scripts", $"ed_{suffix}.rptsql"), CreatedBy = owner.Id
+            FolderId = folder.Id,
+            Name = $"ED Report {suffix}",
+            ScriptPath = Path.Combine(_factory.TempDir, "scripts", $"ed_{suffix}.rptsql"),
+            CreatedBy = owner.Id
         };
         db.Reports.Add(report);
         await db.SaveChangesAsync();
@@ -1921,8 +1923,12 @@ CREATE PAGE Main AS DASHBOARD(
         var name = $"#ed_{suffix}";
         await registry.RegisterOrUpdate(new DatasetMetadata
         {
-            Name = name, FolderPath = folder.Path, ParquetFilePath = $"ed_{suffix}.parquet",
-            SourceQuery = "SELECT 1", AccessLevel = DatasetAccessLevel.Private, OwningReportId = report.Id
+            Name = name,
+            FolderPath = folder.Path,
+            ParquetFilePath = $"ed_{suffix}.parquet",
+            SourceQuery = "SELECT 1",
+            AccessLevel = DatasetAccessLevel.Private,
+            OwningReportId = report.Id
         });
 
         var refreshGroup = new Group { Name = $"ed-refreshers-{suffix}" };
@@ -1941,19 +1947,19 @@ CREATE PAGE Main AS DASHBOARD(
             new DatasetAcl { DatasetId = ds.Id, GroupId = viewerGroup.Id, Permission = DatasetPermission.Viewer });
         await db.SaveChangesAsync();
 
-        Assert.True (await registry.CanRefreshAsync(name, "Admin"));
-        Assert.True (await registry.CanRefreshAsync(name, $"UserId={owner.Id}"));
-        Assert.True (await registry.CanRefreshAsync(name, $"UserId={refresher.Id}"));
-        Assert.True (await registry.CanRefreshAsync(name, $"UserId={editor.Id}"));
+        Assert.True(await registry.CanRefreshAsync(name, "Admin"));
+        Assert.True(await registry.CanRefreshAsync(name, $"UserId={owner.Id}"));
+        Assert.True(await registry.CanRefreshAsync(name, $"UserId={refresher.Id}"));
+        Assert.True(await registry.CanRefreshAsync(name, $"UserId={editor.Id}"));
         Assert.False(await registry.CanRefreshAsync(name, $"UserId={viewer.Id}"));
         Assert.False(await registry.CanRefreshAsync(name, $"UserId={outsider.Id}"));
         Assert.False(await registry.CanRefreshAsync(name, ""));
         Assert.False(await registry.CanRefreshAsync($"#nonexistent_{suffix}", "Admin"));
 
-        Assert.True (await registry.CanEditAsync(name, "Admin"));
-        Assert.True (await registry.CanEditAsync(name, $"UserId={owner.Id}"));
+        Assert.True(await registry.CanEditAsync(name, "Admin"));
+        Assert.True(await registry.CanEditAsync(name, $"UserId={owner.Id}"));
         Assert.False(await registry.CanEditAsync(name, $"UserId={refresher.Id}"));
-        Assert.True (await registry.CanEditAsync(name, $"UserId={editor.Id}"));
+        Assert.True(await registry.CanEditAsync(name, $"UserId={editor.Id}"));
         Assert.False(await registry.CanEditAsync(name, $"UserId={viewer.Id}"));
         Assert.False(await registry.CanEditAsync(name, $"UserId={outsider.Id}"));
         Assert.False(await registry.CanEditAsync(name, ""));
@@ -1972,7 +1978,7 @@ CREATE PAGE Main AS DASHBOARD(
 
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var publisher = new PortalUser { UserName = $"pub_{suffix}", Email = $"pub_{suffix}@test.local" };
-        var outsider  = new PortalUser { UserName = $"out_{suffix}", Email = $"out_{suffix}@test.local" };
+        var outsider = new PortalUser { UserName = $"out_{suffix}", Email = $"out_{suffix}@test.local" };
         db.Users.AddRange(publisher, outsider);
         await db.SaveChangesAsync();
 
@@ -1983,9 +1989,13 @@ CREATE PAGE Main AS DASHBOARD(
         var name = $"#published_{suffix}";
         await registry.RegisterOrUpdate(new DatasetMetadata
         {
-            Name = name, FolderPath = folder.Path, ParquetFilePath = $"published_{suffix}.parquet",
-            SourceQuery = "", AccessLevel = DatasetAccessLevel.Private,
-            CreatedBy = publisher.Id, LastRefresh = DateTime.UtcNow
+            Name = name,
+            FolderPath = folder.Path,
+            ParquetFilePath = $"published_{suffix}.parquet",
+            SourceQuery = "",
+            AccessLevel = DatasetAccessLevel.Private,
+            CreatedBy = publisher.Id,
+            LastRefresh = DateTime.UtcNow
         });
 
         var stored = await db.Datasets.SingleAsync(d => d.Name == name);
@@ -1995,7 +2005,7 @@ CREATE PAGE Main AS DASHBOARD(
         // Publisher is the owner: can read + edit. Outsider: denied.
         Assert.NotNull(await registry.Lookup(name, $"UserId={publisher.Id}"));
         Assert.Null(await registry.Lookup(name, $"UserId={outsider.Id}"));
-        Assert.True (await registry.CanEditAsync(name, $"UserId={publisher.Id}"));
+        Assert.True(await registry.CanEditAsync(name, $"UserId={publisher.Id}"));
         Assert.False(await registry.CanEditAsync(name, $"UserId={outsider.Id}"));
     }
 
@@ -2306,29 +2316,32 @@ CREATE VISUAL EdgeRows AS TABLE (
 
         // Publish a report
         var folderRes = await AuthPost(token, "/api/folders", new { name = "Sub Folder", parentId = (int?)null });
-        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var folderId  = folder!["id"]!.GetValue<int>();
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "sub_report.rptsql");
         await File.WriteAllTextAsync(scriptPath, "-- sub report\n");
 
         var reportRes = await AuthPost(token, "/api/reports", new
         {
-            folderId, name = "Sub Report", description = "", scriptPath
+            folderId,
+            name = "Sub Report",
+            description = "",
+            scriptPath
         });
-        var report   = await reportRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var report = await reportRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
         // Create SMTP connection (required for non-Link format)
         var smtpRes = await AuthPost(token, "/api/admin/smtp", new
         {
-            alias       = $"test-smtp-{Guid.NewGuid():N}"[..16],
-            host        = "smtp.test.local",
-            port        = 587,
-            username    = "user@test.local",
-            password    = "smtppassword",
+            alias = $"test-smtp-{Guid.NewGuid():N}"[..16],
+            host = "smtp.test.local",
+            port = 587,
+            username = "user@test.local",
+            password = "smtppassword",
             fromAddress = "noreply@test.local",
-            useSsl      = true
+            useSsl = true
         });
         Assert.Equal(HttpStatusCode.OK, smtpRes.StatusCode);
         var smtpBody = await smtpRes.Content.ReadFromJsonAsync<JsonObject>(_json);
@@ -2337,15 +2350,15 @@ CREATE VISUAL EdgeRows AS TABLE (
         // Create subscription (Link format — no attachment export needed)
         var subRes = await AuthPost(token, "/api/subscriptions", new
         {
-            reportId       = reportId,
-            schedule       = "Daily",
-            format         = "Link",
-            smtpAlias      = smtpAlias,
+            reportId = reportId,
+            schedule = "Daily",
+            format = "Link",
+            smtpAlias = smtpAlias,
             recipientEmail = "subscriber@test.local",
-            atTime         = "08:00"
+            atTime = "08:00"
         });
         Assert.Equal(HttpStatusCode.Created, subRes.StatusCode);
-        var sub   = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var sub = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var subId = sub!["id"]!.GetValue<int>();
         Assert.True(subId > 0);
 
@@ -2369,8 +2382,8 @@ CREATE VISUAL EdgeRows AS TABLE (
         var token = await GetAdminTokenAsync();
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = "Sub Tamper", parentId = (int?)null });
-        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var folderId  = folder!["id"]!.GetValue<int>();
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "sub_tamper_report.rptsql");
         await File.WriteAllTextAsync(scriptPath, "-- sub tamper report\n");
@@ -2383,7 +2396,7 @@ CREATE VISUAL EdgeRows AS TABLE (
             scriptPath
         });
         Assert.Equal(HttpStatusCode.Created, reportRes.StatusCode);
-        var report   = await reportRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var report = await reportRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
         var subRes = await AuthPost(token, "/api/subscriptions", new
@@ -2395,7 +2408,7 @@ CREATE VISUAL EdgeRows AS TABLE (
             atTime = "08:00"
         });
         Assert.Equal(HttpStatusCode.Created, subRes.StatusCode);
-        var sub   = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var sub = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var subId = sub!["id"]!.GetValue<int>();
 
         var siblingRoot = Path.Combine(_factory.TempDir, "scripts2");
@@ -2434,8 +2447,8 @@ CREATE VISUAL EdgeRows AS TABLE (
         var auditRes = await AuthGet(token, "/api/admin/audit?pageSize=200");
         Assert.Equal(HttpStatusCode.OK, auditRes.StatusCode);
 
-        var body    = await auditRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var items   = body!["items"]!.AsArray();
+        var body = await auditRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var items = body!["items"]!.AsArray();
         Assert.True(items.Count > 0, "Expected at least one audit log entry");
         Assert.Contains(items, item => item!["action"]!.GetValue<string>() == "LOGIN");
     }
@@ -2531,8 +2544,8 @@ CREATE VISUAL EdgeRows AS TABLE (
         var token = await GetAdminTokenAsync();
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = "Resilience Folder", parentId = (int?)null });
-        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var folderId  = folder!["id"]!.GetValue<int>();
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "resilience_report.rptsql");
         await File.WriteAllTextAsync(scriptPath, @"
@@ -2544,17 +2557,20 @@ CREATE VISUAL Answer AS CARD (
 
         var publishRes = await AuthPost(token, "/api/reports", new
         {
-            folderId, name = "Resilience Report", description = "", scriptPath
+            folderId,
+            name = "Resilience Report",
+            description = "",
+            scriptPath
         });
         Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
-        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
         // First execution — should succeed and produce a snapshot
-        var exec1     = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
+        var exec1 = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
         Assert.Equal(HttpStatusCode.Accepted, exec1.StatusCode);
         var exec1Body = await exec1.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var job1      = await WaitForJobAsync(token, exec1Body!["jobId"]!.GetValue<string>());
+        var job1 = await WaitForJobAsync(token, exec1Body!["jobId"]!.GetValue<string>());
         Assert.Equal("Completed", job1["status"]!.GetValue<string>());
 
         // Verify snapshot exists
@@ -2564,10 +2580,10 @@ CREATE VISUAL Answer AS CARD (
         // Delete the script — next run will fail
         File.Delete(scriptPath);
 
-        var exec2     = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
+        var exec2 = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
         Assert.Equal(HttpStatusCode.Accepted, exec2.StatusCode);
         var exec2Body = await exec2.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var job2      = await WaitForJobAsync(token, exec2Body!["jobId"]!.GetValue<string>());
+        var job2 = await WaitForJobAsync(token, exec2Body!["jobId"]!.GetValue<string>());
         Assert.Equal("Failed", job2["status"]!.GetValue<string>());
 
         // Old snapshot must still be accessible despite the failed refresh
@@ -2579,7 +2595,7 @@ CREATE VISUAL Answer AS CARD (
         // Catalog listing should surface Failed status and preserve snapshotBuiltAt
         var listRes = await AuthGet(token, $"/api/folders/{folderId}/reports");
         var reports = await listRes.Content.ReadFromJsonAsync<JsonArray>(_json);
-        var listed  = reports!.Single(r => r!["id"]!.GetValue<int>() == reportId)!.AsObject();
+        var listed = reports!.Single(r => r!["id"]!.GetValue<int>() == reportId)!.AsObject();
         Assert.Equal("Failed", listed["lastRefreshStatus"]!.GetValue<string>());
         Assert.NotNull(listed["snapshotBuiltAt"]);
     }
@@ -2593,7 +2609,7 @@ CREATE VISUAL Answer AS CARD (
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = $"Concurrent Refresh {suffix}", parentId = (int?)null });
         Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
-        var folder   = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var folderId = folder!["id"]!.GetValue<int>();
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"concurrent_refresh_{suffix}.rptsql");
@@ -2606,22 +2622,25 @@ CREATE VISUAL Answer AS TABLE (
 
         var publishRes = await AuthPost(token, "/api/reports", new
         {
-            folderId, name = $"Concurrent Refresh Report {suffix}", description = "", scriptPath
+            folderId,
+            name = $"Concurrent Refresh Report {suffix}",
+            description = "",
+            scriptPath
         });
         Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
-        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
         var execRes = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
         Assert.Equal(HttpStatusCode.Accepted, execRes.StatusCode);
         var execBody = await execRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var execJob  = await WaitForJobAsync(token, execBody!["jobId"]!.GetValue<string>());
+        var execJob = await WaitForJobAsync(token, execBody!["jobId"]!.GetValue<string>());
         Assert.Equal("Completed", execJob["status"]!.GetValue<string>());
 
         var baselineSnapshotRes = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=true");
         Assert.Equal(HttpStatusCode.OK, baselineSnapshotRes.StatusCode);
         var baselineSnapshot = await baselineSnapshotRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var baselineBuiltAt  = baselineSnapshot!["builtAt"]!.GetValue<DateTime>();
+        var baselineBuiltAt = baselineSnapshot!["builtAt"]!.GetValue<DateTime>();
 
         await File.WriteAllTextAsync(scriptPath, @"
 WAITFOR DELAY '00:00:01';
@@ -2685,8 +2704,8 @@ CREATE VISUAL Answer AS TABLE (
         var token = await GetAdminTokenAsync();
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = "Audit Events Folder", parentId = (int?)null });
-        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var folderId  = folder!["id"]!.GetValue<int>();
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "audit_events_report.rptsql");
         await File.WriteAllTextAsync(scriptPath, @"
@@ -2698,17 +2717,20 @@ CREATE VISUAL Summary AS TABLE (
 
         var publishRes = await AuthPost(token, "/api/reports", new
         {
-            folderId, name = "Audit Events Report", description = "", scriptPath
+            folderId,
+            name = "Audit Events Report",
+            description = "",
+            scriptPath
         });
         Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
-        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
         // Execute to get a snapshot (required for CSV export)
         var execRes = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
         Assert.Equal(HttpStatusCode.Accepted, execRes.StatusCode);
         var execBody = await execRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var job      = await WaitForJobAsync(token, execBody!["jobId"]!.GetValue<string>());
+        var job = await WaitForJobAsync(token, execBody!["jobId"]!.GetValue<string>());
         Assert.Equal("Completed", job["status"]!.GetValue<string>());
 
         // Trigger VIEW_SNAPSHOT
@@ -2722,25 +2744,30 @@ CREATE VISUAL Summary AS TABLE (
         // Trigger CREATE_SUBSCRIPTION and DELETE_SUBSCRIPTION
         var smtpRes = await AuthPost(token, "/api/admin/smtp", new
         {
-            alias       = $"audit-smtp-{Guid.NewGuid():N}"[..16],
-            host        = "smtp.test.local",
-            port        = 587,
-            username    = "user@test.local",
-            password    = "smtppassword",
+            alias = $"audit-smtp-{Guid.NewGuid():N}"[..16],
+            host = "smtp.test.local",
+            port = 587,
+            username = "user@test.local",
+            password = "smtppassword",
             fromAddress = "noreply@test.local",
-            useSsl      = true
+            useSsl = true
         });
         Assert.Equal(HttpStatusCode.OK, smtpRes.StatusCode);
-        var smtpBody  = await smtpRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var smtpBody = await smtpRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var smtpAlias = smtpBody!["alias"]!.GetValue<string>();
 
         var subRes = await AuthPost(token, "/api/subscriptions", new
         {
-            reportId, schedule = "Daily", format = "Link", smtpAlias, recipientEmail = "audit@test.local", atTime = "09:00"
+            reportId,
+            schedule = "Daily",
+            format = "Link",
+            smtpAlias,
+            recipientEmail = "audit@test.local",
+            atTime = "09:00"
         });
         Assert.Equal(HttpStatusCode.Created, subRes.StatusCode);
         var subBody = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var subId   = subBody!["id"]!.GetValue<int>();
+        var subId = subBody!["id"]!.GetValue<int>();
 
         var delSubRes = await AuthDelete(token, $"/api/subscriptions/{subId}");
         Assert.Equal(HttpStatusCode.NoContent, delSubRes.StatusCode);
@@ -2749,12 +2776,12 @@ CREATE VISUAL Summary AS TABLE (
         var auditRes = await AuthGet(token, "/api/admin/audit?pageSize=500");
         Assert.Equal(HttpStatusCode.OK, auditRes.StatusCode);
         var auditBody = await auditRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var items     = auditBody!["items"]!.AsArray()
+        var items = auditBody!["items"]!.AsArray()
             .Select(i => i!["action"]!.GetValue<string>())
             .ToHashSet();
 
-        Assert.Contains("VIEW_SNAPSHOT",       items);
-        Assert.Contains("EXPORT_CSV",          items);
+        Assert.Contains("VIEW_SNAPSHOT", items);
+        Assert.Contains("EXPORT_CSV", items);
         Assert.Contains("CREATE_SUBSCRIPTION", items);
         Assert.Contains("DELETE_SUBSCRIPTION", items);
     }
@@ -2766,53 +2793,56 @@ CREATE VISUAL Summary AS TABLE (
         var token = await GetAdminTokenAsync();
 
         var folderRes = await AuthPost(token, "/api/folders", new { name = "Parameterized Sub Folder", parentId = (int?)null });
-        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var folderId  = folder!["id"]!.GetValue<int>();
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
 
         var scriptPath = Path.Combine(_factory.TempDir, "scripts", "param_sub_report.rptsql");
         await File.WriteAllTextAsync(scriptPath, "DECLARE @Region STRING INPUT = 'All';");
 
         var publishRes = await AuthPost(token, "/api/reports", new
         {
-            folderId, name = "Param Sub Report", description = "", scriptPath
+            folderId,
+            name = "Param Sub Report",
+            description = "",
+            scriptPath
         });
         Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
-        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
         var smtpRes = await AuthPost(token, "/api/admin/smtp", new
         {
-            alias       = $"param-smtp-{Guid.NewGuid():N}"[..16],
-            host        = "smtp.test.local",
-            port        = 587,
-            username    = "user@test.local",
-            password    = "smtppassword",
+            alias = $"param-smtp-{Guid.NewGuid():N}"[..16],
+            host = "smtp.test.local",
+            port = 587,
+            username = "user@test.local",
+            password = "smtppassword",
             fromAddress = "noreply@test.local",
-            useSsl      = true
+            useSsl = true
         });
         Assert.Equal(HttpStatusCode.OK, smtpRes.StatusCode);
-        var smtpBody  = await smtpRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var smtpBody = await smtpRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var smtpAlias = smtpBody!["alias"]!.GetValue<string>();
 
         var subRes = await AuthPost(token, "/api/subscriptions", new
         {
             reportId,
-            schedule       = "Daily",
-            format         = "Link",
+            schedule = "Daily",
+            format = "Link",
             smtpAlias,
             recipientEmail = "regional@test.local",
-            atTime         = "07:00",
-            parameters     = new Dictionary<string, string> { ["Region"] = "EMEA" }
+            atTime = "07:00",
+            parameters = new Dictionary<string, string> { ["Region"] = "EMEA" }
         });
         Assert.Equal(HttpStatusCode.Created, subRes.StatusCode);
         var subBody = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var subId   = subBody!["id"]!.GetValue<int>();
+        var subId = subBody!["id"]!.GetValue<int>();
 
         // Verify the GET round-trip preserves parameters
-        var getRes  = await AuthGet(token, $"/api/subscriptions/{subId}");
+        var getRes = await AuthGet(token, $"/api/subscriptions/{subId}");
         Assert.Equal(HttpStatusCode.OK, getRes.StatusCode);
         var getBody = await getRes.Content.ReadFromJsonAsync<JsonObject>(_json);
-        var param   = getBody!["parameters"]!.AsObject()["Region"]!.GetValue<string>();
+        var param = getBody!["parameters"]!.AsObject()["Region"]!.GetValue<string>();
         Assert.Equal("EMEA", param);
 
         // Update the parameter value
@@ -2821,7 +2851,7 @@ CREATE VISUAL Summary AS TABLE (
             parameters = new Dictionary<string, string> { ["Region"] = "NA" }
         });
         Assert.Equal(HttpStatusCode.OK, updateRes.StatusCode);
-        var updatedBody  = await updateRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var updatedBody = await updateRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var updatedParam = updatedBody!["parameters"]!.AsObject()["Region"]!.GetValue<string>();
         Assert.Equal("NA", updatedParam);
     }
@@ -2846,7 +2876,7 @@ CREATE VISUAL Summary AS TABLE (
                 password = "Admin@12345!"
             });
             loginRes.EnsureSuccessStatusCode();
-            var body  = await loginRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var body = await loginRes.Content.ReadFromJsonAsync<JsonObject>(_json);
             var token = body!["token"]!.GetValue<string>();
 
             // Change password once so subsequent tests don't trigger lockout
@@ -2855,7 +2885,7 @@ CREATE VISUAL Summary AS TABLE (
             cpReq.Content = JsonContent.Create(new
             {
                 currentPassword = "Admin@12345!",
-                newPassword     = "Admin@Tests99!"
+                newPassword = "Admin@Tests99!"
             });
             var cpRes = await _client.SendAsync(cpReq);
             cpRes.EnsureSuccessStatusCode();

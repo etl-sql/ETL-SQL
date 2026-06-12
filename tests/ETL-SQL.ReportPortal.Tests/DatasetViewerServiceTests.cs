@@ -132,7 +132,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
     // Writes a 2-row parquet (v = 10, 20) to <_root>/<fileName>, encrypted with encryptOptions when given.
     private string WriteParquet(string fileName, Dictionary<string, string>? encryptOptions)
     {
-        var dest  = Path.Combine(_root, fileName);
+        var dest = Path.Combine(_root, fileName);
         var plain = Path.Combine(_root, "_plain_" + fileName);
 
         var ds = new ETL_SQL.Connectors.Parquet.ParquetDataSource(SystemExecutionContext.Instance, plain);
@@ -176,15 +176,15 @@ public sealed class DatasetViewerServiceTests : IDisposable
     {
         var d = new Dataset
         {
-            Name            = name,
-            FolderPath      = "/f",
+            Name = name,
+            FolderPath = "/f",
             ParquetFilePath = parquetPath,
-            SourceQuery     = "SELECT 1",
-            AccessLevel     = ETL_SQL.Core.Data.DatasetAccessLevel.Public,
-            EncryptionMode  = mode,
-            ColumnSchema    = """[{"name":"v","type":"INT"}]""",
-            RowCount        = 2,
-            LastRefresh     = DateTime.UtcNow
+            SourceQuery = "SELECT 1",
+            AccessLevel = ETL_SQL.Core.Data.DatasetAccessLevel.Public,
+            EncryptionMode = mode,
+            ColumnSchema = """[{"name":"v","type":"INT"}]""",
+            RowCount = 2,
+            LastRefresh = DateTime.UtcNow
         };
         db.Datasets.Add(d);
         db.SaveChanges();

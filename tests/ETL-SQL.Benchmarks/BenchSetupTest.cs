@@ -4,8 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Xunit;
 using ETL_SQL.Benchmarks;
+using Xunit;
 
 namespace ETL_SQL.Benchmarks.Tests
 {
@@ -204,7 +204,7 @@ namespace ETL_SQL.Benchmarks.Tests
             );
 
             // Walk up from the assembly bin directory to find tests/tpch_data/expected.
-            var asmDir  = Path.GetDirectoryName(typeof(BenchSetupTest).Assembly.Location)!;
+            var asmDir = Path.GetDirectoryName(typeof(BenchSetupTest).Assembly.Location)!;
             var expected = Path.GetFullPath(Path.Combine(asmDir, "..", "..", "..", "..", "tpch_data", "expected", "q1_sf01.json"));
             Directory.CreateDirectory(Path.GetDirectoryName(expected)!);
 

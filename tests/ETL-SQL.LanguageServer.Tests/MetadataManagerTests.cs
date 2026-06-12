@@ -2,14 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using Moq;
-using Microsoft.Extensions.Logging;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Services;
-using ETL_SQL.Core.Interfaces;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Interfaces;
+using ETL_SQL.Core.Services;
+using ETL_SQL.Data;
+using Microsoft.Extensions.Logging;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.LanguageServer.Tests
 {
@@ -74,7 +74,7 @@ namespace ETL_SQL.LanguageServer.Tests
             var connectorMock = new Mock<IConnector>();
             connectorMock.Setup(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), connStr, It.IsAny<Dictionary<string, string>>()))
                          .Returns(dataSourceMock.Object);
-            
+
             _registryMock.Setup(r => r.GetConnector(connType)).Returns(connectorMock.Object);
 
             // Act
@@ -101,7 +101,7 @@ namespace ETL_SQL.LanguageServer.Tests
             var connectorMock = new Mock<IConnector>();
             connectorMock.Setup(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>()))
                          .Returns(dataSourceMock.Object);
-            
+
             _registryMock.Setup(r => r.GetConnector(It.IsAny<string>())).Returns(connectorMock.Object);
 
             // Act
@@ -130,23 +130,23 @@ namespace ETL_SQL.LanguageServer.Tests
         [Fact]
         public async Task RegisterDocumentConnection_ClearsCacheForThatDocument()
         {
-             // Arrange
+            // Arrange
             string uri = "file:///doc1.etlsql";
             string connName = "DOC_CONN";
             _manager.RegisterDocumentConnection(uri, connName, "MSSQL", "...");
-            
+
             var dataSourceMock = new Mock<IDataSource>();
             dataSourceMock.Setup(d => d.GetTablesAsync()).ReturnsAsync(new List<string> { "T1" });
 
             var connectorMock = new Mock<IConnector>();
             connectorMock.Setup(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>()))
                          .Returns(dataSourceMock.Object);
-                         
+
             _registryMock.Setup(r => r.GetConnector(It.IsAny<string>())).Returns(connectorMock.Object);
 
             // Cache it
             await _manager.GetTablesAsync(connName, uri);
-            
+
             // Act - Register again (simulating change)
             _manager.RegisterDocumentConnection(uri, connName, "MSSQL", "NEW_STR");
             await _manager.GetTablesAsync(connName, uri);

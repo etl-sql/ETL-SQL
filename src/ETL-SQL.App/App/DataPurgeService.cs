@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Microsoft.Extensions.Configuration;
 using ETL_SQL.Orchestrator.Storage;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.App
 {
@@ -59,15 +59,15 @@ namespace ETL_SQL.App
             }
 
             // Logs
-            AddDir(config["Logging:AppLog:Directory"]    ?? "logs/app",     "Application logs");
+            AddDir(config["Logging:AppLog:Directory"] ?? "logs/app", "Application logs");
             AddDir(config["Logging:ScriptLog:Directory"] ?? "logs/scripts", "Script logs");
-            AddDir(config["Logging:TestLog:Directory"]   ?? "logs/tests",   "Test logs");
+            AddDir(config["Logging:TestLog:Directory"] ?? "logs/tests", "Test logs");
 
             // Portal content + data directories
-            AddDir(config["Portal:SnapshotDirectory"] ?? "./Snapshots",    "Report snapshots");
-            AddDir(config["Portal:ScriptRootPath"]    ?? "./Reports",      "Published reports");
-            AddDir(config["Portal:MapRootPath"]       ?? "./data/maps",    "Portal map files");
-            AddDir(config["Portal:DatasetRootPath"]   ?? "./data/datasets","Portal dataset files");
+            AddDir(config["Portal:SnapshotDirectory"] ?? "./Snapshots", "Report snapshots");
+            AddDir(config["Portal:ScriptRootPath"] ?? "./Reports", "Published reports");
+            AddDir(config["Portal:MapRootPath"] ?? "./data/maps", "Portal map files");
+            AddDir(config["Portal:DatasetRootPath"] ?? "./data/datasets", "Portal dataset files");
 
             // Databases
             AddDb(config["Portal:DatabasePath"] ?? "./portal.db", "Portal database");

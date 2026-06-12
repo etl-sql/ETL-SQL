@@ -1,16 +1,16 @@
 using System;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Data;
 using ETL_SQL.Services;
 
 namespace ETL_SQL.Connectors.Rest
@@ -777,7 +777,7 @@ namespace ETL_SQL.Connectors.Rest
                 }
                 _logger.WriteLine($"  Batch Size: {batchSizeVal}", ConsoleColor.Yellow);
                 _logger.WriteLine($"  Error Mode: {errorMode}", ConsoleColor.Yellow);
-                
+
                 long totalRows = 0;
                 await foreach (var batch in batches)
                 {
@@ -794,7 +794,7 @@ namespace ETL_SQL.Connectors.Rest
                         }
                     }
                 }
-                
+
                 long expectedRequests = 0;
                 if (bodyMode == "ROW_OBJECT" || bodyMode == "TEMPLATE")
                 {
@@ -806,7 +806,7 @@ namespace ETL_SQL.Connectors.Rest
                 }
                 _logger.WriteLine($"  Source Row Count: {totalRows}", ConsoleColor.Yellow);
                 _logger.WriteLine($"  Expected HTTP Request Count: {expectedRequests}", ConsoleColor.Yellow);
-                
+
                 if (_options != null)
                 {
                     var redactedHeaders = new List<string>();
@@ -832,7 +832,7 @@ namespace ETL_SQL.Connectors.Rest
             InMemoryDataSource? respTableDs = null;
             var rowBuffer = new List<Row>();
             var columnNames = new List<string>();
-            
+
             var stats = new WriteStats { RequestIndex = 0, Successes = 0, Failures = 0 };
             int batchIndex = 0;
             int nextSourceRowIndex = 0;
@@ -844,7 +844,7 @@ namespace ETL_SQL.Connectors.Rest
                 {
                     columnNames.AddRange(batch.ColumnNames);
                     ValidateWriteColumns(columnNames, correlationCols, idempotencyKeyCol);
-                    
+
                     if (!string.IsNullOrEmpty(responseTable))
                     {
                         respTableDs = GetOrCreateResponseTable(responseTable, batch, correlationCols);
@@ -854,7 +854,7 @@ namespace ETL_SQL.Connectors.Rest
                 {
                     ValidateWriteColumns(batch.ColumnNames.ToList(), correlationCols, idempotencyKeyCol);
                 }
-                
+
                 foreach (var row in batch.Rows)
                 {
                     if (rowBuffer.Count == 0)
@@ -872,7 +872,7 @@ namespace ETL_SQL.Connectors.Rest
                 }
                 batchIndex++;
             }
-            
+
             if (rowBuffer.Count > 0)
             {
                 await ProcessChunkAsync(rowBuffer, columnNames, batchIndex, rowBufferStartIndex, stats, successStatuses, errorMode, methodStr, retryCount, retryBackoffMs, retryStatuses, idempotencyKeyCol, idempotencyHeader, urlTemplate, bodyTemplate, bodyMode, batchRoot, errorBodyMaxChars, respTableDs, correlationCols);
@@ -953,7 +953,7 @@ namespace ETL_SQL.Connectors.Rest
                         errorBodyMaxChars,
                         respTableDs,
                         correlationCols);
-                    
+
                     rowIdx++;
                 }
             }

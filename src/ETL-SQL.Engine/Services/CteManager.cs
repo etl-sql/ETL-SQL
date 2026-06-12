@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Services
 {
@@ -41,15 +41,15 @@ namespace ETL_SQL.Engine.Services
             {
                 if (cte.ColumnNames != null && cte.ColumnNames.Count > 0)
                 {
-                     var oldNames = batch.ColumnNames.ToList();
-                     if (oldNames.Count != cte.ColumnNames.Count)
-                         throw new ExecutionException($"CTE '{cte.Name}' has {cte.ColumnNames.Count} columns specified, but the anchor query returns {oldNames.Count} columns.", null, cte.Line, cte.Column);
-                     for (int i = 0; i < oldNames.Count; i++) batch.RenameColumn(oldNames[i], cte.ColumnNames[i]);
+                    var oldNames = batch.ColumnNames.ToList();
+                    if (oldNames.Count != cte.ColumnNames.Count)
+                        throw new ExecutionException($"CTE '{cte.Name}' has {cte.ColumnNames.Count} columns specified, but the anchor query returns {oldNames.Count} columns.", null, cte.Line, cte.Column);
+                    for (int i = 0; i < oldNames.Count; i++) batch.RenameColumn(oldNames[i], cte.ColumnNames[i]);
                 }
 
                 if (finalResult.ColumnNames.Count == 0) finalResult.SetColumns(batch.ColumnNames);
                 if (currentStep.ColumnNames.Count == 0) currentStep.SetColumns(finalResult.ColumnNames);
-                
+
                 foreach (var r in batch.Rows)
                 {
                     await finalResult.AddRowAsync(r);
@@ -66,13 +66,13 @@ namespace ETL_SQL.Engine.Services
             {
                 depth++;
                 context.CurrentRecursiveDepth = depth;
-                
+
                 // Register currentStep as the CTE source for this iteration
                 var mem = new InMemoryDataSource();
                 mem.Validator = context as IDataValidator;
                 mem.ExecutionContext = context;
                 mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
-                
+
                 // Type inference (only on first iteration to establish schema)
                 if (depth == 1 && currentStep.Rows.Count > 0)
                 {
@@ -94,7 +94,7 @@ namespace ETL_SQL.Engine.Services
                 }
                 else if (depth == 1)
                 {
-                   foreach (var colName in currentStep.ColumnNames) colDefs.Add(new ColumnDefinition(colName, "STRING", true));
+                    foreach (var colName in currentStep.ColumnNames) colDefs.Add(new ColumnDefinition(colName, "STRING", true));
                 }
 
                 mem.SetSchema(colDefs);
@@ -135,7 +135,7 @@ namespace ETL_SQL.Engine.Services
 
             if (depth >= context.MaxRecursiveDepth && currentStep.Rows.Count > 0)
                 throw new ExecutionException($"The maximum recursion {context.MaxRecursiveDepth} has been exhausted before statement completion for CTE '{cte.Name}'.", null, cte.Line, cte.Column);
-            
+
             var finalMem = new InMemoryDataSource();
             finalMem.Validator = context as IDataValidator;
             finalMem.ExecutionContext = context;
@@ -157,10 +157,10 @@ namespace ETL_SQL.Engine.Services
             {
                 if (cte.ColumnNames != null && cte.ColumnNames.Count > 0)
                 {
-                     var oldNames = batch.ColumnNames.ToList();
-                     if (oldNames.Count != cte.ColumnNames.Count)
-                         throw new ExecutionException($"CTE '{cte.Name}' has {cte.ColumnNames.Count} columns specified, but the query returns {oldNames.Count} columns.", null, cte.Line, cte.Column);
-                     for (int i = 0; i < oldNames.Count; i++) batch.RenameColumn(oldNames[i], cte.ColumnNames[i]);
+                    var oldNames = batch.ColumnNames.ToList();
+                    if (oldNames.Count != cte.ColumnNames.Count)
+                        throw new ExecutionException($"CTE '{cte.Name}' has {cte.ColumnNames.Count} columns specified, but the query returns {oldNames.Count} columns.", null, cte.Line, cte.Column);
+                    for (int i = 0; i < oldNames.Count; i++) batch.RenameColumn(oldNames[i], cte.ColumnNames[i]);
                 }
 
                 if (cteResult.Schema.ColumnCount == 0) cteResult.SetColumns(batch.ColumnNames);

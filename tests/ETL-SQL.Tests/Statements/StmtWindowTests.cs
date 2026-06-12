@@ -1,14 +1,14 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using Spectre.Console;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 
 namespace ETL_SQL.Tests.Statements
@@ -20,7 +20,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #T (Val INT); INSERT INTO #T VALUES (10), (30), (20);"));
-            
+
             var res = await ev.EvaluateSelect((SelectStatement)Parse("SELECT Val, ROW_NUMBER() OVER(ORDER BY Val) AS RN FROM #T;").Statements[0]).FirstAsync();
             Assert.Equal(3, res.Rows.Count);
             Assert.Equal(1m, res.Rows[0]["RN"]);
@@ -33,17 +33,17 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #T (ID INT, Val INT); INSERT INTO #T VALUES (1, 100), (2, 200), (3, 300);"));
-            
+
             var res = await ev.EvaluateSelect((SelectStatement)Parse("SELECT Val, LAG(Val) OVER(ORDER BY ID) AS Prev, LEAD(Val) OVER(ORDER BY ID) AS Next FROM #T;").Statements[0]).FirstAsync();
-            
+
             // Row 1: Val=100, Prev=null, Next=200
             Assert.Null(res.Rows[0]["Prev"]);
             Assert.Equal(200m, res.Rows[0]["Next"]);
-            
+
             // Row 2: Val=200, Prev=100, Next=300
             Assert.Equal(100m, res.Rows[1]["Prev"]);
             Assert.Equal(300m, res.Rows[1]["Next"]);
-            
+
             // Row 3: Val=300, Prev=200, Next=null
             Assert.Equal(200m, res.Rows[2]["Prev"]);
             Assert.Null(res.Rows[2]["Next"]);
@@ -54,13 +54,13 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #T (Grp INT, Val INT); INSERT INTO #T VALUES (1, 10), (1, 20), (2, 100), (2, 200);"));
-            
+
             var res = await ev.EvaluateSelect((SelectStatement)Parse("SELECT Grp, Val, FIRST_VALUE(Val) OVER(PARTITION BY Grp ORDER BY Val) AS First, LAST_VALUE(Val) OVER(PARTITION BY Grp ORDER BY Val) AS Last FROM #T;").Statements[0]).FirstAsync();
-            
+
             // Grp 1
             Assert.Equal(10m, res.Rows[0]["First"]);
             Assert.Equal(20m, res.Rows[0]["Last"]);
-            
+
             // Grp 2
             Assert.Equal(100m, res.Rows[2]["First"]);
             Assert.Equal(200m, res.Rows[2]["Last"]);
@@ -71,9 +71,9 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #T (Val INT); INSERT INTO #T VALUES (10), (20), (30);"));
-            
+
             var res = await ev.EvaluateSelect((SelectStatement)Parse("SELECT Val, SUM(Val) OVER() AS WSum, MIN(Val) OVER() AS WMin, MAX(Val) OVER() AS WMax, AVG(Val) OVER() AS WAvg, COUNT(*) OVER() AS WCount FROM #T;").Statements[0]).FirstAsync();
-            
+
             foreach (var row in res.Rows)
             {
                 Assert.Equal(60m, row["WSum"]);
@@ -89,9 +89,9 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #T (ID INT, Grp INT, Val INT); INSERT INTO #T VALUES (1, 1, 100), (2, 1, 200), (3, 2, 1000), (4, 2, 2000);"));
-            
+
             var res = await ev.EvaluateSelect((SelectStatement)Parse("SELECT ID, ROW_NUMBER() OVER(PARTITION BY Grp ORDER BY ID) AS RN, SUM(Val) OVER(PARTITION BY Grp) AS GrpSum FROM #T;").Statements[0]).FirstAsync();
-            
+
             // Grp 1
             Assert.Equal(1m, res.Rows[0]["RN"]);
             Assert.Equal(300m, res.Rows[0]["GrpSum"]);
@@ -106,9 +106,9 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #R (Val INT); INSERT INTO #R VALUES (10), (10), (20), (30), (30), (40);"));
-            
+
             var res = await ev.EvaluateSelect((SelectStatement)Parse("SELECT Val, RANK() OVER(ORDER BY Val) AS Rnk, DENSE_RANK() OVER(ORDER BY Val) AS DRnk FROM #R;").Statements[0]).FirstAsync();
-            
+
             // Expected for RANK: 1, 1, 3, 4, 4, 6
             Assert.Equal(1m, res.Rows[0]["Rnk"]);
             Assert.Equal(1m, res.Rows[1]["Rnk"]);
@@ -116,7 +116,7 @@ namespace ETL_SQL.Tests.Statements
             Assert.Equal(4m, res.Rows[3]["Rnk"]);
             Assert.Equal(4m, res.Rows[4]["Rnk"]);
             Assert.Equal(6m, res.Rows[5]["Rnk"]);
-            
+
             // Expected for DENSE_RANK: 1, 1, 2, 3, 3, 4
             Assert.Equal(1m, res.Rows[0]["DRnk"]);
             Assert.Equal(1m, res.Rows[1]["DRnk"]);
@@ -131,19 +131,19 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #F (ID INT, Val INT); INSERT INTO #F VALUES (1, 10), (2, 20), (3, 30), (4, 40);"));
-            
+
             // ROWS BETWEEN 1 PRECEDING AND CURRENT ROW
             // Row 1: 10 (WSum=10)
             // Row 2: 10+20 (WSum=30)
             // Row 3: 20+30 (WSum=50)
             // Row 4: 30+40 (WSum=70)
             var res = await ev.EvaluateSelect((SelectStatement)Parse("SELECT Val, SUM(Val) OVER(ORDER BY ID ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) AS WSum FROM #F;").Statements[0]).FirstAsync();
-            
+
             Assert.Equal(10m, res.Rows[0]["WSum"]);
             Assert.Equal(30m, res.Rows[1]["WSum"]);
             Assert.Equal(50m, res.Rows[2]["WSum"]);
             Assert.Equal(70m, res.Rows[3]["WSum"]);
-            
+
             // ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW (Cumulative Sum)
             var resCum = await ev.EvaluateSelect((SelectStatement)Parse("SELECT Val, SUM(Val) OVER(ORDER BY ID ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS CumSum FROM #F;").Statements[0]).FirstAsync();
             Assert.Equal(10m, resCum.Rows[0]["CumSum"]);
@@ -342,12 +342,12 @@ namespace ETL_SQL.Tests.Statements
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #Q (Dept VARCHAR, Name VARCHAR, Salary INT); " +
                                   "INSERT INTO #Q VALUES ('Eng', 'Alice', 100), ('Eng', 'Bob', 200), ('Sales', 'Charlie', 150);"));
-            
+
             // Should return only the highest salary per department
             var res = await ev.EvaluateSelect((SelectStatement)Parse(
                 "SELECT Dept, Name, Salary, RANK() OVER(PARTITION BY Dept ORDER BY Salary DESC) as rnk FROM #Q QUALIFY rnk = 1;")
                 .Statements[0]).FirstAsync();
-            
+
             Assert.Equal(2, res.Rows.Count);
             Assert.Contains(res.Rows, r => r["Name"].ToString() == "Bob");
             Assert.Contains(res.Rows, r => r["Name"].ToString() == "Charlie");
@@ -358,14 +358,14 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #F (Val INT); INSERT INTO #F VALUES (10), (100), (20), (200);"));
-            
+
             // SUM(Val) FILTER (WHERE Val > 50)
             // Rows: 10 (skipped), 100 (included), 20 (skipped), 200 (included)
             // Cumulative Sums: 0, 100, 100, 300
             var res = await ev.EvaluateSelect((SelectStatement)Parse(
                 "SELECT Val, SUM(Val) FILTER (WHERE Val > 50) OVER(ORDER BY Val) AS FilteredSum FROM #F;")
                 .Statements[0]).FirstAsync();
-            
+
             Assert.Equal(4, res.Rows.Count);
             Assert.Null(res.Rows[0]["FilteredSum"]);   // 10 — no values pass Val > 50 → SUM(empty) = NULL
             Assert.Null(res.Rows[1]["FilteredSum"]);   // 20 — no values pass Val > 50 → SUM(empty) = NULL

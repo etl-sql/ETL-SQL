@@ -1,10 +1,10 @@
-using ETL_SQL.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -172,23 +172,23 @@ namespace ETL_SQL.Engine.Engines
                                 }
                                 break;
                             case "LAG":
-                            {
-                                int lag = f.Arguments.Count >= 2 ? Convert.ToInt32(await _context.EvaluateValue(f.Arguments[1], partitionRows[i])) : 1;
-                                if (i - lag >= 0)
-                                    winVal = await _context.EvaluateValue(f.Arguments[0], partitionRows[i - lag]);
-                                else
-                                    winVal = f.Arguments.Count >= 3 ? await _context.EvaluateValue(f.Arguments[2], partitionRows[i]) : null;
-                                break;
-                            }
+                                {
+                                    int lag = f.Arguments.Count >= 2 ? Convert.ToInt32(await _context.EvaluateValue(f.Arguments[1], partitionRows[i])) : 1;
+                                    if (i - lag >= 0)
+                                        winVal = await _context.EvaluateValue(f.Arguments[0], partitionRows[i - lag]);
+                                    else
+                                        winVal = f.Arguments.Count >= 3 ? await _context.EvaluateValue(f.Arguments[2], partitionRows[i]) : null;
+                                    break;
+                                }
                             case "LEAD":
-                            {
-                                int lead = f.Arguments.Count >= 2 ? Convert.ToInt32(await _context.EvaluateValue(f.Arguments[1], partitionRows[i])) : 1;
-                                if (i + lead < partitionRows.Count)
-                                    winVal = await _context.EvaluateValue(f.Arguments[0], partitionRows[i + lead]);
-                                else
-                                    winVal = f.Arguments.Count >= 3 ? await _context.EvaluateValue(f.Arguments[2], partitionRows[i]) : null;
-                                break;
-                            }
+                                {
+                                    int lead = f.Arguments.Count >= 2 ? Convert.ToInt32(await _context.EvaluateValue(f.Arguments[1], partitionRows[i])) : 1;
+                                    if (i + lead < partitionRows.Count)
+                                        winVal = await _context.EvaluateValue(f.Arguments[0], partitionRows[i + lead]);
+                                    else
+                                        winVal = f.Arguments.Count >= 3 ? await _context.EvaluateValue(f.Arguments[2], partitionRows[i]) : null;
+                                    break;
+                                }
                             case "FIRST_VALUE":
                                 winVal = partitionRows.Count > 0 ? await _context.EvaluateValue(f.Arguments[0], partitionRows[0]) : null;
                                 break;
@@ -218,7 +218,7 @@ namespace ETL_SQL.Engine.Engines
                                 {
                                     frameRows = await ResolveFrameRows(i, partitionRows, window);
                                 }
-                                
+
                                 if (f.Filter != null)
                                 {
                                     var filtered = new List<Row>();

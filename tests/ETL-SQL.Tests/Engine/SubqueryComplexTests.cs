@@ -1,19 +1,19 @@
-﻿using Xunit;
-using ETL_SQL.Engine;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Core.Common;
-using ETL_SQL.Tests.Core;
-using System.Threading.Tasks;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using Moq;
+using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Services;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Engine.Services;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Execution;
+using ETL_SQL.Services;
+using ETL_SQL.Tests.Core;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -31,13 +31,14 @@ namespace ETL_SQL.Tests.Engine
             var sessions = new Mock<ISessionStateManager>();
             var languageHelp = new Mock<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry>();
             var variableScopeManager = new VariableScopeManager();
-            
+
             var registry = new EvaluatorComponentRegistry();
-            
+
             // Mock a connector for MOCKDB
             var mockConnector = new Mock<IConnector>();
             mockConnector.Setup(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<IEnumerable<ColumnDefinition>>()))
-                         .Returns((IExecutionContext ctx, string target, Dictionary<string, string> opts, IEnumerable<ColumnDefinition> schema) => {
+                         .Returns((IExecutionContext ctx, string target, Dictionary<string, string> opts, IEnumerable<ColumnDefinition> schema) =>
+                         {
                              var m = new PersistentMockDatabaseSource();
                              // Return one row to satisfy SELECT ... FROM src
                              var dt = new DataTable();
@@ -54,8 +55,8 @@ namespace ETL_SQL.Tests.Engine
                    .Returns(new Dictionary<string, string>());
 
             var pushdown = new ExecutePushdownStatementHandler(logger.Object);
-            var handlers = new List<IStatementHandler> 
-            { 
+            var handlers = new List<IStatementHandler>
+            {
                 new SelectStatementHandler(logger.Object),
                 new CreateConnectionStatementHandler(connectors.Object, logger.Object),
                 new CreateTableStatementHandler(logger.Object),
@@ -64,24 +65,24 @@ namespace ETL_SQL.Tests.Engine
             };
 
             var evaluator = new Evaluator(
-                handlers, 
-                services.Object, 
-                functions.Object, 
-                tracker.Object, 
-                docker.Object, 
-                connectors.Object, 
-                sessions.Object, 
-                security, 
-                logger.Object, 
-                languageHelp.Object, 
+                handlers,
+                services.Object,
+                functions.Object,
+                tracker.Object,
+                docker.Object,
+                connectors.Object,
+                sessions.Object,
+                security,
+                logger.Object,
+                languageHelp.Object,
                 registry,
                 variableScopeManager: variableScopeManager);
 
             registry.Initialize(evaluator, logger.Object, variableScopeManager);
-            
+
             // Disable cache for baseline test
             // evaluator.Options.SubqueryCacheSize = 0; 
-            
+
             return evaluator;
         }
 
@@ -106,7 +107,7 @@ namespace ETL_SQL.Tests.Engine
         {
             var evaluator = CreateEvaluator();
             await evaluator.EvaluateStatement(Parse("CREATE CONNECTION src AS MOCKDB();"));
-            
+
             // Populate #data using DUAL to avoid MOCKDB pushdown side-effects for literals
             await evaluator.EvaluateStatement(Parse("SELECT 1 as id, 'A' as cat, 10.0 as val INTO #data FROM DUAL;"));
             await evaluator.EvaluateStatement(Parse("INSERT INTO #data(id, cat, val) SELECT 2, 'A', 20.0 FROM DUAL;"));
@@ -124,7 +125,7 @@ namespace ETL_SQL.Tests.Engine
 
             var rows = result.SelectMany(b => b.Rows).ToList();
             Assert.Equal(3, rows.Count);
-            
+
             // Normalize to decimal for comparison
             Assert.Equal(30m, Convert.ToDecimal(rows[0]["total"])); // A: 10 + 20
             Assert.Equal(30m, Convert.ToDecimal(rows[1]["total"])); // A: 10 + 20
@@ -167,7 +168,7 @@ namespace ETL_SQL.Tests.Engine
             var rows = result.SelectMany(b => b.Rows).ToList();
             Assert.Single(rows);
             Assert.Equal(1m, Convert.ToDecimal(rows[0]["res"]));
-            
+
             // Check telemetry
             Assert.True(evaluator.Telemetry.SubqueryCacheMisses >= 2);
         }
@@ -193,7 +194,7 @@ namespace ETL_SQL.Tests.Engine
             public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult(Enumerable.Empty<string>());
             public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => Task.FromResult(Enumerable.Empty<string>());
             public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => System.Linq.AsyncEnumerable.ToAsyncEnumerable(new[] { SeededResult.Clone() });
-            public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) { await foreach (var b in batches) {} }
+            public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) { await foreach (var b in batches) { } }
             public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(SeededResult.Schema.ColumnNames.AsEnumerable());
             public object? Snapshot() => null;
             public void Restore(object? snapshot) { }

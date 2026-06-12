@@ -56,8 +56,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
         private SmtpDataSource MakeDataSource() =>
             new SmtpDataSource(MakeContext(), new Dictionary<string, string>
             {
-                ["HOST"]    = _smtp.SmtpHost,
-                ["PORT"]    = _smtp.SmtpPort.ToString(),
+                ["HOST"] = _smtp.SmtpHost,
+                ["PORT"] = _smtp.SmtpPort.ToString(),
                 ["USE_SSL"] = "false"
             });
 
@@ -66,10 +66,10 @@ namespace ETL_SQL.Tests.Integration.Connectors
             var table = new DataTable();
             table.SetColumns(new[] { "To", "From", "Subject", "Body" });
             var row = table.NewRow();
-            row["To"]      = to;
-            row["From"]    = "sender@etl-sql.test";
+            row["To"] = to;
+            row["From"] = "sender@etl-sql.test";
             row["Subject"] = subject;
-            row["Body"]    = body;
+            row["Body"] = body;
             await table.AddRowAsync(row);
             return table;
         }
@@ -83,9 +83,9 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
             var ds = MakeDataSource();
             var batch = await OneRowBatch(
-                to:      "recipient@example.com",
+                to: "recipient@example.com",
                 subject: "Integration test email",
-                body:    "Hello from SmtpIntegrationTests");
+                body: "Hello from SmtpIntegrationTests");
 
             await ds.WriteBatches(new[] { batch }.ToAsyncEnumerable());
 
@@ -107,10 +107,10 @@ namespace ETL_SQL.Tests.Integration.Connectors
             for (int i = 1; i <= 2; i++)
             {
                 var row = table.NewRow();
-                row["To"]      = $"user{i}@example.com";
-                row["From"]    = "sender@etl-sql.test";
+                row["To"] = $"user{i}@example.com";
+                row["From"] = "sender@etl-sql.test";
                 row["Subject"] = $"Batch message {i}";
-                row["Body"]    = $"Body {i}";
+                row["Body"] = $"Body {i}";
                 await table.AddRowAsync(row);
             }
 
@@ -165,8 +165,8 @@ namespace ETL_SQL.Tests.Integration.Connectors
         {
             var ds = new SmtpDataSource(MakeContext(), new Dictionary<string, string>
             {
-                ["HOST"]    = "127.0.0.1",
-                ["PORT"]    = "1",          // port 1 is always refused
+                ["HOST"] = "127.0.0.1",
+                ["PORT"] = "1",          // port 1 is always refused
                 ["USE_SSL"] = "false"
             });
 
@@ -206,11 +206,11 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
             var ds = new SmtpDataSource(MakeContext(), new Dictionary<string, string>
             {
-                ["HOST"]     = "127.0.0.1",
-                ["PORT"]     = "1",
+                ["HOST"] = "127.0.0.1",
+                ["PORT"] = "1",
                 ["USERNAME"] = "user@example.com",
                 ["PASSWORD"] = password,
-                ["USE_SSL"]  = "false"
+                ["USE_SSL"] = "false"
             });
 
             var batch = await OneRowBatch("r@example.com", "Creds test", "body");

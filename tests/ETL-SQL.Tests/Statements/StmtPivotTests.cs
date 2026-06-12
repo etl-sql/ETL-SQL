@@ -1,12 +1,12 @@
-using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Core;
-using ETL_SQL.Engine;
-using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using ETL_SQL.App;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -23,7 +23,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task Pivot_BasicSummary()
         {
             var eval = _serviceProvider.GetRequiredService<Evaluator>();
-            
+
             // 1. Setup data: Category, Year, Amount
             await eval.Evaluate(new Parser(new Lexer("CREATE TABLE #Sales (Category NVARCHAR(50), Year INT, Amount DECIMAL(18,2));").Tokenize()).Parse());
             await eval.Evaluate(new Parser(new Lexer("INSERT INTO #Sales (Category, Year, Amount) VALUES ('Electronics', 2021, 100), ('Electronics', 2022, 150), ('Clothing', 2021, 200), ('Clothing', 2022, 250);").Tokenize()).Parse());
@@ -62,7 +62,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task Unpivot_BasicRotation()
         {
             var eval = _serviceProvider.GetRequiredService<Evaluator>();
-            
+
             // 1. Setup data: Category, Q1, Q2
             await eval.Evaluate(new Parser(new Lexer("CREATE TABLE #Quarterly (Category NVARCHAR(50), Q1 DECIMAL(18,2), Q2 DECIMAL(18,2));").Tokenize()).Parse());
             await eval.Evaluate(new Parser(new Lexer("INSERT INTO #Quarterly (Category, Q1, Q2) VALUES ('Electronics', 100, 150), ('Clothing', 200, 250);").Tokenize()).Parse());
@@ -96,7 +96,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task Pivot_WithMultipleGroupingColumns()
         {
             var eval = _serviceProvider.GetRequiredService<Evaluator>();
-            
+
             // Region, Category, Year, Amount
             await eval.Evaluate(new Parser(new Lexer("CREATE TABLE #RegionalSales (Region NVARCHAR(50), Category NVARCHAR(50), Year INT, Amount DECIMAL(18,2));").Tokenize()).Parse());
             await eval.Evaluate(new Parser(new Lexer("INSERT INTO #RegionalSales (Region, Category, Year, Amount) VALUES ('North', 'Electronics', 2021, 10), ('North', 'Electronics', 2021, 20), ('South', 'Electronics', 2021, 30), ('North', 'Clothing', 2021, 40);").Tokenize()).Parse());
@@ -114,7 +114,7 @@ namespace ETL_SQL.Tests.Statements
             // Header: Region, Category, 2021
             Assert.NotNull(result);
             Assert.Equal(3, result.Rows.Count); // (North, Electronics), (South, Electronics), (North, Clothing)
-            
+
             var nElec = result.Rows.First(r => r["Region"]?.ToString() == "North" && r["Category"]?.ToString() == "Electronics");
             Assert.NotNull(nElec["2021"]);
             Assert.Equal(30m, Convert.ToDecimal(nElec["2021"])); // 10 + 20
@@ -124,7 +124,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task Pivot_Chaining()
         {
             var eval = _serviceProvider.GetRequiredService<Evaluator>();
-            
+
             // Source: Region, Year, SaleType, Amount
             await eval.Evaluate(new Parser(new Lexer("CREATE TABLE #Chained (Region NVARCHAR(50), Year INT, SaleType NVARCHAR(10), Amount DECIMAL(18,2));").Tokenize()).Parse());
             await eval.Evaluate(new Parser(new Lexer("INSERT INTO #Chained VALUES ('North', 2021, 'A', 10), ('North', 2021, 'B', 20), ('North', 2022, 'A', 30), ('North', 2022, 'B', 20);").Tokenize()).Parse());
@@ -145,19 +145,19 @@ namespace ETL_SQL.Tests.Statements
             Assert.Contains("B", result.ColumnNames);
             Assert.Contains("2021", result.ColumnNames);
             Assert.Contains("2022", result.ColumnNames);
-            
+
             // Now there should be ONE row for North because B is consistently 20
             var north = result.Rows.First(r => r["Region"]?.ToString() == "North");
             Assert.Equal(10m, Convert.ToDecimal(north["2021"])); // A (2021) 
             Assert.Equal(30m, Convert.ToDecimal(north["2022"])); // A (2022)
-            Assert.Equal(20m, Convert.ToDecimal(north["B"])); 
+            Assert.Equal(20m, Convert.ToDecimal(north["B"]));
         }
 
         [Fact]
         public async Task Pivot_Subquery()
         {
             var eval = _serviceProvider.GetRequiredService<Evaluator>();
-            
+
             await eval.Evaluate(new Parser(new Lexer("CREATE TABLE #SubSrc (ID INT, Val DECIMAL, Category NVARCHAR(10));").Tokenize()).Parse());
             await eval.Evaluate(new Parser(new Lexer("INSERT INTO #SubSrc VALUES (1, 10, 'A'), (2, 20, 'B');").Tokenize()).Parse());
 

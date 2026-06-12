@@ -12,7 +12,7 @@ namespace ETL_SQL.Engine.Functions
     {
         private readonly Dictionary<string, string> _helpTexts = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Func<List<object?>, IExecutionContext, Task<object?>>> _functions = new(StringComparer.OrdinalIgnoreCase);
-        
+
         /// <summary>Registers a new asynchronous function implementation.</summary>
         public void Register(string name, Func<List<object?>, IExecutionContext, Task<object?>> implementation)
         {

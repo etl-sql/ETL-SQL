@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using ETL_SQL.Core;
-using ETL_SQL.Data;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Connectors.MockDb;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -21,7 +21,7 @@ namespace ETL_SQL.TUI.UI
             _context = context;
             _connections = connections;
         }
-    
+
 
         public void RefreshConnections(string script, bool force = false)
         {
@@ -29,7 +29,7 @@ namespace ETL_SQL.TUI.UI
             _lastScript = script;
 
             // Only clear if the script actually contains connection or table definitions
-            if (script.Contains("CREATE CONNECTION", StringComparison.OrdinalIgnoreCase) || 
+            if (script.Contains("CREATE CONNECTION", StringComparison.OrdinalIgnoreCase) ||
                 script.Contains("CREATE TABLE #", StringComparison.OrdinalIgnoreCase))
             {
                 _connections.Clear();

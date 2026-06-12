@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -91,7 +91,7 @@ namespace ETL_SQL.Engine.Handlers
                     resultTable.SetColumns(batch.ColumnNames);
                     resultMap[batch.ResultSetIndex] = resultTable;
                 }
-                
+
                 foreach (var row in batch.Rows)
                 {
                     await resultTable.AddRowAsync(row);
@@ -154,7 +154,7 @@ namespace ETL_SQL.Engine.Handlers
         private async Task LoadIntoTable(TableReference target, List<DataTable> results, Evaluator context)
         {
             string tableName = target.TableName;
-            
+
             // If it's a temp table and doesn't exist, create it from the first batch's schema
             if (tableName.StartsWith("#") && !context.Connections.ContainsKey(tableName))
             {
@@ -176,15 +176,15 @@ namespace ETL_SQL.Engine.Handlers
             {
                 // Simple truncate and load for EXECUTE ... INTO
                 await targetSource.TruncateAsync();
-                
+
                 async IAsyncEnumerable<DataTable> GetBatches()
                 {
                     foreach (var b in results) yield return b;
                     await Task.CompletedTask;
                 }
-                
+
                 await targetSource.WriteBatches(GetBatches());
-                
+
                 int totalRows = results.Sum(r => r.Rows.Count);
                 _logger.WriteLine($"Loaded {totalRows} rows into {tableName}.", ConsoleColor.Green);
                 context.Telemetry.RowsProcessed += totalRows;

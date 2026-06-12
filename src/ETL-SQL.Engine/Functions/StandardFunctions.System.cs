@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Functions;
-using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Functions;
 
 namespace ETL_SQL.Engine.Functions
 {
@@ -16,34 +16,35 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("ADD_TO_LIST", AddToList, "ADD_TO_LIST(@list, value): Alias for APPEND_TO_LIST.");
             registry.RegisterWithHelp("REMOVE_FROM_LIST", RemoveFromList, "REMOVE_FROM_LIST(@list, value): Removes all occurrences of a value from a list variable.");
             registry.RegisterWithHelp("SORT_LIST", SortList, "SORT_LIST(list[, 'ASC'|'DESC']): Returns a sorted version of the list.");
-            
+
             registry.RegisterWithHelp("CAST", (args, ctx) => args.Count >= 2 ? EvaluationUtils.CastToType(args[0], args[1]?.ToString() ?? "STRING") : args[0], "CAST(expr AS type): Converts an expression to a target data type.");
             registry.RegisterWithHelp("COUNT", Count, "COUNT(col): Returns the number of items in a collection.");
             registry.RegisterWithHelp("GENERATE_SERIES", GenerateSeries, "GENERATE_SERIES(start, stop[, step]): Generates a series of numbers.");
             registry.RegisterWithHelp("FILE_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.File.Exists(ctx.ResolvePath(args[0]?.ToString() ?? "")) : false, "FILE_EXISTS(path): Returns TRUE if the file exists.");
             registry.RegisterWithHelp("DIRECTORY_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.Directory.Exists(ctx.ResolvePath(args[0]?.ToString() ?? "")) : false, "DIRECTORY_EXISTS(path): Returns TRUE if the directory exists.");
-            
+
             registry.RegisterWithHelp("HASHBYTES", HashBytes, "HASHBYTES('algo', val): Returns a cryptographic hash (MD5, SHA1, SHA256, SHA512).");
             registry.RegisterWithHelp("NEWID", (args, ctx) => NewUuidV7(), "NEWID(): Returns a new unique identifier (UUID v7).");
             registry.RegisterWithHelp("NEWSEQUENTIALID", (args, ctx) => NewUuidV7(), "NEWSEQUENTIALID(): Returns a new sequential unique identifier.");
             registry.RegisterWithHelp("CHECKSUM", Checksum, "CHECKSUM(v1, v2, ...): Returns a hash of the input values.");
             registry.RegisterWithHelp("BINARY_CHECKSUM", Checksum, "BINARY_CHECKSUM(v1, v2, ...): Returns a binary-compatible hash.");
-            
+
             registry.RegisterWithHelp("TRY_CAST", TryCast, "TRY_CAST(expr AS type): Converts to type or returns NULL on failure.");
-            
+
             registry.RegisterWithHelp("ERROR_NUMBER", (args, ctx) => (ctx.ActiveException ?? ctx.LastError)?.Number ?? 0, "ERROR_NUMBER(): Returns the error number of the error that caused the CATCH block to run.");
             registry.RegisterWithHelp("ERROR_MESSAGE", (args, ctx) => (ctx.ActiveException ?? ctx.LastError)?.Message, "ERROR_MESSAGE(): Returns the message text of the error that caused the CATCH block to run.");
             registry.RegisterWithHelp("ERROR_SEVERITY", (args, ctx) => (ctx.ActiveException ?? ctx.LastError)?.Severity ?? 0, "ERROR_SEVERITY(): Returns the severity of the error that caused the CATCH block to run.");
             registry.RegisterWithHelp("ERROR_STATE", (args, ctx) => (ctx.ActiveException ?? ctx.LastError)?.State ?? 0, "ERROR_STATE(): Returns the state number of the error that caused the CATCH block to run.");
             registry.RegisterWithHelp("ERROR_LINE", (args, ctx) => (ctx.ActiveException ?? ctx.LastError)?.Line ?? 0, "ERROR_LINE(): Returns the line number where the error occurred.");
-            
-            registry.RegisterWithHelp("ENV", (args, ctx) => {
+
+            registry.RegisterWithHelp("ENV", (args, ctx) =>
+            {
                 string? name = args.FirstOrDefault()?.ToString();
                 if (string.IsNullOrEmpty(name)) return null;
                 ctx.SecurityService.ValidateEnvVar(name);
                 return Environment.GetEnvironmentVariable(name);
             }, "ENV('VAR_NAME'): Returns the value of a host environment variable (subject to security allow-list).");
-            
+
             registry.RegisterWithHelp("CONNECTION_PROPERTY", ConnectionProperty, "CONNECTION_PROPERTY(conn_name, prop_name): Returns the value of a connection property, masking sensitive properties.");
         }
 
@@ -73,7 +74,7 @@ namespace ETL_SQL.Engine.Functions
             long start = Convert.ToInt64(args[0]);
             long stop = Convert.ToInt64(args[1]);
             long step = args.Count >= 3 ? Convert.ToInt64(args[2]) : 1;
-            
+
             var list = new List<object?>();
             for (long i = start; (step > 0 ? i <= stop : i >= stop); i += step)
             {
@@ -116,9 +117,12 @@ namespace ETL_SQL.Engine.Functions
         private static object? TryCast(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 2) return null;
-            try {
+            try
+            {
                 return EvaluationUtils.CastToType(args[0], args[1]?.ToString() ?? "STRING");
-            } catch {
+            }
+            catch
+            {
                 return null;
             }
         }

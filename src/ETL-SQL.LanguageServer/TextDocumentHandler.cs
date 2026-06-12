@@ -3,27 +3,27 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Diagnostics;
+using ETL_SQL.Analysis.Lineage;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using OmniSharp.Extensions.JsonRpc;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Server;
-using ETL_SQL.Analysis.Diagnostics;
-using ETL_SQL.Analysis.Lineage;
-using ETL_SQL.Core;
-using OmniSharp.Extensions.JsonRpc;
-using ETL_SQL.Analysis.Linting;
-using ETL_SQL.Analysis.Linting.Rules;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Common;
-using ETL_SQL.Data;
 using LSPRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
+using SaveOptions = OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities.SaveOptions;
 using TextDocumentSelector = OmniSharp.Extensions.LanguageServer.Protocol.Models.TextDocumentSelector;
 using TextDocumentSyncKind = OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities.TextDocumentSyncKind;
-using SaveOptions = OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities.SaveOptions;
 
 namespace ETL_SQL.LSP
 {
@@ -43,10 +43,10 @@ namespace ETL_SQL.LSP
 
         public TextDocumentHandler(ILoggerFactory loggerFactory, IMetadataManager metadata, DocumentStateStore store)
         {
-            _logger   = loggerFactory.CreateLogger<TextDocumentHandler>();
+            _logger = loggerFactory.CreateLogger<TextDocumentHandler>();
             _metadata = metadata;
-            _store    = store;
-            _linter   = new Linter();
+            _store = store;
+            _linter = new Linter();
             foreach (var type in typeof(ILintRule).Assembly.GetTypes()
                 .Where(t => typeof(ILintRule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract))
             {
@@ -78,7 +78,7 @@ namespace ETL_SQL.LSP
         {
             var uri = request.TextDocument.Uri;
             if (_metadata.DebugMode) _logger.LogInformation("[DIAGNOSTIC] LSP: didOpen {Uri}", uri);
-            
+
             // Notify the client that a script has been opened/focused to help sync UI state
             _server?.SendNotification("etlsql/scriptOpened", new { uri = uri.ToString() });
 
@@ -143,13 +143,13 @@ namespace ETL_SQL.LSP
                 _logger.LogInformation("Pushing {Count} connections to client for {Uri}", connections.Count, uri);
                 _server?.SendNotification("etlsql/scriptConnections", new
                 {
-                    uri         = uri.ToString(),
+                    uri = uri.ToString(),
                     connections = connections.Select(c => new
                     {
-                        name             = c.Name,
-                        type             = c.Type,
+                        name = c.Name,
+                        type = c.Type,
                         connectionString = c.ConnectionString,
-                        isDocument       = c.IsDocument
+                        isDocument = c.IsDocument
                     }).ToList()
                 });
 
@@ -157,15 +157,15 @@ namespace ETL_SQL.LSP
                 var scriptVariables = new List<object>();
                 foreach (var stmt in script.Statements)
                     DiscoverVariablesRecursive(stmt, scriptVariables);
-                
-            _server?.SendNotification("etlsql/scriptVariables", new
+
+                _server?.SendNotification("etlsql/scriptVariables", new
                 {
-                    uri       = uri.ToString(),
+                    uri = uri.ToString(),
                     variables = scriptVariables.GroupBy(v => ((dynamic)v).name).Select(g => g.First()).ToList()
                 });
 
                 // Lineage analysis — store result in DocumentStateStore
-                var tracker  = new LineageTracker(NullLogger.Instance);
+                var tracker = new LineageTracker(NullLogger.Instance);
                 var analyzer = new LineageAnalyzer(tracker);
                 analyzer.Analyze(script);
                 _store.SetState(uri, text, script, analyzer.Tracker);
@@ -178,7 +178,7 @@ namespace ETL_SQL.LSP
                 // Lint diagnostics
                 var lintContext = new DefaultLintContext
                 {
-                    Metadata    = new LanguageServerMetadataProvider(_metadata, uri.ToString()),
+                    Metadata = new LanguageServerMetadataProvider(_metadata, uri.ToString()),
                     DocumentUri = uri.ToString()
                 };
                 var lintResults = await _linter.AnalyzeAsync(script, lintContext);
@@ -194,7 +194,7 @@ namespace ETL_SQL.LSP
 
             _server?.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
             {
-                Uri         = uri,
+                Uri = uri,
                 Diagnostics = diagnostics
             });
             _logger.LogDebug("Published {Count} diagnostics for {Uri}", diagnostics.Count, uri);
@@ -257,7 +257,7 @@ namespace ETL_SQL.LSP
                     var hasStar = ss.Columns.Any(c => c.Expression is IdentifierExpression id && id.Name == "*");
                     if (hasStar && ss.FromTable != null)
                     {
-                        var conn       = ss.FromTable.ConnectionName ?? _metadata.GetConnections(uri).FirstOrDefault(c => c.IsDocument)?.Name ?? "DEFAULT";
+                        var conn = ss.FromTable.ConnectionName ?? _metadata.GetConnections(uri).FirstOrDefault(c => c.IsDocument)?.Name ?? "DEFAULT";
                         var sourceCols = await _metadata.GetColumnsAsync(conn, ss.FromTable.TableName, uri);
                         columns.AddRange(sourceCols);
                     }
@@ -297,8 +297,8 @@ namespace ETL_SQL.LSP
                     foreach (var ei in ifStmt.ElseIfClauses) await DiscoverMetadataRecursiveAsync(ei.Body, uri);
                 if (ifStmt.ElseBody != null) await DiscoverMetadataRecursiveAsync(ifStmt.ElseBody, uri);
             }
-            else if (stmt is WhileStatement w)   await DiscoverMetadataRecursiveAsync(w.Body, uri);
-            else if (stmt is ForStatement f)      await DiscoverMetadataRecursiveAsync(f.Body, uri);
+            else if (stmt is WhileStatement w) await DiscoverMetadataRecursiveAsync(w.Body, uri);
+            else if (stmt is ForStatement f) await DiscoverMetadataRecursiveAsync(f.Body, uri);
             else if (stmt is ForeachStatement fe) await DiscoverMetadataRecursiveAsync(fe.Body, uri);
             else if (stmt is TryCatchStatement tc)
             {
@@ -311,8 +311,8 @@ namespace ETL_SQL.LSP
             => new TextDocumentSyncRegistrationOptions
             {
                 DocumentSelector = TextDocumentSelector.ForLanguage("etlsql"),
-                Change           = TextDocumentSyncKind.Full,
-                Save             = new SaveOptions { IncludeText = true }
+                Change = TextDocumentSyncKind.Full,
+                Save = new SaveOptions { IncludeText = true }
             };
 
         private void DiscoverVariablesRecursive(Statement? stmt, List<object> vars)
@@ -342,7 +342,7 @@ namespace ETL_SQL.LSP
                     foreach (var ei in ifStmt.ElseIfClauses) DiscoverVariablesRecursive(ei.Body, vars);
                 if (ifStmt.ElseBody != null) DiscoverVariablesRecursive(ifStmt.ElseBody, vars);
             }
-            else if (stmt is WhileStatement w)   DiscoverVariablesRecursive(w.Body, vars);
+            else if (stmt is WhileStatement w) DiscoverVariablesRecursive(w.Body, vars);
             else if (stmt is TryCatchStatement tc)
             {
                 DiscoverVariablesRecursive(tc.TryBody, vars);

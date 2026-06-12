@@ -1,6 +1,6 @@
-using Xunit;
 using System.Linq;
 using ETL_SQL.TUI.UI;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {

@@ -21,7 +21,7 @@ namespace ETL_SQL.SqlLogicTests
             var failLog = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "slt_failure_debug.log");
             if (File.Exists(failLog))
             {
-                try { File.Delete(failLog); } catch {}
+                try { File.Delete(failLog); } catch { }
             }
 
             object fileLock = new object();
@@ -64,7 +64,7 @@ namespace ETL_SQL.SqlLogicTests
                             sb.AppendLine($"=======================================================");
                             File.AppendAllText(failLog, sb.ToString());
                         }
-                        catch {}
+                        catch { }
                     }
                 }
             });
@@ -81,7 +81,7 @@ namespace ETL_SQL.SqlLogicTests
             // Resolve relative to the assembly directory first to support static discovery in xUnit
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
             var root = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "slt_data"));
-            
+
             if (!Directory.Exists(root))
             {
                 root = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "slt_data"));

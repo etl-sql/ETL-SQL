@@ -23,7 +23,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             var original = "Hello, machine-bound world!"u8.ToArray();
             var protected_ = MachineBoundCrypto.Protect(original);
-            var recovered  = MachineBoundCrypto.Unprotect(protected_);
+            var recovered = MachineBoundCrypto.Unprotect(protected_);
 
             Assert.Equal(original, recovered);
         }
@@ -42,10 +42,10 @@ namespace ETL_SQL.Tests.Reporting
         public void MachineBoundCrypto_FileRoundTrip_ProducesIdenticalContent()
         {
             var dir = Path.GetTempPath();
-            var plain     = Path.Combine(dir, Path.GetRandomFileName());
+            var plain = Path.Combine(dir, Path.GetRandomFileName());
             var encrypted = Path.Combine(dir, Path.GetRandomFileName());
             var decrypted = Path.Combine(dir, Path.GetRandomFileName());
-            var content   = "Dataset row 1,row 2,row 3\n";
+            var content = "Dataset row 1,row 2,row 3\n";
 
             try
             {
@@ -171,7 +171,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             // LinterFactory uses reflection — verify the new rule is picked up automatically
             var linter = LinterFactory.CreateWithAllRules();
-            var sql    = "CREATE DATASET &sales ENCRYPT = PASSWORD PASSWORD = 'x' AS (SELECT 1 AS v FROM t);";
+            var sql = "CREATE DATASET &sales ENCRYPT = PASSWORD PASSWORD = 'x' AS (SELECT 1 AS v FROM t);";
             var results = (await linter.AnalyzeAsync(Parse(sql), new DefaultLintContext())).ToList();
 
             Assert.Contains(results, r => r.RuleName == "DatasetEncryptionMode" && r.Severity == LintSeverity.Warning);

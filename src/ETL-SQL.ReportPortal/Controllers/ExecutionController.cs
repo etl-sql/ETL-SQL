@@ -1,15 +1,15 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
-using ETL_SQL.Reporting;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -17,11 +17,11 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [Route("api")]
 [Authorize]
 public class ExecutionController(
-    PortalDbContext     db,
+    PortalDbContext db,
     ExecutionJobService jobService,
-    SessionCache        sessions,
-    AuditService        audit,
-    PortalConfig        portalConfig,
+    SessionCache sessions,
+    AuditService audit,
+    PortalConfig portalConfig,
     FolderPermissionService folderPermissions) : ControllerBase
 {
     private int CurrentUserId =>
@@ -173,7 +173,7 @@ public class ExecutionController(
             return Forbid();
 
         string? existingJobId = jobService.GetActiveRefreshJobId(id);
-        bool alreadyRunning   = existingJobId is not null;
+        bool alreadyRunning = existingJobId is not null;
 
         var jobId = alreadyRunning
             ? existingJobId!
@@ -207,7 +207,7 @@ public class ExecutionController(
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
-        var svc      = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
+        var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
         var manifest = await svc.SetParameterAsync(req.Name, req.Value ?? string.Empty, req.IsInteraction);
         await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
         return Ok(manifest);
@@ -231,8 +231,8 @@ public class ExecutionController(
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
-        var svc      = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
-        var updates  = (req.Params ?? Enumerable.Empty<ParameterUpdateRequest>())
+        var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
+        var updates = (req.Params ?? Enumerable.Empty<ParameterUpdateRequest>())
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name, p.Value));
         var manifest = await svc.SetParametersAsync(updates, req.IsInteraction, req.PageName);
@@ -257,7 +257,7 @@ public class ExecutionController(
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
-        var svc      = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
+        var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
         var manifest = req.Direction?.ToUpperInvariant() == "UP"
             ? await svc.DrillUpAsync(req.VisualName, req.TargetDepth)
             : await svc.DrillInAsync(req.VisualName, req.ClickedValue ?? "");
@@ -282,7 +282,7 @@ public class ExecutionController(
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
-        var svc      = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
+        var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
         var manifest = await svc.RefreshVisualsAsync(req.Visuals);
         await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
         return manifest is null ? NotFound() : Ok(manifest);
@@ -340,7 +340,7 @@ public class ExecutionController(
                 && PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath)
                 && System.IO.File.Exists(resolvedManifestPath))
             {
-                var store    = new SnapshotStore();
+                var store = new SnapshotStore();
                 var manifest = await store.LoadAsync(resolvedManifestPath);
                 // DashboardService doesn't expose a direct "seed from manifest" API, so
                 // if there's a saved snapshot we just let the first real interaction trigger

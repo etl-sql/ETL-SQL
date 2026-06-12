@@ -12,7 +12,7 @@ namespace ETL_SQL.Core.Analysis
     {
         private readonly string? _targetTable;
         private readonly string? _targetConn;
-        
+
         public bool IsDmlDetected { get; private set; }
         public bool HasOpaqueCalls { get; private set; }
 
@@ -84,8 +84,8 @@ namespace ETL_SQL.Core.Analysis
             {
                 CheckTarget(sel.IntoTable);
             }
-            else if (statement is ExecStatement || 
-                     statement is ExecuteRemoteBlockStatement || 
+            else if (statement is ExecStatement ||
+                     statement is ExecuteRemoteBlockStatement ||
                      statement is ExecutePushdownStatement ||
                      statement is ExecuteStatement ||
                      statement is EmailStatement ||
@@ -96,7 +96,7 @@ namespace ETL_SQL.Core.Analysis
             {
                 // Side effects detected - trigger safe path
                 HasOpaqueCalls = true;
-                IsDmlDetected = true; 
+                IsDmlDetected = true;
             }
         }
 

@@ -1,8 +1,8 @@
+using System.Collections.Generic;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using Xunit;
-using System.Collections.Generic;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -25,7 +25,7 @@ namespace ETL_SQL.Tests.Engine
                 new List<JoinClause>(),
                 null
             );
-            
+
             var key1 = new SubqueryCacheKey(stmt1, new CompoundKey(1));
             var key2 = new SubqueryCacheKey(stmt2, new CompoundKey(1));
             var key3 = new SubqueryCacheKey(stmt1, new CompoundKey(2));
@@ -36,9 +36,9 @@ namespace ETL_SQL.Tests.Engine
                     new TableReference("Other"),
                     new List<JoinClause>(),
                     null
-                ), 
+                ),
                 new CompoundKey(1));
-            
+
             Assert.Equal(key1, key2);
             Assert.NotEqual(key1, key3);
             Assert.NotEqual(key1, key4);
@@ -56,7 +56,7 @@ namespace ETL_SQL.Tests.Engine
             );
             var key1 = new SubqueryCacheKey(stmt, new CompoundKey("A", 10));
             var key2 = new SubqueryCacheKey(stmt, new CompoundKey("A", 10));
-            
+
             Assert.Equal(key1.GetHashCode(), key2.GetHashCode());
         }
     }

@@ -1,14 +1,14 @@
-using ETL_SQL.Core;
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using ETL_SQL.App;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
-using System;
-using System.IO;
-using System.Threading.Tasks;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -139,10 +139,10 @@ namespace ETL_SQL.Tests.Statements
                 ";
 
                 var parser = new Parser(new Lexer(script).Tokenize());
-                
-                var ex = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () => 
+
+                var ex = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () =>
                     await _evaluator.Evaluate(parser.Parse()));
-                
+
                 Assert.Contains("Max errors (1) exceeded", ex.Message);
             }
             finally

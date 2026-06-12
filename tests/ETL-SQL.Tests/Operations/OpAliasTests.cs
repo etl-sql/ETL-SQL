@@ -1,11 +1,11 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Operations
 {
@@ -16,7 +16,7 @@ namespace ETL_SQL.Tests.Operations
         public async Task TestFileAlias()
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             // Test primary name
             await eval.Evaluate(new Parser(new Lexer("CREATE CONNECTION TestFile1 AS FLATFILE('test1.csv');").Tokenize()).Parse());
             if (eval.Connections.TryGetValue("TestFile1", out var conn1))
@@ -38,7 +38,7 @@ namespace ETL_SQL.Tests.Operations
         public async Task TestSqlServerAlias()
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             // Test primary name
             await eval.Evaluate(new Parser(new Lexer("CREATE CONNECTION TestSql1 AS MSSQL('server=localhost');").Tokenize()).Parse());
             Assert.True(eval.Connections.ContainsKey("TestSql1"), "Failed to create connection with MSSQL");

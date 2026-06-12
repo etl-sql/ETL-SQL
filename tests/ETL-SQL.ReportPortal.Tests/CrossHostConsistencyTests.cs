@@ -58,7 +58,7 @@ public class CrossHostConsistencyTests : IClassFixture<PortalWebFactory>
     public CrossHostConsistencyTests(PortalWebFactory factory)
     {
         _factory = factory;
-        _client  = factory.CreateClient();
+        _client = factory.CreateClient();
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class CrossHostConsistencyTests : IClassFixture<PortalWebFactory>
         var publishRes = await AuthPost(token, "/api/reports", new
         {
             folderId,
-            name        = "Cross-Host Fixture",
+            name = "Cross-Host Fixture",
             description = "Cross-host consistency smoke fixture",
             scriptPath
         });

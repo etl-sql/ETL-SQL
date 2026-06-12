@@ -2,8 +2,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.Engine.Services
 {
@@ -30,7 +30,7 @@ namespace ETL_SQL.Engine.Services
 
         private string CompileExpressionInternal(Expression e, string d)
         {
-            if (e is IdentifierExpression id) 
+            if (e is IdentifierExpression id)
             {
                 if (id.Name.StartsWith("@"))
                 {
@@ -41,7 +41,7 @@ namespace ETL_SQL.Engine.Services
                 }
                 return id.Name;
             }
-            if (e is LiteralExpression lit) 
+            if (e is LiteralExpression lit)
             {
                 var pName = "@p" + _paramCounter++;
                 _currentParams[pName] = lit.Value;
@@ -49,11 +49,20 @@ namespace ETL_SQL.Engine.Services
             }
             if (e is BinaryExpression bin)
             {
-                var op = bin.Operator switch {
-                    TokenType.EQUALS => "=", TokenType.NOT_EQUALS => "!=", TokenType.LESS_THAN => "<",
-                    TokenType.GREATER_THAN => ">", TokenType.LESS_EQUALS => "<=", TokenType.GREATER_EQUALS => ">=",
-                    TokenType.PLUS => "+", TokenType.MINUS => "-", TokenType.STAR => "*", TokenType.SLASH => "/",
-                    TokenType.LSHIFT => "<<", TokenType.RSHIFT => ">>",
+                var op = bin.Operator switch
+                {
+                    TokenType.EQUALS => "=",
+                    TokenType.NOT_EQUALS => "!=",
+                    TokenType.LESS_THAN => "<",
+                    TokenType.GREATER_THAN => ">",
+                    TokenType.LESS_EQUALS => "<=",
+                    TokenType.GREATER_EQUALS => ">=",
+                    TokenType.PLUS => "+",
+                    TokenType.MINUS => "-",
+                    TokenType.STAR => "*",
+                    TokenType.SLASH => "/",
+                    TokenType.LSHIFT => "<<",
+                    TokenType.RSHIFT => ">>",
                     _ => bin.Operator.ToString()
                 };
                 return $"({CompileExpressionInternal(bin.Left, d)} {op} {CompileExpressionInternal(bin.Right, d)})";
@@ -104,7 +113,7 @@ namespace ETL_SQL.Engine.Services
                 selectParts.Add(cols);
 
                 var sql = "SELECT " + string.Join(" ", selectParts);
-                
+
                 if (sel.FromTable != null)
                 {
                     sql += $" FROM {CompileTableReferenceInternal(sel.FromTable, d)}";
@@ -161,11 +170,15 @@ namespace ETL_SQL.Engine.Services
 
                 return sql;
             }
-            if (s is SetOperationStatement setOp) 
+            if (s is SetOperationStatement setOp)
             {
-                string op = setOp.Operation switch {
-                    SetOpType.UNION => "UNION", SetOpType.UNION_ALL => "UNION ALL",
-                    SetOpType.EXCEPT => "EXCEPT", SetOpType.INTERSECT => "INTERSECT", _ => "UNION"
+                string op = setOp.Operation switch
+                {
+                    SetOpType.UNION => "UNION",
+                    SetOpType.UNION_ALL => "UNION ALL",
+                    SetOpType.EXCEPT => "EXCEPT",
+                    SetOpType.INTERSECT => "INTERSECT",
+                    _ => "UNION"
                 };
                 return $"{CompileQueryInternal(setOp.Left, d)} {op} {CompileQueryInternal(setOp.Right, d)}";
             }
@@ -194,7 +207,7 @@ namespace ETL_SQL.Engine.Services
                 sql = _evaluator.GetSqlTableName(t, d);
             }
 
-            if (t.Alias != null) 
+            if (t.Alias != null)
             {
                 if (d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))
                     sql += " " + t.Alias;
@@ -207,12 +220,12 @@ namespace ETL_SQL.Engine.Services
         private string CompileMergeInternal(MergeStatement m, string d)
         {
             var targetTable = _evaluator.GetSqlTableName(m.TargetTable, d);
-            var sql = d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase) 
-                ? $"MERGE INTO {targetTable} T" 
+            var sql = d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase)
+                ? $"MERGE INTO {targetTable} T"
                 : $"MERGE INTO {targetTable} AS T";
-            
+
             sql += $" USING {CompileTableReferenceInternal(m.SourceTable, d)}";
-            
+
             // If the source table reference didn't have an alias, we explicitly add one for the ON clause (S and T are standard)
             if (m.SourceTable.Alias == null)
             {

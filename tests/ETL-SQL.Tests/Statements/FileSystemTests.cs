@@ -1,14 +1,14 @@
-using Xunit;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.Engine;
-using ETL_SQL.Core;
 using ETL_SQL.App;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -70,7 +70,7 @@ namespace ETL_SQL.Tests.Statements
             Directory.CreateDirectory(dirName);
             File.WriteAllText(Path.Combine(dirName, "file1.txt"), "1");
             File.WriteAllText(Path.Combine(dirName, "file2.log"), "2");
-            
+
             var evaluator = GetEvaluator();
 
             try
@@ -102,7 +102,7 @@ namespace ETL_SQL.Tests.Statements
             if (Directory.Exists(dest)) Directory.Delete(dest, true);
             Directory.CreateDirectory(src);
             File.WriteAllText(Path.Combine(src, "test.txt"), "hello");
-            
+
             var evaluator = GetEvaluator();
 
             try
@@ -128,7 +128,7 @@ namespace ETL_SQL.Tests.Statements
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "keep_me.txt"), "stay");
             Directory.CreateDirectory(Path.Combine(dir, "sub"));
-            
+
             var evaluator = GetEvaluator();
 
             try
@@ -151,7 +151,7 @@ namespace ETL_SQL.Tests.Statements
             if (File.Exists(src)) File.Delete(src);
             if (File.Exists(dest)) File.Delete(dest);
             if (File.Exists("file_renamed.txt")) File.Delete("file_renamed.txt");
-            
+
             await File.WriteAllTextAsync(src, "test");
 
             var evaluator = GetEvaluator();
@@ -181,7 +181,7 @@ namespace ETL_SQL.Tests.Statements
             string renamedDir = "DirOps_Renamed";
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
             if (Directory.Exists(renamedDir)) Directory.Delete(renamedDir, true);
-            
+
             var evaluator = GetEvaluator();
             try
             {

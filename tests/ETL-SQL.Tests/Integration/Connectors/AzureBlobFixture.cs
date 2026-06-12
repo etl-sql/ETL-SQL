@@ -38,7 +38,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
             $"BlobEndpoint=http://127.0.0.1:{BlobPort}/{DevAccountName};";
 
         public string ValidConnectionString => ConnectionString(DevAccountKey);
-        public string BadKeyConnectionString  => ConnectionString(WrongAccountKey);
+        public string BadKeyConnectionString => ConnectionString(WrongAccountKey);
 
         public string ExpiredSasConnectionString()
         {

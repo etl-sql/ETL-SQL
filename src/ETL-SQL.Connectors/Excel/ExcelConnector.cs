@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Excel
 {
@@ -47,7 +47,7 @@ namespace ETL_SQL.Connectors.Excel
             "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption";
 
-        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) 
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
             => new ExcelDataSource(context, connectionString, options);
 
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
@@ -56,7 +56,7 @@ namespace ETL_SQL.Connectors.Excel
         public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
         /// <summary>Builds an Excel file path from named properties.</summary>
-        public string BuildConnectionString(Dictionary<string, string> properties) => 
+        public string BuildConnectionString(Dictionary<string, string> properties) =>
             ConnectionStringBuilder.Build(Name, properties);
     }
 }

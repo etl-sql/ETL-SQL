@@ -1,10 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
@@ -25,7 +25,7 @@ namespace ETL_SQL.App
 
                 logger.WriteLine($"Reading schema JSON: {schemaPath}");
                 var jsonContent = await File.ReadAllTextAsync(schemaPath);
-                
+
                 var options = new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true,
@@ -62,11 +62,11 @@ namespace ETL_SQL.App
                 if (spec.Datasets != null && spec.Datasets.Count > 0)
                 {
                     logger.WriteLine($"Compiling multi-dataset master pipeline: '{spec.PipelineName}' ({spec.Datasets.Count} datasets)");
-                    
+
                     var masterFileNameWithoutExtension = Path.GetFileNameWithoutExtension(outputPath);
                     var modulesDirName = $"{masterFileNameWithoutExtension}_modules";
                     var modulesDirPath = Path.Combine(outputDir, modulesDirName);
-                    
+
                     if (!Directory.Exists(modulesDirPath))
                     {
                         Directory.CreateDirectory(modulesDirPath);
@@ -77,7 +77,7 @@ namespace ETL_SQL.App
                     {
                         var dsName = ds.Name ?? "unnamed_dataset";
                         logger.WriteLine($"  -> Compiling sub-module: '{dsName}'");
-                        
+
                         var subSpec = new SpecPipeline
                         {
                             PipelineName = dsName,
@@ -99,7 +99,7 @@ namespace ETL_SQL.App
                     // 2. Generate Master Runner
                     var masterEtlSql = CompileMasterPipeline(spec, modulesDirName, Path.GetFileName(schemaPath));
                     await File.WriteAllTextAsync(outputPath, masterEtlSql, Encoding.UTF8);
-                    
+
                     logger.WriteLine($"Multi-dataset pipeline successfully compiled.", ConsoleColor.Green);
                     logger.WriteLine($"  Master Script: {outputPath}", ConsoleColor.Green);
                     logger.WriteLine($"  Modules Directory: {modulesDirPath}", ConsoleColor.Green);
@@ -257,7 +257,7 @@ namespace ETL_SQL.App
             sb.AppendLine("-- =========================================================================");
             sb.AppendLine();
             sb.AppendLine("BEGIN TRY");
-            
+
             foreach (var ds in spec.Datasets!)
             {
                 var dsName = ds.Name ?? "unnamed";
@@ -300,7 +300,7 @@ namespace ETL_SQL.App
             // 2. Variable declarations and date handling for target filename
             var namingPattern = spec.Destination?.NamingPattern ?? $"{pipelineName}_output.csv";
             var hasDatePattern = namingPattern.Contains("{yyyy") || namingPattern.Contains("{HH");
-            
+
             if (hasDatePattern)
             {
                 sb.AppendLine("-- 2. DYNAMIC FILENAME GENERATION");
@@ -323,7 +323,7 @@ namespace ETL_SQL.App
                     sb.AppendLine($"DECLARE @TimestampStr VARCHAR(15);");
                     sb.AppendLine($"SET @TimestampStr = FORMAT(GETDATE(), 'yyyyMMdd_HHmmss');");
                 }
-                
+
                 sb.AppendLine($"DECLARE @FileName VARCHAR(100);");
                 sb.AppendLine($"SET @FileName = '{cleanPattern}';");
                 sb.AppendLine();
@@ -339,13 +339,13 @@ namespace ETL_SQL.App
             {
                 sb.AppendLine($"-- Base directory connection context (isolates physical drive paths)");
                 sb.AppendLine($"CREATE CONNECTION target_dir AS DIRECTORY('{path}');");
-                
+
                 var fileRef = hasDatePattern ? "target_dir + '/' + @FileName" : $"target_dir + '/{namingPattern}'";
-                
+
                 sb.AppendLine($"CREATE CONNECTION outbound_dest AS FLATFILE(");
                 sb.AppendLine($"    PATH = {fileRef},");
                 sb.AppendLine($"    FORMAT = '{format}',");
-                
+
                 var hasHeader = spec.Destination?.HasHeader ?? true;
                 sb.AppendLine($"    HAS_HEADER = {(hasHeader ? "TRUE" : "FALSE")},");
 
@@ -777,12 +777,12 @@ namespace ETL_SQL.App
             {
                 if (col.MaxLength.HasValue)
                 {
-                    return col.Nullable 
+                    return col.Nullable
                         ? $"SUBSTRING(TRY_CAST({colName} AS VARCHAR), 1, {col.MaxLength.Value})"
                         : $"SUBSTRING(ISNULL(TRY_CAST({colName} AS VARCHAR), ''), 1, {col.MaxLength.Value})";
                 }
-                return col.Nullable 
-                    ? $"TRY_CAST({colName} AS VARCHAR)" 
+                return col.Nullable
+                    ? $"TRY_CAST({colName} AS VARCHAR)"
                     : $"ISNULL(TRY_CAST({colName} AS VARCHAR), '')";
             }
 

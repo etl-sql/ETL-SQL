@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Engine.Storage;
-using ETL_SQL.Engine.Functions;
-using System.Text.Json;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Functions;
+using ETL_SQL.Engine.Storage;
 
 namespace ETL_SQL.Engine.Services
 {
@@ -64,11 +64,11 @@ namespace ETL_SQL.Engine.Services
             {
                 var mem = new InMemoryDataSource();
                 mem.Validator = _evaluator;
-                
+
                 // Configure spill-to-disk protection
                 mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
                 mem.ExecutionContext = _evaluator;
-                
+
                 // [STABILIZATION] Always register in global connections to ensure persistence 
                 // across statement boundaries within the session.
                 connections[name] = mem;
@@ -104,7 +104,7 @@ namespace ETL_SQL.Engine.Services
                     mem.Validator = _evaluator;
                     mem.ExecutionContext = _evaluator;
                     mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
-                    
+
                     await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
                     return mem;
                 }
@@ -305,7 +305,7 @@ namespace ETL_SQL.Engine.Services
             var ds = new InMemoryDataSource();
             ds.Validator = _evaluator;
             ds.ExecutionContext = _evaluator;
-            
+
             // Restore schema (full ColumnDefinitions and TableConstraints)
             if (info.Columns != null && info.Columns.Count > 0)
             {
@@ -319,7 +319,7 @@ namespace ETL_SQL.Engine.Services
                 _logger.Debug("[SESSION] Rehydrated temp table {TableName} from {ChunkCount} spill chunks.", info.Name, info.SpillChunkNames.Count);
                 return ds;
             }
-            
+
             // Legacy/Snapshot Path: Restore from JSON file
             if (File.Exists(info.DataFilePath))
             {
@@ -328,11 +328,11 @@ namespace ETL_SQL.Engine.Services
                     string encryptedJson = await File.ReadAllTextAsync(info.DataFilePath);
                     string plainJson = CryptoUtils.Unprotect(encryptedJson, password);
                     var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(plainJson);
-                    
+
                     if (rows != null && rows.Count > 0)
                     {
-                        var dt = new DataTable(); 
-                        dt.SetColumns(ds.Schema.Keys, info.Constraints); 
+                        var dt = new DataTable();
+                        dt.SetColumns(ds.Schema.Keys, info.Constraints);
 
                         foreach (var rowDict in rows)
                         {
@@ -352,7 +352,7 @@ namespace ETL_SQL.Engine.Services
                     _logger.WriteLine($"Warning: Failed to restore temp table {info.Name}: {ex.Message}", ConsoleColor.Yellow);
                 }
             }
-            
+
             return ds;
         }
 
@@ -410,7 +410,7 @@ namespace ETL_SQL.Engine.Services
                 switch (elem.ValueKind)
                 {
                     case JsonValueKind.String: return elem.GetString();
-                    case JsonValueKind.Number: 
+                    case JsonValueKind.Number:
                         if (elem.TryGetInt32(out int i)) return i;
                         if (elem.TryGetInt64(out long l)) return l;
                         return elem.GetDouble();
@@ -430,7 +430,7 @@ namespace ETL_SQL.Engine.Services
         {
             var source = await ResolveDataSourceAsync(table, connections, transactionManager);
             var batches = source.ReadBatches(batchSize);
-            
+
             if (table.TableOperators.Count == 0)
             {
                 await foreach (var b in batches) yield return b;
@@ -466,7 +466,7 @@ namespace ETL_SQL.Engine.Services
             var resultTable = new DataTable();
             if (allRows.Count > 0) resultTable.SetColumns(allRows[0].Columns.Keys);
             foreach (var r in allRows) await resultTable.AddRowAsync(r);
-            
+
             yield return resultTable;
         }
     }

@@ -25,10 +25,10 @@ namespace ETL_SQL.Engine
         /// Prints a batch of rows to the console or as JSON depending on the current mode.
         /// Handles paging if enabled.
         /// </summary>
-        public static void PrintBatch(DataTable batch, bool isFirst) 
-        { 
+        public static void PrintBatch(DataTable batch, bool isFirst)
+        {
             if (SuppressOutput) return;
-            if (IsJsonMode) { PrintJson(batch, isFirst); return; } 
+            if (IsJsonMode) { PrintJson(batch, isFirst); return; }
             if (batch.Rows.Count == 0) return;
 
             if (EnablePaging && isFirst && _resultSetCount > 0)
@@ -46,7 +46,8 @@ namespace ETL_SQL.Engine
 
             foreach (var row in batch.Rows)
             {
-                var values = batch.ColumnNames.Select(c => {
+                var values = batch.ColumnNames.Select(c =>
+                {
                     var val = row[c];
                     if (val is string s && s.StartsWith("ENC:")) return "ENC:********";
                     return Markup.Escape(val?.ToString() ?? "NULL");
@@ -83,10 +84,10 @@ namespace ETL_SQL.Engine
                 type = "results",
                 isFirst = isFirst,
                 columns = batch.ColumnNames,
-                rows = batch.Rows.Select(r => 
+                rows = batch.Rows.Select(r =>
                 {
                     var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-                    foreach(var col in batch.ColumnNames) dict[col] = r[col];
+                    foreach (var col in batch.ColumnNames) dict[col] = r[col];
                     return dict;
                 }).ToList()
             };
@@ -114,9 +115,9 @@ namespace ETL_SQL.Engine
 
             object output = list;
             if (!string.IsNullOrEmpty(root)) output = new Dictionary<string, object> { [root] = list };
-            
+
             var json = JsonSerializer.Serialize(output, new JsonSerializerOptions { WriteIndented = true });
-            
+
             if (withoutArrayWrapper && !string.IsNullOrEmpty(json))
             {
                 json = json.Trim();
@@ -125,7 +126,7 @@ namespace ETL_SQL.Engine
                     json = json.Substring(1, json.Length - 2).Trim();
                 }
             }
-            
+
             return json;
         }
 
@@ -160,7 +161,7 @@ namespace ETL_SQL.Engine
                 {
                     // EXPLICIT mode is complex, but we'll do a basic implementation
                     // Expecting 'Tag' and 'Parent' columns
-                    rowEl = new XElement("row"); 
+                    rowEl = new XElement("row");
                 }
                 else
                 {
@@ -175,7 +176,7 @@ namespace ETL_SQL.Engine
                     if (val == null)
                     {
                         if (!includeNulls) continue;
-                        
+
                         // XSINIL support
                         var nilEl = new XElement(safeKey.Replace(".", "_").Replace(" ", "_"), new XAttribute(xsi + "nil", "true"));
                         rowEl.Add(nilEl);

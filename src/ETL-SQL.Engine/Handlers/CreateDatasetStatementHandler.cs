@@ -70,7 +70,7 @@ namespace ETL_SQL.Engine.Handlers
                         $"CREATE OR ALTER DATASET '{stmt.TempTableName}' requires editor or owner permission.",
                         null, stmt.Line, stmt.Column);
 
-                var existing  = await registry.Lookup(stmt.TempTableName, callerCtx);
+                var existing = await registry.Lookup(stmt.TempTableName, callerCtx);
                 if (IsFreshEnough(existing, stmt.Ttl))
                 {
                     _logger.Debug(
@@ -135,20 +135,20 @@ namespace ETL_SQL.Engine.Handlers
             var existing = await registry.Lookup(stmt.TempTableName, callerCtx);
             var metadata = new DatasetMetadata
             {
-                Id             = existing?.Id ?? 0,
-                Name           = stmt.TempTableName,
-                FolderPath     = folderPath,
+                Id = existing?.Id ?? 0,
+                Name = stmt.TempTableName,
+                FolderPath = folderPath,
                 OwningReportId = (context as Evaluator)?.DatasetOwningReportId,
-                CreatedBy      = existing?.CreatedBy,
+                CreatedBy = existing?.CreatedBy,
                 ParquetFilePath = existing?.ParquetFilePath ?? "",
-                SourceQuery    = stmt.SourceQuery.ToSql(),
-                AccessLevel    = stmt.AccessLevel,
+                SourceQuery = stmt.SourceQuery.ToSql(),
+                AccessLevel = stmt.AccessLevel,
                 EncryptionMode = stmt.EncryptionMode,
-                LastRefresh    = DateTime.UtcNow,
-                Ttl            = stmt.Ttl,
-                CachedTtl      = ParseDuration(stmt.Ttl),
+                LastRefresh = DateTime.UtcNow,
+                Ttl = stmt.Ttl,
+                CachedTtl = ParseDuration(stmt.Ttl),
                 RefreshInterval = stmt.RefreshInterval,
-                RowCount       = rowCount
+                RowCount = rowCount
             };
 
             var allocatedNewRow = existing == null;
@@ -298,7 +298,7 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
 
-            var jobName   = $"__dataset_refresh_{MakeSafeAlias(stmt.TempTableName)}__";
+            var jobName = $"__dataset_refresh_{MakeSafeAlias(stmt.TempTableName)}__";
             var jobScript = new PrintStatement(
                 [new LiteralExpression(
                     $"Dataset refresh trigger for {stmt.TempTableName}",
@@ -348,14 +348,14 @@ namespace ETL_SQL.Engine.Handlers
                     DatasetAtRestOptions.Apply(opts, null);   // host MACHINE (no portal key)
                     break;
                 case DatasetEncryptionMode.Password:
-                    opts["ENCRYPT"]   = new LiteralExpression("PASSWORD",                   TokenType.STRING_LITERAL);
-                    opts["PASSWORD"]  = new LiteralExpression(stmt.EncryptionPassword ?? "", TokenType.STRING_LITERAL);
+                    opts["ENCRYPT"] = new LiteralExpression("PASSWORD", TokenType.STRING_LITERAL);
+                    opts["PASSWORD"] = new LiteralExpression(stmt.EncryptionPassword ?? "", TokenType.STRING_LITERAL);
                     break;
                 case DatasetEncryptionMode.KeyFile:
-                    opts["ENCRYPT"]  = new LiteralExpression("KEYFILE",          TokenType.STRING_LITERAL);
-                    opts["KEYFILE"]  = new LiteralExpression(stmt.KeyFile ?? "", TokenType.STRING_LITERAL);
+                    opts["ENCRYPT"] = new LiteralExpression("KEYFILE", TokenType.STRING_LITERAL);
+                    opts["KEYFILE"] = new LiteralExpression(stmt.KeyFile ?? "", TokenType.STRING_LITERAL);
                     break;
-                // DatasetEncryptionMode.None → no ENCRYPT option → Parquet written unencrypted
+                    // DatasetEncryptionMode.None → no ENCRYPT option → Parquet written unencrypted
             }
 
             return opts;
@@ -376,7 +376,7 @@ namespace ETL_SQL.Engine.Handlers
                 "M" => "MINUTE",
                 "H" => "HOUR",
                 "D" => "DAY",
-                _   => "MINUTE"
+                _ => "MINUTE"
             };
             return new ScheduleInfo(value, unit);
         }
@@ -395,7 +395,7 @@ namespace ETL_SQL.Engine.Handlers
                 "M" => TimeSpan.FromMinutes(value),
                 "H" => TimeSpan.FromHours(value),
                 "D" => TimeSpan.FromDays(value),
-                _   => null
+                _ => null
             };
         }
     }

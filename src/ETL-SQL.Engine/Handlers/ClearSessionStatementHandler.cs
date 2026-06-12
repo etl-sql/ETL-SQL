@@ -1,10 +1,10 @@
-using ETL_SQL.Core;
 using System;
-using System.Threading.Tasks;
 using System.Linq;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
+using System.Threading.Tasks;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -32,7 +32,7 @@ namespace ETL_SQL.Engine.Handlers
                         sessionStateManager.UnregisterActiveSession(context.DataContext.SessionId);
                         sessionStateManager.ClearSession(context.DataContext.SessionId);
                         logger.Info("Cleared current session: {SessionId}", context.DataContext.SessionId);
-                        
+
                         // We must cast if we need to null it out, or use a new method
                         if (context is IEngineContext engineCtx && engineCtx is ETL_SQL.Engine.Evaluator eval)
                         {

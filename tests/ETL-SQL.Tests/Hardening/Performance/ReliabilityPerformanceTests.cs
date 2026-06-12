@@ -2,15 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Core;
-using ETL_SQL.App;
-using ETL_SQL.Engine.Engines;
-using ETL_SQL.Data;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Common;
-using ETL_SQL.Engine.Spill;
 using ETL_SQL.Analysis.Linting;
+using ETL_SQL.App;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Engines;
+using ETL_SQL.Engine.Spill;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
@@ -35,7 +35,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
 
             using var store = new SpillStore(e);
             var chunkName = $"test_chunk_{encrypt}_{compress}";
-            
+
             var testRows = new List<Row>();
             for (int i = 0; i < 1000; i++)
             {
@@ -80,19 +80,19 @@ namespace ETL_SQL.Tests.Hardening.Performance
         {
             var e = NewEvaluator();
             e.ExternalHashPartitions = 1; // Degenerate case
-            
+
             var leftRows = new List<Row> { new Row { ["id"] = 1, ["l"] = "a" }, new Row { ["id"] = 2, ["l"] = "b" } };
             var rightRows = new List<Row> { new Row { ["id"] = 1, ["r"] = "x" } };
 
             var engine = new ExternalJoinEngine(e, NullLogger.Instance);
-            var join = new JoinClause("INNER", new TableReference("right"), 
+            var join = new JoinClause("INNER", new TableReference("right"),
                 new BinaryExpression(new IdentifierExpression("id"), TokenType.EQUALS, new IdentifierExpression("id")));
 
             var results = await engine.ApplyHashJoinExternal(
-                leftRows.ToAsyncEnumerable(), 
-                rightRows.ToAsyncEnumerable(), 
-                join, 
-                new List<string> { "id" }, 
+                leftRows.ToAsyncEnumerable(),
+                rightRows.ToAsyncEnumerable(),
+                join,
+                new List<string> { "id" },
                 new List<string> { "id" }).ToListAsync();
 
             Assert.Single(results);
@@ -107,14 +107,14 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var rightRows = new List<Row> { new Row { ["id"] = null, ["r"] = "null" }, new Row { ["id"] = 2, ["r"] = "two" } };
 
             var engine = new ExternalJoinEngine(e, NullLogger.Instance);
-            var join = new JoinClause("INNER", new TableReference("right"), 
+            var join = new JoinClause("INNER", new TableReference("right"),
                 new BinaryExpression(new IdentifierExpression("id"), TokenType.EQUALS, new IdentifierExpression("id")));
 
             var results = await engine.ApplyHashJoinExternal(
-                leftRows.ToAsyncEnumerable(), 
-                rightRows.ToAsyncEnumerable(), 
-                join, 
-                new List<string> { "id" }, 
+                leftRows.ToAsyncEnumerable(),
+                rightRows.ToAsyncEnumerable(),
+                join,
+                new List<string> { "id" },
                 new List<string> { "id" }).ToListAsync();
 
             // In SQL, NULL != NULL, so there should be 0 matches
@@ -129,18 +129,18 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var rightRows = new List<Row>(); // Empty right
 
             var engine = new ExternalJoinEngine(e, NullLogger.Instance);
-            
+
             // Testing both "LEFT JOIN" and "LEFT OUTER JOIN"
             foreach (var type in new[] { "LEFT JOIN", "LEFT OUTER JOIN" })
             {
-                var join = new JoinClause(type, new TableReference("right"), 
+                var join = new JoinClause(type, new TableReference("right"),
                     new BinaryExpression(new IdentifierExpression("id"), TokenType.EQUALS, new IdentifierExpression("id")));
 
                 var results = await engine.ApplyHashJoinExternal(
-                    leftRows.ToAsyncEnumerable(), 
-                    rightRows.ToAsyncEnumerable(), 
-                    join, 
-                    new List<string> { "id" }, 
+                    leftRows.ToAsyncEnumerable(),
+                    rightRows.ToAsyncEnumerable(),
+                    join,
+                    new List<string> { "id" },
                     new List<string> { "id" }).ToListAsync();
 
                 Assert.Single(results);
@@ -194,7 +194,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
 
             var rows = new List<Row>();
             var schema = new TableSchema(new[] { "key", "val" });
-            
+
             int hash = int.MinValue;
             int count = 32;
             int index = (hash & 0x7FFFFFFF) % count;
@@ -208,15 +208,15 @@ namespace ETL_SQL.Tests.Hardening.Performance
                 rows.Add(r);
             }
 
-            var columns = new List<SelectColumn> { 
-                new SelectColumn(new FunctionCallExpression("COUNT", new List<Expression>()), "cnt") 
+            var columns = new List<SelectColumn> {
+                new SelectColumn(new FunctionCallExpression("COUNT", new List<Expression>()), "cnt")
             };
             var groupBy = new List<Expression> { new IdentifierExpression("key") };
 
             var results = await engine.ApplyAggregationExternal(
-                rows.ToAsyncEnumerable(), 
-                groupBy, 
-                columns, 
+                rows.ToAsyncEnumerable(),
+                groupBy,
+                columns,
                 new List<string> { "key", "cnt" })
                 .ToListAsync();
 
@@ -230,7 +230,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
         {
             var e = NewEvaluator();
             var linter = LinterFactory.CreateWithAllRules();
-            
+
             var source = @"
 BEGIN TRY
   IF 1=1
@@ -250,9 +250,9 @@ END CATCH";
 
             var tokens = new Lexer(source).Tokenize();
             var script = new Parser(tokens).Parse();
-            
+
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
-            
+
             Assert.Contains(results, r => r.Message.Contains("Disabling Encryption") && r.Severity == LintSeverity.Warning);
         }
     }

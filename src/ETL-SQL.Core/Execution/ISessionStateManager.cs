@@ -8,7 +8,7 @@ namespace ETL_SQL.Core.Execution
     {
         string SessionRoot { get; }
         byte[] GetSpillKey(string sessionId);
-        
+
         Task SaveSession(string sessionId, object evaluator, string? scriptSource = null);
         Task<SessionState?> LoadSession(string sessionId);
         void ClearSession(string sessionId);

@@ -40,7 +40,7 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("description")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Description { get; set; }
-        
+
         [JsonPropertyName("css")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Css { get; set; }
@@ -120,7 +120,7 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("customThemes")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<ThemeManifest>? CustomThemes { get; set; }
-        
+
         [JsonPropertyName("telemetry")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public TelemetryManifest? Telemetry { get; set; }
@@ -139,8 +139,8 @@ namespace ETL_SQL.Reporting
     }
 
     public record LogEntryManifest(
-        [property: JsonPropertyName("message")]   string Message,
-        [property: JsonPropertyName("color")]     string? Color,
+        [property: JsonPropertyName("message")] string Message,
+        [property: JsonPropertyName("color")] string? Color,
         [property: JsonPropertyName("timestamp")] DateTime Timestamp
     );
 
@@ -163,7 +163,7 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("subtitleIsMarkdown")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool SubtitleIsMarkdown { get; set; }
-        
+
         [JsonPropertyName("isMarkdown")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool IsMarkdown { get; set; }
@@ -181,7 +181,7 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("defaultValue")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? DefaultValue { get; set; }
-        
+
         [JsonPropertyName("labelPosition")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? LabelPosition { get; set; }
@@ -197,7 +197,7 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("decimals")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public int? Decimals { get; set; }
-        
+
         [JsonPropertyName("placeholder")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Placeholder { get; set; }
@@ -306,7 +306,7 @@ namespace ETL_SQL.Reporting
     public class DrillPathSegment
     {
         [JsonPropertyName("column")] public string Column { get; set; } = "";
-        [JsonPropertyName("value")]  public string Value  { get; set; } = "";
+        [JsonPropertyName("value")] public string Value { get; set; } = "";
     }
 
     public class DataLabelsManifest
@@ -426,7 +426,7 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("subtitleIsMarkdown")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool SubtitleIsMarkdown { get; set; }
-        
+
         [JsonPropertyName("tooltip")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public TooltipManifest? Tooltip { get; set; }
@@ -471,7 +471,7 @@ namespace ETL_SQL.Reporting
     public class FormattingRuleManifest
     {
         [JsonPropertyName("condition")] public string Condition { get; set; } = string.Empty;
-        [JsonPropertyName("color")]     public string Color     { get; set; } = string.Empty;
+        [JsonPropertyName("color")] public string Color { get; set; } = string.Empty;
         [JsonPropertyName("fontColor")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? FontColor { get; set; }
@@ -539,8 +539,8 @@ namespace ETL_SQL.Reporting
     public class OverlayManifest
     {
         [JsonPropertyName("overlayType")] public string OverlayType { get; set; } = string.Empty;
-        [JsonPropertyName("parameter")]   public double? Parameter  { get; set; }
-        [JsonPropertyName("lineStyle")]   public string LineStyle   { get; set; } = "dashed";
+        [JsonPropertyName("parameter")] public double? Parameter { get; set; }
+        [JsonPropertyName("lineStyle")] public string LineStyle { get; set; } = "dashed";
         [JsonPropertyName("color")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Color { get; set; }
@@ -552,7 +552,7 @@ namespace ETL_SQL.Reporting
     public class SeriesDefManifest
     {
         [JsonPropertyName("seriesType")] public string SeriesType { get; set; } = string.Empty;
-        [JsonPropertyName("column")]     public string Column { get; set; } = string.Empty;
+        [JsonPropertyName("column")] public string Column { get; set; } = string.Empty;
     }
 
     public class TableSummaryData
@@ -567,17 +567,17 @@ namespace ETL_SQL.Reporting
 
     public class SummaryItemData
     {
-        [JsonPropertyName("column")]    public string Column { get; set; } = string.Empty;
+        [JsonPropertyName("column")] public string Column { get; set; } = string.Empty;
         [JsonPropertyName("aggregate")] public string Aggregate { get; set; } = string.Empty;
-        [JsonPropertyName("value")]     public string Value { get; set; } = string.Empty;
-        [JsonPropertyName("alias")]     public string? Alias { get; set; }
+        [JsonPropertyName("value")] public string Value { get; set; } = string.Empty;
+        [JsonPropertyName("alias")] public string? Alias { get; set; }
     }
 
     public class ContainerManifest
     {
-        [JsonPropertyName("name")]          public string Name { get; set; } = string.Empty;
+        [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
         [JsonPropertyName("containerType")] public string ContainerType { get; set; } = string.Empty;
-        
+
         [JsonPropertyName("title")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Title { get; set; }
@@ -609,7 +609,7 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("tooltip")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public TooltipManifest? Tooltip { get; set; }
-        
+
         [JsonPropertyName("isCollapsible")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool IsCollapsible { get; set; }
@@ -630,13 +630,13 @@ namespace ETL_SQL.Reporting
 
     public class NavigationManifest
     {
-        [JsonPropertyName("name")]        public string Name { get; set; } = string.Empty;
-        [JsonPropertyName("navType")]     public string NavType { get; set; } = string.Empty;
+        [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
+        [JsonPropertyName("navType")] public string NavType { get; set; } = string.Empty;
         [JsonPropertyName("orientation")] public string Orientation { get; set; } = "horizontal";
         [JsonPropertyName("defaultPage")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? DefaultPage { get; set; }
-        [JsonPropertyName("pages")]       public List<string> Pages { get; set; } = new();
+        [JsonPropertyName("pages")] public List<string> Pages { get; set; } = new();
     }
 
     /// <summary>
@@ -671,14 +671,14 @@ namespace ETL_SQL.Reporting
 
     public class ButtonManifest
     {
-        [JsonPropertyName("name")]       public string Name { get; set; } = string.Empty;
+        [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
         [JsonPropertyName("buttonType")] public string ButtonType { get; set; } = string.Empty;
-        [JsonPropertyName("title")]      public string? Title { get; set; }
+        [JsonPropertyName("title")] public string? Title { get; set; }
         [JsonPropertyName("tooltip")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public TooltipManifest? Tooltip { get; set; }
-        [JsonPropertyName("options")]    public Dictionary<string, string> Options { get; set; } = new();
-        [JsonPropertyName("actions")]    public List<VisualActionManifest> Actions { get; set; } = new();
+        [JsonPropertyName("options")] public Dictionary<string, string> Options { get; set; } = new();
+        [JsonPropertyName("actions")] public List<VisualActionManifest> Actions { get; set; } = new();
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
@@ -708,9 +708,9 @@ namespace ETL_SQL.Reporting
 
     public class ParameterMetadataManifest
     {
-        [JsonPropertyName("name")]         public string Name         { get; set; } = string.Empty;
-        [JsonPropertyName("type")]         public string Type         { get; set; } = string.Empty;
+        [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
+        [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
         [JsonPropertyName("defaultValue")] public string? DefaultValue { get; set; }
-        [JsonPropertyName("isRequired")]   public bool IsRequired     { get; set; }
+        [JsonPropertyName("isRequired")] public bool IsRequired { get; set; }
     }
 }

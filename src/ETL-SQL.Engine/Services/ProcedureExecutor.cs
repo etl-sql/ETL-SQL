@@ -1,8 +1,8 @@
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace ETL_SQL.Engine.Services
 {
@@ -22,7 +22,7 @@ namespace ETL_SQL.Engine.Services
         public async ValueTask<object?> EvaluateUserDefinedFunction(
             FunctionCallExpression f, System.Collections.Generic.List<object?> args, Row row)
         {
-             _context.CurrentRecursiveDepth++;
+            _context.CurrentRecursiveDepth++;
             _context.IncrementOperationCount(OperationType.EngineInternal); // Trigger check against limits
 
             if (!_scopeManager.TryGetFunction(f.FunctionName, out var funcStmt) || funcStmt == null)
@@ -88,7 +88,7 @@ namespace ETL_SQL.Engine.Services
             IReadOnlyList<ParameterDefinition> parameters, IReadOnlyList<(string? Name, object? Value)> args)
         {
             var vars = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-            
+
             // Initialize with nulls or default values
             foreach (var p in parameters) vars[p.Name] = null;
 

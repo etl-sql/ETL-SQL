@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Moq;
-using Xunit;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Engine.Services;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements.Statements
 {
@@ -22,7 +22,7 @@ namespace ETL_SQL.Tests.Statements.Statements
             var eval = NewEval();
             var sessionId = Guid.NewGuid().ToString();
             eval.SessionId = sessionId;
-            
+
             var script = TestHelpers.Parse("CLEAR SESSION;");
             Assert.IsType<ClearSessionStatement>(script.Statements[0]);
 
@@ -36,12 +36,12 @@ namespace ETL_SQL.Tests.Statements.Statements
         {
             var eval = NewEval();
             eval.Telemetry.IsProfiling = false;
-            
+
             var stmt = (SetProfilingStatement)TestHelpers.Parse("SET PROFILING ON;").Statements[0];
             var handler = new SetProfilingStatementHandler();
-            
+
             await handler.Execute(stmt, eval);
-            
+
             Assert.True(eval.Telemetry.IsProfiling);
         }
 
@@ -50,12 +50,12 @@ namespace ETL_SQL.Tests.Statements.Statements
         {
             var eval = NewEval();
             eval.Telemetry.IsProfiling = true;
-            
+
             var stmt = (SetProfilingStatement)TestHelpers.Parse("SET PROFILE OFF;").Statements[0];
             var handler = new SetProfilingStatementHandler();
-            
+
             await handler.Execute(stmt, eval);
-            
+
             Assert.False(eval.Telemetry.IsProfiling);
         }
 
@@ -64,10 +64,10 @@ namespace ETL_SQL.Tests.Statements.Statements
         {
             var eval = NewEval();
             eval.IsWhatIf = false;
-            
+
             var script = TestHelpers.Parse("SET WHAT_IF ON;");
             await eval.Evaluate(script);
-            
+
             // The parser supports SET WHAT_IF and the evaluator handles it via SetWhatIfStatementHandler.
             Assert.IsType<SetWhatIfStatement>(script.Statements[0]);
             Assert.True(((SetWhatIfStatement)script.Statements[0]).Enabled);
@@ -77,9 +77,9 @@ namespace ETL_SQL.Tests.Statements.Statements
         [Fact]
         public void SetShowPassword_Off_SetsEvaluatorFlag()
         {
-             var script = TestHelpers.Parse("SET SHOW_PASSWORD OFF;");
-             Assert.IsType<SetShowPasswordStatement>(script.Statements[0]);
-             Assert.False(((SetShowPasswordStatement)script.Statements[0]).Enabled);
+            var script = TestHelpers.Parse("SET SHOW_PASSWORD OFF;");
+            Assert.IsType<SetShowPasswordStatement>(script.Statements[0]);
+            Assert.False(((SetShowPasswordStatement)script.Statements[0]).Enabled);
         }
 
         [Fact]

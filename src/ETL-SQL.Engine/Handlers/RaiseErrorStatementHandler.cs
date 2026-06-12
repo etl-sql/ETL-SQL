@@ -1,8 +1,8 @@
-using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 using System;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -23,7 +23,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (RaiseErrorStatement)statement;
-            
+
             var msg = (await context.EvaluateValue(stmt.Message, new Row()))?.ToString() ?? "NULL";
             int severity = 2;
             if (decimal.TryParse((await context.EvaluateValue(stmt.Severity, new Row()))?.ToString(), out var s)) severity = (int)s;

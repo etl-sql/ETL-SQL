@@ -1,17 +1,17 @@
 ﻿using System;
 using System.IO;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.ReportHosting;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
-using Microsoft.Extensions.DependencyInjection;
-using Moq;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
+using ETL_SQL.ReportHosting;
 using ETL_SQL.Services;
-using ETL_SQL.Common;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Reporting
 {
@@ -33,10 +33,10 @@ CREATE VISUAL StaticVisual AS TABLE (SOURCE = 'SELECT * FROM test_csv');
 CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A B', MAP('A' = AffectedVisual, 'B' = StaticVisual));
 ");
 
-            try 
+            try
             {
                 var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
-                
+
                 // 2. Initial build
                 var manifest1 = await service.GetManifestAsync();
                 var builtAt1 = manifest1.BuiltAt;
@@ -44,7 +44,7 @@ CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A B', MAP('A' = AffectedVisual, 'B' 
                 // 3. Update parameter
                 await Task.Delay(100); // Ensure timestamp change
                 var manifest2 = await service.SetParameterAsync("Cat", "B");
-                
+
                 // 4. Verify results
                 Assert.True(manifest2.BuiltAt > builtAt1, "Manifest timestamp should update.");
                 Assert.Contains(manifest2.Visuals, v => v.Name == "AffectedVisual");

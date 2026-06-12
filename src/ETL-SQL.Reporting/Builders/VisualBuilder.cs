@@ -20,24 +20,24 @@ namespace ETL_SQL.Reporting.Builders
 
             var vm = new VisualManifest
             {
-                Name            = name,
-                VisualType      = vStmt.VisualType.ToString().ToUpperInvariant(),
-                Fetch           = vStmt.FetchMode switch
+                Name = name,
+                VisualType = vStmt.VisualType.ToString().ToUpperInvariant(),
+                Fetch = vStmt.FetchMode switch
                 {
                     VisualFetchMode.OnLoad => "ON_LOAD",
                     VisualFetchMode.OnRun => "ON_RUN",
                     _ => "AUTO"
                 },
-                DefaultValue    = defVal,
-                LabelPosition   = vStmt.LabelPosition,
-                Min             = vStmt.Min,
-                Max             = vStmt.Max,
-                Decimals        = vStmt.Decimals,
-                Placeholder     = placeholder,
+                DefaultValue = defVal,
+                LabelPosition = vStmt.LabelPosition,
+                Min = vStmt.Min,
+                Max = vStmt.Max,
+                Decimals = vStmt.Decimals,
+                Placeholder = placeholder,
                 TitleIsMarkdown = titleMd,
                 SubtitleIsMarkdown = subtitleMd,
-                IsMarkdown      = vStmt.VisualType == VisualType.Text || vStmt.VisualType == VisualType.Textbox,
-                Tooltip         = await styleBuilder.BuildTooltipManifestAsync(vStmt.Tooltip)
+                IsMarkdown = vStmt.VisualType == VisualType.Text || vStmt.VisualType == VisualType.Textbox,
+                Tooltip = await styleBuilder.BuildTooltipManifestAsync(vStmt.Tooltip)
             };
 
             if (title != null) vm.Options["title"] = title;
@@ -99,10 +99,10 @@ namespace ETL_SQL.Reporting.Builders
                 vm.Overlays = vStmt.Overlays.Select(o => new OverlayManifest
                 {
                     OverlayType = o.OverlayType.ToString(),
-                    Parameter   = o.Parameter,
-                    LineStyle   = o.LineStyle.ToString().ToLowerInvariant(),
-                    Color       = o.Color,
-                    Label       = o.Label
+                    Parameter = o.Parameter,
+                    LineStyle = o.LineStyle.ToString().ToLowerInvariant(),
+                    Color = o.Color,
+                    Label = o.Label
                 }).ToList();
 
             // Conditional formatting rules (TABLE)
@@ -132,51 +132,51 @@ namespace ETL_SQL.Reporting.Builders
                 {
                     DrillDownAction dd => new VisualActionManifest
                     {
-                        Type         = "DRILL_DOWN",
-                        Trigger      = dd.Trigger,
+                        Type = "DRILL_DOWN",
+                        Trigger = dd.Trigger,
                         TargetVisual = dd.TargetVisual,
-                        KeyColumns   = dd.KeyColumns
+                        KeyColumns = dd.KeyColumns
                     },
                     SetParameterAction sp => new VisualActionManifest
                     {
-                        Type            = "SET_PARAMETER",
-                        Trigger         = sp.Trigger,
-                        ParameterName   = sp.ParameterName,
+                        Type = "SET_PARAMETER",
+                        Trigger = sp.Trigger,
+                        ParameterName = sp.ParameterName,
                         ValueExpression = sp.ValueExpression
                     },
                     RunScriptAction rs => new VisualActionManifest
                     {
-                        Type       = "RUN_SCRIPT",
-                        Trigger    = rs.Trigger,
+                        Type = "RUN_SCRIPT",
+                        Trigger = rs.Trigger,
                         ScriptPath = rs.ScriptPath,
                         Parameters = rs.Parameters
                     },
                     ClearFiltersAction cf => new VisualActionManifest
                     {
-                        Type    = "CLEAR_FILTERS",
+                        Type = "CLEAR_FILTERS",
                         Trigger = cf.Trigger
                     },
                     ReportCommandAction command => new VisualActionManifest
                     {
-                        Type    = command.Command,
+                        Type = command.Command,
                         Trigger = command.Trigger
                     },
                     DrillInAction di => new VisualActionManifest
                     {
-                        Type      = "DRILL_IN",
-                        Trigger   = di.Trigger,
+                        Type = "DRILL_IN",
+                        Trigger = di.Trigger,
                         Hierarchy = di.Hierarchy
                     },
                     DrillReportAction dr => new VisualActionManifest
                     {
-                        Type         = "DRILL_REPORT",
-                        Trigger      = dr.Trigger,
+                        Type = "DRILL_REPORT",
+                        Trigger = dr.Trigger,
                         TargetReport = dr.TargetReport,
-                        Parameters   = dr.Parameters
+                        Parameters = dr.Parameters
                     },
                     RefreshVisualsAction rv => new VisualActionManifest
                     {
-                        Type    = "REFRESH_VISUALS",
+                        Type = "REFRESH_VISUALS",
                         Trigger = rv.Trigger,
                         Targets = rv.Targets
                     },
@@ -217,10 +217,10 @@ namespace ETL_SQL.Reporting.Builders
                         vm.Options["mapping:x"] = currentLevel;
                         vm.DrillState = new VisualDrillStateManifest
                         {
-                            Hierarchy    = drillState.Hierarchy,
-                            Path         = drillState.Path.Select(s => new DrillPathSegment { Column = s.Column, Value = s.Value }).ToList(),
+                            Hierarchy = drillState.Hierarchy,
+                            Path = drillState.Path.Select(s => new DrillPathSegment { Column = s.Column, Value = s.Value }).ToList(),
                             CurrentLevel = currentLevel,
-                            CanDrillUp   = drillState.Path.Count > 0
+                            CanDrillUp = drillState.Path.Count > 0
                         };
                     }
 
@@ -308,8 +308,8 @@ namespace ETL_SQL.Reporting.Builders
         private static (List<List<string?>> rows, List<string> columns) ApplyDrillAggregation(
             List<List<string?>> rows, List<string> columns, VisualDrillState state)
         {
-            var hierarchy    = state.Hierarchy;
-            var path         = state.Path;
+            var hierarchy = state.Hierarchy;
+            var path = state.Path;
             var currentLevel = hierarchy[path.Count];
 
             // Filter: keep only rows matching the full drill path
@@ -323,7 +323,7 @@ namespace ETL_SQL.Reporting.Builders
             var levelIdx = columns.FindIndex(c => c.Equals(currentLevel, StringComparison.OrdinalIgnoreCase));
             if (levelIdx < 0) return (filtered, columns);
 
-            var hierSet    = new HashSet<string>(hierarchy, StringComparer.OrdinalIgnoreCase);
+            var hierSet = new HashSet<string>(hierarchy, StringComparer.OrdinalIgnoreCase);
             var measureIdx = columns.Select((c, i) => (c, i))
                                     .Where(t => !hierSet.Contains(t.c))
                                     .Select(t => t.i)
@@ -455,7 +455,7 @@ namespace ETL_SQL.Reporting.Builders
                             ctx.VarContext.SetVariable(kvp.Key, kvp.Value);
                     }
                 }
-                else 
+                else
                 {
                     // NONE: Ignore interaction, use original state
                     await ExecuteAndPopulateRowsAsync(queryStmt, vStmt, vm.Rows, vm.RowStyles, vm);
@@ -640,8 +640,8 @@ namespace ETL_SQL.Reporting.Builders
         private void CalculateSummaries(CreateVisualStatement vStmt, VisualManifest vm)
         {
             if (vm.Rows.Count == 0 || vm.Columns.Count == 0) return;
-            if (vStmt.Summaries.Count == 0 && (vStmt.SummaryOptions == null || 
-                (!vStmt.SummaryOptions.GrandTotalRow && !vStmt.SummaryOptions.GrandTotalColumn && 
+            if (vStmt.Summaries.Count == 0 && (vStmt.SummaryOptions == null ||
+                (!vStmt.SummaryOptions.GrandTotalRow && !vStmt.SummaryOptions.GrandTotalColumn &&
                  !vStmt.SummaryOptions.SummarizeRow && !vStmt.SummaryOptions.SummarizeColumn)))
                 return;
 
@@ -722,14 +722,14 @@ namespace ETL_SQL.Reporting.Builders
 
         private bool IsControlVisual(VisualType type)
         {
-            return type == VisualType.Slicer || 
-                   type == VisualType.DatePicker || 
-                   type == VisualType.RelDatePicker || 
-                   type == VisualType.Slider || 
-                   type == VisualType.MultiSelect || 
-                   type == VisualType.Search || 
-                   type == VisualType.Checkbox || 
-                   type == VisualType.Textbox || 
+            return type == VisualType.Slicer ||
+                   type == VisualType.DatePicker ||
+                   type == VisualType.RelDatePicker ||
+                   type == VisualType.Slider ||
+                   type == VisualType.MultiSelect ||
+                   type == VisualType.Search ||
+                   type == VisualType.Checkbox ||
+                   type == VisualType.Textbox ||
                    type == VisualType.Numberbox;
         }
 

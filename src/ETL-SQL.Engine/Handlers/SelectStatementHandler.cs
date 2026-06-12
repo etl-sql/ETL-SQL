@@ -1,17 +1,17 @@
-using ETL_SQL.Data;
-using ETL_SQL.Core.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Spectre.Console;
 using ETL_SQL.Common;
-using ETL_SQL.Engine.Engines;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Engines;
 using ETL_SQL.Engine.Services;
+using Spectre.Console;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -28,7 +28,7 @@ namespace ETL_SQL.Engine.Handlers
 
         public Type SupportedStatementType => typeof(SelectStatement);
 
- 
+
 
         /// <summary>
         /// Executes a SELECT statement, handling pushdown to remote sources or local evaluation.
@@ -64,11 +64,11 @@ namespace ETL_SQL.Engine.Handlers
                 await destination.TruncateAsync();
 
                 var batches = EvaluateQuery(statement, context);
-                
+
                 var targetCols = (await destination.GetColumnsAsync()).ToList();
                 if (targetCols.Count > 0) batches = context.AlignColumns(batches, targetCols);
                 if (forClause != null) batches = context.EvaluateForClause(batches, forClause);
-                
+
                 // Record Lineage (importing DB catalog metadata first, when enabled,
                 // so source column comments inherit onto the derived columns).
                 await context.EnsureCatalogMetadataImportedAsync(statement.GetSourceTables());
@@ -89,7 +89,7 @@ namespace ETL_SQL.Engine.Handlers
 
                 context.Variables["@@ROWCOUNT"] = totalRows;
                 context.Logger.Info($"{totalRows} rows affected.");
-                
+
                 if (context.InteractiveMode)
                 {
                     // Emit a friendly message for notebooks

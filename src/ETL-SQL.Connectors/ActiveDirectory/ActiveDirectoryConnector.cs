@@ -6,10 +6,10 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors
 {
@@ -17,7 +17,7 @@ namespace ETL_SQL.Connectors
     {
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
-        
+
         private readonly string _host = "localhost";
         private readonly int _port = 389;
         private readonly bool _useSsl = false;
@@ -33,7 +33,7 @@ namespace ETL_SQL.Connectors
 
         private static readonly string[] DefaultAttributes = new[]
         {
-            "sAMAccountName", "displayName", "mail", "userPrincipalName", 
+            "sAMAccountName", "displayName", "mail", "userPrincipalName",
             "distinguishedName", "memberOf", "whenCreated", "objectGUID", "objectSid"
         };
 
@@ -64,7 +64,7 @@ namespace ETL_SQL.Connectors
             // Parse connection string or HOST option
             if (!string.IsNullOrEmpty(connectionString))
             {
-                if (connectionString.StartsWith("ldap://", StringComparison.OrdinalIgnoreCase) || 
+                if (connectionString.StartsWith("ldap://", StringComparison.OrdinalIgnoreCase) ||
                     connectionString.StartsWith("ldaps://", StringComparison.OrdinalIgnoreCase))
                 {
                     var uri = new Uri(connectionString);
@@ -85,7 +85,7 @@ namespace ETL_SQL.Connectors
                 _port = port;
             }
             _useSsl = _options.GetValueOrDefault("USE_SSL", _useSsl.ToString()).Equals("TRUE", StringComparison.OrdinalIgnoreCase);
-            
+
             _authMode = _options.GetValueOrDefault("AUTH_MODE", "INTEGRATED").ToUpperInvariant();
             _user = _options.GetValueOrDefault("USER", "");
             _password = _options.GetValueOrDefault("PASSWORD", "");
@@ -199,11 +199,11 @@ namespace ETL_SQL.Connectors
             return new ActiveDirectoryConnector(context, connectionString, options);
         }
 
-        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => 
+        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) =>
             Task.FromResult<IEnumerable<string>>(new[] { "users", "groups", "computers", "contacts" });
 
         public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => 
+        public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) =>
             Task.FromResult<IEnumerable<string>>(DefaultAttributes);
         public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
@@ -239,7 +239,7 @@ namespace ETL_SQL.Connectors
                 {
                     pass = _context.DecryptValue(pass) ?? "";
                 }
-                
+
                 credentials = new NetworkCredential(_user, pass, _domain);
                 authType = AuthType.Basic;
             }
@@ -298,7 +298,7 @@ namespace ETL_SQL.Connectors
                 request.Controls.Add(pageControl);
 
                 var response = (SearchResponse)connection.SendRequest(request);
-                
+
                 // Get page response cookie to verify if more records exist
                 var pageResponse = (PageResultResponseControl?)response.Controls
                     .FirstOrDefault(c => c is PageResultResponseControl);
@@ -344,7 +344,7 @@ namespace ETL_SQL.Connectors
                 }
 
                 await Task.Yield(); // Keep UI thread responsive during sync LDAP query pagination
-            } 
+            }
             while (cookie != null && cookie.Length > 0);
 
             if (table.Rows.Count > 0)

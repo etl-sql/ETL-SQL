@@ -1,13 +1,13 @@
-using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
-using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using ETL_SQL.App;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements.Statements
 {
@@ -39,19 +39,19 @@ SELECT id, name, level FROM subordinates ORDER BY level, id;
 ";
             var evaluator = CreateEvaluator();
             await evaluator.Evaluate(Parse(script));
-            
+
             var result = evaluator.LastResult;
             Assert.NotNull(result);
             Assert.Equal(4, result.Rows.Count);
-            
+
             // Level 0: CEO
             Assert.Equal("CEO", result.Rows[0]["name"]);
             Assert.Equal(0, Convert.ToInt32(result.Rows[0]["level"]));
-            
+
             // Level 1: VP Sales, VP Eng
             Assert.Equal(1, Convert.ToInt32(result.Rows[1]["level"]));
             Assert.Equal(1, Convert.ToInt32(result.Rows[2]["level"]));
-            
+
             // Level 2: Sales Rep
             Assert.Equal("Sales Rep", result.Rows[3]["name"]);
             Assert.Equal(2, Convert.ToInt32(result.Rows[3]["level"]));
@@ -75,7 +75,7 @@ SELECT node FROM reachable ORDER BY node;
 ";
             var evaluator = CreateEvaluator();
             await evaluator.Evaluate(Parse(script));
-            
+
             var result = evaluator.LastResult;
             Assert.NotNull(result);
             Assert.Equal(3, result.Rows.Count); // Should only have nodes 1, 2, 3
@@ -97,7 +97,7 @@ SELECT * FROM infinite;
 ";
             var evaluator = CreateEvaluator();
             evaluator.MaxRecursiveDepth = 5; // Low limit for test
-            
+
             var ex = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => evaluator.Evaluate(Parse(script)));
             Assert.Contains("maximum recursion", ex.Message);
         }

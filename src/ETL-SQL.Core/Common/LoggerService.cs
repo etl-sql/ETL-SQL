@@ -90,18 +90,18 @@ namespace ETL_SQL.Common
         {
             var serilogLevel = level switch
             {
-                LogLevel.Error   => LogEventLevel.Error,
+                LogLevel.Error => LogEventLevel.Error,
                 LogLevel.Warning => LogEventLevel.Warning,
-                LogLevel.Debug   => LogEventLevel.Debug,
-                _                => LogEventLevel.Information
+                LogLevel.Debug => LogEventLevel.Debug,
+                _ => LogEventLevel.Information
             };
 
             var color = level switch
             {
-                LogLevel.Error   => ConsoleColor.Red,
+                LogLevel.Error => ConsoleColor.Red,
                 LogLevel.Warning => ConsoleColor.Yellow,
-                LogLevel.Debug   => ConsoleColor.DarkGray,
-                _                => ConsoleColor.White
+                LogLevel.Debug => ConsoleColor.DarkGray,
+                _ => ConsoleColor.White
             };
 
             // 1. Serilog structured write — named properties preserved in file/Seq sinks
@@ -115,10 +115,10 @@ namespace ETL_SQL.Common
             {
                 var msLevel = level switch
                 {
-                    LogLevel.Error   => Microsoft.Extensions.Logging.LogLevel.Error,
+                    LogLevel.Error => Microsoft.Extensions.Logging.LogLevel.Error,
                     LogLevel.Warning => Microsoft.Extensions.Logging.LogLevel.Warning,
-                    LogLevel.Debug   => Microsoft.Extensions.Logging.LogLevel.Debug,
-                    _                => Microsoft.Extensions.Logging.LogLevel.Information
+                    LogLevel.Debug => Microsoft.Extensions.Logging.LogLevel.Debug,
+                    _ => Microsoft.Extensions.Logging.LogLevel.Information
                 };
                 _msLogger.Log(msLevel, ex, ILogger.FormatArgs(template, args));
             }

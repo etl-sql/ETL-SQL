@@ -1,11 +1,11 @@
-using ETL_SQL.Common;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -95,7 +95,7 @@ namespace ETL_SQL.Engine.Handlers
 
             // 3. Send via WriteBatches
             _logger.Debug("Sending email to {To} via {ConnName}", row["To"], connName ?? "default SMTP");
-            
+
             ValidateEmails(row["To"]?.ToString());
             if (row.Columns.TryGetValue("Cc", out var cc)) ValidateEmails(cc?.ToString());
             if (row.Columns.TryGetValue("Bcc", out var bcc)) ValidateEmails(bcc?.ToString());

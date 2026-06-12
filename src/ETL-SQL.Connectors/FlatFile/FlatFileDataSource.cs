@@ -1,15 +1,15 @@
 using System;
-using System.IO;
-using System.Text;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
-using System.IO.Compression;
 using ETL_SQL.Core.Common.Exceptions;
-using System.Globalization;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.FlatFile
 {
@@ -59,7 +59,7 @@ namespace ETL_SQL.Connectors.FlatFile
             _context = context;
             _logger = context.Logger;
             _filePath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
-            
+
             // Security Hardening: Defense in depth
             context.SecurityService.ValidatePath(_filePath);
             context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
@@ -123,7 +123,8 @@ namespace ETL_SQL.Connectors.FlatFile
 
                 if (options.TryGetValue("NULL_AS", out var nullas))
                 {
-                    _nullAs = nullas.ToUpperInvariant() switch {
+                    _nullAs = nullas.ToUpperInvariant() switch
+                    {
                         "EMPTY" => "",
                         "BACKSLASH_N" => "\\n",
                         "NULL" => "NULL",
@@ -335,7 +336,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
             char q = _textQualifier.Value;
             bool needsQuoting = value.Contains(_delimiter) || value.Contains(q) || value.Contains('\n') || value.Contains('\r');
-            
+
             if (!needsQuoting) return value;
 
             string escaped = value.Replace(q.ToString(), new string(q, 2));
@@ -353,78 +354,78 @@ namespace ETL_SQL.Connectors.FlatFile
             try
             {
                 using var reader = new StreamReader(effectivePath, _encoding);
-                
+
                 for (int i = 0; i < _startAtRows; i++) await ReadRecordAsync(reader);
 
-            string? headerLine = null;
-            if (_headerFile != null)
-            {
-                if (System.IO.File.Exists(_headerFile))
+                string? headerLine = null;
+                if (_headerFile != null)
                 {
-                    headerLine = (await System.IO.File.ReadAllTextAsync(_headerFile)).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+                    if (System.IO.File.Exists(_headerFile))
+                    {
+                        headerLine = (await System.IO.File.ReadAllTextAsync(_headerFile)).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+                    }
+                    else
+                    {
+                        headerLine = _headerFile;
+                    }
+
+                    if (_hasHeader) await ReadRecordAsync(reader);
                 }
                 else
                 {
-                    headerLine = _headerFile;
+                    headerLine = await ReadRecordAsync(reader);
                 }
-                
-                if (_hasHeader) await ReadRecordAsync(reader);
-            }
-            else
-            {
-                headerLine = await ReadRecordAsync(reader);
-            }
 
-            if (string.IsNullOrWhiteSpace(headerLine))
-                yield break;
+                if (string.IsNullOrWhiteSpace(headerLine))
+                    yield break;
 
-            var headers = _fixedColumns != null ? SplitFixedWidthLine(headerLine) : SplitLine(headerLine);
-            var currentBatch = new DataTable();
+                var headers = _fixedColumns != null ? SplitFixedWidthLine(headerLine) : SplitLine(headerLine);
+                var currentBatch = new DataTable();
 
-            if (_hasHeader)
-            {
-                currentBatch.SetColumns(headers.Select(h => h.Trim()));
-            }
-            else
-            {
-                var colNames = _fixedColumns != null 
-                    ? _fixedColumns.Select(c => c.Name).ToList() 
-                    : Enumerable.Range(1, headers.Length).Select(i => $"Col{i}").ToList();
-                currentBatch.SetColumns(colNames);
-                await currentBatch.AddRowAsync(CreateRow(headers, currentBatch));
-            }
-
-            var actualHeaders = new List<string>(currentBatch.ColumnNames);
-            int totalRowsRead = 0;
-
-            var lineQueue = new Queue<string>();
-            string? line;
-            while ((line = await ReadRecordAsync(reader)) != null)
-            {
-                lineQueue.Enqueue(line);
-                if (lineQueue.Count > _endAtRows + (_countAtEndPattern != null ? 1 : 0))
+                if (_hasHeader)
                 {
-                    var dataLine = lineQueue.Dequeue();
-                    await ProcessDataLine(dataLine, currentBatch, actualHeaders);
-                    totalRowsRead++;
+                    currentBatch.SetColumns(headers.Select(h => h.Trim()));
+                }
+                else
+                {
+                    var colNames = _fixedColumns != null
+                        ? _fixedColumns.Select(c => c.Name).ToList()
+                        : Enumerable.Range(1, headers.Length).Select(i => $"Col{i}").ToList();
+                    currentBatch.SetColumns(colNames);
+                    await currentBatch.AddRowAsync(CreateRow(headers, currentBatch));
+                }
 
-                    if (currentBatch.Rows.Count >= batchSize)
+                var actualHeaders = new List<string>(currentBatch.ColumnNames);
+                int totalRowsRead = 0;
+
+                var lineQueue = new Queue<string>();
+                string? line;
+                while ((line = await ReadRecordAsync(reader)) != null)
+                {
+                    lineQueue.Enqueue(line);
+                    if (lineQueue.Count > _endAtRows + (_countAtEndPattern != null ? 1 : 0))
                     {
-                        yield return currentBatch;
-                        currentBatch = new DataTable();
-                        currentBatch.SetColumns(actualHeaders);
+                        var dataLine = lineQueue.Dequeue();
+                        await ProcessDataLine(dataLine, currentBatch, actualHeaders);
+                        totalRowsRead++;
+
+                        if (currentBatch.Rows.Count >= batchSize)
+                        {
+                            yield return currentBatch;
+                            currentBatch = new DataTable();
+                            currentBatch.SetColumns(actualHeaders);
+                        }
                     }
                 }
-            }
 
-            if (_countAtEndPattern != null && lineQueue.Count > _endAtRows)
-            {
-                var countLine = lineQueue.Dequeue();
-                ValidateFooterCount(countLine, totalRowsRead);
-            }
+                if (_countAtEndPattern != null && lineQueue.Count > _endAtRows)
+                {
+                    var countLine = lineQueue.Dequeue();
+                    ValidateFooterCount(countLine, totalRowsRead);
+                }
 
-            if (currentBatch.Rows.Count > 0)
-                yield return currentBatch;
+                if (currentBatch.Rows.Count > 0)
+                    yield return currentBatch;
             }
             finally
             {
@@ -443,15 +444,15 @@ namespace ETL_SQL.Connectors.FlatFile
 
             var sb = new StringBuilder();
             int delimIdx = 0;
-            
+
             while (reader.Peek() != -1)
             {
                 int cInt = reader.Read();
                 if (cInt == -1) break;
                 char c = (char)cInt;
-                
+
                 sb.Append(c);
-                
+
                 if (c == _rowDelimiter[delimIdx])
                 {
                     delimIdx++;
@@ -467,7 +468,7 @@ namespace ETL_SQL.Connectors.FlatFile
                     if (c == _rowDelimiter[0]) delimIdx = 1;
                 }
             }
-            
+
             return sb.Length > 0 ? sb.ToString() : null;
         }
 
@@ -484,7 +485,7 @@ namespace ETL_SQL.Connectors.FlatFile
             for (int i = 0; i < columnNames.Count && i < values.Length; i++)
             {
                 string val = _trim ? values[i].Trim() : values[i];
-                
+
                 if (_nullAs != null && (val.Equals(_nullAs, StringComparison.OrdinalIgnoreCase) || (string.IsNullOrEmpty(val) && _nullAs == "")))
                 {
                     row[i] = null;
@@ -664,7 +665,7 @@ namespace ETL_SQL.Connectors.FlatFile
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
-            
+
             var tempFiles = new List<string>();
             string effectivePath;
             try { effectivePath = PrepareReadPath(tempFiles, ".csv"); }

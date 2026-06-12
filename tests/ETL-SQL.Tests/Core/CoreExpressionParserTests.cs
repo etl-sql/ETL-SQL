@@ -1,10 +1,10 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Core
 {
@@ -117,7 +117,7 @@ namespace ETL_SQL.Tests.Core
             var cast = (FunctionCallExpression)expr!;
             Assert.Equal("CAST", cast.FunctionName);
         }
-        
+
         [Fact]
         public void ParseListExpression()
         {

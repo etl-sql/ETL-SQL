@@ -15,7 +15,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
         public string Name => "DashboardKeywordConflict";
         public string Description => "Prevents naming conflicts for visuals and datasets with reserved dashboard keywords.";
 
-        private static readonly string[] ReservedKeywords = 
+        private static readonly string[] ReservedKeywords =
         { 
             // Engine Reserved
             "ROWCOUNT", "ERROR", "RESULTSETS", "IDENTITY", "FETCH", "TOP", "LIMIT",

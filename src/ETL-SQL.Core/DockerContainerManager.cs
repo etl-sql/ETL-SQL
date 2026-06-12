@@ -1,19 +1,19 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
-using DotNet.Testcontainers.Containers;
-using Testcontainers.MsSql;
-using Testcontainers.PostgreSql;
-using Testcontainers.Oracle;
-using Testcontainers.MySql;
-using Microsoft.Extensions.Logging;
-using DotNet.Testcontainers.Configurations;
 using System.Linq;
-using ETL_SQL.Core.Common.Exceptions;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Docker.DotNet;
 using Docker.DotNet.Models;
-using System.Runtime.InteropServices;
+using DotNet.Testcontainers.Configurations;
+using DotNet.Testcontainers.Containers;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using Microsoft.Extensions.Logging;
+using Testcontainers.MsSql;
+using Testcontainers.MySql;
+using Testcontainers.Oracle;
+using Testcontainers.PostgreSql;
 
 namespace ETL_SQL.Core
 {
@@ -24,14 +24,14 @@ namespace ETL_SQL.Core
         public string? LastConnectionString { get; private set; }
         public string? LastAlias { get; private set; }
         public bool HasActiveContainers => !_activeContainers.IsEmpty;
-        
+
         private readonly ILoggerFactory _loggerFactory;
         private readonly ETL_SQL.Common.ILogger _logger;
 
         public DockerContainerManager(ETL_SQL.Common.ILogger logger)
         {
             _logger = logger;
-            _loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder => 
+            _loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder =>
                 builder.AddProvider(new TestcontainersLoggerProvider(_logger)));
         }
 
@@ -119,7 +119,7 @@ namespace ETL_SQL.Core
                 throw new ExecutionException($"Unsupported Docker image for database: {imageName}. Currently supported: MsSql, Postgres, Oracle.");
             }
 
-            try 
+            try
             {
                 await container.StartAsync();
             }
@@ -145,9 +145,9 @@ namespace ETL_SQL.Core
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 // Try common Windows pipes in order of prevalence
-                var pipes = new[] 
-                { 
-                    "npipe://./pipe/docker_engine", 
+                var pipes = new[]
+                {
+                    "npipe://./pipe/docker_engine",
                     "npipe://./pipe/docker_desktop_linux",
                     "npipe://./pipe/docker_desktop_windows"
                 };
@@ -180,7 +180,7 @@ namespace ETL_SQL.Core
                     .Build();
                 var containers = await client.Containers.ListContainersAsync(new ContainersListParameters { All = false });
                 var target = containers.FirstOrDefault(c => c.Names.Any(n => n.Equals("/" + name, StringComparison.OrdinalIgnoreCase)));
-                
+
                 if (target != null)
                 {
                     int internalPort = imageName.Contains("mssql") ? 1433 : (imageName.Contains("postgres") ? 5432 : (imageName.Contains("mysql") || imageName.Contains("mariadb") ? 3306 : 1521));
@@ -189,7 +189,7 @@ namespace ETL_SQL.Core
                     {
                         var host = "localhost";
                         var publicPort = portMap.PublicPort;
-                        
+
                         if (imageName.Contains("mssql"))
                             return $"Server={host},{publicPort};Database=master;User Id=sa;Password=Password123!;Trusted_Connection=False;Encrypt=False;";
                         if (imageName.Contains("postgres"))
@@ -198,7 +198,7 @@ namespace ETL_SQL.Core
                             return $"Server={host};Port={publicPort};Database=mysql;User ID=mysql;Password=mysql";
                         if (imageName.Contains("oracle"))
                         {
-                             if (imageName.Contains("free", StringComparison.OrdinalIgnoreCase))
+                            if (imageName.Contains("free", StringComparison.OrdinalIgnoreCase))
                                 return $"User Id=system;Password=oracle;Data Source={host}:{publicPort}/FREE";
                             return $"User Id=oracle;Password=oracle;Data Source={host}:{publicPort}/XE";
                         }
@@ -249,7 +249,7 @@ namespace ETL_SQL.Core
         /// <param name="nameOrAlias">The optional alias to target. If null, all containers are closed.</param>
         public async Task CloseContainers(string? nameOrAlias = null)
         {
-            var targets = nameOrAlias != null 
+            var targets = nameOrAlias != null
                 ? _activeContainers.Where(c => c.Key.Contains(nameOrAlias, StringComparison.OrdinalIgnoreCase)).ToList()
                 : _activeContainers.ToList();
 
@@ -271,7 +271,7 @@ namespace ETL_SQL.Core
             if (container is MsSqlContainer mssql) return mssql.GetConnectionString();
             if (container is PostgreSqlContainer pg) return pg.GetConnectionString();
             if (container is MySqlContainer mysql) return mysql.GetConnectionString();
-            if (container is OracleContainer oracle) 
+            if (container is OracleContainer oracle)
             {
                 var port = oracle.GetMappedPublicPort(1521);
                 if (imageName.Contains("free", StringComparison.OrdinalIgnoreCase))

@@ -1,12 +1,12 @@
 using System.Security.Claims;
 using System.Text;
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
-using CoreParser = ETL_SQL.Core.Parser.Parser;
 using ETL_SQL.ReportPortal.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -28,7 +28,7 @@ public class DesignerController : ControllerBase
         try
         {
             var tokens = new Lexer(req.Script).Tokenize();
-            var ast    = new CoreParser(tokens, req.Script).Parse();
+            var ast = new CoreParser(tokens, req.Script).Parse();
             return Ok(new ParseDesignerResponse(ScriptToState(ast), null));
         }
         catch (Exception ex)
@@ -180,7 +180,7 @@ public class DesignerController : ControllerBase
 
         foreach (var ds in state.Datasets ?? [])
         {
-            var name  = NormalizeDatasetName(ds.Name);
+            var name = NormalizeDatasetName(ds.Name);
             var query = string.IsNullOrWhiteSpace(ds.Query) ? "SELECT 1 AS Placeholder" : ds.Query.Trim().TrimEnd(';');
             sb.AppendLine($"CREATE DATASET {name} AS (");
             sb.AppendLine($"  {query}");
@@ -193,7 +193,7 @@ public class DesignerController : ControllerBase
         {
             pageNum++;
             var pageName = SanitizeName(string.IsNullOrWhiteSpace(page.Name) ? $"Page{pageNum}" : page.Name);
-            var visuals  = page.Visuals ?? [];
+            var visuals = page.Visuals ?? [];
 
             foreach (var v in visuals)
             {
@@ -213,8 +213,8 @@ public class DesignerController : ControllerBase
                 sb.AppendLine($"        MAP (");
                 for (int i = 0; i < visuals.Count; i++)
                 {
-                    var v     = visuals[i];
-                    var slot  = SanitizeSlotName(v.Name);
+                    var v = visuals[i];
+                    var slot = SanitizeSlotName(v.Name);
                     var trail = i < visuals.Count - 1 ? "," : "";
                     sb.AppendLine($"            '{slot}' = {SanitizeName(v.Name)}{trail}");
                 }
@@ -235,7 +235,7 @@ public class DesignerController : ControllerBase
 
     private static string GenerateVisual(DesignerVisualDto v)
     {
-        var sb   = new StringBuilder();
+        var sb = new StringBuilder();
         var name = SanitizeName(v.Name);
         var type = v.Type.ToUpper();
 
@@ -265,7 +265,7 @@ public class DesignerController : ControllerBase
         // Use only as many columns as the visuals actually occupy, not the full 12-column grid.
         // This avoids trailing rows of ". . . . . . . ." that appear when visuals span fewer columns.
         int usedCols = Math.Min(GridCols, visuals.Max(v => v.GridCol + v.GridColSpan - 1));
-        var grid   = new string[maxRow, usedCols];
+        var grid = new string[maxRow, usedCols];
         for (int r = 0; r < maxRow; r++)
             for (int c = 0; c < usedCols; c++)
                 grid[r, c] = ".";

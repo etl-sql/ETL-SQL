@@ -8,13 +8,13 @@ using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Orchestrator.Service;
-using ETL_SQL.Orchestrator.Scheduling;
-using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Orchestrator.Service;
+using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Tests.Integration.Connectors;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.ReportPortal.Tests
 {

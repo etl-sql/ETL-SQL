@@ -37,19 +37,19 @@ namespace ETL_SQL.Engine.Handlers
                 ? await PinBundlePathsAsync(stmt.Script.ToSql(), context)
                 : existing.Script;
 
-            int    newInterval = stmt.Schedule?.Interval        ?? existing.Interval;
-            string newUnit     = stmt.Schedule?.Unit            ?? existing.Unit;
-            string? newAtTime  = stmt.Schedule != null ? stmt.Schedule.AtTime : existing.AtTime;
+            int newInterval = stmt.Schedule?.Interval ?? existing.Interval;
+            string newUnit = stmt.Schedule?.Unit ?? existing.Unit;
+            string? newAtTime = stmt.Schedule != null ? stmt.Schedule.AtTime : existing.AtTime;
 
-            var hashBytes  = SHA256.HashData(Encoding.UTF8.GetBytes(newScript));
+            var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(newScript));
             var scriptHash = "sha256:" + Convert.ToHexString(hashBytes).ToLowerInvariant();
 
             var updated = existing with
             {
-                Script     = newScript,
-                Interval   = newInterval,
-                Unit       = newUnit,
-                AtTime     = newAtTime,
+                Script = newScript,
+                Interval = newInterval,
+                Unit = newUnit,
+                AtTime = newAtTime,
                 ScriptHash = scriptHash,
                 HashPolicy = context.ScriptHashPolicy
             };

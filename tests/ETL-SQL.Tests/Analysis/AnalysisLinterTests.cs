@@ -1,10 +1,10 @@
-﻿using Xunit;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 using System.Linq;
-using ETL_SQL.Core;
+using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Core;
+using Xunit;
 
 
 namespace ETL_SQL.Tests.Analysis
@@ -111,10 +111,10 @@ END;
 SELECT * FROM MyTable WHERE Id = @param2; -- Should error
 ";
             var script = Parse(sql);
-            
+
             var rule = new UndeclaredVariableRule();
             var results = (await rule.AnalyzeAsync(script, new DefaultLintContext())).ToList();
-            
+
             Assert.Single(results);
             Assert.Equal("@param2", results[0].Message.Split('\'')[1]);
         }
@@ -225,7 +225,7 @@ SELECT * FROM MyTable WHERE Id = @param2; -- Should error
 
             var metadata = new MockMetadataProvider();
             metadata.Columns["Sales"] = new List<string> { "Region", "Year", "Category", "Amount" };
-            
+
             var context = new DefaultLintContext { Metadata = metadata };
 
             // PIVOT with valid columns
@@ -257,14 +257,14 @@ SELECT * FROM MyTable WHERE Id = @param2; -- Should error
 
             var metadata = new MockMetadataProvider();
             metadata.Columns["Sales"] = new List<string> { "Region", "Q1", "Q2" };
-            
+
             var context = new DefaultLintContext { Metadata = metadata };
 
             // UNPIVOT with missing source column
             var sqlInvalid = "SELECT * FROM src.Sales UNPIVOT (Val FOR Q IN (Q1, Q3)) AS upvt;";
             var scriptInvalid = Parse(sqlInvalid);
             var resultsInvalid = (await linter.AnalyzeAsync(scriptInvalid, context)).ToList();
-            
+
             Assert.Single(resultsInvalid);
             Assert.Contains("Unpivot source column 'Q3' not found", resultsInvalid[0].Message);
         }
@@ -280,7 +280,7 @@ SELECT * FROM MyTable WHERE Id = @param2; -- Should error
                 SELECT * FROM (SELECT Region, Amount FROM Sales) 
                 PIVOT (SUM(Amount) FOR Year IN (2023, 2024)) AS pvt;
             ";
-            
+
             var script = Parse(sqlInvalid);
             var context = new DefaultLintContext { Metadata = new MockMetadataProvider() };
             var results = (await linter.AnalyzeAsync(script, context)).ToList();
@@ -300,7 +300,7 @@ SELECT * FROM MyTable WHERE Id = @param2; -- Should error
                 SELECT * FROM (SELECT Region, Q1 FROM Sales) 
                 UNPIVOT (Val FOR Q IN (Q1, Q2)) AS upvt;
             ";
-            
+
             var script = Parse(sqlInvalid);
             var context = new DefaultLintContext { Metadata = new MockMetadataProvider() };
             var results = (await linter.AnalyzeAsync(script, context)).ToList();

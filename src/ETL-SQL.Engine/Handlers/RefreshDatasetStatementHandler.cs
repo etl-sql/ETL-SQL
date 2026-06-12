@@ -32,9 +32,9 @@ namespace ETL_SQL.Engine.Handlers
                     "Datasets can only be refreshed when a DatasetRegistry is available.",
                     null, stmt.Line, stmt.Column);
 
-            var callerCtx        = (context as Evaluator)?.DatasetCallerContext ?? "";
-            var callerAtRestKey  = (context as Evaluator)?.DatasetAtRestKey;
-            var existing         = await registry.Lookup(stmt.DatasetName, callerCtx);
+            var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
+            var callerAtRestKey = (context as Evaluator)?.DatasetAtRestKey;
+            var existing = await registry.Lookup(stmt.DatasetName, callerCtx);
             if (existing == null)
                 throw new ExecutionException(
                     $"REFRESH DATASET '{stmt.DatasetName}': dataset not found in the portal registry. " +
@@ -57,8 +57,8 @@ namespace ETL_SQL.Engine.Handlers
             _logger.Debug("REFRESH DATASET '{Name}': re-materialising from source query...", stmt.DatasetName);
 
             // ── 1. Parse and re-execute the stored source SQL ─────────────────
-            var tokens     = new Lexer(existing.SourceQuery).Tokenize();
-            var parser     = new Parser(tokens);
+            var tokens = new Lexer(existing.SourceQuery).Tokenize();
+            var parser = new Parser(tokens);
             var sourceStmt = new StatementParser(parser).ParseStatement();
 
             Statement selectInto;
@@ -78,7 +78,7 @@ namespace ETL_SQL.Engine.Handlers
             // ── 2. Re-write Parquet with machine-bound encryption ─────────────
             var parquetPath = registry.BuildDatasetFilePath(existing.Id, stmt.DatasetName);
             using var fileTransaction = DatasetFileTransaction.Create(parquetPath);
-            var connAlias   = $"__ds_write_{Guid.NewGuid():N}__";
+            var connAlias = $"__ds_write_{Guid.NewGuid():N}__";
 
             var encOptions = new Dictionary<string, Expression>
             {
@@ -106,8 +106,8 @@ namespace ETL_SQL.Engine.Handlers
 
             // ── 3. Update registry ────────────────────────────────────────────
             existing.ParquetFilePath = parquetPath;
-            existing.LastRefresh     = DateTime.UtcNow;
-            existing.RowCount        = rowCount;
+            existing.LastRefresh = DateTime.UtcNow;
+            existing.RowCount = rowCount;
             await registry.RegisterOrUpdate(existing);
             fileTransaction.Complete();
 

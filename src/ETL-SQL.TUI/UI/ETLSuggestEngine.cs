@@ -1,16 +1,15 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text.RegularExpressions;
 using System.IO;
+using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using Spectre.Console;
-
-using ETL_SQL.Core;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using Spectre.Console;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -200,7 +199,7 @@ namespace ETL_SQL.TUI.UI
 
                 int clipStart = Math.Max(t.Start, scrollCol);
                 int clipEnd = Math.Min(tokenEnd, visibleEnd);
-                
+
                 string visiblePart;
                 if (t.IsSecret && t.Length >= 2)
                 {
@@ -246,7 +245,7 @@ namespace ETL_SQL.TUI.UI
 
                 // @tag
                 tokens.Add((offset + m.Index, m.Groups[1].Length, theme.CommentTag, false));
-                
+
                 // :
                 tokens.Add((offset + m.Index + m.Groups[1].Length, 1, theme.Comment, false));
 
@@ -311,11 +310,11 @@ namespace ETL_SQL.TUI.UI
                 {
                     int lastSlash = prefix.LastIndexOf('/');
                     dir = prefix.Substring(0, lastSlash);
-                    
+
                     // Root resolution
-                    if (string.IsNullOrEmpty(dir)) 
+                    if (string.IsNullOrEmpty(dir))
                     {
-                        dir = "/"; 
+                        dir = "/";
                     }
                     else if (dir.Length == 2 && dir[1] == ':' && char.IsLetter(dir[0]))
                     {
@@ -336,8 +335,8 @@ namespace ETL_SQL.TUI.UI
                 // We ensure Directory.Exists works consistently.
                 if (Directory.Exists(dir))
                 {
-                    var entries = string.IsNullOrEmpty(searchPattern) 
-                        ? Directory.GetFileSystemEntries(dir) 
+                    var entries = string.IsNullOrEmpty(searchPattern)
+                        ? Directory.GetFileSystemEntries(dir)
                         : Directory.GetFileSystemEntries(dir, searchPattern + "*");
 
                     foreach (var entry in entries)
@@ -346,7 +345,7 @@ namespace ETL_SQL.TUI.UI
                         if (string.IsNullOrEmpty(name)) continue;
 
                         // Filter out noise
-                        if (name.StartsWith("$") || 
+                        if (name.StartsWith("$") ||
                             name.Equals("System Volume Information", StringComparison.OrdinalIgnoreCase) ||
                             name.Equals("Documents and Settings", StringComparison.OrdinalIgnoreCase) ||
                             name.Equals("Config.Msi", StringComparison.OrdinalIgnoreCase) ||
@@ -354,7 +353,7 @@ namespace ETL_SQL.TUI.UI
                             name.Equals("hiberfil.sys", StringComparison.OrdinalIgnoreCase)) continue;
 
                         bool isDir = Directory.Exists(entry);
-                        
+
                         // Construct the suggested path relative to what the user typed
                         string result;
                         if (dir == "." || dir == "./")
@@ -371,14 +370,14 @@ namespace ETL_SQL.TUI.UI
 
                         // Strip leading ./ for aesthetics
                         if (result.StartsWith("./")) result = result.Substring(2);
-                        
+
                         suggestions.Add(result);
                     }
                 }
             }
-            catch (Exception ex) 
-            { 
-                logger?.Debug($"[ETLSuggestEngine.GetFileSuggestions] File system error for prefix '{prefix}': {ex.Message}"); 
+            catch (Exception ex)
+            {
+                logger?.Debug($"[ETLSuggestEngine.GetFileSuggestions] File system error for prefix '{prefix}': {ex.Message}");
             }
             return suggestions.OrderBy(s => s.EndsWith("/") ? 0 : 1).ThenBy(s => s).ToList();
         }

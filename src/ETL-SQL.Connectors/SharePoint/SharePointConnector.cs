@@ -8,10 +8,10 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors
 {
@@ -20,13 +20,13 @@ namespace ETL_SQL.Connectors
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private readonly HttpClient _httpClient;
-        
+
         private readonly string _siteUrl = "";
         private readonly string _authMode = "INTEGRATED";
         private readonly string _documentLibrary = "Shared Documents";
         private readonly string _listName = "";
         private readonly Dictionary<string, string> _options = new(StringComparer.OrdinalIgnoreCase);
-        
+
         private string? _cachedToken;
         private DateTime _tokenExpiry = DateTime.MinValue;
 
@@ -83,10 +83,10 @@ namespace ETL_SQL.Connectors
                     string user = _options.GetValueOrDefault("USER", "");
                     string pass = DecryptIfNeeded(_options.GetValueOrDefault("PASSWORD", ""));
                     string domain = _options.GetValueOrDefault("DOMAIN", "");
-                    
+
                     clientHandler.Credentials = new NetworkCredential(user, pass, domain);
                 }
-                
+
                 _httpClient = new HttpClient(clientHandler);
             }
         }
@@ -97,14 +97,14 @@ namespace ETL_SQL.Connectors
             {
                 return "SharePoint REST API Connector v1.0 (Offline - Invalid Site URL)";
             }
-            
+
             context.SecurityService.ValidateHost(uri.Host);
 
             try
             {
                 await AuthenticateAsync();
                 string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web";
-                
+
                 _httpClient.DefaultRequestHeaders.Accept.Clear();
                 _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
@@ -116,7 +116,7 @@ namespace ETL_SQL.Connectors
 
                 var json = await response.Content.ReadAsStringAsync();
                 string siteTitle = "Unknown SharePoint Site";
-                
+
                 using var doc = JsonDocument.Parse(json);
                 JsonElement dProp;
                 if (doc.RootElement.TryGetProperty("d", out dProp))
@@ -217,7 +217,7 @@ namespace ETL_SQL.Connectors
             }
 
             _logger.Debug("Acquiring Entra ID access token for SharePoint.");
-            
+
             // Build resource/scope scope based on SharePoint URL host
             var siteUri = new Uri(_siteUrl);
             string scope = $"https://{siteUri.Host}/.default";
@@ -245,7 +245,7 @@ namespace ETL_SQL.Connectors
             var json = await res.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            
+
             _cachedToken = root.GetProperty("access_token").GetString() ?? throw new ExecutionException("Access token not found in Entra ID response.");
             int expires = root.TryGetProperty("expires_in", out var expVal) ? expVal.GetInt32() : 3600;
             _tokenExpiry = DateTime.UtcNow.AddSeconds(expires - 60);
@@ -282,7 +282,7 @@ namespace ETL_SQL.Connectors
         {
             await AuthenticateAsync();
             string folderUrl = GetServerRelativeUrl(path);
-            
+
             // SharePoint list files REST call
             string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{Uri.EscapeDataString(folderUrl)}')/Files";
             _httpClient.DefaultRequestHeaders.Accept.Clear();
@@ -297,7 +297,7 @@ namespace ETL_SQL.Connectors
 
             var json = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(json);
-            
+
             JsonElement valueProp;
             // OData structure can have values under root or root.value
             if (doc.RootElement.TryGetProperty("value", out valueProp) || doc.RootElement.TryGetProperty("d", out valueProp))
@@ -320,7 +320,7 @@ namespace ETL_SQL.Connectors
                                 long.TryParse(lenProp.GetString(), out size);
                             }
                         }
-                        
+
                         DateTime modified = DateTime.MinValue;
                         if (item.TryGetProperty("TimeLastModified", out var modProp))
                         {
@@ -344,7 +344,7 @@ namespace ETL_SQL.Connectors
         {
             if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
-            
+
             if (!File.Exists(localPath))
             {
                 throw new ExecutionException($"Local source file not found: {localPath}");
@@ -457,7 +457,7 @@ namespace ETL_SQL.Connectors
             string newFolderName = System.IO.Path.GetFileName(relativeUrl);
 
             string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{Uri.EscapeDataString(parentPath)}')/Folders";
-            
+
             var payload = new { ServerRelativeUrl = relativeUrl };
             var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
@@ -505,7 +505,7 @@ namespace ETL_SQL.Connectors
 
             var json = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(json);
-            
+
             JsonElement valueProp;
             if (doc.RootElement.TryGetProperty("value", out valueProp) || doc.RootElement.TryGetProperty("d", out valueProp))
             {
@@ -513,7 +513,7 @@ namespace ETL_SQL.Connectors
                 {
                     var table = new DataTable();
                     var rows = valueProp.EnumerateArray().ToList();
-                    
+
                     if (rows.Count > 0)
                     {
                         // Infer schema columns from first row

@@ -1,13 +1,13 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Functions
 {
@@ -106,10 +106,10 @@ namespace ETL_SQL.Tests.Functions
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("CREATE TABLE #T (Val STRING); INSERT INTO #T VALUES ('C'), ('A'), ('B');"));
-            
+
             var resAsc = await ev.EvaluateSelect((SelectStatement)Parse("SELECT STRING_AGG(Val, ',') WITHIN GROUP (ORDER BY Val ASC) AS Res FROM #T;").Statements[0]).FirstAsync();
             Assert.True(resAsc.Rows[0]["Res"]?.ToString() == "A,B,C", $"Ordered ASC failed: {resAsc.Rows[0]["Res"]}");
-            
+
             var resDesc = await ev.EvaluateSelect((SelectStatement)Parse("SELECT STRING_AGG(Val, ',') WITHIN GROUP (ORDER BY Val DESC) AS Res FROM #T;").Statements[0]).FirstAsync();
             Assert.True(resDesc.Rows[0]["Res"]?.ToString() == "C,B,A", $"Ordered DESC failed: {resDesc.Rows[0]["Res"]}");
         }
@@ -130,21 +130,21 @@ namespace ETL_SQL.Tests.Functions
         public async Task TestNewFunctions()
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             // DateTimeFromParts (year, month, day, hour, minute, second, ms)
             var dtParts = await EvaluateExpression(evaluator, "DATETIMEFROMPARTS(2024, 3, 24, 12, 0, 0, 500)");
             Assert.Equal(new DateTime(2024, 3, 24, 12, 0, 0, 500), dtParts);
-            
+
             // HashBytes
             var hashRes = await EvaluateExpression(evaluator, "HASHBYTES('SHA2_256', 'test')");
             Assert.True(hashRes is byte[], "HASHBYTES should return byte[]");
-            
+
             // Checksum (Robust 64-bit)
             var ck1 = await EvaluateExpression(evaluator, "CHECKSUM('ABC')");
             var ck2 = await EvaluateExpression(evaluator, "CHECKSUM('ABD')");
             Assert.NotEqual(ck1, ck2);
             Assert.True(ck1 is long, "CHECKSUM should return long");
-            
+
             // NewID - UUID v7 (RFC 9562)
             var id1 = await EvaluateExpression(evaluator, "NEWID()");
             var id2 = await EvaluateExpression(evaluator, "NEWID()");
@@ -194,12 +194,12 @@ namespace ETL_SQL.Tests.Functions
         public async Task TestLikeEscape()
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             // Should match '100% pure'
             await AssertEval(evaluator, "'100% pure' LIKE '100\\% pure' ESCAPE '\\'", true);
             // Should not match '1000 pure' (escaped % is literal)
             await AssertEval(evaluator, "'1000 pure' LIKE '100\\% pure' ESCAPE '\\'", false);
-            
+
             // Should match 'A_B'
             await AssertEval(evaluator, "'A_B' LIKE 'A\\_B' ESCAPE '\\'", true);
             // Should not match 'ATB' (escaped _ is literal)
@@ -207,7 +207,7 @@ namespace ETL_SQL.Tests.Functions
 
             // Escaping the escape character itself '\\' -> '\'
             await AssertEval(evaluator, "'C:\\dir' LIKE 'C:\\\\dir' ESCAPE '\\'", true);
-            
+
             // Mixing escaped characters and wildcards
             await AssertEval(evaluator, "'100% pure orange juice' LIKE '100\\% pure %' ESCAPE '\\'", true);
         }
@@ -218,6 +218,6 @@ namespace ETL_SQL.Tests.Functions
             return new Parser(lexer.Tokenize()).Parse();
         }
 
-        
+
     }
 }

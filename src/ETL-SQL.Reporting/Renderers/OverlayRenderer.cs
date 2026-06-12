@@ -69,9 +69,11 @@ namespace ETL_SQL.Reporting.Renderers
                         var maVals = ComputeMovingAverage(yVals, window);
                         extraSeries.Add(new
                         {
-                            type = "line", name = label,
+                            type = "line",
+                            name = label,
                             data = maVals.Select((d, i) => (object?)(d.HasValue ? d : null)).ToList(),
-                            smooth = true, symbol = "none",
+                            smooth = true,
+                            symbol = "none",
                             lineStyle = new { type = ls, color },
                             itemStyle = new { color },
                             tooltip = new { valueFormatter = (object?)null }

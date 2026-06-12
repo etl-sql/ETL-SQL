@@ -5,16 +5,16 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.EntityFrameworkCore;
-using Xunit;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using ETL_SQL.ReportPortal.Data;
-using ETL_SQL.ReportPortal.Services;
 using ETL_SQL.ReportPortal.Models;
+using ETL_SQL.ReportPortal.Services;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Xunit;
 
 namespace ETL_SQL.ReportPortal.Tests
 {
@@ -172,14 +172,14 @@ namespace ETL_SQL.ReportPortal.Tests
 
                     var cfg = new PortalConfig
                     {
-                        DatabasePath      = dbPath,
-                        ScriptRootPath    = scriptRoot,
+                        DatabasePath = dbPath,
+                        ScriptRootPath = scriptRoot,
                         SnapshotDirectory = snapshotDir,
-                        MapRootPath       = mapRoot,
-                        DatasetRootPath   = datasetRoot,
+                        MapRootPath = mapRoot,
+                        DatasetRootPath = datasetRoot,
                         Jwt = new JwtConfig { Secret = jwtSecret, ExpiryMinutes = 60, RefreshExpiryDays = 7 },
-                        FirstRun          = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
-                        Orchestrator      = new OrchestratorConfig { DatabasePath = orchDbPath },
+                        FirstRun = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
+                        Orchestrator = new OrchestratorConfig { DatabasePath = orchDbPath },
                         Identity = new IdentityConfig
                         {
                             Provider = "Local",

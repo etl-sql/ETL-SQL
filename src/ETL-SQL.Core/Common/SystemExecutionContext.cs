@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.IO;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Functions;
-using ETL_SQL.Services;
-using ETL_SQL.Core.Spill;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Functions;
+using ETL_SQL.Core.Spill;
+using ETL_SQL.Data;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Core.Common
 {
@@ -38,7 +38,7 @@ namespace ETL_SQL.Core.Common
             public string? SessionId { get; set; }
             public event Action<string, string?, ConsoleColor>? OnMessage;
 
-            public void Log(LogLevel level, string message, Exception? ex = null) 
+            public void Log(LogLevel level, string message, Exception? ex = null)
             {
                 OnMessage?.Invoke(message, SessionId, ConsoleColor.Gray);
             }
@@ -60,18 +60,18 @@ namespace ETL_SQL.Core.Common
         public IFunctionRegistry FunctionRegistry => throw new NotSupportedException();
         public IDatasetRegistry? DatasetRegistry { get; set; }
         public Interfaces.ILanguageHelpRegistry LanguageHelp { get; } = new Metadata.LanguageHelpRegistry();
-        
+
         public IDictionary<string, object?> Variables => new Dictionary<string, object?>();
         public IDictionary<string, object?> CurrentVariables => new Dictionary<string, object?>();
         public IDictionary<string, VariableMetadata> VariableMetadata => new Dictionary<string, VariableMetadata>();
         public IDictionary<string, VariableMetadata> CurrentMetadata => new Dictionary<string, VariableMetadata>();
-        
+
         public string SessionId { get; set; } = Guid.NewGuid().ToString("N");
         public string SessionRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions", SessionId);
         public IDictionary<string, IDataSource> Connections { get; } = new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
         public IDictionary<string, IDataSource> LocalSources => new Dictionary<string, IDataSource>();
         public IDictionary<string, NamedSet> NamedSets => new Dictionary<string, NamedSet>();
-        
+
         public string? MasterPassword => null;
         public string? ScriptPassword { get; set; }
         public DataTable? LastResult { get; set; }
@@ -92,7 +92,7 @@ namespace ETL_SQL.Core.Common
         public int SortSpillCount { get; set; }
         public int FetchStatus { get; set; }
         public Action<DataTable>? OnResultSet { get; set; }
-        
+
         public bool IsProfiling { get; set; }
         public bool IsWhatIf { get; set; }
         public bool LineageEnabled { get; set; } = true;
@@ -182,7 +182,7 @@ namespace ETL_SQL.Core.Common
                 throw new ETL_SQL.Services.SecurityException($"SMTP send limit exceeded: this script attempted to send {SmtpEmailsSentThisScript} emails, but MAX_SMTP_EMAILS_PER_SCRIPT is {MaxSmtpEmailsPerScript}.");
         }
         public int MaxInternalOperations { get => SecurityService.MaxInternalOperations; set => SecurityService.MaxInternalOperations = value; }
-        
+
         public IDictionary<string, CreateVisualStatement> VisualDefinitions { get; } = new Dictionary<string, CreateVisualStatement>();
         public IDictionary<string, CreatePageStatement> PageDefinitions { get; } = new Dictionary<string, CreatePageStatement>();
         public IDictionary<string, CreateDatasetStatement> DatasetDefinitions { get; } = new Dictionary<string, CreateDatasetStatement>();
@@ -220,19 +220,19 @@ namespace ETL_SQL.Core.Common
         public void PopScope() => throw new NotSupportedException();
         public bool ContainsVariable(string name) => false;
         public bool ContainsVariableInCurrentScope(string name) => false;
-         public void DeclareVariable(string name, object? value, VariableMetadata? metadata = null) => throw new NotSupportedException();
-         public bool RemoveProcedure(string name) => false;
-         public void SetProcedure(string name, CreateProcedureStatement stmt) => throw new NotSupportedException();
-         public bool TryGetProcedure(string name, out CreateProcedureStatement? stmt) { stmt = null; return false; }
-         public void SetFunction(string name, CreateFunctionStatement stmt) => throw new NotSupportedException();
-         public bool RemoveFunction(string name) => false;
-         public bool TryGetFunction(string name, out CreateFunctionStatement? stmt) { stmt = null; return false; }
-         public void SetView(string name, CreateViewStatement stmt) => throw new NotSupportedException();
-         public bool RemoveView(string name) => false;
-         public bool TryGetView(string name, out CreateViewStatement? stmt) { stmt = null; return false; }
-         public IReadOnlyDictionary<string, CreateViewStatement> GetViews() => new Dictionary<string, CreateViewStatement>(StringComparer.OrdinalIgnoreCase);
-         public IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null) => new Dictionary<string, (object? Value, VariableMetadata Metadata)>();
-         public void Reset() { }
+        public void DeclareVariable(string name, object? value, VariableMetadata? metadata = null) => throw new NotSupportedException();
+        public bool RemoveProcedure(string name) => false;
+        public void SetProcedure(string name, CreateProcedureStatement stmt) => throw new NotSupportedException();
+        public bool TryGetProcedure(string name, out CreateProcedureStatement? stmt) { stmt = null; return false; }
+        public void SetFunction(string name, CreateFunctionStatement stmt) => throw new NotSupportedException();
+        public bool RemoveFunction(string name) => false;
+        public bool TryGetFunction(string name, out CreateFunctionStatement? stmt) { stmt = null; return false; }
+        public void SetView(string name, CreateViewStatement stmt) => throw new NotSupportedException();
+        public bool RemoveView(string name) => false;
+        public bool TryGetView(string name, out CreateViewStatement? stmt) { stmt = null; return false; }
+        public IReadOnlyDictionary<string, CreateViewStatement> GetViews() => new Dictionary<string, CreateViewStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null) => new Dictionary<string, (object? Value, VariableMetadata Metadata)>();
+        public void Reset() { }
 
         public IAsyncEnumerable<DataTable> ExecuteQuery(Statement query) => throw new NotSupportedException();
         public Task<IDataSource> ResolveDataSourceAsync(TableReference table) => throw new NotSupportedException();
@@ -251,7 +251,7 @@ namespace ETL_SQL.Core.Common
         public Task RollbackTransaction(string? name = null) => Task.CompletedTask;
         public Task RollbackAllTransactions() => Task.CompletedTask;
 
-        public void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true) 
+        public void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true)
         {
             if (Messages.Count >= MaxMessages && MaxMessages > 0)
                 Messages.RemoveAt(0);

@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Interfaces;
-using ETL_SQL.Analysis.Lineage;
 
 namespace ETL_SQL.TUI.UI
 {

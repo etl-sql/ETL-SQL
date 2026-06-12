@@ -1,11 +1,11 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -16,7 +16,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             evaluator.Connections["#test"] = new InMemoryDataSource();
-            
+
             string script = @"
                 BEGIN TRANSACTION;
                 INSERT INTO #test (id, val) VALUES (1, 'Outer');
@@ -34,7 +34,7 @@ namespace ETL_SQL.Tests.Statements
             var mem = (InMemoryDataSource)evaluator.Connections["#test"];
             int rowCount = 0;
             await foreach (var batch in mem.ReadBatches()) rowCount += batch.Rows.Count;
-            
+
             Assert.Equal(0, rowCount);
         }
 
@@ -43,7 +43,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             evaluator.Connections["#test"] = new InMemoryDataSource();
-            
+
             string script = @"
                 BEGIN TRANSACTION;
                 INSERT INTO #test (id, val) VALUES (1, 'Outer');
@@ -60,7 +60,7 @@ namespace ETL_SQL.Tests.Statements
             var mem = (InMemoryDataSource)evaluator.Connections["#test"];
             int rowCount = 0;
             await foreach (var batch in mem.ReadBatches()) rowCount += batch.Rows.Count;
-            
+
             Assert.Equal(0, rowCount);
         }
         [Fact]
@@ -68,7 +68,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             evaluator.Connections["#test"] = new InMemoryDataSource();
-            
+
             string script = @"
                 BEGIN TRANSACTION;
                 BEGIN TRY
@@ -85,7 +85,7 @@ namespace ETL_SQL.Tests.Statements
             var mem = (InMemoryDataSource)evaluator.Connections["#test"];
             int rowCount = 0;
             await foreach (var batch in mem.ReadBatches()) rowCount += batch.Rows.Count;
-            
+
             Assert.Equal(1, rowCount);
         }
 
@@ -94,7 +94,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             evaluator.Connections["#test"] = new InMemoryDataSource();
-            
+
             string script = @"
                 BEGIN TRANSACTION;
                 BEGIN TRY
@@ -113,7 +113,7 @@ namespace ETL_SQL.Tests.Statements
             var mem = (InMemoryDataSource)evaluator.Connections["#test"];
             int rowCount = 0;
             await foreach (var batch in mem.ReadBatches()) rowCount += batch.Rows.Count;
-            
+
             Assert.Equal(0, rowCount);
         }
 
@@ -122,7 +122,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             evaluator.AutoRollbackOnFinish = false;
-            
+
             await evaluator.Evaluate(new Lexer("BEGIN TRANSACTION;").TokenizeToScript());
             Assert.Equal(1, Convert.ToInt32(evaluator.GetVariable("@@TRANCOUNT")));
 

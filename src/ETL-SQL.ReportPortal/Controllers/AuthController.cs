@@ -1,12 +1,12 @@
 using System.Security.Claims;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Models;
+using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using ETL_SQL.ReportPortal.Data;
-using ETL_SQL.ReportPortal.Models;
-using ETL_SQL.ReportPortal.Services;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -14,14 +14,14 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [Route("api/auth")]
 [EnableRateLimiting("auth")]
 public class AuthController(
-    UserManager<PortalUser>  userManager,
+    UserManager<PortalUser> userManager,
     SignInManager<PortalUser> signInManager,
-    TokenService             tokenService,
-    AuditService             auditService,
-    SecuritySessionService   securitySessions,
-    PortalDbContext          db,
-    PortalConfig             config,
-    ILdapService             ldapService) : ControllerBase
+    TokenService tokenService,
+    AuditService auditService,
+    SecuritySessionService securitySessions,
+    PortalDbContext db,
+    PortalConfig config,
+    ILdapService ldapService) : ControllerBase
 {
     [HttpPost("login")]
     [AllowAnonymous]
@@ -86,13 +86,13 @@ public class AuthController(
                     // Auto-provision user
                     user = new PortalUser
                     {
-                        UserName           = ldapResult.Username,
-                        Email              = ldapResult.Email ?? $"{ldapResult.Username}@{config.Identity.Ldap.Domain}",
-                        FirstName          = ldapResult.FirstName,
-                        LastName           = ldapResult.LastName,
-                        IsActive           = true,
+                        UserName = ldapResult.Username,
+                        Email = ldapResult.Email ?? $"{ldapResult.Username}@{config.Identity.Ldap.Domain}",
+                        FirstName = ldapResult.FirstName,
+                        LastName = ldapResult.LastName,
+                        IsActive = true,
                         MustChangePassword = false,
-                        Provider           = "LDAP"
+                        Provider = "LDAP"
                     };
 
                     var createResult = await userManager.CreateAsync(user);
@@ -217,15 +217,15 @@ public class AuthController(
             }
         }
 
-        var roles       = await userManager.GetRolesAsync(user);
-        var jwt         = tokenService.GenerateJwt(user, roles);
-        var rawRefresh  = tokenService.GenerateRefreshToken();
-        var expiresAt   = DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes);
+        var roles = await userManager.GetRolesAsync(user);
+        var jwt = tokenService.GenerateJwt(user, roles);
+        var rawRefresh = tokenService.GenerateRefreshToken();
+        var expiresAt = DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes);
 
         db.RefreshTokens.Add(new RefreshToken
         {
-            UserId    = user.Id,
-            Token     = TokenService.HashRefreshToken(rawRefresh),
+            UserId = user.Id,
+            Token = TokenService.HashRefreshToken(rawRefresh),
             ExpiresAt = DateTime.UtcNow.AddDays(config.Jwt.RefreshExpiryDays)
         });
         await db.SaveChangesAsync();
@@ -260,15 +260,15 @@ public class AuthController(
         var newRaw = tokenService.GenerateRefreshToken();
         db.RefreshTokens.Add(new RefreshToken
         {
-            UserId    = token.UserId,
-            Token     = TokenService.HashRefreshToken(newRaw),
+            UserId = token.UserId,
+            Token = TokenService.HashRefreshToken(newRaw),
             ExpiresAt = DateTime.UtcNow.AddDays(config.Jwt.RefreshExpiryDays)
         });
         await db.SaveChangesAsync();
 
-        var user     = token.User;
-        var roles    = await userManager.GetRolesAsync(user);
-        var jwt      = tokenService.GenerateJwt(user, roles);
+        var user = token.User;
+        var roles = await userManager.GetRolesAsync(user);
+        var jwt = tokenService.GenerateJwt(user, roles);
         var expiresAt = DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes);
 
         return Ok(new LoginResponse(jwt, newRaw, expiresAt));
@@ -286,7 +286,7 @@ public class AuthController(
     {
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
-        var user   = await userManager.FindByIdAsync(userId.Value.ToString());
+        var user = await userManager.FindByIdAsync(userId.Value.ToString());
         if (user is null) return NotFound();
 
         if (user.Provider == "LDAP")

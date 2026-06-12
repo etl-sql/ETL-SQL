@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.Data.SqlClient;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Microsoft.Data.SqlClient;
 
 namespace ETL_SQL.Connectors.SqlServer
 {
@@ -65,14 +65,19 @@ namespace ETL_SQL.Connectors.SqlServer
         {
             if (string.IsNullOrWhiteSpace(_connectionString)) return "MSSQL (Offline)";
             var (conn, isShared) = await GetConnectionAsync();
-            try {
+            try
+            {
                 await using var cmd = CreateCommand("SELECT @@VERSION", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 var result = await cmd.ExecuteScalarAsync();
                 return result?.ToString() ?? "Unknown SQL Server Version";
-            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
                 throw ConnectorExceptionWrapper.Wrap("SQL Server", ex);
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) await conn.DisposeAsync();
             }
         }
@@ -88,42 +93,45 @@ namespace ETL_SQL.Connectors.SqlServer
                 throw new ExecutionException("No table specified for SQL Server data source read.");
 
             var (conn, isShared) = await GetConnectionAsync();
-            try {
+            try
+            {
                 await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 await using var reader = await cmd.ExecuteReaderAsync();
 
-            var columns = new List<string>();
-            for (int i = 0; i < reader.FieldCount; i++)
-            {
-                columns.Add(reader.GetName(i));
-            }
-
-            var currentBatch = new DataTable();
-            currentBatch.SetColumns(columns);
-
-            while (await reader.ReadAsync())
-            {
-                var row = currentBatch.NewRow();
+                var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
-                    row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                    columns.Add(reader.GetName(i));
                 }
+
+                var currentBatch = new DataTable();
+                currentBatch.SetColumns(columns);
+
+                while (await reader.ReadAsync())
+                {
+                    var row = currentBatch.NewRow();
+                    for (int i = 0; i < reader.FieldCount; i++)
+                    {
+                        row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                    }
                     await currentBatch.AddRowAsync(row);
 
-                if (currentBatch.Rows.Count >= batchSize)
+                    if (currentBatch.Rows.Count >= batchSize)
+                    {
+                        yield return currentBatch;
+                        currentBatch = new DataTable();
+                        currentBatch.SetColumns(columns);
+                    }
+                }
+
+                if (currentBatch.Rows.Count > 0)
                 {
                     yield return currentBatch;
-                    currentBatch = new DataTable();
-                    currentBatch.SetColumns(columns);
                 }
             }
-
-            if (currentBatch.Rows.Count > 0)
+            finally
             {
-                yield return currentBatch;
-            }
-            } finally {
                 if (!isShared) await conn.DisposeAsync();
             }
         }
@@ -136,46 +144,51 @@ namespace ETL_SQL.Connectors.SqlServer
             if (!append) await TruncateAsync();
 
             var (conn, isShared) = await GetConnectionAsync();
-            try {
-                using var bulkCopy = _activeTransaction != null 
+            try
+            {
+                using var bulkCopy = _activeTransaction != null
                     ? new SqlBulkCopy(conn, SqlBulkCopyOptions.Default, _activeTransaction)
                     : new SqlBulkCopy(conn);
                 bulkCopy.DestinationTableName = _tableName;
 
-            var isFirstBatch = true;
-            System.Data.DataTable? dt = null;
+                var isFirstBatch = true;
+                System.Data.DataTable? dt = null;
 
-            await foreach (var batch in batches)
-            {
-                if (batch.Rows.Count == 0) continue;
-
-                if (isFirstBatch)
+                await foreach (var batch in batches)
                 {
-                    dt = new System.Data.DataTable();
-                    foreach (var col in batch.ColumnNames)
-                    {
-                        dt.Columns.Add(col);
-                        bulkCopy.ColumnMappings.Add(col, col);
-                    }
-                    isFirstBatch = false;
-                }
-                
-                dt!.Clear();
-                foreach (var row in batch.Rows)
-                {
-                    var dataRow = dt.NewRow();
-                    foreach (var col in batch.ColumnNames)
-                    {
-                        dataRow[col] = row[col] ?? DBNull.Value;
-                    }
-                    dt.Rows.Add(dataRow);
-                }
+                    if (batch.Rows.Count == 0) continue;
 
-                await bulkCopy.WriteToServerAsync(dt);
+                    if (isFirstBatch)
+                    {
+                        dt = new System.Data.DataTable();
+                        foreach (var col in batch.ColumnNames)
+                        {
+                            dt.Columns.Add(col);
+                            bulkCopy.ColumnMappings.Add(col, col);
+                        }
+                        isFirstBatch = false;
+                    }
+
+                    dt!.Clear();
+                    foreach (var row in batch.Rows)
+                    {
+                        var dataRow = dt.NewRow();
+                        foreach (var col in batch.ColumnNames)
+                        {
+                            dataRow[col] = row[col] ?? DBNull.Value;
+                        }
+                        dt.Rows.Add(dataRow);
+                    }
+
+                    await bulkCopy.WriteToServerAsync(dt);
+                }
             }
-            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
                 throw ConnectorExceptionWrapper.Wrap("SQL Server", ex);
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) await conn.DisposeAsync();
             }
         }
@@ -198,7 +211,8 @@ namespace ETL_SQL.Connectors.SqlServer
             conn.InfoMessage += infoHandler;
             conn.FireInfoMessageEventOnUserErrors = true;
 
-            try {
+            try
+            {
                 await using var cmd = CreateCommand(sql, conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 cmd.StatementCompleted += (_, e) =>
@@ -266,7 +280,9 @@ namespace ETL_SQL.Connectors.SqlServer
                         resultSetIndex++;
                     }
                 } while (await reader.NextResultAsync());
-            } finally {
+            }
+            finally
+            {
                 conn.InfoMessage -= infoHandler;
                 if (!isShared) await conn.DisposeAsync();
             }

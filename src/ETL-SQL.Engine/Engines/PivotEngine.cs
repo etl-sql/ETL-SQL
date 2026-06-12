@@ -1,10 +1,10 @@
-using ETL_SQL.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -29,11 +29,11 @@ namespace ETL_SQL.Engine.Engines
         {
             if (rows.Count == 0) return rows;
 
-            
-            
+
+
             // 1. Identify grouping columns (all columns except AggregateColumn and PivotColumn)
-            var rawGroupingCols = rows[0].Columns.Keys.Where(c => 
-                !c.Equals(pivot.PivotColumn, StringComparison.OrdinalIgnoreCase) && 
+            var rawGroupingCols = rows[0].Columns.Keys.Where(c =>
+                !c.Equals(pivot.PivotColumn, StringComparison.OrdinalIgnoreCase) &&
                 !c.Equals(pivot.AggregateColumn, StringComparison.OrdinalIgnoreCase) &&
                 !IsMatch(c, pivot.PivotColumn) &&
                 !IsMatch(c, pivot.AggregateColumn)
@@ -42,7 +42,7 @@ namespace ETL_SQL.Engine.Engines
             // Deduplicate: if we have both "Col" and "Table.Col", only keep one (preferring the unprefixed short name for the final result set if possible, or just consistency)
             var groupingCols = new List<string>();
             var seenBaseNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            
+
             // Sort by length so we see short names first or long names first? 
             // If we keep short names, it looks cleaner.
             foreach (var col in rawGroupingCols.OrderBy(c => c.Contains(".") ? 1 : 0))
@@ -84,8 +84,9 @@ namespace ETL_SQL.Engine.Engines
                 {
                     var pivotVal = pivotValues[i];
                     var targetColName = pivotValueNames[i];
-                    
-                    var filteredRows = groupRows.Where(r => {
+
+                    var filteredRows = groupRows.Where(r =>
+                    {
                         var rVal = FindValue(r, pivot.PivotColumn);
                         return _context.CompareConstants(rVal, pivotVal) == 0;
                     }).ToList();
@@ -118,7 +119,7 @@ namespace ETL_SQL.Engine.Engines
                 {
                     var newRow = new Row();
                     foreach (var col in colsToKeep) newRow[col] = row[col];
-                    
+
                     newRow[unpivot.NameColumn] = unpivotCol;
                     newRow[unpivot.ValueColumn] = FindValue(row, unpivotCol);
                     resultRows.Add(newRow);

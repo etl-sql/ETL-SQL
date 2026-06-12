@@ -2,8 +2,8 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -17,13 +17,13 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (WaitForFileStatement)statement;
-            
+
             var rawPath = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "";
             if (string.IsNullOrEmpty(rawPath))
                 throw new ExecutionException("WAITFOR FILE UNLOCKED requires a non-empty file path.", null, stmt.Line, stmt.Column);
-                
+
             string resolvedPath = context.ResolvePath(rawPath);
-            
+
             // Security validation
             context.SecurityService.ValidatePath(resolvedPath);
 
@@ -43,7 +43,7 @@ namespace ETL_SQL.Engine.Handlers
                     pollIntervalMs = pMs;
             }
 
-            if (context.IsVerbose) 
+            if (context.IsVerbose)
                 context.Log($"[WaitForFile] Waiting for '{resolvedPath}' to arrive and unlock. Timeout: {timeoutSec}s, Poll: {pollIntervalMs}ms");
 
             var start = DateTime.UtcNow;
@@ -78,7 +78,7 @@ namespace ETL_SQL.Engine.Handlers
                 throw new ExecutionException($"Timeout waiting for file to arrive and unlock: {resolvedPath}", null, stmt.Line, stmt.Column);
             }
 
-            if (context.IsVerbose) 
+            if (context.IsVerbose)
                 context.Log($"[WaitForFile] File '{resolvedPath}' is unlocked and ready.");
         }
     }

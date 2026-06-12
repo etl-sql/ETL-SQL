@@ -1,26 +1,26 @@
 using System;
-using System.IO;
-using System.Diagnostics;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using Spectre.Console;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common;
-using ETL_SQL.Data;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 using ETL_SQL.Reporting;
 using ETL_SQL.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
 
 namespace ETL_SQL.App
 {
@@ -111,7 +111,7 @@ namespace ETL_SQL.App
             {
                 return await RunDoctor(ctx, logger);
             }
-            
+
             if (ctx.Command == "config-setup-jwt")
             {
                 return await RunSetupJwt(logger, ctx.UpdateConfig);
@@ -146,10 +146,10 @@ namespace ETL_SQL.App
                 if (ctx.IsLogMode)
                 {
                     // Read script-log config from the DI container's IConfiguration (graceful defaults)
-                    var config     = Program.ServiceProvider.GetService<IConfiguration>();
-                    string scriptLogDir      = config?["Logging:ScriptLog:Directory"]          ?? "logs/scripts";
-                    int    scriptRetention   = int.TryParse(config?["Logging:ScriptLog:DefaultRetentionDays"], out var sr) ? sr : 30;
-                    int    scriptSizeLimitMb = int.TryParse(config?["Logging:ScriptLog:FileSizeLimitMb"],      out var ss) ? ss : 10;
+                    var config = Program.ServiceProvider.GetService<IConfiguration>();
+                    string scriptLogDir = config?["Logging:ScriptLog:Directory"] ?? "logs/scripts";
+                    int scriptRetention = int.TryParse(config?["Logging:ScriptLog:DefaultRetentionDays"], out var sr) ? sr : 30;
+                    int scriptSizeLimitMb = int.TryParse(config?["Logging:ScriptLog:FileSizeLimitMb"], out var ss) ? ss : 10;
 
                     // --log-path override still respected
                     if (!string.IsNullOrWhiteSpace(ctx.LogPath))
@@ -160,7 +160,7 @@ namespace ETL_SQL.App
                 }
 
                 string source = File.ReadAllText(ctx.ScriptFile.FullName);
-                
+
                 long startMem = GC.GetTotalMemory(true);
 
                 var lexTime = Stopwatch.StartNew();
@@ -168,7 +168,7 @@ namespace ETL_SQL.App
                 var lexer = new Lexer(source);
                 var tokens = lexer.Tokenize();
                 lexTime.Stop();
-                
+
                 var parseTime = Stopwatch.StartNew();
                 logger.WriteLine("Parser phase...");
                 var parser = new Parser(tokens, source);
@@ -181,15 +181,17 @@ namespace ETL_SQL.App
                     if (ctx.IsJsonMode)
                     {
                         // Output the error messages to stderr for the extension to capture
-                        foreach (var err in errors) {
+                        foreach (var err in errors)
+                        {
                             Console.Error.WriteLine($"Syntax Error at line {err.Line}, col {err.Column}: {err.Message}");
                         }
                         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName }));
-                    } 
-                    else 
+                    }
+                    else
                     {
                         logger.WriteLine("Parsing failed:", ConsoleColor.Red);
-                        foreach (var err in errors) {
+                        foreach (var err in errors)
+                        {
                             logger.WriteLine($"  - Line {err.Line}, Col {err.Column}: {err.Message}", ConsoleColor.Yellow);
                         }
                     }
@@ -233,21 +235,23 @@ namespace ETL_SQL.App
                 {
                     if (ctx.IsJsonMode)
                     {
-                        foreach (var err in lintErrors) {
+                        foreach (var err in lintErrors)
+                        {
                             Console.Error.WriteLine($"Linter Error at line {err.LineNumber}, col {err.ColumnNumber}: {err.Message}");
                         }
                         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName }));
-                    } 
-                    else 
+                    }
+                    else
                     {
                         logger.WriteLine("Linting failed:", ConsoleColor.Red);
-                        foreach (var err in lintErrors) {
+                        foreach (var err in lintErrors)
+                        {
                             logger.WriteLine($"  - Line {err.LineNumber}, Col {err.ColumnNumber}: {err.Message}", ConsoleColor.Yellow);
                         }
                     }
                     return 1;
                 }
-                
+
                 var engineConfig = Program.ServiceProvider.GetRequiredService<IConfiguration>();
                 bool auditAdHoc = engineConfig.GetValue<bool>("Engine:AuditAdHocRuns");
                 long auditHistoryId = -1L;
@@ -341,7 +345,7 @@ namespace ETL_SQL.App
                             }
                         }
                     }
-                    
+
                     // Periodic reaping of stale sessions
                     var sessionRetentionDays = int.TryParse(Program.ServiceProvider.GetRequiredService<IConfiguration>()["Session:StaleSessionRetentionDays"], out var srd) ? srd : 7;
                     sessionManager.ReapStaleSessions(TimeSpan.FromDays(sessionRetentionDays));
@@ -364,7 +368,7 @@ namespace ETL_SQL.App
                         var visualizer = new ExecuteTreeVisualizer(tree);
                         treeCts = new CancellationTokenSource();
                         treeRenderTask = visualizer.RenderLiveAsync(treeCts.Token);
-                        
+
                         // If we are showing the tree, we might want to suppress some logs to avoid flickering
                         // but let's keep it simple for now as requested.
                     }
@@ -373,29 +377,33 @@ namespace ETL_SQL.App
                         // In JSON mode, we emit "progress" packets for the VS Code extension
                         var tree = evaluator.Telemetry.ExecutionTree;
                         treeCts = new CancellationTokenSource();
-                        
-                        evaluator.Telemetry.IsProfiling = true; 
+
+                        evaluator.Telemetry.IsProfiling = true;
                         evaluator.DisplayExecuteTree = true;
 
                         // Initial clear signal for the VS Code extension
-                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new {
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+                        {
                             type = "clear",
                             uri = ctx.ScriptFile.FullName,
                             target = "all"
                         }));
 
                         // Initial flush to ensure the root node is visible immediately
-                        var initialSnapshot = new {
+                        var initialSnapshot = new
+                        {
                             type = "progress",
                             uri = ctx.ScriptFile.FullName,
                             data = tree.ToSnapshot()
                         };
                         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(initialSnapshot));
 
-                        treeRenderTask = Task.Run(async () => {
+                        treeRenderTask = Task.Run(async () =>
+                        {
                             while (!treeCts.Token.IsCancellationRequested)
                             {
-                                var snapshot = new {
+                                var snapshot = new
+                                {
                                     type = "progress",
                                     uri = ctx.ScriptFile.FullName,
                                     data = tree.ToSnapshot()
@@ -403,10 +411,12 @@ namespace ETL_SQL.App
                                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(snapshot));
 
                                 // Emit variables state
-                                var vars = new {
+                                var vars = new
+                                {
                                     type = "variables",
                                     uri = ctx.ScriptFile.FullName,
-                                    data = evaluator.VarContext.GetVariablesWithMetadata().Select(kv => new {
+                                    data = evaluator.VarContext.GetVariablesWithMetadata().Select(kv => new
+                                    {
                                         name = kv.Key,
                                         value = kv.Value.Value?.ToString() ?? "null",
                                         type = kv.Value.Value?.GetType().Name ?? "null"
@@ -427,7 +437,7 @@ namespace ETL_SQL.App
                     if (treeCts != null)
                     {
                         treeCts.Cancel();
-                        if (treeRenderTask != null) 
+                        if (treeRenderTask != null)
                         {
                             try { await treeRenderTask; } catch (TaskCanceledException) { /* Expected */ }
                         }
@@ -435,7 +445,8 @@ namespace ETL_SQL.App
                         // Final flush for fast scripts in JSON mode
                         if (ctx.IsJsonMode && !ctx.IsSilentMode)
                         {
-                            var finalSnapshot = new {
+                            var finalSnapshot = new
+                            {
                                 type = "progress",
                                 uri = ctx.ScriptFile.FullName,
                                 data = evaluator.Telemetry.ExecutionTree.ToSnapshot()
@@ -443,10 +454,12 @@ namespace ETL_SQL.App
                             Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(finalSnapshot));
 
                             // Final variables flush
-                            var finalVars = new {
+                            var finalVars = new
+                            {
                                 type = "variables",
                                 uri = ctx.ScriptFile.FullName,
-                                data = evaluator.VarContext.GetVariablesWithMetadata().Select(kv => new {
+                                data = evaluator.VarContext.GetVariablesWithMetadata().Select(kv => new
+                                {
                                     name = kv.Key,
                                     value = kv.Value.Value?.ToString() ?? "null",
                                     type = kv.Value.Value?.GetType().Name ?? "null"
@@ -457,12 +470,15 @@ namespace ETL_SQL.App
                             // Emit performance telemetry
                             if (evaluator.Telemetry.IsProfiling)
                             {
-                                var perf = new {
+                                var perf = new
+                                {
                                     type = "performance",
                                     uri = ctx.ScriptFile.FullName,
-                                    data = new {
+                                    data = new
+                                    {
                                         totalDurationMs = execTime.ElapsedMilliseconds,
-                                        statements = evaluator.Telemetry.ProfileMetrics.Select(m => new {
+                                        statements = evaluator.Telemetry.ProfileMetrics.Select(m => new
+                                        {
                                             statementType = m.Sql.Split(' ')[0], // Simple type extraction
                                             durationMs = m.DurationMs,
                                             memoryUsageBytes = Math.Max(0, m.MemoryDeltaBytes),
@@ -490,10 +506,12 @@ namespace ETL_SQL.App
 
                         if (ctx.IsJsonMode)
                         {
-                            var perfPacket = new {
+                            var perfPacket = new
+                            {
                                 type = "performance",
                                 uri = ctx.ScriptFile.FullName,
-                                metrics = new {
+                                metrics = new
+                                {
                                     lexerMs = lexTime.ElapsedMilliseconds,
                                     parserMs = parseTime.ElapsedMilliseconds,
                                     executionMs = execTime.ElapsedMilliseconds,
@@ -503,7 +521,8 @@ namespace ETL_SQL.App
                                     maxRecursion = evaluator.MaxRecursiveDepth,
                                     rowsProcessed = evaluator.Telemetry.RowsProcessed,
                                     rowsPerSecond = rowsPerSec,
-                                    statements = evaluator.Telemetry.ProfileMetrics.Select(m => new {
+                                    statements = evaluator.Telemetry.ProfileMetrics.Select(m => new
+                                    {
                                         sql = m.Sql,
                                         durationMs = m.DurationMs,
                                         rows = m.RowsProcessed
@@ -517,7 +536,7 @@ namespace ETL_SQL.App
                         else if (!ctx.IsSilentMode)
                         {
                             AnsiConsole.Write(new Rule("[yellow]Performance Metrics[/]").RuleStyle("grey"));
-                            
+
                             var chart = new BreakdownChart()
                                 .Width(60)
                                 .AddItem("Execution", execTime.ElapsedMilliseconds, Color.Green)
@@ -532,16 +551,16 @@ namespace ETL_SQL.App
                             table.AddRow("Total Rows Processed", evaluator.Telemetry.RowsProcessed.ToString("N0"));
                             table.AddRow("Throughput (Rows/s)", rowsPerSec.ToString("N0"));
                             table.AddRow("Approx. RAM Peak", $"{memUsageMb} MB");
-                            
+
                             if (evaluator.Telemetry.TotalSpilledBytes > 0)
                                 table.AddRow("Disk Spilled", $"[yellow]{Math.Round((double)evaluator.Telemetry.TotalSpilledBytes / (1024 * 1024), 2)} MB[/]");
-                            
+
                             if (evaluator.Telemetry.PartitionsCount > 0)
                                 table.AddRow("Partitions Used", evaluator.Telemetry.PartitionsCount.ToString());
 
                             if (evaluator.MaxRecursiveDepth > 0)
                                 table.AddRow("Max Recursion Depth", evaluator.MaxRecursiveDepth.ToString());
-                            
+
                             AnsiConsole.Write(table);
                             Console.WriteLine();
                         }
@@ -556,11 +575,12 @@ namespace ETL_SQL.App
                     {
                         if (ctx.IsJsonMode)
                         {
-                            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { 
-                                type = "message", 
+                            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+                            {
+                                type = "message",
                                 uri = ctx.ScriptFile.FullName,
                                 level = "warning",
-                                text = "Docker containers are still running. Remember to use 'DOCKER CLOSE;' when finished." 
+                                text = "Docker containers are still running. Remember to use 'DOCKER CLOSE;' when finished."
                             }));
                         }
                         else
@@ -1163,7 +1183,7 @@ CREATE PAGE Main AS DASHBOARD (
                     ["checks"] = new System.Text.Json.Nodes.JsonArray(
                         checks.Select(c => (System.Text.Json.Nodes.JsonNode)new System.Text.Json.Nodes.JsonObject
                         {
-                            ["name"]   = c.Name,
+                            ["name"] = c.Name,
                             ["detail"] = c.Detail,
                             ["status"] = c.Status,
                         }).ToArray())
@@ -1181,10 +1201,10 @@ CREATE PAGE Main AS DASHBOARD (
                 {
                     var statusMarkup = status switch
                     {
-                        "OK"   => "[green]OK[/]",
+                        "OK" => "[green]OK[/]",
                         "WARN" => "[yellow]WARN[/]",
                         "FAIL" => "[red]FAIL[/]",
-                        _      => status,
+                        _ => status,
                     };
                     table.AddRow(name, Markup.Escape(detail), statusMarkup);
                 }
@@ -1376,7 +1396,7 @@ CREATE PAGE Main AS DASHBOARD (
             if (updateConfig)
             {
                 // Update appsettings.json
-                try 
+                try
                 {
                     var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
                     if (File.Exists(configPath))
@@ -1388,7 +1408,7 @@ CREATE PAGE Main AS DASHBOARD (
                             var portal = doc["Portal"] ?? (doc["Portal"] = new System.Text.Json.Nodes.JsonObject());
                             var jwt = portal["Jwt"] ?? (portal["Jwt"] = new System.Text.Json.Nodes.JsonObject());
                             jwt["Secret"] = encryptedSecret;
-                            
+
                             File.WriteAllText(configPath, doc.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
                             AnsiConsole.MarkupLine("[green]SUCCESS:[/] Updated Portal:Jwt:Secret in appsettings.json.");
                         }

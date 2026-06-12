@@ -9,11 +9,11 @@ namespace ETL_SQL.Reporting.Builders
         {
             return new DatasetManifest
             {
-                TempTableName   = dsStmt.TempTableName,
+                TempTableName = dsStmt.TempTableName,
                 RefreshInterval = dsStmt.RefreshInterval,
-                Ttl             = dsStmt.Ttl,
-                LastRefresh     = DateTime.UtcNow,
-                RowCount        = 0 // To be filled by the caller if needed
+                Ttl = dsStmt.Ttl,
+                LastRefresh = DateTime.UtcNow,
+                RowCount = 0 // To be filled by the caller if needed
             };
         }
     }

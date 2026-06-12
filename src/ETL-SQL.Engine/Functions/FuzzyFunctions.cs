@@ -73,11 +73,11 @@ namespace ETL_SQL.Engine.Functions
             return preset switch
             {
                 "COMPANY" => NormalizeCompany(s),
-                "PERSON"  => NormalizePerson(s),
+                "PERSON" => NormalizePerson(s),
                 "ADDRESS" => NormalizeAddress(s),
-                "PHONE"   => NormalizePhone(s),
-                "EMAIL"   => NormalizeEmail(s),
-                _         => NormalizeBase(s)
+                "PHONE" => NormalizePhone(s),
+                "EMAIL" => NormalizeEmail(s),
+                _ => NormalizeBase(s)
             };
         }
 
@@ -195,10 +195,10 @@ namespace ETL_SQL.Engine.Functions
             double score = algo switch
             {
                 "LEVENSHTEIN" => ComputeLevenshteinNormalized(a, b),
-                "TRIGRAM"     => ComputeTrigram(a, b),
-                "JACCARD"     => ComputeJaccard(a, b),
-                "TOKENSORT"   => ComputeTokenSort(a, b),
-                _             => ComputeJaroWinkler(a, b)  // JAROWINKLER (default)
+                "TRIGRAM" => ComputeTrigram(a, b),
+                "JACCARD" => ComputeJaccard(a, b),
+                "TOKENSORT" => ComputeTokenSort(a, b),
+                _ => ComputeJaroWinkler(a, b)  // JAROWINKLER (default)
             };
 
             return (decimal)Math.Round(score, 6);
@@ -398,13 +398,13 @@ namespace ETL_SQL.Engine.Functions
 
         private static char SoundexCode(char c) => c switch
         {
-            'B' or 'F' or 'P' or 'V'                         => '1',
+            'B' or 'F' or 'P' or 'V' => '1',
             'C' or 'G' or 'J' or 'K' or 'Q' or 'S' or 'X' or 'Z' => '2',
-            'D' or 'T'                                        => '3',
-            'L'                                               => '4',
-            'M' or 'N'                                        => '5',
-            'R'                                               => '6',
-            _                                                 => '0'
+            'D' or 'T' => '3',
+            'L' => '4',
+            'M' or 'N' => '5',
+            'R' => '6',
+            _ => '0'
         };
 
         // ── Phase 2 — METAPHONE (original 1990) ───────────────────────────────────
@@ -439,7 +439,11 @@ namespace ETL_SQL.Engine.Functions
 
                 switch (c)
                 {
-                    case 'A': case 'E': case 'I': case 'O': case 'U':
+                    case 'A':
+                    case 'E':
+                    case 'I':
+                    case 'O':
+                    case 'U':
                         if (i == 0) result.Append(c);
                         i++; break;
 
@@ -588,9 +592,9 @@ namespace ETL_SQL.Engine.Functions
             if (s.Length == 0) return new DmResult("", "");
 
             int length = s.Length;
-            var primary   = new StringBuilder(8);
+            var primary = new StringBuilder(8);
             var secondary = new StringBuilder(8);
-            int current   = 0;
+            int current = 0;
             bool slavoGermanic = s.Contains('W') || s.Contains('K') || s.Contains("CZ") || s.Contains("WITZ");
 
             // Initial transformations
@@ -620,7 +624,12 @@ namespace ETL_SQL.Engine.Functions
                 char c = s[current];
                 switch (c)
                 {
-                    case 'A': case 'E': case 'I': case 'O': case 'U': case 'Y':
+                    case 'A':
+                    case 'E':
+                    case 'I':
+                    case 'O':
+                    case 'U':
+                    case 'Y':
                         if (current == 0) Add(primary, secondary, "A");
                         current++; break;
 

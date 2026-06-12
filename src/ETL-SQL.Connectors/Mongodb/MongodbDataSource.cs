@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using ETL_SQL.Data;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors.Mongodb
 {

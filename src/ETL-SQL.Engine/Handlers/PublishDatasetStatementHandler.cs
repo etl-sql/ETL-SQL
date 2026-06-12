@@ -82,15 +82,15 @@ namespace ETL_SQL.Engine.Handlers
                 // Register first to allocate the stable Id the at-rest filename is keyed on.
                 var metadata = new DatasetMetadata
                 {
-                    Name            = stmt.DatasetName,
-                    FolderPath      = publishTarget.FolderPath,
-                    FolderId        = publishTarget.FolderId,
+                    Name = stmt.DatasetName,
+                    FolderPath = publishTarget.FolderPath,
+                    FolderId = publishTarget.FolderId,
                     ParquetFilePath = "",
-                    SourceQuery     = "",                        // published snapshots have no source to re-run
-                    AccessLevel     = stmt.AccessLevel,
-                    CreatedBy       = publishTarget.OwnerUserId,
-                    LastRefresh     = DateTime.UtcNow,
-                    RowCount        = 0                          // unknown for an imported snapshot
+                    SourceQuery = "",                        // published snapshots have no source to re-run
+                    AccessLevel = stmt.AccessLevel,
+                    CreatedBy = publishTarget.OwnerUserId,
+                    LastRefresh = DateTime.UtcNow,
+                    RowCount = 0                          // unknown for an imported snapshot
                 };
                 var id = await registry.RegisterOrUpdate(metadata);
                 allocatedRow = true;
@@ -98,7 +98,7 @@ namespace ETL_SQL.Engine.Handlers
                 using var fileTransaction = DatasetFileTransaction.Create(atRestPath);
 
                 var transport = new EncryptionOptions(BuildTransportOptions(stmt));
-                var atRest    = new EncryptionOptions(BuildAtRestOptions(atRestKey));
+                var atRest = new EncryptionOptions(BuildAtRestOptions(atRestKey));
 
                 var tempPlain = Path.Combine(Path.GetTempPath(), $"__ds_publish_{Guid.NewGuid():N}.parquet");
                 try
@@ -173,7 +173,7 @@ namespace ETL_SQL.Engine.Handlers
 
         private static Dictionary<string, string> BuildTransportOptions(PublishDatasetStatement stmt) =>
             stmt.EncryptionMode == DatasetEncryptionMode.KeyFile
-                ? new Dictionary<string, string> { ["ENCRYPT"] = "KEYFILE",  ["KEYFILE"]  = stmt.KeyFile ?? "" }
+                ? new Dictionary<string, string> { ["ENCRYPT"] = "KEYFILE", ["KEYFILE"] = stmt.KeyFile ?? "" }
                 : new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = stmt.EncryptionPassword ?? "" };
     }
 }

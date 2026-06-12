@@ -20,7 +20,7 @@ namespace ETL_SQL.Analysis.Linting
         public static Linter CreateWithAllRules(IServiceProvider? serviceProvider = null)
         {
             var linter = new Linter();
-            
+
             if (serviceProvider != null)
             {
                 var registeredRules = serviceProvider.GetServices<ILintRule>();

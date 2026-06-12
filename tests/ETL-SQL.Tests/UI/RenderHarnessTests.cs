@@ -1,11 +1,11 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Spectre.Console;
-using Spectre.Console.Rendering;
 using ETL_SQL.Core;
 using ETL_SQL.TUI.UI;
+using Spectre.Console;
+using Spectre.Console.Rendering;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {

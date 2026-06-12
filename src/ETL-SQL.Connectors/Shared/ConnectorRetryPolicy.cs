@@ -1,15 +1,15 @@
 using System;
-using System.Threading.Tasks;
-using Microsoft.Data.SqlClient;
-using Npgsql;
-using Oracle.ManagedDataAccess.Client;
 using System.Data.Odbc;
-using Snowflake.Data.Client;
-using MySqlConnector;
-using Polly;
-using Polly.Retry;
+using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
+using Microsoft.Data.SqlClient;
+using MySqlConnector;
+using Npgsql;
+using Oracle.ManagedDataAccess.Client;
+using Polly;
+using Polly.Retry;
+using Snowflake.Data.Client;
 
 
 namespace ETL_SQL.Connectors.Shared
@@ -42,10 +42,10 @@ namespace ETL_SQL.Connectors.Shared
                 .AddRetry(new RetryStrategyOptions
                 {
                     MaxRetryAttempts = MaxAttempts,
-                    Delay             = BaseDelay,
-                    BackoffType       = DelayBackoffType.Exponential,
-                    UseJitter         = true,
-                    ShouldHandle      = new PredicateBuilder()
+                    Delay = BaseDelay,
+                    BackoffType = DelayBackoffType.Exponential,
+                    UseJitter = true,
+                    ShouldHandle = new PredicateBuilder()
                         .Handle<SqlException>(IsTransientSql)
                         .Handle<TimeoutException>(),
                     OnRetry = args =>
@@ -98,10 +98,10 @@ namespace ETL_SQL.Connectors.Shared
                 .AddRetry(new RetryStrategyOptions
                 {
                     MaxRetryAttempts = MaxAttempts,
-                    Delay             = BaseDelay,
-                    BackoffType       = DelayBackoffType.Exponential,
-                    UseJitter         = true,
-                    ShouldHandle      = new PredicateBuilder()
+                    Delay = BaseDelay,
+                    BackoffType = DelayBackoffType.Exponential,
+                    UseJitter = true,
+                    ShouldHandle = new PredicateBuilder()
                         .Handle<NpgsqlException>(IsTransientPg)
                         .Handle<TimeoutException>(),
                     OnRetry = args =>
@@ -132,10 +132,10 @@ namespace ETL_SQL.Connectors.Shared
                 .AddRetry(new RetryStrategyOptions
                 {
                     MaxRetryAttempts = MaxAttempts,
-                    Delay             = BaseDelay,
-                    BackoffType       = DelayBackoffType.Exponential,
-                    UseJitter         = true,
-                    ShouldHandle      = new PredicateBuilder()
+                    Delay = BaseDelay,
+                    BackoffType = DelayBackoffType.Exponential,
+                    UseJitter = true,
+                    ShouldHandle = new PredicateBuilder()
                         .Handle<OracleException>(IsTransientOracle)
                         .Handle<TimeoutException>(),
                     OnRetry = args =>
@@ -155,8 +155,8 @@ namespace ETL_SQL.Connectors.Shared
         private static bool IsTransientOracle(OracleException ex) =>
             ex.Number switch
             {
-                3113  => true,  // End-of-file on communication channel
-                3114  => true,  // Not connected to ORACLE
+                3113 => true,  // End-of-file on communication channel
+                3114 => true,  // Not connected to ORACLE
                 12150 => true,  // TNS: unable to send data
                 12153 => true,  // TNS: not connected
                 12157 => true,  // TNS: internal network communication error
@@ -168,7 +168,7 @@ namespace ETL_SQL.Connectors.Shared
                 17002 => true,  // IO Error: Connection reset
                 17008 => true,  // Closed Connection
                 17410 => true,  // No more data to read from socket
-                _     => false
+                _ => false
             };
 
         // ── Snowflake ────────────────────────────────────────────────────────
@@ -178,10 +178,10 @@ namespace ETL_SQL.Connectors.Shared
                 .AddRetry(new RetryStrategyOptions
                 {
                     MaxRetryAttempts = MaxAttempts,
-                    Delay             = BaseDelay,
-                    BackoffType       = DelayBackoffType.Exponential,
-                    UseJitter         = true,
-                    ShouldHandle      = new PredicateBuilder()
+                    Delay = BaseDelay,
+                    BackoffType = DelayBackoffType.Exponential,
+                    UseJitter = true,
+                    ShouldHandle = new PredicateBuilder()
                         .Handle<SnowflakeDbException>(IsTransientSnowflake)
                         .Handle<TimeoutException>(),
                     OnRetry = args =>
@@ -204,7 +204,7 @@ namespace ETL_SQL.Connectors.Shared
                 390100 => true,  // Network error
                 390110 => true,  // Connection timeout
                 250001 => true,  // No connection available
-                _      => false
+                _ => false
             };
 
         // ── BigQuery ─────────────────────────────────────────────────────────
@@ -214,10 +214,10 @@ namespace ETL_SQL.Connectors.Shared
                 .AddRetry(new RetryStrategyOptions
                 {
                     MaxRetryAttempts = MaxAttempts,
-                    Delay             = BaseDelay,
-                    BackoffType       = DelayBackoffType.Exponential,
-                    UseJitter         = true,
-                    ShouldHandle      = new PredicateBuilder()
+                    Delay = BaseDelay,
+                    BackoffType = DelayBackoffType.Exponential,
+                    UseJitter = true,
+                    ShouldHandle = new PredicateBuilder()
                         .Handle<Google.GoogleApiException>(IsTransientBigQuery)
                         .Handle<TimeoutException>(),
                     OnRetry = args =>
@@ -241,7 +241,7 @@ namespace ETL_SQL.Connectors.Shared
                 429 => true,  // Rate limit / quota exceeded
                 500 => true,  // Internal server error (often transient in cloud)
                 503 => true,  // Service unavailable
-                _   => false
+                _ => false
             };
 
         // ── ODBC ─────────────────────────────────────────────────────────────
@@ -251,10 +251,10 @@ namespace ETL_SQL.Connectors.Shared
                 .AddRetry(new RetryStrategyOptions
                 {
                     MaxRetryAttempts = MaxAttempts,
-                    Delay             = BaseDelay,
-                    BackoffType       = DelayBackoffType.Exponential,
-                    UseJitter         = true,
-                    ShouldHandle      = new PredicateBuilder()
+                    Delay = BaseDelay,
+                    BackoffType = DelayBackoffType.Exponential,
+                    UseJitter = true,
+                    ShouldHandle = new PredicateBuilder()
                         .Handle<OdbcException>(IsTransientOdbc)
                         .Handle<TimeoutException>(),
                     OnRetry = args =>
@@ -292,10 +292,10 @@ namespace ETL_SQL.Connectors.Shared
                 .AddRetry(new RetryStrategyOptions
                 {
                     MaxRetryAttempts = MaxAttempts,
-                    Delay             = BaseDelay,
-                    BackoffType       = DelayBackoffType.Exponential,
-                    UseJitter         = true,
-                    ShouldHandle      = new PredicateBuilder()
+                    Delay = BaseDelay,
+                    BackoffType = DelayBackoffType.Exponential,
+                    UseJitter = true,
+                    ShouldHandle = new PredicateBuilder()
                         .Handle<MySqlException>(IsTransientMySql)
                         .Handle<TimeoutException>(),
                     OnRetry = args =>

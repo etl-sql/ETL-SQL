@@ -1,14 +1,13 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
-
 using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Operations
 {
@@ -18,7 +17,7 @@ namespace ETL_SQL.Tests.Operations
         public async Task TestGroupByWithWindowFunction()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             // Setup data
             await ev.Evaluate(Parse("CREATE TABLE #Sales (Category STRING, Amount DECIMAL);"));
             await ev.Evaluate(Parse("INSERT INTO #Sales VALUES ('Electronics', 100), ('Electronics', 200), ('Clothing', 50), ('Clothing', 150), ('Books', 300);"));

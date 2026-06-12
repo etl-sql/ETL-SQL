@@ -10,12 +10,12 @@ namespace ETL_SQL.TUI.UI
         int WindowHeight { get; }
         bool CursorVisible { get; set; }
         IReadOnlyCapabilities Capabilities { get; }
-        
+
         void SetCursorPosition(int left, int top);
         ConsoleKeyInfo ReadKey(bool intercept);
         void Write(string value);
         void Clear();
-        
+
         // Spectre.Console integration
         void Markup(string markup);
         void WriteWidget(IRenderable widget);
@@ -26,9 +26,10 @@ namespace ETL_SQL.TUI.UI
     {
         public int WindowWidth => AnsiConsole.Console.Profile.Width;
         public int WindowHeight => AnsiConsole.Console.Profile.Height;
-        public bool CursorVisible { 
-            get => true; 
-            set { if (value) AnsiConsole.Console.Cursor.Show(); else AnsiConsole.Console.Cursor.Hide(); } 
+        public bool CursorVisible
+        {
+            get => true;
+            set { if (value) AnsiConsole.Console.Cursor.Show(); else AnsiConsole.Console.Cursor.Hide(); }
         }
         public IReadOnlyCapabilities Capabilities => AnsiConsole.Console.Profile.Capabilities;
 

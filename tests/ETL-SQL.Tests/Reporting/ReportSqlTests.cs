@@ -55,7 +55,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
             var inlineSelect = Assert.IsType<SelectStatement>(stmt.Source.InlineSelect);
             Assert.Equal("Total", inlineSelect.Columns[1].Alias);
         }
-        
+
         [Fact]
         public void TestExplainInto_Serialization()
         {
@@ -63,10 +63,10 @@ namespace ETL_SQL.Tests.Reporting.Reporting
             var tokens = new Lexer(sql).Tokenize();
             var parser = new Parser(tokens, sql);
             var stmt = (ExplainStatement)parser.ParseStatement();
-            
+
             Assert.NotNull(stmt.IntoTable);
             Assert.Equal("#Plan", stmt.IntoTable.TableName);
-            
+
             var serialized = stmt.ToSql();
             Assert.Contains("INTO #Plan", serialized);
         }
@@ -89,7 +89,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
             Assert.Equal("corporate", stmt.Name);
             Assert.Equal(ObjectCreationMode.Create, stmt.Mode);
             Assert.Equal("#1a1a2e", stmt.Properties["BACKGROUND"]);
-            Assert.Equal("#eee",    stmt.Properties["TEXT_COLOR"]);
+            Assert.Equal("#eee", stmt.Properties["TEXT_COLOR"]);
             Assert.Equal("#4ecca3", stmt.Properties["ACCENT_COLOR"]);
         }
 
@@ -99,10 +99,10 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         {
             var props = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["BACKGROUND"]   = "#1a1a2e",
-                ["TEXT_COLOR"]   = "#eeeeee",
+                ["BACKGROUND"] = "#1a1a2e",
+                ["TEXT_COLOR"] = "#eeeeee",
                 ["ACCENT_COLOR"] = "#4ecca3",
-                ["GRID_COLOR"]   = "#333333"
+                ["GRID_COLOR"] = "#333333"
             };
 
             var json = ETL_SQL.Engine.Handlers.CreateThemeStatementHandler.BuildEChartsTheme(props);
@@ -148,9 +148,9 @@ namespace ETL_SQL.Tests.Reporting.Reporting
 
             Assert.Equal(VisualType.Map, stmt.VisualType);
             Assert.Contains(stmt.Mappings, m => m.Role == "REGION" && m.Column == "State");
-            Assert.Contains(stmt.Mappings, m => m.Role == "VALUE"  && m.Column == "Revenue");
+            Assert.Contains(stmt.Mappings, m => m.Role == "VALUE" && m.Column == "Revenue");
             var opts = stmt.Options.ToDictionary(o => o.Key, o => o.Value, StringComparer.OrdinalIgnoreCase);
-            Assert.Equal("US_STATES",  opts["MAP_NAME"]);
+            Assert.Equal("US_STATES", opts["MAP_NAME"]);
             Assert.Equal("#e0f2fe", opts["COLOR_LOW"]);
             Assert.Equal("#0369a1", opts["COLOR_HIGH"]);
         }
@@ -175,7 +175,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
             Assert.Equal(VisualType.Map, stmt.VisualType);
             var opts = stmt.Options.ToDictionary(o => o.Key, o => o.Value, StringComparer.OrdinalIgnoreCase);
             Assert.Equal("US_COUNTIES", opts["MAP_NAME"]);
-            Assert.Equal("FIPS",        opts["MATCH_BY"]);
+            Assert.Equal("FIPS", opts["MATCH_BY"]);
         }
 
         [Fact]
@@ -199,13 +199,13 @@ namespace ETL_SQL.Tests.Reporting.Reporting
             var stmt = (CreateVisualStatement)new Parser(tokens, sql).ParseStatement();
 
             Assert.Equal(VisualType.Map, stmt.VisualType);
-            Assert.Contains(stmt.Mappings, m => m.Role == "LON"   && m.Column == "longitude");
-            Assert.Contains(stmt.Mappings, m => m.Role == "LAT"   && m.Column == "latitude");
+            Assert.Contains(stmt.Mappings, m => m.Role == "LON" && m.Column == "longitude");
+            Assert.Contains(stmt.Mappings, m => m.Role == "LAT" && m.Column == "latitude");
             Assert.Contains(stmt.Mappings, m => m.Role == "VALUE" && m.Column == "Revenue");
             Assert.Contains(stmt.Mappings, m => m.Role == "LABEL" && m.Column == "city_name");
             var opts = stmt.Options.ToDictionary(o => o.Key, o => o.Value, StringComparer.OrdinalIgnoreCase);
             Assert.Equal("US_STATES", opts["MAP_NAME"]);
-            Assert.Equal("POINTS",    opts["MODE"]);
+            Assert.Equal("POINTS", opts["MODE"]);
         }
 
         [Fact]

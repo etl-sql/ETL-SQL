@@ -1,19 +1,19 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
-using System.Threading.Tasks;
-using System.Collections.Concurrent;
-using System.Threading;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Execution;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
-using ConnectionInfo = ETL_SQL.Core.Data.ConnectionInfo;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Data;
+using ConnectionInfo = ETL_SQL.Core.Data.ConnectionInfo;
 
 namespace ETL_SQL.Engine.Services
 {
@@ -37,7 +37,7 @@ namespace ETL_SQL.Engine.Services
             _securityService = securityService;
             _configuration = configuration;
             SessionRoot = InitializeSessionRoot(customSessionDir);
-            
+
             _ttlHours = int.TryParse(_configuration["Session:PersistentSessionTTLHours"], out var val) ? val : 24;
 
             // Defer reaping to a randomized background delay (5–30 s) so simultaneous process
@@ -105,11 +105,12 @@ namespace ETL_SQL.Engine.Services
                 // 3. Save Connections
                 var connections = evaluator.Connections
                     .Where(c => c.Value.ConnectorType != "INMEMORY")
-                    .Select(c => new ConnectionInfo { 
-                        Name = c.Key, 
-                        Type = c.Value.ConnectorType, 
-                        ConnectionString = GetSafeConnectionString(c.Value), 
-                        Options = c.Value.Options ?? new() 
+                    .Select(c => new ConnectionInfo
+                    {
+                        Name = c.Key,
+                        Type = c.Value.ConnectorType,
+                        ConnectionString = GetSafeConnectionString(c.Value),
+                        Options = c.Value.Options ?? new()
                     }).ToList();
                 await store.SaveConnectionsAsync(connections);
 
@@ -155,7 +156,7 @@ namespace ETL_SQL.Engine.Services
             try
             {
                 var state = new SessionState { SessionId = sessionId };
-                
+
                 // 1. Load Variables
                 var (vars, meta) = await store.LoadVariablesAsync();
                 state.GlobalVariables = vars;
@@ -202,7 +203,8 @@ namespace ETL_SQL.Engine.Services
                 return;
             }
 
-            _securityService.ExecuteInternal(() => {
+            _securityService.ExecuteInternal(() =>
+            {
                 var sessionDir = Path.Combine(SessionRoot, sessionId);
                 if (Directory.Exists(sessionDir))
                 {
@@ -225,7 +227,7 @@ namespace ETL_SQL.Engine.Services
 
                 var lastModified = File.GetLastWriteTime(dbPath);
                 var createdAt = File.GetCreationTime(dbPath);
-                
+
                 long totalSize = Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
 
                 yield return new SessionSummary
@@ -258,7 +260,7 @@ namespace ETL_SQL.Engine.Services
             try
             {
                 if (!Directory.Exists(SessionRoot)) return;
-                
+
                 var cutoff = DateTime.Now.AddHours(-_ttlHours);
                 var sessionDirs = Directory.GetDirectories(SessionRoot);
                 int reapCount = 0;

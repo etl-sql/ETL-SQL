@@ -1,14 +1,14 @@
 using System;
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core;
-using ETL_SQL.Engine;
-using ETL_SQL.TUI.UI;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using ETL_SQL.TUI;
+using ETL_SQL.TUI.UI;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {

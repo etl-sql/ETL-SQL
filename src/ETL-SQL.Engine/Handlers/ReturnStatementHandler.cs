@@ -1,6 +1,6 @@
-using ETL_SQL.Data;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -21,7 +21,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ReturnStatement)statement;
-            
+
             _logger.Debug("Executing RETURN");
             var val = stmt.ReturnValue != null ? await context.EvaluateValue(stmt.ReturnValue, new Row()) : null;
             throw new ReturnException(val);

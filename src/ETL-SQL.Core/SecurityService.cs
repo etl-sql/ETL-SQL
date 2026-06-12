@@ -1,12 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
-using Microsoft.Extensions.Configuration;
+using System.Text.RegularExpressions;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Services
 {
@@ -248,7 +248,7 @@ namespace ETL_SQL.Services
             if (IsInternalOperation || IsTestMode) return;
 
             // Always allow local loopback
-            if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || 
+            if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
                 host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
                 host.Equals("::1", StringComparison.OrdinalIgnoreCase))
             {
@@ -264,7 +264,7 @@ namespace ETL_SQL.Services
                     var domain = allowed.Substring(2);
                     if (host.EndsWith(domain, StringComparison.OrdinalIgnoreCase)) return;
                 }
-                
+
                 if (string.Equals(host, allowed, StringComparison.OrdinalIgnoreCase)) return;
             }
 
@@ -291,7 +291,7 @@ namespace ETL_SQL.Services
 
             // 0. Internal Bypass
             if (IsInternalOperation) return;
-            
+
             // 0.1 Unrestricted Mode Bypass
             if (ProtectionMode == PathProtectionMode.Unrestricted) return;
 
@@ -306,7 +306,7 @@ namespace ETL_SQL.Services
 
                 var testFullPath = fullPath.EndsWith(Path.DirectorySeparatorChar) ? fullPath : fullPath + Path.DirectorySeparatorChar;
 
-                if (testFullPath.StartsWith(baseDir, PathComparison) || 
+                if (testFullPath.StartsWith(baseDir, PathComparison) ||
                     testFullPath.StartsWith(tempPath, PathComparison) ||
                     testFullPath.StartsWith(currentDir, PathComparison))
                 {
@@ -316,7 +316,7 @@ namespace ETL_SQL.Services
 
             if (!isSafeZone)
             {
-                matchedZone = ApprovedSafeZones.FirstOrDefault(z => 
+                matchedZone = ApprovedSafeZones.FirstOrDefault(z =>
                 {
                     var zoneDir = z.EndsWith(Path.DirectorySeparatorChar) ? z : z + Path.DirectorySeparatorChar;
                     var testFullPath = fullPath.EndsWith(Path.DirectorySeparatorChar) ? fullPath : fullPath + Path.DirectorySeparatorChar;
@@ -356,7 +356,7 @@ namespace ETL_SQL.Services
             // B. Block Critical and Sensitive directories
             foreach (var blocked in CriticalSystemDirectories.Concat(SensitiveDirectories))
             {
-                var blockedClean = blocked.Trim('/'); 
+                var blockedClean = blocked.Trim('/');
                 if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase)))
                 {
                     throw new SecurityException($"Unauthorized access to protected system/environment directory: {blocked} in path {fullPath}");
@@ -366,7 +366,7 @@ namespace ETL_SQL.Services
             // C. Block Standard restricted directories (VCS, AppData, etc.)
             foreach (var blocked in RestrictedDirectories)
             {
-                var blockedClean = blocked.Trim('/'); 
+                var blockedClean = blocked.Trim('/');
                 if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase)))
                 {
                     throw new SecurityException($"Unauthorized access to restricted application/build directory: {blocked} in path {fullPath}");
@@ -379,7 +379,7 @@ namespace ETL_SQL.Services
             {
                 throw new SecurityException($"Unauthorized access to internal session metadata: {fileName}");
             }
-            
+
             if (fullPath.Contains("_temp") && segments.Any(s => s.EndsWith("_temp")))
             {
                 throw new SecurityException("Direct access to session temporary storage is prohibited.");
@@ -390,10 +390,10 @@ namespace ETL_SQL.Services
         {
             var normalizedPath = fullPath.Replace('\\', '/');
             var segments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            
+
             foreach (var blocked in CriticalSystemDirectories.Concat(SensitiveDirectories))
             {
-                var blockedClean = blocked.Trim('/'); 
+                var blockedClean = blocked.Trim('/');
                 if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase))) return true;
             }
             return false;
@@ -513,7 +513,7 @@ namespace ETL_SQL.Services
 
             if (!allowLarge || !isSafeZone)
             {
-                 throw new SecurityException($"Memory Safety Guardrail: String result size ({length} bytes) exceeds the safety limit of {MaxStringResultSize} bytes. Use a safe zone and 'SET ALLOW_LARGE_STRING_RESULTS ON;' if this is intentional.");
+                throw new SecurityException($"Memory Safety Guardrail: String result size ({length} bytes) exceeds the safety limit of {MaxStringResultSize} bytes. Use a safe zone and 'SET ALLOW_LARGE_STRING_RESULTS ON;' if this is intentional.");
             }
 
             _logger.Warning("Security Override: Large string result ({Length} bytes) authorized via safe zone '{Path}'.", length, safeZonePath);
@@ -899,13 +899,13 @@ namespace ETL_SQL.Services
             {
                 var fullPath = Path.GetFullPath(path);
                 var root = Path.GetPathRoot(fullPath);
-                
+
                 // 1. Root of any drive is a system path
                 if (string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase)) return true;
-                
+
                 var normalizedPath = fullPath.Replace('\\', '/');
                 var segments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-                
+
                 // 2. Check against critical system directories (Windows & Linux)
                 string[] criticalBlocks = { "Windows", "System32", "etc", "root", "bin", "sbin", "usr", "var", "etc", "Boot" };
                 foreach (var blocked in criticalBlocks)
@@ -915,7 +915,7 @@ namespace ETL_SQL.Services
                         return true;
                     }
                 }
-                
+
                 return false;
             }
             catch { return true; } // Safety first: if invalid path, treat as system path
@@ -976,18 +976,18 @@ namespace ETL_SQL.Services
             if (string.IsNullOrEmpty(path)) return false;
             var fullPath = Path.GetFullPath(path);
             var current = fullPath;
-            
+
             _logger.Debug("[SECURITY] Checking if path is within safe zone: {Path}", fullPath);
 
             while (!string.IsNullOrEmpty(current))
             {
                 var normalized = current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                if (ApprovedSafeZones.Contains(normalized)) 
+                if (ApprovedSafeZones.Contains(normalized))
                 {
                     _logger.Debug("[SECURITY] Path AUTHORIZED via safe zone: {Zone}", normalized);
                     return true;
                 }
-                
+
                 var parent = Path.GetDirectoryName(current);
                 if (parent == null || parent == current) break;
                 current = parent;

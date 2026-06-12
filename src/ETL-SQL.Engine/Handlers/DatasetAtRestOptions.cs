@@ -15,7 +15,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             if (!string.IsNullOrWhiteSpace(atRestKey))
             {
-                opts["ENCRYPT"]  = new LiteralExpression("PASSWORD", TokenType.STRING_LITERAL);
+                opts["ENCRYPT"] = new LiteralExpression("PASSWORD", TokenType.STRING_LITERAL);
                 opts["PASSWORD"] = new LiteralExpression(atRestKey, TokenType.STRING_LITERAL);
             }
             else

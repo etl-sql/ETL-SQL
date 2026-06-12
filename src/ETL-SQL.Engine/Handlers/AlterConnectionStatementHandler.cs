@@ -1,12 +1,12 @@
-using ETL_SQL.Common;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -36,8 +36,8 @@ namespace ETL_SQL.Engine.Handlers
 
             // Start from the existing state — type, path, and options are all inherited
             var connectionType = stmt.ConnectionType ?? existingDs.ConnectorType;
-            var target         = existingDs.Path;
-            var options        = new Dictionary<string, string>(
+            var target = existingDs.Path;
+            var options = new Dictionary<string, string>(
                 existingDs.Options ?? new Dictionary<string, string>(),
                 StringComparer.OrdinalIgnoreCase);
 

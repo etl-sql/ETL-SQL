@@ -1,11 +1,11 @@
-using ETL_SQL.Common;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Data;
 using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -82,7 +82,7 @@ namespace ETL_SQL.Engine.Handlers
                     {
                         privateKeyFile = Path.Combine(path, "id_rsa");
                         publicKeyFile = privateKeyFile + ".pub";
-                        
+
                         if (string.IsNullOrEmpty(passphrase))
                         {
                             privateKeyPem = rsa.ExportPkcs8PrivateKeyPem();

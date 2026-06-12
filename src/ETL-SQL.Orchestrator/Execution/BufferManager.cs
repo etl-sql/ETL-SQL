@@ -4,9 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using ETL_SQL.Core.Execution;
 
 namespace ETL_SQL.Orchestrator.Execution
 {
@@ -20,7 +20,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly BufferManagerOptions _options;
         private readonly ISystemResources _systemResources;
         private readonly SemaphoreSlim _cursorSemaphore;
-        
+
         private long _currentMemoryBytes;
         private int _isMemoryExhausted; // 0=false, 1=true
         private int _isSystemMemoryExhausted; // 0=false, 1=true
@@ -29,7 +29,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly object _memLock = new();
         private readonly ConcurrentQueue<MemoryRequest> _memoryQueue = new();
         private readonly ConcurrentDictionary<ISpillable, byte> _spillables = new();
-        
+
         private int _activeCursors;
         private int _queuedCursors;
 
@@ -44,19 +44,19 @@ namespace ETL_SQL.Orchestrator.Execution
         }
 
         private readonly Timer? _zombieSweepTimer;
- 
+
         public BufferManager(IOptions<BufferManagerOptions> options, ILogger<BufferManager> logger, ISystemResources systemResources)
         {
             _options = options.Value;
             _logger = logger;
             _systemResources = systemResources;
-            
+
             var maxCursors = _options.MaxStreamingCursors > 0 ? _options.MaxStreamingCursors : 50;
             _cursorSemaphore = new SemaphoreSlim(maxCursors, maxCursors);
-            
-            _logger.LogInformation("BufferManager initialized: MaxMemory={MaxMem}MB, SystemFloor={Floor}MB, MaxCursors={MaxCursors}, Timeout={Timeout}s", 
+
+            _logger.LogInformation("BufferManager initialized: MaxMemory={MaxMem}MB, SystemFloor={Floor}MB, MaxCursors={MaxCursors}, Timeout={Timeout}s",
                 _options.MaxGlobalMemoryMB, _options.SystemMemoryFloorMB, maxCursors, _options.ResourceWaitTimeoutSeconds);
- 
+
             // Start the zombie protection sweep
             _zombieSweepTimer = new Timer(PruneZombies, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
         }
@@ -79,7 +79,7 @@ namespace ETL_SQL.Orchestrator.Execution
             {
                 // Optimistically increment
                 var newTotal = Interlocked.Add(ref _currentMemoryBytes, bytes);
-                
+
                 // Re-verify after increment to ensure we didn't just cross the line
                 if (newTotal <= maxBytes || maxBytes <= 0)
                 {
@@ -92,7 +92,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
             // SLOW PATH: Use queueing logic
             TaskCompletionSource<bool> tcs = null!;
-            
+
             lock (_memLock)
             {
                 // One more check inside the lock just in case someone released while we were entering
@@ -143,7 +143,7 @@ namespace ETL_SQL.Orchestrator.Execution
             {
                 if (Interlocked.CompareExchange(ref _isSystemMemoryExhausted, 1, 0) == 0)
                 {
-                    _logger.LogWarning("[SYSTEM_MEMORY_PRESSURE] System available RAM ({Current} MB) is below safe floor ({Floor} MB). Suspending requests.", 
+                    _logger.LogWarning("[SYSTEM_MEMORY_PRESSURE] System available RAM ({Current} MB) is below safe floor ({Floor} MB). Suspending requests.",
                         systemAvailable / 1024 / 1024, _options.SystemMemoryFloorMB);
                 }
                 return false;
@@ -157,7 +157,7 @@ namespace ETL_SQL.Orchestrator.Execution
             if (maxBytes <= 0) return true;
 
             // If currently exhausted, we must wait until hysteresis threshold is reached
-            if (Volatile.Read(ref _isMemoryExhausted) == 1) 
+            if (Volatile.Read(ref _isMemoryExhausted) == 1)
             {
                 long hysteresisBytes = (long)_options.HysteresisMemoryMB * 1024 * 1024;
                 long safeLevel = maxBytes - hysteresisBytes;
@@ -166,7 +166,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 if (safeLevel < maxBytes / 2) safeLevel = maxBytes / 2;
 
                 if (Interlocked.Read(ref _currentMemoryBytes) + bytes > safeLevel) return false;
-                
+
                 _logger.LogInformation("[HYSTERESIS] Safe memory level reached. Resuming queue processing.");
                 Interlocked.Exchange(ref _isMemoryExhausted, 0);
             }
@@ -179,7 +179,7 @@ namespace ETL_SQL.Orchestrator.Execution
             if (Interlocked.CompareExchange(ref _isMemoryExhausted, 1, 0) == 0)
             {
                 _logger.LogWarning("[RESOURCE_EXHAUSTION] Global memory limit reached ({Max}MB). Suspending requests until hysteresis cooldown.", _options.MaxGlobalMemoryMB);
-                
+
                 // Trigger proactive spill to disk to relieve pressure if possible
                 _ = Task.Run(() => TriggerSpillsUnderPressureAsync(bytes));
             }
@@ -212,9 +212,9 @@ namespace ETL_SQL.Orchestrator.Execution
 
                 try
                 {
-                    _logger.LogWarning("[MEMORY_PRESSURE_RELIEF] Proactively spilling {Token} to disk ({Size} MB) to alleviate global memory pressure.", 
+                    _logger.LogWarning("[MEMORY_PRESSURE_RELIEF] Proactively spilling {Token} to disk ({Size} MB) to alleviate global memory pressure.",
                         spillable.SpillToken, sizeBefore / 1024 / 1024);
-                    
+
                     if (await spillable.SpillAsync())
                     {
                         reclaimed += sizeBefore;
@@ -228,7 +228,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
             if (reclaimed > 0)
             {
-                _logger.LogInformation("[MEMORY_PRESSURE_RELIEF] Proactive spill complete. Reclaimed {Size} MB from {Count} sources.", 
+                _logger.LogInformation("[MEMORY_PRESSURE_RELIEF] Proactive spill complete. Reclaimed {Size} MB from {Count} sources.",
                     reclaimed / 1024 / 1024, candidates.Count(c => c.MemoryUsageBytes == 0)); // This count is a bit loose but works
             }
 
@@ -336,7 +336,7 @@ namespace ETL_SQL.Orchestrator.Execution
             public Guid Id { get; } = Guid.NewGuid();
             public string SessionId { get; }
             public WeakReference? Owner { get; }
- 
+
             public MemoryRelease(BufferManager owner, string sessionId, long bytes, object? ownerRef = null)
             {
                 _owner = owner;
@@ -398,7 +398,7 @@ namespace ETL_SQL.Orchestrator.Execution
             public Guid Id { get; } = Guid.NewGuid();
             public string SessionId { get; }
             public WeakReference? Owner { get; }
- 
+
             public CursorRelease(BufferManager owner, string sessionId, object? ownerRef = null)
             {
                 _owner = owner;
@@ -435,7 +435,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
                 elapsed += nextWait;
                 int remainingMinutes = (timeoutSeconds - elapsed) / 60;
-                _logger.LogInformation("Session {SessionId} still waiting for {Resource}... ({Remaining} min remaining)", 
+                _logger.LogInformation("Session {SessionId} still waiting for {Resource}... ({Remaining} min remaining)",
                     sessionId, resourceName, remainingMinutes > 0 ? remainingMinutes : 0);
             }
 
@@ -447,7 +447,7 @@ namespace ETL_SQL.Orchestrator.Execution
             _zombieSweepTimer?.Dispose();
             _cursorSemaphore.Dispose();
         }
- 
+
         internal void PruneZombies(object? state = null)
         {
             try
@@ -465,7 +465,7 @@ namespace ETL_SQL.Orchestrator.Execution
                                 toReclaim.Add(reservation);
                             }
                         }
- 
+
                         if (toReclaim.Count > 0)
                         {
                             _logger.LogWarning("[ZOMBIE_RECLAMATION] Detected {Count} orphaned reservations for session {SessionId} whose owner has been GCed. Reclaiming...", toReclaim.Count, sessionId);

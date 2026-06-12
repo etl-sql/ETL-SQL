@@ -1,10 +1,10 @@
-using Xunit;
 using System;
 using System.Threading.Tasks;
-using ETL_SQL.Engine;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Core;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 
 namespace ETL_SQL.Tests.Engine
@@ -22,7 +22,7 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal(0, Convert.ToInt32(val1));
 
             // 2. Run a statement that fails
-            await Assert.ThrowsAnyAsync<Exception>(async () => 
+            await Assert.ThrowsAnyAsync<Exception>(async () =>
                 await TestHelpers.Execute(eval, "SELECT * FROM NonExistentTable;")
             );
 
@@ -35,20 +35,20 @@ END TRY
 BEGIN CATCH
     SET @CapturedError = @@ERROR;
 END CATCH");
-            
+
             var err = eval.GetVariable("@CapturedError");
             Assert.True(Convert.ToInt32(err) != 0, "@@ERROR should have been captured as non-zero inside CATCH.");
 
 
             // 4. Run a successful statement
             await TestHelpers.Execute(eval, "PRINT 'Success';");
-            
+
             // 5. @@ERROR should be reset to 0
             var val2 = eval.GetVariable("@@ERROR");
             Assert.Equal(0, Convert.ToInt32(val2));
         }
 
-        
+
         [Fact]
         public async Task TestRowCountVariable()
         {

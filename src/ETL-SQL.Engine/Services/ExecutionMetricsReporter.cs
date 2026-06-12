@@ -13,7 +13,7 @@ namespace ETL_SQL.Engine.Services
     public class ExecutionMetricsReporter(IExecutionContext context)
     {
         private readonly IExecutionContext _context = context;
-        
+
         private long _lastMemoryUsage;
         private long _lastSpilledBytes;
         private long _lastSubqHits;
@@ -45,10 +45,10 @@ namespace ETL_SQL.Engine.Services
         public void ReportPostExecutionMetrics(Statement s, long ms)
         {
             if (!_context.Telemetry.IsProfiling) return;
-            
+
             var currentMemory = GC.GetTotalMemory(false);
             var rowsProcessed = _context.Telemetry.RowsProcessed - _startRows;
-            
+
             // Note: We still update the context's LastStatementRowsProcessed so @@ROWCOUNT works
             _context.Telemetry.LastStatementRowsProcessed = rowsProcessed;
 

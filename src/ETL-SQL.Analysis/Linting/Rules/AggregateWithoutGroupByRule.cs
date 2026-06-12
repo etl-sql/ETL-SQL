@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace ETL_SQL.Analysis.Linting.Rules
 {
@@ -64,7 +64,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 AnalyzeStatement(setOp.Left, results);
                 AnalyzeStatement(setOp.Right, results);
             }
-            
+
             // Recurse into blocks/conditionals
             if (statement is BlockStatement block)
             {
@@ -109,11 +109,11 @@ namespace ETL_SQL.Analysis.Linting.Rules
             {
                 if (f.Window != null) return false; // Window functions are not aggregates in this context
                 if (_aggregates.Contains(f.FunctionName.ToUpperInvariant())) return true;
-                
+
                 // Recurse into arguments
                 return f.Arguments.Any(ContainsAggregate);
             }
-            
+
             if (expr is BinaryExpression b) return ContainsAggregate(b.Left) || ContainsAggregate(b.Right);
             if (expr is UnaryExpression u) return ContainsAggregate(u.Expression);
             if (expr is InExpression i) return ContainsAggregate(i.Left) || ContainsAggregate(i.Right);

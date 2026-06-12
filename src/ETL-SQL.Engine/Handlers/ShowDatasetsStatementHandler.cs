@@ -39,18 +39,18 @@ namespace ETL_SQL.Engine.Handlers
             if (registry != null)
             {
                 var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
-                var datasets  = await registry.ListAll(callerCtx);
+                var datasets = await registry.ListAll(callerCtx);
                 foreach (var ds in datasets)
                 {
                     var row = new Row();
-                    row["Name"]            = ds.Name;
-                    row["FolderPath"]      = ds.FolderPath;
-                    row["AccessLevel"]     = ds.AccessLevel.ToString();
-                    row["RowCount"]        = ds.RowCount;
-                    row["LastRefresh"]     = ds.LastRefresh?.ToString("o") ?? "";
-                    row["IsStale"]         = IsStale(ds) ? "1" : "0";
+                    row["Name"] = ds.Name;
+                    row["FolderPath"] = ds.FolderPath;
+                    row["AccessLevel"] = ds.AccessLevel.ToString();
+                    row["RowCount"] = ds.RowCount;
+                    row["LastRefresh"] = ds.LastRefresh?.ToString("o") ?? "";
+                    row["IsStale"] = IsStale(ds) ? "1" : "0";
                     row["RefreshInterval"] = ds.RefreshInterval ?? "";
-                    row["Ttl"]             = ds.Ttl ?? "";
+                    row["Ttl"] = ds.Ttl ?? "";
                     await table.AddRowAsync(row);
                 }
             }
@@ -59,14 +59,14 @@ namespace ETL_SQL.Engine.Handlers
                 foreach (var kv in rc.DatasetDefinitions)
                 {
                     var row = new Row();
-                    row["Name"]            = kv.Key;
-                    row["FolderPath"]      = Path.GetDirectoryName(context.CurrentScriptPath) ?? "";
-                    row["AccessLevel"]     = DatasetAccessLevel.Private.ToString();
-                    row["RowCount"]        = "";
-                    row["LastRefresh"]     = "";
-                    row["IsStale"]         = "0";
+                    row["Name"] = kv.Key;
+                    row["FolderPath"] = Path.GetDirectoryName(context.CurrentScriptPath) ?? "";
+                    row["AccessLevel"] = DatasetAccessLevel.Private.ToString();
+                    row["RowCount"] = "";
+                    row["LastRefresh"] = "";
+                    row["IsStale"] = "0";
                     row["RefreshInterval"] = kv.Value.RefreshInterval ?? "";
-                    row["Ttl"]             = kv.Value.Ttl ?? "";
+                    row["Ttl"] = kv.Value.Ttl ?? "";
                     await table.AddRowAsync(row);
                 }
             }
@@ -109,7 +109,7 @@ namespace ETL_SQL.Engine.Handlers
                 "M" => TimeSpan.FromMinutes(v),
                 "H" => TimeSpan.FromHours(v),
                 "D" => TimeSpan.FromDays(v),
-                _   => TimeSpan.Zero
+                _ => TimeSpan.Zero
             };
             return result != TimeSpan.Zero || v == 0;
         }

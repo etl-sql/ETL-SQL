@@ -1,11 +1,11 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using ETL_SQL.Core.Data;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 

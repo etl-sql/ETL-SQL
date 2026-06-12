@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Linq;
+using System.Threading.Tasks;
 using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Analysis.Linting.Rules
@@ -129,7 +129,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
             if (statement is SelectStatement select)
             {
                 var tablesInScope = new List<(string Conn, string Table, string? Alias)>();
-                
+
                 // 1. Resolve Tables in FROM and JOIN
                 if (select.FromTable != null)
                 {
@@ -159,7 +159,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 {
                     var scope = tablesInScope[0];
                     var cols = (await context.Metadata!.GetColumnsAsync(scope.Conn, scope.Table)).ToList();
-                    
+
                     // Relaxed validation for file connectors: if no columns are found, assume implied schema creation
                     string? connType = null;
                     if (scriptConnections.TryGetValue(scope.Conn, out var connStmt))
@@ -179,7 +179,8 @@ namespace ETL_SQL.Analysis.Linting.Rules
                     {
                         if (!cols.Any(c => string.Equals(c, col, StringComparison.OrdinalIgnoreCase)))
                         {
-                            results.Add(new LintResult {
+                            results.Add(new LintResult
+                            {
                                 RuleName = Name,
                                 Severity = LintSeverity.Warning,
                                 Message = $"Column '{col}' not found in target table '{scope.Table}'.",
@@ -204,7 +205,8 @@ namespace ETL_SQL.Analysis.Linting.Rules
                         var cols = await context.Metadata!.GetColumnsAsync(scope.Conn, scope.Table);
                         if (!cols.Any(c => string.Equals(c, assign.ColumnName, StringComparison.OrdinalIgnoreCase)))
                         {
-                            results.Add(new LintResult {
+                            results.Add(new LintResult
+                            {
                                 RuleName = Name,
                                 Severity = LintSeverity.Warning,
                                 Message = $"Column '{assign.ColumnName}' not found in target table '{scope.Table}'.",
@@ -271,9 +273,9 @@ namespace ETL_SQL.Analysis.Linting.Rules
             {
                 connType = context.Metadata!.GetConnectionType(connName);
             }
-            
+
             // Skip validation for engine-side temporary tables (#) or built-in DUAL
-            if ((tableRef.ConnectionName == null && tableRef.TableName.StartsWith("#")) || 
+            if ((tableRef.ConnectionName == null && tableRef.TableName.StartsWith("#")) ||
                 string.Equals(tableRef.TableName, "DUAL", StringComparison.OrdinalIgnoreCase))
             {
                 // We use the table name as the connection identity for engine-side tables
@@ -330,12 +332,13 @@ namespace ETL_SQL.Analysis.Linting.Rules
             }
 
             var tables = await context.Metadata!.GetTablesAsync(connName);
-            if (tables == null) return; 
-            
+            if (tables == null) return;
+
             string searchName = NormalizeName(tableRef.TableName);
             if (!tables.Any(t => string.Equals(NormalizeName(t), searchName, StringComparison.OrdinalIgnoreCase)))
             {
-                results.Add(new LintResult {
+                results.Add(new LintResult
+                {
                     RuleName = Name,
                     Severity = LintSeverity.Warning,
                     Message = $"Table '{tableRef.TableName}' not found in connection '{connName}'.",
@@ -366,7 +369,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 if (parts.Length == 1)
                 {
                     if (parts[0] == "*") return; // Asterisk is a meta-column, skip physical validation
-                    
+
                     // Unqualified column - check all tables in scope
                     bool found = false;
                     foreach (var scope in tablesInScope)
@@ -388,7 +391,8 @@ namespace ETL_SQL.Analysis.Linting.Rules
 
                     if (!found && tablesInScope.Any())
                     {
-                         results.Add(new LintResult {
+                        results.Add(new LintResult
+                        {
                             RuleName = Name,
                             Severity = LintSeverity.Warning,
                             Message = $"Column '{parts[0]}' not found in any table in the current scope.",
@@ -402,8 +406,8 @@ namespace ETL_SQL.Analysis.Linting.Rules
                     // table.col or alias.col
                     var qualifier = parts[0];
                     var colName = parts[1];
-                    var scope = tablesInScope.FirstOrDefault(s => 
-                        string.Equals(s.Alias, qualifier, StringComparison.OrdinalIgnoreCase) || 
+                    var scope = tablesInScope.FirstOrDefault(s =>
+                        string.Equals(s.Alias, qualifier, StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(s.Table, qualifier, StringComparison.OrdinalIgnoreCase));
 
                     if (scope != default)
@@ -414,7 +418,8 @@ namespace ETL_SQL.Analysis.Linting.Rules
                         var cols = await context.Metadata!.GetColumnsAsync(scope.Conn, scope.Table);
                         if (!cols.Any(c => string.Equals(c, colName, StringComparison.OrdinalIgnoreCase)))
                         {
-                            results.Add(new LintResult {
+                            results.Add(new LintResult
+                            {
                                 RuleName = Name,
                                 Severity = LintSeverity.Warning,
                                 Message = $"Column '{colName}' not found in table '{scope.Table}'.",
@@ -441,7 +446,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
         {
             if (string.IsNullOrEmpty(type)) return false;
             var t = type.ToUpperInvariant();
-            return t == "FLATFILE" || t == "CSV" || t == "EXCEL" || t == "JSON" || 
+            return t == "FLATFILE" || t == "CSV" || t == "EXCEL" || t == "JSON" ||
                    t == "XML" || t == "AVRO" || t == "PARQUET";
         }
     }

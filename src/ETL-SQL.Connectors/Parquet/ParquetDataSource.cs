@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Data;
 using Parquet;
 using Parquet.Data;
 using Parquet.Schema;
@@ -26,11 +26,11 @@ namespace ETL_SQL.Connectors.Parquet
         private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
-        private readonly IExecutionContext? _context; 
+        private readonly IExecutionContext? _context;
 
         public string Path => _filePath;
         public Dictionary<string, string>? Options => _options;
-        
+
         public IDataSource WithTable(string tableName) => this;
         public string ConnectorType => "PARQUET";
 
@@ -39,7 +39,7 @@ namespace ETL_SQL.Connectors.Parquet
             _context = context;
             _logger = context.Logger;
             _filePath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
-            
+
             // Security Hardening: Defense in depth
             context.SecurityService.ValidatePath(_filePath);
             context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
@@ -142,7 +142,7 @@ namespace ETL_SQL.Connectors.Parquet
             {
                 object? firstVal = firstBatch.Rows.Count > 0 ? firstBatch.Rows[0][col] : null;
                 Type t = firstVal?.GetType() ?? typeof(string);
-                
+
                 if (t == typeof(int) || t == typeof(long)) fields.Add(new DataField<long>(col, nullable: true));
                 else if (t == typeof(decimal)) fields.Add(new DataField<decimal>(col, nullable: true));
                 else if (t == typeof(double) || t == typeof(float)) fields.Add(new DataField<double>(col, nullable: true));
@@ -326,28 +326,28 @@ namespace ETL_SQL.Connectors.Parquet
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             _logger.Debug("[PARQUET] GetColumnsAsync requested for {FilePath}", _filePath);
-            if (!System.IO.File.Exists(_filePath)) 
+            if (!System.IO.File.Exists(_filePath))
             {
                 _logger.Debug("[PARQUET] GetColumnsAsync failed: File does not exist at {FilePath}", _filePath);
                 return Enumerable.Empty<string>();
             }
-            
+
             string effectivePath = _filePath;
             string? tempFile = null;
 
             if (_encryption.Enabled)
             {
                 tempFile = System.IO.Path.GetTempFileName();
-                try 
-                { 
-                    _encryption.DecryptFile(_filePath, tempFile); 
-                    effectivePath = tempFile; 
+                try
+                {
+                    _encryption.DecryptFile(_filePath, tempFile);
+                    effectivePath = tempFile;
                     _logger.Debug("[PARQUET] Decrypted to {TempFile} for schema discovery.", tempFile);
                 }
-                catch (Exception ex) 
-                { 
-                    _logger.Debug("[PARQUET] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message); 
-                    return Enumerable.Empty<string>(); 
+                catch (Exception ex)
+                {
+                    _logger.Debug("[PARQUET] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message);
+                    return Enumerable.Empty<string>();
                 }
             }
 
@@ -359,10 +359,10 @@ namespace ETL_SQL.Connectors.Parquet
                 _logger.Debug("[PARQUET] Found {Count} columns: {Cols}", cols.Count, string.Join(", ", cols));
                 return cols;
             }
-            catch (Exception ex) 
-            { 
+            catch (Exception ex)
+            {
                 _logger.Debug("[PARQUET] Failed to read schema from '{FilePath}': {Message}", _filePath, ex.Message);
-                return Enumerable.Empty<string>(); 
+                return Enumerable.Empty<string>();
             }
             finally { TempFileHelper.SafeDelete(tempFile, _logger); }
         }

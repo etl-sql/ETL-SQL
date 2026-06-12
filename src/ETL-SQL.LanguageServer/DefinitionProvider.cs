@@ -2,13 +2,13 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
-using ETL_SQL.Core;
 using LSPRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using TextDocumentSelector = OmniSharp.Extensions.LanguageServer.Protocol.Models.TextDocumentSelector;
 
@@ -34,7 +34,7 @@ namespace ETL_SQL.LSP
                 return Task.FromResult<LocationOrLocationLinks?>(default);
 
             int line = (int)request.Position.Line + 1;
-            int col  = (int)request.Position.Character + 1;
+            int col = (int)request.Position.Character + 1;
 
             var lines = state.Text.Split('\n');
             if (line > lines.Length)

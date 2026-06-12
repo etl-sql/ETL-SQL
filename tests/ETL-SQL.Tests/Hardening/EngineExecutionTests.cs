@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Engines;
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Common;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -51,13 +51,13 @@ namespace ETL_SQL.Tests.Hardening
             var engine = new ExternalJoinEngine(e, NullLogger.Instance);
 
             var schema = new TableSchema(new[] { "Id", "Val" });
-            
+
             // Should properly process within 1 partition directly
             var result = await engine.ApplyHashJoinExternal(
-                Stream(schema, 0, 100), 
+                Stream(schema, 0, 100),
                 Stream(schema, 50, 100), // overlap 50..99
                 CreateJoin("INNER"),
-                new List<string> { "Id" }, 
+                new List<string> { "Id" },
                 new List<string> { "Id" }).ToListAsync();
 
             Assert.Equal(50, result.Count);
@@ -71,17 +71,17 @@ namespace ETL_SQL.Tests.Hardening
 
             var schemaLeft = new TableSchema(new[] { "Id", "ValLeft" });
             var schemaRight = new TableSchema(new[] { "Id", "ValRight" });
-            
+
             var result = await engine.ApplyHashJoinExternal(
                 Stream(schemaLeft, 0, 100, false, "ValLeft"), // Left has 0..99
                 Stream(schemaRight, 50, 100, false, "ValRight"), // Right has 50..149
                 CreateJoin("LEFT"),
-                new List<string> { "Id" }, 
+                new List<string> { "Id" },
                 new List<string> { "Id" }).ToListAsync();
 
             // 50 matched + 50 unmatched from left = 100 total
             Assert.Equal(100, result.Count);
-            
+
             // Only 50 rows have an actual right match, so exactly 50 rows will have "ValRight" populated
             var nullRightVals = result.Count(r => r["ValRight"] == null);
             Assert.Equal(50, nullRightVals);
@@ -95,7 +95,7 @@ namespace ETL_SQL.Tests.Hardening
 
             var schema = new TableSchema(new[] { "Group", "Id" });
             var rows = new List<Row>();
-            for(int i=0; i<100; i++)
+            for (int i = 0; i < 100; i++)
             {
                 var r = new Row(schema);
                 r["Group"] = i % 5;
@@ -117,7 +117,7 @@ namespace ETL_SQL.Tests.Hardening
             {
                 int prevGroup = Convert.ToInt32(result[i - 1]["Group"]);
                 int currGroup = Convert.ToInt32(result[i]["Group"]);
-                
+
                 Assert.True(currGroup >= prevGroup);
 
                 if (currGroup == prevGroup)
@@ -138,10 +138,10 @@ namespace ETL_SQL.Tests.Hardening
 
             // In SQL, NULL = NULL is false. Hash joins must NOT match rows where the key is NULL.
             var result = await engine.ApplyHashJoinExternal(
-                Stream(schema, 0, 100, addNulls: true), 
-                Stream(schema, 0, 100, addNulls: true), 
+                Stream(schema, 0, 100, addNulls: true),
+                Stream(schema, 0, 100, addNulls: true),
                 CreateJoin("INNER"),
-                new List<string> { "Id" }, 
+                new List<string> { "Id" },
                 new List<string> { "Id" }).ToListAsync();
 
             // 100 total rows... 20 are null. So 80 matching.
@@ -205,7 +205,7 @@ namespace ETL_SQL.Tests.Hardening
 
             // Produce rows where Group = int.MinValue to try to cause partition hash index to go negative
             var rows = new List<Row>();
-            for(int i = 0; i < 100; i++)
+            for (int i = 0; i < 100; i++)
             {
                 var r = new Row(schema);
                 r["Group"] = int.MinValue;
@@ -235,7 +235,7 @@ namespace ETL_SQL.Tests.Hardening
 
             // Group by 11 columns in CUBE => 2^11 = 2048 grouping sets (exceeds 1024 limit)
             var exprs = new List<Expression>();
-            for(int i=0; i<11; i++) exprs.Add(new IdentifierExpression($"Col{i}"));
+            for (int i = 0; i < 11; i++) exprs.Add(new IdentifierExpression($"Col{i}"));
 
             var clause = new GroupingSetClause(GroupingSetType.Cube, new List<List<Expression>> { exprs });
 
@@ -248,13 +248,13 @@ namespace ETL_SQL.Tests.Hardening
         {
             var e = NewEvaluator();
             var engine = new AggregateEngine(e, NullLogger.Instance);
-            
+
             // Average of BigInteger 10 and BigInteger 11 should be truncated to 10
             // because they are integer types. If they were treated as decimals/floats,
             // the average would be 10.5.
             var schema = new TableSchema(new[] { "Val" });
             var rows = new List<Row>();
-            
+
             var r1 = new Row(schema);
             r1["Val"] = new System.Numerics.BigInteger(10);
             rows.Add(r1);

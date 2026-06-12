@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
-using Xunit;
-using Spectre.Console;
 using ETL_SQL.Reporting;
 using ETL_SQL.Reporting.Renderers;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Reporting
 {
@@ -104,15 +104,15 @@ namespace ETL_SQL.Tests.Reporting
         public void RenderPage_WithContainer_ReturnsNonNull()
         {
             var manifest = new ReportManifest();
-            var container = new ContainerManifest 
-            { 
-                Name = "MyContainer", 
+            var container = new ContainerManifest
+            {
+                Name = "MyContainer",
                 Title = "Sub-Layout",
                 ContainerType = "GRID",
                 SlotMap = new Dictionary<string, string> { ["slot1"] = "MyBtn2" }
             };
             var button = new ButtonManifest { Name = "MyBtn2", Title = "Nested Button" };
-            
+
             manifest.Containers = new List<ContainerManifest> { container };
             manifest.Buttons = new List<ButtonManifest> { button };
 

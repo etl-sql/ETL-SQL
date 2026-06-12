@@ -10,13 +10,13 @@ namespace ETL_SQL.Analysis.Linting.Rules
     /// </summary>
     public class UseBeforeCreateRule : ILintRule
     {
-        public string Name        => "UseBeforeCreate";
+        public string Name => "UseBeforeCreate";
         public string Description => "Warns when USE DATASET appears before CREATE DATASET for the same dataset name in the same script.";
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {
-            var results    = new List<LintResult>();
-            var usedNames  = new Dictionary<string, (int Line, int Column)>(System.StringComparer.OrdinalIgnoreCase);
+            var results = new List<LintResult>();
+            var usedNames = new Dictionary<string, (int Line, int Column)>(System.StringComparer.OrdinalIgnoreCase);
             var createdNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
 
             foreach (var stmt in script.Statements)
@@ -33,11 +33,11 @@ namespace ETL_SQL.Analysis.Linting.Rules
                     {
                         results.Add(new LintResult
                         {
-                            RuleName     = Name,
-                            Severity     = LintSeverity.Warning,
-                            Message      = $"USE DATASET '{create.TempTableName}' (line {useLocation.Line}) appears before CREATE DATASET '{create.TempTableName}' (line {create.Line}). " +
+                            RuleName = Name,
+                            Severity = LintSeverity.Warning,
+                            Message = $"USE DATASET '{create.TempTableName}' (line {useLocation.Line}) appears before CREATE DATASET '{create.TempTableName}' (line {create.Line}). " +
                                            "CREATE must precede USE within the same script.",
-                            LineNumber   = useLocation.Line,
+                            LineNumber = useLocation.Line,
                             ColumnNumber = useLocation.Column
                         });
                     }

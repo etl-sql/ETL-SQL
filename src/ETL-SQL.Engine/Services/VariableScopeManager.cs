@@ -18,20 +18,20 @@ namespace ETL_SQL.Engine.Services
         private readonly Dictionary<string, VariableMetadata> _variableMetadata = new(StringComparer.OrdinalIgnoreCase);
         private readonly Stack<Dictionary<string, object?>> _scopeStack = new();
         private readonly Stack<Dictionary<string, VariableMetadata>> _metadataStack = new();
-        
+
         private readonly Dictionary<string, CreateProcedureStatement> _procedures = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, CreateFunctionStatement> _functions = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, CreateViewStatement> _views = new(StringComparer.OrdinalIgnoreCase);
- 
-        public IDictionary<string, object?> Variables { get { lock(_lock) { return _variables; } } }
-        public IDictionary<string, VariableMetadata> VariableMetadata { get { lock(_lock) { return _variableMetadata; } } }
- 
+
+        public IDictionary<string, object?> Variables { get { lock (_lock) { return _variables; } } }
+        public IDictionary<string, VariableMetadata> VariableMetadata { get { lock (_lock) { return _variableMetadata; } } }
+
         /// <summary>Gets the current set of variables in the active scope.</summary>
-        public IDictionary<string, object?> CurrentVariables { get { lock(_lock) { return _scopeStack.Count > 0 ? _scopeStack.Peek() : _variables; } } }
- 
+        public IDictionary<string, object?> CurrentVariables { get { lock (_lock) { return _scopeStack.Count > 0 ? _scopeStack.Peek() : _variables; } } }
+
         /// <summary>Gets the current set of variable metadata in the active scope.</summary>
-        public IDictionary<string, VariableMetadata> CurrentMetadata { get { lock(_lock) { return _metadataStack.Count > 0 ? _metadataStack.Peek() : _variableMetadata; } } }
- 
+        public IDictionary<string, VariableMetadata> CurrentMetadata { get { lock (_lock) { return _metadataStack.Count > 0 ? _metadataStack.Peek() : _variableMetadata; } } }
+
         [Obsolete("Use Variables")]
         public IDictionary<string, object?> GlobalVariables => Variables;
         [Obsolete("Use VariableMetadata")]
@@ -165,31 +165,31 @@ namespace ETL_SQL.Engine.Services
         }
 
         /// <summary>Registers a stored procedure.</summary>
-        public void SetProcedure(string name, CreateProcedureStatement stmt) { lock(_lock) { _procedures[name] = stmt; } }
+        public void SetProcedure(string name, CreateProcedureStatement stmt) { lock (_lock) { _procedures[name] = stmt; } }
 
         /// <summary>Removes a stored procedure.</summary>
-        public bool RemoveProcedure(string name) { lock(_lock) { return _procedures.Remove(name); } }
+        public bool RemoveProcedure(string name) { lock (_lock) { return _procedures.Remove(name); } }
 
         /// <summary>Attempts to retrieve a stored procedure by name.</summary>
-        public bool TryGetProcedure(string name, out CreateProcedureStatement? stmt) { lock(_lock) { return _procedures.TryGetValue(name, out stmt); } }
+        public bool TryGetProcedure(string name, out CreateProcedureStatement? stmt) { lock (_lock) { return _procedures.TryGetValue(name, out stmt); } }
 
         /// <summary>Registers a user-defined function.</summary>
-        public void SetFunction(string name, CreateFunctionStatement stmt) { lock(_lock) { _functions[name] = stmt; } }
+        public void SetFunction(string name, CreateFunctionStatement stmt) { lock (_lock) { _functions[name] = stmt; } }
 
         /// <summary>Removes a user-defined function.</summary>
-        public bool RemoveFunction(string name) { lock(_lock) { return _functions.Remove(name); } }
+        public bool RemoveFunction(string name) { lock (_lock) { return _functions.Remove(name); } }
 
         /// <summary>Attempts to retrieve a user-defined function by name.</summary>
-        public bool TryGetFunction(string name, out CreateFunctionStatement? stmt) { lock(_lock) { return _functions.TryGetValue(name, out stmt); } }
+        public bool TryGetFunction(string name, out CreateFunctionStatement? stmt) { lock (_lock) { return _functions.TryGetValue(name, out stmt); } }
 
         /// <summary>Registers a session-scoped query view.</summary>
-        public void SetView(string name, CreateViewStatement stmt) { lock(_lock) { _views[name] = stmt; } }
+        public void SetView(string name, CreateViewStatement stmt) { lock (_lock) { _views[name] = stmt; } }
 
         /// <summary>Removes a session-scoped query view.</summary>
-        public bool RemoveView(string name) { lock(_lock) { return _views.Remove(name); } }
+        public bool RemoveView(string name) { lock (_lock) { return _views.Remove(name); } }
 
         /// <summary>Attempts to retrieve a session-scoped query view by name.</summary>
-        public bool TryGetView(string name, out CreateViewStatement? stmt) { lock(_lock) { return _views.TryGetValue(name, out stmt); } }
+        public bool TryGetView(string name, out CreateViewStatement? stmt) { lock (_lock) { return _views.TryGetValue(name, out stmt); } }
 
         /// <summary>Returns a snapshot of all session-scoped query views.</summary>
         public IReadOnlyDictionary<string, CreateViewStatement> GetViews()
@@ -209,7 +209,7 @@ namespace ETL_SQL.Engine.Services
                 // Shallow copy global variables
                 foreach (var kvp in _variables) fork._variables[kvp.Key] = kvp.Value;
                 foreach (var kvp in _variableMetadata) fork._variableMetadata[kvp.Key] = kvp.Value;
-                
+
                 // Shallow copy procedure/function registries
                 foreach (var kvp in _procedures) fork._procedures[kvp.Key] = kvp.Value;
                 foreach (var kvp in _functions) fork._functions[kvp.Key] = kvp.Value;
@@ -222,7 +222,7 @@ namespace ETL_SQL.Engine.Services
                 Array.Reverse(metas);
                 for (int i = 0; i < scopes.Length; i++)
                 {
-                    fork.PushScope(new Dictionary<string, object?>(scopes[i], StringComparer.OrdinalIgnoreCase), 
+                    fork.PushScope(new Dictionary<string, object?>(scopes[i], StringComparer.OrdinalIgnoreCase),
                                   new Dictionary<string, VariableMetadata>(metas[i], StringComparer.OrdinalIgnoreCase));
                 }
                 return fork;
@@ -270,13 +270,13 @@ namespace ETL_SQL.Engine.Services
                 // Purge all stacked scopes
                 var scopeList = _scopeStack.ToList();
                 var metaList = _metadataStack.ToList();
-                
-                for(int i = 0; i < metaList.Count; i++)
+
+                for (int i = 0; i < metaList.Count; i++)
                 {
                     var scope = scopeList[i];
                     var meta = metaList[i];
                     var localSecrets = meta.Where(kv => kv.Value.IsSecret).Select(kv => kv.Key).ToList();
-                    foreach(var key in localSecrets)
+                    foreach (var key in localSecrets)
                     {
                         scope[key] = null;
                     }

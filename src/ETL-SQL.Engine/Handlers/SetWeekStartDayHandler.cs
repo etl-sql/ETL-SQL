@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Handlers
@@ -15,13 +15,13 @@ namespace ETL_SQL.Engine.Handlers
     {
         private static readonly Dictionary<string, DayOfWeek> DayNames = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Monday"]    = DayOfWeek.Monday,
-            ["Tuesday"]   = DayOfWeek.Tuesday,
+            ["Monday"] = DayOfWeek.Monday,
+            ["Tuesday"] = DayOfWeek.Tuesday,
             ["Wednesday"] = DayOfWeek.Wednesday,
-            ["Thursday"]  = DayOfWeek.Thursday,
-            ["Friday"]    = DayOfWeek.Friday,
-            ["Saturday"]  = DayOfWeek.Saturday,
-            ["Sunday"]    = DayOfWeek.Sunday
+            ["Thursday"] = DayOfWeek.Thursday,
+            ["Friday"] = DayOfWeek.Friday,
+            ["Saturday"] = DayOfWeek.Saturday,
+            ["Sunday"] = DayOfWeek.Sunday
         };
 
         public Type SupportedStatementType => typeof(SetWeekStartDayStatement);

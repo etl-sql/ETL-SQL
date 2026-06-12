@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Services
 {
@@ -25,7 +25,7 @@ namespace ETL_SQL.Engine.Services
             if (name.Equals("@@AGGREGATE_EXPANSION_RATIO", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.AggregateExpansionRatio;
             if (name.Equals("@@SUBQUERY_CACHE_HITS", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.SubqueryCacheHits;
             if (name.Equals("@@SUBQUERY_CACHE_MISSES", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.SubqueryCacheMisses;
-            
+
             return null;
         }
     }

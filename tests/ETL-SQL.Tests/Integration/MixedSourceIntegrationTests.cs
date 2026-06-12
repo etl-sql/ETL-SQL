@@ -1,14 +1,14 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration
 {
@@ -27,10 +27,10 @@ namespace ETL_SQL.Tests.Integration
         public async Task TestJsonToParquetToMsSql()
         {
             AnsiConsole.MarkupLine("  - Scenario: JSON -> Parquet -> MSSQL...");
-            
+
             string jsonPath = Path.Combine(AppContext.BaseDirectory, "users.json");
             string parquetPath = Path.Combine(AppContext.BaseDirectory, "users.parquet");
-            
+
             // 1. Generate JSON data
             var users = Enumerable.Range(1, 1000).Select(i => new { Id = i, Name = $"User {i}", JoinDate = DateTime.Now.AddDays(-i).ToString("yyyy-MM-dd HH:mm:ss") });
             var jsonContent = "[" + string.Join(",", users.Select(u => $"{{\"Id\":{u.Id},\"Name\":\"{u.Name}\",\"JoinDate\":\"{u.JoinDate}\"}}")) + "]";
@@ -75,10 +75,10 @@ namespace ETL_SQL.Tests.Integration
         public async Task TestCsvToPostgresToJson()
         {
             AnsiConsole.MarkupLine("  - Scenario: CSV -> Postgres -> JSON...");
-            
+
             string csvPath = Path.Combine(AppContext.BaseDirectory, "data.csv");
             string jsonOutPath = Path.Combine(AppContext.BaseDirectory, "output.json");
-            
+
             // 1. Generate CSV data
             await File.WriteAllTextAsync(csvPath, "id,category,amount\n1,A,10.5\n2,B,20.0\n3,A,15.75");
 
@@ -104,12 +104,12 @@ namespace ETL_SQL.Tests.Integration
                 ";
 
                 await eval.Evaluate(new Parser(new Lexer(script).Tokenize()).Parse());
-                
+
                 // Verify JSON FLATFILE exists and has content
                 Assert.True(File.Exists(jsonOutPath), "Final JSON output file not found.");
                 var jsonContent = await File.ReadAllTextAsync(jsonOutPath);
                 Assert.False(string.IsNullOrEmpty(jsonContent), "Final JSON output file is empty.");
-                
+
                 // Check row count in database to be sure
                 await eval.Evaluate(new Parser(new Lexer("SELECT COUNT(*) as Total FROM db.mixed_categories;").Tokenize()).Parse());
                 int count = Convert.ToInt32(eval.LastResult?.Rows[0]["TOTAL"] ?? 0);

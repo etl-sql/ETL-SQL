@@ -1,12 +1,12 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.IO;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -65,7 +65,7 @@ namespace ETL_SQL.Tests.Connectors
             string dir = "ListInteraction_Test";
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
             Directory.CreateDirectory(dir);
-            
+
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             string script = $@"
                 DECLARE @files LIST = ['{dir.Replace("\\", "/")}/f1', '{dir.Replace("\\", "/")}/f2'];
@@ -89,7 +89,7 @@ namespace ETL_SQL.Tests.Connectors
             string zip = "compress_test.zip";
             string enc = "encrypt_test.enc";
             string dec = "decrypt_test.txt";
-            
+
             if (File.Exists(src)) File.Delete(src);
             if (File.Exists(zip)) File.Delete(zip);
             if (File.Exists(enc)) File.Delete(enc);
@@ -98,16 +98,16 @@ namespace ETL_SQL.Tests.Connectors
             await File.WriteAllTextAsync(src, "secret info");
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             await eval.Evaluate(new Lexer($"COMPRESS_FILE('{src}', '{zip}');").TokenizeToScript());
             Assert.True(File.Exists(zip), "COMPRESS_FILE failed to create zip");
-            
+
             await eval.Evaluate(new Lexer($"ENCRYPT_FILE('{src}', '{enc}', 'TestPass1', ON);").TokenizeToScript());
             Assert.True(File.Exists(enc), "ENCRYPT_FILE failed to create enc");
 
             await eval.Evaluate(new Lexer($"DECRYPT_FILE('{enc}', '{dec}', 'TestPass1', ON);").TokenizeToScript());
             Assert.True(File.Exists(dec), "DECRYPT_FILE failed to create dec");
-            
+
             string content = await File.ReadAllTextAsync(dec);
             Assert.Equal("secret info", content);
 
@@ -128,10 +128,10 @@ namespace ETL_SQL.Tests.Connectors
             await File.WriteAllTextAsync(csv, "id,val\n1,secret");
             await eval.Evaluate(new Lexer($"CREATE CONNECTION RawCsv AS FLATFILE('{csv}');").TokenizeToScript());
             await eval.Evaluate(new Lexer($"CREATE CONNECTION EncryptedCsv AS FLATFILE('{encCsv}', ENCRYPT='ON', PASSWORD='MyPass123');").TokenizeToScript());
-            
+
             await eval.Evaluate(new Lexer("INSERT INTO EncryptedCsv SELECT * FROM RawCsv;").TokenizeToScript());
             Assert.True(File.Exists(encCsv), "Encrypted file not created");
-            
+
             string rawContent = await File.ReadAllTextAsync(encCsv);
             Assert.DoesNotContain("secret", rawContent);
 

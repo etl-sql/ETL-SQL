@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Npgsql;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Npgsql;
 
 namespace ETL_SQL.Connectors.Postgres
 {
@@ -64,14 +64,19 @@ namespace ETL_SQL.Connectors.Postgres
         public async Task<string> GetVersionAsync()
         {
             var (conn, isShared) = await GetConnectionAsync();
-            try {
+            try
+            {
                 await using var cmd = CreateCommand("SELECT version()", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 var result = await cmd.ExecuteScalarAsync();
                 return result?.ToString() ?? "Unknown PostgreSQL Version";
-            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
                 throw ConnectorExceptionWrapper.Wrap("PostgreSQL", ex);
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) await conn.DisposeAsync();
             }
         }
@@ -87,42 +92,45 @@ namespace ETL_SQL.Connectors.Postgres
                 throw new ExecutionException("No table specified for Postgres data source read.");
 
             var (conn, isShared) = await GetConnectionAsync();
-            try {
+            try
+            {
                 await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 await using var reader = await cmd.ExecuteReaderAsync();
 
-            var columns = new List<string>();
-            for (int i = 0; i < reader.FieldCount; i++)
-            {
-                columns.Add(reader.GetName(i));
-            }
-
-            var currentBatch = new DataTable();
-            currentBatch.SetColumns(columns);
-
-            while (await reader.ReadAsync())
-            {
-                var row = currentBatch.NewRow();
+                var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
-                    row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                    columns.Add(reader.GetName(i));
                 }
+
+                var currentBatch = new DataTable();
+                currentBatch.SetColumns(columns);
+
+                while (await reader.ReadAsync())
+                {
+                    var row = currentBatch.NewRow();
+                    for (int i = 0; i < reader.FieldCount; i++)
+                    {
+                        row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                    }
                     await currentBatch.AddRowAsync(row);
 
-                if (currentBatch.Rows.Count >= batchSize)
+                    if (currentBatch.Rows.Count >= batchSize)
+                    {
+                        yield return currentBatch;
+                        currentBatch = new DataTable();
+                        currentBatch.SetColumns(columns);
+                    }
+                }
+
+                if (currentBatch.Rows.Count > 0)
                 {
                     yield return currentBatch;
-                    currentBatch = new DataTable();
-                    currentBatch.SetColumns(columns);
                 }
             }
-
-            if (currentBatch.Rows.Count > 0)
+            finally
             {
-                yield return currentBatch;
-            }
-            } finally {
                 if (!isShared) await conn.DisposeAsync();
             }
         }
@@ -136,21 +144,22 @@ namespace ETL_SQL.Connectors.Postgres
 
             var (conn, isShared) = await GetConnectionAsync();
             System.IO.TextWriter? writer = null;
-            try 
+            try
             {
                 await foreach (var batch in batches)
                 {
                     if (batch.Rows.Count == 0) continue;
-                    
+
                     if (writer == null)
                     {
                         var cols = string.Join(", ", batch.ColumnNames.Select(c => $"\"{c}\""));
                         writer = await conn.BeginTextImportAsync($"COPY {QuoteIdentifier(_tableName)} ({cols}) FROM STDIN");
                     }
-                    
+
                     foreach (var row in batch.Rows)
                     {
-                        var values = batch.ColumnNames.Select(key => {
+                        var values = batch.ColumnNames.Select(key =>
+                        {
                             var val = row[key];
                             if (val == null || val == DBNull.Value) return "\\N";
                             var s = val.ToString() ?? "";
@@ -177,7 +186,7 @@ namespace ETL_SQL.Connectors.Postgres
         private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters = null)
         {
             var (conn, isShared) = await GetConnectionAsync();
-            
+
             void NoticeHandler(object sender, NpgsqlNoticeEventArgs e)
             {
                 _logger.WriteLine(e.Notice.MessageText, ConsoleColor.Cyan);
@@ -185,7 +194,8 @@ namespace ETL_SQL.Connectors.Postgres
 
             conn.Notice += NoticeHandler;
 
-            try {
+            try
+            {
                 await using var cmd = CreateCommand(sql, conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
 
@@ -213,48 +223,50 @@ namespace ETL_SQL.Connectors.Postgres
 
                 await using var reader = await cmd.ExecuteReaderAsync();
 
-            int resultSetIndex = 0;
-            do
-            {
-                var columns = new List<string>();
-                for (int i = 0; i < reader.FieldCount; i++)
+                int resultSetIndex = 0;
+                do
                 {
-                    columns.Add(reader.GetName(i));
-                }
-
-                var currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
-                currentBatch.SetColumns(columns);
-
-                while (await reader.ReadAsync())
-                {
-                    var row = currentBatch.NewRow();
+                    var columns = new List<string>();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
-                        row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                        columns.Add(reader.GetName(i));
                     }
+
+                    var currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
+                    currentBatch.SetColumns(columns);
+
+                    while (await reader.ReadAsync())
+                    {
+                        var row = currentBatch.NewRow();
+                        for (int i = 0; i < reader.FieldCount; i++)
+                        {
+                            row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                        }
                         await currentBatch.AddRowAsync(row);
 
-                    if (currentBatch.Rows.Count >= 10000)
-                    {
-                        yield return currentBatch;
-                        currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
-                        currentBatch.SetColumns(columns);
+                        if (currentBatch.Rows.Count >= 10000)
+                        {
+                            yield return currentBatch;
+                            currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
+                            currentBatch.SetColumns(columns);
+                        }
                     }
-                }
 
-                if (currentBatch.Rows.Count > 0 || resultSetIndex == 0 || reader.FieldCount > 0)
-                {
-                    currentBatch.RowsAffected = (int)reader.RecordsAffected;
-                    yield return currentBatch;
-                }
-                else if (resultSetIndex == 0 && reader.RecordsAffected >= 0)
-                {
-                    currentBatch.RowsAffected = (int)reader.RecordsAffected;
-                    yield return currentBatch;
-                }
-                resultSetIndex++;
-            } while (await reader.NextResultAsync());
-            } finally {
+                    if (currentBatch.Rows.Count > 0 || resultSetIndex == 0 || reader.FieldCount > 0)
+                    {
+                        currentBatch.RowsAffected = (int)reader.RecordsAffected;
+                        yield return currentBatch;
+                    }
+                    else if (resultSetIndex == 0 && reader.RecordsAffected >= 0)
+                    {
+                        currentBatch.RowsAffected = (int)reader.RecordsAffected;
+                        yield return currentBatch;
+                    }
+                    resultSetIndex++;
+                } while (await reader.NextResultAsync());
+            }
+            finally
+            {
                 conn.Notice -= NoticeHandler;
                 if (!isShared) await conn.DisposeAsync();
             }
@@ -440,7 +452,8 @@ namespace ETL_SQL.Connectors.Postgres
         {
             if (string.IsNullOrEmpty(name)) return name;
             var parts = name.Split('.');
-            return string.Join(".", parts.Select(p => {
+            return string.Join(".", parts.Select(p =>
+            {
                 if (p.StartsWith("\"")) return p;
                 // For Postgres, we only quote if the identifier contains special characters 
                 // that REQUIRE quoting. This prevents accidental case-sensitivity issues.

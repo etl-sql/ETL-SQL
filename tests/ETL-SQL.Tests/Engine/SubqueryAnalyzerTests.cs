@@ -1,8 +1,8 @@
+using System.Collections.Generic;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Services;
 using Xunit;
-using System.Collections.Generic;
 
 namespace ETL_SQL.Tests.Engine
 {

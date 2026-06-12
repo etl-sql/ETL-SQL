@@ -1,14 +1,14 @@
-using Xunit;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Linq;
-using ETL_SQL.Core;
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.App;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using ETL_SQL.App;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -43,7 +43,7 @@ namespace ETL_SQL.Tests.Statements
             var results = eval.LastResult;
             Assert.NotNull(results);
             Assert.True(results.Rows.Count >= 2);
-            
+
             var countRow = results.Rows.FirstOrDefault(r => r["Name"].ToString() == "@count");
             Assert.NotNull(countRow);
             Assert.Equal(42m, Convert.ToDecimal(countRow["Value"]));
@@ -78,7 +78,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestShowVariables_ShowsSensitiveVariables_WhenExplicitlyEnabled()
         {
             var eval = await GetEvaluator();
-            eval.ShowPassword = true; 
+            eval.ShowPassword = true;
 
             var sql = @"
                 DECLARE @secret STRING = 'my-password' PASSWORD;

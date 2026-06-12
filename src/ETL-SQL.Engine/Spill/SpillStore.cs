@@ -10,9 +10,9 @@ using System.Threading.Tasks;
 using Apache.Arrow;
 using Apache.Arrow.Ipc;
 using Apache.Arrow.Types;
-using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Spill;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Spill
 {
@@ -31,7 +31,7 @@ namespace ETL_SQL.Engine.Spill
                 JsonValueKind.True => true,
                 JsonValueKind.False => false,
                 JsonValueKind.Null => null,
-                JsonValueKind.Array => element, 
+                JsonValueKind.Array => element,
                 JsonValueKind.Object => element,
                 _ => element.GetRawText()
             };
@@ -537,85 +537,85 @@ namespace ETL_SQL.Engine.Spill
                 switch (field.DataType)
                 {
                     case Int64Type:
-                    {
-                        var b = new Int64Array.Builder();
-                        b.Reserve(rows.Count);
-                        foreach (var row in rows)
                         {
-                            var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
-                            if (v == null) b.AppendNull();
-                            else b.Append(Convert.ToInt64(v));
-                        }
-                        return b.Build();
-                    }
-                    case Decimal128Type dt:
-                    {
-                        var b = new Decimal128Array.Builder(dt);
-                        b.Reserve(rows.Count);
-                        foreach (var row in rows)
-                        {
-                            var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
-                            if (v == null) b.AppendNull();
-                            else b.Append(Math.Round(Convert.ToDecimal(v), dt.Scale));
-                        }
-                        return b.Build();
-                    }
-                    case DoubleType:
-                    {
-                        var b = new DoubleArray.Builder();
-                        b.Reserve(rows.Count);
-                        foreach (var row in rows)
-                        {
-                            var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
-                            if (v == null) b.AppendNull();
-                            else b.Append(Convert.ToDouble(v));
-                        }
-                        return b.Build();
-                    }
-                    case BooleanType:
-                    {
-                        var b = new BooleanArray.Builder();
-                        b.Reserve(rows.Count);
-                        foreach (var row in rows)
-                        {
-                            var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
-                            if (v == null) b.AppendNull();
-                            else b.Append(Convert.ToBoolean(v));
-                        }
-                        return b.Build();
-                    }
-                    case TimestampType tt:
-                    {
-                        var b = new TimestampArray.Builder(tt.Unit, tt.Timezone);
-                        b.Reserve(rows.Count);
-                        foreach (var row in rows)
-                        {
-                            var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
-                            if (v == null) b.AppendNull();
-                            else
+                            var b = new Int64Array.Builder();
+                            b.Reserve(rows.Count);
+                            foreach (var row in rows)
                             {
-                                var dt = Convert.ToDateTime(v);
-                                var dto = dt.Kind == DateTimeKind.Unspecified
-                                    ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc))
-                                    : new DateTimeOffset(dt);
-                                b.Append(dto);
+                                var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
+                                if (v == null) b.AppendNull();
+                                else b.Append(Convert.ToInt64(v));
                             }
+                            return b.Build();
                         }
-                        return b.Build();
-                    }
-                    default:
-                    {
-                        var b = new StringArray.Builder();
-                        b.Reserve(rows.Count);
-                        foreach (var row in rows)
+                    case Decimal128Type dt:
                         {
-                            var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
-                            if (v == null) b.AppendNull();
-                            else if (v is string s) b.Append(s);
-                            else b.Append(JsonPrefix + JsonSerializer.Serialize(v));
+                            var b = new Decimal128Array.Builder(dt);
+                            b.Reserve(rows.Count);
+                            foreach (var row in rows)
+                            {
+                                var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
+                                if (v == null) b.AppendNull();
+                                else b.Append(Math.Round(Convert.ToDecimal(v), dt.Scale));
+                            }
+                            return b.Build();
                         }
-                        return b.Build();
-                    }
+                    case DoubleType:
+                        {
+                            var b = new DoubleArray.Builder();
+                            b.Reserve(rows.Count);
+                            foreach (var row in rows)
+                            {
+                                var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
+                                if (v == null) b.AppendNull();
+                                else b.Append(Convert.ToDouble(v));
+                            }
+                            return b.Build();
+                        }
+                    case BooleanType:
+                        {
+                            var b = new BooleanArray.Builder();
+                            b.Reserve(rows.Count);
+                            foreach (var row in rows)
+                            {
+                                var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
+                                if (v == null) b.AppendNull();
+                                else b.Append(Convert.ToBoolean(v));
+                            }
+                            return b.Build();
+                        }
+                    case TimestampType tt:
+                        {
+                            var b = new TimestampArray.Builder(tt.Unit, tt.Timezone);
+                            b.Reserve(rows.Count);
+                            foreach (var row in rows)
+                            {
+                                var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
+                                if (v == null) b.AppendNull();
+                                else
+                                {
+                                    var dt = Convert.ToDateTime(v);
+                                    var dto = dt.Kind == DateTimeKind.Unspecified
+                                        ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc))
+                                        : new DateTimeOffset(dt);
+                                    b.Append(dto);
+                                }
+                            }
+                            return b.Build();
+                        }
+                    default:
+                        {
+                            var b = new StringArray.Builder();
+                            b.Reserve(rows.Count);
+                            foreach (var row in rows)
+                            {
+                                var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
+                                if (v == null) b.AppendNull();
+                                else if (v is string s) b.Append(s);
+                                else b.Append(JsonPrefix + JsonSerializer.Serialize(v));
+                            }
+                            return b.Build();
+                        }
                 }
             }
 
@@ -734,12 +734,12 @@ namespace ETL_SQL.Engine.Spill
 
                 return array switch
                 {
-                    Int64Array a    => (object?)(decimal?)a.GetValue(index),
+                    Int64Array a => (object?)(decimal?)a.GetValue(index),
                     Decimal128Array a => (object?)a.GetValue(index),
-                    DoubleArray a   => ToDecimalOrDouble(a.GetValue(index)),
-                    BooleanArray a  => (object?)a.GetValue(index),
+                    DoubleArray a => ToDecimalOrDouble(a.GetValue(index)),
+                    BooleanArray a => (object?)a.GetValue(index),
                     TimestampArray a => (object?)a.GetTimestamp(index)?.UtcDateTime,
-                    StringArray a   => (object?)DecodeArrowString(a.GetString(index)),
+                    StringArray a => (object?)DecodeArrowString(a.GetString(index)),
                     _ => null
                 };
             }
@@ -751,8 +751,8 @@ namespace ETL_SQL.Engine.Spill
                 if (s == null) return null;
                 if (s.StartsWith(JsonPrefix, StringComparison.Ordinal))
                 {
-                    try 
-                    { 
+                    try
+                    {
                         var element = JsonSerializer.Deserialize<JsonElement>(s.AsSpan(JsonPrefix.Length));
                         return UnwrapJsonValue(element);
                     }

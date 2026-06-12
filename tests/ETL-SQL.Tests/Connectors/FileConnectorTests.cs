@@ -5,15 +5,15 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Xunit;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors;
 using ETL_SQL.Connectors.Excel;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Connectors.Json;
 using ETL_SQL.Connectors.Xml;
-using ETL_SQL.Connectors;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -859,7 +859,9 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string>
             {
-                ["SERVER"] = "localhost", ["DATABASE"] = "TestDB", ["TRUSTED_CONNECTION"] = "TRUE"
+                ["SERVER"] = "localhost",
+                ["DATABASE"] = "TestDB",
+                ["TRUSTED_CONNECTION"] = "TRUE"
             };
             var cs = ConnectionStringBuilder.Build("MSSQL", props);
             Assert.Contains("localhost", cs);
@@ -880,7 +882,8 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string>
             {
-                ["SERVER"] = "srv", ["POOL_LIFETIME"] = "300"
+                ["SERVER"] = "srv",
+                ["POOL_LIFETIME"] = "300"
             };
             var cs = ConnectionStringBuilder.Build("MSSQL", props);
             Assert.NotEmpty(cs);
@@ -891,7 +894,9 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string>
             {
-                ["SERVER"] = "srv", ["ENCRYPT"] = "TRUE", ["TRUST_SERVER_CERTIFICATE"] = "TRUE"
+                ["SERVER"] = "srv",
+                ["ENCRYPT"] = "TRUE",
+                ["TRUST_SERVER_CERTIFICATE"] = "TRUE"
             };
             var cs = ConnectionStringBuilder.Build("MSSQL", props);
             Assert.Contains("srv", cs);
@@ -902,7 +907,8 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string>
             {
-                ["SERVER"] = "srv", ["APPLICATION_INTENT"] = "READWRITE"
+                ["SERVER"] = "srv",
+                ["APPLICATION_INTENT"] = "READWRITE"
             };
             var cs = ConnectionStringBuilder.Build("MSSQL", props);
             Assert.NotEmpty(cs);
@@ -913,7 +919,9 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string>
             {
-                ["HOST"] = "pghost", ["DATABASE"] = "db", ["CONNECTION_IDLE_LIFETIME"] = "60"
+                ["HOST"] = "pghost",
+                ["DATABASE"] = "db",
+                ["CONNECTION_IDLE_LIFETIME"] = "60"
             };
             var cs = ConnectionStringBuilder.Build("POSTGRES", props);
             Assert.Contains("pghost", cs);
@@ -932,7 +940,8 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string>
             {
-                ["HOST"] = "orahost", ["PORT"] = "1521"
+                ["HOST"] = "orahost",
+                ["PORT"] = "1521"
             };
             var cs = ConnectionStringBuilder.Build("ORACLE", props);
             Assert.Contains("orahost", cs);
@@ -943,7 +952,9 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string>
             {
-                ["HOST"] = "orahost", ["SERVICE_NAME"] = "xe", ["CONNECTION_LIFETIME"] = "300"
+                ["HOST"] = "orahost",
+                ["SERVICE_NAME"] = "xe",
+                ["CONNECTION_LIFETIME"] = "300"
             };
             var cs = ConnectionStringBuilder.Build("ORACLE", props);
             Assert.NotEmpty(cs);
@@ -954,8 +965,11 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string>
             {
-                ["DSN"] = "MySalesDSN", ["USER"] = "admin", ["PASSWORD"] = "secret",
-                ["CONNECT_TIMEOUT"] = "30", ["CHARSET"] = "utf8"
+                ["DSN"] = "MySalesDSN",
+                ["USER"] = "admin",
+                ["PASSWORD"] = "secret",
+                ["CONNECT_TIMEOUT"] = "30",
+                ["CHARSET"] = "utf8"
             };
             var cs = ConnectionStringBuilder.Build("ODBC", props);
             Assert.Contains("DSN=MySalesDSN", cs);
@@ -967,7 +981,8 @@ namespace ETL_SQL.Tests.Connectors
         {
             var props = new Dictionary<string, string>
             {
-                ["USER"] = "admin", ["PASSWORD"] = "secret"
+                ["USER"] = "admin",
+                ["PASSWORD"] = "secret"
             };
             var cs = ConnectionStringBuilder.Build("ODBC", props);
             Assert.Contains("UID=admin", cs);

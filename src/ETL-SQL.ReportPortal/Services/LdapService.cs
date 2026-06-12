@@ -93,7 +93,7 @@ namespace ETL_SQL.ReportPortal.Services
                     if (response.Entries.Count > 0)
                     {
                         userEntry = response.Entries[0];
-                        
+
                         // Query groups using service connection
                         bool hasMemberOf = false;
                         foreach (string name in userEntry.Attributes.AttributeNames)
@@ -113,7 +113,7 @@ namespace ETL_SQL.ReportPortal.Services
                                 break;
                             }
                         }
-                        
+
                         if (!hasMemberOf)
                         {
                             try
@@ -250,10 +250,10 @@ namespace ETL_SQL.ReportPortal.Services
                 // Bind using credentials
                 var credential = new NetworkCredential(bindUsername, password);
                 connection.Credential = credential;
-                
+
                 // Active Directory supports both Basic (over SSL) and Negotiate (default for Windows environments).
-                connection.AuthType = (ldapConfig.UseSsl || string.IsNullOrEmpty(ldapConfig.Domain) || bindUsername.Contains("=")) 
-                    ? AuthType.Basic 
+                connection.AuthType = (ldapConfig.UseSsl || string.IsNullOrEmpty(ldapConfig.Domain) || bindUsername.Contains("="))
+                    ? AuthType.Basic
                     : AuthType.Negotiate;
 
                 await Task.Run(() => connection.Bind());
@@ -271,7 +271,7 @@ namespace ETL_SQL.ReportPortal.Services
 
                 string escapedUsername = EscapeLdapFilter(cleanUsername);
                 string searchFilter = $"(|(sAMAccountName={escapedUsername})(uid={escapedUsername})(cn={escapedUsername}))";
-                
+
                 string baseDn = ldapConfig.BaseDn;
                 if (string.IsNullOrEmpty(baseDn) && !string.IsNullOrEmpty(ldapConfig.Domain))
                 {
@@ -387,11 +387,11 @@ namespace ETL_SQL.ReportPortal.Services
                 switch (c)
                 {
                     case '\\': sb.Append("\\5c"); break;
-                    case '*':  sb.Append("\\2a"); break;
-                    case '(':  sb.Append("\\28"); break;
-                    case ')':  sb.Append("\\29"); break;
+                    case '*': sb.Append("\\2a"); break;
+                    case '(': sb.Append("\\28"); break;
+                    case ')': sb.Append("\\29"); break;
                     case '\0': sb.Append("\\00"); break;
-                    default:   sb.Append(c); break;
+                    default: sb.Append(c); break;
                 }
             }
             return sb.ToString();

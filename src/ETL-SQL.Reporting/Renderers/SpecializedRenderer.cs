@@ -23,22 +23,22 @@ namespace ETL_SQL.Reporting.Renderers
             var series = new List<object> { new { type = "scatter", name = v.Name, data } };
             var option = new Dictionary<string, object>
             {
-                ["title"]   = TitleOpt(v),
+                ["title"] = TitleOpt(v),
                 ["tooltip"] = new { trigger = "item" },
-                ["xAxis"]   = new { },
-                ["yAxis"]   = new { },
-                ["series"]  = ApplyCommonSeriesOptions(v, series, stacked: false, smooth: false)
+                ["xAxis"] = new { },
+                ["yAxis"] = new { },
+                ["series"] = ApplyCommonSeriesOptions(v, series, stacked: false, smooth: false)
             };
 
             // SCATTER BRUSH: inject markers consumed by the JS runtime's brushSelected handler
             if (IsOn(v.Options.GetValueOrDefault("BRUSH")))
             {
                 v.Options.TryGetValue("BRUSH_PARAM", out var brushParam);
-                v.Options.TryGetValue("BRUSH_TYPE",  out var brushType);
+                v.Options.TryGetValue("BRUSH_TYPE", out var brushType);
                 if (!string.IsNullOrEmpty(brushParam))
                 {
                     option["__brushParam"] = brushParam;
-                    option["__brushType"]  = (string.IsNullOrEmpty(brushType) ? "rect" : brushType).ToLowerInvariant();
+                    option["__brushType"] = (string.IsNullOrEmpty(brushType) ? "rect" : brushType).ToLowerInvariant();
                 }
             }
 
@@ -220,10 +220,10 @@ namespace ETL_SQL.Reporting.Renderers
 
         public string RenderBubble(VisualManifest v)
         {
-            var xCol    = FindRole(v, "x")     ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
-            var yCol    = FindRole(v, "y")     ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
-            var sizeCol = FindRole(v, "size")  ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
-            var lblCol  = FindRole(v, "label") ?? (v.Columns.Count > 3 ? v.Columns[3] : null);
+            var xCol = FindRole(v, "x") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var yCol = FindRole(v, "y") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var sizeCol = FindRole(v, "size") ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
+            var lblCol = FindRole(v, "label") ?? (v.Columns.Count > 3 ? v.Columns[3] : null);
 
             int xi = ColIdx(v, xCol);
             int yi = ColIdx(v, yCol);
@@ -237,23 +237,23 @@ namespace ETL_SQL.Reporting.Renderers
             // ECharts scatter uses symbolSize as a function — the client reads index 2 for display size.
             var data = v.Rows.Select(r =>
             {
-                double x       = ToDouble(xi >= 0 && xi < r.Count ? r[xi] : null) ?? 0.0;
-                double y       = ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null) ?? 0.0;
+                double x = ToDouble(xi >= 0 && xi < r.Count ? r[xi] : null) ?? 0.0;
+                double y = ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null) ?? 0.0;
                 double rawSize = si >= 0 && si < r.Count ? ToDouble(r[si]) ?? 0.0 : 0.0;
-                double scaled  = si >= 0 ? rawSize / maxSize * 60 + 5 : 20.0;
-                string name    = li >= 0 && li < r.Count ? r[li]?.ToString() ?? "" : "";
+                double scaled = si >= 0 ? rawSize / maxSize * 60 + 5 : 20.0;
+                string name = li >= 0 && li < r.Count ? r[li]?.ToString() ?? "" : "";
                 return (object)new { value = new object[] { x, y, scaled, rawSize }, name };
             }).ToList();
 
             // symbolSize is a client-side function; embed a marker so report-runtime.js knows to apply it.
             return Serialize(new
             {
-                title   = TitleOpt(v),
+                title = TitleOpt(v),
                 tooltip = new { trigger = "item" },
-                xAxis   = new { },
-                yAxis   = new { },
+                xAxis = new { },
+                yAxis = new { },
                 __bubbleSymbolSize = true,   // signal to client to wire symbolSize function
-                series  = new[] { new { type = "scatter", name = v.Name, data } }
+                series = new[] { new { type = "scatter", name = v.Name, data } }
             });
         }
 
@@ -286,16 +286,16 @@ namespace ETL_SQL.Reporting.Renderers
 
             var seriesData = v.Rows.Select(r =>
             {
-                var name   = r.Count > 0 ? r[0]?.ToString() ?? "" : "";
+                var name = r.Count > 0 ? r[0]?.ToString() ?? "" : "";
                 var values = r.Skip(1).Select(val => ToDouble(val) ?? 0.0).ToList();
                 return (object)new { name, value = values };
             }).ToList();
 
             return Serialize(new
             {
-                title  = TitleOpt(v),
+                title = TitleOpt(v),
                 legend = LegendOpt(v),
-                radar  = new { indicator = indicators },
+                radar = new { indicator = indicators },
                 series = new[] { new { type = "radar", name = v.Name, data = seriesData } }
             });
         }
@@ -306,17 +306,17 @@ namespace ETL_SQL.Reporting.Renderers
 
         public string RenderCandlestick(VisualManifest v)
         {
-            var xCol     = FindRole(v, "x")     ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
-            var openCol  = FindRole(v, "open")  ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
-            var highCol  = FindRole(v, "high")  ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
-            var lowCol   = FindRole(v, "low")   ?? (v.Columns.Count > 3 ? v.Columns[3] : null);
+            var xCol = FindRole(v, "x") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var openCol = FindRole(v, "open") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var highCol = FindRole(v, "high") ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
+            var lowCol = FindRole(v, "low") ?? (v.Columns.Count > 3 ? v.Columns[3] : null);
             var closeCol = FindRole(v, "close") ?? (v.Columns.Count > 4 ? v.Columns[4] : null);
 
-            int xi  = ColIdx(v, xCol);
-            int oi  = ColIdx(v, openCol);
-            int hi  = ColIdx(v, highCol);
-            int li  = ColIdx(v, lowCol);
-            int ci  = ColIdx(v, closeCol);
+            int xi = ColIdx(v, xCol);
+            int oi = ColIdx(v, openCol);
+            int hi = ColIdx(v, highCol);
+            int li = ColIdx(v, lowCol);
+            int ci = ColIdx(v, closeCol);
 
             var categories = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi]?.ToString() ?? "" : "").ToList();
             var ohlc = v.Rows.Select(r => new[]
@@ -327,16 +327,16 @@ namespace ETL_SQL.Reporting.Renderers
                 ToDouble(hi >= 0 && hi < r.Count ? r[hi] : null) ?? 0.0
             }).ToList();
 
-            v.Options.TryGetValue("COLOR_UP",   out var colorUp);
+            v.Options.TryGetValue("COLOR_UP", out var colorUp);
             v.Options.TryGetValue("COLOR_DOWN", out var colorDown);
 
             return Serialize(new
             {
-                title   = TitleOpt(v),
+                title = TitleOpt(v),
                 tooltip = new { trigger = "axis", axisPointer = new { type = "cross" } },
-                xAxis   = new { type = "category", data = categories, boundaryGap = true, axisLine = new { onZero = false } },
-                yAxis   = new { scale = true },
-                series  = new[]
+                xAxis = new { type = "category", data = categories, boundaryGap = true, axisLine = new { onZero = false } },
+                yAxis = new { scale = true },
+                series = new[]
                 {
                     new
                     {
@@ -361,10 +361,10 @@ namespace ETL_SQL.Reporting.Renderers
 
         public string RenderGantt(VisualManifest v)
         {
-            var yCol     = FindRole(v, "y")      ?? FindRole(v, "label") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
-            var startCol = FindRole(v, "start")  ?? FindRole(v, "x")     ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
-            var endCol   = FindRole(v, "end")    ?? FindRole(v, "x2")    ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
-            var colorCol = FindRole(v, "color")  ?? (v.Columns.Count > 3 ? v.Columns[3] : null);
+            var yCol = FindRole(v, "y") ?? FindRole(v, "label") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var startCol = FindRole(v, "start") ?? FindRole(v, "x") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var endCol = FindRole(v, "end") ?? FindRole(v, "x2") ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
+            var colorCol = FindRole(v, "color") ?? (v.Columns.Count > 3 ? v.Columns[3] : null);
 
             int yi = ColIdx(v, yCol);
             int si = ColIdx(v, startCol);
@@ -376,17 +376,17 @@ namespace ETL_SQL.Reporting.Renderers
                 .Select(r => yi >= 0 && yi < r.Count ? r[yi]?.ToString() ?? "" : "")
                 .Distinct()
                 .ToList();
-            
+
             var catMap = categories.Select((c, i) => (c, i)).ToDictionary(t => t.c, t => t.i);
 
             // Encode [categoryIndex, start, end, label, color]
             var data = v.Rows.Select(r =>
             {
                 string catName = yi >= 0 && yi < r.Count ? r[yi]?.ToString() ?? "" : "";
-                int catIdx     = catMap.TryGetValue(catName, out var idx) ? idx : 0;
-                var startVal   = si >= 0 && si < r.Count ? r[si] : null;
-                var endVal     = ei >= 0 && ei < r.Count ? r[ei] : null;
-                var color      = ci >= 0 && ci < r.Count ? r[ci]?.ToString() : null;
+                int catIdx = catMap.TryGetValue(catName, out var idx) ? idx : 0;
+                var startVal = si >= 0 && si < r.Count ? r[si] : null;
+                var endVal = ei >= 0 && ei < r.Count ? r[ei] : null;
+                var color = ci >= 0 && ci < r.Count ? r[ci]?.ToString() : null;
 
                 return new object?[]
                 {
@@ -400,13 +400,13 @@ namespace ETL_SQL.Reporting.Renderers
 
             return Serialize(new
             {
-                title   = TitleOpt(v),
+                title = TitleOpt(v),
                 tooltip = new { trigger = "item" },
-                grid    = new { left = "10%", right = "5%", bottom = "10%", containLabel = true },
-                xAxis   = new { type = "time" },
-                yAxis   = new { type = "category", data = categories, inverse = true },
+                grid = new { left = "10%", right = "5%", bottom = "10%", containLabel = true },
+                xAxis = new { type = "time" },
+                yAxis = new { type = "category", data = categories, inverse = true },
                 __ganttRenderItem = true, // signal to client to wire custom renderItem
-                series  = new[]
+                series = new[]
                 {
                     new
                     {
@@ -428,8 +428,8 @@ namespace ETL_SQL.Reporting.Renderers
         public string RenderSankey(VisualManifest v)
         {
             var srcCol = FindRole(v, "source") ?? FindRole(v, "from") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
-            var tgtCol = FindRole(v, "target") ?? FindRole(v, "to")   ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
-            var valCol = FindRole(v, "value")  ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
+            var tgtCol = FindRole(v, "target") ?? FindRole(v, "to") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var valCol = FindRole(v, "value") ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
 
             int si = ColIdx(v, srcCol), ti = ColIdx(v, tgtCol), vi = ColIdx(v, valCol);
 
@@ -449,9 +449,9 @@ namespace ETL_SQL.Reporting.Renderers
 
             return Serialize(new
             {
-                title   = TitleOpt(v),
+                title = TitleOpt(v),
                 tooltip = new { trigger = "item", triggerOn = "mousemove" },
-                series  = new[]
+                series = new[]
                 {
                     new
                     {
@@ -475,9 +475,9 @@ namespace ETL_SQL.Reporting.Renderers
             var level1Col = FindRole(v, "level1");
             var level2Col = FindRole(v, "level2");
             var level3Col = FindRole(v, "level3");
-            var labelCol  = FindRole(v, "label") ?? FindRole(v, "name") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var labelCol = FindRole(v, "label") ?? FindRole(v, "name") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
             var parentCol = FindRole(v, "parent");
-            var valueCol  = FindRole(v, "value") ?? (v.Columns.Count > 0 ? v.Columns[^1] : null);
+            var valueCol = FindRole(v, "value") ?? (v.Columns.Count > 0 ? v.Columns[^1] : null);
 
             var data = level1Col != null
                 ? BuildSunburstLevels(v, level1Col, level2Col, level3Col, valueCol)
@@ -485,9 +485,9 @@ namespace ETL_SQL.Reporting.Renderers
 
             return Serialize(new
             {
-                title   = TitleOpt(v),
+                title = TitleOpt(v),
                 tooltip = new { trigger = "item" },
-                series  = new[]
+                series = new[]
                 {
                     new
                     {
@@ -520,10 +520,10 @@ namespace ETL_SQL.Reporting.Renderers
 
             foreach (var row in v.Rows)
             {
-                var k1  = l1i >= 0 && l1i < row.Count ? row[l1i] ?? "(blank)" : "(blank)";
-                var k2  = l2i >= 0 && l2i < row.Count ? row[l2i] ?? "(blank)" : null;
-                var k3  = l3i >= 0 && l3i < row.Count ? row[l3i] ?? "(blank)" : null;
-                var val = vi  >= 0 && vi  < row.Count ? ToDouble(row[vi]) ?? 0.0 : 1.0;
+                var k1 = l1i >= 0 && l1i < row.Count ? row[l1i] ?? "(blank)" : "(blank)";
+                var k2 = l2i >= 0 && l2i < row.Count ? row[l2i] ?? "(blank)" : null;
+                var k3 = l3i >= 0 && l3i < row.Count ? row[l3i] ?? "(blank)" : null;
+                var val = vi >= 0 && vi < row.Count ? ToDouble(row[vi]) ?? 0.0 : 1.0;
 
                 if (!roots.TryGetValue(k1, out var n1)) roots[k1] = n1 = new SunNode(k1);
                 n1.Value += val;
@@ -575,9 +575,9 @@ namespace ETL_SQL.Reporting.Renderers
 
         public string RenderNetwork(VisualManifest v)
         {
-            var fromCol  = FindRole(v, "from")       ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
-            var toCol    = FindRole(v, "to")         ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
-            var valCol   = FindRole(v, "value");
+            var fromCol = FindRole(v, "from") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var toCol = FindRole(v, "to") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var valCol = FindRole(v, "value");
             var groupCol = FindRole(v, "node_group") ?? FindRole(v, "group");
 
             int fi = ColIdx(v, fromCol), ti = ColIdx(v, toCol), vi = ColIdx(v, valCol), gi = ColIdx(v, groupCol);
@@ -590,17 +590,17 @@ namespace ETL_SQL.Reporting.Renderers
 
             var nodes = new Dictionary<string, SunNode>(StringComparer.Ordinal);
             var groups = new Dictionary<string, int>(StringComparer.Ordinal);
-            var links  = new List<object>();
+            var links = new List<object>();
 
             foreach (var row in v.Rows)
             {
-                var from  = fi >= 0 && fi < row.Count ? row[fi] ?? "" : "";
-                var to    = ti >= 0 && ti < row.Count ? row[ti] ?? "" : "";
-                var val   = vi >= 0 && vi < row.Count ? ToDouble(row[vi]) ?? 1.0 : 1.0;
+                var from = fi >= 0 && fi < row.Count ? row[fi] ?? "" : "";
+                var to = ti >= 0 && ti < row.Count ? row[ti] ?? "" : "";
+                var val = vi >= 0 && vi < row.Count ? ToDouble(row[vi]) ?? 1.0 : 1.0;
                 var group = gi >= 0 && gi < row.Count ? row[gi] ?? "" : "";
 
                 if (!string.IsNullOrEmpty(from) && !nodes.ContainsKey(from)) nodes[from] = new SunNode(from);
-                if (!string.IsNullOrEmpty(to)   && !nodes.ContainsKey(to))   nodes[to]   = new SunNode(to);
+                if (!string.IsNullOrEmpty(to) && !nodes.ContainsKey(to)) nodes[to] = new SunNode(to);
                 if (!string.IsNullOrEmpty(group) && !groups.ContainsKey(group)) groups[group] = groups.Count;
                 if (!string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(to))
                     links.Add(new { source = from, target = to, value = val });
@@ -627,27 +627,27 @@ namespace ETL_SQL.Reporting.Renderers
 
             var seriesBase = new Dictionary<string, object>
             {
-                ["type"]       = "graph",
-                ["layout"]     = layout,
-                ["data"]       = nodeData,
-                ["links"]      = links,
-                ["roam"]       = roam,
-                ["label"]      = new { show = true, position = "right" },
+                ["type"] = "graph",
+                ["layout"] = layout,
+                ["data"] = nodeData,
+                ["links"] = links,
+                ["roam"] = roam,
+                ["label"] = new { show = true, position = "right" },
                 ["edgeSymbol"] = new[] { "circle", "arrow" },
-                ["lineStyle"]  = new { color = "source", curveness = 0.3 },
-                ["force"]      = new { repulsion = repulsion, edgeLength = new[] { 80, 200 }, layoutAnimation = false }
+                ["lineStyle"] = new { color = "source", curveness = 0.3 },
+                ["force"] = new { repulsion = repulsion, edgeLength = new[] { 80, 200 }, layoutAnimation = false }
             };
             if (categories.Length > 0)
             {
                 seriesBase["categories"] = categories;
-                seriesBase["legend"]     = new { show = true };
+                seriesBase["legend"] = new { show = true };
             }
 
             return Serialize(new
             {
-                title   = TitleOpt(v),
+                title = TitleOpt(v),
                 tooltip = new { trigger = "item" },
-                series  = new[] { seriesBase }
+                series = new[] { seriesBase }
             });
         }
 
@@ -658,8 +658,8 @@ namespace ETL_SQL.Reporting.Renderers
 
         public string RenderTrellis(VisualManifest v)
         {
-            var xCol    = FindRole(v, "x")     ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
-            var yCol    = FindRole(v, "y")     ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var xCol = FindRole(v, "x") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var yCol = FindRole(v, "y") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
             var facetCol = FindRole(v, "facet") ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
 
             int xi = ColIdx(v, xCol), yi = ColIdx(v, yCol), fi = ColIdx(v, facetCol);
@@ -667,9 +667,9 @@ namespace ETL_SQL.Reporting.Renderers
             v.Options.TryGetValue("CHART_TYPE", out var chartTypeOpt);
             string chartType = (chartTypeOpt ?? "BAR").ToLowerInvariant() switch
             {
-                "line"    => "line",
+                "line" => "line",
                 "scatter" => "scatter",
-                _         => "bar"
+                _ => "bar"
             };
 
             v.Options.TryGetValue("COLUMNS", out var colsOpt);
@@ -687,13 +687,13 @@ namespace ETL_SQL.Reporting.Renderers
 
             double cellW = 0.9 / numCols;
             double cellH = 0.8 / numRows;
-            double padX  = 0.05 / numCols;
-            double padY  = 0.05 / numRows;
+            double padX = 0.05 / numCols;
+            double padY = 0.05 / numRows;
 
-            var grids   = new List<object>();
-            var xAxes   = new List<object>();
-            var yAxes   = new List<object>();
-            var series  = new List<object>();
+            var grids = new List<object>();
+            var xAxes = new List<object>();
+            var yAxes = new List<object>();
+            var series = new List<object>();
 
             // Compute global Y range for shared axis
             double globalMin = double.MaxValue, globalMax = double.MinValue;
@@ -714,17 +714,17 @@ namespace ETL_SQL.Reporting.Renderers
                 var facet = facets[i];
                 int col = i % numCols, row = i / numCols;
 
-                double left   = col * (cellW + padX) + padX;
-                double top    = row * (cellH + padY) + 0.08 + padY;
+                double left = col * (cellW + padX) + padX;
+                double top = row * (cellH + padY) + 0.08 + padY;
 
                 grids.Add(new { left = $"{left:P0}", top = $"{top:P0}", width = $"{cellW:P0}", height = $"{cellH:P0}", containLabel = true });
 
                 var xLabels = facet.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").Distinct().ToList();
-                var yData   = facet.Select(r => ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null) ?? 0.0).ToList();
+                var yData = facet.Select(r => ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null) ?? 0.0).ToList();
 
                 if (chartType == "scatter")
                 {
-                    xAxes.Add(new { gridIndex = i, type = "value",    name = facet.Key, nameLocation = "middle", nameGap = 20 });
+                    xAxes.Add(new { gridIndex = i, type = "value", name = facet.Key, nameLocation = "middle", nameGap = 20 });
                     yAxes.Add(new { gridIndex = i, type = "value" });
                     var pts = facet.Select(r => new[]
                     {
@@ -745,12 +745,12 @@ namespace ETL_SQL.Reporting.Renderers
 
             return Serialize(new
             {
-                title   = TitleOpt(v),
+                title = TitleOpt(v),
                 tooltip = new { trigger = "axis" },
-                grid    = grids,
-                xAxis   = xAxes,
-                yAxis   = yAxes,
-                series  = series
+                grid = grids,
+                xAxis = xAxes,
+                yAxis = yAxes,
+                series = series
             });
         }
 
@@ -770,10 +770,10 @@ namespace ETL_SQL.Reporting.Renderers
                 return agg switch
                 {
                     "COUNT" => vals.Count.ToString(),
-                    "AVG"   => (vals.Sum() / vals.Count).ToString("G6"),
-                    "MIN"   => vals.Min().ToString("G6"),
-                    "MAX"   => vals.Max().ToString("G6"),
-                    _       => vals.Sum().ToString("G6")
+                    "AVG" => (vals.Sum() / vals.Count).ToString("G6"),
+                    "MIN" => vals.Min().ToString("G6"),
+                    "MAX" => vals.Max().ToString("G6"),
+                    _ => vals.Sum().ToString("G6")
                 };
             }
 
@@ -810,19 +810,19 @@ namespace ETL_SQL.Reporting.Renderers
             }
             int valueCount = Math.Max(1, valueCols.Count);
 
-            string agg          = (v.Options.GetValueOrDefault("AGGREGATE") ?? "SUM").ToUpperInvariant();
-            bool grandTotal     = IsOn(v.Options.GetValueOrDefault("GRAND_TOTAL"));
-            bool subtotals      = IsOn(v.Options.GetValueOrDefault("SUBTOTALS"));
+            string agg = (v.Options.GetValueOrDefault("AGGREGATE") ?? "SUM").ToUpperInvariant();
+            bool grandTotal = IsOn(v.Options.GetValueOrDefault("GRAND_TOTAL"));
+            bool subtotals = IsOn(v.Options.GetValueOrDefault("SUBTOTALS"));
             string axisSortMode = (v.Options.GetValueOrDefault("AXIS_SORT") ?? "ALPHA").ToUpperInvariant();
 
             var rowIndices = rowCols.Select(c => ColIdx(v, c)).ToList();
             var colIndices = colCols.Select(c => ColIdx(v, c)).ToList();
 
             // Build groups: rowKey -> colKey -> List<double>[valueCount]
-            var groups      = new Dictionary<string, Dictionary<string, List<double>[]>>(StringComparer.Ordinal);
+            var groups = new Dictionary<string, Dictionary<string, List<double>[]>>(StringComparer.Ordinal);
             var rowKeyOrder = new List<string>();
             var colKeyOrder = new List<string>();
-            var colKeySet   = new HashSet<string>(StringComparer.Ordinal);
+            var colKeySet = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var row in v.Rows)
             {
@@ -848,8 +848,8 @@ namespace ETL_SQL.Reporting.Renderers
                     groups.Values.Sum(g => g.TryGetValue(ck, out var vl) ? vl[0].Sum() : 0.0))
                 : colKeyOrder.OrderBy(s => s, StringComparer.OrdinalIgnoreCase);
 
-            var colKeys   = orderedColKeys.ToList();
-            var colParts  = colKeys.Select(key => key.Split(Sep).ToList()).ToList();
+            var colKeys = orderedColKeys.ToList();
+            var colParts = colKeys.Select(key => key.Split(Sep).ToList()).ToList();
             var colValues = colParts
                 .Select(parts => string.Join(" / ", parts.Where(p => !string.IsNullOrEmpty(p))))
                 .ToList();
@@ -886,16 +886,16 @@ namespace ETL_SQL.Reporting.Renderers
 
             return Serialize(new
             {
-                __matrix         = true,
-                rowHeaders       = rowCols,
-                colHeaders       = colCols,
-                colKeys          = colKeys,
-                colParts         = colParts,
-                colValues        = colValues,
-                aggregate        = agg,
-                rows             = pivotRows,
-                grandTotals      = totals,
-                valueHeaders     = valueCount > 1 ? valueCols.Select(vc => vc.col).ToArray() : null,
+                __matrix = true,
+                rowHeaders = rowCols,
+                colHeaders = colCols,
+                colKeys = colKeys,
+                colParts = colParts,
+                colValues = colValues,
+                aggregate = agg,
+                rows = pivotRows,
+                grandTotals = totals,
+                valueHeaders = valueCount > 1 ? valueCols.Select(vc => vc.col).ToArray() : null,
                 subtotalsEnabled = subtotals
             });
         }

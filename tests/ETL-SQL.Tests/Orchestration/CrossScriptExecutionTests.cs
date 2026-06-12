@@ -1,14 +1,13 @@
-using Xunit;
-using ETL_SQL.Core;
-
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
-using System.Threading.Tasks;
+using System;
 using System.Collections.Generic;
 using System.IO;
-using Microsoft.Extensions.DependencyInjection;
+using System.Threading.Tasks;
 using ETL_SQL.App;
-using System;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {
@@ -80,14 +79,14 @@ END
 
             var result = evaluator.Connections["#ParallelTest"] as InMemoryDataSource;
             Assert.NotNull(result);
-            
+
             // Collect all rows from batches
             var rows = new List<Row>();
             await foreach (var batch in result.ReadBatches())
             {
                 rows.AddRange(batch.Rows);
             }
-            
+
             Assert.Equal(5, rows.Count);
         }
     }

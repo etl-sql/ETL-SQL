@@ -1,8 +1,8 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Orchestrator.Scheduling;
 using Microsoft.Extensions.DependencyInjection;
 

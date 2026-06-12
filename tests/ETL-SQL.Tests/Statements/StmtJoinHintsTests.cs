@@ -1,13 +1,13 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using ETL_SQL.Data;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {

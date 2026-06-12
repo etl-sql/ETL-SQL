@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Engine;
-using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Core
 {
@@ -16,7 +16,7 @@ namespace ETL_SQL.Tests.Core
         {
             var serviceProvider = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = serviceProvider.GetRequiredService<Evaluator>();
-            
+
             // Test as a field in SELECT
             var res = await EvaluateExpression(evaluator, "SYSDATE");
             Assert.True(res is DateTime, $"SYSDATE should return DateTime, but got {res?.GetType().Name}");

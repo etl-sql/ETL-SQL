@@ -1,13 +1,12 @@
-using Xunit;
-using ETL_SQL.Core;
-
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
-using ETL_SQL.App;
 using System;
-using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
 using System.Linq;
+using System.Threading.Tasks;
+using ETL_SQL.App;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -112,7 +111,7 @@ namespace ETL_SQL.Tests.Statements
         [Fact]
         public async Task Merge_NotMatchedBySource_Works()
         {
-             // Setup
+            // Setup
             var setup = new Lexer(@"
                 CREATE TABLE #T2 (ID INT, Name STRING);
                 INSERT INTO #T2 VALUES (1, 'A'), (2, 'B'), (3, 'C');
@@ -136,7 +135,8 @@ namespace ETL_SQL.Tests.Statements
             var result = _evaluator.LastResult;
 
             Assert.Equal(2, result.Rows.Count);
-            Assert.DoesNotContain(result.Rows, r => {
+            Assert.DoesNotContain(result.Rows, r =>
+            {
                 Assert.NotNull(r["ID"]);
                 return Convert.ToInt32(r["ID"]) == 3;
             });

@@ -1,14 +1,14 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Xunit;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis.Statements
 {
@@ -21,7 +21,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
         public async Task ShowTags_ForTable_ReturnsTableTags()
         {
             var eval = NewEval();
-            
+
             // Record a lineage entry with table-level tags
             var metadata = new Dictionary<string, string> { { "owner", "admin" }, { "sensitivity", "high" } };
             // Simulate a table creation or tag application
@@ -33,7 +33,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
             Assert.NotNull(eval.LastResult);
             var resultKeys = eval.LastResult!.Rows.Select(r => r["TagName"]?.ToString()).ToList();
             var resultVals = eval.LastResult!.Rows.Select(r => r["TagValue"]?.ToString()).ToList();
-            
+
             Assert.Contains("owner", resultKeys);
             Assert.Contains("admin", resultVals);
         }
@@ -42,7 +42,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
         public async Task ShowTags_ForColumn_ReturnsColumnTags()
         {
             var eval = NewEval();
-            
+
             var metadata = new Dictionary<string, string> { { "d", "User ID" } };
             eval.LineageTracker.Record("MyTable", new List<string>(), "CREATE", "UserId", null, metadata);
 
@@ -59,7 +59,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
         public async Task ShowTagValue_ForTable_ReturnsSpecificValue()
         {
             var eval = NewEval();
-            
+
             var metadata = new Dictionary<string, string> { { "owner", "admin" }, { "sensitivity", "high" } };
             eval.LineageTracker.Record("TargetTable", new List<string>(), "UPDATE", null, null, metadata);
 
@@ -76,7 +76,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
         public async Task ShowTagValue_ForColumn_ReturnsSpecificValue()
         {
             var eval = NewEval();
-            
+
             var metadata = new Dictionary<string, string> { { "d", "Email Address" }, { "pii", "true" } };
             eval.LineageTracker.Record("Users", new List<string>(), "INSERT", "Email", null, metadata);
 

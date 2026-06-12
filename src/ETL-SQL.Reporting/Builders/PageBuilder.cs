@@ -34,17 +34,17 @@ namespace ETL_SQL.Reporting.Builders
 
             var pm = new PageManifest
             {
-                Name               = name,
-                Mode               = pStmt.PageMode.ToString().ToUpperInvariant(),
-                Structure          = pStmt.Structure,
-                IsHidden           = isHidden,
+                Name = name,
+                Mode = pStmt.PageMode.ToString().ToUpperInvariant(),
+                Structure = pStmt.Structure,
+                IsHidden = isHidden,
                 RefreshIntervalSeconds = pStmt.RefreshIntervalSeconds,
-                SlotMap            = pStmt.SlotMap.ToDictionary(kv => kv.Key, kv => kv.Value),
-                Title              = title,
-                TitleIsMarkdown    = titleMd,
-                Subtitle           = subtitle,
+                SlotMap = pStmt.SlotMap.ToDictionary(kv => kv.Key, kv => kv.Value),
+                Title = title,
+                TitleIsMarkdown = titleMd,
+                Subtitle = subtitle,
                 SubtitleIsMarkdown = subtitleMd,
-                Tooltip            = await styleBuilder.BuildTooltipManifestAsync(pStmt.Tooltip)
+                Tooltip = await styleBuilder.BuildTooltipManifestAsync(pStmt.Tooltip)
             };
 
 

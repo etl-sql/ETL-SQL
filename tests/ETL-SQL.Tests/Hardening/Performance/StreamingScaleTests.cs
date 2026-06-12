@@ -2,14 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.App;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Engines;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
-using ETL_SQL.Core;
-using ETL_SQL.App;
-using ETL_SQL.Engine.Engines;
-using ETL_SQL.Data;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
@@ -30,14 +30,14 @@ namespace ETL_SQL.Tests.Hardening.Performance
         {
             var e = NewEvaluator();
             var schema = new TableSchema(new[] { "category", "value" });
-            var table  = new DataTable();
+            var table = new DataTable();
             table.SetColumns(new[] { "category", "value" });
 
             for (int i = 0; i < rowCount; i++)
             {
                 var r = new Row(schema);
                 r["category"] = ((char)('A' + (i % categoryCount))).ToString();
-                r["value"]    = (decimal)(i + 1);
+                r["value"] = (decimal)(i + 1);
                 await table.AddRowAsync(r);
             }
 
@@ -58,7 +58,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var e = await EvaluatorWithLargeSource(ROWS, CATS);
 
             _output.WriteLine("Testing HAVING COUNT(*) = 50000 over 150k rows...");
-            
+
             await e.Evaluate(new Parser(new Lexer(
                 "SELECT category, COUNT(*) AS cnt FROM #large GROUP BY category HAVING COUNT(*) = 50000;")
                 .Tokenize()).Parse());
@@ -85,7 +85,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var e = NewEvaluator();
             var schema = new TableSchema(new[] { "ID", "DupKey" });
             var rows = new List<Row>(ROWS);
-            
+
             for (int i = 0; i < ROWS; i++)
             {
                 var r = new Row(schema);
@@ -96,7 +96,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
 
             _output.WriteLine("Sorting 250k rows with duplicate keys...");
             var engine = new ExternalSortEngine(e, NullLogger.Instance);
-            var orderBy = new List<OrderByClause> { 
+            var orderBy = new List<OrderByClause> {
                 new OrderByClause(new IdentifierExpression("DupKey"), false),
                 new OrderByClause(new IdentifierExpression("ID"), true) // Secondary sort (descending IDs)
             };

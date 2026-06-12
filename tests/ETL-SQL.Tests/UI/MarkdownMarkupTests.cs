@@ -1,6 +1,6 @@
-using Xunit;
-using Spectre.Console;
 using ETL_SQL.TUI.UI;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {

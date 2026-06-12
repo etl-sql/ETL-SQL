@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Reporting
 {
@@ -14,8 +14,8 @@ namespace ETL_SQL.Reporting
     public static class ReportInteractionRefresher
     {
         public static async Task<int> RefreshAffectedVisualsAsync(
-            IExecutionContext context, 
-            ReportManifest manifest, 
+            IExecutionContext context,
+            ReportManifest manifest,
             IEnumerable<(string Name, string Value)> updates,
             bool isInteraction = false)
         {
@@ -52,16 +52,16 @@ namespace ETL_SQL.Reporting
                 // to ensure cross-filtering/ghosting is applied correctly across the page.
                 var action = visualDef.Interactions.FirstOrDefault(o => string.Equals(o.Key, "ON_SELECT", StringComparison.OrdinalIgnoreCase))?.Value;
                 bool hasInteraction = action != null && !string.Equals(action, "NONE", StringComparison.OrdinalIgnoreCase);
-                
+
                 bool isAffected = (isInteraction && hasInteraction) || affectedNames.Any(n => DependsOnVariable(visualDef, n));
-                
+
                 if (isAffected)
                 {
                     var existingVm = manifest.Visuals.FirstOrDefault(v => v.Name == visualDef.Name);
                     if (existingVm != null)
                     {
                         logger.Debug($"[ReportInteractionRefresher] Refreshing visual: {visualDef.Name}");
-                        
+
                         // If it's an interaction, we need to pass the selection values down to the visual builder
                         // for the double-fetch logic.
                         if (isInteraction)

@@ -22,13 +22,13 @@ namespace ETL_SQL.Analysis.Linting.Rules
 
             foreach (var stmt in script.Statements)
             {
-                if (stmt is CreateVisualStatement cv)    Check(cv.Name, cv, results);
-                if (stmt is CreatePageStatement cp)      Check(cp.Name, cp, results);
+                if (stmt is CreateVisualStatement cv) Check(cv.Name, cv, results);
+                if (stmt is CreatePageStatement cp) Check(cp.Name, cp, results);
                 if (stmt is CreateContainerStatement cc) Check(cc.Name, cc, results);
                 if (stmt is CreateNavigationStatement cn) Check(cn.Name, cn, results);
-                if (stmt is CreateDatasetStatement cd)   Check(cd.TempTableName.TrimStart('&'), cd, results);
-                if (stmt is CreateStyleStatement cs)     Check(cs.Name, cs, results);
-                if (stmt is CreateTemplateStatement ct)  Check(ct.Name, ct, results);
+                if (stmt is CreateDatasetStatement cd) Check(cd.TempTableName.TrimStart('&'), cd, results);
+                if (stmt is CreateStyleStatement cs) Check(cs.Name, cs, results);
+                if (stmt is CreateTemplateStatement ct) Check(ct.Name, ct, results);
             }
 
             return Task.FromResult<IEnumerable<LintResult>>(results);
@@ -44,7 +44,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 {
                     RuleName = Name,
                     Severity = LintSeverity.Warning,
-                    Message  = $"Report object name '{name}' is a reserved ETL-SQL keyword. This may cause ambiguity in expressions.",
+                    Message = $"Report object name '{name}' is a reserved ETL-SQL keyword. This may cause ambiguity in expressions.",
                     LineNumber = stmt.Line,
                     ColumnNumber = stmt.Column
                 });

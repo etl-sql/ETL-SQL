@@ -4,8 +4,8 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -46,14 +46,14 @@ namespace ETL_SQL.Engine.Handlers
             {
                 var hfVal = (await context.EvaluateValue(stmt.HashFile, new Row()))?.ToString() ?? "";
                 string hashFile = context.ResolvePath(hfVal);
-                
+
                 context.SecurityService.ValidatePath(hashFile);
                 if (!File.Exists(hashFile))
                     throw new ExecutionException($"Hash file not found: {hashFile}", null, stmt.Line, stmt.Column);
 
                 context.IncrementOperationCount(OperationType.FileSystem, hashFile, 1);
                 string content = await File.ReadAllTextAsync(hashFile);
-                
+
                 // Extract first word (sha256sum outputs 'hash *filename')
                 expectedHash = content.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                                       .FirstOrDefault()?.Trim('\'', '\"')

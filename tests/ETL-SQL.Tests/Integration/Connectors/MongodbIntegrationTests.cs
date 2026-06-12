@@ -2,15 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using Moq;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors.Mongodb;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using ETL_SQL.Services;
 using MongoDB.Bson;
 using MongoDB.Driver;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Connectors.Mongodb;
-using ETL_SQL.Services;
-using ETL_SQL.Data;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {

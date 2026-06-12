@@ -62,11 +62,11 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 VisualType.Gauge => new List<string> { "VALUE" },
                 VisualType.Slicer => new List<string> { "VALUE" },
                 VisualType.MultiSelect => new List<string> { "VALUE" },
-                VisualType.BoxPlot     => new List<string> { "X", "LOW", "Q1", "MEDIAN", "Q3", "HIGH" },
-                VisualType.Combo       => new List<string> { "X" },
-                VisualType.Bubble      => new List<string> { "X", "Y" },
+                VisualType.BoxPlot => new List<string> { "X", "LOW", "Q1", "MEDIAN", "Q3", "HIGH" },
+                VisualType.Combo => new List<string> { "X" },
+                VisualType.Bubble => new List<string> { "X", "Y" },
                 VisualType.Candlestick => new List<string> { "X", "OPEN", "HIGH", "LOW", "CLOSE" },
-                VisualType.Map         => GetMapRequiredRoles(visual),
+                VisualType.Map => GetMapRequiredRoles(visual),
                 _ => null
             };
         }

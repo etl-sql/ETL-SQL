@@ -18,12 +18,12 @@ namespace ETL_SQL.Tests.Orchestration
         public LineageCatalogTests()
         {
             _dbPath = Path.Combine(Path.GetTempPath(), $"etlsql-lineage-{Guid.NewGuid():N}.db");
-            _store  = new SQLiteJobHistoryStore(_dbPath);
+            _store = new SQLiteJobHistoryStore(_dbPath);
         }
 
         public void Dispose()
         {
-            try { if (File.Exists(_dbPath))         File.Delete(_dbPath); }         catch (IOException) { }
+            try { if (File.Exists(_dbPath)) File.Delete(_dbPath); } catch (IOException) { }
             try { if (File.Exists(_dbPath + "-wal")) File.Delete(_dbPath + "-wal"); } catch (IOException) { }
             try { if (File.Exists(_dbPath + "-shm")) File.Delete(_dbPath + "-shm"); } catch (IOException) { }
         }
@@ -38,7 +38,7 @@ namespace ETL_SQL.Tests.Orchestration
             new LineageEntry(target, operation)
             {
                 SourceTables = sources?.ToList() ?? new List<string>(),
-                Metadata     = tags   ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                Metadata = tags ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             };
 
         // ── SaveLineageAsync + GetHistoryForTableAsync ─────────────────────────
@@ -60,8 +60,8 @@ namespace ETL_SQL.Tests.Orchestration
             var history = (await ((ILineageCatalogStore)_store).GetHistoryForTableAsync("Orders")).ToList();
 
             Assert.Single(history);
-            Assert.Equal("Orders",    history[0].TargetTable);
-            Assert.Equal("INSERT",    history[0].Operation);
+            Assert.Equal("Orders", history[0].TargetTable);
+            Assert.Equal("INSERT", history[0].Operation);
             Assert.Equal("DailyLoad", history[0].JobName);
             Assert.Contains("Staging", history[0].SourceTables);
         }
@@ -74,17 +74,17 @@ namespace ETL_SQL.Tests.Orchestration
 
             var entry = new LineageEntry("dataset:sales_snap", "SELECT")
             {
-                TargetColumn             = "total",
-                SourceTables             = new List<string> { "Sales" },
-                SourceColumns            = new List<string> { "Amount" },
-                TransformationKind       = TransformationKind.Aggregation,
+                TargetColumn = "total",
+                SourceTables = new List<string> { "Sales" },
+                SourceColumns = new List<string> { "Amount" },
+                TransformationKind = TransformationKind.Aggregation,
                 TransformationExpression = "SUM(Amount)",
-                FunctionsApplied         = new List<string> { "SUM" },
-                DerivedFromDescriptions  = "Amount: Sales amounts",
-                Metadata                 = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                FunctionsApplied = new List<string> { "SUM" },
+                DerivedFromDescriptions = "Amount: Sales amounts",
+                Metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["pii"] = "true",
-                    ["d"]   = "Sales amounts",
+                    ["d"] = "Sales amounts",
                 },
             };
 
@@ -92,13 +92,13 @@ namespace ETL_SQL.Tests.Orchestration
 
             var hist = (await catalog.GetHistoryForTableAsync("dataset:sales_snap")).ToList();
             var e = Assert.Single(hist);
-            Assert.Equal("total",                 e.TargetColumn);
-            Assert.Equal(new[] { "Amount" },      e.SourceColumns);
-            Assert.Equal("Aggregation",           e.TransformationKind);
-            Assert.Equal("SUM(Amount)",           e.TransformationExpression);
-            Assert.Equal(new[] { "SUM" },         e.FunctionsApplied);
+            Assert.Equal("total", e.TargetColumn);
+            Assert.Equal(new[] { "Amount" }, e.SourceColumns);
+            Assert.Equal("Aggregation", e.TransformationKind);
+            Assert.Equal("SUM(Amount)", e.TransformationExpression);
+            Assert.Equal(new[] { "SUM" }, e.FunctionsApplied);
             Assert.Equal("Amount: Sales amounts", e.DerivedFromDescriptions);
-            Assert.Equal("true",                  e.Tags["pii"]);
+            Assert.Equal("true", e.Tags["pii"]);
         }
 
         [Fact]
@@ -167,8 +167,8 @@ namespace ETL_SQL.Tests.Orchestration
             await _store.InitializeAsync();
             var catalog = (ILineageCatalogStore)_store;
 
-            var piiTrue  = MakeEntry("Customers", tags: new Dictionary<string, string> { ["pii"] = "true" });
-            var piiFalse = MakeEntry("Audit",     tags: new Dictionary<string, string> { ["pii"] = "false" });
+            var piiTrue = MakeEntry("Customers", tags: new Dictionary<string, string> { ["pii"] = "true" });
+            var piiFalse = MakeEntry("Audit", tags: new Dictionary<string, string> { ["pii"] = "false" });
 
             await catalog.SaveLineageAsync(new[] { piiTrue, piiFalse }, null, null, DateTime.UtcNow);
 
@@ -303,7 +303,7 @@ namespace ETL_SQL.Tests.Orchestration
             var script = ParseScript("SHOW LINEAGE HISTORY FOR TAG pii = 'true';");
             var stmt = Assert.Single(script.Statements);
             var hist = Assert.IsType<ShowLineageHistoryForTagStatement>(stmt);
-            Assert.Equal("pii",  hist.TagKey);
+            Assert.Equal("pii", hist.TagKey);
             Assert.Equal("true", hist.TagValue);
         }
 
@@ -313,9 +313,9 @@ namespace ETL_SQL.Tests.Orchestration
             var script = ParseScript("SHOW LINEAGE HISTORY FOR TAG pii = 'true' LIMIT 25;");
             var stmt = Assert.Single(script.Statements);
             var hist = Assert.IsType<ShowLineageHistoryForTagStatement>(stmt);
-            Assert.Equal("pii",  hist.TagKey);
+            Assert.Equal("pii", hist.TagKey);
             Assert.Equal("true", hist.TagValue);
-            Assert.Equal(25,     hist.Limit);
+            Assert.Equal(25, hist.Limit);
         }
 
         [Fact]
@@ -324,7 +324,7 @@ namespace ETL_SQL.Tests.Orchestration
             var script = ParseScript("SHOW LINEAGE HISTORY FOR TABLE Orders INTO #result;");
             var stmt = Assert.Single(script.Statements);
             var hist = Assert.IsType<ShowLineageHistoryForTableStatement>(stmt);
-            Assert.Equal("Orders",  hist.TableName);
+            Assert.Equal("Orders", hist.TableName);
             Assert.Equal("#result", hist.IntoTable);
         }
 
@@ -334,7 +334,7 @@ namespace ETL_SQL.Tests.Orchestration
             var script = ParseScript("SHOW LINEAGE HISTORY FOR TABLE Orders AT ProdOrch;");
             var stmt = Assert.Single(script.Statements);
             var hist = Assert.IsType<ShowLineageHistoryForTableStatement>(stmt);
-            Assert.Equal("Orders",   hist.TableName);
+            Assert.Equal("Orders", hist.TableName);
             Assert.Equal("ProdOrch", hist.At);
         }
 
@@ -344,10 +344,10 @@ namespace ETL_SQL.Tests.Orchestration
             var script = ParseScript("SHOW LINEAGE HISTORY FOR TABLE Orders AT ProdOrch LIMIT 50 INTO #h;");
             var stmt = Assert.Single(script.Statements);
             var hist = Assert.IsType<ShowLineageHistoryForTableStatement>(stmt);
-            Assert.Equal("Orders",   hist.TableName);
+            Assert.Equal("Orders", hist.TableName);
             Assert.Equal("ProdOrch", hist.At);
-            Assert.Equal(50,         hist.Limit);
-            Assert.Equal("#h",       hist.IntoTable);
+            Assert.Equal(50, hist.Limit);
+            Assert.Equal("#h", hist.IntoTable);
         }
 
         [Fact]
@@ -356,8 +356,8 @@ namespace ETL_SQL.Tests.Orchestration
             var script = ParseScript("SHOW LINEAGE HISTORY FOR TAG pii = 'true' AT ProdOrch;");
             var stmt = Assert.Single(script.Statements);
             var hist = Assert.IsType<ShowLineageHistoryForTagStatement>(stmt);
-            Assert.Equal("pii",      hist.TagKey);
-            Assert.Equal("true",     hist.TagValue);
+            Assert.Equal("pii", hist.TagKey);
+            Assert.Equal("true", hist.TagValue);
             Assert.Equal("ProdOrch", hist.At);
         }
 
@@ -368,10 +368,10 @@ namespace ETL_SQL.Tests.Orchestration
             var stmt = Assert.Single(script.Statements);
             var hist = Assert.IsType<ShowLineageHistoryForTagStatement>(stmt);
             Assert.Equal("classification", hist.TagKey);
-            Assert.Equal("restricted",     hist.TagValue);
-            Assert.Equal("ProdOrch",       hist.At);
-            Assert.Equal(100,              hist.Limit);
-            Assert.Equal("#r",             hist.IntoTable);
+            Assert.Equal("restricted", hist.TagValue);
+            Assert.Equal("ProdOrch", hist.At);
+            Assert.Equal(100, hist.Limit);
+            Assert.Equal("#r", hist.IntoTable);
         }
     }
 }

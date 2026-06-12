@@ -5,13 +5,13 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.App;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Reporting;
 using ETL_SQL.Reporting.Renderers;
-using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 
 namespace ETL_SQL.ReportBuilder.CLI
@@ -28,11 +28,11 @@ namespace ETL_SQL.ReportBuilder.CLI
 
             return args[0].ToLowerInvariant() switch
             {
-                "build"   => await BuildCommand(args),
+                "build" => await BuildCommand(args),
                 "refresh" => await RefreshCommand(args),
-                "serve"   => await ServeCommand(args),
-                "print"   => await PrintCommand(args),
-                _         => UnknownCommand(args[0])
+                "serve" => await ServeCommand(args),
+                "print" => await PrintCommand(args),
+                _ => UnknownCommand(args[0])
             };
         }
 
@@ -42,19 +42,21 @@ namespace ETL_SQL.ReportBuilder.CLI
         {
             string? scriptPath = null;
             string? outputPath = null;
-            string  format     = "md";
-            bool    isInteraction = false;
-            var     parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var     runPages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string format = "md";
+            bool isInteraction = false;
+            var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var runPages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             for (int i = 1; i < args.Length; i++)
             {
                 switch (args[i].ToLowerInvariant())
                 {
-                    case "--output": case "-o":
+                    case "--output":
+                    case "-o":
                         outputPath = i + 1 < args.Length ? args[++i] : null;
                         break;
-                    case "--format": case "-f":
+                    case "--format":
+                    case "-f":
                         format = i + 1 < args.Length ? args[++i].ToLowerInvariant() : "md";
                         break;
                     case "--interaction":
@@ -66,7 +68,8 @@ namespace ETL_SQL.ReportBuilder.CLI
                             runPages.Add(args[++i]);
                         }
                         break;
-                    case "--parameter": case "-p":
+                    case "--parameter":
+                    case "-p":
                         if (i + 1 < args.Length)
                         {
                             var pair = args[++i].Split('=', 2);
@@ -90,7 +93,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             var (evaluator, err) = await EvaluateScriptFile(scriptPath, isInteraction ? null : parameters);
             if (evaluator == null) { Console.Error.WriteLine($"error: {err}"); return 2; }
 
-            var builder  = new ManifestBuilder(evaluator);
+            var builder = new ManifestBuilder(evaluator);
             var manifest = await builder.BuildAsync(scriptPath, isInteraction ? parameters : null, runPages: runPages.Count > 0 ? runPages : null);
             manifest.IsInteraction = isInteraction;
 
@@ -136,7 +139,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             var (evaluator, err) = await EvaluateScriptFile(scriptPath, null);
             if (evaluator == null) { Console.Error.WriteLine($"error: {err}"); return 2; }
 
-            var manifest     = await new ManifestBuilder(evaluator).BuildAsync(scriptPath);
+            var manifest = await new ManifestBuilder(evaluator).BuildAsync(scriptPath);
             var snapshotPath = SnapshotStore.DefaultPath(scriptPath);
             await new SnapshotStore().SaveAsync(manifest, snapshotPath);
 
@@ -180,18 +183,20 @@ namespace ETL_SQL.ReportBuilder.CLI
             }
 
             var (evaluator, err) = await EvaluateScriptFile(scriptPath, parameters);
-            if (evaluator == null) { 
-                if (outputPath == null) AnsiConsole.MarkupLine($"[red]error: {err}[/]"); 
+            if (evaluator == null)
+            {
+                if (outputPath == null) AnsiConsole.MarkupLine($"[red]error: {err}[/]");
                 else await File.WriteAllTextAsync(outputPath, $"error: {err}");
-                return 2; 
+                return 2;
             }
 
             var manifest = await new ManifestBuilder(evaluator).BuildAsync(scriptPath);
-            
+
             if (outputPath != null)
             {
                 // Capture output to a string and strip ANSI
-                var console = AnsiConsole.Create(new AnsiConsoleSettings {
+                var console = AnsiConsole.Create(new AnsiConsoleSettings
+                {
                     Ansi = AnsiSupport.No,
                     ColorSystem = ColorSystemSupport.NoColors,
                     Interactive = InteractionSupport.No,
@@ -200,14 +205,16 @@ namespace ETL_SQL.ReportBuilder.CLI
 
                 if (manifest.Pages.Count == 0)
                 {
-                    foreach (var visual in manifest.Visuals) {
+                    foreach (var visual in manifest.Visuals)
+                    {
                         console.Write(TerminalRenderer.RenderVisual(visual));
                         console.WriteLine();
                     }
                 }
                 else
                 {
-                    foreach (var page in manifest.Pages) {
+                    foreach (var page in manifest.Pages)
+                    {
                         console.Write(TerminalRenderer.RenderPage(page, manifest));
                         console.WriteLine();
                     }
@@ -252,12 +259,12 @@ namespace ETL_SQL.ReportBuilder.CLI
             try { scriptText = await File.ReadAllTextAsync(scriptPath); }
             catch (Exception ex) { return (null, $"Cannot read script: {ex.Message}"); }
 
-            var lexer  = new Lexer(scriptText);
+            var lexer = new Lexer(scriptText);
             var tokens = lexer.Tokenize();
             var parser = new ETL_SQL.Core.Parser.Parser(tokens, scriptText);
             var script = parser.Parse();
 
-            var provider  = DependencyInjectionSetup.BuildServiceProvider();
+            var provider = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = provider.GetRequiredService<Evaluator>();
             evaluator.RedirectOutput = true;
 
@@ -286,12 +293,12 @@ namespace ETL_SQL.ReportBuilder.CLI
 
         private static async Task<int> ServeCommand(string[] args)
         {
-            string? scriptPath   = null;
+            string? scriptPath = null;
             string? manifestPath = null;
-            string? dirPath      = null;
-            string? openReport   = null;
+            string? dirPath = null;
+            string? openReport = null;
 
-            int?    portArg      = null;
+            int? portArg = null;
             for (int i = 1; i < args.Length; i++)
             {
                 if ((args[i] == "--manifest" || args[i] == "-m") && i + 1 < args.Length)
@@ -311,10 +318,11 @@ namespace ETL_SQL.ReportBuilder.CLI
             if (dirPath != null && manifestPath == null)
             {
                 if (!Directory.Exists(dirPath)) { Console.Error.WriteLine($"error: directory not found: {dirPath}"); return 1; }
-                
+
                 var files = Directory.GetFiles(dirPath, "*.rptsql", SearchOption.TopDirectoryOnly);
-                var entries = ((IEnumerable<string>)files).Select(f => new { 
-                    Name = Path.GetFileNameWithoutExtension(f), 
+                var entries = ((IEnumerable<string>)files).Select(f => new
+                {
+                    Name = Path.GetFileNameWithoutExtension(f),
                     Description = $"Report: {Path.GetFileName(f)}",
                     Path = Path.GetRelativePath(dirPath, f)
                 }).ToList();
@@ -347,37 +355,37 @@ namespace ETL_SQL.ReportBuilder.CLI
             string playerArg = multiMode
                 ? $"--manifest \"{Path.GetFullPath(manifestPath!)}\" --no-browser"
                 : $"\"{Path.GetFullPath(scriptPath!)}\" --no-browser";
-            
+
             if (portArg.HasValue) playerArg += $" --port {portArg.Value}";
 
             // Resolve the ReportPlayer project for dotnet run (development mode)
-            var selfDir      = AppContext.BaseDirectory;
-            var playerExe    = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.exe");
-            var playerDll    = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.dll");
+            var selfDir = AppContext.BaseDirectory;
+            var playerExe = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.exe");
+            var playerDll = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.dll");
             var usePlayerExe = File.Exists(playerExe) || File.Exists(playerDll);
 
             string exe;
             string exeArgs;
             if (usePlayerExe && File.Exists(playerDll))
             {
-                exe     = "dotnet";
+                exe = "dotnet";
                 exeArgs = $"\"{playerDll}\" {playerArg}";
             }
             else if (usePlayerExe && File.Exists(playerExe))
             {
-                exe     = playerExe;
+                exe = playerExe;
                 exeArgs = playerArg;
             }
             else
             {
-                var slnDir     = FindSolutionDir(selfDir) ?? selfDir;
+                var slnDir = FindSolutionDir(selfDir) ?? selfDir;
                 var projectDir = Path.Combine(slnDir, "src", "ETL-SQL.ReportPlayer");
                 if (!Directory.Exists(projectDir))
                 {
                     Console.Error.WriteLine($"error: Cannot locate ETL-SQL.ReportPlayer.");
                     return 1;
                 }
-                exe     = "dotnet";
+                exe = "dotnet";
                 exeArgs = $"run --project \"{projectDir}\" -- {playerArg}";
             }
 
@@ -391,23 +399,25 @@ namespace ETL_SQL.ReportBuilder.CLI
                 Console.WriteLine($"Starting ReportPlayer for: {scriptPath}");
             }
 
-            var psi = new ProcessStartInfo(exe, exeArgs) 
-            { 
+            var psi = new ProcessStartInfo(exe, exeArgs)
+            {
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
-            
+
             using var proc = new Process { StartInfo = psi };
-            
+
             var urlSource = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-            proc.OutputDataReceived += (s, e) => {
+            proc.OutputDataReceived += (s, e) =>
+            {
                 if (e.Data == null) return;
                 Console.WriteLine(e.Data);
                 if (e.Data.StartsWith("REPORT_URL="))
                     urlSource.TrySetResult(e.Data.Substring("REPORT_URL=".Length).Trim());
             };
-            proc.ErrorDataReceived += (s, e) => {
+            proc.ErrorDataReceived += (s, e) =>
+            {
                 if (e.Data != null) Console.Error.WriteLine(e.Data);
             };
 
@@ -418,7 +428,7 @@ namespace ETL_SQL.ReportBuilder.CLI
 
             // Wait up to 60s — dotnet run (dev mode) can take 10–30s on first build
             var completed = await Task.WhenAny(urlSource.Task, Task.Delay(60_000));
-            var boundUrl  = completed == urlSource.Task ? urlSource.Task.Result : null;
+            var boundUrl = completed == urlSource.Task ? urlSource.Task.Result : null;
 
             if (boundUrl != null)
             {
@@ -430,16 +440,18 @@ namespace ETL_SQL.ReportBuilder.CLI
                     boundUrl += "reports/" + System.Net.WebUtility.UrlEncode(name);
                 }
 
-                try {
+                try
+                {
                     Process.Start(new ProcessStartInfo(boundUrl) { UseShellExecute = true });
                 }
                 catch { /* browser open is best-effort */ }
             }
 
             await proc.WaitForExitAsync();
-            
+
             // Cleanup temp manifest
-            if (tempManifest != null && File.Exists(tempManifest)) {
+            if (tempManifest != null && File.Exists(tempManifest))
+            {
                 try { File.Delete(tempManifest); } catch { }
             }
 

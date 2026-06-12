@@ -16,7 +16,7 @@ namespace ETL_SQL.Engine.Services
         {
             _localAliasStack.Clear();
             var outerRefs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            
+
             CollectOuterReferences(subquery, outerRefs);
 
             return outerRefs.OrderBy(s => s).ToList();
@@ -31,7 +31,7 @@ namespace ETL_SQL.Engine.Services
                 var localAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 if (sel.FromTable != null) localAliases.Add(sel.FromTable.Alias ?? sel.FromTable.TableName);
                 foreach (var join in sel.Joins) localAliases.Add(join.Table.Alias ?? join.Table.TableName);
-                
+
                 _localAliasStack.Push(localAliases);
                 try
                 {

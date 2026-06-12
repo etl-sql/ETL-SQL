@@ -190,7 +190,7 @@ namespace ETL_SQL.Reporting
 
         private static string LoadEcharts()
         {
-            var asm  = typeof(EChartsSsrRenderer).Assembly;
+            var asm = typeof(EChartsSsrRenderer).Assembly;
             var name = Array.Find(asm.GetManifestResourceNames(),
                            n => n.EndsWith("echarts.min.js", StringComparison.OrdinalIgnoreCase))
                        ?? throw new InvalidOperationException("echarts.min.js embedded resource not found");
@@ -223,7 +223,7 @@ namespace ETL_SQL.Reporting
 
         private static string? LoadGeojson(string mapKey)
         {
-            var asm  = typeof(EChartsSsrRenderer).Assembly;
+            var asm = typeof(EChartsSsrRenderer).Assembly;
             var name = Array.Find(asm.GetManifestResourceNames(),
                 n => n.EndsWith("." + mapKey + ".geojson", StringComparison.OrdinalIgnoreCase));
             if (name == null) return null;

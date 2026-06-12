@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Services;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Services;
 using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -17,7 +17,7 @@ namespace ETL_SQL.Tests.Hardening
         public async Task SpillSecurityRule_EnforcesRecursionLimit()
         {
             var rule = new SpillSecurityRule();
-            
+
             // Build a deeply nested structure exceeding depth 50
             Statement currentBlock = new BlockStatement(new List<Statement> { new PrintStatement(new List<Expression> { new LiteralExpression("Deep", TokenType.STRING) }) });
             for (int i = 0; i <= 51; i++) // Create 52 levels of nesting
@@ -27,7 +27,7 @@ namespace ETL_SQL.Tests.Hardening
 
             var script = new Script();
             script.Statements.Add(currentBlock);
-            
+
             var contextMock = new Mock<ILintContext>();
 
             var ex = await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() => rule.AnalyzeAsync(script, contextMock.Object));
@@ -39,7 +39,7 @@ namespace ETL_SQL.Tests.Hardening
         public async Task CredentialLeakRule_DetectsObfuscatedLeak()
         {
             var rule = new CredentialLeakRule();
-            
+
             // Attempting to obfuscate credential leakage
             string code = @"
             DECLARE @my_secret ENCRYPTED = 'xyz';

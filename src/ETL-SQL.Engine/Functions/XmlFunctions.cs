@@ -7,8 +7,8 @@ using System.Xml;
 using System.Xml.Linq;
 using System.Xml.XPath;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Functions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Functions;
 
@@ -69,21 +69,21 @@ namespace ETL_SQL.Engine.Functions
                 var first = nodes.Cast<object>().FirstOrDefault();
                 return first switch
                 {
-                    XElement el   => el.Value,
+                    XElement el => el.Value,
                     XAttribute at => at.Value,
-                    XText txt     => txt.Value,
-                    null          => null,
-                    _             => first.ToString()
+                    XText txt => txt.Value,
+                    null => null,
+                    _ => first.ToString()
                 };
             }
 
             // Scalar results from XPath functions like string(), number(), boolean()
             return result switch
             {
-                string s  => s,
-                double d  => (decimal)d,
-                bool b    => b ? 1m : 0m,
-                _         => result?.ToString()
+                string s => s,
+                double d => (decimal)d,
+                bool b => b ? 1m : 0m,
+                _ => result?.ToString()
             };
         }
 

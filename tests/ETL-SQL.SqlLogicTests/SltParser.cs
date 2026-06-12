@@ -59,8 +59,8 @@ namespace ETL_SQL.SqlLogicTests
                     {
                         switch (parts[2].ToLowerInvariant())
                         {
-                            case "nosort":    record.SortMode = SltSortMode.NoSort;    labelIdx = 3; break;
-                            case "rowsort":   record.SortMode = SltSortMode.RowSort;   labelIdx = 3; break;
+                            case "nosort": record.SortMode = SltSortMode.NoSort; labelIdx = 3; break;
+                            case "rowsort": record.SortMode = SltSortMode.RowSort; labelIdx = 3; break;
                             case "valuesort": record.SortMode = SltSortMode.ValueSort; labelIdx = 3; break;
                         }
                     }
@@ -102,8 +102,8 @@ namespace ETL_SQL.SqlLogicTests
                             {
                                 switch (innerParts[2].ToLowerInvariant())
                                 {
-                                    case "nosort":    record.SortMode = SltSortMode.NoSort;    labelIdx = 3; break;
-                                    case "rowsort":   record.SortMode = SltSortMode.RowSort;   labelIdx = 3; break;
+                                    case "nosort": record.SortMode = SltSortMode.NoSort; labelIdx = 3; break;
+                                    case "rowsort": record.SortMode = SltSortMode.RowSort; labelIdx = 3; break;
                                     case "valuesort": record.SortMode = SltSortMode.ValueSort; labelIdx = 3; break;
                                 }
                             }

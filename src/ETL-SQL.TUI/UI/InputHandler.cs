@@ -1,8 +1,8 @@
 using System;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Parser;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -380,8 +380,9 @@ namespace ETL_SQL.TUI.UI
 
                 _renderer.AutocompleteVisible = false;
                 _renderer.ForceFullRepaint();
-                
-                string focusName = _renderer.Focus switch {
+
+                string focusName = _renderer.Focus switch
+                {
                     EditorFocus.Editor => "Editor",
                     EditorFocus.Sidebar => "File Explorer",
                     EditorFocus.ExecutionTree => "Pipeline Tree",
@@ -445,8 +446,8 @@ namespace ETL_SQL.TUI.UI
                         _renderer.CompareFocusIndex = 0;
                         _renderer.CompareScrollRows = _editor._evaluator.LastResultSets.Select(_ => 0).ToList();
                         _renderer.CompareScrollCols = _editor._evaluator.LastResultSets.Select(_ => 0).ToList();
-                        _renderer.CompareFilters    = _editor._evaluator.LastResultSets.Select(_ => "").ToList();
-                        _renderer.ResultsVisible    = false;
+                        _renderer.CompareFilters = _editor._evaluator.LastResultSets.Select(_ => "").ToList();
+                        _renderer.ResultsVisible = false;
                         _renderer.PerformanceVisible = false;
                         _renderer.IsBottomMaximized = true;
                         _renderer.ForceFullRepaint();
@@ -494,57 +495,57 @@ namespace ETL_SQL.TUI.UI
             {
                 // Cycle: Pipeline+Messages → Results → Performance → Output → Variables → (repeat)
                 if (_renderer.ResultsVisible)
-                    { _renderer.ResultsVisible = false; _renderer.PerformanceVisible = true; _renderer.ShowStatus("View: Performance Metrics"); }
+                { _renderer.ResultsVisible = false; _renderer.PerformanceVisible = true; _renderer.ShowStatus("View: Performance Metrics"); }
                 else if (_renderer.PerformanceVisible)
-                    { _renderer.PerformanceVisible = false; _renderer.OutputVisible = true; _renderer.ShowStatus("View: Output"); }
+                { _renderer.PerformanceVisible = false; _renderer.OutputVisible = true; _renderer.ShowStatus("View: Output"); }
                 else if (_renderer.OutputVisible)
-                    { _renderer.OutputVisible = false; _renderer.VariablesVisible = true; _renderer.ShowStatus("View: Variables"); }
+                { _renderer.OutputVisible = false; _renderer.VariablesVisible = true; _renderer.ShowStatus("View: Variables"); }
                 else if (_renderer.VariablesVisible)
-                    { _renderer.VariablesVisible = false; _renderer.ShowStatus("View: Pipeline & Messages"); }
+                { _renderer.VariablesVisible = false; _renderer.ShowStatus("View: Pipeline & Messages"); }
                 else
-                    { _renderer.ResultsVisible = true; _renderer.ShowStatus("View: Query Results"); }
+                { _renderer.ResultsVisible = true; _renderer.ShowStatus("View: Query Results"); }
                 _renderer.Focus = EditorFocus.Editor;
                 _renderer.ForceFullRepaint();
                 return;
             }
 
-        // Alt+R - Toggle Report Preview (Phase 5)
-        if (key.Key == ConsoleKey.R && key.Modifiers.HasFlag(ConsoleModifiers.Alt))
-        {
-            _renderer.ReportVisible = !_renderer.ReportVisible;
+            // Alt+R - Toggle Report Preview (Phase 5)
+            if (key.Key == ConsoleKey.R && key.Modifiers.HasFlag(ConsoleModifiers.Alt))
+            {
+                _renderer.ReportVisible = !_renderer.ReportVisible;
+                if (_renderer.ReportVisible)
+                {
+                    _renderer.Focus = EditorFocus.Editor;
+                    _renderer.AutocompleteVisible = false;
+
+                    // If no report has been built yet, try running the script automatically
+                    if (_renderer.CurrentReportManifest == null)
+                    {
+                        _renderer.ShowStatus("Initializing report preview...");
+                        await _editor.RunScript();
+                    }
+
+                    if (_renderer.CurrentReportManifest != null)
+                        _renderer.ShowStatus("View: Report Preview (PgUp/PgDn: Scroll | Shift+PgUp/PgDn: Pages)");
+                    else
+                        _renderer.ShowStatus("View: Report Preview (No report definitions found)");
+                }
+                else
+                {
+                    _renderer.ShowStatus("View: Editor");
+                }
+                _renderer.ForceFullRepaint();
+                return;
+            }
+
             if (_renderer.ReportVisible)
             {
-                _renderer.Focus = EditorFocus.Editor;
-                _renderer.AutocompleteVisible = false;
-
-                // If no report has been built yet, try running the script automatically
-                if (_renderer.CurrentReportManifest == null)
-                {
-                    _renderer.ShowStatus("Initializing report preview...");
-                    await _editor.RunScript();
-                }
-
-                if (_renderer.CurrentReportManifest != null)
-                    _renderer.ShowStatus("View: Report Preview (PgUp/PgDn: Scroll | Shift+PgUp/PgDn: Pages)");
-                else
-                    _renderer.ShowStatus("View: Report Preview (No report definitions found)");
+                HandleReportKey(key);
+                return;
             }
-            else
-            {
-                _renderer.ShowStatus("View: Editor");
-            }
-            _renderer.ForceFullRepaint();
-            return;
-        }
-
-        if (_renderer.ReportVisible)
-        {
-            HandleReportKey(key);
-            return;
-        }
 
             if (_renderer.CompareMode)
-                {
+            {
                 HandleCompareKey(key);
                 return;
             }
@@ -566,10 +567,10 @@ namespace ETL_SQL.TUI.UI
             // Shift+Arrow selection
             if (key.Modifiers.HasFlag(ConsoleModifiers.Shift))
             {
-                if (!_buffer.SelectionStartLine.HasValue) 
-                { 
-                    _buffer.SelectionStartLine = _buffer.CursorLine; 
-                    _buffer.SelectionStartCol = _buffer.CursorColumn; 
+                if (!_buffer.SelectionStartLine.HasValue)
+                {
+                    _buffer.SelectionStartLine = _buffer.CursorLine;
+                    _buffer.SelectionStartCol = _buffer.CursorColumn;
                 }
             }
             else if (!IsNavigationKey(key))
@@ -662,7 +663,7 @@ namespace ETL_SQL.TUI.UI
             int idx = _renderer.CompareFocusIndex;
             while (_renderer.CompareScrollRows.Count <= idx) _renderer.CompareScrollRows.Add(0);
             while (_renderer.CompareScrollCols.Count <= idx) _renderer.CompareScrollCols.Add(0);
-            while (_renderer.CompareFilters.Count    <= idx) _renderer.CompareFilters.Add("");
+            while (_renderer.CompareFilters.Count <= idx) _renderer.CompareFilters.Add("");
 
             // Largest column offset that still leaves at least one column visible in the focused pane.
             int maxCol = idx < _editor._evaluator.LastResultSets.Count
@@ -943,7 +944,7 @@ namespace ETL_SQL.TUI.UI
                 {
                     if (key.Key == ConsoleKey.UpArrow) _renderer.PromptSuggestionIndex = (_renderer.PromptSuggestionIndex - 1 + _renderer.PromptSuggestions.Count) % _renderer.PromptSuggestions.Count;
                     else _renderer.PromptSuggestionIndex = (_renderer.PromptSuggestionIndex + 1) % _renderer.PromptSuggestions.Count;
-                    
+
                     _renderer.PromptValue = _renderer.PromptSuggestions[_renderer.PromptSuggestionIndex];
                     _renderer.PromptCursor = _renderer.PromptValue.Length;
                 }
@@ -1029,7 +1030,7 @@ namespace ETL_SQL.TUI.UI
             else if (key.Key == ConsoleKey.PageUp) { _renderer.ReportScrollRow = Math.Max(0, _renderer.ReportScrollRow - 10); }
             else if (key.Key == ConsoleKey.PageDown) { _renderer.ReportScrollRow += 10; }
             else if (key.Key == ConsoleKey.Home) { _renderer.ReportScrollRow = 0; }
-            
+
             else if (key.Key >= ConsoleKey.D1 && key.Key <= ConsoleKey.D9)
             {
                 int index = (int)key.Key - (int)ConsoleKey.D1;

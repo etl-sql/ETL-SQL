@@ -1,12 +1,12 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -17,7 +17,7 @@ namespace ETL_SQL.Tests.Engine
         {
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var ev = services.GetRequiredService<Evaluator>();
-            
+
             // Set cap to 100
             ev.MaxLastResultRows = 100;
             ev.RedirectOutput = false; // "Interactive" mode
@@ -32,7 +32,7 @@ namespace ETL_SQL.Tests.Engine
             Assert.NotNull(ev.LastResult);
             Assert.Equal(100, ev.LastResult.Rows.Count);
             Assert.True(ev.LastResult.IsCapped);
-            
+
             // For interactive mode, we STOPPED reading once we hit the cap.
             // So TotalRowsMatched (and @@ROWCOUNT delta) should be 100.
             Assert.Equal(100, ev.LastResult.TotalRowsMatched);
@@ -43,7 +43,7 @@ namespace ETL_SQL.Tests.Engine
         {
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var ev = services.GetRequiredService<Evaluator>();
-            
+
             ev.MaxLastResultRows = 100;
             ev.RedirectOutput = true; // "Redirected" mode
 
@@ -53,12 +53,12 @@ namespace ETL_SQL.Tests.Engine
             await ev.Evaluate(Parse("SELECT * FROM #LotsOfRows;"));
 
             Assert.NotNull(ev.LastResult);
-            
+
             // In redirected mode:
             // 1. result.Rows.Count should still be capped at 100 for engine memory safety.
             Assert.Equal(100, ev.LastResult.Rows.Count);
             Assert.True(ev.LastResult.IsCapped);
-            
+
             // 2. But we should NOT have stopped consumption. 
             // So TotalRowsMatched should be 1000.
             Assert.Equal(1000, ev.LastResult.TotalRowsMatched);
@@ -69,7 +69,7 @@ namespace ETL_SQL.Tests.Engine
         {
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var ev = services.GetRequiredService<Evaluator>();
-            
+
             ev.MaxLastResultRows = 100;
             ev.RedirectOutput = false;
 
@@ -82,7 +82,7 @@ namespace ETL_SQL.Tests.Engine
             Assert.NotNull(ev.LastResult);
             Assert.Equal(50, ev.LastResult.Rows.Count);
             Assert.Equal(50, ev.LastResult.TotalRowsMatched);
-            
+
             // Check session state persisted correctly
             Assert.Equal(50, ev.MaxLastResultRows);
         }

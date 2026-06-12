@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using FluentFTP;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using FluentFTP;
 
 namespace ETL_SQL.Connectors
 {
@@ -76,11 +76,11 @@ namespace ETL_SQL.Connectors
         public HashSet<string> GetSupportedKeywords() => new();
         public Dictionary<string, string[]> GetSupportedOptions() => new()
         {
-            ["USER"]     = Array.Empty<string>(),
+            ["USER"] = Array.Empty<string>(),
             ["PASSWORD"] = Array.Empty<string>(),
-            ["PORT"]     = Array.Empty<string>(),
-            ["USE_SSL"]  = new[] { "OFF", "EXPLICIT", "IMPLICIT" },
-            ["PASSIVE"]  = new[] { "ON", "OFF" }
+            ["PORT"] = Array.Empty<string>(),
+            ["USE_SSL"] = new[] { "OFF", "EXPLICIT", "IMPLICIT" },
+            ["PASSIVE"] = new[] { "ON", "OFF" }
         };
         public Dictionary<string, string[]> GetOptionValues() => new();
         public string GetHelp() => "FTP Connector for remote file operations.\nOptions:\n  USER: The username for the FTP connection.\n  PASSWORD: The password for the FTP connection.\n  PORT: The FTP control port. Default: 21.\nMethods: GET_FILE, PUT_FILE, REMOTE_FILE_LIST.";
@@ -106,7 +106,7 @@ namespace ETL_SQL.Connectors
         public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => throw new NotSupportedException("Use IDataSource.GetColumnsAsync instead.");
         public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
-        public string BuildConnectionString(Dictionary<string, string> properties) => 
+        public string BuildConnectionString(Dictionary<string, string> properties) =>
             ConnectionStringBuilder.Build(Name, properties);
 
         private void EnsureConnected()
@@ -306,8 +306,8 @@ namespace ETL_SQL.Connectors
             client.Config.EncryptionMode = useSsl?.ToUpperInvariant() switch
             {
                 "EXPLICIT" or "ON" => FtpEncryptionMode.Explicit,
-                "IMPLICIT"         => FtpEncryptionMode.Implicit,
-                _                  => FtpEncryptionMode.None
+                "IMPLICIT" => FtpEncryptionMode.Implicit,
+                _ => FtpEncryptionMode.None
             };
             if (!passive)
                 client.Config.DataConnectionType = FtpDataConnectionType.PORT;

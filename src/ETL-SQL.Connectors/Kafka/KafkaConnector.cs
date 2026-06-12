@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Confluent.Kafka;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Kafka
 {
@@ -36,7 +36,7 @@ namespace ETL_SQL.Connectors.Kafka
 
                 using var adminClient = new AdminClientBuilder(config).Build();
                 var metadata = await Task.Run(() => adminClient.GetMetadata(TimeSpan.FromSeconds(5)));
-                
+
                 return $"Apache Kafka Connector v1.0 (Connected - Brokers: {metadata.Brokers.Count}, Topics: {metadata.Topics.Count})";
             }
             catch (Exception ex)

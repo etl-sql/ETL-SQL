@@ -43,9 +43,9 @@ namespace ETL_SQL.Connectors.Orchestrator
         public OrchestratorDataSource(string baseUrl, string apiKey, ILogger logger)
         {
             _baseUrl = baseUrl.TrimEnd('/');
-            _apiKey  = apiKey;
-            _logger  = logger;
-            _http    = new HttpClient { BaseAddress = new Uri(_baseUrl + "/") };
+            _apiKey = apiKey;
+            _logger = logger;
+            _http = new HttpClient { BaseAddress = new Uri(_baseUrl + "/") };
             if (!string.IsNullOrWhiteSpace(apiKey))
                 _http.DefaultRequestHeaders.Add("X-Orchestrator-Key", apiKey);
             Options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -76,23 +76,23 @@ namespace ETL_SQL.Connectors.Orchestrator
             switch (statement)
             {
                 case CreatePortalRefreshJobStatement s: await CreateRefreshJobAsync(s, context); break;
-                case DropPortalRefreshJobStatement s:   await DropJobAsync(s, context); break;
-                case CreateJobStatement s:              await CreateScriptJobAsync(s, context); break;
-                case AlterJobStatement s:              await AlterScriptJobAsync(s, context); break;
-                case EnableJobStatement s:             await EnableDisableJobAsync(s.Name, enable: true, context); break;
-                case DisableJobStatement s:            await EnableDisableJobAsync(s.Name, enable: false, context); break;
-                case TriggerJobStatement s:            await TriggerJobAsync(s.Name, context); break;
-                case PublishBundleStatement s:         await PublishBundleAsync(s, context); break;
-                case ValidateBundleStatement s:        await ValidateBundleAsync(s, context); break;
-                case ExportScriptStatement s:          await ExportScriptAsync(s, context); break;
-                case ShowPublishedBundlesStatement s:  await FetchPublishedBundlesAsync(s, context); break;
-                case ShowBundleVersionsStatement s:    await FetchBundleVersionsAsync(s, context); break;
-                case ShowBundleFilesStatement s:       await FetchBundleFilesAsync(s, context); break;
+                case DropPortalRefreshJobStatement s: await DropJobAsync(s, context); break;
+                case CreateJobStatement s: await CreateScriptJobAsync(s, context); break;
+                case AlterJobStatement s: await AlterScriptJobAsync(s, context); break;
+                case EnableJobStatement s: await EnableDisableJobAsync(s.Name, enable: true, context); break;
+                case DisableJobStatement s: await EnableDisableJobAsync(s.Name, enable: false, context); break;
+                case TriggerJobStatement s: await TriggerJobAsync(s.Name, context); break;
+                case PublishBundleStatement s: await PublishBundleAsync(s, context); break;
+                case ValidateBundleStatement s: await ValidateBundleAsync(s, context); break;
+                case ExportScriptStatement s: await ExportScriptAsync(s, context); break;
+                case ShowPublishedBundlesStatement s: await FetchPublishedBundlesAsync(s, context); break;
+                case ShowBundleVersionsStatement s: await FetchBundleVersionsAsync(s, context); break;
+                case ShowBundleFilesStatement s: await FetchBundleFilesAsync(s, context); break;
                 case ShowBundleDependenciesStatement s: await FetchBundleDependenciesAsync(s, context); break;
-                case ShowJobsStatement s:                          await FetchJobsAsync(s, context); break;
-                case ShowJobHistoryStatement s:                    await FetchJobHistoryAsync(s, context); break;
-                case ShowLineageHistoryForTableStatement s:        await FetchLineageHistoryForTableAsync(s, context); break;
-                case ShowLineageHistoryForTagStatement s:          await FetchLineageHistoryForTagAsync(s, context); break;
+                case ShowJobsStatement s: await FetchJobsAsync(s, context); break;
+                case ShowJobHistoryStatement s: await FetchJobHistoryAsync(s, context); break;
+                case ShowLineageHistoryForTableStatement s: await FetchLineageHistoryForTableAsync(s, context); break;
+                case ShowLineageHistoryForTagStatement s: await FetchLineageHistoryForTagAsync(s, context); break;
                 default:
                     throw new ExecutionException(
                         $"Statement type '{statement.GetType().Name}' is not supported inside an ORCHESTRATOR block.");
@@ -104,11 +104,11 @@ namespace ETL_SQL.Connectors.Orchestrator
             var (interval, unit, atTime) = ParseCronToSchedule(stmt.Schedule);
             var req = new
             {
-                Name       = $"REFRESH:{stmt.ReportName}",
+                Name = $"REFRESH:{stmt.ReportName}",
                 ScriptText = $"-- Auto-generated refresh job for report '{stmt.ReportName}'",
-                Interval   = interval,
-                Unit       = unit,
-                AtTime     = atTime
+                Interval = interval,
+                Unit = unit,
+                AtTime = atTime
             };
             var content = new StringContent(JsonSerializer.Serialize(req, _json), Encoding.UTF8, "application/json");
             var resp = await SendHttpAsync(() => _http.PostAsync("api/scheduled-jobs", content));
@@ -161,11 +161,11 @@ namespace ETL_SQL.Connectors.Orchestrator
             var schedule = stmt.Schedule;
             var req = new
             {
-                Name       = stmt.JobName,
+                Name = stmt.JobName,
                 ScriptText = scriptText,
-                Interval   = schedule?.Interval ?? 1,
-                Unit       = (schedule?.Unit ?? "HOUR").ToUpperInvariant(),
-                AtTime     = schedule?.AtTime
+                Interval = schedule?.Interval ?? 1,
+                Unit = (schedule?.Unit ?? "HOUR").ToUpperInvariant(),
+                AtTime = schedule?.AtTime
             };
             var content = new StringContent(JsonSerializer.Serialize(req, _json), Encoding.UTF8, "application/json");
             var resp = await SendHttpAsync(() => _http.PostAsync("api/scheduled-jobs", content));
@@ -303,16 +303,16 @@ namespace ETL_SQL.Connectors.Orchestrator
             foreach (var e in entries)
             {
                 var row = new Row();
-                row["Id"]           = e.Id;
-                row["RunAt"]        = e.RunAt;
-                row["JobName"]      = e.JobName;
-                row["TargetTable"]  = e.TargetTable;
+                row["Id"] = e.Id;
+                row["RunAt"] = e.RunAt;
+                row["JobName"] = e.JobName;
+                row["TargetTable"] = e.TargetTable;
                 row["TargetColumn"] = e.TargetColumn;
                 row["SourceTables"] = string.Join(", ", e.SourceTables);
-                row["Operation"]    = e.Operation;
-                row["Tags"]         = JsonSerializer.Serialize(e.Tags);
-                row["SourceFile"]   = e.SourceFile;
-                row["Line"]         = e.Line;
+                row["Operation"] = e.Operation;
+                row["Tags"] = JsonSerializer.Serialize(e.Tags);
+                row["SourceFile"] = e.SourceFile;
+                row["Line"] = e.Line;
                 await table.AddRowAsync(row);
             }
             return table;
@@ -535,10 +535,10 @@ namespace ETL_SQL.Connectors.Orchestrator
             // Build a partial update — only set fields that the ALTER statement changed.
             var req = new
             {
-                ScriptText        = stmt.Script   != null ? (string?)stmt.Script.ToSql()     : null,
-                Interval          = stmt.Schedule != null ? (int?)stmt.Schedule.Interval      : null,
-                Unit              = stmt.Schedule != null ? (string?)stmt.Schedule.Unit.ToUpperInvariant() : null,
-                AtTime            = stmt.Schedule != null ? stmt.Schedule.AtTime               : null
+                ScriptText = stmt.Script != null ? (string?)stmt.Script.ToSql() : null,
+                Interval = stmt.Schedule != null ? (int?)stmt.Schedule.Interval : null,
+                Unit = stmt.Schedule != null ? (string?)stmt.Schedule.Unit.ToUpperInvariant() : null,
+                AtTime = stmt.Schedule != null ? stmt.Schedule.AtTime : null
             };
             var encoded = Uri.EscapeDataString(stmt.JobName);
             var content = new StringContent(JsonSerializer.Serialize(req, _json), Encoding.UTF8, "application/json");

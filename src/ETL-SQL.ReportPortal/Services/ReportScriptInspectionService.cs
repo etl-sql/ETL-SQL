@@ -1,12 +1,12 @@
 using System.Security.Cryptography;
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
 using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
-using ETL_SQL.Reporting;
+using Microsoft.Extensions.Logging;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.ReportPortal.Services;

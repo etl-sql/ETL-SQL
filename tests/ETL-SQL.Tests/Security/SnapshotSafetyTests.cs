@@ -2,8 +2,8 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
 using ETL_SQL.Reporting;
+using Xunit;
 
 namespace ETL_SQL.Tests.Security
 {
@@ -23,7 +23,8 @@ namespace ETL_SQL.Tests.Security
             var manifest = new ReportManifest { BuiltAt = DateTime.UtcNow };
 
             // Simulate high concurrency: 50 simultaneous saves to the same path
-            var tasks = Enumerable.Range(0, 50).Select(i => Task.Run(async () => {
+            var tasks = Enumerable.Range(0, 50).Select(i => Task.Run(async () =>
+            {
                 await Task.Delay(new Random().Next(1, 10)); // Jitter
                 await store.SaveAsync(manifest, _testPath);
             }));
@@ -35,7 +36,7 @@ namespace ETL_SQL.Tests.Security
             var content = await File.ReadAllTextAsync(_testPath);
             Assert.Contains("\"builtAt\":", content);
 
-            
+
             // Check that no .tmp files were leaked
             var tmpFiles = Directory.GetFiles(Path.GetTempPath(), "*.tmp")
                                     .Where(f => f.Contains(Path.GetFileName(_testPath)));

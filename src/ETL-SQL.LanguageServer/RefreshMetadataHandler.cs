@@ -1,17 +1,17 @@
 using System.Threading;
 using System.Threading.Tasks;
-using MediatR;
-using OmniSharp.Extensions.JsonRpc;
-using Microsoft.Extensions.Logging;
-using OmniSharp.Extensions.LanguageServer.Protocol;
 using ETL_SQL.Core;
+using MediatR;
+using Microsoft.Extensions.Logging;
+using OmniSharp.Extensions.JsonRpc;
+using OmniSharp.Extensions.LanguageServer.Protocol;
 
 namespace ETL_SQL.LSP
 {
     /// <summary>Params for metadata refresh.</summary>
-    public class RefreshMetadataParams : IRequest 
-    { 
-        public string Uri { get; set; } = string.Empty; 
+    public class RefreshMetadataParams : IRequest
+    {
+        public string Uri { get; set; } = string.Empty;
     }
 
     /// <summary>Notification handler for metadata refresh.</summary>

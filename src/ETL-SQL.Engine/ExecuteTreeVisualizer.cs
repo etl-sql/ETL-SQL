@@ -4,9 +4,9 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Common;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Engine
 {
@@ -112,11 +112,11 @@ namespace ETL_SQL.Engine
 
         private (string Icon, string Color) GetStatusStyle(ExecutionStatus status) => status switch
         {
-            ExecutionStatus.Waiting   => ("⏳", "[grey]"),
-            ExecutionStatus.Running   => ("▶️", "[bold cyan]"),
+            ExecutionStatus.Waiting => ("⏳", "[grey]"),
+            ExecutionStatus.Running => ("▶️", "[bold cyan]"),
             ExecutionStatus.Completed => ("✅", "[bold green]"),
-            ExecutionStatus.Faulted   => ("❌", "[bold red]"),
-            _                         => ("❓", "[white]")
+            ExecutionStatus.Faulted => ("❌", "[bold red]"),
+            _ => ("❓", "[white]")
         };
     }
 }

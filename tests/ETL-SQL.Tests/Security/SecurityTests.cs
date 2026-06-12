@@ -1,14 +1,14 @@
-﻿using Xunit;
-using System;
-using System.Threading.Tasks;
+﻿using System;
+using System.Linq;
 using System.Security.Cryptography;
+using System.Threading.Tasks;
+using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
-using ETL_SQL.App;
 using ETL_SQL.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
-using System.Linq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Security
 {
@@ -20,13 +20,13 @@ namespace ETL_SQL.Tests.Security
         {
             string original = "Server=myServerAddress;Database=myDataBase;User Id=myUsername;Password=myPassword;";
             string pass = "Secret123!";
-            
+
             string encrypted = CryptoUtils.Encrypt(original, pass);
             Assert.StartsWith("ENC:", encrypted);
-            
+
             string decrypted = CryptoUtils.Decrypt(encrypted, pass);
             Assert.Equal(original, decrypted);
-            
+
             Assert.ThrowsAny<Exception>(() => CryptoUtils.Decrypt(encrypted, "WrongPass"));
         }
 
@@ -36,17 +36,17 @@ namespace ETL_SQL.Tests.Security
             string original = "dummy_connection_string";
             string pass = "MasterPass";
             string encrypted = CryptoUtils.Encrypt(original, pass);
-            
+
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             eval.MasterPassword = pass;
-            
+
             var lexer = new Lexer($"CREATE CONNECTION SecureConn AS MOCKDB();");
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens);
             var script = parser.Parse();
-            
+
             await eval.Evaluate(script);
-            
+
             Assert.True(eval.Connections.ContainsKey("SecureConn"), "Connection not created.");
         }
 
@@ -56,7 +56,7 @@ namespace ETL_SQL.Tests.Security
             string password = "MyPass";
             string script = "CREATE CONNECTION MyConn AS MSSQL('Server=localhost;User=sa;Password=secret;');";
             string encryptedScript = EncryptionLogic(script, password);
-            
+
             Assert.Contains("ENC:", encryptedScript);
             Assert.DoesNotContain("Password=secret;", encryptedScript);
         }
@@ -69,7 +69,7 @@ namespace ETL_SQL.Tests.Security
             string original = "Server=localhost;Password=secret;";
             string encrypted = CryptoUtils.Encrypt(original, password);
             string script = $"CREATE CONNECTION MyConn AS MSSQL('{encrypted}');";
-            
+
             string decryptedScript = DecryptionLogic(script, password);
             Assert.Contains(original, decryptedScript);
         }
@@ -79,7 +79,7 @@ namespace ETL_SQL.Tests.Security
             var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             for (int i = 0; i < lines.Length; i++)
             {
-                if (lines[i].Contains("CREATE CONNECTION", StringComparison.OrdinalIgnoreCase) && 
+                if (lines[i].Contains("CREATE CONNECTION", StringComparison.OrdinalIgnoreCase) &&
                     !lines[i].Contains("ENCRYPT=OFF", StringComparison.OrdinalIgnoreCase) &&
                     !lines[i].Contains("'ENC:", StringComparison.OrdinalIgnoreCase))
                 {
@@ -121,24 +121,24 @@ namespace ETL_SQL.Tests.Security
             security.IsTestMode = false; // Force restriction enforcement for verification
             var safePath = "C:\\MyProject";
             var neutralPath = "C:\\Data";
-            
+
             security.ApprovedSafeZones.Add(safePath);
-            
+
             // 1. FileSystem Limit (100)
             // Should allow override in safe zone
             security.CheckRunawayProtection(OperationType.FileSystem, 101, 1, allowLargeCount: true, allowDeepRecursion: false, path: safePath + "\\file.csv");
-            
+
             // Should FAIL override in neutral zone
-            Assert.Throws<ETL_SQL.Services.SecurityException>(() => 
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
                 security.CheckRunawayProtection(OperationType.FileSystem, 101, 1, allowLargeCount: true, allowDeepRecursion: false, path: neutralPath + "\\file.csv")
             );
 
             // 2. EngineInternal/Mock Limit (100,000)
             // Should allow up to 100k without override
             security.CheckRunawayProtection(OperationType.EngineInternal, 99999, 1, allowLargeCount: false, allowDeepRecursion: false);
-            
+
             // Should fail at 100,001 without override
-            Assert.Throws<ETL_SQL.Services.SecurityException>(() => 
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
                 security.CheckRunawayProtection(OperationType.EngineInternal, 100001, 1, allowLargeCount: false, allowDeepRecursion: false)
             );
 
@@ -167,7 +167,7 @@ namespace ETL_SQL.Tests.Security
         public void TestLinuxPathBlocking()
         {
             var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
-            
+
             // Should block Linux system paths even on Windows
             Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("/etc/passwd"));
             Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("/usr/bin/bash"));
@@ -178,7 +178,7 @@ namespace ETL_SQL.Tests.Security
         public void TestExtensionBlacklistStrictness()
         {
             var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
-            
+
             // Should block .exe even if allowUnknown (override flag) is TRUE
             Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidateFileType("C:\\Safe\\tool.exe", allowUnknown: true));
             Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidateFileType("C:\\Safe\\driver.sys", allowUnknown: true));
@@ -188,7 +188,7 @@ namespace ETL_SQL.Tests.Security
         public void TestEnvironmentFolderProtection()
         {
             var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
-            
+
             // Should block sensitive environment folders
             Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("C:\\Users\\chuck\\.ssh\\id_rsa"));
             Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("C:\\Users\\chuck\\.aws\\credentials"));
@@ -198,10 +198,10 @@ namespace ETL_SQL.Tests.Security
         public void TestInternalBypass()
         {
             var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
-            
+
             // Enable internal bypass
             security.IsInternalOperation = true;
-            
+
             // Should now allow restricted files (even in bin or restricted extensions)
             security.ValidatePath("C:\\Safe\\test.etlsession");
             security.ValidatePath("C:\\Safe\\recovery.recovery.json");
@@ -214,17 +214,17 @@ namespace ETL_SQL.Tests.Security
         {
             var plainText = "Sensitive Session State Data";
             var entropy = "Session-123-Unique-Entropy";
-            
+
             // 1. Protect data
             var protectedData = ETL_SQL.Common.CryptoUtils.Protect(plainText, entropy);
             Assert.StartsWith("DPAPI:", protectedData);
-            
+
             // 2. Unprotect data (should work for same user/machine)
             var decryptedData = ETL_SQL.Common.CryptoUtils.Unprotect(protectedData, entropy);
             Assert.Equal(plainText, decryptedData);
-            
+
             // 3. Fail with wrong entropy
-            Assert.Throws<CryptographicException>(() => 
+            Assert.Throws<CryptographicException>(() =>
                 ETL_SQL.Common.CryptoUtils.Unprotect(protectedData, "Wrong-Entropy")
             );
         }
@@ -233,20 +233,20 @@ namespace ETL_SQL.Tests.Security
         public void TestScriptImmutability()
         {
             var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
-            
+
             // Should block writing to native script types
             Assert.Throws<SecurityException>(() => security.ValidateWriteAccess("test.etlsql"));
             Assert.Throws<SecurityException>(() => security.ValidateWriteAccess("report.rptsql"));
             Assert.Throws<SecurityException>(() => security.ValidateWriteAccess("db_setup.sql"));
             Assert.Throws<SecurityException>(() => security.ValidateWriteAccess("run.sh"));
-            
+
             // Should allow reading/general access (ValidatePath doesn't block extensions, only ValidateWriteAccess does)
-            security.ValidatePath("C:\\Safe\\test.etlsql"); 
-            
+            security.ValidatePath("C:\\Safe\\test.etlsql");
+
             // Should allow writing to data assets
             security.ValidateWriteAccess("C:\\Safe\\data.csv");
             security.ValidateWriteAccess("C:\\Safe\\results.json");
-            
+
             // Internal bypass should allow even scripts (for session logic)
             security.IsInternalOperation = true;
             security.ValidateWriteAccess("internal.etlsql");
@@ -263,7 +263,7 @@ namespace ETL_SQL.Tests.Security
             security.ValidatePath("C:\\tmp\\data.csv");
             security.ValidatePath("C:\\temp\\log.txt");
             security.ValidatePath("/tmp/session.json");
-            
+
             // Should still block OS directories
             Assert.Throws<SecurityException>(() => security.ValidatePath("C:\\Windows\\system.ini"));
             Assert.Throws<SecurityException>(() => security.ValidatePath("/etc/passwd"));
@@ -305,7 +305,7 @@ namespace ETL_SQL.Tests.Security
             var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
             security.IsTestMode = false;
             security.ProtectionMode = PathProtectionMode.Restricted;
-            
+
             var windowsZone = "C:\\Windows";
             security.ApprovedSafeZones.Add(windowsZone);
 

@@ -2,19 +2,19 @@ namespace ETL_SQL.ReportPortal;
 
 public class PortalConfig
 {
-    public string DatabasePath    { get; set; } = "./portal.db";
-    public string ScriptRootPath  { get; set; } = "./Reports";
+    public string DatabasePath { get; set; } = "./portal.db";
+    public string ScriptRootPath { get; set; } = "./Reports";
     public string SnapshotDirectory { get; set; } = "./Snapshots";
     public string MapRootPath { get; set; } = "./data/maps";
     public string DatasetRootPath { get; set; } = "./data/datasets";
     public bool AllowServiceControl { get; set; } = false;
-    public int  MaxPreviewRows    { get; set; } = 50000;
+    public int MaxPreviewRows { get; set; } = 50000;
     public ResourcesConfig Resources { get; set; } = new();
-    public JwtConfig       Jwt       { get; set; } = new();
-    public IdentityConfig  Identity  { get; set; } = new();
-    public FirstRunConfig  FirstRun  { get; set; } = new();
+    public JwtConfig Jwt { get; set; } = new();
+    public IdentityConfig Identity { get; set; } = new();
+    public FirstRunConfig FirstRun { get; set; } = new();
     public OrchestratorConfig Orchestrator { get; set; } = new();
-    public DatasetConfig   Dataset   { get; set; } = new();
+    public DatasetConfig Dataset { get; set; } = new();
     public PortalSecurityConfig Security { get; set; } = new();
     public PortalRateLimitConfig RateLimit { get; set; } = new();
 }
@@ -101,27 +101,27 @@ public class LdapIdentityConfig
 
 public class OrchestratorConfig
 {
-    public string? ApiUrl      { get; set; }
+    public string? ApiUrl { get; set; }
     public string? DatabasePath { get; set; }
-    public string? ApiKey      { get; set; }
-    public bool    SameHost    { get; set; } = false;
+    public string? ApiKey { get; set; }
+    public bool SameHost { get; set; } = false;
 }
 
 public class ResourcesConfig
 {
     public int MaxConcurrentReportExecutions { get; set; } = 4;
-    public int ExecutionTimeoutSeconds       { get; set; } = 300;
-    public int SessionCacheMaxSize           { get; set; } = 50;
-    public int SessionCacheTtlMinutes        { get; set; } = 30;
-    public bool PersistAdHocInteractions     { get; set; } = false;
+    public int ExecutionTimeoutSeconds { get; set; } = 300;
+    public int SessionCacheMaxSize { get; set; } = 50;
+    public int SessionCacheTtlMinutes { get; set; } = 30;
+    public bool PersistAdHocInteractions { get; set; } = false;
 }
 
 public class JwtConfig
 {
-    public string Secret          { get; set; } = "";
+    public string Secret { get; set; } = "";
     public string[] PreviousSecrets { get; set; } = [];
-    public int    ExpiryMinutes   { get; set; } = 60;
-    public int    RefreshExpiryDays { get; set; } = 7;
+    public int ExpiryMinutes { get; set; } = 60;
+    public int RefreshExpiryDays { get; set; } = 7;
 }
 
 public class FirstRunConfig

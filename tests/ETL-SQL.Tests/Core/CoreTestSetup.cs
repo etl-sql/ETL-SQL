@@ -1,14 +1,14 @@
 using System;
 using System.IO;
 using System.Runtime.CompilerServices;
-using Serilog;
-using Serilog.Events;
 using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
-using Microsoft.Extensions.DependencyInjection;
-using Xunit;
 using ETL_SQL.Services;
+using Microsoft.Extensions.DependencyInjection;
+using Serilog;
+using Serilog.Events;
+using Xunit;
 
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
 

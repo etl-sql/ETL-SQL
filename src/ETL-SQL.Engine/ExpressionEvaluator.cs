@@ -1,19 +1,19 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
-using System.Text.RegularExpressions;
-using System.Diagnostics;
-using ETL_SQL.Common;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Engine.Services;
-using System.Collections.Concurrent;
 using System.Reflection;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine
 {
@@ -144,8 +144,8 @@ namespace ETL_SQL.Engine
         {
             public readonly struct MatchResult
             {
-                public string? ResolvedKey  { get; init; }
-                public bool    IsAmbiguous  { get; init; }
+                public string? ResolvedKey { get; init; }
+                public bool IsAmbiguous { get; init; }
                 public IReadOnlyList<string> Candidates { get; init; }
 
                 public static MatchResult NoMatch => new() { Candidates = Array.Empty<string>() };
@@ -157,12 +157,12 @@ namespace ETL_SQL.Engine
 
             public static MatchResult FindMatch(string name, IReadOnlyList<string> allNames)
             {
-                var baseName  = name.Contains('.') ? name[(name.LastIndexOf('.') + 1)..] : name;
+                var baseName = name.Contains('.') ? name[(name.LastIndexOf('.') + 1)..] : name;
                 var qualifier = name.Contains('.') ? name[..name.LastIndexOf('.')] : null;
-                var suffix    = "." + baseName;
+                var suffix = "." + baseName;
 
                 var strongMatches = new List<string>();
-                var weakMatches   = new List<string>();
+                var weakMatches = new List<string>();
 
                 // When a qualifier is present, build an index from baseName → qualified keys so the
                 // "belongs to another qualifier" check is O(1) per candidate instead of O(N).
@@ -333,7 +333,7 @@ namespace ETL_SQL.Engine
                 {
                     return new ValueTask<object?>(ParseHex(s.Substring(12)));
                 }
-                return new ValueTask<object?>( (decryptSensitive && lit.Value is string enc && enc.StartsWith("ENC:")) ? _context.DecryptValue(enc) : lit.Value );
+                return new ValueTask<object?>((decryptSensitive && lit.Value is string enc && enc.StartsWith("ENC:")) ? _context.DecryptValue(enc) : lit.Value);
             }
 
             if (expr is IdentifierExpression id)
@@ -420,7 +420,7 @@ namespace ETL_SQL.Engine
             bool hasElements = false;
             bool found = false;
             bool hasNullRight = false;
-            
+
             if (inExp.Right is SubqueryExpression subq)
             {
                 // Use cached stream evaluation for subqueries in IN clauses
@@ -544,7 +544,7 @@ namespace ETL_SQL.Engine
             bool finalResult = isBetween.Value;
             return bet.IsNot ? !finalResult : finalResult;
         }
-    
+
 
         /// <summary>Evaluates an EXISTS clause.</summary>
         private async ValueTask<object?> EvaluateExists(ExistsExpression ex, Row context)
@@ -568,7 +568,7 @@ namespace ETL_SQL.Engine
         /// <summary>Evaluates a scalar or aggregate function call.</summary>
         public async ValueTask<object?> EvaluateFunction(FunctionCallExpression f, Row context, bool decryptSensitive = false)
         {
-            if (f.Window != null) 
+            if (f.Window != null)
             {
                 var winKey = $"WINDOW_{f.ToSql().ToUpperInvariant()}";
                 return context.HasColumn(winKey) ? context[winKey] : null;
@@ -600,7 +600,7 @@ namespace ETL_SQL.Engine
                 }
                 return null;
             }
-            
+
             // ANSI String length aliases
             if (fn == "CHARACTER_LENGTH" || fn == "CHAR_LENGTH" || fn == "OCTET_LENGTH")
             {
@@ -649,14 +649,17 @@ namespace ETL_SQL.Engine
             var val = await EvaluateInternal(atTz.Left, context, decryptSensitive);
             var zone = await EvaluateInternal(atTz.TimeZone, context, decryptSensitive);
             if (val == null || zone == null) return val;
-            
+
             DateTime dt = DateTime.Parse(val.ToString() ?? "");
             if (dt.Kind == DateTimeKind.Unspecified) dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
-            
-            try {
+
+            try
+            {
                 var tzInfo = TimeZoneInfo.FindSystemTimeZoneById(zone.ToString() ?? "UTC");
                 return TimeZoneInfo.ConvertTime(dt, tzInfo);
-            } catch {
+            }
+            catch
+            {
                 return dt;
             }
         }
@@ -666,7 +669,7 @@ namespace ETL_SQL.Engine
         {
             object? result = null;
             var query = (SelectStatement)subq.Query;
-            
+
             if (!_outerRefCache.TryGetValue(query, out var outerRefs))
             {
                 var analyzer = new SubqueryAnalyzer();
@@ -683,7 +686,7 @@ namespace ETL_SQL.Engine
                     captureValues.Add(ResolveIdentifier(or, context));
                 }
             }
-            
+
             var cacheKey = new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), SubqueryResultType.Scalar);
 
             if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
@@ -691,9 +694,9 @@ namespace ETL_SQL.Engine
                 _context.Telemetry.SubqueryCacheHits++;
                 return cachedResult!.ScalarValue;
             }
-            
+
             _context.Telemetry.SubqueryCacheMisses++;
-            
+
             _context.OuterRowStack.Push(context);
             try
             {
@@ -733,7 +736,7 @@ namespace ETL_SQL.Engine
                     captureValues.Add(ResolveIdentifier(or, context));
                 }
             }
-            
+
             var cacheKey = new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), SubqueryResultType.Stream);
 
             if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
@@ -752,14 +755,14 @@ namespace ETL_SQL.Engine
                 }
                 yield break;
             }
-            
+
             _context.Telemetry.SubqueryCacheMisses++;
-            
+
             // Materialize or Spill fully BEFORE yielding to ensure cache is populated
             long rowCount = 0;
             var inSet = new HashSet<object?>(CanonicalEqualityComparer.Instance);
             InMemoryDataSource? spillStore = null;
-            
+
             _context.OuterRowStack.Push(context);
             try
             {
@@ -769,20 +772,20 @@ namespace ETL_SQL.Engine
                     {
                         rowCount++;
                         var val = row.Schema?.ColumnCount > 0 ? row[0] : null;
-                        
+
                         if (spillStore != null)
                         {
-                            await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { batch })); 
+                            await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { batch }));
                         }
                         else if (rowCount > _context.SubquerySpillThresholdRows)
                         {
                             spillStore = new InMemoryDataSource();
                             spillStore.SetSchema(batch.Schema.ColumnNames.Select(c => new ColumnDefinition(c, "VARIANT", false)).ToList());
-                            
+
                             var dt = new DataTable { Schema = new TableSchema(new[] { "Value" }) };
-                            foreach(var existing in inSet!) await dt.AddRowAsync(new Row(dt.Schema, new[] { existing }));
+                            foreach (var existing in inSet!) await dt.AddRowAsync(new Row(dt.Schema, new[] { existing }));
                             await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { dt }));
-                            
+
                             var currentBatch = new DataTable { Schema = batch.Schema };
                             await currentBatch.AddRowAsync(row);
                             await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { currentBatch }));
@@ -836,7 +839,7 @@ namespace ETL_SQL.Engine
                     captureValues.Add(ResolveIdentifier(or, context));
                 }
             }
-            
+
             var cacheKey = new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), SubqueryResultType.Exists);
 
             if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
@@ -844,10 +847,10 @@ namespace ETL_SQL.Engine
                 _context.Telemetry.SubqueryCacheHits++;
                 return (cachedResult!.ScalarValue is bool b && b);
             }
-            
+
             _context.Telemetry.SubqueryCacheMisses++;
             bool found = false;
-            
+
             _context.OuterRowStack.Push(context);
             try
             {
@@ -874,13 +877,13 @@ namespace ETL_SQL.Engine
 
         /// <summary>Compares two values for ordering.</summary>
         public int CompareConstants(object? a, object? b) => EvaluationUtils.CompareConstants(a, b, _context.CaseSensitiveComparison);
-        
+
         /// <summary>Performs mathematical operations between two objects.</summary>
         public object? MathOp(object? a, object? b, TokenType op) => EvaluationUtils.MathOp(a, b, op switch { TokenType.PLUS => "+", TokenType.MINUS => "-", TokenType.STAR => "*", TokenType.SLASH => "/", TokenType.MODULO => "%", _ => "" });
-        
+
         /// <summary>Evaluates a LIKE pattern match.</summary>
         public bool EvaluateLike(object? input, object? pattern, string? escapeChar = null) => EvaluationUtils.EvaluateLike(input, pattern, escapeChar);
-        
+
         /// <summary>Casts a value to a specific data type.</summary>
         public object? CastToType(object? value, string type) => EvaluationUtils.CastToType(value, type);
 
@@ -904,10 +907,10 @@ namespace ETL_SQL.Engine
             if (v.Name.Equals("@@FETCH_STATUS", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.FetchStatus;
 
 
-            
+
             if (!_context.VarContext.ContainsVariable(v.Name))
                 throw new ExecutionException($"Undeclared: {v.Name}");
-            
+
             var val = _context.VarContext.GetVariable(v.Name);
 
             if (val is string reldateExpr &&
@@ -924,7 +927,7 @@ namespace ETL_SQL.Engine
                     return _context.DecryptValue(s);
                 }
             }
-                
+
             return val;
         }
 
@@ -940,7 +943,7 @@ namespace ETL_SQL.Engine
                 }
                 throw new ExecutionException($"Parameter index {p.Index} is out of range. Provided: {_context.Parameters?.Count ?? 0}");
             }
-            
+
             // For standard '?', it's usually handled by the provider (e.g. MSSQL/Postgres)
             // But if evaluating in engine context, we might want to pop from a queue?
             // For now, we'll throw as it's ambiguous without a specific binding context
@@ -952,17 +955,17 @@ namespace ETL_SQL.Engine
         {
             var val = await EvaluateInternal(ma.Expression, context, decryptSensitive);
             if (val == null) return null;
-            
+
             // Handle Row or IDictionary
-            if (val is Row row) 
+            if (val is Row row)
             {
                 // Try direct indexer (best for schema-backed columns)
                 var r = row[ma.MemberName];
                 if (r != null) return r;
-                
+
                 // Fallback: Check if it's explicitly null (HasColumn distinguishes null-stored vs missing)
                 if (row.TryGetValue(ma.MemberName, out var dynamicVal)) return dynamicVal;
-                
+
                 return null;
             }
             if (val is IDictionary<string, object?> dict && dict.TryGetValue(ma.MemberName, out var dVal)) return dVal;
@@ -972,7 +975,7 @@ namespace ETL_SQL.Engine
                 if (ma.MemberName.Equals("MIN", StringComparison.OrdinalIgnoreCase)) return mm.Min;
                 if (ma.MemberName.Equals("MAX", StringComparison.OrdinalIgnoreCase)) return mm.Max;
             }
-            
+
             // Handle reflection for properties/fields with caching
             var type = val.GetType();
             var member = _reflectionCache.GetOrAdd((type, ma.MemberName), key =>
@@ -1000,7 +1003,7 @@ namespace ETL_SQL.Engine
                 var alias = id.Name.Replace(".CONNECTION_STRING", "", StringComparison.OrdinalIgnoreCase);
                 var connStr = _context.DockerManager.GetConnectionString(alias);
                 if (connStr != null) return connStr;
-                
+
                 // Direct fallback for plain DOCKER.CONNECTION_STRING
                 if (alias.Equals("DOCKER", StringComparison.OrdinalIgnoreCase))
                     return _context.DockerManager.LastConnectionString;
@@ -1068,8 +1071,8 @@ namespace ETL_SQL.Engine
             if (result != null) return result;
 
             // Arithmetic operators don't fall back to soft equality if null
-            if (bin.Operator == TokenType.PLUS || bin.Operator == TokenType.MINUS || 
-                bin.Operator == TokenType.STAR || bin.Operator == TokenType.SLASH || 
+            if (bin.Operator == TokenType.PLUS || bin.Operator == TokenType.MINUS ||
+                bin.Operator == TokenType.STAR || bin.Operator == TokenType.SLASH ||
                 bin.Operator == TokenType.MODULO ||
                 bin.Operator == TokenType.LSHIFT || bin.Operator == TokenType.RSHIFT) return null;
 
@@ -1168,11 +1171,11 @@ namespace ETL_SQL.Engine
             var val = await EvaluateInternal(sub.String, context, decryptSensitive);
             if (val == null) return null;
             var s = val.ToString() ?? "";
-            
+
             var startVal = await EvaluateInternal(sub.Start, context, decryptSensitive);
             if (startVal == null) return null;
             int start = Convert.ToInt32(startVal);
-            
+
             int? len = null;
             if (sub.Length != null)
             {
@@ -1199,10 +1202,10 @@ namespace ETL_SQL.Engine
             var substrVal = await EvaluateInternal(pos.Substring, context, decryptSensitive);
             var strVal = await EvaluateInternal(pos.String, context, decryptSensitive);
             if (substrVal == null || strVal == null) return 0;
-            
+
             var substr = substrVal.ToString() ?? "";
             var str = strVal.ToString() ?? "";
-            
+
             // SQL POSITION returns 1-based index, or 0 if not found
             int index = str.IndexOf(substr, StringComparison.OrdinalIgnoreCase);
             return index + 1;
@@ -1212,11 +1215,11 @@ namespace ETL_SQL.Engine
         {
             var val = await EvaluateInternal(ext.Source, context, decryptSensitive);
             if (val == null) return null;
-            
+
             DateTime dt;
             if (val is DateTime dateTime) dt = dateTime;
             else if (!DateTime.TryParse(val.ToString(), out dt)) return null;
-            
+
             return ext.Field.ToUpperInvariant() switch
             {
                 "YEAR" => dt.Year,
@@ -1244,25 +1247,25 @@ namespace ETL_SQL.Engine
             var strVal = await EvaluateInternal(ovl.String, context, decryptSensitive);
             var ovlVal = await EvaluateInternal(ovl.Overlay, context, decryptSensitive);
             var startVal = await EvaluateInternal(ovl.Start, context, decryptSensitive);
-            
+
             if (strVal == null || ovlVal == null || startVal == null) return null;
-            
+
             var s = strVal.ToString() ?? "";
             var o = ovlVal.ToString() ?? "";
             int start = Convert.ToInt32(startVal);
-            
+
             if (start < 1) start = 1;
             int dotNetStart = start - 1;
-            
+
             int len = o.Length;
             if (ovl.Length != null)
             {
                 var lenVal = await EvaluateInternal(ovl.Length, context, decryptSensitive);
                 if (lenVal != null) len = Convert.ToInt32(lenVal);
             }
-            
+
             if (dotNetStart > s.Length) return s + o;
-            
+
             var prefix = s.Substring(0, dotNetStart);
             var replacedLen = Math.Min(len, s.Length - dotNetStart);
             var suffix = (dotNetStart + replacedLen < s.Length) ? s.Substring(dotNetStart + replacedLen) : "";
@@ -1274,14 +1277,14 @@ namespace ETL_SQL.Engine
             var val = await EvaluateInternal(trim.String, context, decryptSensitive);
             if (val == null) return null;
             var s = val.ToString() ?? "";
-            
+
             char[]? chars = null;
             if (trim.Characters != null)
             {
                 var cVal = await EvaluateInternal(trim.Characters, context, decryptSensitive);
                 if (cVal != null) chars = cVal.ToString()?.ToCharArray();
             }
-            
+
             return trim.Type switch
             {
                 TrimType.LEADING => chars != null ? s.TrimStart(chars) : s.TrimStart(),

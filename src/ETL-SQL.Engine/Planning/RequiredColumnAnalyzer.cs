@@ -118,8 +118,8 @@ namespace ETL_SQL.Engine.Planning
                         foreach (var o in func.WithinGroupOrderBy) Collect(o.Expression, required);
                     break;
 
-                // Subqueries, literals, variables, parameters reference their own scope
-                // or carry no column names — skip.
+                    // Subqueries, literals, variables, parameters reference their own scope
+                    // or carry no column names — skip.
             }
         }
 

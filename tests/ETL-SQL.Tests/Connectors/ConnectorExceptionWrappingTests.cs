@@ -3,20 +3,20 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors;
 using ETL_SQL.Connectors.Avro;
 using ETL_SQL.Connectors.Email;
 using ETL_SQL.Connectors.Excel;
 using ETL_SQL.Connectors.Odbc;
 using ETL_SQL.Connectors.Oracle;
+using ETL_SQL.Connectors.Orchestrator;
 using ETL_SQL.Connectors.Parquet;
 using ETL_SQL.Connectors.ReportPortal;
-using ETL_SQL.Connectors.Orchestrator;
 using ETL_SQL.Connectors.Rest;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -155,8 +155,8 @@ namespace ETL_SQL.Tests.Connectors
         {
             var opts = new Dictionary<string, string>
             {
-                ["HOST"]    = "127.0.0.1",
-                ["PORT"]    = "1",      // port 1 is always refused
+                ["HOST"] = "127.0.0.1",
+                ["PORT"] = "1",      // port 1 is always refused
                 ["USE_SSL"] = "false"
             };
             var ds = new SmtpDataSource(Ctx, opts);

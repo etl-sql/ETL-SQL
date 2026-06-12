@@ -1,7 +1,7 @@
-using Microsoft.AspNetCore.Mvc;
-using Xunit;
 using ETL_SQL.ReportPortal.Controllers;
 using ETL_SQL.ReportPortal.Models;
+using Microsoft.AspNetCore.Mvc;
+using Xunit;
 
 namespace ETL_SQL.ReportPortal.Tests;
 

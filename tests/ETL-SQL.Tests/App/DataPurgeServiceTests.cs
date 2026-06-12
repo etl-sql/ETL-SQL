@@ -1,9 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
-using Microsoft.Extensions.Configuration;
 using ETL_SQL.App;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace ETL_SQL.Tests.CliCommands

@@ -25,7 +25,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ShowSessionsStatement)statement;
-            
+
             var table = new DataTable();
             table.AddColumn("SessionId");
             table.AddColumn("Created");

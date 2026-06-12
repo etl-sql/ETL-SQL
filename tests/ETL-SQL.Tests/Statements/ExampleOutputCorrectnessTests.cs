@@ -71,19 +71,19 @@ namespace ETL_SQL.Tests.Statements
                 r => r["test_case"]?.ToString() ?? "",
                 r => r["result"]?.ToString() ?? "");
 
-            Assert.Equal("HELLO",    byCase["UPPER"]);
-            Assert.Equal("hello",    byCase["LOWER"]);
-            Assert.Equal("abc",      byCase["CONCAT"]);
-            Assert.Equal("spaced",   byCase["TRIM"]);
-            Assert.Equal("aXc",      byCase["REPLACE"]);
-            Assert.Equal("abc",      byCase["LEFT"]);
-            Assert.Equal("def",      byCase["RIGHT"]);
-            Assert.Equal("12.35",    byCase["ROUND"]);
-            Assert.Equal("5",        byCase["ABS"]);
-            Assert.Equal("16",       byCase["POWER"]);
-            Assert.Equal("2026",     byCase["YEAR"]);
-            Assert.Equal("3",        byCase["MONTH"]);
-            Assert.Equal("14",       byCase["DAY"]);
+            Assert.Equal("HELLO", byCase["UPPER"]);
+            Assert.Equal("hello", byCase["LOWER"]);
+            Assert.Equal("abc", byCase["CONCAT"]);
+            Assert.Equal("spaced", byCase["TRIM"]);
+            Assert.Equal("aXc", byCase["REPLACE"]);
+            Assert.Equal("abc", byCase["LEFT"]);
+            Assert.Equal("def", byCase["RIGHT"]);
+            Assert.Equal("12.35", byCase["ROUND"]);
+            Assert.Equal("5", byCase["ABS"]);
+            Assert.Equal("16", byCase["POWER"]);
+            Assert.Equal("2026", byCase["YEAR"]);
+            Assert.Equal("3", byCase["MONTH"]);
+            Assert.Equal("14", byCase["DAY"]);
             Assert.Equal("found it", byCase["COALESCE"]);
             Assert.Equal("fallback", byCase["ISNULL"]);
         }
@@ -119,9 +119,9 @@ namespace ETL_SQL.Tests.Statements
 
             // UserID 5 → latest event is EventID 103; UserID 8 → only event is EventID 104
             var rows = result.Rows.OrderBy(r => Convert.ToInt32(r["UserID"])).ToList();
-            Assert.Equal(5,   Convert.ToInt32(rows[0]["UserID"]));
+            Assert.Equal(5, Convert.ToInt32(rows[0]["UserID"]));
             Assert.Equal(103, Convert.ToInt32(rows[0]["EventID"]));
-            Assert.Equal(8,   Convert.ToInt32(rows[1]["UserID"]));
+            Assert.Equal(8, Convert.ToInt32(rows[1]["UserID"]));
             Assert.Equal(104, Convert.ToInt32(rows[1]["EventID"]));
         }
 
@@ -168,9 +168,9 @@ namespace ETL_SQL.Tests.Statements
             var cust001 = prodResult.Rows.First(r => r["CustomerID"]?.ToString() == "CUST001");
             var cust002 = prodResult.Rows.First(r => r["CustomerID"]?.ToString() == "CUST002");
             var cust003 = prodResult.Rows.First(r => r["CustomerID"]?.ToString() == "CUST003");
-            Assert.Equal("PREMIUM",  cust001["Segment"]?.ToString());
+            Assert.Equal("PREMIUM", cust001["Segment"]?.ToString());
             Assert.Equal("STANDARD", cust002["Segment"]?.ToString());
-            Assert.Equal("NEW",      cust003["Segment"]?.ToString());
+            Assert.Equal("NEW", cust003["Segment"]?.ToString());
 
             // AuditTrail contains at least the UPDATE for CUST001 (engine may or may not emit OUTPUT for INSERT branch)
             var auditResult = await RunAndGetResult(eval, "SELECT * FROM #AuditTrail;");
@@ -212,14 +212,14 @@ namespace ETL_SQL.Tests.Statements
             Assert.Equal(2, result.Rows.Count);
 
             var john = result.Rows[0];
-            Assert.Equal("jd***@secure.com",       john["MaskedEmail"]?.ToString());
-            Assert.Equal("XXX-XX-6789",            john["MaskedSSN"]?.ToString());
-            Assert.Equal("Accounting",             john["DepartmentName"]?.ToString());
+            Assert.Equal("jd***@secure.com", john["MaskedEmail"]?.ToString());
+            Assert.Equal("XXX-XX-6789", john["MaskedSSN"]?.ToString());
+            Assert.Equal("Accounting", john["DepartmentName"]?.ToString());
 
             var jane = result.Rows[1];
-            Assert.Equal("ja***@secure.com",       jane["MaskedEmail"]?.ToString());
-            Assert.Equal("XXX-XX-4321",            jane["MaskedSSN"]?.ToString());
-            Assert.Equal("Engineering",            jane["DepartmentName"]?.ToString());
+            Assert.Equal("ja***@secure.com", jane["MaskedEmail"]?.ToString());
+            Assert.Equal("XXX-XX-4321", jane["MaskedSSN"]?.ToString());
+            Assert.Equal("Engineering", jane["DepartmentName"]?.ToString());
         }
 
         // ── 07_Real_World/realworld_06_reconciliation_anti_join.etlsql ───────────
@@ -256,9 +256,9 @@ namespace ETL_SQL.Tests.Statements
             Assert.Single(result.Rows);
 
             var missing = result.Rows[0];
-            Assert.Equal(1002,                    Convert.ToInt32(missing["AccountID"]));
-            Assert.Equal("Beta Ltd",              missing["CustomerName"]?.ToString());
-            Assert.Equal("Silver",                missing["Tier"]?.ToString());
+            Assert.Equal(1002, Convert.ToInt32(missing["AccountID"]));
+            Assert.Equal("Beta Ltd", missing["CustomerName"]?.ToString());
+            Assert.Equal("Silver", missing["Tier"]?.ToString());
             Assert.Equal("MISSING IN FULFILLMENT", missing["DiscrepancyReason"]?.ToString());
         }
 

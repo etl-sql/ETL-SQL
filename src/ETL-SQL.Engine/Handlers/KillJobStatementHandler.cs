@@ -1,8 +1,8 @@
 using System;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Common;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -25,7 +25,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (KillJobStatement)statement;
-            
+
             var jobIdObj = await context.EvaluationContext.EvaluateValue(stmt.JobIdExpr, new Row());
             if (jobIdObj == null || !long.TryParse(jobIdObj.ToString(), out long historyId))
             {

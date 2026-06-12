@@ -4,13 +4,13 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Services;
 using Moq;
 using Renci.SshNet;
 using Xunit;
-using ETL_SQL.Connectors;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Services;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {

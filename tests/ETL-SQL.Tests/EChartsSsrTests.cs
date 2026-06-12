@@ -11,11 +11,11 @@ namespace ETL_SQL.Tests
     public class EChartsSsrTests
     {
         [Theory]
-        [InlineData("BAR",     "{\"xAxis\":{\"type\":\"category\",\"data\":[\"A\",\"B\",\"C\"]},\"yAxis\":{\"type\":\"value\"},\"series\":[{\"type\":\"bar\",\"data\":[5,20,36]}]}")]
+        [InlineData("BAR", "{\"xAxis\":{\"type\":\"category\",\"data\":[\"A\",\"B\",\"C\"]},\"yAxis\":{\"type\":\"value\"},\"series\":[{\"type\":\"bar\",\"data\":[5,20,36]}]}")]
         [InlineData("SCATTER", "{\"xAxis\":{},\"yAxis\":{},\"series\":[{\"type\":\"scatter\",\"data\":[[1,2],[3,4],[5,9]]}]}")]
-        [InlineData("PIE",     "{\"series\":[{\"type\":\"pie\",\"data\":[{\"value\":1,\"name\":\"x\"},{\"value\":2,\"name\":\"y\"}]}]}")]
-        [InlineData("RADAR",   "{\"radar\":{\"indicator\":[{\"name\":\"A\",\"max\":100},{\"name\":\"B\",\"max\":100},{\"name\":\"C\",\"max\":100}]},\"series\":[{\"type\":\"radar\",\"data\":[{\"value\":[60,70,80]}]}]}")]
-        [InlineData("GAUGE",   "{\"series\":[{\"type\":\"gauge\",\"data\":[{\"value\":70}]}]}")]
+        [InlineData("PIE", "{\"series\":[{\"type\":\"pie\",\"data\":[{\"value\":1,\"name\":\"x\"},{\"value\":2,\"name\":\"y\"}]}]}")]
+        [InlineData("RADAR", "{\"radar\":{\"indicator\":[{\"name\":\"A\",\"max\":100},{\"name\":\"B\",\"max\":100},{\"name\":\"C\",\"max\":100}]},\"series\":[{\"type\":\"radar\",\"data\":[{\"value\":[60,70,80]}]}]}")]
+        [InlineData("GAUGE", "{\"series\":[{\"type\":\"gauge\",\"data\":[{\"value\":70}]}]}")]
         [InlineData("HEATMAP", "{\"xAxis\":{\"type\":\"category\",\"data\":[\"a\",\"b\"]},\"yAxis\":{\"type\":\"category\",\"data\":[\"x\",\"y\"]},\"visualMap\":{\"min\":0,\"max\":10},\"series\":[{\"type\":\"heatmap\",\"data\":[[0,0,5],[1,1,8]]}]}")]
         public void RenderSvg_ProducesChartSvg_ForType(string type, string chartConfig)
         {

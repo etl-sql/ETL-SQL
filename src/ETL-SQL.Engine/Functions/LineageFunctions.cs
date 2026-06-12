@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Functions
 {
@@ -31,11 +31,11 @@ namespace ETL_SQL.Engine.Functions
         private static Task<object?> GetTags(List<object?> args, IExecutionContext context)
         {
             if (args.Count < 1 || args[0] == null) return Task.FromResult<object?>(null);
-            
+
             string table = args[0]?.ToString() ?? "";
             string? column = args.Count > 1 ? args[1]?.ToString() : null;
 
-            var metadata = column != null 
+            var metadata = column != null
                 ? context.LineageTracker.GetColumnMetadata(table, column)
                 : context.LineageTracker.GetLineage(table).FirstOrDefault()?.Metadata;
 
@@ -52,13 +52,13 @@ namespace ETL_SQL.Engine.Functions
         private static Task<object?> GetTagValue(List<object?> args, IExecutionContext context)
         {
             if (args.Count < 3 || args[0] == null || args[1] == null || args[2] == null) return Task.FromResult<object?>(null);
-            
+
             string table = args[0]?.ToString() ?? "";
             string column = args[1]?.ToString() ?? "";
             string tag = args[2]?.ToString() ?? "";
 
             var metadata = context.LineageTracker.GetColumnMetadata(table, column);
-            
+
             if (metadata != null && metadata.TryGetValue(tag, out var val))
             {
                 return Task.FromResult<object?>(val);

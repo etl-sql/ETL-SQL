@@ -1,16 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.App;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Core.Common;
-using System.Collections.Generic;
-using ETL_SQL.Common;
-using System.Linq;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.App;
+using Xunit;
 
 namespace ETL_SQL.Tests.Operations
 {
@@ -36,12 +36,12 @@ namespace ETL_SQL.Tests.Operations
         {
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = services.GetRequiredService<Evaluator>();
-            
+
             var lexer = new Lexer(sql);
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens, sql);
             var script = parser.Parse();
-            
+
             if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
             {
                 var errors = string.Join("\n", script.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => d.Message));
@@ -64,7 +64,7 @@ namespace ETL_SQL.Tests.Operations
             string destEsc = dest.Replace("\\", "\\\\");
 
             string script = $"COPY FILE '{sourceEsc}' TO '{destEsc}' WITH(OVERWRITE=OFF);";
-            
+
             await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () => await RunScriptAsync(script));
         }
 
@@ -80,7 +80,7 @@ namespace ETL_SQL.Tests.Operations
             string destEsc = dest.Replace("\\", "\\\\");
 
             string script = $"COPY FILE '{sourceEsc}' TO '{destEsc}' WITH(OVERWRITE=ON);";
-            
+
             await RunScriptAsync(script);
             Assert.Equal("hello", File.ReadAllText(dest));
         }
@@ -97,7 +97,7 @@ namespace ETL_SQL.Tests.Operations
             string zipPathEsc = zipPath.Replace("\\", "\\\\");
 
             string script = $"COMPRESS DIRECTORY '{subDirEsc}' TO '{zipPathEsc}';";
-            
+
             await RunScriptAsync(script);
             Assert.True(File.Exists(zipPath));
         }
@@ -114,7 +114,7 @@ namespace ETL_SQL.Tests.Operations
             string zipPathEsc = zipPath.Replace("\\", "\\\\");
 
             string script = $"COMPRESS_DIRECTORY('{subDirEsc}', '{zipPathEsc}');";
-            
+
             await RunScriptAsync(script);
             Assert.True(File.Exists(zipPath));
         }
@@ -125,7 +125,7 @@ namespace ETL_SQL.Tests.Operations
             string subDir = Path.Combine(_testDir, "data");
             Directory.CreateDirectory(subDir);
             File.WriteAllText(Path.Combine(subDir, "secret.txt"), "my secret");
-            
+
             string encDir = Path.Combine(_testDir, "encrypted_data");
             string decDir = Path.Combine(_testDir, "decrypted_data");
 
@@ -137,9 +137,9 @@ namespace ETL_SQL.Tests.Operations
                 ENCRYPT DIRECTORY '{subDirEsc}' TO '{encDirEsc}' PASSWORD('TestPass1');
                 DECRYPT DIRECTORY '{encDirEsc}' TO '{decDirEsc}' PASSWORD('TestPass1');
             ";
-            
+
             await RunScriptAsync(script);
-            
+
             Assert.True(File.Exists(Path.Combine(decDir, "secret.txt")));
             Assert.Equal("my secret", File.ReadAllText(Path.Combine(decDir, "secret.txt")));
         }
@@ -152,7 +152,7 @@ namespace ETL_SQL.Tests.Operations
 
             string fileEsc = file.Replace("\\", "\\\\");
             string script = $"DELETE FILE '{fileEsc}';";
-            
+
             await RunScriptAsync(script);
             Assert.False(File.Exists(file));
         }

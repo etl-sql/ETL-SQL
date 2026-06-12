@@ -1,10 +1,10 @@
-using ETL_SQL.Common;
-using ETL_SQL.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Storage
 {
@@ -26,8 +26,8 @@ namespace ETL_SQL.Engine.Storage
         {
             _variableName = variableName;
             _context = context;
-            _inner = new InMemoryDataSource 
-            { 
+            _inner = new InMemoryDataSource
+            {
                 Validator = context as IDataValidator,
                 ExecutionContext = context,
                 MaxInMemoryBatches = context.MaxInMemoryBatches
@@ -61,12 +61,12 @@ namespace ETL_SQL.Engine.Storage
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             await _inner.WriteBatches(batches, append);
-            
+
             // Consolidate into a single DataTable for the variable.
             // This ensures that @Variables behave like standard DataTables for all other engine operations.
             var result = new DataTable();
             bool columnSet = false;
-            
+
             await foreach (var batch in _inner.ReadBatches())
             {
                 if (!columnSet)
@@ -79,7 +79,7 @@ namespace ETL_SQL.Engine.Storage
                     await result.AddRowAsync(row);
                 }
             }
-            
+
             if (!_context.VarContext.ContainsVariable(_variableName))
             {
                 _context.VarContext.DeclareVariable(_variableName, result);

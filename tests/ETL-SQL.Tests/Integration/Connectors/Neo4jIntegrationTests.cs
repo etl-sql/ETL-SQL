@@ -5,17 +5,17 @@ using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Xunit;
-using Moq;
+using ETL_SQL.App;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.Neo4j;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Connectors.Neo4j;
-using ETL_SQL.Services;
 using ETL_SQL.Data;
-using ETL_SQL.App;
-using ETL_SQL.Core;
+using ETL_SQL.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {

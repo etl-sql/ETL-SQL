@@ -13,7 +13,7 @@ namespace ETL_SQL.Core.Common.Exceptions
         public int Line { get; }
         public int Column { get; }
 
-        public SyntaxException(string message, int line = 0, int column = 0) 
+        public SyntaxException(string message, int line = 0, int column = 0)
             : base(Sanitize(message, line, column))
         {
             Line = line;
@@ -24,14 +24,14 @@ namespace ETL_SQL.Core.Common.Exceptions
         {
             if (string.IsNullOrEmpty(message)) return $"at line {line}, col {column}";
             var sanitized = System.Text.RegularExpressions.Regex.Replace(
-                message, 
-                @"ENC:[A-Za-z0-9+/=]+", 
-                "ENC:********", 
+                message,
+                @"ENC:[A-Za-z0-9+/=]+",
+                "ENC:********",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             sanitized = System.Text.RegularExpressions.Regex.Replace(
-                sanitized, 
-                @"(PASSWORD|PWD|SECRET|APIKEY|API_KEY|TOKEN|CREDENTIAL|PRIVATEKEY)\s*=\s*['""]?[^'""\s,;]+['""]?", 
-                "$1=********", 
+                sanitized,
+                @"(PASSWORD|PWD|SECRET|APIKEY|API_KEY|TOKEN|CREDENTIAL|PRIVATEKEY)\s*=\s*['""]?[^'""\s,;]+['""]?",
+                "$1=********",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             return $"{sanitized} at line {line}, col {column}";
         }
@@ -56,7 +56,7 @@ namespace ETL_SQL.Core.Common.Exceptions
             State = state;
         }
 
-        public ExecutionException(string message, Exception innerException, string? statementContext = null, int line = 0, int column = 0, int errorNumber = 50000, int severity = 16, int state = 1) 
+        public ExecutionException(string message, Exception innerException, string? statementContext = null, int line = 0, int column = 0, int errorNumber = 50000, int severity = 16, int state = 1)
             : base(message, innerException)
         {
             StatementContext = statementContext;
@@ -71,7 +71,7 @@ namespace ETL_SQL.Core.Common.Exceptions
     public class ConnectionException : ExecutionException
     {
         public string ConnectionAlias { get; }
-        public ConnectionException(string message, string alias, Exception? inner = null) 
+        public ConnectionException(string message, string alias, Exception? inner = null)
             : base($"Connection '{alias}' failed: {message}", inner!, null)
         {
             ConnectionAlias = alias;

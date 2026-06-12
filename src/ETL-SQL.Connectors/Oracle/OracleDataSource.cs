@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Oracle.ManagedDataAccess.Client;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Oracle.ManagedDataAccess.Client;
 
 namespace ETL_SQL.Connectors.Oracle
 {

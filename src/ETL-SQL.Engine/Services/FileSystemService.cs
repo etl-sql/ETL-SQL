@@ -46,13 +46,13 @@ namespace ETL_SQL.Engine.Services
             var dir = new DirectoryInfo(path);
             if (!dir.Exists) return;
 
-            foreach (FileInfo file in dir.GetFiles()) 
+            foreach (FileInfo file in dir.GetFiles())
             {
                 context.IncrementOperationCount(OperationType.FileSystem, file.FullName);
                 file.Delete();
             }
-            
-            foreach (DirectoryInfo subDir in dir.GetDirectories()) 
+
+            foreach (DirectoryInfo subDir in dir.GetDirectories())
             {
                 if (recursive)
                 {

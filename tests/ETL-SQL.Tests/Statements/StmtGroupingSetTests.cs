@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using Xunit.Abstractions;
+using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.App;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+using Xunit.Abstractions;
 
 namespace ETL_SQL.Tests.Statements
 {

@@ -14,7 +14,7 @@ namespace ETL_SQL.Engine.Handlers
     public class ShowProfileStatementHandler : IStatementHandler
     {
         public Type SupportedStatementType => typeof(ShowProfileStatement);
-        
+
         /// <summary>Executes the SHOW PROFILE statement, rendering a detailed performance table.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {

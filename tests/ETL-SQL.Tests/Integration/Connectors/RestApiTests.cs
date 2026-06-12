@@ -1,16 +1,16 @@
 using System;
-using System.Net;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Rest;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Engine;
 using ETL_SQL.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,7 +30,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
             // Note: Since RestDataSource uses a static HttpClient, mocking it directly via constructor 
             // would require refactoring. For this test, we verify the logic assuming a successful response.
             // In a real environment, we'd use a MockHttpMessageHandler.
-            
+
             // For now, let's test the Connection String Building logic which is definitely unit-testable.
             var props = new Dictionary<string, string>
             {
@@ -1115,7 +1115,7 @@ FROM #bed_usage;
                 attempts++;
                 if (attempts == 1)
                 {
-                    return new LocalHttpResponse(429, "application/json", """{"error":"rate_limited"}""", 
+                    return new LocalHttpResponse(429, "application/json", """{"error":"rate_limited"}""",
                         new Dictionary<string, string> { { "Retry-After", "1" } });
                 }
                 return LocalHttpResponse.Json("""{"status":"ok"}""");

@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Services;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -72,10 +72,10 @@ namespace ETL_SQL.TUI.UI
             };
 
             var coreSuggestions = await _service.GetSuggestionsAsync(coreContext);
-            
+
             return coreSuggestions.Select(s => new Suggestion(
-                s.Text, 
-                MapType(s.Type), 
+                s.Text,
+                MapType(s.Type),
                 s.Priority,
                 s.Documentation
             ));
@@ -186,7 +186,7 @@ namespace ETL_SQL.TUI.UI
         {
             var metadata = new TuiMetadataManager(context.Connections);
             var bridge = new LanguageServiceBridgeProvider(metadata, _helpRegistry);
-            
+
             var results = await bridge.GetSuggestionsAsync(context);
             return results.ToList();
         }

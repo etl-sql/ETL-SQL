@@ -1,15 +1,15 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
-using ETL_SQL.Data;
-using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -33,8 +33,8 @@ namespace ETL_SQL.Tests.Connectors
                     new ColumnDefinition("Active", "CHAR(1)", false)
                 };
 
-                var options = new Dictionary<string, string> 
-                { 
+                var options = new Dictionary<string, string>
+                {
                     { "FORMAT", "FIXED" },
                     { "HEADER", "OFF" }
                 };
@@ -44,7 +44,7 @@ namespace ETL_SQL.Tests.Connectors
 
                 Assert.Single(batches);
                 Assert.Equal(2, batches[0].Rows.Count);
-                
+
                 var row1 = batches[0].Rows[0];
                 Assert.Equal("00001", row1["ID"]?.ToString());
                 Assert.Equal("Chuck", row1["Name"]?.ToString());
@@ -71,8 +71,8 @@ namespace ETL_SQL.Tests.Connectors
                     new ColumnDefinition("Value", "VARCHAR", false, null, new Dictionary<string, string> { { "width", "5" } })
                 };
 
-                var options = new Dictionary<string, string> 
-                { 
+                var options = new Dictionary<string, string>
+                {
                     { "FORMAT", "FIXED" },
                     { "HEADER", "OFF" }
                 };
@@ -95,8 +95,8 @@ namespace ETL_SQL.Tests.Connectors
             try
             {
                 var schema = new List<ColumnDefinition> { new ColumnDefinition("Name", "VARCHAR(10)", false) };
-                var options = new Dictionary<string, string> 
-                { 
+                var options = new Dictionary<string, string>
+                {
                     { "FORMAT", "FIXED" },
                     { "HEADER", "OFF" },
                     { "TRIM", "OFF" }
@@ -125,8 +125,8 @@ namespace ETL_SQL.Tests.Connectors
                     new ColumnDefinition("NAME", "VARCHAR(6)", false)
                 };
 
-                var options = new Dictionary<string, string> 
-                { 
+                var options = new Dictionary<string, string>
+                {
                     { "FORMAT", "FIXED" },
                     { "START_AT", "1" },
                     { "HEADER", "ON" }

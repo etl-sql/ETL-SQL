@@ -3,14 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
 using ETL_SQL.App;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
-
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Common;
+using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {

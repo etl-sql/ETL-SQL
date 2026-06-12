@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine
@@ -18,21 +18,21 @@ namespace ETL_SQL.Engine
         }
 
         public void SetVariable(string name, object? value) => VarContext.SetVariable(name, value);
-        
-        public void DeclareVariable(string name, object? value, VariableMetadata? metadata = null) 
-            => VarContext.DeclareVariable(name, value, metadata);
-            
-        public bool ContainsVariable(string name) => VarContext.ContainsVariable(name);
-        
-        public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null) 
-            => VarContext.PushScope(vars, metadata);
-            
-        public void PopScope() => VarContext.PopScope();
-        
 
-        public IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null) 
+        public void DeclareVariable(string name, object? value, VariableMetadata? metadata = null)
+            => VarContext.DeclareVariable(name, value, metadata);
+
+        public bool ContainsVariable(string name) => VarContext.ContainsVariable(name);
+
+        public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null)
+            => VarContext.PushScope(vars, metadata);
+
+        public void PopScope() => VarContext.PopScope();
+
+
+        public IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null)
             => VarContext.GetVariablesWithMetadata(predicate);
-            
+
         public bool ContainsVariableInCurrentScope(string name) => VarContext.ContainsVariableInCurrentScope(name);
 
         public IDictionary<string, object?> Variables => VarContext.Variables;

@@ -1,13 +1,13 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
@@ -28,7 +28,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
         {
             var sp = DependencyInjectionSetup.BuildServiceProvider();
             var eval = sp.GetRequiredService<Evaluator>();
-            
+
             // Set threshold very low to force DEEP-SPILLING (partition-level streaming)
             // Sales table has 250 rows.
             eval.WindowSpillThreshold = 10;
@@ -62,7 +62,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
                     Console.WriteLine($"Duplicate SaleID: {dup.Key}, Count: {dup.Count()}");
             }
             Assert.Empty(duplicateSales);
-            
+
             // MockDataSeeder generates 250 rows for Sales
             Assert.Equal(250, result.Rows.Count);
 
@@ -77,7 +77,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
                     try
                     {
                         Assert.Equal((decimal)(i + 1), curr["row_num"]);
-                        
+
                         if (i > 0)
                         {
                             var prev = sorted[i - 1];

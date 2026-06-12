@@ -1,11 +1,11 @@
 using System;
 using System.IO;
-using System.Threading.Tasks;
 using System.IO.Compression;
-using ETL_SQL.Data;
+using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers
@@ -27,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (DirectoryOperationStatement)statement;
-            
+
             if (!string.IsNullOrEmpty(stmt.ConnectionName))
             {
                 // Remote execution context
@@ -75,7 +75,7 @@ namespace ETL_SQL.Engine.Handlers
             string path = context.ResolvePath(pathVal);
 
             string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
-            
+
             bool overwrite = true; // Default to true for backward compatibility
             if (stmt.Overwrite != null)
             {
@@ -149,11 +149,11 @@ namespace ETL_SQL.Engine.Handlers
                                 var parent = System.IO.Path.GetDirectoryName(path.TrimEnd('/', '\\')) ?? "";
                                 target = System.IO.Path.Combine(parent, dest);
                             }
-                            
+
                             // Security Hardening: Validate the target path
                             context.SecurityService.ValidatePath(target);
                             context.SecurityService.ValidateWriteAccess(target);
-                            
+
                             if (Directory.Exists(target))
                             {
                                 if (overwrite) Directory.Delete(target, true);
@@ -187,8 +187,8 @@ namespace ETL_SQL.Engine.Handlers
 
                             if (File.Exists(dest))
                             {
-                                 if (overwrite) File.Delete(dest);
-                                 else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                                if (overwrite) File.Delete(dest);
+                                else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
                             }
                             System.IO.Compression.ZipFile.CreateFromDirectory(path, dest);
                             _logger.WriteLine($"Directory compressed: {path} -> {dest}", ConsoleColor.Green);

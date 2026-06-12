@@ -1,12 +1,12 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -22,9 +22,9 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = NewEvaluator();
             await TestHelpers.Execute(ev, "CREATE TABLE #t (val INT); INSERT INTO #t VALUES (1), (2), (1), (3), (2);");
-            
+
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT DISTINCT val FROM #t ORDER BY val;").Statements[0]).FirstAsync();
-            TestHelpers.AssertRowsMatch(res, 
+            TestHelpers.AssertRowsMatch(res,
                 new object[] { 1 },
                 new object[] { 2 },
                 new object[] { 3 }
@@ -36,9 +36,9 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = NewEvaluator();
             await TestHelpers.Execute(ev, "CREATE TABLE #t (a INT, b INT); INSERT INTO #t VALUES (1, 1), (1, 2), (1, 1), (2, 1);");
-            
+
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT DISTINCT a, b FROM #t ORDER BY a, b;").Statements[0]).FirstAsync();
-            TestHelpers.AssertRowsMatch(res, 
+            TestHelpers.AssertRowsMatch(res,
                 new object[] { 1, 1 },
                 new object[] { 1, 2 },
                 new object[] { 2, 1 }
@@ -50,10 +50,10 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = NewEvaluator();
             await TestHelpers.Execute(ev, "CREATE TABLE #t (val INT); INSERT INTO #t VALUES (1), (NULL), (NULL), (2);");
-            
+
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT DISTINCT val FROM #t ORDER BY val;").Statements[0]).FirstAsync();
             // NULL typically sorts to the top or bottom; our engine currently sorts NULLs to the top in memory
-            TestHelpers.AssertRowsMatch(res, 
+            TestHelpers.AssertRowsMatch(res,
                 new object[] { null },
                 new object[] { 1 },
                 new object[] { 2 }
@@ -68,9 +68,9 @@ namespace ETL_SQL.Tests.Statements
             var ev = NewEvaluator();
             await TestHelpers.Execute(ev, "CREATE TABLE #t (d DATETIME, amt INT);");
             await TestHelpers.Execute(ev, "INSERT INTO #t VALUES ('2024-01-01', 10), ('2024-01-01', 20), ('2024-01-02', 30);");
-            
+
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT d, SUM(amt) AS total FROM #t GROUP BY d ORDER BY d;").Statements[0]).FirstAsync();
-            TestHelpers.AssertRowsMatch(res, 
+            TestHelpers.AssertRowsMatch(res,
                 new object[] { DateTime.Parse("2024-01-01"), 30m },
                 new object[] { DateTime.Parse("2024-01-02"), 30m }
             );
@@ -83,10 +83,10 @@ namespace ETL_SQL.Tests.Statements
             // Test with standard ISO format
             await TestHelpers.Execute(ev, "CREATE TABLE #t (d DATETIME, amt INT);");
             await TestHelpers.Execute(ev, "INSERT INTO #t VALUES ('2024-01-15', 10), ('2024-01-15', 20), ('2024-01-16', 50);");
-            
+
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT d, SUM(amt) AS total FROM #t GROUP BY d ORDER BY d;").Statements[0]).FirstAsync();
-            
-            TestHelpers.AssertRowsMatch(res, 
+
+            TestHelpers.AssertRowsMatch(res,
                 new object[] { new DateTime(2024, 1, 15), 30m },
                 new object[] { new DateTime(2024, 1, 16), 50m }
             );
@@ -98,9 +98,9 @@ namespace ETL_SQL.Tests.Statements
             var ev = NewEvaluator();
             await TestHelpers.Execute(ev, "CREATE TABLE #t (d DATETIME, amt INT);");
             await TestHelpers.Execute(ev, "INSERT INTO #t (d, amt) VALUES ('2024-02-28', 1), ('2024-02-29', 10), ('2024-02-29', 20), ('2024-03-01', 100);");
-            
+
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT d, SUM(amt) AS total FROM #t GROUP BY d ORDER BY d;").Statements[0]).FirstAsync();
-            TestHelpers.AssertRowsMatch(res, 
+            TestHelpers.AssertRowsMatch(res,
                 new object[] { new DateTime(2024, 2, 28), 1m },
                 new object[] { new DateTime(2024, 2, 29), 30m },
                 new object[] { new DateTime(2024, 3, 1), 100m }
@@ -114,11 +114,11 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = NewEvaluator();
             await TestHelpers.Execute(ev, "CREATE TABLE #t (v1 INT, v2 INT); INSERT INTO #t VALUES (1, 10), (NULL, 20), (NULL, 20);");
-            
+
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT COALESCE(v1, 0) AS g, SUM(v2) AS s FROM #t GROUP BY COALESCE(v1, 0) ORDER BY g;").Statements[0]).FirstAsync();
-            
-            TestHelpers.AssertRowsMatch(res, 
-                new object[] { 0m, 40m }, 
+
+            TestHelpers.AssertRowsMatch(res,
+                new object[] { 0m, 40m },
                 new object[] { 1m, 10m }
             );
         }
@@ -146,7 +146,7 @@ namespace ETL_SQL.Tests.Statements
             ");
 
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT t1.name, t2.score FROM #t1 AS t1 JOIN #t2 AS t2 ON t1.id = t2.id ORDER BY t1.id;").Statements[0]).FirstAsync();
-            TestHelpers.AssertRowsMatch(res, 
+            TestHelpers.AssertRowsMatch(res,
                 new object[] { "A", 100m },
                 new object[] { "B", 200m }
             );
@@ -164,7 +164,7 @@ namespace ETL_SQL.Tests.Statements
             ");
 
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT t1.id, t2.score FROM #t1 AS t1 LEFT JOIN #t2 AS t2 ON t1.id = t2.id ORDER BY t1.id;").Statements[0]).FirstAsync();
-            TestHelpers.AssertRowsMatch(res, 
+            TestHelpers.AssertRowsMatch(res,
                 new object[] { 1, 100m },
                 new object[] { 2, 200m },
                 new object[] { 3, null }
@@ -183,7 +183,7 @@ namespace ETL_SQL.Tests.Statements
             ");
 
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT val FROM #t1 UNION SELECT val FROM #t2 ORDER BY val;").Statements[0]).FirstAsync();
-            TestHelpers.AssertRowsMatch(res, 
+            TestHelpers.AssertRowsMatch(res,
                 new object[] { 1 },
                 new object[] { 2 },
                 new object[] { 3 }
@@ -213,10 +213,10 @@ namespace ETL_SQL.Tests.Statements
             var ev = NewEvaluator();
             await TestHelpers.Execute(ev, "CREATE TABLE #t1 (id INT, val VARCHAR); INSERT INTO #t1 VALUES (1, 'A'), (NULL, 'B');");
             await TestHelpers.Execute(ev, "CREATE TABLE #t2 (id INT, val VARCHAR); INSERT INTO #t2 VALUES (1, 'X'), (NULL, 'Y');");
-            
+
             // Only id=1 should match. NULL=NULL is UNKNOWN/FALSE.
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT t1.val, t2.val FROM #t1 AS t1 JOIN #t2 AS t2 ON t1.id = t2.id;").Statements[0]).FirstAsync();
-            
+
             Assert.Single(res.Rows);
             Assert.Equal("A", res.Rows[0][0]);
             Assert.Equal("X", res.Rows[0][1]);
@@ -227,7 +227,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = NewEvaluator();
             await TestHelpers.Execute(ev, "CREATE TABLE #t (id INT); INSERT INTO #t VALUES (1), (NULL);");
-            
+
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT * FROM #t WHERE id = NULL;").Statements[0]).FirstAsync();
             Assert.Empty(res.Rows);
 
@@ -247,9 +247,9 @@ namespace ETL_SQL.Tests.Statements
             // Test with mixed date formats that represent same logical day
             await TestHelpers.Execute(ev, "CREATE TABLE #t (dt VARCHAR, val INT);");
             await TestHelpers.Execute(ev, "INSERT INTO #t VALUES ('2024-01-01', 10), ('01/01/2024', 20), ('2024-02-01', 100);");
-            
+
             var res = await ev.ExecuteQuery(TestHelpers.Parse("SELECT dt, SUM(val) OVER(PARTITION BY dt) AS total FROM #t ORDER BY dt;").Statements[0]).FirstAsync();
-            
+
             // If normalization works, 2024-01-01 and 01/01/2024 should be in same partition (Sum=30)
             Assert.Equal(3, res.Rows.Count);
             Assert.Equal(30m, Convert.ToDecimal(res.Rows[0]["total"]));

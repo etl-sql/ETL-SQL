@@ -1,12 +1,12 @@
-﻿using Xunit;
+﻿using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Linq;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
+using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
-using System;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis
 {
@@ -50,7 +50,7 @@ namespace ETL_SQL.Tests.Analysis
 
             var metadata = new MockFileMetadataProvider();
             metadata.Columns["FILE"] = new List<string> { "TransactionID" };
-            
+
             var context = new DefaultLintContext { Metadata = metadata };
 
             var sql = @"
@@ -75,7 +75,7 @@ namespace ETL_SQL.Tests.Analysis
             var metadata = new MockDbMetadataProvider();
             metadata.Tables.Add("Users");
             metadata.Columns["Users"] = new List<string> { "ID" };
-            
+
             var context = new DefaultLintContext { Metadata = metadata };
 
             var sql = @"

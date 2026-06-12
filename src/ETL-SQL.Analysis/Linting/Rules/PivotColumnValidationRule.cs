@@ -17,7 +17,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
         {
             var results = new List<LintResult>();
             // We don't return early here because we might be validating subqueries that don't need external metadata.
-            
+
             foreach (var stmt in script.Statements)
             {
                 await AnalyzeStatementAsync(stmt, context, results);
@@ -66,7 +66,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
 
             var connName = tableRef.ConnectionName ?? context.Metadata?.GetConnections().FirstOrDefault() ?? "DEFAULT";
             var cols = context.Metadata == null ? null : (await context.Metadata.GetColumnsAsync(connName, tableRef.TableName))?.ToList();
-            
+
             if (cols == null || !cols.Any()) return;
             await ValidateTableOperatorsAsync(tableRef, cols, context, results);
         }

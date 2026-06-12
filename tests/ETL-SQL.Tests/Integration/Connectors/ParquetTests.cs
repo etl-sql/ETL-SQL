@@ -1,15 +1,15 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
-using ETL_SQL.Connectors.Parquet;
-using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.Parquet;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration
 {
@@ -20,7 +20,7 @@ namespace ETL_SQL.Tests.Integration
     {
         private static async IAsyncEnumerable<DataTable> ArrayToAsyncEnumerable(DataTable[] data)
         {
-            foreach(var d in data)
+            foreach (var d in data)
             {
                 yield return d;
             }
@@ -36,7 +36,7 @@ namespace ETL_SQL.Tests.Integration
             var ds = new ParquetDataSource(SystemExecutionContext.Instance, path);
             var batch = new DataTable();
             batch.ColumnNames.AddRange(new[] { "ID", "Name", "Score" });
-            
+
             var r1 = new Row(); r1["ID"] = 1L; r1["Name"] = "Alice"; r1["Score"] = 95.5;
             var r2 = new Row(); r2["ID"] = 2L; r2["Name"] = "Bob"; r2["Score"] = 88.0;
             await batch.AddRowAsync(r1);
@@ -48,7 +48,7 @@ namespace ETL_SQL.Tests.Integration
 
             var dsRead = new ParquetDataSource(SystemExecutionContext.Instance, path);
             var batches = await dsRead.ReadBatches().ToListAsync();
-            
+
             Assert.Single(batches);
             Assert.Equal(2, batches[0].Rows.Count);
             Assert.Equal("Alice", batches[0].Rows[0]["Name"]?.ToString());

@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using MySqlConnector;
 using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Data;
+using MySqlConnector;
 
 namespace ETL_SQL.Connectors.MySql
 {

@@ -11,19 +11,19 @@ namespace ETL_SQL.Analysis.Linting.Rules
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {
             var results = new List<LintResult>();
-            
+
             foreach (var statement in script.Statements)
             {
                 AnalyzeStatement(statement, results);
             }
-            
+
             return Task.FromResult<IEnumerable<LintResult>>(results);
         }
 
         private void AnalyzeStatement(Statement statement, List<LintResult> results)
         {
             if (statement == null) return;
-            
+
             if (statement is ExecutePushdownStatement pushdown)
             {
                 if (pushdown.HasUnbalancedBlocks)

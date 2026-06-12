@@ -4,10 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Functions;
-using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Functions
 {
@@ -26,7 +26,7 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("DIRECTORY", FileList, "DIRECTORY(path, [recursive]): Alias for FILE_LIST.");
             registry.RegisterWithHelp("FILE_EXISTS", FileExists, "FILE_EXISTS(path): Returns true if the file exists.");
             registry.RegisterWithHelp("DIRECTORY_EXISTS", DirectoryExists, "DIRECTORY_EXISTS(path): Returns true if the directory exists.");
-            
+
             registry.RegisterWithHelp("FILE_HASH", FileHash, "FILE_HASH(path [, algorithm]): Computes the cryptographic hash of a file (MD5, SHA1, SHA256, SHA512).");
             registry.RegisterWithHelp("FILE_SIZE", FileSize, "FILE_SIZE(path): Returns the size of a local file in bytes.");
             registry.RegisterWithHelp("FILE_MODIFIED", FileModified, "FILE_MODIFIED(path): Returns the last write timestamp of a file as a DATETIME.");
@@ -126,7 +126,7 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 1) throw new ExecutionException("REMOTE_FILE_LIST requires at least a connection name.");
             string connName = args[0]?.ToString() ?? "";
             string path = args.Count > 1 ? args[1]?.ToString() ?? "" : "";
-            
+
             if (!context.Connections.TryGetValue(connName, out var ds) || ds is not IRemoteFileSystem remoteFs)
             {
                 throw new ExecutionException($"Connection '{connName}' not found or does not support IRemoteFileSystem.");
@@ -170,9 +170,9 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 1 || args[0] == null) return table;
             string path = context.ResolvePath(args[0]?.ToString() ?? "");
             bool recursive = args.Count >= 2 && args[1] != null && (args[1] is bool b ? b : (args[1] is string s ? s.Equals("TRUE", StringComparison.OrdinalIgnoreCase) : Convert.ToBoolean(args[1])));
-            
+
             if (!Directory.Exists(path)) return table;
-            
+
             var files = Directory.GetFiles(path, "*", (recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly));
             foreach (var fPath in files)
             {

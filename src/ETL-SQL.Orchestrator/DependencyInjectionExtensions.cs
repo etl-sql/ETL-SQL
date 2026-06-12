@@ -1,5 +1,29 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors;
+using ETL_SQL.Connectors.Avro;
+using ETL_SQL.Connectors.BigQuery;
+using ETL_SQL.Connectors.Directory;
+using ETL_SQL.Connectors.Email;
+using ETL_SQL.Connectors.Excel;
+using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Connectors.Json;
+using ETL_SQL.Connectors.Kafka;
+using ETL_SQL.Connectors.MockDb;
+using ETL_SQL.Connectors.Mongodb;
+using ETL_SQL.Connectors.MySql;
+using ETL_SQL.Connectors.Neo4j;
+using ETL_SQL.Connectors.Odbc;
+using ETL_SQL.Connectors.Oracle;
+using ETL_SQL.Connectors.Orchestrator;
+using ETL_SQL.Connectors.Parquet;
+using ETL_SQL.Connectors.Postgres;
+using ETL_SQL.Connectors.ReportPortal;
+using ETL_SQL.Connectors.Rest;
+using ETL_SQL.Connectors.S3;
+using ETL_SQL.Connectors.Snowflake;
+using ETL_SQL.Connectors.Sqlite;
+using ETL_SQL.Connectors.SqlServer;
+using ETL_SQL.Connectors.Xml;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
@@ -7,35 +31,11 @@ using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Engine.Services;
-using ETL_SQL.Common;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Storage;
-using ETL_SQL.Connectors.MockDb;
-using ETL_SQL.Connectors.SqlServer;
-using ETL_SQL.Connectors.Oracle;
-using ETL_SQL.Connectors.Postgres;
-using ETL_SQL.Connectors.MySql;
-using ETL_SQL.Connectors.FlatFile;
-using ETL_SQL.Connectors.Json;
-using ETL_SQL.Connectors.Xml;
-using ETL_SQL.Connectors.Odbc;
-using ETL_SQL.Connectors.Rest;
-using ETL_SQL.Connectors.Excel;
-using ETL_SQL.Connectors.Directory;
-using ETL_SQL.Connectors.Parquet;
-using ETL_SQL.Connectors.Avro;
-using ETL_SQL.Connectors.Email;
-using ETL_SQL.Connectors.Snowflake;
-using ETL_SQL.Connectors.BigQuery;
-using ETL_SQL.Connectors.ReportPortal;
-using ETL_SQL.Connectors.Orchestrator;
-using ETL_SQL.Connectors.Sqlite;
-using ETL_SQL.Connectors.S3;
-using ETL_SQL.Connectors.Mongodb;
-using ETL_SQL.Connectors.Neo4j;
-using ETL_SQL.Connectors.Kafka;
-using ETL_SQL.Connectors;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Orchestrator
 {
@@ -47,7 +47,7 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<CliContext>(new CliContext());
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
-            
+
             var fnRegistry = new ETL_SQL.Engine.Functions.FunctionRegistry();
             ETL_SQL.Engine.Functions.FileFunctions.Register(fnRegistry);
             ETL_SQL.Engine.Functions.StandardFunctions.Register(fnRegistry);
@@ -64,7 +64,7 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<BufferManager>();
             services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
 
-            services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager>(sp => 
+            services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager>(sp =>
             {
                 var cfg = sp.GetRequiredService<IConfiguration>();
                 var log = sp.GetRequiredService<ETL_SQL.Common.ILogger>();
@@ -74,7 +74,7 @@ namespace ETL_SQL.Orchestrator
             });
             services.AddSingleton<SessionStateManager>(sp => (SessionStateManager)sp.GetRequiredService<ETL_SQL.Core.Execution.ISessionStateManager>());
 
-            services.AddSingleton<ETL_SQL.Services.SecurityService>(sp => 
+            services.AddSingleton<ETL_SQL.Services.SecurityService>(sp =>
             {
                 var log = sp.GetRequiredService<ETL_SQL.Common.ILogger>();
                 var sec = new ETL_SQL.Services.SecurityService(log);
@@ -109,27 +109,27 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IConnector, MongodbConnector>();
             services.AddSingleton<IConnector, Neo4jConnector>();
             services.AddSingleton<IConnector, KafkaConnector>();
-            
+
             services.AddSingleton<IConnector>(sp => new FtpConnector(
                 configuration["Connectors:Ftp:Host"] ?? "localhost",
                 configuration["Connectors:Ftp:Username"] ?? "anonymous",
                 configuration["Connectors:Ftp:Password"] ?? ""));
-            
+
             services.AddSingleton<IConnector>(sp => new SftpConnector(
                 configuration["Connectors:Sftp:Host"] ?? "localhost",
                 configuration["Connectors:Sftp:Username"] ?? "user",
                 configuration["Connectors:Sftp:Password"] ?? "pass"));
-            
+
             services.AddSingleton<IConnector>(sp => new AzureBlobConnector(
                 configuration["Connectors:AzureBlob:ConnectionString"] ?? "UseDevelopmentStorage=true",
-                configuration["Connectors:AzureBlob:Container"]       ?? "test"));
+                configuration["Connectors:AzureBlob:Container"] ?? "test"));
 
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
 
             // 3. Engine & Execution
             services.AddTransient<ExecutionSession>();
             services.AddTransient<Evaluator>();
-            
+
             services.AddTransient<IExecutionContext>(sp => (IExecutionContext)sp.GetRequiredService<Evaluator>());
             services.AddTransient<IVariableContext>(sp => (IVariableContext)sp.GetRequiredService<Evaluator>());
             services.AddTransient<IQueryContext>(sp => (IQueryContext)sp.GetRequiredService<Evaluator>());

@@ -1,8 +1,8 @@
-using Xunit;
 using System.Collections.Generic;
 using System.Linq;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
+using Xunit;
 
 namespace ETL_SQL.Tests.Core
 {
@@ -18,7 +18,7 @@ namespace ETL_SQL.Tests.Core
                 , (2, 'B') /* Block comment */
                 , (3, 'C') /* @d: Tag between rows */
                 , (4, 'D');";
-            
+
             var script = Parse(sql);
             Assert.Single(script.Statements);
             var insert = script.Statements[0] as InsertStatement;

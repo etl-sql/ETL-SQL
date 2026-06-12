@@ -5,9 +5,9 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using ETL_SQL.Core;
 
 namespace ETL_SQL.Orchestrator.Execution
 {
@@ -37,7 +37,7 @@ namespace ETL_SQL.Orchestrator.Execution
         {
             _options = options.Value;
             _tracker = tracker;
-            _logger  = logger;
+            _logger = logger;
         }
 
         public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null)
@@ -58,7 +58,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private async Task<ScriptExecutionResult> RunProcessAsync(string scriptFile, string? sessionId, CancellationToken ct)
         {
             var exePath = ResolveExecutablePath();
-            var args    = BuildArguments(scriptFile, sessionId);
+            var args = BuildArguments(scriptFile, sessionId);
 
             _logger.LogInformation("Spawning job process: {Exe} {Args}", exePath, args);
 
@@ -68,11 +68,11 @@ namespace ETL_SQL.Orchestrator.Execution
 
             var psi = new ProcessStartInfo(exePath, args)
             {
-                UseShellExecute        = false,
+                UseShellExecute = false,
                 RedirectStandardOutput = true,
-                RedirectStandardError  = true,
-                CreateNoWindow         = true,
-                WorkingDirectory       = Path.GetDirectoryName(exePath) ?? Directory.GetCurrentDirectory()
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                WorkingDirectory = Path.GetDirectoryName(exePath) ?? Directory.GetCurrentDirectory()
             };
 
             using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
@@ -81,7 +81,7 @@ namespace ETL_SQL.Orchestrator.Execution
             var stderr = new StringBuilder();
 
             process.OutputDataReceived += (_, e) => { if (e.Data != null) stdout.AppendLine(e.Data); };
-            process.ErrorDataReceived  += (_, e) => { if (e.Data != null) stderr.AppendLine(e.Data); };
+            process.ErrorDataReceived += (_, e) => { if (e.Data != null) stderr.AppendLine(e.Data); };
 
             process.Start();
             process.BeginOutputReadLine();
@@ -119,7 +119,7 @@ namespace ETL_SQL.Orchestrator.Execution
             catch { /* Process object might be in a state where these are unavailable */ }
 
             var exitCode = process.ExitCode;
-            _logger.LogInformation("Job process PID={Pid} exited with code {ExitCode}. CPU: {Cpu}s, Peak RAM: {Mem} bytes", 
+            _logger.LogInformation("Job process PID={Pid} exited with code {ExitCode}. CPU: {Cpu}s, Peak RAM: {Mem} bytes",
                 process.Id, exitCode, cpuSeconds, peakMemory);
 
             // Many CLIs write progress info to stderr even on success; only escalate to Error
@@ -165,9 +165,9 @@ namespace ETL_SQL.Orchestrator.Execution
                         success = exitCode == 0;
                     }
 
-                    long   rows     = root.TryGetProperty("rowsProcessed", out var r) ? r.GetInt64() : 0;
-                    string? error   = root.TryGetProperty("error",         out var e) ? e.GetString() : null;
-                    string? session = root.TryGetProperty("sessionId",     out var sid) ? sid.GetString() : null;
+                    long rows = root.TryGetProperty("rowsProcessed", out var r) ? r.GetInt64() : 0;
+                    string? error = root.TryGetProperty("error", out var e) ? e.GetString() : null;
+                    string? session = root.TryGetProperty("sessionId", out var sid) ? sid.GetString() : null;
 
                     return new ScriptExecutionResult(success, rows, error, peakMemory, cpuSeconds, session);
                 }
@@ -179,7 +179,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
             // No parseable JSON envelope — fall back to exit code
             return exitCode == 0
-                ? new ScriptExecutionResult(true,  0, null, peakMemory, cpuSeconds)
+                ? new ScriptExecutionResult(true, 0, null, peakMemory, cpuSeconds)
                 : new ScriptExecutionResult(false, 0, $"Process exited with code {exitCode}. Stdout: {stdout.Trim()}", peakMemory, cpuSeconds);
         }
 
@@ -189,7 +189,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 return _options.ExecutablePath;
 
             // Auto-discover: look for ETL-SQL.exe / ETL-SQL next to the current assembly
-            var dir  = AppDomain.CurrentDomain.BaseDirectory;
+            var dir = AppDomain.CurrentDomain.BaseDirectory;
             foreach (var name in new[] { "ETL-SQL.exe", "ETL-SQL", "etl-sql.exe", "etl-sql" })
             {
                 var candidate = Path.Combine(dir, name);
@@ -224,7 +224,7 @@ namespace ETL_SQL.Orchestrator.Execution
         /// <summary>Optional process argument template. Supports {ScriptFile} and {SessionId}; defaults to run "{ScriptFile}" --json.</summary>
         public string? ArgumentsTemplate { get; set; }
         /// <summary>Maximum seconds a job process may run before it is killed. 0 = unlimited.</summary>
-        public int TimeoutSeconds     { get; set; } = 3600;
+        public int TimeoutSeconds { get; set; } = 3600;
         /// <summary>When true, SchedulerService uses ProcessJobExecutor instead of ScriptExecutorAdapter.</summary>
         public bool UseProcessSpawning { get; set; } = false;
     }

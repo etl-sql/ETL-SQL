@@ -1,14 +1,13 @@
-﻿using ETL_SQL.Core;
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
-
+﻿using System;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using ETL_SQL.App;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
-using System.Threading.Tasks;
-using System.Linq;
-using System;
-using System.IO;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -71,7 +70,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task Missing_EnvironmentVariable_KeepsPlaceholder()
         {
             var evaluator = _serviceProvider.GetRequiredService<Evaluator>();
-            
+
             // Assuming ${NON_EXISTENT_VAR} is not set
             var script = "CREATE CONNECTION conn AS JSON('${NON_EXISTENT_VAR}');";
             await evaluator.Evaluate(new Lexer(script).TokenizeToScript());

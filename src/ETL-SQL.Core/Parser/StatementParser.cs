@@ -13,22 +13,22 @@ namespace ETL_SQL.Core.Parser
     {
         private readonly IParser _parser;
 
-        internal DataParser      DataParser      { get; }
-        internal FlowParser      FlowParser      { get; }
-        internal SystemParser    SystemParser    { get; }
+        internal DataParser DataParser { get; }
+        internal FlowParser FlowParser { get; }
+        internal SystemParser SystemParser { get; }
         internal ExtensionParser ExtensionParser { get; }
-        internal ReportParser    ReportParser    { get; }
-        internal PortalParser    PortalParser    { get; }
+        internal ReportParser ReportParser { get; }
+        internal PortalParser PortalParser { get; }
 
         public StatementParser(IParser parser)
         {
-            _parser        = parser;
-            DataParser      = new DataParser(parser, this);
-            FlowParser      = new FlowParser(parser, this);
-            SystemParser    = new SystemParser(parser, this);
+            _parser = parser;
+            DataParser = new DataParser(parser, this);
+            FlowParser = new FlowParser(parser, this);
+            SystemParser = new SystemParser(parser, this);
             ExtensionParser = new ExtensionParser(parser, this);
-            ReportParser    = new ReportParser(parser, this);
-            PortalParser    = new PortalParser(parser, this);
+            ReportParser = new ReportParser(parser, this);
+            PortalParser = new PortalParser(parser, this);
             InitializeDispatchMap();
         }
 
@@ -36,28 +36,29 @@ namespace ETL_SQL.Core.Parser
 
         private void InitializeDispatchMap()
         {
-            _dispatchMap[TokenType.WITH]          = ParseStatementWithCte;
-            _dispatchMap[TokenType.CREATE]        = () => { var t = _parser.Previous; return DataParser.ParseCreate(t); };
-            _dispatchMap[TokenType.TAG]           = () => { var t = _parser.Previous; return DataParser.ParseTag(t); };
-            _dispatchMap[TokenType.ALTER]         = () => { var t = _parser.Previous; return DataParser.ParseAlter(t); };
-            _dispatchMap[TokenType.EXPLAIN]       = () => { var t = _parser.Previous; return SystemParser.ParseExplain(t); };
-            _dispatchMap[TokenType.DROP]          = () => { var t = _parser.Previous; return DataParser.ParseDrop(t); };
-            _dispatchMap[TokenType.CLEAR]         = () => { var t = _parser.Previous; return SystemParser.ParseClear(t); };
-            _dispatchMap[TokenType.TRUNCATE]      = () => { var t = _parser.Previous; return DataParser.ParseTruncate(t); };
-            _dispatchMap[TokenType.GENERATE]      = () => { var t = _parser.Previous; return DataParser.ParseGenerate(t); };
-            _dispatchMap[TokenType.DELETE]        = () => { var t = _parser.Previous; return DataParser.ParseDelete(t); };
-            _dispatchMap[TokenType.DECLARE]       = () => SystemParser.ParseDeclare();
-            _dispatchMap[TokenType.RUN]           = () => { var t = _parser.Previous; return SystemParser.ParseRun(t); };
-            _dispatchMap[TokenType.SHOW]          = () => { var t = _parser.Previous; return SystemParser.ParseShow(t); };
-            _dispatchMap[TokenType.COMMIT]        = () => SystemParser.ParseCommitTransaction();
-            _dispatchMap[TokenType.ROLLBACK]      = () => SystemParser.ParseRollbackTransaction();
-            _dispatchMap[TokenType.IF]            = () => { var t = _parser.Previous; return FlowParser.ParseIf(t); };
-            _dispatchMap[TokenType.WHILE]         = () => { var t = _parser.Previous; return FlowParser.ParseWhile(t); };
-            _dispatchMap[TokenType.FOREACH]       = () => FlowParser.ParseForeach();
-            _dispatchMap[TokenType.INSERT]        = () => { var t = _parser.Previous; return DataParser.ParseInsert(t); };
-            _dispatchMap[TokenType.REPLACE]       = () => { var t = _parser.Previous; return DataParser.ParseInsert(t); };
-            _dispatchMap[TokenType.UPDATE]        = () => { var t = _parser.Previous; return DataParser.ParseUpdate(t); };
-            _dispatchMap[TokenType.MERGE]         = () => {
+            _dispatchMap[TokenType.WITH] = ParseStatementWithCte;
+            _dispatchMap[TokenType.CREATE] = () => { var t = _parser.Previous; return DataParser.ParseCreate(t); };
+            _dispatchMap[TokenType.TAG] = () => { var t = _parser.Previous; return DataParser.ParseTag(t); };
+            _dispatchMap[TokenType.ALTER] = () => { var t = _parser.Previous; return DataParser.ParseAlter(t); };
+            _dispatchMap[TokenType.EXPLAIN] = () => { var t = _parser.Previous; return SystemParser.ParseExplain(t); };
+            _dispatchMap[TokenType.DROP] = () => { var t = _parser.Previous; return DataParser.ParseDrop(t); };
+            _dispatchMap[TokenType.CLEAR] = () => { var t = _parser.Previous; return SystemParser.ParseClear(t); };
+            _dispatchMap[TokenType.TRUNCATE] = () => { var t = _parser.Previous; return DataParser.ParseTruncate(t); };
+            _dispatchMap[TokenType.GENERATE] = () => { var t = _parser.Previous; return DataParser.ParseGenerate(t); };
+            _dispatchMap[TokenType.DELETE] = () => { var t = _parser.Previous; return DataParser.ParseDelete(t); };
+            _dispatchMap[TokenType.DECLARE] = () => SystemParser.ParseDeclare();
+            _dispatchMap[TokenType.RUN] = () => { var t = _parser.Previous; return SystemParser.ParseRun(t); };
+            _dispatchMap[TokenType.SHOW] = () => { var t = _parser.Previous; return SystemParser.ParseShow(t); };
+            _dispatchMap[TokenType.COMMIT] = () => SystemParser.ParseCommitTransaction();
+            _dispatchMap[TokenType.ROLLBACK] = () => SystemParser.ParseRollbackTransaction();
+            _dispatchMap[TokenType.IF] = () => { var t = _parser.Previous; return FlowParser.ParseIf(t); };
+            _dispatchMap[TokenType.WHILE] = () => { var t = _parser.Previous; return FlowParser.ParseWhile(t); };
+            _dispatchMap[TokenType.FOREACH] = () => FlowParser.ParseForeach();
+            _dispatchMap[TokenType.INSERT] = () => { var t = _parser.Previous; return DataParser.ParseInsert(t); };
+            _dispatchMap[TokenType.REPLACE] = () => { var t = _parser.Previous; return DataParser.ParseInsert(t); };
+            _dispatchMap[TokenType.UPDATE] = () => { var t = _parser.Previous; return DataParser.ParseUpdate(t); };
+            _dispatchMap[TokenType.MERGE] = () =>
+            {
                 var t = _parser.Previous;
                 if (_parser.Current.Type == TokenType.FILES)
                 {
@@ -66,35 +67,35 @@ namespace ETL_SQL.Core.Parser
                 }
                 return DataParser.ParseMerge(t);
             };
-            _dispatchMap[TokenType.PRINT]         = () => SystemParser.ParsePrint();
-            _dispatchMap[TokenType.WAITFOR]       = () => { var t = _parser.Previous; return ExtensionParser.ParseWaitFor(t); };
-            _dispatchMap[TokenType.WAIT]          = () => { var t = _parser.Previous; return ExtensionParser.ParseWait(t); };
-            _dispatchMap[TokenType.CONVERT]       = () => { var t = _parser.Previous; return ExtensionParser.ParseConvertFileEncoding(t); };
-            _dispatchMap[TokenType.SPLIT]         = () => { var t = _parser.Previous; return ExtensionParser.ParseSplitFile(t); };
-            _dispatchMap[TokenType.SYNC]          = () => { var t = _parser.Previous; return ExtensionParser.ParseSyncDirectory(t); };
-            _dispatchMap[TokenType.VERIFY]        = () => { var t = _parser.Previous; return ExtensionParser.ParseVerifyFileIntegrity(t); };
-            _dispatchMap[TokenType.RAISEERROR]    = () => FlowParser.ParseRaiseError();
-            _dispatchMap[TokenType.ASSERT]        = () => { var t = _parser.Previous; return FlowParser.ParseAssert(t); };
-            _dispatchMap[TokenType.EXPECT]        = () => { var t = _parser.Previous; return FlowParser.ParseExpectSchema(t); };
-            _dispatchMap[TokenType.PARALLEL]      = () => { var t = _parser.Previous; return FlowParser.ParseParallel(t); };
-            _dispatchMap[TokenType.THROW]         = () => FlowParser.ParseThrow();
-            _dispatchMap[TokenType.RETURN]        = () => FlowParser.ParseReturn();
-            _dispatchMap[TokenType.BREAK]         = () => FlowParser.ParseBreak();
-            _dispatchMap[TokenType.CONTINUE]      = () => FlowParser.ParseContinue();
-            _dispatchMap[TokenType.GOTO]          = () => ParseGoto();
-            _dispatchMap[TokenType.GO]            = () => ParseGo();
-            _dispatchMap[TokenType.HELP]          = () => SystemParser.ParseHelp();
-            _dispatchMap[TokenType.USE]           = () => { var t = _parser.Previous; return SystemParser.ParseUse(t); };
-            _dispatchMap[TokenType.BULK]          = () => { var t = _parser.Previous; return DataParser.ParseBulkInsert(t); };
-            _dispatchMap[TokenType.LINT]          = () => { var t = _parser.Previous; return ExtensionParser.ParseLint(t); };
-            _dispatchMap[TokenType.REQUIRE]       = () => { var t = _parser.Previous; return SystemParser.ParseRequireVersion(t); };
-            _dispatchMap[TokenType.START]         = () => ExtensionParser.ParseDockerVerb(DockerAction.Start);
-            _dispatchMap[TokenType.STOP]          = () => ExtensionParser.ParseDockerVerb(DockerAction.Stop);
-            _dispatchMap[TokenType.PAUSE]         = () => ExtensionParser.ParseDockerVerb(DockerAction.Pause);
-            _dispatchMap[TokenType.CLOSE]         = () => ExtensionParser.ParseDockerVerb(DockerAction.Close);
-            _dispatchMap[TokenType.DOCKER]        = () => ExtensionParser.ParseDockerVerb(DockerAction.Start); // Fallback
-            _dispatchMap[TokenType.STYLE]         = () => { var t = _parser.Previous; return ReportParser.ParseStyleStatement(t); };
-            _dispatchMap[TokenType.EXPORT]        = () =>
+            _dispatchMap[TokenType.PRINT] = () => SystemParser.ParsePrint();
+            _dispatchMap[TokenType.WAITFOR] = () => { var t = _parser.Previous; return ExtensionParser.ParseWaitFor(t); };
+            _dispatchMap[TokenType.WAIT] = () => { var t = _parser.Previous; return ExtensionParser.ParseWait(t); };
+            _dispatchMap[TokenType.CONVERT] = () => { var t = _parser.Previous; return ExtensionParser.ParseConvertFileEncoding(t); };
+            _dispatchMap[TokenType.SPLIT] = () => { var t = _parser.Previous; return ExtensionParser.ParseSplitFile(t); };
+            _dispatchMap[TokenType.SYNC] = () => { var t = _parser.Previous; return ExtensionParser.ParseSyncDirectory(t); };
+            _dispatchMap[TokenType.VERIFY] = () => { var t = _parser.Previous; return ExtensionParser.ParseVerifyFileIntegrity(t); };
+            _dispatchMap[TokenType.RAISEERROR] = () => FlowParser.ParseRaiseError();
+            _dispatchMap[TokenType.ASSERT] = () => { var t = _parser.Previous; return FlowParser.ParseAssert(t); };
+            _dispatchMap[TokenType.EXPECT] = () => { var t = _parser.Previous; return FlowParser.ParseExpectSchema(t); };
+            _dispatchMap[TokenType.PARALLEL] = () => { var t = _parser.Previous; return FlowParser.ParseParallel(t); };
+            _dispatchMap[TokenType.THROW] = () => FlowParser.ParseThrow();
+            _dispatchMap[TokenType.RETURN] = () => FlowParser.ParseReturn();
+            _dispatchMap[TokenType.BREAK] = () => FlowParser.ParseBreak();
+            _dispatchMap[TokenType.CONTINUE] = () => FlowParser.ParseContinue();
+            _dispatchMap[TokenType.GOTO] = () => ParseGoto();
+            _dispatchMap[TokenType.GO] = () => ParseGo();
+            _dispatchMap[TokenType.HELP] = () => SystemParser.ParseHelp();
+            _dispatchMap[TokenType.USE] = () => { var t = _parser.Previous; return SystemParser.ParseUse(t); };
+            _dispatchMap[TokenType.BULK] = () => { var t = _parser.Previous; return DataParser.ParseBulkInsert(t); };
+            _dispatchMap[TokenType.LINT] = () => { var t = _parser.Previous; return ExtensionParser.ParseLint(t); };
+            _dispatchMap[TokenType.REQUIRE] = () => { var t = _parser.Previous; return SystemParser.ParseRequireVersion(t); };
+            _dispatchMap[TokenType.START] = () => ExtensionParser.ParseDockerVerb(DockerAction.Start);
+            _dispatchMap[TokenType.STOP] = () => ExtensionParser.ParseDockerVerb(DockerAction.Stop);
+            _dispatchMap[TokenType.PAUSE] = () => ExtensionParser.ParseDockerVerb(DockerAction.Pause);
+            _dispatchMap[TokenType.CLOSE] = () => ExtensionParser.ParseDockerVerb(DockerAction.Close);
+            _dispatchMap[TokenType.DOCKER] = () => ExtensionParser.ParseDockerVerb(DockerAction.Start); // Fallback
+            _dispatchMap[TokenType.STYLE] = () => { var t = _parser.Previous; return ReportParser.ParseStyleStatement(t); };
+            _dispatchMap[TokenType.EXPORT] = () =>
             {
                 var t = _parser.Previous;
                 if (_parser.Current.Type == TokenType.DATASET)
@@ -109,14 +110,14 @@ namespace ETL_SQL.Core.Parser
                 }
                 return ParseExportReport(t);
             };
-            _dispatchMap[TokenType.ENABLE]        = () => ParseEnableJob();
-            _dispatchMap[TokenType.DISABLE]       = () => ParseDisableJob();
-            _dispatchMap[TokenType.TRIGGER]       = () => ParseTriggerJob();
+            _dispatchMap[TokenType.ENABLE] = () => ParseEnableJob();
+            _dispatchMap[TokenType.DISABLE] = () => ParseDisableJob();
+            _dispatchMap[TokenType.TRIGGER] = () => ParseTriggerJob();
 
             // Portal admin statements (valid inside EXECUTE portal BEGIN…END)
-            _dispatchMap[TokenType.GRANT]        = () => { var t = _parser.Previous; return PortalParser.ParseGrant(t); };
-            _dispatchMap[TokenType.REVOKE]       = () => { var t = _parser.Previous; return PortalParser.ParseRevoke(t); };
-            _dispatchMap[TokenType.PUBLISH]      = () =>
+            _dispatchMap[TokenType.GRANT] = () => { var t = _parser.Previous; return PortalParser.ParseGrant(t); };
+            _dispatchMap[TokenType.REVOKE] = () => { var t = _parser.Previous; return PortalParser.ParseRevoke(t); };
+            _dispatchMap[TokenType.PUBLISH] = () =>
             {
                 var t = _parser.Previous;
                 if (_parser.Current.Type == TokenType.DATASET)
@@ -131,9 +132,9 @@ namespace ETL_SQL.Core.Parser
                 }
                 return PortalParser.ParsePublishReport(t);
             };
-            _dispatchMap[TokenType.FAVORITE]     = () => { var t = _parser.Previous; return PortalParser.ParseFavoriteReport(t, favorite: true); };
-            _dispatchMap[TokenType.UNFAVORITE]   = () => { var t = _parser.Previous; return PortalParser.ParseFavoriteReport(t, favorite: false); };
-            _dispatchMap[TokenType.VALIDATE]     = () =>
+            _dispatchMap[TokenType.FAVORITE] = () => { var t = _parser.Previous; return PortalParser.ParseFavoriteReport(t, favorite: true); };
+            _dispatchMap[TokenType.UNFAVORITE] = () => { var t = _parser.Previous; return PortalParser.ParseFavoriteReport(t, favorite: false); };
+            _dispatchMap[TokenType.VALIDATE] = () =>
             {
                 var t = _parser.Previous;
                 if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("BUNDLE", StringComparison.OrdinalIgnoreCase))
@@ -143,11 +144,11 @@ namespace ETL_SQL.Core.Parser
                 }
                 return PortalParser.ParseValidateReport(t);
             };
-            _dispatchMap[TokenType.DISCONNECT]   = () => { var t = _parser.Previous; return PortalParser.ParseDisconnectUser(t); };
-            _dispatchMap[TokenType.RESTART]      = () => { var t = _parser.Previous; return PortalParser.ParseRestartPortal(t); };
-            _dispatchMap[TokenType.SHUTDOWN]     = () => { var t = _parser.Previous; return PortalParser.ParseShutdownPortal(t); };
-            _dispatchMap[TokenType.REBUILD]      = () => { var t = _parser.Previous; return PortalParser.ParseRebuildSnapshot(t); };
-            _dispatchMap[TokenType.ADD]          = () =>
+            _dispatchMap[TokenType.DISCONNECT] = () => { var t = _parser.Previous; return PortalParser.ParseDisconnectUser(t); };
+            _dispatchMap[TokenType.RESTART] = () => { var t = _parser.Previous; return PortalParser.ParseRestartPortal(t); };
+            _dispatchMap[TokenType.SHUTDOWN] = () => { var t = _parser.Previous; return PortalParser.ParseShutdownPortal(t); };
+            _dispatchMap[TokenType.REBUILD] = () => { var t = _parser.Previous; return PortalParser.ParseRebuildSnapshot(t); };
+            _dispatchMap[TokenType.ADD] = () =>
             {
                 var t = _parser.Previous;
                 if (_parser.Match(TokenType.USER)) return PortalParser.ParseAddUserToGroup(t);
@@ -155,8 +156,8 @@ namespace ETL_SQL.Core.Parser
                     $"Unexpected ADD target '{_parser.Current.Value}'",
                     _parser.Current.Line, _parser.Current.Column);
             };
-            _dispatchMap[TokenType.TOKENS]       = () => { var t = _parser.Previous; return PortalParser.ParseRevokeTokens(t); };
-            _dispatchMap[TokenType.REFRESH]      = () =>
+            _dispatchMap[TokenType.TOKENS] = () => { var t = _parser.Previous; return PortalParser.ParseRevokeTokens(t); };
+            _dispatchMap[TokenType.REFRESH] = () =>
             {
                 var t = _parser.Previous;
                 if (_parser.Match(TokenType.REPORT)) return PortalParser.ParseRefreshReport(t);
@@ -416,8 +417,8 @@ namespace ETL_SQL.Core.Parser
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after EXPORT REPORT WITH options");
             }
 
-             return new ExportReportStatement(reportPath, format, outputPath, pdfMode, host, browserPath)
-                { Line = t.Line, Column = t.Column };
+            return new ExportReportStatement(reportPath, format, outputPath, pdfMode, host, browserPath)
+            { Line = t.Line, Column = t.Column };
         }
 
         private string ConsumeExportReportOptionName()

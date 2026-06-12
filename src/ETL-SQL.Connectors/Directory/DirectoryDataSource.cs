@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Directory
 {
@@ -32,7 +32,7 @@ namespace ETL_SQL.Connectors.Directory
             bool create = true;
             if (options != null && options.TryGetValue("CREATE", out var createStr))
             {
-                create = createStr.Equals("ON", StringComparison.OrdinalIgnoreCase) || 
+                create = createStr.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
                          createStr.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
             }
 
@@ -64,7 +64,7 @@ namespace ETL_SQL.Connectors.Directory
                 row["LastModified"] = info.LastWriteTime;
                 row["IsReadOnly"] = info.IsReadOnly;
                 row["CreationTime"] = info.CreationTime;
-                
+
                 await currentBatch.AddRowAsync(row);
                 count++;
 

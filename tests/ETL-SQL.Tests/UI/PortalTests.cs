@@ -1,9 +1,9 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using ETL_SQL.TUI.UI;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {

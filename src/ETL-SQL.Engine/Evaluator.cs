@@ -1,28 +1,27 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using Spectre.Console;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
-
-using ETL_SQL.Common;
+using System.Threading.Tasks;
 using ETL_SQL.Analysis.Lineage;
-using ETL_SQL.Data;
-using ETL_SQL.Engine.Handlers;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Engine.Services;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Spill;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Engine.Services;
 using ETL_SQL.Services;
 using Microsoft.Extensions.Configuration;
-using ETL_SQL.Core.Spill;
-using ETL_SQL.Core.Execution;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
 
 namespace ETL_SQL.Engine
 {
@@ -101,48 +100,48 @@ namespace ETL_SQL.Engine
         public EvaluatorOptions Options => _options;
 
         public bool AutoRollbackOnFinish { get => _options.AutoRollbackOnFinish; set => _options.AutoRollbackOnFinish = value; }
-        
+
         [System.Obsolete("Use Telemetry.ExecutionTree")]
         public ExecutionTree ExecutionTree => Telemetry.ExecutionTree;
-        
+
         public IReportContext ReportContext => _registry.ReportContext;
 
         public long TempTableSpillThresholdRows { get => _options.TempTableSpillThresholdRows; set => _options.TempTableSpillThresholdRows = value; }
-        public int MaxRecursiveDepth 
-        { 
-            get => _options.MaxRecursiveDepth; 
-            set { _options.MaxRecursiveDepth = value; _securityService.MaxRecursiveDepth = value; } 
+        public int MaxRecursiveDepth
+        {
+            get => _options.MaxRecursiveDepth;
+            set { _options.MaxRecursiveDepth = value; _securityService.MaxRecursiveDepth = value; }
         }
         public int CurrentRecursiveDepth { get; set; } = 0;
         public string? LastIndexUsedName { get; set; }
-        
+
         public bool AllowUnknownFileTypes { get => _options.AllowUnknownFileTypes; set => _options.AllowUnknownFileTypes = value; }
         public bool AllowLargeFileOperationCount { get => _options.AllowLargeFileOperationCount; set => _options.AllowLargeFileOperationCount = value; }
         public bool AllowDeepRecursion { get => _options.AllowDeepRecursion; set => _options.AllowDeepRecursion = value; }
         public bool AllowLargeStringResults { get => _options.AllowLargeStringResults; set => _options.AllowLargeStringResults = value; }
         public HashSet<string> AllowedFileTypeOverrides => _options.AllowedFileTypeOverrides;
 
-        public int MaxParallelDegree 
-        { 
-            get => _options.MaxParallelDegree; 
-            set { _options.MaxParallelDegree = value; _securityService.MaxParallelDegree = value; } 
+        public int MaxParallelDegree
+        {
+            get => _options.MaxParallelDegree;
+            set { _options.MaxParallelDegree = value; _securityService.MaxParallelDegree = value; }
         }
-        public long MaxStringResultSize 
-        { 
-            get => _options.MaxStringResultSize; 
-            set { _options.MaxStringResultSize = value; _securityService.MaxStringResultSize = value; } 
+        public long MaxStringResultSize
+        {
+            get => _options.MaxStringResultSize;
+            set { _options.MaxStringResultSize = value; _securityService.MaxStringResultSize = value; }
         }
-        public int RegexMatchTimeoutMs 
-        { 
-            get => _options.RegexMatchTimeoutMs; 
-            set { _options.RegexMatchTimeoutMs = value; _securityService.RegexMatchTimeout = TimeSpan.FromMilliseconds(value); } 
+        public int RegexMatchTimeoutMs
+        {
+            get => _options.RegexMatchTimeoutMs;
+            set { _options.RegexMatchTimeoutMs = value; _securityService.RegexMatchTimeout = TimeSpan.FromMilliseconds(value); }
         }
         public string? CurrentScriptPath { get; set; }
         public string WorkingDirectory { get; set; } = Directory.GetCurrentDirectory();
-        public int MaxFileOperations 
-        { 
-            get => _options.MaxFileOperations; 
-            set { _options.MaxFileOperations = value; _securityService.MaxFileOperations = value; } 
+        public int MaxFileOperations
+        {
+            get => _options.MaxFileOperations;
+            set { _options.MaxFileOperations = value; _securityService.MaxFileOperations = value; }
         }
         public int MaxGroupingSets { get => _options.MaxGroupingSets; set => _options.MaxGroupingSets = value; }
         public long MaxSessionSize { get => _options.MaxSessionSize; set => _options.MaxSessionSize = value; }
@@ -159,10 +158,10 @@ namespace ETL_SQL.Engine
                 throw new SecurityException($"SMTP send limit exceeded: this script attempted to send {count} emails, but MAX_SMTP_EMAILS_PER_SCRIPT is {MaxSmtpEmailsPerScript}.");
             }
         }
-        public int MaxInternalOperations 
-        { 
-            get => _options.MaxInternalOperations; 
-            set { _options.MaxInternalOperations = value; _securityService.MaxInternalOperations = value; } 
+        public int MaxInternalOperations
+        {
+            get => _options.MaxInternalOperations;
+            set { _options.MaxInternalOperations = value; _securityService.MaxInternalOperations = value; }
         }
 
         public bool IsPersistentSession { get; set; }
@@ -188,16 +187,16 @@ namespace ETL_SQL.Engine
         /// <summary>Last script total execution duration in milliseconds.</summary>
         public long LastExecTimeMs { get; set; }
 
-        
+
         /// <summary>Size of row batches used during streaming operations.</summary>
         public int BatchSize { get => _options.BatchSize; set => _options.BatchSize = value; }
-        
+
         /// <summary>Number of batches held in memory before spilling to disk for #temp tables.</summary>
         public int MaxInMemoryBatches { get => _options.MaxInMemoryBatches; set => _options.MaxInMemoryBatches = value; }
 
         /// <summary>Maximum rows to fetch per page for remote FOREACH pushdown.</summary>
         public int ForeachPageSize { get => _options.ForeachPageSize; set => _options.ForeachPageSize = value; }
-        
+
         /// <summary>
         /// Whether to output detailed execution logs for this evaluator instance.
         /// Reads the global Logger.IsVerbose as a fallback so that a process-wide verbose
@@ -209,13 +208,13 @@ namespace ETL_SQL.Engine
             get => _options.IsVerbose || _logger.IsVerbose;
             set => _options.IsVerbose = value;
         }
-        
+
         /// <summary>If true, Log messages are captured in the Messages list instead of direct console output.</summary>
         public bool RedirectOutput { get => _options.RedirectOutput; set => _options.RedirectOutput = value; }
-        
+
         /// <summary>Limit the number of rows returned for previews.</summary>
         public int? PreviewLimit { get => _options.PreviewLimit; set => _options.PreviewLimit = value; }
-        
+
         /// <summary>Preference for showing sensitive data in plain text in the UI.</summary>
         public bool ShowPassword { get => _options.ShowPassword; set => _options.ShowPassword = value; }
 
@@ -225,26 +224,26 @@ namespace ETL_SQL.Engine
         public bool NoSaveSensitive { get => _options.NoSaveSensitive; set => _options.NoSaveSensitive = value; }
         public bool NoSaveConnection { get => _options.NoSaveConnection; set => _options.NoSaveConnection = value; }
         public bool ConnectionEncryption { get => _options.ConnectionEncryption; set => _options.ConnectionEncryption = value; }
-        
+
         /// <summary>Master password for decrypting connection strings.</summary>
         public string? MasterPassword { get; set; }
 
 
         /// <summary>Script-level password for encryption/decryption of sensitive data within the script.</summary>
         public string? ScriptPassword { get; set; }
-        
+
         /// <summary>Event raised when a batch of rows is processed.</summary>
         public Action<long>? OnBatchProcessed { get; set; }
-        
+
         /// <summary>Event raised when a new result set is produced.</summary>
         public Action<DataTable>? OnResultSet { get; set; }
 
         /// <summary>Event raised when a new visual is created (Interactive Mode).</summary>
         public Action<CreateVisualStatement>? OnVisualCreated { get; set; }
-        
+
         /// <summary>Event raised when a diagnostic message is emitted (Interactive Mode).</summary>
         public Action<Diagnostic>? OnMessage { get; set; }
-        
+
         private readonly object _lastResultSetsLock = new();
         private readonly object _messagesLock = new();
 
@@ -253,7 +252,7 @@ namespace ETL_SQL.Engine
 
         /// <summary>Collection of all result sets produced during the last execution.</summary>
         public List<DataTable> LastResultSets { get; } = new();
-        
+
         /// <summary>Named environment sets created by CREATE SETS.</summary>
         public IDictionary<string, NamedSet> NamedSets { get; } = new Dictionary<string, NamedSet>(StringComparer.OrdinalIgnoreCase);
 
@@ -262,7 +261,7 @@ namespace ETL_SQL.Engine
 
         /// <summary>Whether to capture execution metrics for profiling.</summary>
         public bool IsJsonMode { get; set; }
-        
+
         /// <summary>Whether to run in dry-run mode (no side effects).</summary>
         public bool IsWhatIf { get; set; }
 
@@ -274,7 +273,7 @@ namespace ETL_SQL.Engine
 
         /// <summary>Whether the engine is in interactive mode (e.g. Notebooks/REPL).</summary>
         public bool InteractiveMode { get; set; } = false;
-        
+
         public IServiceProvider ServiceProvider => _serviceProvider;
 
         public int JoinSpillThreshold { get => _options.JoinSpillThreshold; set => _options.JoinSpillThreshold = value; }
@@ -286,7 +285,7 @@ namespace ETL_SQL.Engine
         public bool SpillEncryptionEnabled { get => _options.SpillEncryptionEnabled; set => _options.SpillEncryptionEnabled = value; }
         public bool SpillCompressionEnabled { get => _options.SpillCompressionEnabled; set => _options.SpillCompressionEnabled = value; }
         public string SpillFormat { get => _options.SpillFormat; set => _options.SpillFormat = value; }
-        
+
         public string? DecryptValue(string? val)
         {
             if (string.IsNullOrEmpty(val)) return val;
@@ -306,10 +305,10 @@ namespace ETL_SQL.Engine
             get => ExecutionNode.Current.Value?.Id;
             set => ExecutionNode.Current.Value = value.HasValue ? Telemetry.ExecutionTree.GetNode(value.Value) : null;
         }
-        
+
         /// <summary>Interface for managing Docker database containers.</summary>
         public IDockerManager DockerManager => _dockerManager;
-        
+
         /// <summary>Interface for tracking data lineage.</summary>
         public ILineageTracker LineageTracker => _lineageTracker;
 
@@ -363,23 +362,23 @@ namespace ETL_SQL.Engine
         /// The root directory for the current session (metadata, logs, and spills).
         /// Defaults to the standard AppData path if not explicitly provided.
         /// </summary>
-        public string SessionRoot 
-        { 
+        public string SessionRoot
+        {
             get => _sessionRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions", SessionId ?? "DEFAULT");
             set => _sessionRoot = value;
         }
         private string? _sessionRoot;
 
-        
+
         /// <summary>Cache for scalar subquery results to avoid redundant execution.</summary>
         public ETL_SQL.Core.Common.LruCache<SubqueryCacheKey, ETL_SQL.Core.Data.SubqueryResult> SubqueryCache => _subqueryCache;
-        
+
         /// <summary>Token used to cancel long-running operations in this context.</summary>
         public System.Threading.CancellationToken CancellationToken { get; private set; } = System.Threading.CancellationToken.None;
-        
+
         /// <summary>Stack of row contexts for correlated subquery resolution.</summary>
         public Stack<Row> OuterRowStack => _outerRowStack;
-        
+
         /// <summary>Registry of all scalar and aggregate functions available in the session.</summary>
         public Core.Functions.IFunctionRegistry FunctionRegistry => _functionRegistry;
 
@@ -419,11 +418,12 @@ namespace ETL_SQL.Engine
             _logger = logger;
             _languageHelp = languageHelp;
             _bufferManager = _serviceProvider?.GetService<IBufferManager>();
-            
+
             _options = options ?? new EvaluatorOptions { MaxSmtpEmailsPerScript = _securityService.MaxSmtpEmailsPerScript };
             _registry = registry ?? new EvaluatorComponentRegistry();
             _subqueryCache = new ETL_SQL.Core.Common.LruCache<SubqueryCacheKey, ETL_SQL.Core.Data.SubqueryResult>(_options.SubqueryCacheSize);
-            _subqueryCache.OnEvicted = async (val) => {
+            _subqueryCache.OnEvicted = async (val) =>
+            {
                 try { await val.DisposeAsync(); } catch { }
             };
 
@@ -433,10 +433,10 @@ namespace ETL_SQL.Engine
             Telemetry.ExecutionTree.Clear();
             if (executionTree != null)
             {
-               foreach(var node in executionTree.GetAllNodes()) Telemetry.ExecutionTree.AddNode(node);
+                foreach (var node in executionTree.GetAllNodes()) Telemetry.ExecutionTree.AddNode(node);
             }
             _connections = connections ?? new ConcurrentDictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
-            
+
             _queryCompiler = _registry.QueryCompiler;
             _metricsReporter = _registry.MetricsReporter;
             _expressionEvaluator = _registry.ExpressionEvaluator;
@@ -446,7 +446,7 @@ namespace ETL_SQL.Engine
             _procedureExecutor = _registry.ProcedureExecutor;
             _constraintValidator = new DataConstraintValidator(_expressionEvaluator, _connections);
             _spillCoordinator = new EvaluatorSpillCoordinator(this, _logger);
-            
+
             // Link Telemetry to registry components if needed, or initialized via registry.Initialize
             Telemetry.IsProfiling = _options.IsProfiling;
 
@@ -515,7 +515,7 @@ namespace ETL_SQL.Engine
             // Configure the process-wide grant pool (shared across concurrent jobs). 0 = unbounded.
             MemoryGrantArbiter.Shared.TotalBudgetBytes = (long)DefaultThresholds.TotalMemoryGrantMB(config) * 1024 * 1024;
             TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
-            
+
             _options.BatchSize = BatchSize;
             _options.SubqueryCacheSize = DefaultThresholds.SubqueryCacheSize(config);
             _options.TempTableSpillThresholdRows = TempTableSpillThresholdRows;
@@ -660,9 +660,9 @@ namespace ETL_SQL.Engine
                     {
                         var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                         {
-                            ["db_type"]     = col.DataType,
+                            ["db_type"] = col.DataType,
                             ["db_nullable"] = col.IsNullable ? "true" : "false",
-                            ["db_is_pk"]    = col.IsPrimaryKey ? "true" : "false",
+                            ["db_is_pk"] = col.IsPrimaryKey ? "true" : "false",
                         };
                         // Record the DB column comment as the lineage description ("d")
                         // so it inherits onto derived columns and surfaces as the
@@ -758,7 +758,7 @@ namespace ETL_SQL.Engine
 
                 if (!InteractiveMode)
                 {
-                    lock(_messagesLock) { Messages.Clear(); }
+                    lock (_messagesLock) { Messages.Clear(); }
                 }
             }
             try
@@ -769,7 +769,8 @@ namespace ETL_SQL.Engine
                     analyzer.Analyze(script);
                 }
 
-                if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)) {
+                if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+                {
                     var firstError = script.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error);
                     throw new ExecutionException($"Syntax error: {firstError.Message} at {firstError.Line}:{firstError.Column}");
                 }
@@ -777,7 +778,8 @@ namespace ETL_SQL.Engine
                 ExecutionNode? scriptNode = null;
                 if (Telemetry.TelemetryEnabled)
                 {
-                    scriptNode = new ExecutionNode {
+                    scriptNode = new ExecutionNode
+                    {
                         Name = "Script Execution",
                         Status = ExecutionStatus.Running,
                         StartTicks = Stopwatch.GetTimestamp()
@@ -973,7 +975,7 @@ namespace ETL_SQL.Engine
 
             LineageTracker.Clear();
             LineageTracker.LoadState(state.LineageEntries);
-            
+
             foreach (var temp in state.TempTables)
             {
                 _connections[temp.Name] = await _dataSourceManager.RestoreTempTable(temp, ScriptPassword ?? ETL_SQL.Services.SecurityService.GetMachineKey());
@@ -996,16 +998,16 @@ namespace ETL_SQL.Engine
             var parentId = CurrentNodeId;
 
             var nodeName = statement.GetType().Name.Replace("Statement", "");
-            
+
             // Refine node name for readability
             if (statement is UsePasswordStatement) nodeName = "USE PASSWORD";
             else if (statement is UseSetsStatement us) nodeName = $"USE SETS {us.Name}";
             else if (statement is CreateTableStatement cts) nodeName = $"CREATE TABLE {cts.TargetTable.TableName}";
             else if (statement is InsertStatement inst) nodeName = $"INSERT INTO {inst.TargetTable.TableName}";
-            
+
             ExecutionNode? node = null;
             var cacheKey = (parentId, statement);
-            
+
             if (Telemetry.TelemetryEnabled)
             {
                 if (ReuseLoopNodes && _nodeReuseMap.TryGetValue(cacheKey, out var existingNode))
@@ -1018,7 +1020,8 @@ namespace ETL_SQL.Engine
                 }
                 else
                 {
-                    node = new ExecutionNode { 
+                    node = new ExecutionNode
+                    {
                         Name = nodeName,
                         Status = ExecutionStatus.Running,
                         StartTicks = Stopwatch.GetTimestamp()
@@ -1178,7 +1181,7 @@ namespace ETL_SQL.Engine
         {
             // 1. Try current row
             if (row != null && row.Columns.TryGetValue(name, out var val)) return val;
-            
+
             // 2. Try outer row stack (for correlated subqueries)
             foreach (var outer in _outerRowStack)
             {
@@ -1198,7 +1201,7 @@ namespace ETL_SQL.Engine
             }
 
             if (_sessionId != null) _sessionStateManager.UnregisterActiveSession(_sessionId);
-            
+
             // Reclaim any 'Zombie' resource reservations (Reference Counting protection)
             if (!string.IsNullOrEmpty(SessionId))
             {
@@ -1237,7 +1240,7 @@ namespace ETL_SQL.Engine
                 DisplayExecuteTree = DisplayExecuteTree,
                 MaxGroupingSets = MaxGroupingSets
             };
-            
+
             fork.Telemetry.IsProfiling = Telemetry.IsProfiling;
 
             // Note: CurrentNodeId is AsyncLocal and will automatically flow to the new thread if Task.Run is used,
@@ -1255,7 +1258,7 @@ namespace ETL_SQL.Engine
                 if (spawned.LastResult != null) LastResult = spawned.LastResult;
             }
             lock (_messagesLock) foreach (var entry in spawned.Messages) Log(entry.Message, entry.Color);
-            
+
             Telemetry.RowsProcessed += spawned.Telemetry.RowsProcessed;
             Telemetry.TotalSpilledBytes += spawned.Telemetry.TotalSpilledBytes;
         }
@@ -1298,16 +1301,16 @@ namespace ETL_SQL.Engine
             _variableScopeManager.Reset();
 
             // 3. Dispose and Clear Temp Tables (LocalSources) and Global Connections
-            foreach (var conn in _connections.Values) 
+            foreach (var conn in _connections.Values)
             {
-                try { await conn.DisposeAsync(); } 
+                try { await conn.DisposeAsync(); }
                 catch (Exception ex) { _logger.Debug("Error disposing connection: {Msg}", ex.Message); }
             }
             _connections.Clear();
 
-            foreach (var src in _localSources.Values) 
+            foreach (var src in _localSources.Values)
             {
-                try { await src.DisposeAsync(); } 
+                try { await src.DisposeAsync(); }
                 catch (Exception ex) { _logger.Debug("Error disposing local source: {Msg}", ex.Message); }
             }
             _localSources.Clear();

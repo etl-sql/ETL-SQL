@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace ETL_SQL.Analysis.Linting.Rules
 {
@@ -14,7 +14,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
         {
             var results = new List<LintResult>();
             var declaredVariables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            
+
             foreach (var statement in script.Statements)
             {
                 AnalyzeStatement(statement, declaredVariables, results);
@@ -44,7 +44,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 if (select.TopCount != null) AnalyzeExpression(select.TopCount, declaredVariables, results);
                 if (select.LimitCount != null) AnalyzeExpression(select.LimitCount, declaredVariables, results);
                 if (select.Offset != null) AnalyzeExpression(select.Offset, declaredVariables, results);
-                
+
                 if (select.FromTable?.Subquery != null) AnalyzeStatement(select.FromTable.Subquery, declaredVariables, results);
                 foreach (var join in select.Joins)
                 {
@@ -94,9 +94,9 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 AnalyzeExpression(forStmt.StartValue, declaredVariables, results);
                 AnalyzeExpression(forStmt.EndValue, declaredVariables, results);
                 if (forStmt.StepValue != null) AnalyzeExpression(forStmt.StepValue, declaredVariables, results);
-                
+
                 var loopVars = new HashSet<string>(declaredVariables, StringComparer.OrdinalIgnoreCase);
-                loopVars.Add(forStmt.VariableName); 
+                loopVars.Add(forStmt.VariableName);
                 AnalyzeStatement(forStmt.Body, loopVars, results);
             }
             else if (statement is ForeachStatement foreachStmt)
@@ -145,8 +145,8 @@ namespace ETL_SQL.Analysis.Linting.Rules
             }
             else if (statement is UseSetsStatement useSets)
             {
-                 // USE SETS !name - ideally we'd know what variables are in the set, 
-                 // but for now we assume they were defined in a CREATE SETS earlier in this script.
+                // USE SETS !name - ideally we'd know what variables are in the set, 
+                // but for now we assume they were defined in a CREATE SETS earlier in this script.
             }
             else if (statement is AssertStatement assert)
             {
@@ -180,9 +180,9 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 AnalyzeExpression(pFor.StartValue, declaredVariables, results);
                 AnalyzeExpression(pFor.EndValue, declaredVariables, results);
                 if (pFor.StepValue != null) AnalyzeExpression(pFor.StepValue, declaredVariables, results);
-                
+
                 var loopVars = new HashSet<string>(declaredVariables, StringComparer.OrdinalIgnoreCase);
-                loopVars.Add(pFor.VariableName); 
+                loopVars.Add(pFor.VariableName);
                 AnalyzeStatement(pFor.Body, loopVars, results);
             }
             else if (statement is BulkInsertStatement bulk)

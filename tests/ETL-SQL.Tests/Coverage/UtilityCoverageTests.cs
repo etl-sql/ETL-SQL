@@ -5,15 +5,15 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Analysis;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Analysis.Linting;
-using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Data;
+using Xunit;
 
 namespace ETL_SQL.Tests.Coverage
 {

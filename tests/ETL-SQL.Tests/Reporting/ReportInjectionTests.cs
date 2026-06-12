@@ -1,11 +1,11 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.ReportHosting;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
-using System.Linq;
+using ETL_SQL.ReportHosting;
+using Xunit;
 
 namespace ETL_SQL.Tests.Reporting
 {
@@ -20,7 +20,7 @@ namespace ETL_SQL.Tests.Reporting
         public async Task SetParameterAsync_PreventsVariousScriptInjections(string maliciousPayload, string scenario)
         {
             Assert.NotNull(scenario); // Use parameter to satisfy xUnit1026
-            
+
             // 1. Setup a test script that uses a parameter in a WHERE clause.
             string scriptPath = Path.Combine(Path.GetTempPath(), $"injection_test_{Guid.NewGuid()}.rptsql");
             File.WriteAllText(scriptPath, @"
@@ -30,10 +30,10 @@ CREATE VISUAL InjectionResult AS TABLE (SOURCE = (SELECT * FROM #SourceTable WHE
 CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP('A' = InjectionResult));
 ");
 
-            try 
+            try
             {
                 var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
-                
+
                 // 2. Initial build is implicit or explicit
                 await service.GetManifestAsync();
 
@@ -44,8 +44,8 @@ CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP('A' = InjectionResult));
                 // 4. Verification
                 // The visual should be empty because 'Category' does not equal the malicious string
                 // AND most importantly, the engine should not have crashed or executed the secondary statements.
-                Assert.Empty(visual.Rows); 
-                
+                Assert.Empty(visual.Rows);
+
                 // Verify parameter was stored literally
                 Assert.Equal(maliciousPayload, service.Parameters["Category"]);
             }

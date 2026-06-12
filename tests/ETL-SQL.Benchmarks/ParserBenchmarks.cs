@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
-using ETL_SQL.Core;
 using ETL_SQL.App;
+using ETL_SQL.Core;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Benchmarks
@@ -16,7 +16,7 @@ namespace ETL_SQL.Benchmarks
         public void Setup()
         {
             _smallScript = "SELECT * FROM Users WHERE Id = 42;";
-            
+
             // Build a larger script
             var sb = new System.Text.StringBuilder();
             for (int i = 0; i < 100; i++)

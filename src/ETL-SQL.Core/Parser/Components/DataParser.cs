@@ -83,8 +83,8 @@ namespace ETL_SQL.Core.Parser.Components
                 return ParseCreateTable(startToken);
             }
             if (Match(TokenType.PROCEDURE)) return ParseCreateProcedure(startToken, mode);
-            if (Match(TokenType.FUNCTION))  return ParseCreateFunction(startToken, mode);
-            if (Match(TokenType.VIEW))      return ParseCreateView(startToken, mode);
+            if (Match(TokenType.FUNCTION)) return ParseCreateFunction(startToken, mode);
+            if (Match(TokenType.VIEW)) return ParseCreateView(startToken, mode);
             if (Match(TokenType.JOB))
             {
                 var stmt = ParseCreateJob(startToken);
@@ -140,26 +140,26 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             // Report-SQL
-            if (Match(TokenType.VISUAL))     return _parent.ReportParser.ParseCreateVisual(startToken, mode);
-            if (Match(TokenType.PAGE))       return _parent.ReportParser.ParseCreatePage(startToken, mode);
-            if (Match(TokenType.DATASET))    return _parent.ReportParser.ParseCreateDataset(startToken, mode);
-            if (Match(TokenType.CONTAINER))  return _parent.ReportParser.ParseCreateContainer(startToken, mode);
+            if (Match(TokenType.VISUAL)) return _parent.ReportParser.ParseCreateVisual(startToken, mode);
+            if (Match(TokenType.PAGE)) return _parent.ReportParser.ParseCreatePage(startToken, mode);
+            if (Match(TokenType.DATASET)) return _parent.ReportParser.ParseCreateDataset(startToken, mode);
+            if (Match(TokenType.CONTAINER)) return _parent.ReportParser.ParseCreateContainer(startToken, mode);
             if (Match(TokenType.NAVIGATION)) return _parent.ReportParser.ParseCreateNavigation(startToken, mode);
-            if (Match(TokenType.STYLE))      return _parent.ReportParser.ParseCreateStyle(startToken, mode);
-            if (Match(TokenType.BUTTON))     return _parent.ReportParser.ParseCreateButton(startToken, mode);
-            if (Match(TokenType.TEMPLATE))   return _parent.ReportParser.ParseCreateTemplate(startToken, mode);
-            if (Match(TokenType.THEME))      return _parent.ReportParser.ParseCreateTheme(startToken, mode);
+            if (Match(TokenType.STYLE)) return _parent.ReportParser.ParseCreateStyle(startToken, mode);
+            if (Match(TokenType.BUTTON)) return _parent.ReportParser.ParseCreateButton(startToken, mode);
+            if (Match(TokenType.TEMPLATE)) return _parent.ReportParser.ParseCreateTemplate(startToken, mode);
+            if (Match(TokenType.THEME)) return _parent.ReportParser.ParseCreateTheme(startToken, mode);
 
             // Portal admin
-            if (Match(TokenType.USER))       return _parent.PortalParser.ParseCreateUser(startToken);
-            if (Match(TokenType.GROUP))      return _parent.PortalParser.ParseCreateGroup(startToken);
-            if (Match(TokenType.FOLDER))     return _parent.PortalParser.ParseCreateFolder(startToken);
-            if (Match(TokenType.REFRESH))    return _parent.PortalParser.ParseCreateRefreshJob(startToken);
+            if (Match(TokenType.USER)) return _parent.PortalParser.ParseCreateUser(startToken);
+            if (Match(TokenType.GROUP)) return _parent.PortalParser.ParseCreateGroup(startToken);
+            if (Match(TokenType.FOLDER)) return _parent.PortalParser.ParseCreateFolder(startToken);
+            if (Match(TokenType.REFRESH)) return _parent.PortalParser.ParseCreateRefreshJob(startToken);
             if (Match(TokenType.SUBSCRIPTION)) return _parent.PortalParser.ParseCreateSubscription(startToken);
-            if (Match(TokenType.SHARE))      return _parent.PortalParser.ParseCreateShareLink(startToken);
-            if (Match(TokenType.EMBED))      return _parent.PortalParser.ParseCreateEmbedToken(startToken);
-            if (Match(TokenType.SAVED))      return _parent.PortalParser.ParseCreateSavedView(startToken);
-            if (Match(TokenType.ALERT))      return _parent.PortalParser.ParseCreateAlert(startToken);
+            if (Match(TokenType.SHARE)) return _parent.PortalParser.ParseCreateShareLink(startToken);
+            if (Match(TokenType.EMBED)) return _parent.PortalParser.ParseCreateEmbedToken(startToken);
+            if (Match(TokenType.SAVED)) return _parent.PortalParser.ParseCreateSavedView(startToken);
+            if (Match(TokenType.ALERT)) return _parent.PortalParser.ParseCreateAlert(startToken);
 
             throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, VIEW, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, TEMPLATE, or THEME after CREATE", _parser.Current.Line, _parser.Current.Column);
         }
@@ -167,16 +167,16 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParseAlter(Token startToken)
         {
             if (Match(TokenType.CONNECTION)) return ParseAlterConnection(startToken);
-            if (Match(TokenType.PROCEDURE))  return ParseCreateProcedure(startToken, ObjectCreationMode.Alter);
-            if (Match(TokenType.FUNCTION))   return ParseCreateFunction(startToken, ObjectCreationMode.Alter);
-            if (Match(TokenType.VIEW))       return ParseCreateView(startToken, ObjectCreationMode.Alter);
-            if (Match(TokenType.TABLE))      return ParseAlterTable(startToken);
+            if (Match(TokenType.PROCEDURE)) return ParseCreateProcedure(startToken, ObjectCreationMode.Alter);
+            if (Match(TokenType.FUNCTION)) return ParseCreateFunction(startToken, ObjectCreationMode.Alter);
+            if (Match(TokenType.VIEW)) return ParseCreateView(startToken, ObjectCreationMode.Alter);
+            if (Match(TokenType.TABLE)) return ParseAlterTable(startToken);
 
             // Report-SQL
-            if (Match(TokenType.VISUAL))     return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Visual);
-            if (Match(TokenType.PAGE))       return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Page);
-            if (Match(TokenType.CONTAINER))  return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Container);
-            if (Match(TokenType.STYLE))      return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Style);
+            if (Match(TokenType.VISUAL)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Visual);
+            if (Match(TokenType.PAGE)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Page);
+            if (Match(TokenType.CONTAINER)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Container);
+            if (Match(TokenType.STYLE)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Style);
             if (Match(TokenType.NAVIGATION)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Navigation);
             if (Match(TokenType.DATASET))
             {
@@ -184,15 +184,15 @@ namespace ETL_SQL.Core.Parser.Components
                     return _parent.PortalParser.ParseAlterDataset(startToken);
                 return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Dataset);
             }
-            if (Match(TokenType.TEMPLATE))   return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Template);
+            if (Match(TokenType.TEMPLATE)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Template);
 
             // Orchestrator job management
             if (Match(TokenType.JOB)) return ParseAlterJob(startToken);
 
             // Portal admin
-            if (Match(TokenType.USER))         return _parent.PortalParser.ParseAlterUser(startToken);
-            if (Match(TokenType.FOLDER))       return _parent.PortalParser.ParseAlterFolder(startToken);
-            if (Match(TokenType.REPORT))       return _parent.PortalParser.ParseAlterReport(startToken);
+            if (Match(TokenType.USER)) return _parent.PortalParser.ParseAlterUser(startToken);
+            if (Match(TokenType.FOLDER)) return _parent.PortalParser.ParseAlterFolder(startToken);
+            if (Match(TokenType.REPORT)) return _parent.PortalParser.ParseAlterReport(startToken);
             if (Match(TokenType.SUBSCRIPTION)) return _parent.PortalParser.ParseAlterSubscription(startToken);
 
             throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, VIEW, TABLE, JOB, or REPORT object after ALTER", _parser.Current.Line, _parser.Current.Column);
@@ -612,7 +612,7 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.ON, "Expected ON in MERGE");
             var onClause = ParseExpression();
 
-            var whenMatched    = new List<MergeMatchedClause>();
+            var whenMatched = new List<MergeMatchedClause>();
             var whenNotMatched = new List<MergeNotMatchedClause>();
 
             while (Match(TokenType.WHEN))
@@ -707,7 +707,7 @@ namespace ETL_SQL.Core.Parser.Components
         {
             if (!Match(TokenType.INSERT) && !Match(TokenType.LOAD))
                 throw new SyntaxException("Expected INSERT or LOAD after BULK", _parser.Current.Line, _parser.Current.Column);
-            
+
             Match(TokenType.INTO);
             var targetTable = ParseTableReference(false);
             List<string>? columns = null;
@@ -1092,15 +1092,15 @@ namespace ETL_SQL.Core.Parser.Components
                     constraintName = ConsumeIdentifier("Expected constraint name").Value;
 
                 if (_parser.Current.Type == TokenType.PRIMARY ||
-                    _parser.Current.Type == TokenType.UNIQUE  ||
-                    _parser.Current.Type == TokenType.CHECK   ||
+                    _parser.Current.Type == TokenType.UNIQUE ||
+                    _parser.Current.Type == TokenType.CHECK ||
                     _parser.Current.Type == TokenType.FOREIGN)
                 {
                     tableConstraints.Add(ParseTableConstraint(constraintName));
                 }
                 else
                 {
-                    var colName  = ConsumeIdentifier("Expected column name or constraint").Value;
+                    var colName = ConsumeIdentifier("Expected column name or constraint").Value;
                     string dataType = "NVARCHAR(MAX)";
 
                     if (_parser.IsIdentifier(_parser.Current))
@@ -1111,7 +1111,7 @@ namespace ETL_SQL.Core.Parser.Components
                             dataType += "(";
                             if (Match(TokenType.MAX)) dataType += "MAX";
                             else dataType += Consume(TokenType.NUMBER, "Expected length").Value;
-                            
+
                             if (Match(TokenType.COMMA))
                             {
                                 dataType += ",";
@@ -1134,9 +1134,9 @@ namespace ETL_SQL.Core.Parser.Components
                     {
                         if (Match(TokenType.IDENTITY)) { }
                         else if (Match(TokenType.PRIMARY)) { Consume(TokenType.KEY, "Expected KEY after PRIMARY"); colDef.IsPrimaryKey = true; }
-                        else if (Match(TokenType.UNIQUE))  { colDef.IsUnique = true; }
-                        else if (Match(TokenType.NOT))     { Consume(TokenType.NULL, "Expected NULL after NOT"); colDef.IsNullable = false; }
-                        else if (Match(TokenType.NULL))    { colDef.IsNullable = true; }
+                        else if (Match(TokenType.UNIQUE)) { colDef.IsUnique = true; }
+                        else if (Match(TokenType.NOT)) { Consume(TokenType.NULL, "Expected NULL after NOT"); colDef.IsNullable = false; }
+                        else if (Match(TokenType.NULL)) { colDef.IsNullable = true; }
                         else if (Match(TokenType.CHECK))
                         {
                             Consume(TokenType.LPAREN, "Expected '(' after CHECK");
@@ -1255,9 +1255,15 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.LPAREN))
             {
                 path = ParseExpression();
-                if (Match(TokenType.COMMA)) { bits = ParseExpression();
-                    if (Match(TokenType.COMMA)) { algorithm = ParseExpression();
-                        if (Match(TokenType.COMMA)) { passphrase = ParseExpression();
+                if (Match(TokenType.COMMA))
+                {
+                    bits = ParseExpression();
+                    if (Match(TokenType.COMMA))
+                    {
+                        algorithm = ParseExpression();
+                        if (Match(TokenType.COMMA))
+                        {
+                            passphrase = ParseExpression();
                             if (Match(TokenType.COMMA)) comment = ParseExpression();
                         }
                     }
@@ -1278,10 +1284,10 @@ namespace ETL_SQL.Core.Parser.Components
                         var val = ParseExpression();
                         switch (key)
                         {
-                            case "BITS":       bits = val;       break;
-                            case "ALGORITHM":  algorithm = val;  break;
+                            case "BITS": bits = val; break;
+                            case "ALGORITHM": algorithm = val; break;
                             case "PASSPHRASE": passphrase = val; break;
-                            case "COMMENT":    comment = val;    break;
+                            case "COMMENT": comment = val; break;
                             default: throw new SyntaxException($"Unknown SSH_KEY_PAIR option: {key}", keyToken.Line, keyToken.Column);
                         }
                         if (!Match(TokenType.COMMA)) { Consume(TokenType.RPAREN, "Expected ')' or ','"); break; }
@@ -1311,7 +1317,7 @@ namespace ETL_SQL.Core.Parser.Components
                     var keyTok = Advance();
                     string key = keyTok.Value.ToUpperInvariant();
                     Consume(TokenType.EQUALS, "Expected '=' after option key");
-                    
+
                     var valExpr = ParseExpression();
                     if (valExpr is LiteralExpression lit && lit.Type == TokenType.NUMBER)
                     {
@@ -1411,8 +1417,8 @@ namespace ETL_SQL.Core.Parser.Components
                         var val = ParseExpression();
                         switch (key)
                         {
-                            case "BITS":       bits = val;       break;
-                            case "IDENTITY":   identity = val;   break;
+                            case "BITS": bits = val; break;
+                            case "IDENTITY": identity = val; break;
                             case "PASSPHRASE": passphrase = val; break;
                             default: throw new SyntaxException($"Unknown PGP_KEY_PAIR option: {key}", keyToken.Line, keyToken.Column);
                         }

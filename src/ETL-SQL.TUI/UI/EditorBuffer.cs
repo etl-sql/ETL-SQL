@@ -40,7 +40,8 @@ namespace ETL_SQL.TUI.UI
                 }
             }
 
-            char? close = ch switch {
+            char? close = ch switch
+            {
                 '[' => ']',
                 '(' => ')',
                 '"' => '"',
@@ -49,7 +50,7 @@ namespace ETL_SQL.TUI.UI
             };
 
             string toInsert = close.HasValue ? $"{ch}{close.Value}" : ch.ToString();
-            
+
             if (IsMultiLineMode)
             {
                 foreach (var c in SecondaryCursors)
@@ -285,12 +286,12 @@ namespace ETL_SQL.TUI.UI
         {
             if (!SelectionStartLine.HasValue) return null;
             var (startL, startC, endL, endC) = GetSelectionBounds();
-            
+
             if (startL == endL)
             {
                 return Lines[startL].Substring(startC, endC - startC);
             }
-            
+
             var sb = new StringBuilder();
             sb.AppendLine(Lines[startL].Substring(startC));
             for (int i = startL + 1; i < endL; i++)
@@ -364,9 +365,9 @@ namespace ETL_SQL.TUI.UI
                 if (reverse)
                 {
                     int remove = Lines[i].StartsWith("    ") ? 4
-                               : Lines[i].StartsWith("   ")  ? 3
-                               : Lines[i].StartsWith("  ")   ? 2
-                               : Lines[i].StartsWith(" ")    ? 1 : 0;
+                               : Lines[i].StartsWith("   ") ? 3
+                               : Lines[i].StartsWith("  ") ? 2
+                               : Lines[i].StartsWith(" ") ? 1 : 0;
                     if (remove > 0) Lines[i] = Lines[i].Substring(remove);
                     if (i == CursorLine) CursorColumn = Math.Max(0, CursorColumn - remove);
                 }
@@ -426,7 +427,7 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
             if (IsWordChar(line[col])) { while (col < line.Length && IsWordChar(line[col])) col++; }
-            else                       { while (col < line.Length && !IsWordChar(line[col])) col++; }
+            else { while (col < line.Length && !IsWordChar(line[col])) col++; }
             CursorColumn = col;
         }
 

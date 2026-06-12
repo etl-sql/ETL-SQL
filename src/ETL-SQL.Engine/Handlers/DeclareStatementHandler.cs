@@ -1,8 +1,8 @@
-using ETL_SQL.Data;
 using System;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -24,7 +24,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (DeclareStatement)statement;
-            
+
             _logger.Debug("Declaring variable {VariableName} as {DataType}", stmt.VariableName, stmt.DataType);
 
             object? val = null;
@@ -56,10 +56,10 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
 
-            var metadata = new VariableMetadata 
-            { 
-                IsInput = stmt.IsInput, 
-                IsOutput = stmt.IsOutput, 
+            var metadata = new VariableMetadata
+            {
+                IsInput = stmt.IsInput,
+                IsOutput = stmt.IsOutput,
                 IsRequired = stmt.IsRequired,
                 IsSensitive = stmt.IsSensitive,
                 IsSecret = stmt.IsSecret,

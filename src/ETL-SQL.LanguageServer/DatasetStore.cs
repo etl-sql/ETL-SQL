@@ -15,17 +15,17 @@ namespace ETL_SQL.LSP
     public sealed class DatasetStore
     {
         public record DatasetEntry(
-            string   Name,
-            string   FolderPath,
-            string   AccessLevel,
-            long     RowCount,
+            string Name,
+            string FolderPath,
+            string AccessLevel,
+            long RowCount,
             DateTime? LastRefresh,
-            string?  Ttl,
-            bool     IsStale);
+            string? Ttl,
+            bool IsStale);
 
         private readonly ILogger<DatasetStore> _log;
-        private volatile List<DatasetEntry>    _entries = [];
-        private string?                        _dbPath;
+        private volatile List<DatasetEntry> _entries = [];
+        private string? _dbPath;
 
         public DatasetStore(ILogger<DatasetStore> log) => _log = log;
 
@@ -49,7 +49,7 @@ namespace ETL_SQL.LSP
                 var cs = new SqliteConnectionStringBuilder
                 {
                     DataSource = _dbPath,
-                    Mode       = SqliteOpenMode.ReadOnly
+                    Mode = SqliteOpenMode.ReadOnly
                 }.ToString();
 
                 using var conn = new SqliteConnection(cs);
@@ -65,15 +65,15 @@ namespace ETL_SQL.LSP
                 using var reader = cmd.ExecuteReader();
                 while (reader.Read())
                 {
-                    var name        = reader.GetString(0);
-                    var folder      = reader.GetString(1);
+                    var name = reader.GetString(0);
+                    var folder = reader.GetString(1);
                     var accessLevel = reader.IsDBNull(2) ? "Private" : MapAccessLevel(reader.GetInt32(2));
-                    var rowCount    = reader.IsDBNull(3) ? 0L : reader.GetInt64(3);
+                    var rowCount = reader.IsDBNull(3) ? 0L : reader.GetInt64(3);
                     DateTime? lastRefresh = null;
                     if (!reader.IsDBNull(4))
                         lastRefresh = DateTime.Parse(reader.GetString(4), null, System.Globalization.DateTimeStyles.RoundtripKind);
-                    var ttl         = reader.IsDBNull(5) ? null : reader.GetString(5);
-                    var isStale     = ComputeIsStale(lastRefresh, ttl);
+                    var ttl = reader.IsDBNull(5) ? null : reader.GetString(5);
+                    var isStale = ComputeIsStale(lastRefresh, ttl);
 
                     entries.Add(new DatasetEntry(name, folder, accessLevel, rowCount, lastRefresh, ttl, isStale));
                 }
@@ -121,7 +121,7 @@ namespace ETL_SQL.LSP
                 "M" => TimeSpan.FromMinutes(v),
                 "H" => TimeSpan.FromHours(v),
                 "D" => TimeSpan.FromDays(v),
-                _   => null
+                _ => null
             };
         }
     }

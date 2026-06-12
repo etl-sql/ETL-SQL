@@ -1,16 +1,16 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using MySqlConnector;
-using Testcontainers.MySql;
+using ETL_SQL.App;
 using ETL_SQL.Connectors.MySql;
 using ETL_SQL.Core;
-using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using MySqlConnector;
 using Spectre.Console;
+using Testcontainers.MySql;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration
 {
@@ -30,7 +30,7 @@ namespace ETL_SQL.Tests.Integration
         {
             var connStr = _fixture.MySqlConnectionString;
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             await TestDataTypes(eval, connStr);
             await TestFunctions(eval, connStr);
             await TestMetadata(eval, connStr);
@@ -41,7 +41,7 @@ namespace ETL_SQL.Tests.Integration
         {
             AnsiConsole.MarkupLine("  - Testing MySQL Data Types...");
             await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION db AS MYSQL('{connStr}');").Tokenize()).Parse());
-            
+
             string sql = @"
                 CREATE TABLE db.typetest (
                     ID INT,
@@ -54,15 +54,15 @@ namespace ETL_SQL.Tests.Integration
                     TimestampCol TIMESTAMP NULL
                 );";
             await eval.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
-            
+
             string insert = @"
                 INSERT INTO db.typetest (ID, BigIntCol, BooleanCol, NumericCol, TextCol, VarcharCol, DateCol, TimestampCol) 
                 VALUES (1, 9223372036854775807, true, 123.45, 'Large text block...', 'Hello', '2023-01-01', '2023-01-01 12:00:00');";
             await eval.Evaluate(new Parser(new Lexer(insert).Tokenize()).Parse());
-            
+
             await eval.Evaluate(new Parser(new Lexer("SELECT * FROM db.typetest;").Tokenize()).Parse());
             var res = eval.LastResult;
-            
+
             Assert.NotNull(res);
             Assert.Single(res.Rows);
             var row = res.Rows[0];
@@ -74,13 +74,13 @@ namespace ETL_SQL.Tests.Integration
         private async Task TestFunctions(Evaluator eval, string connStr)
         {
             AnsiConsole.MarkupLine("  - Testing MySQL Specific Functions...");
-            
+
             await eval.Evaluate(new Parser(new Lexer("SELECT INSTR('Hello World', 'World') AS Pos FROM db.typetest LIMIT 1;").Tokenize()).Parse());
             Assert.Equal(7, Convert.ToInt32(eval.LastResult?.Rows[0]["POS"]));
 
             await eval.Evaluate(new Parser(new Lexer("SELECT NOW() AS Now;").Tokenize()).Parse());
             Assert.NotNull(eval.LastResult?.Rows[0]["NOW"]);
-            
+
             string sql = "SELECT * FROM db.typetest WHERE LENGTH(VarcharCol) = 5;";
             await eval.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
             Assert.Single(eval.LastResult?.Rows);
@@ -93,7 +93,7 @@ namespace ETL_SQL.Tests.Integration
             {
                 var tables = (await db.GetTablesAsync()).ToList();
                 Assert.Contains(tables, t => t.EndsWith(".typetest", StringComparison.OrdinalIgnoreCase) || t.Equals("typetest", StringComparison.OrdinalIgnoreCase));
-                
+
                 var columns = (await db.GetColumnsAsync("typetest")).ToList();
                 Assert.Contains(columns, c => c.Equals("varcharcol", StringComparison.OrdinalIgnoreCase));
             }
@@ -104,7 +104,7 @@ namespace ETL_SQL.Tests.Integration
         private async Task TestTransactions(Evaluator eval, string connStr)
         {
             AnsiConsole.MarkupLine("  - Testing MySQL Transactions...");
-            
+
             // 1. Rollback test
             string script1 = @"
                 BEGIN TRANSACTION;
@@ -112,7 +112,7 @@ namespace ETL_SQL.Tests.Integration
                 ROLLBACK TRANSACTION;
             ";
             await eval.Evaluate(new Parser(new Lexer(script1).Tokenize()).Parse());
-            
+
             await eval.Evaluate(new Parser(new Lexer("SELECT * FROM db.typetest WHERE ID = 99;").Tokenize()).Parse());
             Assert.Empty(eval.LastResult?.Rows);
 
@@ -123,7 +123,7 @@ namespace ETL_SQL.Tests.Integration
                 COMMIT TRANSACTION;
             ";
             await eval.Evaluate(new Parser(new Lexer(script2).Tokenize()).Parse());
-            
+
             await eval.Evaluate(new Parser(new Lexer("SELECT * FROM db.typetest WHERE ID = 100;").Tokenize()).Parse());
             Assert.Single(eval.LastResult?.Rows);
         }

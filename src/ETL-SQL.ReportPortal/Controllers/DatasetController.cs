@@ -2,13 +2,13 @@ using System.IO.Pipelines;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using ETL_SQL.Core.Data;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -16,9 +16,9 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [Route("api/datasets")]
 [Authorize]
 public class DatasetController(
-    PortalDbContext     db,
-    IDatasetRegistry    registry,
-    AuditService        audit,
+    PortalDbContext db,
+    IDatasetRegistry registry,
+    AuditService audit,
     ExecutionJobService jobService,
     DatasetViewerService viewer,
     DatasetPermissionService datasetPermissions,
@@ -26,17 +26,17 @@ public class DatasetController(
     SecuritySessionService securitySessions,
     SessionCache sessions) : ControllerBase
 {
-    private int  CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-    private bool IsAdmin       => User.IsInRole("Admin");
+    private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private bool IsAdmin => User.IsInRole("Admin");
 
     // ── Permission helpers ────────────────────────────────────────────────────
 
     private Task<DatasetPermission?> GetEffectivePermissionAsync(Dataset dataset) =>
         datasetPermissions.GetEffectivePermissionAsync(dataset, CurrentUserId, IsAdmin);
 
-    private static bool CanView(DatasetPermission? p)   => DatasetPermissionService.CanView(p);
+    private static bool CanView(DatasetPermission? p) => DatasetPermissionService.CanView(p);
     private static bool CanRefresh(DatasetPermission? p) => DatasetPermissionService.CanRefresh(p);
-    private static bool CanEdit(DatasetPermission? p)   => DatasetPermissionService.CanEdit(p);
+    private static bool CanEdit(DatasetPermission? p) => DatasetPermissionService.CanEdit(p);
     private static bool CanManage(DatasetPermission? p) => DatasetPermissionService.CanManage(p);
 
     // ── GET /api/datasets ─────────────────────────────────────────────────────
@@ -86,10 +86,10 @@ public class DatasetController(
     [HttpGet("{id:int}/data")]
     public async Task<IActionResult> GetData(
         int id,
-        [FromQuery] int    page     = 1,
-        [FromQuery] int    pageSize = 50,
-        [FromQuery] string? sort   = null,
-        [FromQuery] string? dir    = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? sort = null,
+        [FromQuery] string? dir = null,
         [FromQuery] string? search = null,
         [FromQuery] string? filters = null)
     {
@@ -120,11 +120,11 @@ public class DatasetController(
     [HttpGet("{id:int}/data/export")]
     public async Task<IActionResult> ExportData(
         int id,
-        [FromQuery] string? sort    = null,
-        [FromQuery] string? dir     = null,
-        [FromQuery] string? search  = null,
+        [FromQuery] string? sort = null,
+        [FromQuery] string? dir = null,
+        [FromQuery] string? search = null,
         [FromQuery] string? filters = null,
-        [FromQuery] string? format  = null)
+        [FromQuery] string? format = null)
     {
         var dataset = await LoadDataset(id);
         if (dataset is null) return NotFound();
@@ -133,7 +133,7 @@ public class DatasetController(
         if (!CanView(perm)) return Forbid();
 
         var filterList = ParseFilters(filters);
-        var safeName   = string.Concat(dataset.Name.Where(c => char.IsLetterOrDigit(c) || c == '_'));
+        var safeName = string.Concat(dataset.Name.Where(c => char.IsLetterOrDigit(c) || c == '_'));
 
         try
         {
@@ -214,7 +214,7 @@ public class DatasetController(
     public async Task<IActionResult> GetColumnValues(
         int id, string colName,
         [FromQuery] string? search = null,
-        [FromQuery] int     limit  = 50)
+        [FromQuery] int limit = 50)
     {
         var dataset = await LoadDataset(id);
         if (dataset is null) return NotFound();
@@ -544,7 +544,7 @@ public class DatasetController(
             "M" => TimeSpan.FromMinutes(v),
             "H" => TimeSpan.FromHours(v),
             "D" => TimeSpan.FromDays(v),
-            _   => null
+            _ => null
         };
     }
 

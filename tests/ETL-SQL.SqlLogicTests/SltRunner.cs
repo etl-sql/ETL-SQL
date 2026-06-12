@@ -1,27 +1,27 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime;
 using System.Linq;
+using System.Runtime;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Engine;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Functions;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using ETL_SQL.Engine.Functions;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Engine.Services;
-using ETL_SQL.Engine.Functions;
-using ETL_SQL.Connectors;
-using ETL_SQL.Core.Execution;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Xunit;
-using ETL_SQL.Common;
-using ETL_SQL.Data;
-using ETL_SQL.Services;
 
 
 namespace ETL_SQL.SqlLogicTests
@@ -151,13 +151,16 @@ SET TELEMETRY = OFF;";
                             await foreach (var batch in t3mem.ReadBatches()) t3Batches.Add(batch);
                             var t3Rows = t3Batches.SelectMany(b => b.Rows).ToList();
                             sb.AppendLine($"t3 row count: {t3Rows.Count}");
-                            var matchingT3 = t3Rows.Where(r => {
+                            var matchingT3 = t3Rows.Where(r =>
+                            {
                                 var val = r["a3"];
                                 if (val == null || val == DBNull.Value) return false;
-                                try {
+                                try
+                                {
                                     long l = Convert.ToInt64(val);
                                     return l == 637 || l == 591 || l == 710 || l == 644;
-                                } catch { return false; }
+                                }
+                                catch { return false; }
                             }).ToList();
                             sb.AppendLine($"t3 matching rows: {matchingT3.Count}");
                         }
@@ -167,13 +170,16 @@ SET TELEMETRY = OFF;";
                             await foreach (var batch in t7mem.ReadBatches()) t7Batches.Add(batch);
                             var t7Rows = t7Batches.SelectMany(b => b.Rows).ToList();
                             sb.AppendLine($"t7 row count: {t7Rows.Count}");
-                            var matchingT7 = t7Rows.Where(r => {
+                            var matchingT7 = t7Rows.Where(r =>
+                            {
                                 var val = r["e7"];
                                 if (val == null || val == DBNull.Value) return false;
-                                try {
+                                try
+                                {
                                     long l = Convert.ToInt64(val);
                                     return l == 280;
-                                } catch { return false; }
+                                }
+                                catch { return false; }
                             }).ToList();
                             sb.AppendLine($"t7 matching rows: {matchingT7.Count}");
                         }
@@ -181,9 +187,11 @@ SET TELEMETRY = OFF;";
                     }
                     catch (Exception debugEx)
                     {
-                        try {
+                        try
+                        {
                             System.IO.File.AppendAllText(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "slt_failure_debug.log"), $"Debug logging failed: {debugEx.Message}\n");
-                        } catch {}
+                        }
+                        catch { }
                     }
                     throw new Exception($"Line {record.LineNumber}: Statement failed: {ex.Message}", ex);
                 }
@@ -197,7 +205,7 @@ SET TELEMETRY = OFF;";
             var limitBytes = (long)(TotalSystemMemoryBytes * MemoryGuardFraction);
             if (workingSet <= limitBytes) return;
 
-            var usedMB  = workingSet / 1024 / 1024;
+            var usedMB = workingSet / 1024 / 1024;
             var limitMB = limitBytes / 1024 / 1024;
             var totalMB = TotalSystemMemoryBytes / 1024 / 1024;
             throw new InvalidOperationException(
@@ -218,7 +226,7 @@ SET TELEMETRY = OFF;";
                 var progressFile = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "slt_progress.log");
                 System.IO.File.WriteAllText(progressFile, prefix + Environment.NewLine);
             }
-            catch {}
+            catch { }
 
             // Every 50 queries also emit memory stats so you can spot the spike.
             if (_queryCount % 50 == 0)
@@ -285,7 +293,7 @@ SET TELEMETRY = OFF;";
             if (m.Success)
             {
                 var expectedCount = int.Parse(m.Groups[1].Value);
-                var expectedHash  = m.Groups[2].Value;
+                var expectedHash = m.Groups[2].Value;
 
                 if (flat.Count != expectedCount)
                     throw new Exception($"Line {record.LineNumber}: Value count mismatch. Expected {expectedCount} values, got {flat.Count}.");
@@ -313,7 +321,7 @@ SET TELEMETRY = OFF;";
                     sb.AppendLine($"expectedValues: {string.Join(", ", expectedValues)}");
                     System.IO.File.AppendAllText(@"C:\Users\chuck\scratch\ETL-SQL\debug_select.txt", sb.ToString());
                 }
-                catch {}
+                catch { }
             }
 
             if (flat.Count != expectedValues.Count)
@@ -405,7 +413,7 @@ SET TELEMETRY = OFF;";
         private Evaluator CreateEvaluator(ILogger l)
         {
             var services = new ServiceCollection();
-            
+
             var security = new SecurityService(l) { IsTestMode = true };
             var registry = new ETL_SQL.Engine.Functions.FunctionRegistry();
             FileFunctions.Register(registry);
@@ -413,15 +421,15 @@ SET TELEMETRY = OFF;";
             JsonFunctions.Register(registry);
             XmlFunctions.Register(registry);
             FuzzyFunctions.Register(registry);
-            
+
             var tracker = new Mock<ILineageTracker>();
             tracker.Setup(t => t.GlobalMetadata).Returns(new Dictionary<string, string>());
-            
+
             var docker = new Mock<IDockerManager>();
             var sessions = new Mock<ISessionStateManager>();
             var pushdown = new Mock<ExecutePushdownStatementHandler>(l);
             var bufferManager = new Mock<IBufferManager>();
-            
+
             var connectors = new ConnectorRegistry();
             connectors.Register(new ETL_SQL.Connectors.MockDb.MockDbConnector());
 

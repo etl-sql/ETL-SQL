@@ -9,7 +9,7 @@ namespace ETL_SQL.Core
         {
             if (ReferenceEquals(x, y)) return true;
             if (x == null || y == null) return false;
-            
+
             // Basic optimization: compare SQL strings
             // Note: ToSql() might include CTEs and other context, which is good for subqueries.
             return string.Equals(x.ToSql(), y.ToSql(), StringComparison.OrdinalIgnoreCase);

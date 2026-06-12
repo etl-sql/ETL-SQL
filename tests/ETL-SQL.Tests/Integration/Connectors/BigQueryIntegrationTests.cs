@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.BigQuery;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Connectors.BigQuery;
 using ETL_SQL.Services;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
@@ -35,7 +35,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 new Dictionary<string, string>
                 {
                     ["PROJECT_ID"] = BigQueryFixture.TestProject,
-                    ["DATASET"]    = BigQueryFixture.TestDataset,
+                    ["DATASET"] = BigQueryFixture.TestDataset,
                 });
 
         // ── T1 — Smoke test ───────────────────────────────────────────────────────

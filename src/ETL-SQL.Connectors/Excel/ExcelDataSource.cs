@@ -1,16 +1,16 @@
 using System;
+using System.Collections.Generic;
+using System.Data; // For DataSet
 using System.IO;
 using System.IO.Compression;
-using System.Collections.Generic;
 using System.Linq;
-using System.Data; // For DataSet
-using ExcelDataReader;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Data;
+using ExcelDataReader;
 
 namespace ETL_SQL.Connectors.Excel
 {
@@ -53,9 +53,9 @@ namespace ETL_SQL.Connectors.Excel
                 if (options.TryGetValue("RANGE", out var r)) _range = r;
                 if (options.TryGetValue("COMPRESS", out var comp)) _compress = comp.ToUpperInvariant() == "ON";
             }
-            
+
             _encryption = new EncryptionOptions(options);
-            
+
             // Register encoding provider for ExcelDataReader (needed for .net core)
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
         }
@@ -74,7 +74,7 @@ namespace ETL_SQL.Connectors.Excel
             {
                 using var stream = System.IO.File.OpenRead(effectivePath);
                 using var reader = ExcelReaderFactory.CreateReader(stream);
-                
+
                 // Accepted exception (Rule 2): ExcelDataReader has no async read API.
                 // The full sheet is loaded into a DataSet synchronously here. Re-evaluate if
                 // ExcelDataReader ever ships an async overload or we switch libraries.
@@ -93,7 +93,7 @@ namespace ETL_SQL.Connectors.Excel
                 if (sheet == null) yield break;
 
                 var range = ExcelRange.Parse(_range, sheet.Rows.Count, sheet.Columns.Count);
-                
+
                 int startRow = Math.Min(range.StartRow, sheet.Rows.Count - 1);
                 int endRow = Math.Min(range.EndRow, sheet.Rows.Count - 1);
                 int startCol = Math.Min(range.StartCol, sheet.Columns.Count - 1);
@@ -103,7 +103,7 @@ namespace ETL_SQL.Connectors.Excel
 
                 var columnNames = new List<string>();
                 int dataStartRow = startRow;
-                
+
                 if (_hasHeader && startRow < sheet.Rows.Count)
                 {
                     var headerRow = sheet.Rows[startRow];
@@ -159,7 +159,7 @@ namespace ETL_SQL.Connectors.Excel
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
-            
+
             var tempFiles = new List<string>();
             string effectivePath;
             try { effectivePath = PrepareReadPath(tempFiles); }
@@ -191,7 +191,7 @@ namespace ETL_SQL.Connectors.Excel
                     {
                         return Enumerable.Range(1, Math.Max(0, endCol - startCol + 1)).Select(i => $"Column{i}");
                     }
-                    
+
                     var headerRow = sheet.Rows[startRow];
                     var names = new List<string>();
                     for (int c = startCol; c <= endCol; c++)
@@ -209,7 +209,7 @@ namespace ETL_SQL.Connectors.Excel
         public async Task<IEnumerable<string>> GetTablesAsync()
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
-            
+
             var tempFiles = new List<string>();
             string effectivePath;
             try { effectivePath = PrepareReadPath(tempFiles); }
@@ -284,7 +284,7 @@ namespace ETL_SQL.Connectors.Excel
 
                 var parts = rangeStr.Split(':');
                 var start = ParseCell(parts[0]);
-                
+
                 result.StartRow = start.row ?? 0;
                 result.StartCol = start.col ?? 0;
 

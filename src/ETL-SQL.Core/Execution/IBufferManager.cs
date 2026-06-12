@@ -21,13 +21,13 @@ namespace ETL_SQL.Core.Execution
         /// Returns a disposable that releases the slot when disposed.
         /// </summary>
         Task<IDisposable> AcquireCursorAsync(string sessionId, bool isOverride = false, object? owner = null);
-        
+
         /// <summary>
         /// Forcefully releases all memory and cursor reservations associated with a session.
         /// Used for 'Zombie Protection' to clean up leaked resources when a script finishes.
         /// </summary>
         void ReleaseAllForSession(string sessionId);
-        
+
         /// <summary>
         /// Registers a spillable object for global memory reclamation.
         /// </summary>

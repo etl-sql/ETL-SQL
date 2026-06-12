@@ -34,7 +34,7 @@ namespace ETL_SQL.Engine.Engines
             // Detect the similarity expression and right-side column for blocking
             var scoreExpr = ExtractScoreExpression(join.Condition);
             string? rightBlockCol = scoreExpr != null ? ExtractRightBlockingColumn(scoreExpr, join.Table.Alias ?? join.Table.TableName) : null;
-            string? leftBlockCol  = scoreExpr != null ? ExtractLeftBlockingColumn(scoreExpr) : null;
+            string? leftBlockCol = scoreExpr != null ? ExtractLeftBlockingColumn(scoreExpr) : null;
 
             // Build a trigram inverted index on the right side when possible
             Dictionary<string, HashSet<int>>? index = null;
@@ -173,10 +173,10 @@ namespace ETL_SQL.Engine.Engines
         {
             if (condition is BinaryExpression bin &&
                 (bin.Operator == TokenType.GREATER_THAN || bin.Operator == TokenType.GREATER_EQUALS ||
-                 bin.Operator == TokenType.LESS_THAN    || bin.Operator == TokenType.LESS_EQUALS))
+                 bin.Operator == TokenType.LESS_THAN || bin.Operator == TokenType.LESS_EQUALS))
             {
                 // score > threshold  OR  threshold < score
-                if (ContainsSimilarity(bin.Left))  return bin.Left;
+                if (ContainsSimilarity(bin.Left)) return bin.Left;
                 if (ContainsSimilarity(bin.Right)) return bin.Right;
             }
             return null;

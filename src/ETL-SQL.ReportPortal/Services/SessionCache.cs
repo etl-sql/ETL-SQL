@@ -28,7 +28,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
     {
         _config = config;
         _scopeFactory = scopeFactory;
-        _log    = log;
+        _log = log;
     }
 
     /// <summary>Returns the existing session or creates a fresh one from scriptPath.</summary>
@@ -113,8 +113,8 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
     private void Evict()
     {
         var maxSize = _config.Resources.SessionCacheMaxSize;
-        var ttl     = TimeSpan.FromMinutes(_config.Resources.SessionCacheTtlMinutes);
-        var now     = DateTime.UtcNow;
+        var ttl = TimeSpan.FromMinutes(_config.Resources.SessionCacheTtlMinutes);
+        var now = DateTime.UtcNow;
 
         // First remove idle sessions beyond TTL
         foreach (var (key, entry) in _sessions)

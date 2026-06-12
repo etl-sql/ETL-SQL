@@ -1,11 +1,11 @@
-using Xunit;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Linq;
-using ETL_SQL.Core;
+using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis
 {
@@ -132,7 +132,7 @@ namespace ETL_SQL.Tests.Analysis
                     PRINT @secretToken; 
                 END
             ";
-            
+
             var script = Parse(sql);
             var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
 

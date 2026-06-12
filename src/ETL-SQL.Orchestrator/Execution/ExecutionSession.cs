@@ -4,14 +4,14 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common;
 using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Services;
-using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Orchestrator.Execution
@@ -32,7 +32,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IDataSource> _persistentConnections
             = new(StringComparer.OrdinalIgnoreCase);
         private readonly VariableScopeManager _persistentVariables = new();
-        public  Evaluator? LastEvaluator { get; private set; }
+        public Evaluator? LastEvaluator { get; private set; }
         private bool _disposed;
 
         /// <summary>
@@ -56,7 +56,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
             _logger.SessionId = _ctx.SessionId;
             _logger.Info("Starting execution session {SessionId}", _ctx.SessionId);
-            
+
             try
             {
                 // 1. Lex
@@ -70,7 +70,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
                 if (script.Diagnostics.Exists(d => d.Severity == DiagnosticSeverity.Error))
                 {
-                    _logger.Warning("Parse failed with {ErrorCount} errors and {WarningCount} warnings", 
+                    _logger.Warning("Parse failed with {ErrorCount} errors and {WarningCount} warnings",
                         script.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error),
                         script.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning));
                     result.Success = false;
@@ -103,9 +103,9 @@ namespace ETL_SQL.Orchestrator.Execution
                     new ExecutionTree()
                 );
 
-                evaluator.BatchSize  = _ctx.BatchSize;
-                evaluator.IsVerbose  = _ctx.IsVerbose;
-                evaluator.SessionId  = _ctx.SessionId;
+                evaluator.BatchSize = _ctx.BatchSize;
+                evaluator.IsVerbose = _ctx.IsVerbose;
+                evaluator.SessionId = _ctx.SessionId;
                 evaluator.Telemetry.IsProfiling = true;
                 evaluator.RedirectOutput = true;
 
@@ -117,11 +117,11 @@ namespace ETL_SQL.Orchestrator.Execution
 
                 await evaluator.Evaluate(script, cancellationToken);
 
-                result.ExecutionTree  = evaluator.Telemetry.ExecutionTree;
-                result.RowsProcessed  = evaluator.Telemetry.RowsProcessed;
-                result.Messages       = evaluator.Messages.ToList();
-                result.Success        = true;
-                LastEvaluator        = evaluator;
+                result.ExecutionTree = evaluator.Telemetry.ExecutionTree;
+                result.RowsProcessed = evaluator.Telemetry.RowsProcessed;
+                result.Messages = evaluator.Messages.ToList();
+                result.Success = true;
+                LastEvaluator = evaluator;
             }
             catch (Exception ex)
             {

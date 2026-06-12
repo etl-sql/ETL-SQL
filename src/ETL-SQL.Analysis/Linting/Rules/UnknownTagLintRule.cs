@@ -63,8 +63,8 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 foreach (var ei in ifStmt.ElseIfClauses ?? []) AnalyzeStatement(ei.Body, results);
                 if (ifStmt.ElseBody != null) AnalyzeStatement(ifStmt.ElseBody, results);
             }
-            else if (stmt is WhileStatement w)   AnalyzeStatement(w.Body, results);
-            else if (stmt is ForStatement f)      AnalyzeStatement(f.Body, results);
+            else if (stmt is WhileStatement w) AnalyzeStatement(w.Body, results);
+            else if (stmt is ForStatement f) AnalyzeStatement(f.Body, results);
             else if (stmt is ForeachStatement fe) AnalyzeStatement(fe.Body, results);
             else if (stmt is TryCatchStatement tc)
             {
@@ -91,10 +91,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 {
                     results.Add(new LintResult
                     {
-                        RuleName    = "UnknownTag",
-                        Severity    = LintSeverity.Warning,
-                        Message     = $"Unknown tag key '@{key}'. Standard tags are: {_standardList}.",
-                        LineNumber  = line,
+                        RuleName = "UnknownTag",
+                        Severity = LintSeverity.Warning,
+                        Message = $"Unknown tag key '@{key}'. Standard tags are: {_standardList}.",
+                        LineNumber = line,
                         ColumnNumber = col,
                     });
                 }

@@ -1,12 +1,12 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -17,10 +17,10 @@ namespace ETL_SQL.Tests.Hardening
         {
             string testDir = Path.Combine(Path.GetTempPath(), "ETL_SQL_Tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(testDir);
-            
+
             string childPath = Path.Combine(testDir, "child.sql");
             string parentPath = Path.Combine(testDir, "parent.sql");
-            
+
             try
             {
                 // Child script declares @p as OUTPUT
@@ -85,9 +85,9 @@ namespace ETL_SQL.Tests.Hardening
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             // Using MockSqlDataSource to simulate remote plan
             await ev.Evaluate(TestHelpers.Parse("CREATE CONNECTION RemotePlan AS MSSQL('Server=Remote', PASSWORD='abc');"));
-            
+
             var res = await ev.ExecuteQuery(TestHelpers.Parse("EXPLAIN SELECT * FROM RemotePlan.Users;").Statements[0]).FirstAsync();
-            
+
             Assert.NotEmpty(res.Rows);
             // Verify it mentions remote execution
             bool foundRemote = false;
@@ -114,9 +114,9 @@ namespace ETL_SQL.Tests.Hardening
             try
             {
                 var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                
+
                 await ev.Evaluate(TestHelpers.Parse($"DELETE_DIRECTORY('{inner.Replace("\\", "/")}');"));
-                
+
                 Assert.False(Directory.Exists(inner));
             }
             finally

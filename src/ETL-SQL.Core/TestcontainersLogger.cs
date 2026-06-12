@@ -1,6 +1,6 @@
 using System;
-using Microsoft.Extensions.Logging;
 using ETL_SQL.Common;
+using Microsoft.Extensions.Logging;
 
 namespace ETL_SQL.Core
 {

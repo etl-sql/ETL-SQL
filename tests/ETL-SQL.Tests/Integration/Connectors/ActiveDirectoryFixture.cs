@@ -15,7 +15,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
         public const string AdminUser = "cn=admin,dc=etl-sql,dc=org";
         public const string AdminPassword = "adminpassword";
         public const string BaseDn = "dc=etl-sql,dc=org";
-        
+
         public int Port { get; private set; }
         public string Host => "127.0.0.1";
 

@@ -1,6 +1,6 @@
-using Xunit;
 using System.Collections.Generic;
 using ETL_SQL.Connectors;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {

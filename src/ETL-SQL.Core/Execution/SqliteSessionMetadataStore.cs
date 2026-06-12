@@ -4,10 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
-using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
+using Microsoft.Data.Sqlite;
 
 namespace ETL_SQL.Core.Execution
 {
@@ -129,7 +129,7 @@ namespace ETL_SQL.Core.Execution
         public async Task SaveLineageAsync(IEnumerable<LineageEntry> entries)
         {
             using var transaction = _connection!.BeginTransaction();
-            
+
             using var clearCmd = _connection.CreateCommand();
             clearCmd.Transaction = transaction;
             clearCmd.CommandText = "DELETE FROM lineage";
@@ -210,7 +210,7 @@ namespace ETL_SQL.Core.Execution
             {
                 var name = row.Name;
                 var schema = JsonSerializer.Deserialize<List<ColumnDefinition>>(row.SchemaJson) ?? new();
-                
+
                 var chunks = new List<string>();
                 using (var chunkCmd = _connection!.CreateCommand())
                 {
@@ -232,7 +232,7 @@ namespace ETL_SQL.Core.Execution
         public async Task SaveConnectionsAsync(IEnumerable<ETL_SQL.Core.Data.ConnectionInfo> connections)
         {
             using var transaction = _connection!.BeginTransaction();
-            
+
             using var clearCmd = _connection.CreateCommand();
             clearCmd.Transaction = transaction;
             clearCmd.CommandText = "DELETE FROM connections";
@@ -244,11 +244,11 @@ namespace ETL_SQL.Core.Execution
                 cmd.Transaction = transaction;
                 cmd.CommandText = "INSERT INTO connections (name, info_json) VALUES (@name, @json)";
                 cmd.Parameters.AddWithValue("@name", conn.Name);
-                
+
                 var json = JsonSerializer.Serialize(conn);
                 var protectedJson = ETL_SQL.Common.CryptoUtils.Protect(json, _entropy);
                 cmd.Parameters.AddWithValue("@json", protectedJson);
-                
+
                 await cmd.ExecuteNonQueryAsync();
             }
             await transaction.CommitAsync();
@@ -276,7 +276,7 @@ namespace ETL_SQL.Core.Execution
         public async Task SaveDockerStateAsync(string? lastConn, IDictionary<string, string> connStrings)
         {
             using var transaction = _connection!.BeginTransaction();
-            
+
             using var cmd1 = _connection.CreateCommand();
             cmd1.Transaction = transaction;
             cmd1.CommandText = "INSERT OR REPLACE INTO docker_state (key, value_json) VALUES ('last_conn', @val)";
@@ -286,7 +286,7 @@ namespace ETL_SQL.Core.Execution
             using var cmd2 = _connection.CreateCommand();
             cmd2.Transaction = transaction;
             cmd2.CommandText = "INSERT OR REPLACE INTO docker_state (key, value_json) VALUES ('conn_strings', @val)";
-            
+
             var connJson = JsonSerializer.Serialize(connStrings);
             var protectedConnJson = ETL_SQL.Common.CryptoUtils.Protect(connJson, _entropy);
             cmd2.Parameters.AddWithValue("@val", protectedConnJson);

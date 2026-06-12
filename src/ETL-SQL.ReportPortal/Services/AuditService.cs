@@ -9,12 +9,12 @@ public class AuditService(PortalDbContext db)
     {
         db.AuditLogs.Add(new AuditLog
         {
-            UserId       = userId,
-            Action       = action,
+            UserId = userId,
+            Action = action,
             ResourceType = resourceType,
-            ResourceId   = resourceId,
-            Timestamp    = DateTime.UtcNow,
-            Detail       = detail
+            ResourceId = resourceId,
+            Timestamp = DateTime.UtcNow,
+            Detail = detail
         });
         await db.SaveChangesAsync();
     }

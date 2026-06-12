@@ -1,6 +1,6 @@
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace ETL_SQL.Analysis.Linting.Rules
 {
@@ -36,7 +36,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                         ColumnNumber = select.Column
                     });
                 }
-                
+
                 // Check subqueries
                 if (select.FromTable?.Subquery != null) AnalyzeStatement(select.FromTable.Subquery, results);
                 if (select.Joins != null)
@@ -52,7 +52,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 AnalyzeStatement(setOp.Left, results);
                 AnalyzeStatement(setOp.Right, results);
             }
-            
+
             // Recurse into blocks/conditionals/containers
             if (statement is BlockStatement block)
             {
@@ -87,7 +87,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 AnalyzeStatement(tryCatch.TryBody, results);
                 AnalyzeStatement(tryCatch.CatchBody, results);
             }
-            
+
             // Check other statements that might contain subqueries or nested queries
             if (statement is InsertStatement insert && insert.SelectQuery != null)
             {

@@ -1,9 +1,9 @@
-using Xunit;
-using ETL_SQL.Data;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -14,7 +14,7 @@ namespace ETL_SQL.Tests.Statements
         {
             // Use the centralized ServiceProvider from Program (initialized in TestSetup)
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
-            
+
             var script = @"
                 CREATE TABLE #Orders (
                     OrderId INT PRIMARY KEY,
@@ -33,13 +33,13 @@ namespace ETL_SQL.Tests.Statements
                 
                 SELECT COUNT(*) AS RowCount FROM #Orders;
             ";
-            
+
             await evaluator.Evaluate(TestHelpers.Parse(script));
             var table = evaluator.LastResult;
-            
+
             Assert.NotNull(table);
             Assert.Single(table.Rows);
-            
+
             // Explicitly cast to decimal then int as our engine often parses numbers as decimal
             var rowCount = Convert.ToInt32(table.Rows[0]["RowCount"]);
             Assert.Equal(3, rowCount);
@@ -49,7 +49,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestMultipleValuesKeywordsRegression()
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
-            
+
             var script = @"
                 CREATE TABLE #T (ID INT);
                 INSERT INTO #T 
@@ -57,17 +57,17 @@ namespace ETL_SQL.Tests.Statements
                 VALUES (3), (4);
                 SELECT COUNT(*) AS RowCount FROM #T;
             ";
-            
+
             await evaluator.Evaluate(TestHelpers.Parse(script));
             var table = evaluator.LastResult;
-            
+
             Assert.Equal(4, Convert.ToInt32(table.Rows[0]["RowCount"]));
         }
         [Fact]
         public async Task TestMultiLineMultiValueInsert_Complex()
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
-            
+
             var script = @"
                 CREATE TABLE #ComplexOrders (
                     Id INT, 
@@ -91,10 +91,10 @@ namespace ETL_SQL.Tests.Statements
 
                 SELECT SUM(Val) AS TotalVal FROM #ComplexOrders;
             ";
-            
+
             await evaluator.Evaluate(TestHelpers.Parse(script));
             var table = evaluator.LastResult;
-            
+
             Assert.Equal(101.25m, Convert.ToDecimal(table.Rows[0]["TotalVal"]));
         }
     }

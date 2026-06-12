@@ -3,26 +3,26 @@ using ETL_SQL.Core.Data;
 namespace ETL_SQL.ReportPortal.Models;
 
 public record DatasetDto(
-    int      Id,
-    string   Name,
-    string   FolderPath,
-    string   AccessLevel,
-    long     RowCount,
-    bool     IsStale,
+    int Id,
+    string Name,
+    string FolderPath,
+    string AccessLevel,
+    long RowCount,
+    bool IsStale,
     DateTime? LastRefresh,
-    string?  Ttl,
-    string?  RefreshInterval,
-    bool     IsEncrypted,
+    string? Ttl,
+    string? RefreshInterval,
+    bool IsEncrypted,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    string?  OwningReportName,
-    int?     OwningReportId);
+    string? OwningReportName,
+    int? OwningReportId);
 
 public record DatasetColumnDto(string Name, string Type);
 
 public record DatasetPreviewDto(
     IEnumerable<DatasetColumnDto> Columns,
-    long                          RowCount);
+    long RowCount);
 
 public record UpdateDatasetRequest(string? AccessLevel, string? Ttl);
 
@@ -33,13 +33,13 @@ public record DatasetAclEntryDto(int GroupId, string GroupName, string Permissio
 public record GrantDatasetPermissionRequest(int GroupId, string Permission);
 
 public record DatasetRefreshStatusDto(
-    string    Status,       // Idle | InProgress
-    string?   JobId,
+    string Status,       // Idle | InProgress
+    string? JobId,
     DateTime? StartedAt,
     DateTime? CompletedAt,
-    string?   Error,
+    string? Error,
     DateTime? LastRefresh,
-    bool      IsStale);
+    bool IsStale);
 
 // ── Dataset Viewer ─────────────────────────────────────────────────────────────
 
@@ -47,16 +47,16 @@ public record DatasetRefreshStatusDto(
 public record DatasetColumnFilterDto(string Col, string Op, string? Val, string? Val2);
 
 public record DatasetRowsDto(
-    IEnumerable<DatasetColumnDto>            Columns,
+    IEnumerable<DatasetColumnDto> Columns,
     IEnumerable<Dictionary<string, object?>> Rows,
     long TotalCount,
     long FilteredCount,
-    int  Page,
-    int  PageSize);
+    int Page,
+    int PageSize);
 
 public record DatasetColumnStatsDto(
-    string  Name,
-    long    NullCount,
+    string Name,
+    long NullCount,
     object? Min,
     object? Max,
     double? Avg);

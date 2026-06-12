@@ -49,9 +49,9 @@ namespace ETL_SQL.Engine.Handlers
             // Phase 2: Validate that every slot references a known visual, container, or button
             foreach (var (slot, visualName) in stmt.SlotMap)
             {
-                bool isVisual    = context.ReportContext.VisualDefinitions.ContainsKey(visualName);
+                bool isVisual = context.ReportContext.VisualDefinitions.ContainsKey(visualName);
                 bool isContainer = context.ReportContext.ContainerDefinitions.ContainsKey(visualName);
-                bool isButton    = context.ReportContext.ButtonDefinitions.ContainsKey(visualName);
+                bool isButton = context.ReportContext.ButtonDefinitions.ContainsKey(visualName);
 
                 if (!isVisual && !isContainer && !isButton)
                 {
@@ -64,7 +64,7 @@ namespace ETL_SQL.Engine.Handlers
             // Phase 3: Register / overwrite page definition
             if (stmt.Mode == ObjectCreationMode.Create && context.ReportContext.PageDefinitions.ContainsKey(stmt.Name))
             {
-                 throw new ExecutionException($"Page '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP PAGE first.", null, stmt.Line, stmt.Column);
+                throw new ExecutionException($"Page '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP PAGE first.", null, stmt.Line, stmt.Column);
             }
 
             context.ReportContext.PageDefinitions[stmt.Name] = stmt;

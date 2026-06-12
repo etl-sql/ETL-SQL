@@ -38,14 +38,16 @@ namespace ETL_SQL.Core.Data
             ["NTEXT"] = v => v.ToString(),
             ["CHAR"] = v => v.ToString(),
             ["NCHAR"] = v => v.ToString(),
-            ["JSON"] = v => {
+            ["JSON"] = v =>
+            {
                 var s = v.ToString() ?? "";
                 if (string.IsNullOrWhiteSpace(s)) return s;
                 System.Text.Json.JsonDocument.Parse(s); // Validates JSON structure
                 return s;
             },
             ["VARCHAR2"] = v => v.ToString(),
-            ["XML"] = v => {
+            ["XML"] = v =>
+            {
                 var s = v.ToString() ?? "";
                 if (string.IsNullOrWhiteSpace(s)) return s;
                 System.Xml.Linq.XDocument.Parse(s); // Validates XML structure
@@ -58,7 +60,8 @@ namespace ETL_SQL.Core.Data
             ["HIERARCHYID"] = v => v.ToString(),
             ["VARBINARY"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
             ["BINARY"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
-            ["IMAGE"] = v => {
+            ["IMAGE"] = v =>
+            {
                 if (v is byte[] b) return b;
                 string s = v.ToString() ?? "";
                 if (s.Contains("/") || s.Contains("\\") || s.Contains("."))
@@ -66,7 +69,7 @@ namespace ETL_SQL.Core.Data
                     var lower = s.ToLowerInvariant();
                     if (lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.EndsWith(".png") || lower.EndsWith(".gif") || lower.EndsWith(".svg") || lower.EndsWith(".ico"))
                         return s;
-                    
+
                     throw new ArgumentException("Invalid image extension. Supported types are: .jpg, .jpeg, .png, .gif, .svg, .ico");
                 }
                 try { return Convert.FromBase64String(s); } catch { return s; }
@@ -111,7 +114,7 @@ namespace ETL_SQL.Core.Data
             if (value is MinMaxValue mm) return mm;
             if (value is IList list && list.Count >= 2)
                 return new MinMaxValue(list[0], list[1]);
-            
+
             return new MinMaxValue(value, value);
         }
     }

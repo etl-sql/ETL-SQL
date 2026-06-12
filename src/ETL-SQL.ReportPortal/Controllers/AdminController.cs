@@ -1,13 +1,13 @@
 using System.Security.Claims;
 using System.Text;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Models;
+using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
-using ETL_SQL.ReportPortal.Data;
-using ETL_SQL.ReportPortal.Models;
-using ETL_SQL.ReportPortal.Services;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -16,10 +16,10 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [Authorize(Roles = "Admin")]
 public class AdminController(
     UserManager<PortalUser> userManager,
-    PortalDbContext          db,
-    AuditService             audit,
-    SecuritySessionService   securitySessions,
-    PortalConfig             config,
+    PortalDbContext db,
+    AuditService audit,
+    SecuritySessionService securitySessions,
+    PortalConfig config,
     SubscriptionDeliveryStatusService deliveryStatus,
     DatasetAtRestKeyRotationService datasetKeyRotation,
     IHostApplicationLifetime lifetime) : ControllerBase
@@ -63,7 +63,7 @@ public class AdminController(
         var dtos = new List<UserDto>();
         foreach (var u in users)
         {
-            var roles  = await userManager.GetRolesAsync(u);
+            var roles = await userManager.GetRolesAsync(u);
             var groups = u.UserGroups.Select(ug => ug.Group.Name).ToList();
             dtos.Add(new UserDto(u.Id, u.UserName!, u.Email, u.FirstName, u.LastName,
                 u.IsActive, u.MustChangePassword, u.CreatedAt, roles, groups, u.Provider));
@@ -138,13 +138,13 @@ public class AdminController(
         var provider = req.Provider ?? "Local";
         var user = new PortalUser
         {
-            UserName           = req.Username,
-            Email              = req.Email,
-            FirstName          = req.FirstName,
-            LastName           = req.LastName,
-            IsActive           = true,
+            UserName = req.Username,
+            Email = req.Email,
+            FirstName = req.FirstName,
+            LastName = req.LastName,
+            IsActive = true,
             MustChangePassword = provider != "LDAP",
-            Provider           = provider
+            Provider = provider
         };
 
         IdentityResult result;
@@ -179,7 +179,7 @@ public class AdminController(
             .FirstOrDefaultAsync(u => u.Id == id);
         if (user is null) return NotFound();
 
-        var roles  = await userManager.GetRolesAsync(user);
+        var roles = await userManager.GetRolesAsync(user);
         var groups = user.UserGroups.Select(ug => ug.Group.Name).ToList();
         return Ok(new UserDto(user.Id, user.UserName!, user.Email, user.FirstName, user.LastName,
             user.IsActive, user.MustChangePassword, user.CreatedAt, roles, groups, user.Provider));
@@ -193,10 +193,10 @@ public class AdminController(
 
         var wasActive = user.IsActive;
         var roleChanged = false;
-        if (req.Email    is not null) user.Email    = req.Email;
+        if (req.Email is not null) user.Email = req.Email;
         if (req.FirstName is not null) user.FirstName = req.FirstName;
-        if (req.LastName  is not null) user.LastName  = req.LastName;
-        if (req.IsActive.HasValue)    user.IsActive  = req.IsActive.Value;
+        if (req.LastName is not null) user.LastName = req.LastName;
+        if (req.IsActive.HasValue) user.IsActive = req.IsActive.Value;
 
         if (req.Role is not null)
         {
@@ -276,7 +276,7 @@ public class AdminController(
         var user = await userManager.FindByIdAsync(id.ToString());
         if (user is null) return NotFound();
 
-        var token  = await userManager.GeneratePasswordResetTokenAsync(user);
+        var token = await userManager.GeneratePasswordResetTokenAsync(user);
         var result = await userManager.ResetPasswordAsync(user, token, req.NewPassword);
         if (!result.Succeeded)
             return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
@@ -872,8 +872,8 @@ public class AdminController(
     {
         pageSize = Math.Clamp(pageSize, 1, 200);
         var query = db.AuditLogs.AsQueryable();
-        if (action  is not null) query = query.Where(a => a.Action == action);
-        if (userId.HasValue)    query = query.Where(a => a.UserId == userId);
+        if (action is not null) query = query.Where(a => a.Action == action);
+        if (userId.HasValue) query = query.Where(a => a.UserId == userId);
 
         var total = await query.CountAsync();
         var items = await query
@@ -902,8 +902,8 @@ public class AdminController(
             $"action={action ?? "*"};userId={userId?.ToString() ?? "*"}");
 
         var query = db.AuditLogs.AsQueryable();
-        if (action  is not null) query = query.Where(a => a.Action == action);
-        if (userId.HasValue)    query = query.Where(a => a.UserId == userId);
+        if (action is not null) query = query.Where(a => a.Action == action);
+        if (userId.HasValue) query = query.Where(a => a.UserId == userId);
 
         var items = await query
             .OrderByDescending(a => a.Timestamp)
@@ -946,7 +946,7 @@ public class AdminController(
     {
         return Ok(new
         {
-            ApiUrl    = settings.ApiUrl,
+            ApiUrl = settings.ApiUrl,
             HasApiKey = !string.IsNullOrEmpty(settings.ApiKey)
         });
     }

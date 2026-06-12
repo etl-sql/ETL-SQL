@@ -1,15 +1,15 @@
-using Xunit;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests
 {
@@ -23,8 +23,8 @@ namespace ETL_SQL.Tests
         [Fact(Timeout = 120_000)] // 2-minute hard cap — hang == fail
         public async Task TestLargeDatasetScaling()
         {
-            const int chunkSize  = 10_000;
-            const int maxChunks  = 10;   // 100k rows; extend when spill-to-disk ships
+            const int chunkSize = 10_000;
+            const int maxChunks = 10;   // 100k rows; extend when spill-to-disk ships
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             eval.BatchSize = chunkSize;
@@ -67,8 +67,8 @@ namespace ETL_SQL.Tests
                 chunkTimes.Add(sw.Elapsed.TotalMilliseconds);
 
                 process.Refresh();
-                long memMB    = process.WorkingSet64 / 1024 / 1024;
-                double rps    = chunkSize / sw.Elapsed.TotalSeconds;
+                long memMB = process.WorkingSet64 / 1024 / 1024;
+                double rps = chunkSize / sw.Elapsed.TotalSeconds;
 
                 Console.WriteLine($"{totalRows,10:N0}  {rps,10:N0}  {sw.Elapsed.TotalMilliseconds,10:N0}  {memMB,10} MB");
             }
@@ -76,8 +76,8 @@ namespace ETL_SQL.Tests
             // Degradation check: last chunk should be < 5x the first chunk's time.
             // A ratio above that indicates O(n²) table growth — a bug worth fixing.
             double firstMs = chunkTimes[0];
-            double lastMs  = chunkTimes[^1];
-            double ratio   = lastMs / firstMs;
+            double lastMs = chunkTimes[^1];
+            double ratio = lastMs / firstMs;
             Console.WriteLine($"\nDegradation ratio (last/first chunk): {ratio:F2}x");
             Assert.True(ratio < 5.0,
                 $"Insert performance degraded {ratio:F1}x from first to last chunk " +
@@ -97,7 +97,7 @@ namespace ETL_SQL.Tests
             selectSw.Stop();
 
             process.Refresh();
-            long mbAfter  = process.WorkingSet64 / 1024 / 1024;
+            long mbAfter = process.WorkingSet64 / 1024 / 1024;
             double selectRps = selectCount / selectSw.Elapsed.TotalSeconds;
             Console.WriteLine($"\nSELECT * returned {selectCount:N0} rows in {selectSw.ElapsedMilliseconds:N0}ms " +
                               $"({selectRps:N0} rows/sec). Memory delta: +{mbAfter - mbBefore}MB");
@@ -114,8 +114,8 @@ namespace ETL_SQL.Tests
             eval.RedirectOutput = true;
 
             // Lower spill thresholds below 50k so every operation is forced through spill.
-            eval.JoinSpillThreshold    = 10_000;
-            eval.WindowSpillThreshold  = 10_000;
+            eval.JoinSpillThreshold = 10_000;
+            eval.WindowSpillThreshold = 10_000;
 
             // Build 50k rows directly from C# — no SQL WHILE loop overhead.
             const int rowCount = 50_000;
@@ -178,7 +178,7 @@ namespace ETL_SQL.Tests
 
             // All three operations must complete without OOM or timeout.
             Assert.True(sortSw.ElapsedMilliseconds < 60_000, $"Spill sort took {sortSw.ElapsedMilliseconds}ms — expected < 60s");
-            Assert.True(aggSw.ElapsedMilliseconds  < 60_000, $"Spill aggregate took {aggSw.ElapsedMilliseconds}ms — expected < 60s");
+            Assert.True(aggSw.ElapsedMilliseconds < 60_000, $"Spill aggregate took {aggSw.ElapsedMilliseconds}ms — expected < 60s");
             Assert.True(joinSw.ElapsedMilliseconds < 60_000, $"Spill join took {joinSw.ElapsedMilliseconds}ms — expected < 60s");
             Assert.True(aggGroupCount > 0, "GROUP BY returned no groups");
         }
@@ -199,24 +199,24 @@ namespace ETL_SQL.Tests
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             eval.BatchSize = 10000;
-            
+
             await Execute(eval, "CREATE TABLE #t1 (ID INT, Val VARCHAR(10));");
             await Execute(eval, "CREATE TABLE #t2 (ID INT, Val VARCHAR(10));");
-            
+
             Console.WriteLine("Generating 10k rows...");
             var rows1 = new List<List<Expression>>();
-            for(int i=1; i<=10000; i++) 
-                rows1.Add(new List<Expression> { new LiteralExpression(i, TokenType.NUMBER), new LiteralExpression("A"+i, TokenType.STRING) });
-            
-            var insert1 = new InsertStatement(new TableReference("#t1"), new List<string>{"ID", "Val"}, rows1);
+            for (int i = 1; i <= 10000; i++)
+                rows1.Add(new List<Expression> { new LiteralExpression(i, TokenType.NUMBER), new LiteralExpression("A" + i, TokenType.STRING) });
+
+            var insert1 = new InsertStatement(new TableReference("#t1"), new List<string> { "ID", "Val" }, rows1);
             var script1 = new Script(); script1.Statements.Add(insert1);
             await eval.Evaluate(script1);
 
-            var script2 = new Script(); script2.Statements.Add(new InsertStatement(new TableReference("#t2"), new List<string>{"ID", "Val"}, rows1));
+            var script2 = new Script(); script2.Statements.Add(new InsertStatement(new TableReference("#t2"), new List<string> { "ID", "Val" }, rows1));
             await eval.Evaluate(script2);
 
             Stopwatch sw = new Stopwatch();
-            
+
             Console.WriteLine("Running Nested Loop (Equality but no index/hash built yet)...");
             sw.Start();
             await Execute(eval, "SELECT COUNT(*) FROM #t1 JOIN #t2 ON (#t1.ID + 0) = #t2.ID;");
@@ -266,7 +266,7 @@ namespace ETL_SQL.Tests
             sw.Stop();
 
             AnsiConsole.MarkupLine($"[green]Multi-Column Hash Join took {sw.ElapsedMilliseconds} ms for 1k x 1k records[/]");
-            
+
             await eval.Evaluate(Parse("EXPLAIN SELECT * FROM #t1 JOIN #t2 ON #t1.A = #t2.A AND #t1.B = #t2.B;"));
             var plan = eval.LastResult as DataTable;
             Assert.NotNull(plan);
@@ -278,7 +278,7 @@ namespace ETL_SQL.Tests
         public async Task TestParallelConcurrencyStress()
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             // Create target table and initialize row
             await Execute(eval, "CREATE TABLE #stress (ID INT, Counter INT);");
             await Execute(eval, "INSERT INTO #stress VALUES (1, 0);");
@@ -299,7 +299,7 @@ namespace ETL_SQL.Tests
             var result = eval.LastResult as DataTable;
             Assert.NotNull(result);
             var finalCount = Convert.ToInt32(result!.Rows[0]["Counter"]);
-            
+
             // This confirms that the engine's in-memory locking now works!
             Assert.Equal(lap, finalCount);
         }

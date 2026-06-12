@@ -27,9 +27,9 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ExecuteStatement)statement;
-            
+
             // Check if it's a script file
-            if (stmt.ProcedureName.EndsWith(".etlsql", StringComparison.OrdinalIgnoreCase) || 
+            if (stmt.ProcedureName.EndsWith(".etlsql", StringComparison.OrdinalIgnoreCase) ||
                 stmt.ProcedureName.EndsWith(".sql", StringComparison.OrdinalIgnoreCase) ||
                 File.Exists(stmt.ProcedureName))
             {
@@ -78,9 +78,9 @@ namespace ETL_SQL.Engine.Handlers
                     localVars[varName] = val;
                     if (param.IsOutput || param.IsInput)
                     {
-                        localMetadata[varName] = new VariableMetadata 
-                        { 
-                            IsOutput = param.IsOutput, 
+                        localMetadata[varName] = new VariableMetadata
+                        {
+                            IsOutput = param.IsOutput,
                             IsInput = param.IsInput,
                             IsDeclared = false // Marked as injected parameter, not yet declared in sub-script
                         };

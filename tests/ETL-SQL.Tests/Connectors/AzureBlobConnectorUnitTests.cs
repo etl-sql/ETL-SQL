@@ -1,8 +1,8 @@
+using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Services;
 using ETL_SQL.Tests.Integration.Connectors;
 using Xunit;
-using ETL_SQL.Common;
-using ETL_SQL.Core;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -158,7 +158,7 @@ namespace ETL_SQL.Tests.Connectors
             };
 
             var dataSource = (AzureBlobConnector)connector.CreateDataSource(mockContext.Object, "", options);
-            
+
             // Validate the host from decrypted connection string was checked
             mockContext.Verify(c => c.DecryptValue("ENC:encryptedKey"), Moq.Times.Once);
         }

@@ -22,7 +22,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 var contextRow = new Row();
                 if (action != null) contextRow["$action"] = action;
-                
+
                 // Populate DELETED.* and INSERTED.* namespaces
                 if (before != null)
                 {

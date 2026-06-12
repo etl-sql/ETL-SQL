@@ -32,11 +32,11 @@ namespace ETL_SQL.Engine
         public void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true)
         {
             var scrubbed = Scrub(message);
-            
+
             if (forwardToLogger)
             {
                 _logger.WriteLine(scrubbed, color);
-                
+
                 // If output is redirected, the OnMessage event (subscribed in constructor) 
                 // will handle adding to the Messages list to avoid double-capture.
                 if (RedirectOutput) return;

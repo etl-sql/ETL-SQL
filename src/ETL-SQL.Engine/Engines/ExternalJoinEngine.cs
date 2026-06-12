@@ -4,10 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Spill;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Spill;
+using ETL_SQL.Data;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -26,14 +26,14 @@ namespace ETL_SQL.Engine.Engines
 
 
         private readonly IBufferManager? _bufferManager;
- 
+
         public ExternalJoinEngine(IExecutionContext context, ILogger logger)
         {
             _context = context;
             _logger = logger;
             _bufferManager = _context.ServiceProvider?.GetService<IBufferManager>();
         }
-    
+
         /// <summary>Performs an external hash join by partitioning both left and right streams to disk before join processing.</summary>
         public async IAsyncEnumerable<Row> ApplyHashJoinExternal(IAsyncEnumerable<Row> leftStream, IAsyncEnumerable<Row> rightStream, JoinClause join, List<string> leftKeys, List<string> rightKeys)
         {
@@ -41,7 +41,7 @@ namespace ETL_SQL.Engine.Engines
             // 1. Partition Phase
             var leftPartitions = await PartitionStream(leftStream, leftKeys, "left");
             var rightPartitions = await PartitionStream(rightStream, rightKeys, "right");
-    
+
             // 2. Join Phase (one partition at a time)
             for (int i = 0; i < PartitionCount; i++)
             {

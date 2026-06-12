@@ -2,9 +2,9 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Storage;
+using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {
@@ -16,7 +16,7 @@ namespace ETL_SQL.Tests.Orchestration
         public SQLiteJobHistoryStoreTests()
         {
             _dbPath = Path.Combine(Path.GetTempPath(), $"etlsql-test-{Guid.NewGuid():N}.db");
-            _store  = new SQLiteJobHistoryStore(_dbPath);
+            _store = new SQLiteJobHistoryStore(_dbPath);
         }
 
         public void Dispose()
@@ -253,7 +253,7 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task GetActiveJobs_ReturnsOnlyEnabledJobs()
         {
             await _store.InitializeAsync();
-            await _store.SaveJobAsync(MakeJob("Enabled",  enabled: true));
+            await _store.SaveJobAsync(MakeJob("Enabled", enabled: true));
             await _store.SaveJobAsync(MakeJob("Disabled", enabled: false));
 
             var active = (await _store.GetActiveJobsAsync()).ToList();
@@ -266,7 +266,7 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task GetAllJobs_IncludesDisabledJobs()
         {
             await _store.InitializeAsync();
-            await _store.SaveJobAsync(MakeJob("Enabled",  enabled: true));
+            await _store.SaveJobAsync(MakeJob("Enabled", enabled: true));
             await _store.SaveJobAsync(MakeJob("Disabled", enabled: false));
 
             var all = (await _store.GetAllJobsAsync()).ToList();

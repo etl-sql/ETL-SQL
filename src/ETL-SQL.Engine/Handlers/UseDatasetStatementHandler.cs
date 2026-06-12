@@ -32,7 +32,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (UseDatasetStatement)statement;
 
-            var registry   = context is Evaluator e ? e.DatasetRegistry : null;
+            var registry = context is Evaluator e ? e.DatasetRegistry : null;
 
             if (registry == null)
             {
@@ -52,7 +52,7 @@ namespace ETL_SQL.Engine.Handlers
             // dataset the caller cannot read resolves to null, surfacing as the "not found" error
             // below (existence is not leaked). PUBLIC datasets resolve by global name from any folder.
             var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
-            var existing  = await registry.Lookup(stmt.DatasetName, callerCtx);
+            var existing = await registry.Lookup(stmt.DatasetName, callerCtx);
             if (existing == null)
                 throw new ExecutionException(
                     $"USE DATASET '{stmt.DatasetName}': dataset not found in the portal registry. " +
@@ -88,9 +88,9 @@ namespace ETL_SQL.Engine.Handlers
                 reportCtx.DatasetDefinitions[stmt.DatasetName] = new CreateDatasetStatement
                 {
                     TempTableName = stmt.DatasetName,
-                    SourceQuery   = new NoOpStatement(),
-                    Line          = stmt.Line,
-                    Column        = stmt.Column
+                    SourceQuery = new NoOpStatement(),
+                    Line = stmt.Line,
+                    Column = stmt.Column
                 };
             }
 
@@ -145,7 +145,7 @@ namespace ETL_SQL.Engine.Handlers
                 "M" => TimeSpan.FromMinutes(v),
                 "H" => TimeSpan.FromHours(v),
                 "D" => TimeSpan.FromDays(v),
-                _   => null
+                _ => null
             };
         }
     }

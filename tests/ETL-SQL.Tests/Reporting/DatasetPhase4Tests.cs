@@ -34,8 +34,8 @@ namespace ETL_SQL.Tests.Reporting
         public void CreateDataset_AccessPublic_SetsPublicLevel()
         {
             var script = Parse("CREATE DATASET &sales ACCESS PUBLIC AS (SELECT 1 AS v FROM t);");
-            var stmt   = Assert.Single(script.Statements);
-            var ds     = Assert.IsType<CreateDatasetStatement>(stmt);
+            var stmt = Assert.Single(script.Statements);
+            var ds = Assert.IsType<CreateDatasetStatement>(stmt);
             Assert.Equal(DatasetAccessLevel.Public, ds.AccessLevel);
         }
 
@@ -43,8 +43,8 @@ namespace ETL_SQL.Tests.Reporting
         public void CreateDataset_AccessPrivate_SetsPrivateLevel()
         {
             var script = Parse("CREATE DATASET &sales ACCESS PRIVATE AS (SELECT 1 AS v FROM t);");
-            var stmt   = Assert.Single(script.Statements);
-            var ds     = Assert.IsType<CreateDatasetStatement>(stmt);
+            var stmt = Assert.Single(script.Statements);
+            var ds = Assert.IsType<CreateDatasetStatement>(stmt);
             Assert.Equal(DatasetAccessLevel.Private, ds.AccessLevel);
         }
 
@@ -52,8 +52,8 @@ namespace ETL_SQL.Tests.Reporting
         public void CreateDataset_NoAccessClause_DefaultsToPrivate()
         {
             var script = Parse("CREATE DATASET &sales AS (SELECT 1 AS v FROM t);");
-            var stmt   = Assert.Single(script.Statements);
-            var ds     = Assert.IsType<CreateDatasetStatement>(stmt);
+            var stmt = Assert.Single(script.Statements);
+            var ds = Assert.IsType<CreateDatasetStatement>(stmt);
             Assert.Equal(DatasetAccessLevel.Private, ds.AccessLevel);
         }
 
@@ -69,9 +69,9 @@ namespace ETL_SQL.Tests.Reporting
         [Fact]
         public void CreateDataset_AccessClauseWithOtherOptions_ParsesAll()
         {
-            var sql    = "CREATE DATASET &sales TTL = '1h' ACCESS PUBLIC ENCRYPT = MACHINE AS (SELECT 1 AS v FROM t);";
+            var sql = "CREATE DATASET &sales TTL = '1h' ACCESS PUBLIC ENCRYPT = MACHINE AS (SELECT 1 AS v FROM t);";
             var script = Parse(sql);
-            var ds     = Assert.IsType<CreateDatasetStatement>(Assert.Single(script.Statements));
+            var ds = Assert.IsType<CreateDatasetStatement>(Assert.Single(script.Statements));
             Assert.Equal(DatasetAccessLevel.Public, ds.AccessLevel);
             Assert.Equal("1h", ds.Ttl);
             Assert.Equal(DatasetEncryptionMode.MachineBound, ds.EncryptionMode);
@@ -165,16 +165,16 @@ namespace ETL_SQL.Tests.Reporting
             var registry = new SingleDatasetRegistry(ownerUserId: 1);
             await registry.RegisterOrUpdate(new DatasetMetadata
             {
-                Name            = "&secret",
-                FolderPath      = "/folder-a",
+                Name = "&secret",
+                FolderPath = "/folder-a",
                 ParquetFilePath = "secret_1.parquet",
-                SourceQuery     = "SELECT 1 AS v",
-                AccessLevel     = DatasetAccessLevel.Private,
-                LastRefresh     = DateTime.UtcNow
+                SourceQuery = "SELECT 1 AS v",
+                AccessLevel = DatasetAccessLevel.Private,
+                LastRefresh = DateTime.UtcNow
             });
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            eval.DatasetRegistry      = registry;
+            eval.DatasetRegistry = registry;
             eval.DatasetCallerContext = "UserId=99";   // not the owner
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(
@@ -193,7 +193,7 @@ namespace ETL_SQL.Tests.Reporting
             var registry = new SingleDatasetRegistry(ownerUserId: 1);
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            eval.DatasetRegistry      = registry;
+            eval.DatasetRegistry = registry;
             eval.DatasetCallerContext = "UserId=7";
 
             await eval.Evaluate(Parse("SHOW DATASETS;"));
@@ -210,12 +210,16 @@ namespace ETL_SQL.Tests.Reporting
             var registry = new SingleDatasetRegistry(ownerUserId: 1);
             await registry.RegisterOrUpdate(new DatasetMetadata
             {
-                Name = "&pub", FolderPath = "/f", ParquetFilePath = "pub_1.parquet",
-                SourceQuery = "SELECT 1 AS v", AccessLevel = DatasetAccessLevel.Public, LastRefresh = DateTime.UtcNow
+                Name = "&pub",
+                FolderPath = "/f",
+                ParquetFilePath = "pub_1.parquet",
+                SourceQuery = "SELECT 1 AS v",
+                AccessLevel = DatasetAccessLevel.Public,
+                LastRefresh = DateTime.UtcNow
             });
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            eval.DatasetRegistry      = registry;
+            eval.DatasetRegistry = registry;
             eval.DatasetCallerContext = "UserId=99";   // can read (PUBLIC) but not edit
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(
@@ -230,12 +234,16 @@ namespace ETL_SQL.Tests.Reporting
             var registry = new SingleDatasetRegistry(ownerUserId: 1);
             await registry.RegisterOrUpdate(new DatasetMetadata
             {
-                Name = "&pub", FolderPath = "/f", ParquetFilePath = "pub_1.parquet",
-                SourceQuery = "SELECT 1 AS v", AccessLevel = DatasetAccessLevel.Public, LastRefresh = DateTime.UtcNow
+                Name = "&pub",
+                FolderPath = "/f",
+                ParquetFilePath = "pub_1.parquet",
+                SourceQuery = "SELECT 1 AS v",
+                AccessLevel = DatasetAccessLevel.Public,
+                LastRefresh = DateTime.UtcNow
             });
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            eval.DatasetRegistry      = registry;
+            eval.DatasetRegistry = registry;
             eval.DatasetCallerContext = "UserId=99";
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(
@@ -255,7 +263,7 @@ namespace ETL_SQL.Tests.Reporting
                 var registry = new SingleDatasetRegistry(ownerUserId: 1, root: root);
 
                 var producer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                producer.DatasetRegistry      = registry;
+                producer.DatasetRegistry = registry;
                 producer.DatasetCallerContext = "IsAdmin=true";
                 await producer.Evaluate(Parse(@"
                     CREATE TABLE #seed (v INT);
@@ -269,7 +277,7 @@ namespace ETL_SQL.Tests.Reporting
                 // Fresh evaluator (no #seed) consumes the dataset. CREATE DATASET defaults to PRIVATE,
                 // so read as admin; the point is that USE serves the stale parquet without re-running.
                 var consumer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                consumer.DatasetRegistry      = registry;
+                consumer.DatasetRegistry = registry;
                 consumer.DatasetCallerContext = "IsAdmin=true";
                 await consumer.Evaluate(Parse("USE DATASET &sales; SELECT COUNT(*) AS n, SUM(v) AS s FROM &sales;"));
 
@@ -291,12 +299,16 @@ namespace ETL_SQL.Tests.Reporting
             var registry = new SingleDatasetRegistry(ownerUserId: 1);
             await registry.RegisterOrUpdate(new DatasetMetadata
             {
-                Name = "&ghost", FolderPath = "/f", ParquetFilePath = "does_not_exist.parquet",
-                SourceQuery = "SELECT 1 AS v", AccessLevel = DatasetAccessLevel.Public, LastRefresh = DateTime.UtcNow
+                Name = "&ghost",
+                FolderPath = "/f",
+                ParquetFilePath = "does_not_exist.parquet",
+                SourceQuery = "SELECT 1 AS v",
+                AccessLevel = DatasetAccessLevel.Public,
+                LastRefresh = DateTime.UtcNow
             });
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            eval.DatasetRegistry      = registry;
+            eval.DatasetRegistry = registry;
             eval.DatasetCallerContext = "IsAdmin=true";
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(
@@ -319,9 +331,9 @@ namespace ETL_SQL.Tests.Reporting
                 const string key = "cG9ydGFsLWF0LXJlc3Qta2V5LTEyMzQ1Ng==";
 
                 var producer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                producer.DatasetRegistry      = registry;
+                producer.DatasetRegistry = registry;
                 producer.DatasetCallerContext = "IsAdmin=true";
-                producer.DatasetAtRestKey     = key;
+                producer.DatasetAtRestKey = key;
                 await producer.Evaluate(Parse(@"
                     CREATE TABLE #seed (v INT);
                     INSERT INTO #seed VALUES (10);
@@ -329,13 +341,13 @@ namespace ETL_SQL.Tests.Reporting
                     CREATE DATASET &enc AS (SELECT v FROM #seed);"));
 
                 var consumer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                consumer.DatasetRegistry      = registry;
+                consumer.DatasetRegistry = registry;
                 consumer.DatasetCallerContext = "IsAdmin=true";
-                consumer.DatasetAtRestKey     = key;
+                consumer.DatasetAtRestKey = key;
                 await consumer.Evaluate(Parse("USE DATASET &enc; SELECT COUNT(*) AS n, SUM(v) AS s FROM &enc;"));
 
                 var row = consumer.LastResult!.Rows[0];
-                Assert.Equal(2m,  Convert.ToDecimal(row["n"]));
+                Assert.Equal(2m, Convert.ToDecimal(row["n"]));
                 Assert.Equal(30m, Convert.ToDecimal(row["s"]));
             }
             finally
@@ -356,18 +368,18 @@ namespace ETL_SQL.Tests.Reporting
                 var registry = new SingleDatasetRegistry(ownerUserId: 1, root: root);
 
                 var producer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                producer.DatasetRegistry      = registry;
+                producer.DatasetRegistry = registry;
                 producer.DatasetCallerContext = "IsAdmin=true";
-                producer.DatasetAtRestKey     = "cG9ydGFsLWtleS1BLTAwMDAwMDAwMDA=";
+                producer.DatasetAtRestKey = "cG9ydGFsLWtleS1BLTAwMDAwMDAwMDA=";
                 await producer.Evaluate(Parse(@"
                     CREATE TABLE #seed (v INT);
                     INSERT INTO #seed VALUES (1);
                     CREATE DATASET &enc AS (SELECT v FROM #seed);"));
 
                 var consumer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                consumer.DatasetRegistry      = registry;
+                consumer.DatasetRegistry = registry;
                 consumer.DatasetCallerContext = "IsAdmin=true";
-                consumer.DatasetAtRestKey     = "cG9ydGFsLWtleS1CLTk5OTk5OTk5OTk=";   // different key
+                consumer.DatasetAtRestKey = "cG9ydGFsLWtleS1CLTk5OTk5OTk5OTk=";   // different key
 
                 await Assert.ThrowsAnyAsync<Exception>(
                     () => consumer.Evaluate(Parse("USE DATASET &enc;")));
@@ -393,9 +405,9 @@ namespace ETL_SQL.Tests.Reporting
                 const string transport = "transport-secret-pw";
 
                 var producer = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                producer.DatasetRegistry      = registry;
+                producer.DatasetRegistry = registry;
                 producer.DatasetCallerContext = "IsAdmin=true";
-                producer.DatasetAtRestKey     = atKey;
+                producer.DatasetAtRestKey = atKey;
                 await producer.Evaluate(Parse($@"
                     CREATE TABLE #seed (v INT);
                     INSERT INTO #seed VALUES (10);
@@ -413,7 +425,7 @@ namespace ETL_SQL.Tests.Reporting
                     "SELECT COUNT(*) AS n, SUM(v) AS s FROM expconn.FILE;"));
 
                 var row = reader.LastResult!.Rows[0];
-                Assert.Equal(2m,  Convert.ToDecimal(row["n"]));
+                Assert.Equal(2m, Convert.ToDecimal(row["n"]));
                 Assert.Equal(30m, Convert.ToDecimal(row["s"]));
             }
             finally
@@ -428,12 +440,16 @@ namespace ETL_SQL.Tests.Reporting
             var registry = new SingleDatasetRegistry(ownerUserId: 1);
             await registry.RegisterOrUpdate(new DatasetMetadata
             {
-                Name = "&sales", FolderPath = "/f", ParquetFilePath = "sales_1.parquet",
-                SourceQuery = "SELECT 1 AS v", AccessLevel = DatasetAccessLevel.Public, LastRefresh = DateTime.UtcNow
+                Name = "&sales",
+                FolderPath = "/f",
+                ParquetFilePath = "sales_1.parquet",
+                SourceQuery = "SELECT 1 AS v",
+                AccessLevel = DatasetAccessLevel.Public,
+                LastRefresh = DateTime.UtcNow
             });
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            eval.DatasetRegistry      = registry;
+            eval.DatasetRegistry = registry;
             eval.DatasetCallerContext = "IsAdmin=true";
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(
@@ -458,9 +474,9 @@ namespace ETL_SQL.Tests.Reporting
                 // Portal A: create with at-rest key A, then export with a transport credential.
                 var registryA = new SingleDatasetRegistry(ownerUserId: 1, root: rootA);
                 var portalA = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                portalA.DatasetRegistry      = registryA;
+                portalA.DatasetRegistry = registryA;
                 portalA.DatasetCallerContext = "IsAdmin=true";
-                portalA.DatasetAtRestKey     = "cG9ydGFsLUEtYXQtcmVzdC1rZXktMDAw";
+                portalA.DatasetAtRestKey = "cG9ydGFsLUEtYXQtcmVzdC1rZXktMDAw";
                 await portalA.Evaluate(Parse($@"
                     CREATE TABLE #seed (v INT);
                     INSERT INTO #seed VALUES (10);
@@ -471,15 +487,15 @@ namespace ETL_SQL.Tests.Reporting
                 // Portal B: a DIFFERENT at-rest key. Publish the portable file, then consume it.
                 var registryB = new SingleDatasetRegistry(ownerUserId: 1, root: rootB);
                 var portalB = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-                portalB.DatasetRegistry      = registryB;
+                portalB.DatasetRegistry = registryB;
                 portalB.DatasetCallerContext = "IsAdmin=true";
-                portalB.DatasetAtRestKey     = "cG9ydGFsLUItYXQtcmVzdC1rZXktOTk5";
+                portalB.DatasetAtRestKey = "cG9ydGFsLUItYXQtcmVzdC1rZXktOTk5";
                 await portalB.Evaluate(Parse(
                     $"PUBLISH DATASET FROM '{exportPath}' AS &imported INTO '/imports' ACCESS PUBLIC ENCRYPT = PASSWORD PASSWORD = '{transport}'; " +
                     "USE DATASET &imported; SELECT COUNT(*) AS n, SUM(v) AS s FROM &imported;"));
 
                 var row = portalB.LastResult!.Rows[0];
-                Assert.Equal(2m,  Convert.ToDecimal(row["n"]));
+                Assert.Equal(2m, Convert.ToDecimal(row["n"]));
                 Assert.Equal(30m, Convert.ToDecimal(row["s"]));
                 Assert.Equal(1, registryB.Stored("&imported").CreatedBy);
                 Assert.Equal((null, "&imported", "/imports", true), registryB.LastPublishAudit);
@@ -583,12 +599,16 @@ namespace ETL_SQL.Tests.Reporting
             var registry = new SingleDatasetRegistry(ownerUserId: 1);
             await registry.RegisterOrUpdate(new DatasetMetadata
             {
-                Name = "&taken", FolderPath = "/f", ParquetFilePath = "taken_1.parquet",
-                SourceQuery = "SELECT 1 AS v", AccessLevel = DatasetAccessLevel.Public, LastRefresh = DateTime.UtcNow
+                Name = "&taken",
+                FolderPath = "/f",
+                ParquetFilePath = "taken_1.parquet",
+                SourceQuery = "SELECT 1 AS v",
+                AccessLevel = DatasetAccessLevel.Public,
+                LastRefresh = DateTime.UtcNow
             });
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            eval.DatasetRegistry      = registry;
+            eval.DatasetRegistry = registry;
             eval.DatasetCallerContext = "IsAdmin=true";
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(

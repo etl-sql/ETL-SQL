@@ -1,10 +1,10 @@
-using System.Threading.Tasks;
-using System.Linq;
-using System.Collections.Generic;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Common;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -25,7 +25,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ExecuteRemoteBlockStatement)statement;
-            
+
 
             var connNameObj = await context.EvaluateValue(stmt.ConnectionName, new Row());
             string connName = connNameObj?.ToString() ?? "";
@@ -90,7 +90,8 @@ namespace ETL_SQL.Engine.Handlers
                     if (context.LastResultSets.Count > 0)
                     {
                         context.LastResult = context.LastResultSets[^1];
-                        foreach(var rs in context.LastResultSets) {
+                        foreach (var rs in context.LastResultSets)
+                        {
                             rs.ExecutionTimeMs = sw.ElapsedMilliseconds / context.LastResultSets.Count; // Approximate
                             rs.TotalRowsMatched = rs.Rows.Count;
                         }

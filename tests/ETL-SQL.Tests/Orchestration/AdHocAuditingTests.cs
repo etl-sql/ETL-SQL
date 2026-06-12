@@ -1,18 +1,18 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
-using Xunit;
+using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Orchestrator;
 using ETL_SQL.Orchestrator.Storage;
-using ETL_SQL.Data;
-using ETL_SQL.App;
-using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {
@@ -202,7 +202,7 @@ namespace ETL_SQL.Tests.Orchestration
             await store.InitializeAsync();
 
             // Script that generates lineage
-            var scriptContent = 
+            var scriptContent =
                 "SELECT 1 AS amount INTO #orders; " +
                 "CREATE DATASET &daily_sales AS (SELECT amount FROM #orders);";
             await File.WriteAllTextAsync(_tempScriptPath, scriptContent);
@@ -230,7 +230,7 @@ namespace ETL_SQL.Tests.Orchestration
             var lineageStore = provider.GetRequiredService<ILineageCatalogStore>();
             var lineageHistory = (await lineageStore.GetHistoryForJobAsync(jobName)).ToList();
             Assert.NotEmpty(lineageHistory);
-            Assert.Contains(lineageHistory, e => 
+            Assert.Contains(lineageHistory, e =>
                 e.TargetTable.Equals("dataset:&daily_sales", StringComparison.OrdinalIgnoreCase) &&
                 e.Operation.Equals("CREATE DATASET", StringComparison.OrdinalIgnoreCase)
             );

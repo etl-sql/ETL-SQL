@@ -1,13 +1,13 @@
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Engine.Engines;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Engines;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -27,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (InsertStatement)statement;
-            
+
 
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
             if (context.VarContext.TryGetView(connName, out _))
@@ -39,7 +39,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             _logger.Debug("Inserting into {ConnName}", connName);
-            
+
             if (stmt.SelectQuery != null && stmt.SelectQuery is SelectStatement select)
             {
                 var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -51,7 +51,7 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     var sourceCol = select.Columns[i];
                     string? targetCol = (targetCols != null && i < targetCols.Count) ? targetCols[i] : (sourceCol.Alias ?? (sourceCol.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : null));
-                    
+
                     var resolvedSources = sourceCol.Expression.GetSourceTables()
                         .Select(s => aliases.TryGetValue(s, out var real) ? real : s)
                         .ToList();
@@ -63,14 +63,14 @@ namespace ETL_SQL.Engine.Handlers
 
                     var sourceCols = sourceCol.Expression.GetSourceColumns().ToList();
                     var inherited = context.LineageTracker.InheritMetadata(resolvedSources, sourceCols, out var derived);
-                    
+
                     // Merge existing metadata tags from the SelectColumn (e.g. from /* @d: ... */)
                     foreach (var m in sourceCol.Metadata) inherited[m.Key] = m.Value;
 
                     context.LineageTracker.Record(
-                        connName, 
-                        resolvedSources, 
-                        "INSERT", 
+                        connName,
+                        resolvedSources,
+                        "INSERT",
                         targetColumn: targetCol,
                         sourceColumns: sourceCols,
                         metadata: inherited,
@@ -86,7 +86,7 @@ namespace ETL_SQL.Engine.Handlers
 
             var destination = await context.ResolveDataSourceAsync(stmt.TargetTable);
             if (destination == null)
-                 throw new ExecutionException($"Unknown connection: {connName} at Line {stmt.Line}");
+                throw new ExecutionException($"Unknown connection: {connName} at Line {stmt.Line}");
             _logger.Debug("Destination resolved as {DestinationType}", destination.GetType().Name);
 
             if (destination is InMemoryDataSource memSource)
@@ -107,7 +107,7 @@ namespace ETL_SQL.Engine.Handlers
                     }
                     else
                     {
-                        await foreach (var batch in sqlDest.ExecuteRawSql(sql, compiledSelect.Parameters.Values)) 
+                        await foreach (var batch in sqlDest.ExecuteRawSql(sql, compiledSelect.Parameters.Values))
                         {
                             if (batch.RowsAffected >= 0) context.Telemetry.RowsProcessed += batch.RowsAffected;
                         }
@@ -190,7 +190,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 _logger.Debug("Strategy: Batch Transfer from SELECT/EXECUTE");
                 IAsyncEnumerable<DataTable> batches;
-                
+
                 if (stmt.SelectQuery is ExecutePushdownStatement pushdown)
                 {
                     await _pushdownHandler.Execute(pushdown, (Evaluator)context);
@@ -238,7 +238,7 @@ namespace ETL_SQL.Engine.Handlers
 
                     await destination.WriteBatches(CountBatches(boundBatches), append: true);
                 }
-                
+
                 if (context.IsWhatIf)
                 {
                     _logger.WriteLine($"WHAT IF: Would insert {count} rows into {connName} via batch transfer.", ConsoleColor.Yellow);
@@ -271,7 +271,7 @@ namespace ETL_SQL.Engine.Handlers
                 foreach (var rowExprs in stmt.Values)
                 {
                     var row = batch.NewRow();
-                    
+
                     // Map provided values to the correct row slots
                     for (int i = 0; i < rowExprs.Count; i++)
                     {

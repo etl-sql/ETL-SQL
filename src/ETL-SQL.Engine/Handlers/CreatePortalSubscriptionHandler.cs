@@ -23,21 +23,21 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (CreatePortalSubscriptionStatement)statement;
 
-            var name    = stmt.Name ?? Path.GetFileNameWithoutExtension(stmt.ReportPath);
+            var name = stmt.Name ?? Path.GetFileNameWithoutExtension(stmt.ReportPath);
             var jobName = $"SUB:{name}";
 
             var (interval, unit) = ParseScheduleOrRefresh(stmt.Schedule, stmt.OnRefresh);
-            var scriptPath       = GenerateSubscriptionScript(stmt, context);
+            var scriptPath = GenerateSubscriptionScript(stmt, context);
             var job = new JobDefinition(
-                Name:              jobName,
-                Script:            scriptPath,
-                Interval:          interval,
-                Unit:              unit,
-                AtTime:            null,
-                LastRun:           null,
-                NextRun:           null,
-                IsEnabled:         true,
-                MaxRetries:        3,
+                Name: jobName,
+                Script: scriptPath,
+                Interval: interval,
+                Unit: unit,
+                AtTime: null,
+                LastRun: null,
+                NextRun: null,
+                IsEnabled: true,
+                MaxRetries: 3,
                 RetryDelaySeconds: config?.GetValue<int>("Portal:SubscriptionRetryDelaySeconds") ?? 60);
 
             await store.SaveJobAsync(job);
@@ -55,10 +55,10 @@ namespace ETL_SQL.Engine.Handlers
         private string GenerateSubscriptionScript(CreatePortalSubscriptionStatement stmt, IExecutionContext context)
         {
             var sessionRoot = context.SessionRoot;
-            var subDir      = Path.Combine(sessionRoot, "subscriptions");
+            var subDir = Path.Combine(sessionRoot, "subscriptions");
             Directory.CreateDirectory(subDir);
 
-            var safeName   = SanitizeName(stmt.Name ?? Path.GetFileNameWithoutExtension(stmt.ReportPath));
+            var safeName = SanitizeName(stmt.Name ?? Path.GetFileNameWithoutExtension(stmt.ReportPath));
             var scriptPath = Path.Combine(subDir, $"sub_{safeName}.etlsql");
 
             var sb = new StringBuilder();
@@ -76,9 +76,9 @@ namespace ETL_SQL.Engine.Handlers
 
             var formatStr = stmt.Format switch
             {
-                PortalSubscriptionFormat.Csv  => "CSV",
+                PortalSubscriptionFormat.Csv => "CSV",
                 PortalSubscriptionFormat.Both => "PDF",
-                _                             => "PDF"
+                _ => "PDF"
             };
             sb.AppendLine($"EXPORT REPORT '{stmt.ReportPath}' FORMAT {formatStr};");
             sb.AppendLine();
@@ -97,11 +97,11 @@ namespace ETL_SQL.Engine.Handlers
             if (onRefresh) return (0, "REFRESH");
             return schedule?.ToUpperInvariant() switch
             {
-                "HOURLY"  => (1, "HOUR"),
-                "DAILY"   => (1, "DAY"),
-                "WEEKLY"  => (1, "WEEK"),
+                "HOURLY" => (1, "HOUR"),
+                "DAILY" => (1, "DAY"),
+                "WEEKLY" => (1, "WEEK"),
                 "MONTHLY" => (1, "MONTH"),
-                _         => (1, "DAY")
+                _ => (1, "DAY")
             };
         }
 

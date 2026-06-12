@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Analysis.Linting.Rules
 {
@@ -137,7 +137,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 var tokens = lexer.Tokenize();
                 var parser = new ETL_SQL.Core.Parser.Parser(tokens, sql);
                 var parsedScript = parser.Parse();
-                
+
                 foreach (var diag in parsedScript.Diagnostics)
                 {
                     results.Add(new LintResult

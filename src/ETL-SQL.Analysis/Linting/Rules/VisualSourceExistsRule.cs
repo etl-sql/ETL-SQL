@@ -10,12 +10,12 @@ namespace ETL_SQL.Analysis.Linting.Rules
     /// </summary>
     public class VisualSourceExistsRule : ILintRule
     {
-        public string Name        => "VisualSourceExists";
+        public string Name => "VisualSourceExists";
         public string Description => "Warns when CREATE VISUAL SOURCE = &dataset (or #table) references a source not defined in the script.";
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {
-            var results   = new List<LintResult>();
+            var results = new List<LintResult>();
             var tempNames = CollectTempTableNames(script);
 
             foreach (var stmt in script.Statements)
@@ -31,10 +31,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 {
                     results.Add(new LintResult
                     {
-                        RuleName     = Name,
-                        Severity     = LintSeverity.Warning,
-                        Message      = $"Visual '{visual.Name}' references source '{refName}' which is not defined in this script. Ensure it is created before this visual.",
-                        LineNumber   = visual.Line,
+                        RuleName = Name,
+                        Severity = LintSeverity.Warning,
+                        Message = $"Visual '{visual.Name}' references source '{refName}' which is not defined in this script. Ensure it is created before this visual.",
+                        LineNumber = visual.Line,
                         ColumnNumber = visual.Column
                     });
                 }

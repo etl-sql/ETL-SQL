@@ -13,7 +13,7 @@ namespace ETL_SQL.Core.Data
         public string? LastScriptSource { get; init; }
         public string? OwnerUser { get; init; }
         public string? OwnerMachine { get; init; }
-        
+
         public double SizeMB => Math.Round(TotalSizeBytes / (1024.0 * 1024.0), 2);
     }
 }

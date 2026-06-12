@@ -14,7 +14,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (BlockStatement)statement;
-            
+
             for (int i = 0; i < stmt.Statements.Count; i++)
             {
                 var s = stmt.Statements[i];

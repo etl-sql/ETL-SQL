@@ -2,15 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Connectors.Shared;
 using Avro;
 using Avro.File;
 using Avro.Generic;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Avro
 {
@@ -71,7 +71,7 @@ namespace ETL_SQL.Connectors.Avro
             {
                 using var stream = System.IO.File.OpenRead(effectivePath);
                 using var reader = await Task.Run(() => DataFileReader<GenericRecord>.OpenReader(stream));
-                
+
                 var schema = (RecordSchema)reader.GetSchema();
                 var colNames = schema.Fields.Select(f => f.Name).ToList();
 
@@ -175,7 +175,8 @@ namespace ETL_SQL.Connectors.Avro
             foreach (var col in batch.ColumnNames)
             {
                 var val = batch.Rows.Count > 0 ? batch.Rows[0][col] : null;
-                string type = val switch {
+                string type = val switch
+                {
                     int or long => "long",
                     double or float or decimal => "double",
                     bool => "boolean",
@@ -189,7 +190,7 @@ namespace ETL_SQL.Connectors.Avro
         private object? CastValue(object? val, Schema schema)
         {
             if (val == null) return null;
-            
+
             Schema actualSchema = schema;
             if (schema is UnionSchema us)
             {
@@ -215,7 +216,7 @@ namespace ETL_SQL.Connectors.Avro
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
-            
+
             string effectivePath = _filePath;
             string? tempFile = null;
 

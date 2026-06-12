@@ -170,7 +170,7 @@ namespace ETL_SQL.Engine.Planning
                 if (bestJoin != null)
                 {
                     string rightAlias = bestJoin.Table.Alias ?? bestJoin.Table.TableName;
-                    
+
                     // Mark match list expressions as pushed
                     foreach (var m in bestMatchList!)
                     {

@@ -29,7 +29,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     public DatasetControllerTests(PortalWebFactory factory)
     {
         _factory = factory;
-        _client  = factory.CreateClient();
+        _client = factory.CreateClient();
     }
 
     // ── 1. GET /api/datasets — authentication & listing ───────────────────────
@@ -64,7 +64,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     [Fact]
     public async Task GetAll_NonAdminSeesOnlyPublicAndAclDatasets()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var folder = $"/f_acl_{suffix}";
 
@@ -75,9 +75,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         var userRes = await AuthPost(token, "/api/admin/users", new
         {
             username = $"dv_{suffix}",
-            email    = $"dv_{suffix}@test.local",
+            email = $"dv_{suffix}@test.local",
             password = "Viewer@1234!",
-            role     = "Viewer"
+            role = "Viewer"
         });
         Assert.Equal(HttpStatusCode.Created, userRes.StatusCode);
 
@@ -159,9 +159,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     [Trait("Category", "Smoke.Portal")]
     public async Task GetById_ReturnsCorrectMetadata()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name   = $"#meta_{suffix}";
+        var name = $"#meta_{suffix}";
         var folder = $"/meta_{suffix}";
 
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Public, rowCount: 42, ttl: "1h",
@@ -172,20 +172,20 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         var dto = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
 
-        Assert.Equal(name,     dto!["name"]!.GetValue<string>());
+        Assert.Equal(name, dto!["name"]!.GetValue<string>());
         Assert.Equal("Public", dto["accessLevel"]!.GetValue<string>());
-        Assert.Equal(42L,      dto["rowCount"]!.GetValue<long>());
-        Assert.Equal("1h",     dto["ttl"]!.GetValue<string>());
-        Assert.False(          dto["isStale"]!.GetValue<bool>());
+        Assert.Equal(42L, dto["rowCount"]!.GetValue<long>());
+        Assert.Equal("1h", dto["ttl"]!.GetValue<string>());
+        Assert.False(dto["isStale"]!.GetValue<bool>());
     }
 
     [Fact]
     [Trait("Category", "Smoke.Security")]
     public async Task GetById_ForbidsPrivateDatasetForUnrelatedUser()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name   = $"#priv_{suffix}";
+        var name = $"#priv_{suffix}";
         var folder = $"/priv_{suffix}";
 
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Private);
@@ -194,9 +194,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         var userRes = await AuthPost(token, "/api/admin/users", new
         {
             username = $"outsider_{suffix}",
-            email    = $"outsider_{suffix}@test.local",
+            email = $"outsider_{suffix}@test.local",
             password = "Out@1234!",
-            role     = "Viewer"
+            role = "Viewer"
         });
         Assert.Equal(HttpStatusCode.Created, userRes.StatusCode);
         var outsiderToken = await LoginAndChangePasswordAsync($"outsider_{suffix}", "Out@1234!", "Out@Changed9!");
@@ -430,9 +430,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     [Fact]
     public async Task GetRows_ReturnsColumnSchemaAndRowCount()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name   = $"#rows_{suffix}";
+        var name = $"#rows_{suffix}";
         var folder = $"/rows_{suffix}";
         var schema = """[{"name":"ProductId","type":"INT"},{"name":"Revenue","type":"DECIMAL"}]""";
 
@@ -447,15 +447,15 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         var cols = dto["columns"]!.AsArray();
         Assert.Equal(2, cols.Count);
         Assert.Equal("ProductId", cols[0]!["name"]!.GetValue<string>());
-        Assert.Equal("INT",       cols[0]!["type"]!.GetValue<string>());
+        Assert.Equal("INT", cols[0]!["type"]!.GetValue<string>());
     }
 
     [Fact]
     public async Task GetRows_ReturnsEmptyColumnsWhenSchemaIsNull()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name   = $"#noschema_{suffix}";
+        var name = $"#noschema_{suffix}";
         var folder = $"/noschema_{suffix}";
 
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Public, rowCount: 100);
@@ -465,7 +465,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         var dto = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
 
-        Assert.Equal(100L,  dto!["rowCount"]!.GetValue<long>());
+        Assert.Equal(100L, dto!["rowCount"]!.GetValue<long>());
         Assert.Empty(dto["columns"]!.AsArray());
     }
 
@@ -475,9 +475,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     [Trait("Category", "Smoke.Portal")]
     public async Task Refresh_MarksDatasetStale()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name   = $"#refresh_{suffix}";
+        var name = $"#refresh_{suffix}";
         var folder = $"/refresh_{suffix}";
 
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Public,
@@ -502,9 +502,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     [Trait("Category", "Smoke.Security")]
     public async Task Refresh_ForbidsViewerAccess()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name   = $"#refreshforbid_{suffix}";
+        var name = $"#refreshforbid_{suffix}";
         var folder = $"/refreshforbid_{suffix}";
 
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Public);
@@ -513,9 +513,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         var userRes = await AuthPost(token, "/api/admin/users", new
         {
             username = $"viewer_{suffix}",
-            email    = $"viewer_{suffix}@test.local",
+            email = $"viewer_{suffix}@test.local",
             password = "View@1234!",
-            role     = "Viewer"
+            role = "Viewer"
         });
         Assert.Equal(HttpStatusCode.Created, userRes.StatusCode);
         var viewerToken = await LoginAndChangePasswordAsync($"viewer_{suffix}", "View@1234!", "View@Changed9!");
@@ -579,9 +579,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     [Fact]
     public async Task Update_ChangesAccessLevelAndTtl()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name   = $"#update_{suffix}";
+        var name = $"#update_{suffix}";
         var folder = $"/update_{suffix}";
 
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Private);
@@ -590,21 +590,21 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         var patchRes = await AuthPatch(token, $"/api/datasets/{id}", new
         {
             accessLevel = "Public",
-            ttl         = "2h"
+            ttl = "2h"
         });
         Assert.Equal(HttpStatusCode.OK, patchRes.StatusCode);
         var dto = await patchRes.Content.ReadFromJsonAsync<JsonObject>(_json);
 
         Assert.Equal("Public", dto!["accessLevel"]!.GetValue<string>());
-        Assert.Equal("2h",     dto["ttl"]!.GetValue<string>());
+        Assert.Equal("2h", dto["ttl"]!.GetValue<string>());
     }
 
     [Fact]
     public async Task Update_RejectsInvalidAccessLevel()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name   = $"#badup_{suffix}";
+        var name = $"#badup_{suffix}";
         var folder = $"/badup_{suffix}";
 
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Public);
@@ -718,9 +718,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     [Fact]
     public async Task Delete_RemovesDataset()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name   = $"#del_{suffix}";
+        var name = $"#del_{suffix}";
         var folder = $"/del_{suffix}";
 
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Public);
@@ -803,9 +803,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     public async Task Delete_ForbidsEditorAccess()
     {
         var adminToken = await GetAdminTokenAsync();
-        var suffix     = Guid.NewGuid().ToString("N")[..8];
-        var name       = $"#delforbid_{suffix}";
-        var folder     = $"/delforbid_{suffix}";
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var name = $"#delforbid_{suffix}";
+        var folder = $"/delforbid_{suffix}";
 
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Public);
         var id = await GetDatasetIdAsync(name, folder);
@@ -814,9 +814,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         var userRes = await AuthPost(adminToken, "/api/admin/users", new
         {
             username = $"editor_{suffix}",
-            email    = $"editor_{suffix}@test.local",
+            email = $"editor_{suffix}@test.local",
             password = "Edit@1234!",
-            role     = "Viewer"
+            role = "Viewer"
         });
         Assert.Equal(HttpStatusCode.Created, userRes.StatusCode);
         var editorId = (await userRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
@@ -842,9 +842,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     public async Task Acl_GrantAndRevoke_RoundTrips()
     {
         var adminToken = await GetAdminTokenAsync();
-        var suffix     = Guid.NewGuid().ToString("N")[..8];
-        var name       = $"#acl_{suffix}";
-        var folder     = $"/acl_{suffix}";
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var name = $"#acl_{suffix}";
+        var folder = $"/acl_{suffix}";
 
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Private);
         var id = await GetDatasetIdAsync(name, folder);
@@ -857,7 +857,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         // Grant permission
         var grantRes = await AuthPost(adminToken, $"/api/datasets/{id}/acl", new
         {
-            groupId    = groupId,
+            groupId = groupId,
             permission = "Viewer"
         });
         Assert.Equal(HttpStatusCode.OK, grantRes.StatusCode);
@@ -872,7 +872,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         // Upgrade permission
         var upgradeRes = await AuthPost(adminToken, $"/api/datasets/{id}/acl", new
         {
-            groupId    = groupId,
+            groupId = groupId,
             permission = "Editor"
         });
         Assert.Equal(HttpStatusCode.OK, upgradeRes.StatusCode);
@@ -942,7 +942,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     [Trait("Category", "Smoke.Portal")]
     public async Task Refresh_WithOwningReport_Returns202AndJobId()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create a folder, report, and script file
@@ -960,13 +960,16 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
 
         var rptRes = await AuthPost(token, "/api/reports", new
         {
-            folderId, name = $"rf_{suffix}", description = "", scriptPath
+            folderId,
+            name = $"rf_{suffix}",
+            description = "",
+            scriptPath
         });
         rptRes.EnsureSuccessStatusCode();
         var reportId = (await rptRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
 
         // Register a dataset owned by that report
-        var dsName   = $"#rf_{suffix}";
+        var dsName = $"#rf_{suffix}";
         var dsFolder = $"/rf_{suffix}";
         await RegisterDatasetAsync(dsName, dsFolder, DatasetAccessLevel.Public, owningReportId: reportId);
         var dsId = await GetDatasetIdAsync(dsName, dsFolder);
@@ -987,9 +990,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     [Fact]
     public async Task Refresh_WithoutOwningReport_Returns202AndTriggeredFalse()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name   = $"#noreport_{suffix}";
+        var name = $"#noreport_{suffix}";
         var folder = $"/noreport_{suffix}";
 
         // Dataset with no owning report
@@ -1008,9 +1011,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     [Trait("Category", "Smoke.Portal")]
     public async Task RefreshStatus_ReturnsIdleWhenNoJobRunning()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name   = $"#status_{suffix}";
+        var name = $"#status_{suffix}";
         var folder = $"/status_{suffix}";
 
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Public,
@@ -1021,7 +1024,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
 
         var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
-        Assert.Equal("Idle",  body!["status"]!.GetValue<string>());
+        Assert.Equal("Idle", body!["status"]!.GetValue<string>());
         Assert.Null(body["jobId"]);
         Assert.False(body["isStale"]!.GetValue<bool>());
     }
@@ -1031,9 +1034,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     public async Task RefreshStatus_ForbidsUnauthorizedAccess()
     {
         var adminToken = await GetAdminTokenAsync();
-        var suffix     = Guid.NewGuid().ToString("N")[..8];
-        var name       = $"#statusprv_{suffix}";
-        var folder     = $"/statusprv_{suffix}";
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var name = $"#statusprv_{suffix}";
+        var folder = $"/statusprv_{suffix}";
 
         // Private dataset — unrelated user cannot see status
         await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Private);
@@ -1042,9 +1045,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         var userRes = await AuthPost(adminToken, "/api/admin/users", new
         {
             username = $"statusoutsider_{suffix}",
-            email    = $"statusoutsider_{suffix}@test.local",
+            email = $"statusoutsider_{suffix}@test.local",
             password = "Out@Status1!",
-            role     = "Viewer"
+            role = "Viewer"
         });
         Assert.Equal(HttpStatusCode.Created, userRes.StatusCode);
         var outsiderToken = await LoginAndChangePasswordAsync(
@@ -1057,9 +1060,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     [Fact]
     public async Task ExportData_CsvAndXlsx_StreamCorrectly()
     {
-        var token  = await GetAdminTokenAsync();
+        var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name   = $"#export_{suffix}";
+        var name = $"#export_{suffix}";
         var folder = $"/export_{suffix}";
         var schema = """[{"name":"ID","type":"INT"},{"name":"Name","type":"VARCHAR"}]""";
 
@@ -1114,18 +1117,18 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
 
         await registry.RegisterOrUpdate(new DatasetMetadata
         {
-            Name            = name,
-            FolderPath      = folder,
+            Name = name,
+            FolderPath = folder,
             ParquetFilePath = $"{name.TrimStart('&', '#')}.parquet",
-            SourceQuery     = "SELECT 1",
-            AccessLevel     = accessLevel,
-            EncryptionMode  = encryptionMode,
-            RowCount        = rowCount,
-            Ttl             = ttl,
-            ColumnSchema    = columnSchema,
-            LastRefresh     = lastRefresh,
-            OwningReportId  = owningReportId,
-            CreatedBy       = createdBy
+            SourceQuery = "SELECT 1",
+            AccessLevel = accessLevel,
+            EncryptionMode = encryptionMode,
+            RowCount = rowCount,
+            Ttl = ttl,
+            ColumnSchema = columnSchema,
+            LastRefresh = lastRefresh,
+            OwningReportId = owningReportId,
+            CreatedBy = createdBy
         });
     }
 
@@ -1133,7 +1136,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-        var d  = await db.Datasets.SingleAsync(x => x.Name == name && x.FolderPath == folder);
+        var d = await db.Datasets.SingleAsync(x => x.Name == name && x.FolderPath == folder);
         return d.Id;
     }
 
@@ -1143,8 +1146,8 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         db.DatasetAcls.Add(new DatasetAcl
         {
-            DatasetId  = datasetId,
-            GroupId    = groupId,
+            DatasetId = datasetId,
+            GroupId = groupId,
             Permission = permission
         });
         await db.SaveChangesAsync();
@@ -1207,7 +1210,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
             cpReq.Content = JsonContent.Create(new
             {
                 currentPassword = "Admin@12345!",
-                newPassword     = "Admin@Tests99!"
+                newPassword = "Admin@Tests99!"
             });
             (await _client.SendAsync(cpReq)).EnsureSuccessStatusCode();
 

@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
-using Snowflake.Data.Client;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Snowflake.Data.Client;
 
 namespace ETL_SQL.Connectors.Snowflake
 {
@@ -307,7 +307,7 @@ namespace ETL_SQL.Connectors.Snowflake
                 while (await reader.ReadAsync())
                 {
                     var schema = reader.GetString(0);
-                    var table  = reader.GetString(1);
+                    var table = reader.GetString(1);
                     result.Add(schema.Equals("PUBLIC", StringComparison.OrdinalIgnoreCase) ? table : $"{schema}.{table}");
                 }
                 return result;
@@ -333,7 +333,7 @@ namespace ETL_SQL.Connectors.Snowflake
                 while (await reader.ReadAsync())
                 {
                     var schema = reader.GetString(0);
-                    var view   = reader.GetString(1);
+                    var view = reader.GetString(1);
                     result.Add(schema.Equals("PUBLIC", StringComparison.OrdinalIgnoreCase) ? view : $"{schema}.{view}");
                 }
                 return result;

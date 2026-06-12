@@ -1,7 +1,7 @@
 using System;
-using Xunit;
 using ETL_SQL.Core;
 using ETL_SQL.Reporting.Builders;
+using Xunit;
 
 namespace ETL_SQL.Tests.Reporting
 {
@@ -11,10 +11,10 @@ namespace ETL_SQL.Tests.Reporting
             string? refreshInterval = null, string? ttl = null) =>
             new CreateDatasetStatement
             {
-                TempTableName   = tableName,
+                TempTableName = tableName,
                 RefreshInterval = refreshInterval,
-                Ttl             = ttl,
-                SourceQuery     = new SelectStatement(
+                Ttl = ttl,
+                SourceQuery = new SelectStatement(
                     new System.Collections.Generic.List<SelectColumn>
                     {
                         new SelectColumn(new IdentifierExpression("*"))
@@ -26,7 +26,7 @@ namespace ETL_SQL.Tests.Reporting
         public void Build_SetsCorrectTempTableName()
         {
             var builder = new DatasetBuilder();
-            var stmt    = MakeStmt("&SalesData");
+            var stmt = MakeStmt("&SalesData");
 
             var manifest = builder.Build(stmt);
 
@@ -36,7 +36,7 @@ namespace ETL_SQL.Tests.Reporting
         [Fact]
         public void Build_CopiesRefreshInterval()
         {
-            var builder  = new DatasetBuilder();
+            var builder = new DatasetBuilder();
             var manifest = builder.Build(MakeStmt("#Data", refreshInterval: "5m"));
 
             Assert.Equal("5m", manifest.RefreshInterval);
@@ -45,7 +45,7 @@ namespace ETL_SQL.Tests.Reporting
         [Fact]
         public void Build_CopiesTtl()
         {
-            var builder  = new DatasetBuilder();
+            var builder = new DatasetBuilder();
             var manifest = builder.Build(MakeStmt("#Data", ttl: "1h"));
 
             Assert.Equal("1h", manifest.Ttl);
@@ -54,7 +54,7 @@ namespace ETL_SQL.Tests.Reporting
         [Fact]
         public void Build_NullIntervalAndTtl_ManifestHasNulls()
         {
-            var builder  = new DatasetBuilder();
+            var builder = new DatasetBuilder();
             var manifest = builder.Build(MakeStmt("#Data"));
 
             Assert.Null(manifest.RefreshInterval);
@@ -64,10 +64,10 @@ namespace ETL_SQL.Tests.Reporting
         [Fact]
         public void Build_SetsLastRefreshToUtcNow()
         {
-            var before   = DateTime.UtcNow;
-            var builder  = new DatasetBuilder();
+            var before = DateTime.UtcNow;
+            var builder = new DatasetBuilder();
             var manifest = builder.Build(MakeStmt("#Data"));
-            var after    = DateTime.UtcNow;
+            var after = DateTime.UtcNow;
 
             Assert.NotNull(manifest.LastRefresh);
             Assert.True(manifest.LastRefresh >= before);
@@ -77,7 +77,7 @@ namespace ETL_SQL.Tests.Reporting
         [Fact]
         public void Build_InitializesRowCountToZero()
         {
-            var builder  = new DatasetBuilder();
+            var builder = new DatasetBuilder();
             var manifest = builder.Build(MakeStmt("#Data"));
 
             Assert.Equal(0, manifest.RowCount);

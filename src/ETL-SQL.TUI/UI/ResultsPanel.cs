@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Spectre.Console;
 using ETL_SQL.Core;
+using Spectre.Console;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -112,8 +112,8 @@ namespace ETL_SQL.TUI.UI
                 }
             }
 
-            var borderStyleStr = hasFilter 
-                ? TuiTheme.Instance.Ui.ResultsFocusedBorder 
+            var borderStyleStr = hasFilter
+                ? TuiTheme.Instance.Ui.ResultsFocusedBorder
                 : (_renderer.ResultsFocus ? TuiTheme.Instance.Ui.ResultsFocusedBorder : TuiTheme.Instance.Ui.ResultsUnfocusedBorder);
             var borderStyle = TuiTheme.Instance.GetStyle(borderStyleStr, new Style(hasFilter ? Color.Yellow : (_renderer.ResultsFocus ? Color.Yellow : Color.Cyan)));
             var panel = new Panel(table) { Header = new PanelHeader(stats), Height = height, Width = width, Border = TerminalCapabilities.Current.Box(), BorderStyle = borderStyle, Padding = new Padding(0, 0, 0, 0) };
@@ -148,9 +148,9 @@ namespace ETL_SQL.TUI.UI
                     : paneHeight;
 
                 bool isFocused = i == renderer.CompareFocusIndex;
-                string filter  = renderer.CompareFilters.Count  > i ? renderer.CompareFilters[i]  : "";
-                int    scroll  = renderer.CompareScrollRows.Count > i ? renderer.CompareScrollRows[i] : 0;
-                int    colScroll = renderer.CompareScrollCols.Count > i ? renderer.CompareScrollCols[i] : 0;
+                string filter = renderer.CompareFilters.Count > i ? renderer.CompareFilters[i] : "";
+                int scroll = renderer.CompareScrollRows.Count > i ? renderer.CompareScrollRows[i] : 0;
+                int colScroll = renderer.CompareScrollCols.Count > i ? renderer.CompareScrollCols[i] : 0;
 
                 RenderSingleComparePane(console, x, currentY, width, availableHeight, evaluator, i, isFocused, scroll, colScroll, filter);
                 currentY += availableHeight;
@@ -188,16 +188,16 @@ namespace ETL_SQL.TUI.UI
                 : "";
 
             string filterInfo = hasFilter ? $" | [yellow]Filter: {Markup.Escape(filter)}  {rows.Count}/{res.Rows.Count}[/]" : "";
-            string focusTag   = focused ? " [bold magenta]◀[/]" : "";
-            string header     = $"[cyan]Set {setIndex + 1} | {res.ExecutionTimeMs}ms | {res.TotalRowsMatched}{(res.TotalRowsMatched >= 1000 ? "+" : "")} rows[/]{colInfo}{filterInfo}{focusTag}";
+            string focusTag = focused ? " [bold magenta]◀[/]" : "";
+            string header = $"[cyan]Set {setIndex + 1} | {res.ExecutionTimeMs}ms | {res.TotalRowsMatched}{(res.TotalRowsMatched >= 1000 ? "+" : "")} rows[/]{colInfo}{filterInfo}{focusTag}";
 
             var table = new Table().Border(TerminalCapabilities.Current.Table()).BorderColor(TuiTheme.Instance.GetColor(TuiTheme.Instance.Ui.PanelUnfocusedBorder, Color.Grey)).Expand();
             foreach (var col in visibleColumns)
                 table.AddColumn($"[bold cyan]{Markup.Escape(col)}[/]");
 
             int dataRows = Math.Max(1, height - 4);
-            int start    = scrollRow;
-            int end      = Math.Min(start + dataRows, rows.Count);
+            int start = scrollRow;
+            int end = Math.Min(start + dataRows, rows.Count);
             for (int i = start; i < end; i++)
             {
                 var row = rows[i];
@@ -211,7 +211,7 @@ namespace ETL_SQL.TUI.UI
             {
                 Header = new PanelHeader(header),
                 Height = height,
-                Width  = width,
+                Width = width,
                 Border = TerminalCapabilities.Current.Box(),
                 BorderStyle = borderStyle,
                 Padding = new Padding(0, 0, 0, 0)

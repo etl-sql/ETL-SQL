@@ -1,15 +1,15 @@
-using ETL_SQL.Common;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using ETL_SQL.Analysis.Lineage;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Lineage;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.IO;
-using System.Threading.Tasks;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -114,7 +114,7 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     string sources = entry.SourceTables.Any() ? string.Join(", ", entry.SourceTables) : "(Direct Values)";
                     if (entry.SourceColumns.Any()) sources += $" ({string.Join(", ", entry.SourceColumns)})";
-                    
+
                     var metaParts = entry.Metadata.Select(kv => $"**{kv.Key}**: {kv.Value}").ToList();
                     if (!string.IsNullOrEmpty(entry.DerivedFromDescriptions)) metaParts.Add($"*Derived From*: {entry.DerivedFromDescriptions}");
                     string metadataStr = string.Join("<br/>", metaParts);
@@ -142,13 +142,13 @@ namespace ETL_SQL.Engine.Handlers
             {
                 string sources = entry.SourceTables.Any() ? string.Join(", ", entry.SourceTables) : "(Direct Values)";
                 _logger.WriteLine($"{entry.Timestamp:yyyy-MM-dd HH:mm:ss} | {entry.Operation,-15} | {sources}");
-                
+
                 if (entry.TargetColumn != null)
                 {
                     string srcCols = entry.SourceColumns.Any() ? string.Join(", ", entry.SourceColumns) : "(None)";
                     _logger.WriteLine($"  -> Column: {entry.TargetColumn,-15} (Sources: {srcCols})", ConsoleColor.DarkGray);
                 }
-                
+
                 foreach (var tag in entry.Metadata)
                 {
                     _logger.WriteLine($"  -> @{tag.Key}: {tag.Value}", ConsoleColor.DarkMagenta);

@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using ETL_SQL.Connectors.BigQuery;
 using Google.Cloud.BigQuery.V2;
 using Xunit;
-using ETL_SQL.Connectors.BigQuery;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -201,48 +201,48 @@ namespace ETL_SQL.Tests.Connectors
         [Fact]
         public void Functions_ContainsBigQuerySpecificFunctions()
         {
-            Assert.Contains("IF",               BigQuerySyntax.Functions);
-            Assert.Contains("IFNULL",           BigQuerySyntax.Functions);
-            Assert.Contains("SAFE_DIVIDE",      BigQuerySyntax.Functions);
-            Assert.Contains("DATE_DIFF",        BigQuerySyntax.Functions);
-            Assert.Contains("TIMESTAMP_TRUNC",  BigQuerySyntax.Functions);
-            Assert.Contains("STRING_AGG",       BigQuerySyntax.Functions);
-            Assert.Contains("COUNTIF",          BigQuerySyntax.Functions);
+            Assert.Contains("IF", BigQuerySyntax.Functions);
+            Assert.Contains("IFNULL", BigQuerySyntax.Functions);
+            Assert.Contains("SAFE_DIVIDE", BigQuerySyntax.Functions);
+            Assert.Contains("DATE_DIFF", BigQuerySyntax.Functions);
+            Assert.Contains("TIMESTAMP_TRUNC", BigQuerySyntax.Functions);
+            Assert.Contains("STRING_AGG", BigQuerySyntax.Functions);
+            Assert.Contains("COUNTIF", BigQuerySyntax.Functions);
             Assert.Contains("APPROX_COUNT_DISTINCT", BigQuerySyntax.Functions);
-            Assert.Contains("TO_JSON_STRING",   BigQuerySyntax.Functions);
-            Assert.Contains("GENERATE_ARRAY",   BigQuerySyntax.Functions);
-            Assert.Contains("SAFE_CAST",        BigQuerySyntax.Functions);
+            Assert.Contains("TO_JSON_STRING", BigQuerySyntax.Functions);
+            Assert.Contains("GENERATE_ARRAY", BigQuerySyntax.Functions);
+            Assert.Contains("SAFE_CAST", BigQuerySyntax.Functions);
             Assert.Contains("FARM_FINGERPRINT", BigQuerySyntax.Functions);
         }
 
         [Fact]
         public void Functions_ContainsDateTimeFunctions()
         {
-            Assert.Contains("CURRENT_DATE",      BigQuerySyntax.Functions);
-            Assert.Contains("CURRENT_DATETIME",  BigQuerySyntax.Functions);
+            Assert.Contains("CURRENT_DATE", BigQuerySyntax.Functions);
+            Assert.Contains("CURRENT_DATETIME", BigQuerySyntax.Functions);
             Assert.Contains("CURRENT_TIMESTAMP", BigQuerySyntax.Functions);
-            Assert.Contains("FORMAT_DATE",        BigQuerySyntax.Functions);
-            Assert.Contains("PARSE_DATE",         BigQuerySyntax.Functions);
+            Assert.Contains("FORMAT_DATE", BigQuerySyntax.Functions);
+            Assert.Contains("PARSE_DATE", BigQuerySyntax.Functions);
         }
 
         [Fact]
         public void Additions_ContainsBigQueryKeywords()
         {
-            Assert.Contains("QUALIFY",   BigQuerySyntax.Additions);
-            Assert.Contains("LIMIT",     BigQuerySyntax.Additions);
-            Assert.Contains("UNNEST",    BigQuerySyntax.Additions);
-            Assert.Contains("STRUCT",    BigQuerySyntax.Additions);
+            Assert.Contains("QUALIFY", BigQuerySyntax.Additions);
+            Assert.Contains("LIMIT", BigQuerySyntax.Additions);
+            Assert.Contains("UNNEST", BigQuerySyntax.Additions);
+            Assert.Contains("STRUCT", BigQuerySyntax.Additions);
             Assert.Contains("SAFE_CAST", BigQuerySyntax.Additions);
         }
 
         [Fact]
         public void Exclusions_ContainsTSqlAndOracleKeywords()
         {
-            Assert.Contains("TOP",     BigQuerySyntax.Exclusions);
-            Assert.Contains("NOLOCK",  BigQuerySyntax.Exclusions);
-            Assert.Contains("ISNULL",  BigQuerySyntax.Exclusions);
+            Assert.Contains("TOP", BigQuerySyntax.Exclusions);
+            Assert.Contains("NOLOCK", BigQuerySyntax.Exclusions);
+            Assert.Contains("ISNULL", BigQuerySyntax.Exclusions);
             Assert.Contains("GETDATE", BigQuerySyntax.Exclusions);
-            Assert.Contains("ROWNUM",  BigQuerySyntax.Exclusions);
+            Assert.Contains("ROWNUM", BigQuerySyntax.Exclusions);
         }
 
         [Fact]
@@ -255,9 +255,9 @@ namespace ETL_SQL.Tests.Connectors
         [Fact]
         public void AllSets_AreCaseInsensitive()
         {
-            Assert.Contains("if",       BigQuerySyntax.Functions);
-            Assert.Contains("qualify",  BigQuerySyntax.Additions);
-            Assert.Contains("top",      BigQuerySyntax.Exclusions);
+            Assert.Contains("if", BigQuerySyntax.Functions);
+            Assert.Contains("qualify", BigQuerySyntax.Additions);
+            Assert.Contains("top", BigQuerySyntax.Exclusions);
         }
 
         [Fact]

@@ -15,8 +15,8 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (ParallelForStatement)statement;
             var start = Convert.ToInt32(await context.EvaluateValue(stmt.StartValue, new Row()));
-            var end   = Convert.ToInt32(await context.EvaluateValue(stmt.EndValue,   new Row()));
-            var step  = stmt.StepValue != null
+            var end = Convert.ToInt32(await context.EvaluateValue(stmt.EndValue, new Row()));
+            var step = stmt.StepValue != null
                 ? Convert.ToInt32(await context.EvaluateValue(stmt.StepValue, new Row()))
                 : 1;
 

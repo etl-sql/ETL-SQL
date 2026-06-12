@@ -1,11 +1,11 @@
-using Xunit;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
+using ETL_SQL.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -15,9 +15,9 @@ namespace ETL_SQL.Tests.Engine
         public async Task TestTempTableSpillAndRead()
         {
             AnsiConsole.MarkupLine("  - Scenario: #temp table spill-to-disk (5000 rows, threshold 1000)...");
-            
+
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             // 1. Setup threshold and large insert
             string script = @"
                 SET TEMP_TABLE_SPILL_THRESHOLD = 1000;
@@ -36,19 +36,19 @@ namespace ETL_SQL.Tests.Engine
             ";
 
             await eval.Evaluate(new Parser(new Lexer(script).Tokenize()).Parse());
-            
+
             var result = eval.LastResult;
             Assert.NotNull(result);
-            
+
             int count = Convert.ToInt32(result.Rows[0]["TOTAL"]);
             long sumId = Convert.ToInt64(result.Rows[0]["SUMID"]);
-            
+
             // 5000 rows expected
             Assert.Equal(5000, count);
-            
+
             // Sum of 1..5000 = (n * (n+1)) / 2 = (5000 * 5001) / 2 = 12,502,500
             Assert.Equal(12502500, sumId);
-            
+
             AnsiConsole.MarkupLine($"  [green]Success: Count={count}, Sum={sumId}[/]");
         }
 
@@ -56,9 +56,9 @@ namespace ETL_SQL.Tests.Engine
         public async Task TestTempTableSpillWithJoin()
         {
             AnsiConsole.MarkupLine("  - Scenario: #temp table spill with JOIN...");
-            
+
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             string script = @"
                 SET TEMP_TABLE_SPILL_THRESHOLD = 500;
                 
@@ -88,13 +88,13 @@ namespace ETL_SQL.Tests.Engine
             ";
 
             await eval.Evaluate(new Parser(new Lexer(script).Tokenize()).Parse());
-            
+
             var result = eval.LastResult;
             Assert.NotNull(result);
-            
+
             // Should have 100 matches (id 10, 20, ..., 1000)
             Assert.Equal(100, result.Rows.Count);
-            
+
             AnsiConsole.MarkupLine($"  [green]Success: Join returned {result.Rows.Count} rows[/]");
         }
     }

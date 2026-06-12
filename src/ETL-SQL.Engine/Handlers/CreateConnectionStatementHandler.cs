@@ -1,13 +1,13 @@
-using ETL_SQL.Common;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Common.Exceptions;
-using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -27,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (CreateConnectionStatement)statement;
-            
+
             bool alreadyExists = context.Connections.TryGetValue(stmt.ConnectionName, out var existingDataSource);
             bool isInteractive = context.InteractiveMode;
 
@@ -48,7 +48,7 @@ namespace ETL_SQL.Engine.Handlers
                 connectionType ??= existingDataSource.ConnectorType;
                 options = new Dictionary<string, string>(existingDataSource.Options ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
                 target = existingDataSource.Path;
-                
+
                 if (stmt.Options != null)
                 {
                     foreach (var kvp in stmt.Options)
@@ -89,7 +89,7 @@ namespace ETL_SQL.Engine.Handlers
                 target = context.DecryptValue(target);
             }
             target = Interpolate(target ?? "");
-            
+
             var connector = _connectorRegistry.GetConnector(connectionType ?? string.Empty);
             if (connector == null)
             {
@@ -207,7 +207,7 @@ namespace ETL_SQL.Engine.Handlers
             preview.ExecutionTimeMs = 0;
             return preview;
         }
-        
+
         private string StringifyOption(object? val, Expression? expr = null)
         {
             if (val is bool b) return b ? "ON" : "OFF";

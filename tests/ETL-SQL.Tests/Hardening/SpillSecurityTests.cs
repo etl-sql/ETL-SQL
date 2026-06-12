@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using Moq;
 using ETL_SQL.Core;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Spill;
+using ETL_SQL.Data;
 using ETL_SQL.Engine.Spill;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -38,10 +38,10 @@ namespace ETL_SQL.Tests.Hardening
             // Assert: Verify file exists and is garbage (encrypted/compressed)
             var rootPath = typeof(SpillStore).GetField("_cachedRootPath", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(store) as string;
             var filePath = Path.Combine(rootPath!, chunkName);
-            
+
             Assert.True(File.Exists(filePath));
             var rawBytes = await File.ReadAllBytesAsync(filePath);
-            
+
             // Should be at least 16 bytes (IV) + some encrypted/compressed data
             Assert.True(rawBytes.Length > 16);
 
@@ -93,7 +93,7 @@ namespace ETL_SQL.Tests.Hardening
             string rootPath;
             mockContext.Setup(c => c.SessionRoot).Returns(Path.GetTempPath());
             mockContext.Setup(c => c.SessionStateManager).Returns(new global::ETL_SQL.Core.Execution.NullSessionStateManager());
-            
+
             using (var store = new SpillStore(mockContext.Object))
             {
                 // Trigger initialization

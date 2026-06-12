@@ -24,7 +24,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 {
                     // Check if Source exists and is not "empty" (both query and table are null)
                     bool hasSource = visual.Source != null && (visual.Source.IsInlineSelect || !string.IsNullOrEmpty(visual.Source.TempTableName));
-                    
+
                     if (!hasSource)
                     {
                         results.Add(new LintResult
@@ -58,15 +58,15 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 VisualType.Treemap => true,
                 VisualType.HeatMap => true,
                 VisualType.Combo => true,
-                VisualType.Gauge       => true,
-                VisualType.Funnel      => true,
-                VisualType.Waterfall   => true,
-                VisualType.Table       => true,
-                VisualType.Card        => true,
-                VisualType.Bubble      => true,
-                VisualType.Radar       => true,
+                VisualType.Gauge => true,
+                VisualType.Funnel => true,
+                VisualType.Waterfall => true,
+                VisualType.Table => true,
+                VisualType.Card => true,
+                VisualType.Bubble => true,
+                VisualType.Radar => true,
                 VisualType.Candlestick => true,
-                VisualType.Map         => true,
+                VisualType.Map => true,
                 _ => false // Text, DatePicker, Slider, Search don't need source
             };
         }

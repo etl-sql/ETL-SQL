@@ -1,14 +1,14 @@
-using Xunit;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Linq;
-using ETL_SQL.Core;
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.App;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using ETL_SQL.App;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis
 {
@@ -42,7 +42,7 @@ namespace ETL_SQL.Tests.Analysis
             var plan = eval.LastResult;
             Assert.NotNull(plan);
             Assert.Contains("Actual Rows", plan.ColumnNames);
-            
+
             // The last row should have the actual row count (3)
             var lastRow = plan.Rows.Last();
             Assert.Equal(3L, Convert.ToInt64(lastRow["Actual Rows"]));

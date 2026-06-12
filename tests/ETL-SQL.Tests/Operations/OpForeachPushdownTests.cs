@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.App;
+using Xunit;
 
 namespace ETL_SQL.Tests.Operations.Operations
 {
@@ -29,7 +29,7 @@ FOREACH @row IN (SELECT Id, Name FROM remote.Users ORDER BY Id)
 BEGIN
     PRINT @row.Name;
 END";
-            
+
             var tokens = new Lexer(script).Tokenize();
             var program = new Parser(tokens).Parse();
             await e.Evaluate(program);
@@ -37,7 +37,7 @@ END";
             // Verify that we received paged queries (QueryCompiler parameterizes literals as @pN)
             Assert.Contains(mockDb.CapturedSql, s => s.Contains("OFFSET") && s.Contains("ROWS FETCH NEXT") && s.Contains("ROWS ONLY"));
             Assert.True(mockDb.CapturedSql.Count >= 2, "Expected at least 2 paged queries");
-            
+
             // Should have made exactly 3 calls (0-4, 5-9, 10-14 -> return 0 rows)
             Assert.Equal(3, mockDb.CapturedSql.Count);
         }
@@ -56,7 +56,7 @@ FOREACH @row IN (SELECT Id, Name FROM remote.Users)
 BEGIN
     PRINT @row.Name;
 END";
-            
+
             var tokens = new Lexer(script).Tokenize();
             var program = new Parser(tokens).Parse();
             await e.Evaluate(program);
@@ -81,10 +81,10 @@ END";
             public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
             {
                 CapturedSql.Add(sql);
-                
+
                 var dt = new DataTable();
                 dt.SetColumns(new[] { "Id", "Name" });
-                
+
                 // Return 5 rows for the first two pages, then 0 for the last one
                 if (CapturedSql.Count <= 2)
                 {
@@ -103,7 +103,7 @@ END";
                 }
             }
 
-            public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) 
+            public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
             {
                 yield return new DataTable(); // Return empty to avoid crash if called
             }

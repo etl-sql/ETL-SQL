@@ -1,12 +1,12 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -41,7 +41,7 @@ namespace ETL_SQL.Tests.Statements
             string script = "UPDATE remote.TargetTable SET Val = 200 WHERE ID = 1;";
 
             await evaluator.Evaluate(TestHelpers.Parse(script));
-            
+
             Assert.Contains(mockDb.ExecutedSql, s => (s.Contains("UPDATE [TargetTable]") || s.Contains("UPDATE TargetTable")) && s.Contains("Val = @") && s.Contains("ID = @"));
         }
 
@@ -55,7 +55,7 @@ namespace ETL_SQL.Tests.Statements
             string script = "DELETE FROM remote.TargetTable WHERE ID = 1;";
 
             await evaluator.Evaluate(TestHelpers.Parse(script));
-            
+
             Assert.Contains(mockDb.ExecutedSql, s => (s.Contains("DELETE FROM [TargetTable]") || s.Contains("DELETE FROM TargetTable")) && s.Contains("ID = @"));
         }
 
@@ -69,7 +69,7 @@ namespace ETL_SQL.Tests.Statements
             string script = "DROP TABLE remote.TargetTable;";
 
             await evaluator.Evaluate(TestHelpers.Parse(script));
-            
+
             Assert.Contains(mockDb.ExecutedSql, s => s.Contains("DROP TABLE [TargetTable]") || s.Contains("DROP TABLE TargetTable"));
         }
 

@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Xunit;
 using ETL_SQL.Reporting;
+using Xunit;
 
 namespace ETL_SQL.Tests.Reporting
 {
@@ -97,7 +97,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             var m = M(
                 V("T1", "TABLE", new[] { "Name" }, new[] { new[] { "Alice" } }),
-                V("C1", "CARD",  new[] { "Value" }, new[] { new[] { "42" }   })
+                V("C1", "CARD", new[] { "Value" }, new[] { new[] { "42" } })
             );
             var md = MD().Render(m);
             Assert.Contains("T1", md);

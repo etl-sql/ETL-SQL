@@ -26,9 +26,9 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (AlterPortalSubscriptionStatement)statement;
 
             // Find the matching SUB job by id suffix (naming convention: "SUB:{name}")
-            var jobs    = (await store.GetActiveJobsAsync()).ToList();
+            var jobs = (await store.GetActiveJobsAsync()).ToList();
             var pattern = $"SUB-{stmt.SubscriptionId}:";
-            var job     = jobs.FirstOrDefault(j => j.Name.StartsWith(pattern, StringComparison.OrdinalIgnoreCase))
+            var job = jobs.FirstOrDefault(j => j.Name.StartsWith(pattern, StringComparison.OrdinalIgnoreCase))
                        ?? jobs.FirstOrDefault(j => j.Name.Contains($":{stmt.SubscriptionId}:", StringComparison.OrdinalIgnoreCase));
 
             if (job is null)
@@ -44,8 +44,8 @@ namespace ETL_SQL.Engine.Handlers
 
             IReadOnlyList<SubscriptionParameter> finalParams = stmt.Parameters switch
             {
-                null                             => existingParams,   // unchanged
-                { Count: 0 }                     => Array.Empty<SubscriptionParameter>(), // clear
+                null => existingParams,   // unchanged
+                { Count: 0 } => Array.Empty<SubscriptionParameter>(), // clear
                 IReadOnlyList<SubscriptionParameter> p => p          // replace
             };
 
@@ -55,27 +55,27 @@ namespace ETL_SQL.Engine.Handlers
 
             var newSchedule = stmt.NewSchedule ?? job.Unit;
             var (interval, unit) = ParseScheduleUnit(stmt.NewSchedule, job.Interval, job.Unit);
-            var isEnabled   = stmt.SetActive ?? job.IsEnabled;
+            var isEnabled = stmt.SetActive ?? job.IsEnabled;
 
             var updated = new JobDefinition(
-                Name:              job.Name,
-                Script:            job.Script,
-                Interval:          interval,
-                Unit:              unit,
-                AtTime:            job.AtTime,
-                LastRun:           job.LastRun,
-                NextRun:           job.NextRun,
-                IsEnabled:         isEnabled,
-                MaxRetries:        job.MaxRetries,
+                Name: job.Name,
+                Script: job.Script,
+                Interval: interval,
+                Unit: unit,
+                AtTime: job.AtTime,
+                LastRun: job.LastRun,
+                NextRun: job.NextRun,
+                IsEnabled: isEnabled,
+                MaxRetries: job.MaxRetries,
                 RetryDelaySeconds: job.RetryDelaySeconds);
 
             await store.SaveJobAsync(updated);
 
             var paramsMsg = stmt.Parameters switch
             {
-                null         => "parameters unchanged",
+                null => "parameters unchanged",
                 { Count: 0 } => "parameters cleared",
-                var p        => $"parameters updated ({p.Count})"
+                var p => $"parameters updated ({p.Count})"
             };
             logger.WriteLine(
                 $"Subscription {stmt.SubscriptionId} updated. " +
@@ -132,11 +132,11 @@ namespace ETL_SQL.Engine.Handlers
             if (newSchedule is null) return (existingInterval, existingUnit);
             return newSchedule.ToUpperInvariant() switch
             {
-                "HOURLY"  => (1, "HOUR"),
-                "DAILY"   => (1, "DAY"),
-                "WEEKLY"  => (1, "WEEK"),
+                "HOURLY" => (1, "HOUR"),
+                "DAILY" => (1, "DAY"),
+                "WEEKLY" => (1, "WEEK"),
                 "MONTHLY" => (1, "MONTH"),
-                _         => (existingInterval, existingUnit)
+                _ => (existingInterval, existingUnit)
             };
         }
     }

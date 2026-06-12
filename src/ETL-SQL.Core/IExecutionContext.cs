@@ -1,12 +1,12 @@
-using ETL_SQL.Data;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Common;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.Core.Spill;
-using ETL_SQL.Core.Execution;
+using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Spill;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Core
 {
@@ -172,7 +172,7 @@ namespace ETL_SQL.Core
         bool IsSqlPushdown(string connName);
         /// <summary>Named environment sets created by CREATE SETS.</summary>
         IDictionary<string, NamedSet> NamedSets { get; }
-        
+
         // Security override flags (granted via session SET options)
         bool AllowUnknownFileTypes { get; set; }
         bool AllowLargeFileOperationCount { get; set; }
@@ -185,7 +185,7 @@ namespace ETL_SQL.Core
         void RecordSmtpEmailSend();
         int MaxInternalOperations { get; set; }
 
-        
+
         /// <summary>Metadata about the last caught exception in this session.</summary>
         ErrorInfo? LastError { get; set; }
         /// <summary>The error that caused the current CATCH block to run (persists for the duration of the block).</summary>
@@ -237,7 +237,7 @@ namespace ETL_SQL.Core
         string ScriptHashPolicy { get; set; }
         /// <summary>When true, string comparisons are case-sensitive. Defaults to false (SQL Server-style case-insensitive). Settable at runtime via SET CASE_SENSITIVE.</summary>
         bool CaseSensitiveComparison { get; set; }
-        
+
         /// <summary>Positional parameters provided for the current execution (for ? and ?n placeholders).</summary>
         List<object?>? Parameters { get; set; }
     }
@@ -332,16 +332,16 @@ namespace ETL_SQL.Core
         IReportContext ReportContext { get; }
         ITelemetryContext Telemetry { get; }
         IDatasetRegistry? DatasetRegistry { get; }
-        
+
         /// <summary>Event raised when a diagnostic message is emitted (Interactive Mode).</summary>
         Action<Diagnostic>? OnMessage { get; set; }
-        
+
         /// <summary>
         /// Whether the engine is in interactive mode (e.g. Notebooks/REPL).
         /// Enables global idempotency for object creation and immediate visual emission.
         /// </summary>
         bool InteractiveMode { get; set; }
-        
+
         IEvaluationContext EvaluationContext => this;
         IDataContext DataContext => this;
         IQueryContext QueryContext => this;
@@ -354,7 +354,7 @@ namespace ETL_SQL.Core
         bool SpillCompressionEnabled { get; set; }
         string SpillFormat { get; set; }
         ISpillStore SpillStore { get; }
-        
+
         /// <summary>Decrypts an 'ENC:...' value using the current session context passwords.</summary>
         string? DecryptValue(string? value);
 
@@ -362,7 +362,7 @@ namespace ETL_SQL.Core
         Common.LruCache<Data.SubqueryCacheKey, Data.SubqueryResult> SubqueryCache { get; }
         System.Threading.CancellationToken CancellationToken { get; }
         IServiceProvider ServiceProvider { get; }
-        
+
         bool IsWhatIf { get; set; }
         bool LineageEnabled { get; set; }
         string? LineageNamespace { get; set; }
@@ -376,10 +376,10 @@ namespace ETL_SQL.Core
 
         /// <summary>Standardizer for file/path security and runaway protection.</summary>
         ETL_SQL.Services.SecurityService SecurityService { get; }
-        
+
         /// <summary>Manager for session persistence and key derivation.</summary>
         ETL_SQL.Core.Execution.ISessionStateManager SessionStateManager { get; }
-        
+
         void IncrementOperationCount(OperationType type = OperationType.FileSystem, string? path = null, int count = 1);
         IDisposable EnterRecursiveScope();
 

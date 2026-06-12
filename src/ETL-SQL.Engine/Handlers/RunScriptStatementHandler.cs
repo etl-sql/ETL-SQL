@@ -32,11 +32,11 @@ namespace ETL_SQL.Engine.Handlers
             context.IncrementOperationCount(); // Trigger check against limits
 
             var stmt = (RunScriptStatement)statement;
-            
+
             var pathObj = await context.EvaluateValue(stmt.PathExpression, new Row());
             if (pathObj == null)
                 throw new ExecutionException("Script path expression evaluated to null.");
-            
+
             string scriptPath = pathObj.ToString()!;
 
             if (context.CurrentScriptPath != null &&
@@ -75,7 +75,7 @@ namespace ETL_SQL.Engine.Handlers
 
             string? oldPath = context.CurrentScriptPath;
             context.CurrentScriptPath = currentPathForContext;
-            
+
             var tokens = new Lexer(source).Tokenize();
             var script = new Parser(tokens).Parse();
 
@@ -105,7 +105,7 @@ namespace ETL_SQL.Engine.Handlers
                 var allVars = context.VarContext.GetVariablesWithMetadata(v => true);
                 var allMetadata = context.VarContext.CurrentMetadata;
                 context.VarContext.PopScope();
-                
+
                 // 1. Map back variables passed as parameters (by identifier)
                 foreach (var param in stmt.Parameters)
                 {

@@ -1,7 +1,7 @@
 using System.IO;
 using System.Linq;
-using Xunit;
 using ETL_SQL.Core.Metadata;
+using Xunit;
 
 namespace ETL_SQL.LanguageServer.Tests;
 

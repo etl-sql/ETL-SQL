@@ -12,7 +12,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
     /// </summary>
     public class VisualMappingColumnExistsRule : ILintRule
     {
-        public string Name        => "VisualMappingColumnExists";
+        public string Name => "VisualMappingColumnExists";
         public string Description => "Warns when a MAPPINGS column is not present in the visual's inline SELECT.";
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
@@ -47,10 +47,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
                     {
                         results.Add(new LintResult
                         {
-                            RuleName     = Name,
-                            Severity     = LintSeverity.Warning,
-                            Message      = $"Visual '{visual.Name}': mapping role '{mapping.Role}' references column '{mapping.Column}' which is not in the inline SELECT column list.",
-                            LineNumber   = visual.Line,
+                            RuleName = Name,
+                            Severity = LintSeverity.Warning,
+                            Message = $"Visual '{visual.Name}': mapping role '{mapping.Role}' references column '{mapping.Column}' which is not in the inline SELECT column list.",
+                            LineNumber = visual.Line,
                             ColumnNumber = visual.Column
                         });
                     }

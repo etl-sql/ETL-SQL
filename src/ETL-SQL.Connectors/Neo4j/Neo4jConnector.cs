@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Neo4j.Driver;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
+using Neo4j.Driver;
 
 namespace ETL_SQL.Connectors.Neo4j
 {

@@ -49,7 +49,7 @@ namespace ETL_SQL.Core.Parser
             {
                 // Skip location properties to save time
                 if (prop.Name is "Line" or "Column" or "EndLine" or "EndColumn") continue;
-                
+
                 try
                 {
                     var val = prop.GetValue(obj);

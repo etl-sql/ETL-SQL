@@ -1,14 +1,14 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Caching.Memory;
-using Parquet;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Parquet;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -36,11 +36,11 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
 
         var materialized = filteredList.ToList();
 
-        long totalCount    = rows.Count;
+        long totalCount = rows.Count;
         long filteredCount = materialized.Count;
 
         var page1 = Math.Max(1, page);
-        var size  = Math.Clamp(pageSize, 1, 1000);
+        var size = Math.Clamp(pageSize, 1, 1000);
         var paged = materialized.Skip((page1 - 1) * size).Take(size).ToList();
 
         return new DatasetRowsDto(columns, paged, totalCount, filteredCount, page1, size);
@@ -94,7 +94,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
         {
             var values = filtered.Select(r => r.GetValueOrDefault(col.Name)).ToList();
             long nulls = values.Count(v => v is null);
-            var nums   = values.OfType<object>()
+            var nums = values.OfType<object>()
                                .Select(v => TryParseDouble(v))
                                .Where(v => v.HasValue)
                                .Select(v => v!.Value)
@@ -200,7 +200,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
 
         return dataset.EncryptionMode switch
         {
-            DatasetEncryptionMode.None         => null,
+            DatasetEncryptionMode.None => null,
             DatasetEncryptionMode.MachineBound => new Dictionary<string, string> { ["ENCRYPT"] = "MACHINE" },
             _ => throw new InvalidOperationException(
                 $"Dataset '{dataset.Name}' was encrypted at rest with a {dataset.EncryptionMode} credential and no portal at-rest key is configured, so it cannot be viewed. Configure Portal:Dataset:AtRestKey or re-materialise the dataset.")
@@ -236,9 +236,9 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
 
         for (int g = 0; g < reader.RowGroupCount; g++)
         {
-            using var rgReader  = reader.OpenRowGroupReader(g);
-            int rowCount        = (int)rgReader.RowCount;
-            var columnArrays    = new object?[dataFields.Length][];
+            using var rgReader = reader.OpenRowGroupReader(g);
+            int rowCount = (int)rgReader.RowCount;
+            var columnArrays = new object?[dataFields.Length][];
 
             for (int c = 0; c < dataFields.Length; c++)
             {
@@ -292,19 +292,19 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
             var col = f.Col;
             result = f.Op switch
             {
-                "contains"   => result.Where(r => r.GetValueOrDefault(col)?.ToString()?.Contains(f.Val ?? "", StringComparison.OrdinalIgnoreCase) == true),
-                "starts_with"=> result.Where(r => r.GetValueOrDefault(col)?.ToString()?.StartsWith(f.Val ?? "", StringComparison.OrdinalIgnoreCase) == true),
-                "eq"         => result.Where(r => string.Equals(r.GetValueOrDefault(col)?.ToString(), f.Val, StringComparison.OrdinalIgnoreCase)),
-                "neq"        => result.Where(r => !string.Equals(r.GetValueOrDefault(col)?.ToString(), f.Val, StringComparison.OrdinalIgnoreCase)),
-                "gt"         => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) > 0),
-                "lt"         => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) < 0),
-                "gte"        => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) >= 0),
-                "lte"        => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) <= 0),
-                "between"    => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) >= 0 && CompareNum(r.GetValueOrDefault(col), f.Val2) <= 0),
-                "in"         => result.Where(r => ParseJsonArray(f.Val).Contains(r.GetValueOrDefault(col)?.ToString() ?? "", StringComparer.OrdinalIgnoreCase)),
-                "is_null"    => result.Where(r => r.GetValueOrDefault(col) is null),
-                "not_null"   => result.Where(r => r.GetValueOrDefault(col) is not null),
-                _            => result
+                "contains" => result.Where(r => r.GetValueOrDefault(col)?.ToString()?.Contains(f.Val ?? "", StringComparison.OrdinalIgnoreCase) == true),
+                "starts_with" => result.Where(r => r.GetValueOrDefault(col)?.ToString()?.StartsWith(f.Val ?? "", StringComparison.OrdinalIgnoreCase) == true),
+                "eq" => result.Where(r => string.Equals(r.GetValueOrDefault(col)?.ToString(), f.Val, StringComparison.OrdinalIgnoreCase)),
+                "neq" => result.Where(r => !string.Equals(r.GetValueOrDefault(col)?.ToString(), f.Val, StringComparison.OrdinalIgnoreCase)),
+                "gt" => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) > 0),
+                "lt" => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) < 0),
+                "gte" => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) >= 0),
+                "lte" => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) <= 0),
+                "between" => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) >= 0 && CompareNum(r.GetValueOrDefault(col), f.Val2) <= 0),
+                "in" => result.Where(r => ParseJsonArray(f.Val).Contains(r.GetValueOrDefault(col)?.ToString() ?? "", StringComparer.OrdinalIgnoreCase)),
+                "is_null" => result.Where(r => r.GetValueOrDefault(col) is null),
+                "not_null" => result.Where(r => r.GetValueOrDefault(col) is not null),
+                _ => result
             };
         }
 
@@ -315,7 +315,7 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
     {
         if (val is null || threshold is null) return 0;
         if (double.TryParse(val.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
-         && double.TryParse(threshold,      NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+         && double.TryParse(threshold, NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
             return a.CompareTo(b);
         return string.Compare(val.ToString(), threshold, StringComparison.OrdinalIgnoreCase);
     }
@@ -334,11 +334,11 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
     private static double? TryParseDouble(object? v)
     {
         if (v is null) return null;
-        if (v is double d)   return d;
-        if (v is float  f)   return f;
+        if (v is double d) return d;
+        if (v is float f) return f;
         if (v is decimal dm) return (double)dm;
-        if (v is int    i)   return i;
-        if (v is long   l)   return l;
+        if (v is int i) return i;
+        if (v is long l) return l;
         return double.TryParse(v.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var r) ? r : null;
     }
 
@@ -355,9 +355,9 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
     private static string CsvCell(object? v) =>
         v switch
         {
-            null      => "",
-            string s  => NeutralizeCsvFormula(s),
-            _         => v.ToString() ?? ""
+            null => "",
+            string s => NeutralizeCsvFormula(s),
+            _ => v.ToString() ?? ""
         };
 
     // Excel/Sheets interpret a cell beginning with =,+,-,@ (or a leading tab/CR) as a formula.

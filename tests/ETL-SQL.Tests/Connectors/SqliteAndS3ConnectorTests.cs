@@ -6,15 +6,15 @@ using System.Net;
 using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
-using Moq;
 using Amazon.S3;
 using Amazon.S3.Model;
 using ETL_SQL.Common;
-using ETL_SQL.Connectors.Sqlite;
 using ETL_SQL.Connectors.S3;
+using ETL_SQL.Connectors.Sqlite;
 using ETL_SQL.Data;
 using ETL_SQL.Services;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -52,7 +52,7 @@ namespace ETL_SQL.Tests.Connectors
             var mockContext = CreateMockContext();
             string rawPath = "subfolder/mydb.db";
             string resolvedPath = "C:\\Absolute\\subfolder\\mydb.db";
-            
+
             mockContext.Setup(c => c.ResolvePath(rawPath)).Returns(resolvedPath);
 
             var connector = new SqliteConnector();
@@ -154,9 +154,9 @@ namespace ETL_SQL.Tests.Connectors
                 }
 
                 txSource = (SqliteDataSource)dataSource.WithTable("logs");
-                
+
                 await txSource.BeginTransactionAsync();
-                
+
                 var table = new DataTable();
                 table.SetColumns(new[] { "msg" });
                 await table.AddRowAsync(new Row { ["msg"] = "Log entry 1" });
@@ -219,9 +219,9 @@ namespace ETL_SQL.Tests.Connectors
                 }
 
                 txSource = (SqliteDataSource)dataSource.WithTable("logs");
-                
+
                 await txSource.BeginTransactionAsync();
-                
+
                 var table = new DataTable();
                 table.SetColumns(new[] { "msg" });
                 await table.AddRowAsync(new Row { ["msg"] = "Rollback entry" });
@@ -282,7 +282,7 @@ namespace ETL_SQL.Tests.Connectors
                 IsTestMode = false
             };
             securityService.AllowedHosts.Clear();
-            
+
             var mockContext = new Mock<IExecutionContext>();
             mockContext.Setup(c => c.SecurityService).Returns(securityService);
             mockContext.Setup(c => c.Logger).Returns(mockLogger.Object);
@@ -293,7 +293,7 @@ namespace ETL_SQL.Tests.Connectors
                 { "BUCKET", "my-bucket" }
             };
 
-            Assert.Throws<ETL_SQL.Services.SecurityException>(() => 
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
                 new S3Connector(mockContext.Object, "my-bucket", options)
             );
         }
@@ -317,9 +317,9 @@ namespace ETL_SQL.Tests.Connectors
 
                 await connector.UploadFileAsync(localTemp, "remote/path.txt");
 
-                mockS3.Verify(s => s.PutObjectAsync(It.Is<PutObjectRequest>(r => 
-                    r.BucketName == "test-bucket" && 
-                    r.Key == "remote/path.txt" && 
+                mockS3.Verify(s => s.PutObjectAsync(It.Is<PutObjectRequest>(r =>
+                    r.BucketName == "test-bucket" &&
+                    r.Key == "remote/path.txt" &&
                     r.FilePath == localTemp
                 ), It.IsAny<CancellationToken>()), Times.Once);
             }
@@ -357,8 +357,8 @@ namespace ETL_SQL.Tests.Connectors
                 Assert.True(File.Exists(localTemp));
                 Assert.Equal("s3 content", File.ReadAllText(localTemp));
 
-                mockS3.Verify(s => s.GetObjectAsync(It.Is<GetObjectRequest>(r => 
-                    r.BucketName == "test-bucket" && 
+                mockS3.Verify(s => s.GetObjectAsync(It.Is<GetObjectRequest>(r =>
+                    r.BucketName == "test-bucket" &&
                     r.Key == "remote/path.txt"
                 ), It.IsAny<CancellationToken>()), Times.Once);
             }
@@ -382,8 +382,8 @@ namespace ETL_SQL.Tests.Connectors
 
             await connector.DeleteFileAsync("remote/file.txt");
 
-            mockS3.Verify(s => s.DeleteObjectAsync(It.Is<DeleteObjectRequest>(r => 
-                r.BucketName == "test-bucket" && 
+            mockS3.Verify(s => s.DeleteObjectAsync(It.Is<DeleteObjectRequest>(r =>
+                r.BucketName == "test-bucket" &&
                 r.Key == "remote/file.txt"
             ), It.IsAny<CancellationToken>()), Times.Once);
         }
@@ -412,8 +412,8 @@ namespace ETL_SQL.Tests.Connectors
             var mockS3 = new Mock<IAmazonS3>();
 
             mockS3.Setup(s => s.ListObjectsV2Async(It.IsAny<ListObjectsV2Request>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new ListObjectsV2Response 
-                { 
+                .ReturnsAsync(new ListObjectsV2Response
+                {
                     KeyCount = 1,
                     HttpStatusCode = HttpStatusCode.OK
                 });
@@ -424,8 +424,8 @@ namespace ETL_SQL.Tests.Connectors
             var exists = await connector.DirectoryExistsAsync("remote/dir");
 
             Assert.True(exists);
-            mockS3.Verify(s => s.ListObjectsV2Async(It.Is<ListObjectsV2Request>(r => 
-                r.BucketName == "test-bucket" && 
+            mockS3.Verify(s => s.ListObjectsV2Async(It.Is<ListObjectsV2Request>(r =>
+                r.BucketName == "test-bucket" &&
                 r.Prefix == "remote/dir/" &&
                 r.MaxKeys == 1
             ), It.IsAny<CancellationToken>()), Times.Once);
@@ -452,15 +452,15 @@ namespace ETL_SQL.Tests.Connectors
 
             await connector.RenameFileAsync("src.txt", "dest.txt");
 
-            mockS3.Verify(s => s.CopyObjectAsync(It.Is<CopyObjectRequest>(r => 
-                r.SourceBucket == "test-bucket" && 
+            mockS3.Verify(s => s.CopyObjectAsync(It.Is<CopyObjectRequest>(r =>
+                r.SourceBucket == "test-bucket" &&
                 r.SourceKey == "src.txt" &&
                 r.DestinationBucket == "test-bucket" &&
                 r.DestinationKey == "dest.txt"
             ), It.IsAny<CancellationToken>()), Times.Once);
 
-            mockS3.Verify(s => s.DeleteObjectAsync(It.Is<DeleteObjectRequest>(r => 
-                r.BucketName == "test-bucket" && 
+            mockS3.Verify(s => s.DeleteObjectAsync(It.Is<DeleteObjectRequest>(r =>
+                r.BucketName == "test-bucket" &&
                 r.Key == "src.txt"
             ), It.IsAny<CancellationToken>()), Times.Once);
         }
@@ -493,13 +493,13 @@ namespace ETL_SQL.Tests.Connectors
 
             await connector.DeleteDirectoryAsync("dir");
 
-            mockS3.Verify(s => s.ListObjectsV2Async(It.Is<ListObjectsV2Request>(r => 
-                r.BucketName == "test-bucket" && 
+            mockS3.Verify(s => s.ListObjectsV2Async(It.Is<ListObjectsV2Request>(r =>
+                r.BucketName == "test-bucket" &&
                 r.Prefix == "dir/"
             ), It.IsAny<CancellationToken>()), Times.Once);
 
-            mockS3.Verify(s => s.DeleteObjectsAsync(It.Is<DeleteObjectsRequest>(r => 
-                r.BucketName == "test-bucket" && 
+            mockS3.Verify(s => s.DeleteObjectsAsync(It.Is<DeleteObjectsRequest>(r =>
+                r.BucketName == "test-bucket" &&
                 r.Objects.Count == 2 &&
                 r.Objects.Any(o => o.Key == "dir/file1.txt") &&
                 r.Objects.Any(o => o.Key == "dir/sub/file2.txt")

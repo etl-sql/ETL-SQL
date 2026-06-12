@@ -1,13 +1,13 @@
-using ETL_SQL.Core.Data;
-using ETL_SQL.ReportPortal.Data;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Data;
+using ETL_SQL.ReportPortal.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ETL_SQL.ReportPortal.Services
 {

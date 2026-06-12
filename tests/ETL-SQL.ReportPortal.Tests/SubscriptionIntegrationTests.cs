@@ -8,15 +8,15 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Orchestrator.Service;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Orchestrator.Service;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
-using ETL_SQL.Core.Data;
 using ETL_SQL.Tests.Integration.Connectors;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.ReportPortal.Tests
 {
@@ -408,7 +408,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             await PollMailPitUntilCountAsync(initialMailCount + 1);
             var msgsRoot = await _smtp.GetMessagesAsync();
             var msgsArray = msgsRoot.GetProperty("messages");
-            
+
             JsonElement? msgObj = null;
             for (int i = 0; i < msgsArray.GetArrayLength(); i++)
             {

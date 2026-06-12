@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
@@ -20,14 +20,14 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var eval = ServiceProviderServiceExtensions.GetRequiredService<Evaluator>(global::ETL_SQL.App.DependencyInjectionSetup.BuildServiceProvider());
             eval.TempTableSpillThresholdRows = 20;
             eval.SpillEncryptionEnabled = false; // Simplify for test matching old style if needed, but new is better
-            
+
             try
             {
                 var ds = new InMemoryDataSource();
                 ds.ExecutionContext = eval;
-                
+
                 var schema = new List<string> { "Id", "Val" };
-                
+
                 // Prepare 5 batches of 10 rows = 50 rows total
                 var allBatches = new List<DataTable>();
                 for (int b = 0; b < 5; b++)
@@ -50,7 +50,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
                 // Assert
                 // With threshold 20, first 2 batches (20 rows) stay in memory.
                 // Next 3 batches (30 rows) should trigger spilling.
-                
+
                 // Verify data integrity
                 int rowCount = 0;
                 long idSum = 0;

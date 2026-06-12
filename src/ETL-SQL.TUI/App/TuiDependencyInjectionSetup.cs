@@ -1,40 +1,40 @@
 using System.Linq;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors.Avro;
+using ETL_SQL.Connectors.Directory;
+using ETL_SQL.Connectors.Email;
+using ETL_SQL.Connectors.Excel;
+using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Connectors.Json;
+using ETL_SQL.Connectors.Kafka;
+using ETL_SQL.Connectors.MockDb;
+using ETL_SQL.Connectors.Mongodb;
+using ETL_SQL.Connectors.MySql;
+using ETL_SQL.Connectors.Neo4j;
+using ETL_SQL.Connectors.Odbc;
+using ETL_SQL.Connectors.Oracle;
+using ETL_SQL.Connectors.Orchestrator;
+using ETL_SQL.Connectors.Parquet;
+using ETL_SQL.Connectors.Postgres;
+using ETL_SQL.Connectors.ReportPortal;
+using ETL_SQL.Connectors.Rest;
+using ETL_SQL.Connectors.S3;
+using ETL_SQL.Connectors.Sqlite;
+using ETL_SQL.Connectors.SqlServer;
+using ETL_SQL.Connectors.Xml;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Extensions.Logging;
-using ETL_SQL.Core;
-using ETL_SQL.Common;
-using ETL_SQL.Engine.Handlers;
-using ETL_SQL.Connectors.MockDb;
-using ETL_SQL.Connectors.SqlServer;
-using ETL_SQL.Connectors.Oracle;
-using ETL_SQL.Connectors.Postgres;
-using ETL_SQL.Connectors.MySql;
-using ETL_SQL.Connectors.FlatFile;
-using ETL_SQL.Connectors.Json;
-using ETL_SQL.Connectors.Xml;
-using ETL_SQL.Connectors.Excel;
-using ETL_SQL.Connectors.Directory;
-using ETL_SQL.Connectors.Parquet;
-using ETL_SQL.Connectors.Avro;
-using ETL_SQL.Connectors.Email;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Data;
-using ETL_SQL.Connectors.Rest;
-using ETL_SQL.Connectors.Odbc;
-using ETL_SQL.Connectors.ReportPortal;
-using ETL_SQL.Connectors.Orchestrator;
-using ETL_SQL.Connectors.Sqlite;
-using ETL_SQL.Connectors.S3;
-using ETL_SQL.Connectors.Mongodb;
-using ETL_SQL.Connectors.Neo4j;
-using ETL_SQL.Connectors.Kafka;
-using ETL_SQL.Orchestrator.Storage;
-using ETL_SQL.Orchestrator.Scheduling;
-using ETL_SQL.Orchestrator.Execution;
 
 namespace ETL_SQL.TUI
 {
@@ -72,9 +72,9 @@ namespace ETL_SQL.TUI
             services.AddSingleton<CliContext>(new CliContext());
 
             // ── Logging ────────────────────────────────────────────────────────
-            string appLogDir   = configuration["Logging:AppLog:Directory"]    ?? "logs/app";
-            int retentionDays  = int.TryParse(configuration["Logging:AppLog:RetentionDays"],   out var rd) ? rd : 30;
-            int sizeLimitMb    = int.TryParse(configuration["Logging:AppLog:FileSizeLimitMb"], out var sl) ? sl : 10;
+            string appLogDir = configuration["Logging:AppLog:Directory"] ?? "logs/app";
+            int retentionDays = int.TryParse(configuration["Logging:AppLog:RetentionDays"], out var rd) ? rd : 30;
+            int sizeLimitMb = int.TryParse(configuration["Logging:AppLog:FileSizeLimitMb"], out var sl) ? sl : 10;
 
             var loggerService = new LoggerService();
             loggerService.InitializeAppLogger(appLogDir, retentionDays, sizeLimitMb);
@@ -97,11 +97,11 @@ namespace ETL_SQL.TUI
             ETL_SQL.Engine.Functions.XmlFunctions.Register(registry);
             ETL_SQL.Engine.Functions.FuzzyFunctions.Register(registry);
             services.AddSingleton<Core.Functions.IFunctionRegistry>(registry);
-            
+
             var helpRegistry = new Core.Metadata.LanguageHelpRegistry();
             Engine.Services.LanguageHelpService.Initialize(helpRegistry);
             services.AddSingleton<Core.Interfaces.ILanguageHelpRegistry>(helpRegistry);
-            
+
             // ── Language Intelligence ──────────────────────────────────────────
             services.AddSingleton<Core.IMetadataManager, Core.Services.MetadataManager>();
             services.AddSingleton<Core.Services.ILanguageService, Core.Services.LanguageService>();
@@ -138,14 +138,14 @@ namespace ETL_SQL.TUI
             services.AddSingleton<IConnector, ReportPortalConnector>();
             services.AddSingleton<IConnector, OrchestratorConnector>();
 
-            var ftpHost = configuration["Connectors:Ftp:Host"]      ?? "localhost";
-            var ftpUser = configuration["Connectors:Ftp:Username"]   ?? "anonymous";
-            var ftpPass = configuration["Connectors:Ftp:Password"]   ?? "";
-            var sftpHost = configuration["Connectors:Sftp:Host"]     ?? "localhost";
+            var ftpHost = configuration["Connectors:Ftp:Host"] ?? "localhost";
+            var ftpUser = configuration["Connectors:Ftp:Username"] ?? "anonymous";
+            var ftpPass = configuration["Connectors:Ftp:Password"] ?? "";
+            var sftpHost = configuration["Connectors:Sftp:Host"] ?? "localhost";
             var sftpUser = configuration["Connectors:Sftp:Username"] ?? "user";
             var sftpPass = configuration["Connectors:Sftp:Password"] ?? "pass";
-            var azureConn      = configuration["Connectors:AzureBlob:ConnectionString"] ?? "UseDevelopmentStorage=true";
-            var azureContainer = configuration["Connectors:AzureBlob:Container"]        ?? "test";
+            var azureConn = configuration["Connectors:AzureBlob:ConnectionString"] ?? "UseDevelopmentStorage=true";
+            var azureContainer = configuration["Connectors:AzureBlob:Container"] ?? "test";
 
             services.AddSingleton<IConnector>(new FtpConnector(ftpHost, ftpUser, ftpPass));
             services.AddSingleton<IConnector>(new SftpConnector(sftpHost, sftpUser, sftpPass));
@@ -179,7 +179,7 @@ namespace ETL_SQL.TUI
             // ── Storage & Scheduling ───────────────────────────────────────────
             services.Configure<JobThrottleOptions>(configuration.GetSection("Scheduling:Throttle"));
             services.AddSingleton<JobThrottle>();
-            
+
             services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
             services.AddSingleton<BufferManager>();
             services.AddSingleton<IBufferManager>(sp => sp.GetRequiredService<BufferManager>());

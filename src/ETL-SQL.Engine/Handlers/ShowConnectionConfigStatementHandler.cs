@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 
@@ -20,7 +20,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ShowConnectionConfigStatement)statement;
-            
+
             if (!context.Connections.TryGetValue(stmt.ConnectionName, out var dataSource))
             {
                 throw new ExecutionException($"Connection '{stmt.ConnectionName}' not found.", null, stmt.Line, stmt.Column);

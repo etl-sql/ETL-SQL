@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -22,7 +22,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (IfStatement)statement;
-            
+
             _logger.Debug("Evaluating IF condition");
             if (await context.EvaluateCondition(stmt.Condition, new Row()))
             {

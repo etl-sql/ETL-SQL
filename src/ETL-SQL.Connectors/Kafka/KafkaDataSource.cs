@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Confluent.Kafka;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Kafka
 {
@@ -17,7 +17,7 @@ namespace ETL_SQL.Connectors.Kafka
         private readonly Dictionary<string, string> _options = new(StringComparer.OrdinalIgnoreCase);
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
-        
+
         private IConsumer<string, string>? _consumer;
         private IProducer<string, string>? _producer;
 
@@ -196,8 +196,8 @@ namespace ETL_SQL.Connectors.Kafka
             {
                 BootstrapServers = _bootstrapServers,
                 GroupId = _options.GetValueOrDefault("GROUP_ID", "etl-sql-group"),
-                AutoOffsetReset = _options.GetValueOrDefault("AUTO_OFFSET_RESET", "Earliest").Equals("Latest", StringComparison.OrdinalIgnoreCase) 
-                    ? AutoOffsetReset.Latest 
+                AutoOffsetReset = _options.GetValueOrDefault("AUTO_OFFSET_RESET", "Earliest").Equals("Latest", StringComparison.OrdinalIgnoreCase)
+                    ? AutoOffsetReset.Latest
                     : AutoOffsetReset.Earliest,
                 EnableAutoCommit = true
             };
@@ -231,10 +231,10 @@ namespace ETL_SQL.Connectors.Kafka
             {
                 config.SaslUsername = username;
                 config.SaslPassword = password;
-                
+
                 string mechanism = _options.GetValueOrDefault("SASL_MECHANISM", "Plain");
-                config.SaslMechanism = mechanism.Equals("ScramSha512", StringComparison.OrdinalIgnoreCase) 
-                    ? SaslMechanism.ScramSha512 
+                config.SaslMechanism = mechanism.Equals("ScramSha512", StringComparison.OrdinalIgnoreCase)
+                    ? SaslMechanism.ScramSha512
                     : mechanism.Equals("ScramSha256", StringComparison.OrdinalIgnoreCase)
                     ? SaslMechanism.ScramSha256
                     : SaslMechanism.Plain;

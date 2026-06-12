@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Xunit;
-using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis
 {

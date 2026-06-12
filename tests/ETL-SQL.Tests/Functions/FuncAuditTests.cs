@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Engine;
+using ETL_SQL.App;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
-using ETL_SQL.App;
+using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Functions
 {
@@ -22,10 +22,10 @@ namespace ETL_SQL.Tests.Functions
             var ev = NewEvaluator();
             await TestHelpers.Execute(ev, "CREATE TABLE #data (id INT, region VARCHAR);");
             await TestHelpers.Execute(ev, "INSERT INTO #data VALUES (1, 'North'), (2, 'South'), (3, 'East');");
-            
+
             // Pattern common in .rptsql: WHERE @p = 'All' OR col = @p
             string query = "SELECT id FROM #data WHERE @p = 'All' OR region = @p ORDER BY id;";
-            
+
             // 1. Test case: @p = 'All'
             ev.DeclareVariable("@p", "All");
             var resAll = await ev.ExecuteQuery(TestHelpers.Parse(query).Statements[0]).FirstAsync();
@@ -49,14 +49,14 @@ namespace ETL_SQL.Tests.Functions
             var ev = NewEvaluator();
             await TestHelpers.Execute(ev, "CREATE TABLE #data (id INT, region VARCHAR);");
             await TestHelpers.Execute(ev, "INSERT INTO #data VALUES (1, 'North'), (2, NULL);");
-            
+
             string query = "SELECT id FROM #data WHERE region = @p;";
-            
+
             // If @p is NULL, region = @p is UNKNOWN. Should return 0 rows (even for the NULL row).
             ev.DeclareVariable("@p", null);
             var res = await ev.ExecuteQuery(TestHelpers.Parse(query).Statements[0]).FirstAsync();
             Assert.Empty(res.Rows);
-            
+
             // Standard IS NULL should still work
             string queryNull = "SELECT id FROM #data WHERE region IS NULL;";
             var resNull = await ev.ExecuteQuery(TestHelpers.Parse(queryNull).Statements[0]).FirstAsync();

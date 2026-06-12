@@ -4,13 +4,13 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
+using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
-using Amazon.Runtime;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 using IExecutionContext = ETL_SQL.Core.IExecutionContext;
 
 namespace ETL_SQL.Connectors.S3
@@ -20,7 +20,7 @@ namespace ETL_SQL.Connectors.S3
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private IAmazonS3? _client;
-        
+
         private readonly string _bucketName = "";
         private readonly string _endpoint = "";
         private readonly string _accessKey = "";
@@ -59,7 +59,7 @@ namespace ETL_SQL.Connectors.S3
             _accessKey = _options.GetValueOrDefault("ACCESS_KEY", "");
             _secretKey = _options.GetValueOrDefault("SECRET_KEY", "");
             _region = _options.GetValueOrDefault("REGION", "us-east-1");
-            
+
             var forcePathStr = _options.GetValueOrDefault("FORCE_PATH_STYLE", "FALSE");
             _forcePathStyle = forcePathStr.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
 
@@ -298,7 +298,7 @@ namespace ETL_SQL.Connectors.S3
             try
             {
                 using var response = await client.GetObjectAsync(request);
-                
+
                 string? dir = System.IO.Path.GetDirectoryName(localPath);
                 if (!string.IsNullOrEmpty(dir) && !System.IO.Directory.Exists(dir))
                 {

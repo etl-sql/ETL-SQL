@@ -1,9 +1,9 @@
-using Xunit;
 using System.Threading.Tasks;
+using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {

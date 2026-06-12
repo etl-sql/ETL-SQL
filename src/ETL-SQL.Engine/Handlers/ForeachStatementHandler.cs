@@ -3,10 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Analysis;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -46,7 +46,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 context.Telemetry.FetchStatus = 0;
                 ProcessRow(row, iterVarName, stmt, context);
-                
+
                 try
                 {
                     await context.EvaluateStatement(stmt.Body);
@@ -96,7 +96,7 @@ namespace ETL_SQL.Engine.Handlers
             using (await _bufferManager.AcquireCursorAsync(context.SessionId ?? "DEFAULT", owner: this))
             {
                 context.Log($"Starting FAST-PATH Streaming FOREACH for {sel.FromTable.TableName} on {sel.FromTable.ConnectionName}");
-                
+
                 var compiled = context.CompileQuery(sel, db.Dialect);
                 await foreach (var batch in db.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values))
                 {
@@ -104,7 +104,7 @@ namespace ETL_SQL.Engine.Handlers
                     {
                         context.Telemetry.FetchStatus = 0;
                         ProcessRow(row, iterVarName, stmt, context);
-                        
+
                         try
                         {
                             await context.EvaluateStatement(stmt.Body);
@@ -122,8 +122,8 @@ namespace ETL_SQL.Engine.Handlers
         private void ProcessRow(Row row, string iterVarName, ForeachStatement stmt, IExecutionContext context)
         {
             // Optimization: If the row has exactly one column and its name is "Value", unwrap it
-            bool shouldUnwrap = row.Schema != null && 
-                               row.Schema.ColumnCount == 1 && 
+            bool shouldUnwrap = row.Schema != null &&
+                               row.Schema.ColumnCount == 1 &&
                                row.Schema.ColumnNames[0].Equals("Value", StringComparison.OrdinalIgnoreCase);
 
             object? val = shouldUnwrap ? row[0] : row;
@@ -154,12 +154,12 @@ namespace ETL_SQL.Engine.Handlers
             while (hasMore)
             {
                 // We manually deep-clone the parts we need via 'with' expression
-                var pagedQuery = sel with 
-                { 
+                var pagedQuery = sel with
+                {
                     Offset = new LiteralExpression((decimal)offset, TokenType.NUMBER),
                     LimitCount = new LiteralExpression((decimal)pageSize, TokenType.NUMBER)
                 };
-                
+
                 int rowsInPage = 0;
                 var compiled = context.CompileQuery(pagedQuery, db.Dialect);
                 await foreach (var batch in db.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values))
@@ -169,7 +169,7 @@ namespace ETL_SQL.Engine.Handlers
                         rowsInPage++;
                         context.Telemetry.FetchStatus = 0;
                         ProcessRow(row, iterVarName, stmt, context);
-                        
+
                         try
                         {
                             await context.EvaluateStatement(stmt.Body);
@@ -184,7 +184,7 @@ namespace ETL_SQL.Engine.Handlers
                 offset += pageSize;
             }
 
-            finish:
+        finish:
             return true;
         }
     }

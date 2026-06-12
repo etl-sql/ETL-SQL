@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Functions;
-using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Functions;
 
 namespace ETL_SQL.Engine.Functions
 {
@@ -17,22 +17,22 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("DATEDIFF", DateDiff, "DATEDIFF(datepart, start, end): Returns the count of specified datepart boundaries crossed between two dates.");
             registry.RegisterWithHelp("ISDATE", (args, ctx) => EvaluationUtils.SafeTryParseDate(args[0]?.ToString() ?? "", out _) ? 1 : 0, "ISDATE(expr): Returns 1 if the expression is a valid date, 0 otherwise.");
             registry.RegisterWithHelp("EOMONTH", EoMonth, "EOMONTH(date[, months_to_add]): Returns the last day of the month containing the date.");
-            
+
             registry.RegisterWithHelp("YEAR", (args, ctx) => args[0] == null ? null : (EvaluationUtils.TryToDateTime(args[0], out var dt) ? (decimal)dt.Year : null), "YEAR(date): Returns the year part of a date.");
             registry.RegisterWithHelp("MONTH", (args, ctx) => args[0] == null ? null : (EvaluationUtils.TryToDateTime(args[0], out var dt) ? (decimal)dt.Month : null), "MONTH(date): Returns the month part of a date.");
             registry.RegisterWithHelp("DAY", (args, ctx) => args[0] == null ? null : (EvaluationUtils.TryToDateTime(args[0], out var dt) ? (decimal)dt.Day : null), "DAY(date): Returns the day part of a date.");
-            
+
             registry.RegisterWithHelp("GETDATE", (args, ctx) => DateTime.Now, "GETDATE(): Returns the current system date and time.");
             registry.RegisterWithHelp("SYSDATE", (args, ctx) => DateTime.Now, "SYSDATE(): Returns the current system date and time (Oracle style).");
             registry.RegisterWithHelp("NOW", (args, ctx) => DateTime.Now, "NOW(): Alias for GETDATE.");
             registry.RegisterWithHelp("CURRENT_TIMESTAMP", (args, ctx) => DateTime.Now, "CURRENT_TIMESTAMP: Returns the current system date and time.");
             registry.RegisterWithHelp("CURRENT_DATE", (args, ctx) => DateTime.Today, "CURRENT_DATE: Returns the current system date.");
             registry.RegisterWithHelp("CURRENT_TIME", (args, ctx) => DateTime.Now.TimeOfDay, "CURRENT_TIME: Returns the current system time.");
-            
+
             registry.RegisterWithHelp("DATETIMEFROMPARTS", DateTimeFromParts, "DATETIMEFROMPARTS(y, m, d, h, mi, s, ms): Constructs a DATETIME from parts.");
             registry.RegisterWithHelp("TIMEFROMPARTS", TimeFromParts, "TIMEFROMPARTS(h, mi, s, frac, prec): Constructs a TIME from parts.");
             registry.RegisterWithHelp("DATETIMEOFFSETSFROMPARTS", DateTimeOffsetsFromParts, "DATETIMEOFFSETSFROMPARTS(...): Constructs a DATETIMEOFFSET from parts.");
-            
+
             registry.RegisterWithHelp("TRUNC", Trunc, "TRUNC(val[, part]): Truncates a date to the specified part (default 'DAY') or a number to decimals.");
             registry.RegisterWithHelp("TO_DATE", (args, ctx) => args.Count >= 1 ? EvaluationUtils.CastToType(args[0], "DATETIME") : null, "TO_DATE(str[, fmt]): Converts a string to a date.");
             registry.RegisterWithHelp("RELDATE", (args, ctx) => args.Count == 0 ? null : RelDateResolver.Resolve(args[0]?.ToString() ?? "", ctx.WeekStartDay), "RELDATE(expr): Resolves a relative date expression (e.g. 'D-7', 'M-1', 'W-1').");
@@ -47,7 +47,8 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 2 || args[1] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
             if (!DateTime.TryParse(args[1]?.ToString(), out var dt)) throw new ExecutionException($"Invalid date format for DATENAME: {args[1]}");
-            return part switch {
+            return part switch
+            {
                 "MONTH" or "MM" or "M" => dt.ToString("MMMM"),
                 "WEEKDAY" or "DW" or "W" => dt.ToString("dddd"),
                 "YEAR" or "YY" or "YYYY" => dt.Year.ToString(),
@@ -61,7 +62,8 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 2 || args[1] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
             if (!DateTime.TryParse(args[1]?.ToString(), out var dt)) throw new ExecutionException($"Invalid date format for DATEPART: {args[1]}");
-            return part switch {
+            return part switch
+            {
                 "YEAR" or "YY" or "YYYY" => (decimal)dt.Year,
                 "QUARTER" or "QQ" or "Q" => (decimal)((dt.Month - 1) / 3 + 1),
                 "MONTH" or "MM" or "M" => (decimal)dt.Month,
@@ -79,9 +81,10 @@ namespace ETL_SQL.Engine.Functions
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
             if (!EvaluationUtils.TryToDateTime(args[1], out var dt1)) return null;
             if (!EvaluationUtils.TryToDateTime(args[2], out var dt2)) return null;
-            
+
             var diff = dt2 - dt1;
-            return part switch {
+            return part switch
+            {
                 "YEAR" or "YY" or "YYYY" => (decimal)(dt2.Year - dt1.Year),
                 "QUARTER" or "QQ" or "Q" => (decimal)((dt2.Year - dt1.Year) * 4 + ((dt2.Month - 1) / 3) - ((dt1.Month - 1) / 3)),
                 "MONTH" or "MM" or "M" => (decimal)((dt2.Year - dt1.Year) * 12 + dt2.Month - dt1.Month),
@@ -166,8 +169,9 @@ namespace ETL_SQL.Engine.Functions
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
             if (!double.TryParse(args[1]?.ToString(), out var val)) return null;
             if (!EvaluationUtils.TryToDateTime(args[2], out var dt)) return null;
-            
-            return part switch {
+
+            return part switch
+            {
                 "YEAR" or "YY" or "YYYY" => dt.AddYears((int)val),
                 "QUARTER" or "QQ" or "Q" => dt.AddMonths((int)val * 3),
                 "MONTH" or "MM" or "M" => dt.AddMonths((int)val),

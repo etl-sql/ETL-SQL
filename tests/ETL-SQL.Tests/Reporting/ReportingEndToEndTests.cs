@@ -1,15 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.ReportHosting;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
-using System.Linq;
-using System.Collections.Generic;
-using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Engine;
+using ETL_SQL.ReportHosting;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Reporting.Reporting
 {
@@ -61,7 +61,7 @@ CREATE PAGE Dashboard AS DASHBOARD (
 
                 // 2. Verify Manifest Structure
                 Assert.Equal(3, manifest.Visuals.Count);
-                
+
                 var highSales = manifest.Visuals.First(v => v.Name == "HighSales");
                 Assert.Single(highSales.Rows); // Region1 only
                 Assert.Equal("Region1", highSales.Rows[0][0]);
@@ -153,7 +153,7 @@ CREATE PAGE Main AS DASHBOARD (
             try
             {
                 await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
-                
+
                 // Initial build (All regions)
                 var manifest1 = await service.GetManifestAsync();
                 Assert.Equal(2, manifest1.Visuals.First(v => v.Name == "RegionSales").Rows.Count);
@@ -161,7 +161,7 @@ CREATE PAGE Main AS DASHBOARD (
                 // Update parameter to 'North'
                 // This should refresh RegionSales but technically StaticTotal persists
                 var manifest2 = await service.SetParameterAsync("RegionFilter", "North");
-                
+
                 var regionSales = manifest2.Visuals.First(v => v.Name == "RegionSales");
                 Assert.Single(regionSales.Rows);
                 Assert.Equal("North", regionSales.Rows[0][0]);

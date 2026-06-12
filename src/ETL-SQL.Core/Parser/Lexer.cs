@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Linq;
-
+using System.Text;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
@@ -24,14 +23,14 @@ namespace ETL_SQL.Core.Parser
         private static Dictionary<string, TokenType> InitializeKeywords()
         {
             var dict = new Dictionary<string, TokenType>(StringComparer.OrdinalIgnoreCase);
-            
+
             // Add all Keywords from all categories
             foreach (var kw in LanguageMetadata.GetAllKeywords())
             {
                 if (Enum.TryParse<TokenType>(kw, true, out var type))
                     dict[kw] = type;
             }
-            
+
             // Add all Functions
             foreach (var f in LanguageMetadata.Functions)
             {
@@ -64,173 +63,173 @@ namespace ETL_SQL.Core.Parser
             // These are registered so the lexer produces typed tokens inside
             // CREATE VISUAL / CREATE PAGE / CREATE DATASET statements.
             // They are non-reserved: outside those contexts the parser treats them as identifiers.
-            dict["VISUAL"]        = TokenType.VISUAL;
-            dict["PAGE"]          = TokenType.PAGE;
-            dict["DATASET"]       = TokenType.DATASET;
-            dict["LAYOUT"]        = TokenType.LAYOUT;
-            dict["MAPPINGS"]      = TokenType.MAPPINGS;
-            dict["OPTIONS"]       = TokenType.OPTIONS;
-            dict["ACTIONS"]       = TokenType.ACTIONS;
-            dict["STRUCTURE"]     = TokenType.STRUCTURE;
-            dict["MAP"]           = TokenType.MAP;
-            dict["SERIES"]        = TokenType.SERIES;
+            dict["VISUAL"] = TokenType.VISUAL;
+            dict["PAGE"] = TokenType.PAGE;
+            dict["DATASET"] = TokenType.DATASET;
+            dict["LAYOUT"] = TokenType.LAYOUT;
+            dict["MAPPINGS"] = TokenType.MAPPINGS;
+            dict["OPTIONS"] = TokenType.OPTIONS;
+            dict["ACTIONS"] = TokenType.ACTIONS;
+            dict["STRUCTURE"] = TokenType.STRUCTURE;
+            dict["MAP"] = TokenType.MAP;
+            dict["SERIES"] = TokenType.SERIES;
             // SOURCE is already registered via LanguageMetadata (maps to TokenType.SOURCE)
-            dict["BAR"]           = TokenType.BAR;
-            dict["LINE"]          = TokenType.LINE;
-            dict["SCATTER"]       = TokenType.SCATTER;
-            dict["PIE"]           = TokenType.PIE;
-            dict["SLICER"]        = TokenType.SLICER;
-            dict["CARD"]          = TokenType.CARD;
-            dict["HEATMAP"]       = TokenType.HEATMAP;
-            dict["DONUT"]         = TokenType.DONUT;
-            dict["HBAR"]          = TokenType.HBAR;
-            dict["BOXPLOT"]       = TokenType.BOXPLOT;
-            dict["TREEMAP"]       = TokenType.TREEMAP;
-            dict["COLORS"]        = TokenType.COLORS;
-            dict["BOTTOM"]        = TokenType.BOTTOM;   // position keyword; TOP/LEFT/RIGHT come from LanguageMetadata
-            dict["ON_CLICK"]      = TokenType.ON_CLICK;
-            dict["DRILL_DOWN"]    = TokenType.DRILL_DOWN;
-            dict["DRILL_IN"]      = TokenType.DRILL_IN;
-            dict["DRILL_REPORT"]  = TokenType.DRILL_REPORT;
+            dict["BAR"] = TokenType.BAR;
+            dict["LINE"] = TokenType.LINE;
+            dict["SCATTER"] = TokenType.SCATTER;
+            dict["PIE"] = TokenType.PIE;
+            dict["SLICER"] = TokenType.SLICER;
+            dict["CARD"] = TokenType.CARD;
+            dict["HEATMAP"] = TokenType.HEATMAP;
+            dict["DONUT"] = TokenType.DONUT;
+            dict["HBAR"] = TokenType.HBAR;
+            dict["BOXPLOT"] = TokenType.BOXPLOT;
+            dict["TREEMAP"] = TokenType.TREEMAP;
+            dict["COLORS"] = TokenType.COLORS;
+            dict["BOTTOM"] = TokenType.BOTTOM;   // position keyword; TOP/LEFT/RIGHT come from LanguageMetadata
+            dict["ON_CLICK"] = TokenType.ON_CLICK;
+            dict["DRILL_DOWN"] = TokenType.DRILL_DOWN;
+            dict["DRILL_IN"] = TokenType.DRILL_IN;
+            dict["DRILL_REPORT"] = TokenType.DRILL_REPORT;
             dict["SET_PARAMETER"] = TokenType.SET_PARAMETER;
-            dict["ON_CHANGE"]     = TokenType.ON_CHANGE;
-            dict["REFRESH"]       = TokenType.REFRESH;
+            dict["ON_CHANGE"] = TokenType.ON_CHANGE;
+            dict["REFRESH"] = TokenType.REFRESH;
             // EVERY and COMPRESS are already registered via LanguageMetadata
-            dict["TTL"]           = TokenType.TTL;
-            dict["KEYFILE"]       = TokenType.KEYFILE;
-            dict["X_AXIS"]        = TokenType.X_AXIS;
-            dict["TEMPLATE"]      = TokenType.TEMPLATE;
+            dict["TTL"] = TokenType.TTL;
+            dict["KEYFILE"] = TokenType.KEYFILE;
+            dict["X_AXIS"] = TokenType.X_AXIS;
+            dict["TEMPLATE"] = TokenType.TEMPLATE;
             dict["TEMPLATE_PATH"] = TokenType.TEMPLATE_PATH;
-            dict["Y_AXIS"]        = TokenType.Y_AXIS;
-            dict["REPORT"]        = TokenType.REPORT;
-            dict["EXPORT"]        = TokenType.EXPORT;
-            dict["PAGES"]         = TokenType.PAGES;
-            dict["DESCRIPTION"]   = TokenType.DESCRIPTION;
+            dict["Y_AXIS"] = TokenType.Y_AXIS;
+            dict["REPORT"] = TokenType.REPORT;
+            dict["EXPORT"] = TokenType.EXPORT;
+            dict["PAGES"] = TokenType.PAGES;
+            dict["DESCRIPTION"] = TokenType.DESCRIPTION;
 
             // ── Report-SQL keywords (Phase 9.3) ────────────────────────────
-            dict["STYLE"]      = TokenType.STYLE;
-            dict["CONTAINER"]  = TokenType.CONTAINER;
-            dict["BOX"]        = TokenType.BOX;
-            dict["SCROLL"]     = TokenType.SCROLL;
+            dict["STYLE"] = TokenType.STYLE;
+            dict["CONTAINER"] = TokenType.CONTAINER;
+            dict["BOX"] = TokenType.BOX;
+            dict["SCROLL"] = TokenType.SCROLL;
             dict["NAVIGATION"] = TokenType.NAVIGATION;
-            dict["COMBO"]      = TokenType.COMBO;
-            dict["TAB"]         = TokenType.NAV_TAB;
-            dict["BUTTON"]      = TokenType.BUTTON;
-            dict["LINK"]        = TokenType.LINK_NAV;
-            dict["DATEPICKER"]    = TokenType.DATEPICKER;
+            dict["COMBO"] = TokenType.COMBO;
+            dict["TAB"] = TokenType.NAV_TAB;
+            dict["BUTTON"] = TokenType.BUTTON;
+            dict["LINK"] = TokenType.LINK_NAV;
+            dict["DATEPICKER"] = TokenType.DATEPICKER;
             dict["RELDATEPICKER"] = TokenType.RELDATEPICKER;
-            dict["SLIDER"]      = TokenType.SLIDER;
+            dict["SLIDER"] = TokenType.SLIDER;
             dict["MULTISELECT"] = TokenType.MULTISELECT;
-            dict["SEARCH"]      = TokenType.SEARCH;
-            dict["GAUGE"]        = TokenType.GAUGE;
-            dict["FUNNEL"]       = TokenType.FUNNEL;
-            dict["WATERFALL"]    = TokenType.WATERFALL;
-            dict["RADAR"]        = TokenType.RADAR;
-            dict["BUBBLE"]       = TokenType.BUBBLE;
-            dict["CANDLESTICK"]  = TokenType.CANDLESTICK;
-            dict["GANTT"]        = TokenType.GANTT;
-            dict["FORMATTING"]  = TokenType.FORMATTING;
-            dict["EXPECT"]      = TokenType.EXPECT;
+            dict["SEARCH"] = TokenType.SEARCH;
+            dict["GAUGE"] = TokenType.GAUGE;
+            dict["FUNNEL"] = TokenType.FUNNEL;
+            dict["WATERFALL"] = TokenType.WATERFALL;
+            dict["RADAR"] = TokenType.RADAR;
+            dict["BUBBLE"] = TokenType.BUBBLE;
+            dict["CANDLESTICK"] = TokenType.CANDLESTICK;
+            dict["GANTT"] = TokenType.GANTT;
+            dict["FORMATTING"] = TokenType.FORMATTING;
+            dict["EXPECT"] = TokenType.EXPECT;
             dict["PLACEHOLDER"] = TokenType.PLACEHOLDER;
-            dict["ICON"]        = TokenType.ICON;
-            dict["PINNABLE"]    = TokenType.PINNABLE;
-            dict["CONTENT"]     = TokenType.CONTENT;
+            dict["ICON"] = TokenType.ICON;
+            dict["PINNABLE"] = TokenType.PINNABLE;
+            dict["CONTENT"] = TokenType.CONTENT;
 
 
             // ── Overlay keywords (Phase 9F) ────────────────────────────────
-            dict["OVERLAYS"]    = TokenType.OVERLAYS;
-            dict["GOAL"]        = TokenType.GOAL;
-            dict["AVERAGE"]     = TokenType.AVERAGE;
-            dict["MOVING_AVG"]  = TokenType.MOVING_AVG;
-            dict["LINEAR"]      = TokenType.LINEAR;
+            dict["OVERLAYS"] = TokenType.OVERLAYS;
+            dict["GOAL"] = TokenType.GOAL;
+            dict["AVERAGE"] = TokenType.AVERAGE;
+            dict["MOVING_AVG"] = TokenType.MOVING_AVG;
+            dict["LINEAR"] = TokenType.LINEAR;
             dict["EXPONENTIAL"] = TokenType.EXPONENTIAL;
             dict["LOGARITHMIC"] = TokenType.LOGARITHMIC;
-            dict["POLYNOMIAL"]  = TokenType.POLYNOMIAL;
-            dict["POWER"]       = TokenType.POWER;
-            dict["SOLID"]       = TokenType.SOLID;
-            dict["DASHED"]      = TokenType.DASHED;
-            dict["DOTTED"]      = TokenType.DOTTED;
-            dict["COLOR"]       = TokenType.COLOR;
-            dict["FONT_COLOR"]  = TokenType.FONT_COLOR;
-            dict["DATA_BAR"]    = TokenType.DATA_BAR;
+            dict["POLYNOMIAL"] = TokenType.POLYNOMIAL;
+            dict["POWER"] = TokenType.POWER;
+            dict["SOLID"] = TokenType.SOLID;
+            dict["DASHED"] = TokenType.DASHED;
+            dict["DOTTED"] = TokenType.DOTTED;
+            dict["COLOR"] = TokenType.COLOR;
+            dict["FONT_COLOR"] = TokenType.FONT_COLOR;
+            dict["DATA_BAR"] = TokenType.DATA_BAR;
             dict["COLOR_SCALE"] = TokenType.COLOR_SCALE;
-            dict["ICON_SET"]    = TokenType.ICON_SET;
-            dict["HYPERLINK"]   = TokenType.HYPERLINK;
-            dict["SPARKLINE"]   = TokenType.SPARKLINE;
-            dict["SUMMARY"]     = TokenType.SUMMARY;
+            dict["ICON_SET"] = TokenType.ICON_SET;
+            dict["HYPERLINK"] = TokenType.HYPERLINK;
+            dict["SPARKLINE"] = TokenType.SPARKLINE;
+            dict["SUMMARY"] = TokenType.SUMMARY;
             dict["GRAND_TOTAL"] = TokenType.GRAND_TOTAL;
-            dict["GRAND_TOTAL_ROW"]    = TokenType.GRAND_TOTAL_ROW;
+            dict["GRAND_TOTAL_ROW"] = TokenType.GRAND_TOTAL_ROW;
             dict["GRAND_TOTAL_COLUMN"] = TokenType.GRAND_TOTAL_COLUMN;
-            dict["SUMMARIZE_ROW"]      = TokenType.SUMMARIZE_ROW;
-            dict["SUMMARIZE_COLUMN"]   = TokenType.SUMMARIZE_COLUMN;
-            dict["GRID"]                 = TokenType.GRID;
-            dict["DATA_LABELS"]          = TokenType.DATA_LABELS;
+            dict["SUMMARIZE_ROW"] = TokenType.SUMMARIZE_ROW;
+            dict["SUMMARIZE_COLUMN"] = TokenType.SUMMARIZE_COLUMN;
+            dict["GRID"] = TokenType.GRID;
+            dict["DATA_LABELS"] = TokenType.DATA_LABELS;
             dict["DATA_LABELS_POSITION"] = TokenType.DATA_LABELS_POSITION;
-            dict["FONT_FAMILY"]          = TokenType.FONT_FAMILY;
-            dict["FONT_WEIGHT"]          = TokenType.FONT_WEIGHT;
-            dict["GAUGE_STYLE"]          = TokenType.GAUGE_STYLE;
+            dict["FONT_FAMILY"] = TokenType.FONT_FAMILY;
+            dict["FONT_WEIGHT"] = TokenType.FONT_WEIGHT;
+            dict["GAUGE_STYLE"] = TokenType.GAUGE_STYLE;
             dict["SHOW_NO_DATA_PLACEHOLDER"] = TokenType.SHOW_NO_DATA_PLACEHOLDER;
-            dict["INTERACTIONS"]         = TokenType.INTERACTIONS;
-            dict["HIGHLIGHT"]            = TokenType.HIGHLIGHT;
-            dict["CENTER"]        = TokenType.CENTER;
-            dict["FONT_SIZE"]     = TokenType.FONT_SIZE;
-            dict["INSIDE"]        = TokenType.INSIDE;
-            dict["INSIDE_TOP"]    = TokenType.INSIDE_TOP;
+            dict["INTERACTIONS"] = TokenType.INTERACTIONS;
+            dict["HIGHLIGHT"] = TokenType.HIGHLIGHT;
+            dict["CENTER"] = TokenType.CENTER;
+            dict["FONT_SIZE"] = TokenType.FONT_SIZE;
+            dict["INSIDE"] = TokenType.INSIDE;
+            dict["INSIDE_TOP"] = TokenType.INSIDE_TOP;
             dict["INSIDE_BOTTOM"] = TokenType.INSIDE_BOTTOM;
-            dict["INSIDE_LEFT"]   = TokenType.INSIDE_LEFT;
-            dict["INSIDE_RIGHT"]  = TokenType.INSIDE_RIGHT;
-            dict["INSIDE_TOP_LEFT"]     = TokenType.INSIDE_TOP_LEFT;
-            dict["INSIDE_TOP_RIGHT"]    = TokenType.INSIDE_TOP_RIGHT;
-            dict["INSIDE_BOTTOM_LEFT"]  = TokenType.INSIDE_BOTTOM_LEFT;
+            dict["INSIDE_LEFT"] = TokenType.INSIDE_LEFT;
+            dict["INSIDE_RIGHT"] = TokenType.INSIDE_RIGHT;
+            dict["INSIDE_TOP_LEFT"] = TokenType.INSIDE_TOP_LEFT;
+            dict["INSIDE_TOP_RIGHT"] = TokenType.INSIDE_TOP_RIGHT;
+            dict["INSIDE_BOTTOM_LEFT"] = TokenType.INSIDE_BOTTOM_LEFT;
             dict["INSIDE_BOTTOM_RIGHT"] = TokenType.INSIDE_BOTTOM_RIGHT;
-            dict["HEADER"]        = TokenType.HEADER;
-            dict["FOOTER"]        = TokenType.FOOTER;
-            dict["NONE"]          = TokenType.NONE;
-            dict["CSS"]           = TokenType.CSS;
-            dict["JS"]            = TokenType.JS;
-            dict["FAVICON"]       = TokenType.FAVICON;
-            dict["LOGO"]          = TokenType.LOGO;
-            dict["BACKGROUND"]    = TokenType.BACKGROUND;
-            dict["HEAD"]          = TokenType.HEAD;
-            dict["BODY"]          = TokenType.BODY;
-            dict["THEME"]         = TokenType.THEME;
-            dict["NAVIGATION"]    = TokenType.NAVIGATION;
-            dict["RUN_SCRIPT"]    = TokenType.RUN_SCRIPT;
-            dict["SET_UI_STATE"]  = TokenType.SET_UI_STATE;
+            dict["HEADER"] = TokenType.HEADER;
+            dict["FOOTER"] = TokenType.FOOTER;
+            dict["NONE"] = TokenType.NONE;
+            dict["CSS"] = TokenType.CSS;
+            dict["JS"] = TokenType.JS;
+            dict["FAVICON"] = TokenType.FAVICON;
+            dict["LOGO"] = TokenType.LOGO;
+            dict["BACKGROUND"] = TokenType.BACKGROUND;
+            dict["HEAD"] = TokenType.HEAD;
+            dict["BODY"] = TokenType.BODY;
+            dict["THEME"] = TokenType.THEME;
+            dict["NAVIGATION"] = TokenType.NAVIGATION;
+            dict["RUN_SCRIPT"] = TokenType.RUN_SCRIPT;
+            dict["SET_UI_STATE"] = TokenType.SET_UI_STATE;
             dict["APPLY_PARAMETERS"] = TokenType.APPLY_PARAMETERS;
             dict["NAVIGATE_PAGE"] = TokenType.NAVIGATE_PAGE;
             dict["REFRESH_VISUALS"] = TokenType.REFRESH_VISUALS;
 
             // ── Report Portal admin command keywords ──────────────────────
-            dict["USER"]         = TokenType.USER;
-            dict["FOLDER"]       = TokenType.FOLDER;
-            dict["GRANT"]        = TokenType.GRANT;
-            dict["REVOKE"]       = TokenType.REVOKE;
-            dict["PUBLISH"]      = TokenType.PUBLISH;
+            dict["USER"] = TokenType.USER;
+            dict["FOLDER"] = TokenType.FOLDER;
+            dict["GRANT"] = TokenType.GRANT;
+            dict["REVOKE"] = TokenType.REVOKE;
+            dict["PUBLISH"] = TokenType.PUBLISH;
             dict["SUBSCRIPTION"] = TokenType.SUBSCRIPTION;
-            dict["DISCONNECT"]   = TokenType.DISCONNECT;
-            dict["TOKENS"]       = TokenType.TOKENS;
-            dict["RESTART"]      = TokenType.RESTART;
-            dict["SHUTDOWN"]     = TokenType.SHUTDOWN;
-            dict["PORTAL"]       = TokenType.PORTAL;
+            dict["DISCONNECT"] = TokenType.DISCONNECT;
+            dict["TOKENS"] = TokenType.TOKENS;
+            dict["RESTART"] = TokenType.RESTART;
+            dict["SHUTDOWN"] = TokenType.SHUTDOWN;
+            dict["PORTAL"] = TokenType.PORTAL;
             dict["REPORTPORTAL"] = TokenType.REPORTPORTAL;
-            dict["FAVORITE"]     = TokenType.FAVORITE;
-            dict["UNFAVORITE"]   = TokenType.UNFAVORITE;
-            dict["CATALOG"]      = TokenType.CATALOG;
-            dict["PERMISSIONS"]  = TokenType.PERMISSIONS;
-            dict["EFFECTIVE"]    = TokenType.EFFECTIVE;
-            dict["USAGE"]        = TokenType.USAGE;
-            dict["METRICS"]      = TokenType.METRICS;
-            dict["VALIDATE"]     = TokenType.VALIDATE;
-            dict["SHARE"]        = TokenType.SHARE;
-            dict["LINK"]         = TokenType.LINK;
-            dict["EXPIRES"]      = TokenType.EXPIRES;
-            dict["EMBED"]        = TokenType.EMBED;
-            dict["TOKEN"]        = TokenType.TOKEN;
-            dict["SAVED"]        = TokenType.SAVED;
-            dict["VIEW"]         = TokenType.VIEW;
-            dict["ALERT"]        = TokenType.ALERT;
-             
+            dict["FAVORITE"] = TokenType.FAVORITE;
+            dict["UNFAVORITE"] = TokenType.UNFAVORITE;
+            dict["CATALOG"] = TokenType.CATALOG;
+            dict["PERMISSIONS"] = TokenType.PERMISSIONS;
+            dict["EFFECTIVE"] = TokenType.EFFECTIVE;
+            dict["USAGE"] = TokenType.USAGE;
+            dict["METRICS"] = TokenType.METRICS;
+            dict["VALIDATE"] = TokenType.VALIDATE;
+            dict["SHARE"] = TokenType.SHARE;
+            dict["LINK"] = TokenType.LINK;
+            dict["EXPIRES"] = TokenType.EXPIRES;
+            dict["EMBED"] = TokenType.EMBED;
+            dict["TOKEN"] = TokenType.TOKEN;
+            dict["SAVED"] = TokenType.SAVED;
+            dict["VIEW"] = TokenType.VIEW;
+            dict["ALERT"] = TokenType.ALERT;
+
 
             return dict;
         }
@@ -294,7 +293,7 @@ namespace ETL_SQL.Core.Parser
             {
                 Advance(); // /
                 Advance(); // *
-                
+
                 var sb = new StringBuilder();
                 while (CurrentChar != '\0' && !(CurrentChar == '*' && Peek() == '/'))
                 {
@@ -539,7 +538,7 @@ namespace ETL_SQL.Core.Parser
         private Token ReadIdentifierOrKeyword(int line, int column, int startOffset)
         {
             var sb = new StringBuilder();
-            
+
             // Temporary table prefix support, variables, and Report-SQL datasets
             if (CurrentChar == '#' || CurrentChar == '@' || CurrentChar == '&')
             {
@@ -559,13 +558,13 @@ namespace ETL_SQL.Core.Parser
             }
 
             var text = sb.ToString();
-            
+
             // Optimization: Categorized lookup
             if (text.Length > 0)
             {
                 char first = text[0];
                 if (first == '@') return new Token(TokenType.VARIABLE, text, line, column, _line, _column, startOffset, _position);
-                
+
                 // Keywords never start with #
                 if (first != '#' && Keywords.TryGetValue(text, out var type))
                     return new Token(type, text, line, column, _line, _column, startOffset, _position);

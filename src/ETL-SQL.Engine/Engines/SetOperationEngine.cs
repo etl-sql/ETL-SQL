@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -35,13 +35,13 @@ namespace ETL_SQL.Engine.Engines
                     _logger.Debug($"[UNION ALL] Yielding Left batch: {batch.Rows.Count} rows");
                     yield return batch;
                 }
-                
+
                 var rightBatches = _context.ExecuteQuery(setOp.Right);
                 if (leftColumns != null)
                 {
                     rightBatches = _context.AlignColumns(rightBatches, leftColumns);
                 }
-                await foreach (var batch in rightBatches) 
+                await foreach (var batch in rightBatches)
                 {
                     _logger.Debug($"[UNION ALL] Yielding Right batch: {batch.Rows.Count} rows");
                     yield return batch;
@@ -55,18 +55,18 @@ namespace ETL_SQL.Engine.Engines
             if (leftRows.Count == 0 && rightRows.Count == 0) yield break;
 
             var resultBatch = new DataTable();
-            var targetColumns = leftRows.Count > 0 
-                ? leftRows[0].Schema?.ColumnNames.ToList() ?? leftRows[0].Columns.Keys.ToList() 
+            var targetColumns = leftRows.Count > 0
+                ? leftRows[0].Schema?.ColumnNames.ToList() ?? leftRows[0].Columns.Keys.ToList()
                 : rightRows[0].Schema?.ColumnNames.ToList() ?? rightRows[0].Columns.Keys.ToList();
             resultBatch.SetColumns(targetColumns);
 
             // case SetOpType.UNION:
             // case SetOpType.EXCEPT:
             // case SetOpType.INTERSECT:
-            
+
             var normalizedLeft = leftRows.Select(r => Normalize(r, targetColumns)).ToList();
             var normalizedRight = rightRows.Select(r => Normalize(r, targetColumns)).ToList();
-            
+
             var leftKeys = BuildKeySet(normalizedLeft, targetColumns);
             var rightKeys = BuildKeySet(normalizedRight, targetColumns);
 
@@ -114,7 +114,7 @@ namespace ETL_SQL.Engine.Engines
                 resultBatch.Rows.Clear();
                 foreach (var r in finalRows) await resultBatch.AddRowAsync(r);
             }
-            
+
             yield return resultBatch;
         }
 

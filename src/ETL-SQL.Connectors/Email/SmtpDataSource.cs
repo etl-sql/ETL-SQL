@@ -1,11 +1,11 @@
-using ETL_SQL.Common;
-using ETL_SQL.Data;
-using MailKit.Net.Smtp;
-using MimeKit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Data;
+using MailKit.Net.Smtp;
+using MimeKit;
 
 namespace ETL_SQL.Connectors.Email
 {
@@ -70,7 +70,7 @@ namespace ETL_SQL.Connectors.Email
             _context?.RecordSmtpEmailSend();
 
             var message = new MimeMessage();
-            
+
             string from = (row.Columns.TryGetValue("From", out var f) ? f?.ToString() : (_options.TryGetValue("DEFAULT_FROM", out var df) ? df : "etl-sql@localhost")) ?? "etl-sql@localhost";
             message.From.Add(MailboxAddress.Parse(from));
 
@@ -96,7 +96,7 @@ namespace ETL_SQL.Connectors.Email
             }
 
             message.Subject = (row.Columns.TryGetValue("Subject", out var sub) ? sub?.ToString() : "") ?? "";
-            
+
             var body = new TextPart("plain")
             {
                 Text = (row.Columns.TryGetValue("Body", out var b) ? b?.ToString() : "") ?? ""

@@ -1,14 +1,14 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using Spectre.Console;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -64,9 +64,9 @@ namespace ETL_SQL.Tests.Engine
                     DECLARE @Z INT = 30;
                 END;
             ").TokenizeToScript());
-            
+
             await eval.Evaluate(new Lexer("EXECUTE OuterProc;").TokenizeToScript());
-            
+
             Assert.False(eval.Variables.ContainsKey("@Y"), "@Y leaked to global scope");
             Assert.False(eval.Variables.ContainsKey("@Z"), "@Z leaked to global scope");
             Assert.Equal(10, Convert.ToInt32(eval.Variables["@X"]));
@@ -108,21 +108,21 @@ namespace ETL_SQL.Tests.Engine
         public async Task TestAlterOrCreateOrAlter()
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             await eval.Evaluate(new Lexer(@"
                 CREATE OR ALTER PROCEDURE IdempotentProc() AS
                 BEGIN
                     PRINT 'Version 1';
                 END;
             ").TokenizeToScript());
-            
+
             await eval.Evaluate(new Lexer(@"
                 CREATE OR ALTER PROCEDURE IdempotentProc() AS
                 BEGIN
                     PRINT 'Version 2';
                 END;
             ").TokenizeToScript());
-            
+
             await eval.Evaluate(new Lexer(@"
                 ALTER PROCEDURE IdempotentProc() AS
                 BEGIN
@@ -142,13 +142,13 @@ namespace ETL_SQL.Tests.Engine
 
             await eval.Evaluate(new Lexer("CREATE CONNECTION TestConn AS FLATFILE('old.csv');").TokenizeToScript());
             await eval.Evaluate(new Lexer("ALTER CONNECTION TestConn AS FLATFILE('new.csv');").TokenizeToScript());
-            
+
             Assert.True(eval.Connections.ContainsKey("TestConn"), "Connection not found after ALTER");
-            
-            await Assert.ThrowsAsync<ExecutionException>(async () => 
+
+            await Assert.ThrowsAsync<ExecutionException>(async () =>
                 await eval.Evaluate(new Lexer("ALTER PROCEDURE NonExistent() AS BEGIN PRINT 1; END;").TokenizeToScript()));
 
-            await Assert.ThrowsAsync<ExecutionException>(async () => 
+            await Assert.ThrowsAsync<ExecutionException>(async () =>
                 await eval.Evaluate(new Lexer("CREATE PROCEDURE IdempotentProc() AS BEGIN PRINT 1; END;").TokenizeToScript()));
         }
     }

@@ -7,11 +7,11 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.JsonRpc;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.LSP
@@ -30,9 +30,9 @@ namespace ETL_SQL.LSP
     {
         private static readonly JsonSerializerOptions _json = new()
         {
-            PropertyNamingPolicy         = JsonNamingPolicy.CamelCase,
-            DefaultIgnoreCondition       = JsonIgnoreCondition.WhenWritingNull,
-            WriteIndented                = false,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            WriteIndented = false,
         };
 
         public Task<DesignerParseResponse> Handle(DesignerParseParams request, CancellationToken ct)
@@ -41,13 +41,13 @@ namespace ETL_SQL.LSP
             {
                 if (string.IsNullOrWhiteSpace(request.script))
                     return Task.FromResult(new DesignerParseResponse
-                        { designStateJson = JsonSerializer.Serialize(EmptyState(), _json) });
+                    { designStateJson = JsonSerializer.Serialize(EmptyState(), _json) });
 
                 var tokens = new Lexer(request.script).Tokenize();
-                var ast    = new CoreParser(tokens, request.script).Parse();
-                var state  = ScriptToState(ast);
+                var ast = new CoreParser(tokens, request.script).Parse();
+                var state = ScriptToState(ast);
                 return Task.FromResult(new DesignerParseResponse
-                    { designStateJson = JsonSerializer.Serialize(state, _json) });
+                { designStateJson = JsonSerializer.Serialize(state, _json) });
             }
             catch (Exception ex)
             {
@@ -60,7 +60,7 @@ namespace ETL_SQL.LSP
         {
             try
             {
-                var state  = JsonSerializer.Deserialize<LspDesignState>(request.designStateJson, _json)
+                var state = JsonSerializer.Deserialize<LspDesignState>(request.designStateJson, _json)
                              ?? new LspDesignState(new List<LspDesignPage>(), new List<LspDesignDataset>());
                 var script = StateToScript(state);
                 return Task.FromResult(new DesignerGenerateResponse { script = script });
@@ -90,14 +90,14 @@ namespace ETL_SQL.LSP
             var visuals = ast.Statements.OfType<CreateVisualStatement>()
                 .ToDictionary(v => v.Name, StringComparer.OrdinalIgnoreCase);
 
-            var pages   = new List<LspDesignPage>();
+            var pages = new List<LspDesignPage>();
             int pageNum = 0;
             foreach (var stmt in ast.Statements.OfType<CreatePageStatement>())
             {
                 pageNum++;
-                var grid       = ParseStructure(stmt.Structure ?? ".");
+                var grid = ParseStructure(stmt.Structure ?? ".");
                 var pageVisuals = new List<LspDesignVisual>();
-                int vidx       = 0;
+                int vidx = 0;
                 foreach (var (slot, visName) in stmt.SlotMap)
                 {
                     if (!visuals.TryGetValue(visName, out var vis)) continue;
@@ -113,7 +113,7 @@ namespace ETL_SQL.LSP
 
             if (pages.Count == 0 && visuals.Count > 0)
             {
-                int idx  = 0;
+                int idx = 0;
                 var synth = visuals.Values.Select(v => VisualToDto(v, idx, 1, ++idx * 4 - 3, 12, 4)).ToList();
                 pages.Add(new LspDesignPage("p1", "Page 1", "Dashboard", synth));
             }
@@ -170,7 +170,7 @@ namespace ETL_SQL.LSP
 
             foreach (var ds in state.Datasets ?? new List<LspDesignDataset>())
             {
-                var name  = SanitizeName(ds.Name);
+                var name = SanitizeName(ds.Name);
                 var query = string.IsNullOrWhiteSpace(ds.Query) ? "SELECT 1 AS Placeholder" : ds.Query.Trim().TrimEnd(';');
                 sb.AppendLine($"CREATE DATASET #{name} AS (");
                 sb.AppendLine($"  {query}");
@@ -204,7 +204,7 @@ namespace ETL_SQL.LSP
                     sb.AppendLine($"        MAP (");
                     for (int i = 0; i < visuals.Count; i++)
                     {
-                        var slot  = SanitizeName(visuals[i].Name);
+                        var slot = SanitizeName(visuals[i].Name);
                         var trail = i < visuals.Count - 1 ? "," : "";
                         sb.AppendLine($"            '{slot}' = {SanitizeName(visuals[i].Name)}{trail}");
                     }
@@ -224,7 +224,7 @@ namespace ETL_SQL.LSP
 
         private static string GenerateVisual(LspDesignVisual v)
         {
-            var sb   = new StringBuilder();
+            var sb = new StringBuilder();
             var name = SanitizeName(v.Name);
             sb.AppendLine($"CREATE VISUAL {name} AS {v.Type.ToUpper()} (");
             if (!string.IsNullOrWhiteSpace(v.Title))
@@ -245,7 +245,7 @@ namespace ETL_SQL.LSP
         {
             if (visuals.Count == 0) return ".";
             int maxRow = visuals.Max(v => v.GridRow + v.GridRowSpan - 1);
-            var grid   = new string[maxRow, GridCols];
+            var grid = new string[maxRow, GridCols];
             for (int r = 0; r < maxRow; r++)
                 for (int c = 0; c < GridCols; c++)
                     grid[r, c] = ".";

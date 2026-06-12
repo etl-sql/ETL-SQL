@@ -26,8 +26,8 @@ namespace ETL_SQL.Analysis.Linting.Rules
         private static readonly Dictionary<string, string[]> _enumTags = new(System.StringComparer.OrdinalIgnoreCase)
         {
             ["classification"] = new[] { "public", "internal", "confidential", "restricted" },
-            ["quality"]        = new[] { "gold", "silver", "bronze" },
-            ["load_pattern"]   = new[] { "full", "incremental", "cdc" },
+            ["quality"] = new[] { "gold", "silver", "bronze" },
+            ["load_pattern"] = new[] { "full", "incremental", "cdc" },
         };
 
         // Duration tags: integer followed by s/m/h/d (e.g. 1h, 24h, 7d). Mirrors DatasetRefreshIntervalRule.
@@ -87,8 +87,8 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 foreach (var ei in ifStmt.ElseIfClauses ?? []) AnalyzeStatement(ei.Body, results);
                 if (ifStmt.ElseBody != null) AnalyzeStatement(ifStmt.ElseBody, results);
             }
-            else if (stmt is WhileStatement w)   AnalyzeStatement(w.Body, results);
-            else if (stmt is ForStatement f)      AnalyzeStatement(f.Body, results);
+            else if (stmt is WhileStatement w) AnalyzeStatement(w.Body, results);
+            else if (stmt is ForStatement f) AnalyzeStatement(f.Body, results);
             else if (stmt is ForeachStatement fe) AnalyzeStatement(fe.Body, results);
             else if (stmt is TryCatchStatement tc)
             {
@@ -149,10 +149,10 @@ namespace ETL_SQL.Analysis.Linting.Rules
         {
             results.Add(new LintResult
             {
-                RuleName     = "TagValue",
-                Severity     = LintSeverity.Warning,
-                Message      = message,
-                LineNumber   = line,
+                RuleName = "TagValue",
+                Severity = LintSeverity.Warning,
+                Message = message,
+                LineNumber = line,
                 ColumnNumber = col,
             });
         }

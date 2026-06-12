@@ -2,10 +2,10 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Spectre.Console;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Common;
+using ETL_SQL.Orchestrator.Execution;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -25,7 +25,7 @@ namespace ETL_SQL.TUI.UI
             AnsiConsole.Clear();
             AnsiConsole.Write(new FigletText("ETL-SQL").Centered().Color(Color.Green));
             AnsiConsole.MarkupLine("[bold grey]Interactive Simple UI Mode[/]\n");
-            
+
             bool running = true;
             FileInfo? currentScript = _ctx.ScriptFile;
 
@@ -41,7 +41,7 @@ namespace ETL_SQL.TUI.UI
                     }
                     currentScript = null; // Clear so it prompts the menu again cleanly
                 }
-                
+
                 var choice = AnsiConsole.Prompt(
                     new SelectionPrompt<string>()
                         .Title("\n[bold]Select an action:[/]")

@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
 using ETL_SQL.Analysis.Lineage;
-using ETL_SQL.Core;
-using ETL_SQL.Engine;
-using ETL_SQL.Data;
-using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis.Analysis
 {
@@ -19,11 +19,11 @@ namespace ETL_SQL.Tests.Analysis.Analysis
         {
             var sql = "EXECUTE m INTO #emp BEGIN SELECT * FROM dbo.Employee END";
             var script = TestHelpers.Parse(sql);
-            
+
             var tracker = new LineageTracker(NullLogger.Instance);
             var analyzer = new LineageAnalyzer(tracker);
             analyzer.Analyze(script);
-            
+
             var entries = tracker.GetFullLineage().ToList();
             Assert.Contains(entries, e => e.Operation == "EXECUTE PUSHDOWN" && e.TargetTable == "#emp" && e.SourceTables.Contains("m.dbo.Employee"));
         }
@@ -32,16 +32,16 @@ namespace ETL_SQL.Tests.Analysis.Analysis
         public async Task TestDynamicLineage_ExecutePushdown()
         {
             var eval = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
-            
+
             // Mock connection
             var mock = new MockDatabaseSourceWithSchema();
             eval.Connections["m"] = mock;
-            
+
             var sql = "EXECUTE m INTO #emp BEGIN SELECT * FROM dbo.Employee END";
             await TestHelpers.Execute(eval, sql);
-            
+
             var lineage = eval.LineageTracker.GetFullLineage().ToList();
-            
+
             // Verify ACTUAL lineage recorded by the handler
             Assert.Contains(lineage, e => e.Operation == "EXECUTE PUSHDOWN (ACTUAL)" && e.TargetTable == "#emp");
             Assert.Contains(lineage, e => e.Operation == "EXECUTE PUSHDOWN COLUMN (ACTUAL)" && e.TargetTable == "#emp" && e.TargetColumn == "id");

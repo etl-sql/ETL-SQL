@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Engine;
 using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -26,7 +26,7 @@ namespace ETL_SQL.Tests.Hardening
 
             // Assert nested state
             Assert.Equal(2, mgr.TranCount);
-            
+
             // Act - Commit Level 2
             await mgr.CommitTransaction();
             Assert.Equal(1, mgr.TranCount);
@@ -68,9 +68,9 @@ namespace ETL_SQL.Tests.Hardening
             var mgr = new TransactionManager();
             var variables = new Dictionary<string, object?>();
             var connections = new Dictionary<string, IDataSource>();
-            
+
             var mockDs = new Mock<ITransactionalDataSource>();
-            
+
             // Act
             await mgr.BeginTransaction(variables, connections);
             await mgr.EnlistDataSource(mockDs.Object);

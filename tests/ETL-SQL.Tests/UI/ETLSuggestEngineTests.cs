@@ -1,5 +1,5 @@
-using Xunit;
 using ETL_SQL.TUI.UI;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {
@@ -28,7 +28,7 @@ namespace ETL_SQL.Tests.UI
             Assert.DoesNotContain("ENC:AcXpkzRv", highlighted);
             Assert.Contains("********", highlighted);
         }
-        
+
         [Fact]
         public void HighlightLine_NormalString_ShouldNotBeMasked()
         {
@@ -52,7 +52,7 @@ namespace ETL_SQL.Tests.UI
             // '1234567890' is 12 chars including quotes.
             // Masked should also be 12 chars.
             // Expected: '**********'
-            
+
             // We need to strip Spectre markup to check length
             string plain = highlighted.Replace("[darkorange3]", "").Replace("[/]", "");
             Assert.Contains("'**********'", plain);

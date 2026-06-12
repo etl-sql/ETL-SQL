@@ -2,15 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Core.Services;
-using ETL_SQL.Core.Interfaces;
-using ETL_SQL.TUI.UI;
 using ETL_SQL.Common;
-
+using ETL_SQL.Core.Interfaces;
+using ETL_SQL.Core.Services;
+using ETL_SQL.TUI.UI;
+using Xunit;
+using CoreMetadataManager = ETL_SQL.Core.Services.MetadataManager;
 using CoreSuggestionContext = ETL_SQL.Core.Services.SuggestionContext;
 using TuiSuggestionContext = ETL_SQL.TUI.UI.SuggestionContext;
-using CoreMetadataManager = ETL_SQL.Core.Services.MetadataManager;
 
 namespace ETL_SQL.Tests.UI
 {
@@ -34,10 +33,10 @@ namespace ETL_SQL.Tests.UI
         {
             var registry = new MockHelpRegistry();
             var service = new LanguageService(new CoreMetadataManager(null!, ConnectorRegistry.Instance), registry);
-            
+
             var context = new CoreSuggestionContext { Prefix = "SEL" };
             var suggestions = await service.GetSuggestionsAsync(context);
-            
+
             var select = suggestions.FirstOrDefault(s => s.Text == "SELECT");
             Assert.NotNull(select);
             Assert.Equal("The SELECT statement is used to fetch data.", select.Documentation);
@@ -48,10 +47,10 @@ namespace ETL_SQL.Tests.UI
         {
             var registry = new MockHelpRegistry();
             var service = new LanguageService(new CoreMetadataManager(null!, ConnectorRegistry.Instance), registry);
-            
+
             var context = new CoreSuggestionContext { Prefix = "GETD" };
             var suggestions = await service.GetSuggestionsAsync(context);
-            
+
             var getdate = suggestions.FirstOrDefault(s => s.Text == "GETDATE");
             Assert.NotNull(getdate);
             Assert.Equal("Returns current date.", getdate.Documentation);
@@ -62,16 +61,16 @@ namespace ETL_SQL.Tests.UI
         {
             var registry = new MockHelpRegistry();
             var engine = new SuggestionEngine(registry);
-            
+
             var context = new TuiSuggestionContext
             {
                 Prefix = "SEL",
                 Connections = new Dictionary<string, ETL_SQL.Data.IDataSource>()
             };
-            
+
             var suggestions = await engine.GetSuggestionsAsync(context);
             var select = suggestions.FirstOrDefault(s => s.Text == "SELECT");
-            
+
             Assert.NotNull(select);
             Assert.Equal("The SELECT statement is used to fetch data.", select.Documentation);
         }

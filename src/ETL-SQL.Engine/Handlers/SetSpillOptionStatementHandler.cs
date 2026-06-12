@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -18,12 +18,12 @@ namespace ETL_SQL.Engine.Handlers
         public Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (SetSpillOptionStatement)statement;
-            
+
             if (stmt.Option == SpillOptionType.Encryption)
             {
                 context.SpillEncryptionEnabled = stmt.Enabled;
                 _logger.Info("Disk spill encryption is now {Status}.", stmt.Enabled ? "ENABLED" : "DISABLED");
-                
+
                 if (!stmt.Enabled && context.SpillCompressionEnabled)
                 {
                     context.SpillCompressionEnabled = false;

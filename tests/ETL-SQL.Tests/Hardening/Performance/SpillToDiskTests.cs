@@ -2,14 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.App;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.Engine.Engines;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
-using ETL_SQL.Core;
-using ETL_SQL.App;
-using ETL_SQL.Engine.Engines;
-using ETL_SQL.Data;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
@@ -43,11 +43,11 @@ namespace ETL_SQL.Tests.Hardening.Performance
         private static List<Row> BuildRows(int count, bool reversed = false)
         {
             var schema = new TableSchema(new[] { "Id", "Val" });
-            var rows   = new List<Row>(count);
+            var rows = new List<Row>(count);
             for (int i = 0; i < count; i++)
             {
                 var row = new Row(schema);
-                row["Id"]  = reversed ? (count - 1 - i) : i;
+                row["Id"] = reversed ? (count - 1 - i) : i;
                 row["Val"] = i % 100;
                 rows.Add(row);
             }
@@ -75,7 +75,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
         {
             // 10k rows — single chunk, verifies correctness of the engine itself
             const int COUNT = 10_000;
-            var e    = NewEvaluator();
+            var e = NewEvaluator();
             var rows = BuildRows(COUNT, reversed: true);
 
             var engine = new ExternalSortEngine(e, NullLogger.Instance);
@@ -91,7 +91,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
         {
             // 250k rows — forces multiple 100k chunks and k-way merge
             const int COUNT = 250_000;
-            var e    = NewEvaluator();
+            var e = NewEvaluator();
             var rows = BuildRows(COUNT, reversed: true);
 
             long spillBefore = e.Telemetry.TotalSpilledBytes;
@@ -99,7 +99,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var result = await engine.SortExternal(rows, OrderById());
 
             Assert.Equal(COUNT, result.Count);
-            Assert.Equal(0,         Convert.ToInt32(result[0]["Id"]));
+            Assert.Equal(0, Convert.ToInt32(result[0]["Id"]));
             Assert.Equal(COUNT - 1, Convert.ToInt32(result[COUNT - 1]["Id"]));
             Assert.True(e.Telemetry.TotalSpilledBytes > spillBefore, "Expected spilled bytes to increase.");
             _output.WriteLine($"Spilled {e.Telemetry.TotalSpilledBytes - spillBefore:N0} bytes for {COUNT} rows.");
@@ -109,7 +109,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
         public async Task ExternalSortEngine_SortsDescending_MultipleChunks()
         {
             const int COUNT = 150_000;
-            var e    = NewEvaluator();
+            var e = NewEvaluator();
             var rows = BuildRows(COUNT, reversed: false); // ascending input → descending output
 
             var engine = new ExternalSortEngine(e, NullLogger.Instance);
@@ -117,14 +117,14 @@ namespace ETL_SQL.Tests.Hardening.Performance
 
             Assert.Equal(COUNT, result.Count);
             Assert.Equal(COUNT - 1, Convert.ToInt32(result[0]["Id"]));
-            Assert.Equal(0,         Convert.ToInt32(result[COUNT - 1]["Id"]));
+            Assert.Equal(0, Convert.ToInt32(result[COUNT - 1]["Id"]));
         }
 
         [Fact]
         public async Task ExternalSortEngine_PreservesAllRows_NoDuplicatesOrDrops()
         {
             const int COUNT = 120_000;
-            var e    = NewEvaluator();
+            var e = NewEvaluator();
             var rows = BuildRows(COUNT, reversed: true);
 
             var engine = new ExternalSortEngine(e, NullLogger.Instance);
@@ -143,7 +143,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             const int SIDE_COUNT = 5_000;
             var e = NewEvaluator();
 
-            var leftSchema  = new TableSchema(new[] { "Id", "LeftVal" });
+            var leftSchema = new TableSchema(new[] { "Id", "LeftVal" });
             var rightSchema = new TableSchema(new[] { "Id", "RightVal" });
 
             async IAsyncEnumerable<Row> LeftStream()
@@ -151,7 +151,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
                 for (int i = 0; i < SIDE_COUNT; i++)
                 {
                     var r = new Row(leftSchema);
-                    r["Id"]      = i;
+                    r["Id"] = i;
                     r["LeftVal"] = i * 2;
                     yield return r;
                 }
@@ -162,7 +162,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
                 for (int i = 0; i < SIDE_COUNT; i++)
                 {
                     var r = new Row(rightSchema);
-                    r["Id"]       = i;
+                    r["Id"] = i;
                     r["RightVal"] = i * 3;
                     yield return r;
                 }
@@ -183,7 +183,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             const int SIDE_COUNT = 1_000;
             var e = NewEvaluator();
 
-            var leftSchema  = new TableSchema(new[] { "Id", "LeftVal" });
+            var leftSchema = new TableSchema(new[] { "Id", "LeftVal" });
             var rightSchema = new TableSchema(new[] { "Id", "RightVal" });
 
             async IAsyncEnumerable<Row> LeftStream()
@@ -191,7 +191,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
                 for (int i = 0; i < SIDE_COUNT; i++)
                 {
                     var r = new Row(leftSchema);
-                    r["Id"]      = i;
+                    r["Id"] = i;
                     r["LeftVal"] = i;
                     yield return r;
                 }
@@ -203,7 +203,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
                 for (int i = SIDE_COUNT; i < SIDE_COUNT * 2; i++)
                 {
                     var r = new Row(rightSchema);
-                    r["Id"]       = i;
+                    r["Id"] = i;
                     r["RightVal"] = i;
                     yield return r;
                 }
@@ -223,7 +223,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             const int SIDE_COUNT = 10_000;
             var e = NewEvaluator();
 
-            var leftSchema  = new TableSchema(new[] { "Id", "L" });
+            var leftSchema = new TableSchema(new[] { "Id", "L" });
             var rightSchema = new TableSchema(new[] { "Id", "R" });
 
             async IAsyncEnumerable<Row> LeftStream()
@@ -242,7 +242,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             }
 
             long before = e.Telemetry.TotalSpilledBytes;
-            var engine  = new ExternalJoinEngine(e, NullLogger.Instance);
+            var engine = new ExternalJoinEngine(e, NullLogger.Instance);
             await engine.ApplyHashJoinExternal(
                 LeftStream(), RightStream(), InnerJoinOnId(),
                 new List<string> { "Id" }, new List<string> { "Id" }).ToListAsync();
@@ -259,15 +259,15 @@ namespace ETL_SQL.Tests.Hardening.Performance
         {
             // Left table has exactly 100k rows (fits in buffer); right has 110k.
             // JoinEngine.ApplyJoins checks joinRows.Count > 100k and delegates to ExternalJoinEngine.
-            const int LEFT_SIDE  = 100_000;
+            const int LEFT_SIDE = 100_000;
             const int RIGHT_SIDE = 110_000;
             var e = NewEvaluator();
             e.MaxLastResultRows = 200000;
 
-            var leftSchema  = new TableSchema(new[] { "Id", "LeftV" });
+            var leftSchema = new TableSchema(new[] { "Id", "LeftV" });
             var rightSchema = new TableSchema(new[] { "Id", "RightV" });
 
-            var leftTable  = new DataTable();
+            var leftTable = new DataTable();
             leftTable.SetColumns(new[] { "Id", "LeftV" });
             var rightTable = new DataTable();
             rightTable.SetColumns(new[] { "Id", "RightV" });
@@ -316,14 +316,14 @@ namespace ETL_SQL.Tests.Hardening.Performance
 
             // Build a DataTable large enough to trigger ExternalAggregateEngine spill
             var schema = new TableSchema(new[] { "category", "value" });
-            var table  = new DataTable();
+            var table = new DataTable();
             table.SetColumns(new[] { "category", "value" });
 
             for (int i = 0; i < rowCount; i++)
             {
                 var r = new Row(schema);
                 r["category"] = ((char)('A' + (i % categoryCount))).ToString();
-                r["value"]    = (decimal)(i + 1);
+                r["value"] = (decimal)(i + 1);
                 await table.AddRowAsync(r);
             }
 
@@ -361,7 +361,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             // Confirms ExternalAggregateEngine ran (not in-memory AggregateEngine).
             // ExternalAgg always writes partition files, so TotalSpilledBytes must increase.
             const int ROWS = 150_000;
-            var e    = await EvaluatorWithLargeSource(ROWS);
+            var e = await EvaluatorWithLargeSource(ROWS);
             long before = e.Telemetry.TotalSpilledBytes;
 
             await e.Evaluate(new Parser(new Lexer(

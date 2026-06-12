@@ -2,24 +2,24 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Common;
-using ETL_SQL.Connectors;
-using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Analysis.Diagnostics;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.App;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors;
+using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
-using ETL_SQL.App;
+using ETL_SQL.Orchestrator.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using ETL_SQL.Orchestrator.Execution;
+using Xunit;
 
 namespace ETL_SQL.Tests.Coverage
 {

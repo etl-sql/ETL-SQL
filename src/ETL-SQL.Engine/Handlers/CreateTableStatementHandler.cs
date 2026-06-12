@@ -1,6 +1,6 @@
-using ETL_SQL.Data;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -16,7 +16,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (CreateTableStatement)statement;
-            
+
             _logger.Debug("Creating table {TableName} on {ConnectionName}", stmt.TargetTable.TableName, stmt.TargetTable.ConnectionName ?? "local");
             if (context.EngineContext is ETL_SQL.Engine.Evaluator eval)
             {

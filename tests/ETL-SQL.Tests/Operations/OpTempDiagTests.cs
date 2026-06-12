@@ -1,8 +1,8 @@
 using System;
-using Xunit;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Core.Parser;
+using Xunit;
 using Xunit.Abstractions;
 
 namespace ETL_SQL.Tests.Operations
@@ -32,7 +32,7 @@ namespace ETL_SQL.Tests.Operations
 
             var linter = new Linter();
             linter.AddRule(new UndeclaredVariableRule());
-            
+
             // Dummy context
             var ctx = new DefaultLintContext { DocumentUri = "test.sql" };
             var lintResults = await linter.AnalyzeAsync(script, ctx);

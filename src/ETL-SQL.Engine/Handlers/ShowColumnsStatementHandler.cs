@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -19,13 +19,13 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ShowColumnsStatement)statement;
-            
+
             var source = await context.ResolveDataSourceAsync(stmt.Table);
             if (source == null)
                 throw new ExecutionException($"Table '{stmt.Table.ToSql()}' not found.");
 
             var columns = await source.GetColumnsAsync();
-            
+
             var table = new DataTable();
             table.AddColumn("ColumnName");
             table.AddColumn("DataType");
@@ -35,7 +35,7 @@ namespace ETL_SQL.Engine.Handlers
                 var row = new Row();
                 row["ColumnName"] = col;
                 // DataType info might not be available in all IDataSource implementations yet
-                row["DataType"] = "UNKNOWN"; 
+                row["DataType"] = "UNKNOWN";
                 await table.AddRowAsync(row);
             }
 

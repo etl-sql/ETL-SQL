@@ -1,16 +1,16 @@
 ﻿using System;
-using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Core.Parser;
+using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.TUI.UI;
-using ETL_SQL.Data;
-using ETL_SQL.Connectors.MockDb;
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Core.Common;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {
@@ -82,7 +82,7 @@ namespace ETL_SQL.Tests.UI
             Assert.True(results.Any(), "No suggestions returned at all");
             Assert.True(expansionSuggestion != null, "No comma-separated expansion found. Results: " + string.Join("; ", results.Select(r => $"[{r.Type}] {r.Text}")));
             var expansion = expansionSuggestion.Text;
-            
+
             // Should contain columns (without prefix if no alias)
             Assert.Contains("UserID", expansion);
             Assert.Contains("UserName", expansion);
@@ -102,7 +102,7 @@ namespace ETL_SQL.Tests.UI
             var expansionSuggestion = results.FirstOrDefault(s => s.Text.Contains(","));
             Assert.NotNull(expansionSuggestion);
             var expansion = expansionSuggestion.Text;
-            
+
             // Should ONLY contain u. columns
             Assert.Contains("u.UserID", expansion);
             Assert.Contains("u.UserName", expansion);

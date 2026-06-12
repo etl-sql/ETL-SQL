@@ -12,8 +12,8 @@ namespace ETL_SQL.Reporting
     /// </summary>
     public class SvgChartRenderer
     {
-        private const int W  = 600;
-        private const int H  = 350;
+        private const int W = 600;
+        private const int H = 350;
         private const int PL = 60;   // pad left
         private const int PR = 20;   // pad right
         private const int PT = 40;   // pad top
@@ -25,17 +25,17 @@ namespace ETL_SQL.Reporting
         public string? Render(VisualManifest v) =>
             v.VisualType.ToUpperInvariant() switch
             {
-                "BAR"          => RenderBar(v, false),
-                "HBAR"         => RenderBar(v, true),
+                "BAR" => RenderBar(v, false),
+                "HBAR" => RenderBar(v, true),
                 "HORIZONTALBAR" => RenderBar(v, true),
-                "LINE"   => RenderLine(v),
-                "PIE"    => RenderPie(v, false),
-                "DONUT"  => RenderPie(v, true),
-                "CARD"   => null,    // rendered as text in Markdown
-                "TABLE"  => null,    // rendered as GFM table
+                "LINE" => RenderLine(v),
+                "PIE" => RenderPie(v, false),
+                "DONUT" => RenderPie(v, true),
+                "CARD" => null,    // rendered as text in Markdown
+                "TABLE" => null,    // rendered as GFM table
                 "SLICER" => null,    // interactive-only
-                "TEXT"   => null,    // rendered as markdown content
-                _        => RenderPlaceholder(v)
+                "TEXT" => null,    // rendered as markdown content
+                _ => RenderPlaceholder(v)
             };
 
         // ── Bar / Horizontal Bar ───────────────────────────────────────────────
@@ -58,12 +58,12 @@ namespace ETL_SQL.Reporting
             int n = labels.Count;
             double slot = horizontal ? (double)cH / n : (double)cW / n;
             double barThick = slot * 0.7;
-            double gap      = slot * 0.15;
+            double gap = slot * 0.15;
 
             for (int i = 0; i < n; i++)
             {
                 string color = GetColor(v, labels[i]) ?? Colors[i % Colors.Length];
-                double frac  = values[i] / maxVal;
+                double frac = values[i] / maxVal;
                 string label = Truncate(labels[i], 12);
 
                 if (!horizontal)
@@ -151,11 +151,11 @@ namespace ETL_SQL.Reporting
             for (int i = 0; i < items.Count; i++)
             {
                 double sweep = 2 * Math.PI * items[i].value / total;
-                double end   = angle + sweep;
-                int large    = sweep > Math.PI ? 1 : 0;
+                double end = angle + sweep;
+                int large = sweep > Math.PI ? 1 : 0;
 
                 int ox1 = cx + (int)(outerR * Math.Cos(angle)), oy1 = cy + (int)(outerR * Math.Sin(angle));
-                int ox2 = cx + (int)(outerR * Math.Cos(end)),   oy2 = cy + (int)(outerR * Math.Sin(end));
+                int ox2 = cx + (int)(outerR * Math.Cos(end)), oy2 = cy + (int)(outerR * Math.Sin(end));
 
                 string d = donut
                     ? $"M {ox1} {oy1} A {outerR} {outerR} 0 {large} 1 {ox2} {oy2} L {cx + (int)(innerR * Math.Cos(end))} {cy + (int)(innerR * Math.Sin(end))} A {innerR} {innerR} 0 {large} 0 {cx + (int)(innerR * Math.Cos(angle))} {cy + (int)(innerR * Math.Sin(angle))} Z"
@@ -225,7 +225,7 @@ namespace ETL_SQL.Reporting
         private static string TickLabel(double v)
         {
             if (Math.Abs(v) >= 1_000_000) return (v / 1_000_000).ToString("N1") + "M";
-            if (Math.Abs(v) >= 1_000)     return (v / 1_000).ToString("N1") + "K";
+            if (Math.Abs(v) >= 1_000) return (v / 1_000).ToString("N1") + "K";
             return v.ToString("N1");
         }
 

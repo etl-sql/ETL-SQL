@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Npgsql;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
+using Npgsql;
 
 namespace ETL_SQL.Connectors.Postgres
 {
@@ -14,18 +14,18 @@ namespace ETL_SQL.Connectors.Postgres
     {
         public string Name => "POSTGRES";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
-        
+
         public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
             var ds = new PostgresDataSource(context, connectionString, null, null);
             return await ds.GetVersionAsync();
         }
-        
+
         public HashSet<string> GetSupportedFunctions() => PostgresSyntax.GetSupportedFunctions();
         public HashSet<string> GetSupportedKeywords() => PostgresSyntax.GetSupportedKeywords();
         public HashSet<string> GetExcludedKeywords() => PostgresSyntax.Exclusions;
-        
-        public string GetHelp() => 
+
+        public string GetHelp() =>
             "POSTGRES Connector: Used for PostgreSQL database connections.\n" +
             "Options:\n" +
             "  HOST: The target server.\n" +
@@ -58,7 +58,7 @@ namespace ETL_SQL.Connectors.Postgres
 
         public Dictionary<string, string[]> GetOptionValues() => new();
 
-        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) 
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
             string? table = null;
             options?.TryGetValue("TABLE", out table);
@@ -84,7 +84,7 @@ namespace ETL_SQL.Connectors.Postgres
             return procs;
         }
 
-        public string BuildConnectionString(Dictionary<string, string> properties) => 
+        public string BuildConnectionString(Dictionary<string, string> properties) =>
             ConnectionStringBuilder.Build(Name, properties);
 
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null) => GetHostStatic(connectionString, options);
@@ -92,7 +92,7 @@ namespace ETL_SQL.Connectors.Postgres
         public static string? GetHostStatic(string connectionString, Dictionary<string, string>? options = null)
         {
             if (options != null && options.TryGetValue("HOST", out var host)) return host;
-            
+
             try
             {
                 var builder = new NpgsqlConnectionStringBuilder(connectionString);

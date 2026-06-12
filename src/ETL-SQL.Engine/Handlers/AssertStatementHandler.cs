@@ -1,8 +1,8 @@
 using System;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -23,7 +23,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (AssertStatement)statement;
-            
+
             _logger.Debug("Evaluating ASSERT condition");
             if (!await context.EvaluateCondition(stmt.Condition, new Row()))
             {
@@ -35,11 +35,11 @@ namespace ETL_SQL.Engine.Handlers
                 }
 
                 _logger.Error($"[ASSERT FAIL] {message}");
-                
+
                 // Throwing ExecutionException ensures the engine stops and reports the failure properly.
                 throw new ExecutionException(message);
             }
-            
+
             _logger.Debug("ASSERT passed");
         }
     }

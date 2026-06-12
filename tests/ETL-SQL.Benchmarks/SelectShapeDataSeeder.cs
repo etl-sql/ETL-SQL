@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Connectors.MockDb;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Benchmarks
 {
@@ -24,10 +24,10 @@ namespace ETL_SQL.Benchmarks
             {
                 await events.AddRowAsync(new Row
                 {
-                    ["id"]       = i,
+                    ["id"] = i,
                     ["category"] = Categories[i % Categories.Length],
-                    ["score"]    = rng.Next(0, 100),
-                    ["ts"]       = BaseDate.AddSeconds(i)
+                    ["score"] = rng.Next(0, 100),
+                    ["ts"] = BaseDate.AddSeconds(i)
                 });
             }
 

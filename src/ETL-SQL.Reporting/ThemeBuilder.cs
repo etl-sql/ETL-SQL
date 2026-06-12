@@ -40,7 +40,7 @@ namespace ETL_SQL.Reporting
                 theme["textStyle"] = new JsonObject { ["color"] = textColor };
                 theme["title"] = new JsonObject
                 {
-                    ["textStyle"]    = new JsonObject { ["color"] = textColor },
+                    ["textStyle"] = new JsonObject { ["color"] = textColor },
                     ["subtextStyle"] = new JsonObject { ["color"] = textColor }
                 };
                 theme["legend"] = new JsonObject
@@ -53,9 +53,9 @@ namespace ETL_SQL.Reporting
             {
                 var axisObj = BuildAxisObject(axisColor, gridColor);
                 theme["categoryAxis"] = axisObj.DeepClone();
-                theme["valueAxis"]    = axisObj.DeepClone();
-                theme["timeAxis"]     = axisObj.DeepClone();
-                theme["logAxis"]      = axisObj.DeepClone();
+                theme["valueAxis"] = axisObj.DeepClone();
+                theme["timeAxis"] = axisObj.DeepClone();
+                theme["logAxis"] = axisObj.DeepClone();
             }
 
             var handled = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -75,8 +75,8 @@ namespace ETL_SQL.Reporting
             var obj = new JsonObject();
             if (axisColor != null)
             {
-                obj["axisLine"]  = new JsonObject { ["lineStyle"] = new JsonObject { ["color"] = axisColor } };
-                obj["axisTick"]  = new JsonObject { ["lineStyle"] = new JsonObject { ["color"] = axisColor } };
+                obj["axisLine"] = new JsonObject { ["lineStyle"] = new JsonObject { ["color"] = axisColor } };
+                obj["axisTick"] = new JsonObject { ["lineStyle"] = new JsonObject { ["color"] = axisColor } };
                 obj["axisLabel"] = new JsonObject { ["textStyle"] = new JsonObject { ["color"] = axisColor } };
             }
             if (gridColor != null)

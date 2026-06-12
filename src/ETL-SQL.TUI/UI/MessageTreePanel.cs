@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using Spectre.Console;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using Spectre.Console;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -46,8 +46,8 @@ namespace ETL_SQL.TUI.UI
             string treeMarkup = FormatTreeMarkup(visibleTree, treeColContent);
 
             // Build message markup
-            int msgColWidth = width - treeColContent - 6; 
-            
+            int msgColWidth = width - treeColContent - 6;
+
             // Expand messages into wrapped lines
             var allLines = new List<DisplayLine>();
             foreach (var m in _evaluator.Messages)
@@ -72,7 +72,7 @@ namespace ETL_SQL.TUI.UI
 
             // Column headers with scroll indicators and focus highlights
             bool treeFocused = focus == EditorFocus.ExecutionTree;
-            bool msgFocused  = focus == EditorFocus.Messages;
+            bool msgFocused = focus == EditorFocus.Messages;
 
             string treeHeader = treeFocused ? "[bold cyan]▶ Pipeline[/]" : "[cyan]Pipeline[/]";
             if (treeScroll > 0) treeHeader += $" [grey]↑{treeScroll}[/]";
@@ -92,7 +92,7 @@ namespace ETL_SQL.TUI.UI
 
             table.AddRow(
                 new Markup(string.IsNullOrEmpty(treeMarkup) ? "[grey]No pipeline data.[/]" : treeMarkup),
-                new Markup(string.IsNullOrEmpty(msgMarkup)  ? "[grey]No messages.[/]"      : msgMarkup));
+                new Markup(string.IsNullOrEmpty(msgMarkup) ? "[grey]No messages.[/]" : msgMarkup));
 
             var panel = new Panel(table)
             {
@@ -127,26 +127,26 @@ namespace ETL_SQL.TUI.UI
                 var (icon, iconColor) = line.Status switch
                 {
                     ExecutionStatus.Completed => ("✓", "[bold green]"),
-                    ExecutionStatus.Faulted   => ("✗", "[bold red]"),
-                    ExecutionStatus.Running   => ("●", "[bold blue]"),
-                    _                         => ("·", "[grey]")
+                    ExecutionStatus.Faulted => ("✗", "[bold red]"),
+                    ExecutionStatus.Running => ("●", "[bold blue]"),
+                    _ => ("·", "[grey]")
                 };
 
                 string labelColor = line.Status switch
                 {
                     ExecutionStatus.Faulted => "[red]",
                     ExecutionStatus.Running => "[bold blue]",
-                    _                       => "[white]"
+                    _ => "[white]"
                 };
 
                 // Reserve space for: indent + connector + icon + space + stats
                 int prefixLen = line.Indent.Length + line.Connector.Length + 2;
-                int statsLen  = line.Stats.Length > 0 ? line.Stats.Length + 2 : 0;
-                int labelMax  = Math.Max(3, colWidth - prefixLen - statsLen);
-                string label  = Truncate(line.Label, labelMax);
+                int statsLen = line.Stats.Length > 0 ? line.Stats.Length + 2 : 0;
+                int labelMax = Math.Max(3, colWidth - prefixLen - statsLen);
+                string label = Truncate(line.Label, labelMax);
 
                 string indentStr = Markup.Escape(line.Indent + line.Connector);
-                string statsStr  = line.Stats.Length > 0
+                string statsStr = line.Stats.Length > 0
                     ? $"  [grey]{Markup.Escape(line.Stats)}[/]"
                     : "";
 
@@ -159,7 +159,7 @@ namespace ETL_SQL.TUI.UI
         private static string FormatLinesMarkup(List<DisplayLine> lines)
         {
             if (lines.Count == 0) return "";
-            return string.Join("\n", lines.Select(l => 
+            return string.Join("\n", lines.Select(l =>
             {
                 var colorMarkup = l.Color switch
                 {
@@ -171,7 +171,7 @@ namespace ETL_SQL.TUI.UI
                     ConsoleColor.Gray or ConsoleColor.DarkGray => "[grey]",
                     _ => ""
                 };
-                
+
                 string escaped = Markup.Escape(l.Text);
                 return string.IsNullOrEmpty(colorMarkup) ? escaped : $"{colorMarkup}{escaped}[/]";
             }));
@@ -182,7 +182,7 @@ namespace ETL_SQL.TUI.UI
             if (width < 1) return new List<string> { text };
             var result = new List<string>();
             var lines = text.Split(new[] { "\n", "\r\n" }, StringSplitOptions.None);
-            
+
             foreach (var line in lines)
             {
                 if (string.IsNullOrEmpty(line))

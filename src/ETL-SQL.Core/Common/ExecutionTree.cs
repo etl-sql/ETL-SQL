@@ -10,7 +10,7 @@ namespace ETL_SQL.Core.Common
     public class ExecutionTree
     {
         private readonly ConcurrentDictionary<Guid, ExecutionNode> _nodes = new();
-        
+
         /// <summary>Clears all nodes and roots from the tree.</summary>
         public void Clear()
         {

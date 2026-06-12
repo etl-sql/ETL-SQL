@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -20,9 +20,9 @@ namespace ETL_SQL.Engine.Engines
         private readonly ILogger _logger = logger;
 
         public async IAsyncEnumerable<DataTable> ExecuteStreamingSelect(
-            SelectStatement stmt, 
-            IAsyncEnumerable<DataTable> batches, 
-            List<SelectColumn> finalColumns, 
+            SelectStatement stmt,
+            IAsyncEnumerable<DataTable> batches,
+            List<SelectColumn> finalColumns,
             List<string> colNames)
         {
             var resultBatch = new DataTable();
@@ -32,7 +32,7 @@ namespace ETL_SQL.Engine.Engines
             int rowsYielded = 0;
             int rowsSkipped = 0;
             int offset = 0;
-            
+
             if (stmt.Offset != null)
             {
                 var offVal = await _context.EvaluateValue(stmt.Offset, new Row());
@@ -62,7 +62,7 @@ namespace ETL_SQL.Engine.Engines
                     }
 
                     if (stmt.WhereClause != null && !await _context.EvaluateCondition(stmt.WhereClause, evalRow)) continue;
-                    
+
                     if (rowsSkipped < offset)
                     {
                         rowsSkipped++;
@@ -76,7 +76,7 @@ namespace ETL_SQL.Engine.Engines
                     {
                         resRow[i] = await _context.EvaluateValue(finalColumns[i].Expression, evalRow);
                     }
-                    
+
                     await resultBatch.AddRowAsync(resRow);
                     rowsYielded++;
 
@@ -90,7 +90,7 @@ namespace ETL_SQL.Engine.Engines
                 }
                 if (limit.HasValue && rowsYielded >= limit.Value) break;
             }
-            done:
+        done:
             if (resultBatch.Rows.Count > 0 || !yielded) yield return resultBatch;
         }
 

@@ -1,8 +1,8 @@
 using System;
 using System.Linq;
-using Spectre.Console;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Services;
+using Spectre.Console;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -41,14 +41,14 @@ namespace ETL_SQL.TUI.UI
             {
                 int row = y + i;
                 int lineIdx = i + _renderer.ScrollLine;
-                
+
                 console.ClearLine(x, row, width);
 
                 if (lineIdx < _buffer.Lines.Count)
                 {
                     var fullLine = _buffer.Lines[lineIdx];
                     string highlighted = RenderLineWithSelection(lineIdx, fullLine, editorWidth, ref inMultiline);
-                    
+
                     _renderer.SetLinePhysicalShift(lineIdx, 0);
 
                     console.SetCursorPosition(x, row);
@@ -116,14 +116,14 @@ namespace ETL_SQL.TUI.UI
             // Handle selection/cursors (this part still needs to work with the highlighted result)
             // For simplicity in this TUI, we'll re-run highlighting if there's a selection to avoid complex markup splicing.
             // But we must ensure the 'inMultiline' state is preserved correctly.
-            
+
             var secondary = _buffer.SecondaryCursors.FirstOrDefault(c => c.Line == lineIdx);
             bool hasSecondary = _buffer.IsMultiLineMode && _buffer.SecondaryCursors.Any(c => c.Line == lineIdx);
 
             if (!_buffer.SelectionStartLine.HasValue)
             {
                 if (!hasSecondary) return highlighted;
-                
+
                 int relCol = secondary.Col - _renderer.ScrollCol;
                 if (relCol < 0 || relCol >= editorWidth || secondary.Col >= fullLine.Length) return highlighted;
 
@@ -155,8 +155,8 @@ namespace ETL_SQL.TUI.UI
 
             // Complex selection rendering over highlighted text is difficult without a full token model.
             // For now, we'll fall back to plain selection if it's active on this line to ensure it's visible.
-            string visibleLine = fullLine.Length > _renderer.ScrollCol 
-                ? fullLine.Substring(_renderer.ScrollCol, Math.Min(fullLine.Length - _renderer.ScrollCol, editorWidth)) 
+            string visibleLine = fullLine.Length > _renderer.ScrollCol
+                ? fullLine.Substring(_renderer.ScrollCol, Math.Min(fullLine.Length - _renderer.ScrollCol, editorWidth))
                 : "";
 
             int vRelStart = Math.Max(0, lineStart - _renderer.ScrollCol);

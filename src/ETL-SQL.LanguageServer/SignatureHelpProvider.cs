@@ -3,14 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
-using ETL_SQL.Core;
-using ETL_SQL.Data;
 using TextDocumentSelector = OmniSharp.Extensions.LanguageServer.Protocol.Models.TextDocumentSelector;
 
 namespace ETL_SQL.LSP
@@ -182,14 +182,14 @@ namespace ETL_SQL.LSP
 
         public SignatureHelpProvider(ILogger<SignatureHelpProvider> logger, IMetadataManager metadata)
         {
-            _logger   = logger;
+            _logger = logger;
             _metadata = metadata;
         }
 
         public Task<SignatureHelp?> Handle(SignatureHelpParams request, CancellationToken cancellationToken)
         {
             var line = (int)request.Position.Line;
-            var col  = (int)request.Position.Character;
+            var col = (int)request.Position.Character;
 
             // Need document text — use metadata or return null gracefully if unavailable
             // (SignatureHelp operates purely on the prefix line, no parsed state needed)
@@ -226,9 +226,9 @@ namespace ETL_SQL.LSP
                     var options = regConnector.GetSupportedOptions();
                     var sig = new SignatureInformation
                     {
-                        Label         = $"{regConnector.Name}(options)",
+                        Label = $"{regConnector.Name}(options)",
                         Documentation = regConnector.GetHelp(),
-                        Parameters    = options.Select(o => new ParameterInformation { Label = o.Key, Documentation = string.Join("|", o.Value) }).ToList()
+                        Parameters = options.Select(o => new ParameterInformation { Label = o.Key, Documentation = string.Join("|", o.Value) }).ToList()
                     };
                     return new SignatureHelp { Signatures = new List<SignatureInformation> { sig }, ActiveSignature = 0, ActiveParameter = activeParam };
                 }
@@ -239,13 +239,13 @@ namespace ETL_SQL.LSP
             {
                 var sig = new SignatureInformation
                 {
-                    Label         = info.Label,
+                    Label = info.Label,
                     Documentation = info.Doc,
-                    Parameters    = info.Params.Select(p => new ParameterInformation { Label = p }).ToList()
+                    Parameters = info.Params.Select(p => new ParameterInformation { Label = p }).ToList()
                 };
                 return new SignatureHelp
                 {
-                    Signatures      = new List<SignatureInformation> { sig },
+                    Signatures = new List<SignatureInformation> { sig },
                     ActiveSignature = 0,
                     ActiveParameter = Math.Min(activeParam, info.Params.Length - 1)
                 };
@@ -257,7 +257,7 @@ namespace ETL_SQL.LSP
         public SignatureHelpRegistrationOptions GetRegistrationOptions(SignatureHelpCapability capability, ClientCapabilities clientCapabilities)
             => new SignatureHelpRegistrationOptions
             {
-                DocumentSelector  = TextDocumentSelector.ForLanguage("etlsql"),
+                DocumentSelector = TextDocumentSelector.ForLanguage("etlsql"),
                 TriggerCharacters = new Container<string>("(", ",")
             };
     }

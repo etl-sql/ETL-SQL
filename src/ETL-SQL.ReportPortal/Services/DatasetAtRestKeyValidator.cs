@@ -12,7 +12,7 @@ public static class DatasetAtRestKeyValidator
     public readonly record struct Result(Severity Severity, string? Message)
     {
         public static readonly Result Ok = new(Severity.Ok, null);
-        public static Result Warn(string m)  => new(Severity.Warn, m);
+        public static Result Warn(string m) => new(Severity.Warn, m);
         public static Result Fatal(string m) => new(Severity.Fatal, m);
     }
 

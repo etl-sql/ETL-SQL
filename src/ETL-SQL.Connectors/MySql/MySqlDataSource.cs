@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using MySqlConnector;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using MySqlConnector;
 
 namespace ETL_SQL.Connectors.MySql
 {
@@ -61,14 +61,19 @@ namespace ETL_SQL.Connectors.MySql
         public async Task<string> GetVersionAsync()
         {
             var (conn, isShared) = await GetConnectionAsync();
-            try {
+            try
+            {
                 await using var cmd = CreateCommand("SELECT VERSION()", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 var result = await cmd.ExecuteScalarAsync();
                 return result?.ToString() ?? "Unknown MySql/MariaDB Version";
-            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
                 throw ConnectorExceptionWrapper.Wrap("MySql", ex);
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) await conn.DisposeAsync();
             }
         }
@@ -84,7 +89,8 @@ namespace ETL_SQL.Connectors.MySql
                 throw new ExecutionException("No table specified for MySql data source read.");
 
             var (conn, isShared) = await GetConnectionAsync();
-            try {
+            try
+            {
                 await using var cmd = CreateCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 await using var reader = await cmd.ExecuteReaderAsync();
@@ -119,7 +125,9 @@ namespace ETL_SQL.Connectors.MySql
                 {
                     yield return currentBatch;
                 }
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) await conn.DisposeAsync();
             }
         }
@@ -134,8 +142,9 @@ namespace ETL_SQL.Connectors.MySql
             if (!append) await TruncateAsync();
 
             var (conn, isShared) = await GetConnectionAsync();
-            try {
-                var bulkCopy = _activeTransaction != null 
+            try
+            {
+                var bulkCopy = _activeTransaction != null
                     ? new MySqlBulkCopy(conn, _activeTransaction)
                     : new MySqlBulkCopy(conn);
                 bulkCopy.DestinationTableName = _tableName;
@@ -159,7 +168,7 @@ namespace ETL_SQL.Connectors.MySql
                         }
                         isFirstBatch = false;
                     }
-                    
+
                     dt!.Clear();
                     foreach (var row in batch.Rows)
                     {
@@ -173,9 +182,13 @@ namespace ETL_SQL.Connectors.MySql
 
                     await bulkCopy.WriteToServerAsync(dt);
                 }
-            } catch (Exception ex) when (ShouldWrapProviderException(ex)) {
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
                 throw ConnectorExceptionWrapper.Wrap("MySql", ex);
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) await conn.DisposeAsync();
             }
         }
@@ -187,7 +200,8 @@ namespace ETL_SQL.Connectors.MySql
         {
             var (conn, isShared) = await GetConnectionAsync();
 
-            try {
+            try
+            {
                 await using var cmd = CreateCommand(sql, conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
 
@@ -248,7 +262,9 @@ namespace ETL_SQL.Connectors.MySql
                     }
                     resultSetIndex++;
                 } while (await reader.NextResultAsync());
-            } finally {
+            }
+            finally
+            {
                 if (!isShared) await conn.DisposeAsync();
             }
         }
@@ -445,7 +461,8 @@ namespace ETL_SQL.Connectors.MySql
         {
             if (string.IsNullOrEmpty(name)) return name;
             var parts = name.Split('.');
-            return string.Join(".", parts.Select(p => {
+            return string.Join(".", parts.Select(p =>
+            {
                 if (p.StartsWith("`")) return p;
                 bool needsQuoting = p.Any(c => !char.IsLetterOrDigit(c) && c != '_');
                 return needsQuoting ? $"`{p.Replace("`", "``")}`" : p;

@@ -59,7 +59,7 @@ namespace ETL_SQL.Engine.Handlers
             else // WaitType.Until
             {
                 if (context.IsVerbose) context.Log($"[WaitFor] Polling until condition is met: {stmt.Expression.ToSql()}");
-                
+
                 while (true)
                 {
                     context.CancellationToken.ThrowIfCancellationRequested();

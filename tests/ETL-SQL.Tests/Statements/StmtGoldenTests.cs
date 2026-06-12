@@ -1,14 +1,14 @@
-﻿using Xunit;
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
-using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Tests.Core;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -612,7 +612,7 @@ namespace ETL_SQL.Tests.Statements
 
                 var lines = await File.ReadAllLinesAsync(path);
                 var header = lines[0];
-                var data   = lines[1]; // lines[0] is the fixed-width header row
+                var data = lines[1]; // lines[0] is the fixed-width header row
                 Assert.Equal(35, header.Length);
                 Assert.Equal(35, data.Length);
                 // Header: column names padded to their declared widths

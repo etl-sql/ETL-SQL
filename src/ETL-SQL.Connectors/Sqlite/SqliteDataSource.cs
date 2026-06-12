@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using Microsoft.Data.Sqlite;
 
 namespace ETL_SQL.Connectors.Sqlite
 {
@@ -177,7 +177,7 @@ namespace ETL_SQL.Connectors.Sqlite
                         var cols = string.Join(", ", colNames.Select(c => $"\"{c.Replace("\"", "\"\"")}\""));
                         var pars = string.Join(", ", colNames.Select((c, idx) => $"$p{idx}"));
                         insertSql = $"INSERT INTO \"{_tableName.Replace("\"", "\"\"")}\" ({cols}) VALUES ({pars})";
-                        
+
                         insertCmd = CreateCommand(insertSql, conn);
                         if (trans != null) insertCmd.Transaction = trans;
                         else if (_activeTransaction != null) insertCmd.Transaction = _activeTransaction;

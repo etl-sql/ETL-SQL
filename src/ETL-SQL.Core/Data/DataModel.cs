@@ -183,7 +183,7 @@ namespace ETL_SQL.Data
                         return;
                     }
                 }
-                
+
                 _dynamicColumns ??= new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
                 _dynamicColumns[columnName] = value;
             }
@@ -296,7 +296,7 @@ namespace ETL_SQL.Data
         internal void SetSchema(TableSchema schema)
         {
             if (_schema == schema) return;
-            
+
             var oldSchema = _schema;
             var oldValues = _values;
             _schema = schema;
@@ -398,9 +398,9 @@ namespace ETL_SQL.Data
     {
         public TableSchema Schema { get; set; } = new(Enumerable.Empty<string>());
         public List<Row> Rows { get; } = new();
-        
+
         public List<string> ColumnNames => Schema.ColumnNames.ToList();
-        
+
         public long ExecutionTimeMs { get; set; }
         public int RowsAffected { get; set; } = -1; // -1 means not applicable/unknown
         public int TotalRowsMatched { get; set; }

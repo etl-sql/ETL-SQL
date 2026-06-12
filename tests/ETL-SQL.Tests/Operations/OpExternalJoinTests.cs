@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Xunit;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Engines;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Operations.Operations
 {
@@ -36,8 +36,8 @@ namespace ETL_SQL.Tests.Operations.Operations
             for (int i = 0; i < 20; i += 2) rightRows.Add(new Row { ["id"] = i, ["rval"] = $"r-{i}" });
 
             var join = new JoinClause(
-                "INNER", 
-                new TableReference("right"), 
+                "INNER",
+                new TableReference("right"),
                 new BinaryExpression(new IdentifierExpression("id"), TokenType.EQUALS, new IdentifierExpression("id"))
             );
 
@@ -45,10 +45,10 @@ namespace ETL_SQL.Tests.Operations.Operations
             var startParts = eval.Telemetry.PartitionsCount;
 
             var results = await engine.ApplyHashJoinExternal(
-                leftRows.ToAsyncEnumerable(), 
-                rightRows.ToAsyncEnumerable(), 
-                join, 
-                new List<string> { "id" }, 
+                leftRows.ToAsyncEnumerable(),
+                rightRows.ToAsyncEnumerable(),
+                join,
+                new List<string> { "id" },
                 new List<string> { "id" }).ToListAsync();
 
             Assert.Equal(10, results.Count);
@@ -68,16 +68,16 @@ namespace ETL_SQL.Tests.Operations.Operations
             var rightRows = new List<Row> { new Row { ["id"] = 1 } };
 
             var join = new JoinClause(
-                "LEFT", 
-                new TableReference("right"), 
+                "LEFT",
+                new TableReference("right"),
                 new BinaryExpression(new IdentifierExpression("id"), TokenType.EQUALS, new IdentifierExpression("id"))
             );
 
             var results = await engine.ApplyHashJoinExternal(
-                leftRows.ToAsyncEnumerable(), 
-                rightRows.ToAsyncEnumerable(), 
-                join, 
-                new List<string> { "id" }, 
+                leftRows.ToAsyncEnumerable(),
+                rightRows.ToAsyncEnumerable(),
+                join,
+                new List<string> { "id" },
                 new List<string> { "id" }).ToListAsync();
 
             Assert.Equal(2, results.Count);

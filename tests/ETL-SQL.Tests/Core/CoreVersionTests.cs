@@ -1,14 +1,14 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.App;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using ETL_SQL.Common;
-using System.Linq;
-using ETL_SQL.App;
+using Xunit;
 
 namespace ETL_SQL.Tests.Core.Core
 {
@@ -45,12 +45,12 @@ namespace ETL_SQL.Tests.Core.Core
             var script = parser.Parse();
 
             await evaluator.Evaluate(script);
-            
+
             // Verification via expression evaluation directly
             var exprParser = new Parser(new Lexer("@@VERSION").Tokenize());
             var expr = exprParser.ParseExpression();
             var value = await evaluator.EvaluateValue(expr, new Row());
-            
+
             Assert.Equal(LanguageMetadata.GetFullVersionString(), value);
         }
 

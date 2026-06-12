@@ -1,15 +1,15 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
 using ETL_SQL.Connectors.MockDb;
-using Spectre.Console;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -121,7 +121,7 @@ END";
 
             Assert.True(evaluator.LastResult != null, "LastResult should not be null for SELECT 1");
             Assert.True(evaluator.LastResult.Rows.Count == 1, "SELECT 1 should return exactly 1 row");
-            
+
             var val = evaluator.LastResult.Rows[0].Columns.Values.First();
             Assert.True(val != null && val.ToString() == "1", $"Expected 1, got {val}");
         }
@@ -178,7 +178,7 @@ SELECT COUNT(*) AS cnt FROM #emp;";
             var script = "DOCKER CLOSE 'mssql';";
             var parser = new Parser(new Lexer(script).Tokenize());
             var ast = parser.Parse();
-            
+
             Assert.True(ast.Statements[0] is DockerActionStatement, "Should parse as DockerActionStatement (legacy)");
             var dcs = (DockerActionStatement)ast.Statements[0];
             Assert.Equal(DockerAction.Close, dcs.Action);
@@ -188,17 +188,17 @@ SELECT COUNT(*) AS cnt FROM #emp;";
             parser = new Parser(new Lexer(script).Tokenize());
             ast = parser.Parse();
             Assert.True(ast.Statements[0] is DockerActionStatement, "Should parse as DockerActionStatement (new)");
-            
+
             script = "CLOSE DOCKER;";
             parser = new Parser(new Lexer(script).Tokenize());
             ast = parser.Parse();
             Assert.True(ast.Statements[0] is DockerActionStatement, "Should parse as DockerActionStatement (empty)");
             Assert.Equal(DockerTargetMode.LastStarted, ((DockerActionStatement)ast.Statements[0]).TargetMode);
-            
+
             await Task.CompletedTask;
         }
 
-        
+
     }
 
 }

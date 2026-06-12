@@ -1,15 +1,15 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Engine;
-using ETL_SQL.Common;
 using ETL_SQL.App;
+using ETL_SQL.Common;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
-using System.Collections.Generic;
+using Xunit;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -50,7 +50,7 @@ namespace ETL_SQL.Tests.Connectors
             ";
 
             await eval.Evaluate(new Lexer(script).TokenizeToScript());
-            
+
             var ds = eval.Connections["test_conn"];
             Assert.NotNull(ds);
             Assert.Equal("FLATFILE", ds.ConnectorType);
@@ -73,12 +73,12 @@ namespace ETL_SQL.Tests.Connectors
             ";
 
             await eval.Evaluate(new Lexer(script).TokenizeToScript());
-            
+
             var result = eval.LastResult;
             Assert.NotNull(result);
             Assert.Equal(2, result.Rows.Count);
             Assert.Equal("Charlie", result.Rows[0]["name"]);
-            
+
             var ds = eval.Connections["test_conn"];
             Assert.Equal("PIPE", ds.Options["DELIMITER"]);
             Assert.Equal("ON", ds.Options["HEADER"]); // Preserved from CREATE
@@ -88,7 +88,7 @@ namespace ETL_SQL.Tests.Connectors
         public async Task TestCreateOrAlterConnection()
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
+
             // 1. Create using CREATE OR ALTER
             string script1 = $@"
                 CREATE OR ALTER CONNECTION test_coa AS FLATFILE('{_tempFile1.Replace("\\", "/")}', HEADER = ON);
@@ -103,10 +103,10 @@ namespace ETL_SQL.Tests.Connectors
                 SELECT * FROM test_coa;
             ";
             await eval.Evaluate(new Lexer(script2).TokenizeToScript());
-            
+
             var result = eval.LastResult;
             Assert.Equal("Charlie", result.Rows[0]["name"]);
-            
+
             var ds = eval.Connections["test_coa"];
             Assert.Equal("PIPE", ds.Options["DELIMITER"]);
             Assert.Equal("ON", ds.Options["HEADER"]); // Preserved
@@ -117,7 +117,7 @@ namespace ETL_SQL.Tests.Connectors
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             string password = "TestPass123!";
-            
+
             // Encrypt the second path
             string encryptedPath = CryptoUtils.Encrypt(_tempFile2.Replace("\\", "/"), password);
 
@@ -132,7 +132,7 @@ namespace ETL_SQL.Tests.Connectors
             ";
 
             await eval.Evaluate(new Lexer(script).TokenizeToScript());
-            
+
             var result = eval.LastResult;
             Assert.NotNull(result);
             Assert.Equal("Charlie", result.Rows[0]["name"]);

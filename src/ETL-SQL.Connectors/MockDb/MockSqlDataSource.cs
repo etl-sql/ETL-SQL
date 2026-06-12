@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.MockDb
 {
@@ -12,7 +12,7 @@ namespace ETL_SQL.Connectors.MockDb
     {
         private readonly string _connectionString;
         public string ConnectionString => _connectionString;
-        private readonly string _dialect; 
+        private readonly string _dialect;
         private readonly Dictionary<string, DataTable> _mockTables = new(StringComparer.OrdinalIgnoreCase);
         private readonly ILogger _logger;
         private readonly IExecutionContext _context;
@@ -20,7 +20,7 @@ namespace ETL_SQL.Connectors.MockDb
         private readonly Dictionary<string, string>? _options;
         public string ConnectorType => "MOCKDB";
         public Dictionary<string, string>? Options => _options ?? new Dictionary<string, string>();
-        public IDataSource WithTable(string tableName) 
+        public IDataSource WithTable(string tableName)
         {
             _activeTable = tableName;
             return this;
@@ -41,7 +41,7 @@ namespace ETL_SQL.Connectors.MockDb
             _options = options;
             _logger = context.Logger;
             _seeder = seeder ?? new MockDataSeeder();
-            
+
             // Correctly capture and await the async seeding task
             _initTask = _seeder.SeedDataAsync(_mockTables, new Random(42));
         }
@@ -53,7 +53,7 @@ namespace ETL_SQL.Connectors.MockDb
         }
 
         public Task<string> GetVersionAsync() => Task.FromResult("Mock SQL Server 2022 v16.0");
-        public HashSet<string> GetSupportedFunctions() => new(); 
+        public HashSet<string> GetSupportedFunctions() => new();
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
@@ -74,7 +74,7 @@ namespace ETL_SQL.Connectors.MockDb
             }
         }
 
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) 
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             return Task.CompletedTask;
         }
@@ -89,51 +89,52 @@ namespace ETL_SQL.Connectors.MockDb
             }
             return new List<string> { "ID", "Name" };
         }
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) 
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
         {
-             await EnsureInitialized();
-             var trimmedSql = sql.Trim();
-             var normSql = trimmedSql.Replace("[", "").Replace("]", "").Replace("\r", " ").Replace("\n", " ");
-             DataTable? source = null;
-             foreach (var tableName in _mockTables.Keys)
-             {
-                 if (normSql.Contains(tableName, StringComparison.OrdinalIgnoreCase))
-                 {
-                     source = _mockTables[tableName];
-                     break;
-                 }
-             }
+            await EnsureInitialized();
+            var trimmedSql = sql.Trim();
+            var normSql = trimmedSql.Replace("[", "").Replace("]", "").Replace("\r", " ").Replace("\n", " ");
+            DataTable? source = null;
+            foreach (var tableName in _mockTables.Keys)
+            {
+                if (normSql.Contains(tableName, StringComparison.OrdinalIgnoreCase))
+                {
+                    source = _mockTables[tableName];
+                    break;
+                }
+            }
 
-             if (source == null && parameters != null && parameters.Any())
-             {
-                 string processedSql = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(sql);
-                 var dt = new DataTable();
-                 dt.SetColumns(new[] { "ParameterValue", "ProcessedSql" });
-                 foreach (var p in parameters) await dt.AddRowAsync(new Row { ["ParameterValue"] = p, ["ProcessedSql"] = processedSql });
-                 yield return dt;
-                 yield break;
-             }
+            if (source == null && parameters != null && parameters.Any())
+            {
+                string processedSql = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(sql);
+                var dt = new DataTable();
+                dt.SetColumns(new[] { "ParameterValue", "ProcessedSql" });
+                foreach (var p in parameters) await dt.AddRowAsync(new Row { ["ParameterValue"] = p, ["ProcessedSql"] = processedSql });
+                yield return dt;
+                yield break;
+            }
 
-             if (source != null)
-             {
-                 if (normSql.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase) && !normSql.Contains("*"))
-                 {
-                     var fromIdx = normSql.IndexOf("FROM", StringComparison.OrdinalIgnoreCase);
-                     if (fromIdx > 7)
-                     {
+            if (source != null)
+            {
+                if (normSql.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase) && !normSql.Contains("*"))
+                {
+                    var fromIdx = normSql.IndexOf("FROM", StringComparison.OrdinalIgnoreCase);
+                    if (fromIdx > 7)
+                    {
                         var colsPart = normSql.Substring(7, fromIdx - 7);
                         var columnNames = colsPart.Split(',')
-                           .Select(c => {
+                           .Select(c =>
+                           {
                                var trimmed = c.Trim();
                                var lastWord = trimmed.Split(' ').Last();
                                return lastWord.Split('.').Last();
                            })
                            .ToList();
 
-                        var filtered = new DataTable(); 
+                        var filtered = new DataTable();
                         filtered.SetColumns(columnNames);
                         var whereMatch = System.Text.RegularExpressions.Regex.Match(normSql, @"WHERE\s+(?<col>[\w\.]+)\s*=\s*(?<val>[^;]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        
+
                         foreach (var row in source.Rows)
                         {
                             bool match = true;
@@ -141,7 +142,7 @@ namespace ETL_SQL.Connectors.MockDb
                             {
                                 var colName = whereMatch.Groups["col"].Value.Split('.').Last();
                                 var valStr = whereMatch.Groups["val"].Value.Trim().Trim('\'', '"');
-                                
+
                                 // Simplified Mock parameter replacement
                                 if (valStr.StartsWith("?") || valStr.StartsWith("@"))
                                 {
@@ -159,7 +160,7 @@ namespace ETL_SQL.Connectors.MockDb
                                     var pList = parameters?.ToList();
                                     if (pList != null && pIdx >= 0 && pIdx < pList.Count)
                                     {
-                                       valStr = pList[pIdx]?.ToString() ?? "";
+                                        valStr = pList[pIdx]?.ToString() ?? "";
                                     }
                                 }
 
@@ -169,26 +170,26 @@ namespace ETL_SQL.Connectors.MockDb
                             if (match)
                             {
                                 var newRow = new Row();
-                                foreach (var colName in columnNames) 
+                                foreach (var colName in columnNames)
                                 {
                                     newRow[colName] = row[colName];
                                 }
                                 await filtered.AddRowAsync(newRow);
-                                if (whereMatch.Success) break; 
+                                if (whereMatch.Success) break;
                             }
                         }
                         yield return filtered;
                         yield break;
-                     }
-                 }
-                 yield return source;
-             }
-             else
-             {
-                 var dt = new DataTable();
-                 dt.SetColumns(new[] { "ID", "Name" });
-                 yield return dt;
-             }
+                    }
+                }
+                yield return source;
+            }
+            else
+            {
+                var dt = new DataTable();
+                dt.SetColumns(new[] { "ID", "Name" });
+                yield return dt;
+            }
         }
         public async Task<IEnumerable<string>> GetTablesAsync()
         {
@@ -199,7 +200,7 @@ namespace ETL_SQL.Connectors.MockDb
         public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
         {
             await EnsureInitialized();
-            if (_mockTables.TryGetValue(tableName, out var dt)) 
+            if (_mockTables.TryGetValue(tableName, out var dt))
             {
                 return dt.ColumnNames;
             }

@@ -1,6 +1,6 @@
 using System.Text.Json;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Spill
 {
@@ -19,10 +19,10 @@ namespace ETL_SQL.Engine.Spill
                 JsonValueKind.Number when element.TryGetDecimal(out var d) => d,
                 JsonValueKind.Number => element.GetDouble(),
                 JsonValueKind.String => TryParseString(element.GetString()),
-                JsonValueKind.True   => true,
-                JsonValueKind.False  => false,
-                JsonValueKind.Null   => null,
-                _                    => (object?)element.GetRawText()
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Null => null,
+                _ => (object?)element.GetRawText()
             };
 
         /// <summary>

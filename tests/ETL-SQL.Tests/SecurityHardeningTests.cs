@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
-using ETL_SQL.Common;
 using Moq;
-using ETL_SQL.Core.Common.Exceptions;
+using Xunit;
 
 namespace ETL_SQL.Engine.Tests
 {
@@ -31,7 +31,7 @@ namespace ETL_SQL.Engine.Tests
             var row = new Row(schema, new object[] { 1, 2, "Test" });
 
             var expr = new IdentifierExpression("ID");
-            
+
             // Should throw because ID matches both T1.ID and T2.ID
             await Assert.ThrowsAsync<ExecutionException>(async () => await evaluator.Evaluate(expr, row));
         }
@@ -131,14 +131,14 @@ namespace ETL_SQL.Engine.Tests
         {
             var connExpr = new LiteralExpression("src", TokenType.STRING);
             var stmt = new ExecutePushdownStatement(connExpr, sql);
-            
+
             var sources = stmt.GetSourceTables().ToList();
-            
+
             foreach (var exp in expected)
             {
                 Assert.Contains(exp, sources);
             }
-            
+
             // Ensure no extra sources (like CTE names)
             Assert.Equal(expected.Length, sources.Count);
         }

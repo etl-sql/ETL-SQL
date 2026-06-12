@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using ETL_SQL.Common;
 using Microsoft.Data.SqlClient;
 using Npgsql;
 using Oracle.ManagedDataAccess.Client;
-using ETL_SQL.Common;
 
 namespace ETL_SQL.Connectors
 {
@@ -71,8 +71,8 @@ namespace ETL_SQL.Connectors
                 .OrderBy(x => x.Distance)
                 .FirstOrDefault();
 
-            string message = suggestion != null 
-                ? $"Unsupported provider: '{provider}'. Did you mean '{suggestion.Name}'?" 
+            string message = suggestion != null
+                ? $"Unsupported provider: '{provider}'. Did you mean '{suggestion.Name}'?"
                 : $"Unsupported provider: '{provider}'. Supported providers include: {string.Join(", ", ValidProviders.Take(10))}...";
 
             throw new ArgumentException(message);
@@ -102,13 +102,13 @@ namespace ETL_SQL.Connectors
         private static string BuildSqlServer(Dictionary<string, string> props)
         {
             var builder = new SqlConnectionStringBuilder();
-            
+
             if (props.TryGetValue("SERVER", out var server)) builder.DataSource = server;
             if (props.TryGetValue("DATABASE", out var db)) builder.InitialCatalog = db;
-            
-            bool trusted = props.ContainsKey("TRUSTED_CONNECTION") && 
+
+            bool trusted = props.ContainsKey("TRUSTED_CONNECTION") &&
                           props["TRUSTED_CONNECTION"].Equals("TRUE", StringComparison.OrdinalIgnoreCase);
-            
+
             if (trusted)
             {
                 builder.IntegratedSecurity = true;
@@ -128,8 +128,8 @@ namespace ETL_SQL.Connectors
 
             // Production Options: Failover
             if (props.TryGetValue("APPLICATION_INTENT", out var intent) && intent != null)
-                builder.ApplicationIntent = intent.Equals("READONLY", StringComparison.OrdinalIgnoreCase) 
-                    ? ApplicationIntent.ReadOnly 
+                builder.ApplicationIntent = intent.Equals("READONLY", StringComparison.OrdinalIgnoreCase)
+                    ? ApplicationIntent.ReadOnly
                     : ApplicationIntent.ReadWrite;
 
             if (props.TryGetValue("MULTI_SUBNET_FAILOVER", out var failover) && failover != null)
@@ -138,7 +138,7 @@ namespace ETL_SQL.Connectors
             // Production Options: Pooling
             if (props.TryGetValue("MIN_POOL_SIZE", out var minPool) && int.TryParse(minPool, out var min))
                 builder.MinPoolSize = min;
-            
+
             if (props.TryGetValue("MAX_POOL_SIZE", out var maxPool) && int.TryParse(maxPool, out var max))
                 builder.MaxPoolSize = max;
 
@@ -155,7 +155,7 @@ namespace ETL_SQL.Connectors
         private static string BuildPostgres(Dictionary<string, string> props)
         {
             var builder = new NpgsqlConnectionStringBuilder();
-            
+
             if (props.TryGetValue("HOST", out var host)) builder.Host = host;
             if (props.TryGetValue("DATABASE", out var db)) builder.Database = db;
             if (props.TryGetValue("USER", out var user)) builder.Username = user;
@@ -189,17 +189,17 @@ namespace ETL_SQL.Connectors
         private static string BuildMySql(Dictionary<string, string> props)
         {
             var builder = new MySqlConnector.MySqlConnectionStringBuilder();
-            
+
             if (props.TryGetValue("HOST", out var host)) builder.Server = host;
             else if (props.TryGetValue("SERVER", out var server)) builder.Server = server;
-            
+
             if (props.TryGetValue("DATABASE", out var db)) builder.Database = db;
-            
+
             if (props.TryGetValue("USER", out var user)) builder.UserID = user;
             else if (props.TryGetValue("UID", out var uid)) builder.UserID = uid;
-            
+
             if (props.TryGetValue("PASSWORD", out var pass)) builder.Password = pass;
-            
+
             if (props.TryGetValue("PORT", out var portStr) && uint.TryParse(portStr, out var port)) builder.Port = port;
 
             // Production Options: Pooling
@@ -235,7 +235,7 @@ namespace ETL_SQL.Connectors
         private static string BuildOracle(Dictionary<string, string> props)
         {
             var builder = new OracleConnectionStringBuilder();
-            
+
             if (props.TryGetValue("USER", out var user)) builder.UserID = user;
             if (props.TryGetValue("PASSWORD", out var pass)) builder.Password = pass;
 
@@ -248,7 +248,7 @@ namespace ETL_SQL.Connectors
             {
                 var port = props.TryGetValue("PORT", out var p) ? p : "1521";
                 var service = props.TryGetValue("SERVICE_NAME", out var s) ? s : "";
-                
+
                 if (!string.IsNullOrEmpty(service))
                     builder.DataSource = $"{host}:{port}/{service}";
                 else

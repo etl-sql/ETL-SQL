@@ -1,13 +1,13 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
-using Spectre.Console;
-using ETL_SQL.Common;
 using ETL_SQL.TUI.UI;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Core
 {
@@ -25,7 +25,7 @@ namespace ETL_SQL.Tests.Core
             Assert.Equal(2, script.Statements.Count);
             Assert.IsType<DeclareStatement>(script.Statements[0]);
             Assert.IsType<SetVariableStatement>(script.Statements[1]);
-            
+
             var decl = (DeclareStatement)script.Statements[0];
             Assert.Equal("@v", decl.VariableName);
             Assert.Equal("INT", decl.DataType);
@@ -42,7 +42,7 @@ namespace ETL_SQL.Tests.Core
 
             Assert.Single(script.Statements);
             Assert.IsType<SelectStatement>(script.Statements[0]);
-            
+
             var select = (SelectStatement)script.Statements[0];
             Assert.Equal(2, select.Columns.Count);
             Assert.Equal("MyTable", select.FromTable.TableName);
@@ -124,7 +124,7 @@ namespace ETL_SQL.Tests.Core
             var print = (PrintStatement)script.Statements[0];
             Assert.Single(print.Arguments);
             Assert.IsType<BinaryExpression>(print.Arguments[0]);
-            
+
             var bin = (BinaryExpression)print.Arguments[0];
             // 1 + (2 * 3) -> Top level should be +
             Assert.Equal(TokenType.PLUS, bin.Operator);
@@ -144,7 +144,7 @@ namespace ETL_SQL.Tests.Core
 
             Assert.Single(script.Statements);
             Assert.IsType<InsertStatement>(script.Statements[0]);
-            
+
             var insert = (InsertStatement)script.Statements[0];
             Assert.Equal("Dest", insert.TargetTable.TableName);
             Assert.NotNull(insert.SelectQuery);

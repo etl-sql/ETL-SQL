@@ -1,15 +1,15 @@
-﻿using Xunit;
-using ETL_SQL.Core.Common;
-using ETL_SQL.Common;
-using System;
-using System.IO;
+﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Common;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Parser;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -72,7 +72,7 @@ namespace ETL_SQL.Tests.Hardening
         {
             string pwd = "Password123!";
             CryptoUtils.EncryptFile(_plainFile, _encryptedFile, pwd, true, HashAlgorithmName.SHA512);
-            
+
             CryptoUtils.DecryptFile(_encryptedFile, _decryptedFile, pwd, true, HashAlgorithmName.SHA512);
             Assert.Equal(File.ReadAllText(_plainFile), File.ReadAllText(_decryptedFile));
         }
@@ -91,7 +91,7 @@ namespace ETL_SQL.Tests.Hardening
         public void CryptoUtils_SshKeyEncryption_WithPassphrase()
         {
             CryptoUtils.EncryptFileWithSsh(_plainFile, _encryptedFile, _publicKeyFile, true);
-            
+
             // Decrypt with correct passphrase
             CryptoUtils.DecryptFileWithSsh(_encryptedFile, _decryptedFile, _passphraseKeyFile, true, Passphrase);
             Assert.Equal(File.ReadAllText(_plainFile), File.ReadAllText(_decryptedFile));
@@ -119,10 +119,10 @@ namespace ETL_SQL.Tests.Hardening
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
 
             var errors = new System.Collections.Generic.List<LintResult>(results);
-            
+
             // c1: Missing password/keyfile
             Assert.Contains(errors, r => r.Message.Contains("requires either a PASSWORD or a KEYFILE"));
-            
+
             // c2, c3: Valid
             // c4: Invalid algorithm
             Assert.Contains(errors, r => r.Message.Contains("Unsupported encryption algorithm 'INVALID'"));

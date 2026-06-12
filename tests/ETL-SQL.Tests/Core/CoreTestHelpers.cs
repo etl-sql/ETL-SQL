@@ -35,7 +35,7 @@ namespace ETL_SQL.Tests.Core
                 {
                     var actualVal = row[result.ColumnNames[j]];
                     var expectedVal = expectedRow[j];
-                    
+
                     // Simple numeric normalization for testing (everything to decimal if numeric)
                     if (actualVal is decimal d1 && expectedVal is int i1) Assert.Equal(d1, (decimal)i1);
                     else if (actualVal is decimal d2 && expectedVal is double db1) Assert.Equal(d2, (decimal)db1);
@@ -73,9 +73,9 @@ namespace ETL_SQL.Tests.Core
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => Task.FromResult(Enumerable.Empty<string>());
-        
+
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => Enumerable.Empty<DataTable>().ToAsyncEnumerable();
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) 
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             ExecutedSql.Add("INSERT INTO TargetTable (BATCH TRANSFER)");
             await foreach (var batch in batches) { }

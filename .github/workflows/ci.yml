@@ -30,6 +30,9 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore ETL-SQL.slnx
 
+      - name: Verify formatting
+        run: dotnet format ETL-SQL.slnx --verify-no-changes --no-restore
+
       - name: Check shared report runtime assets
         shell: pwsh
         run: node .\scripts\sync-assets.js -Check

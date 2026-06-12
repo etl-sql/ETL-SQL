@@ -3,14 +3,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.App;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.App;
-using ETL_SQL.Core.Common;
-using ETL_SQL.Common;
+using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {
@@ -44,7 +44,7 @@ namespace ETL_SQL.Tests.Orchestration
             {
                 if (!overwrite && File.Exists(localPath))
                     throw new Exception("Local file already exists");
-                
+
                 if (RemoteFiles.TryGetValue(remotePath, out var content))
                 {
                     File.WriteAllText(localPath, content);
@@ -164,7 +164,7 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.True(mockFs.RemoteFiles.ContainsKey("new_remote.txt"));
 
             // 4. SEND FILE (Overwrite OFF - Failure if exists)
-            await Assert.ThrowsAsync<Exception>(async () => 
+            await Assert.ThrowsAsync<Exception>(async () =>
                 await RunScriptAsync(evaluator, $"SEND FILE '{localFile.Replace("\\", "\\\\")}' TO 'remote.txt' AT MYREMOTE WITH(OVERWRITE=OFF);"));
 
             // 5. RECEIVE FILE
@@ -194,7 +194,7 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("Func Content", mockFs.RemoteFiles["func_remote.txt"]);
 
             // 2. SEND_FILE Overwrite OFF
-            await Assert.ThrowsAsync<Exception>(async () => 
+            await Assert.ThrowsAsync<Exception>(async () =>
                 await RunScriptAsync(evaluator, $"SEND_FILE('{localFile.Replace("\\", "\\\\")}', MYREMOTE, 'func_remote.txt', OFF);"));
 
             // Cleanup
@@ -259,11 +259,11 @@ namespace ETL_SQL.Tests.Orchestration
 
             string tempDir = Path.Combine(Path.GetTempPath(), "temp_wildcards_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
-            
+
             string file1 = Path.Combine(tempDir, "a.txt");
             string file2 = Path.Combine(tempDir, "b.txt");
             string file3 = Path.Combine(tempDir, "c.log");
-            
+
             File.WriteAllText(file1, "file1 content");
             File.WriteAllText(file2, "file2 content");
             File.WriteAllText(file3, "file3 content");
@@ -313,7 +313,7 @@ namespace ETL_SQL.Tests.Orchestration
             var scriptExists = parserExists.Parse();
             var resultsExists = new List<DataTable>();
             await foreach (var batch in evaluator.ExecuteQuery(scriptExists.Statements[0])) resultsExists.Add(batch);
-            
+
             Assert.Single(resultsExists);
             var rowsExists = resultsExists[0].Rows.ToList();
             Assert.Single(rowsExists);
@@ -326,7 +326,7 @@ namespace ETL_SQL.Tests.Orchestration
             var scriptDirExists = parserDirExists.Parse();
             var resultsDirExists = new List<DataTable>();
             await foreach (var batch in evaluator.ExecuteQuery(scriptDirExists.Statements[0])) resultsDirExists.Add(batch);
-            
+
             Assert.Single(resultsDirExists);
             var rowsDirExists = resultsDirExists[0].Rows.ToList();
             Assert.Single(rowsDirExists);
@@ -339,7 +339,7 @@ namespace ETL_SQL.Tests.Orchestration
             var scriptNotExists = parserNotExists.Parse();
             var resultsNotExists = new List<DataTable>();
             await foreach (var batch in evaluator.ExecuteQuery(scriptNotExists.Statements[0])) resultsNotExists.Add(batch);
-            
+
             Assert.Single(resultsNotExists);
             var rowsNotExists = resultsNotExists[0].Rows.ToList();
             Assert.Single(rowsNotExists);

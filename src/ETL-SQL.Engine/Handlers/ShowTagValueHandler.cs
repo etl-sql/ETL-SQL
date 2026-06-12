@@ -18,7 +18,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ShowTagValueStatement)statement;
-            
+
             Dictionary<string, string> metadata;
             if (stmt.ColumnName != null)
             {

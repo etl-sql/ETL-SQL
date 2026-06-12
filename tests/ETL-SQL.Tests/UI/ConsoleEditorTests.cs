@@ -1,14 +1,14 @@
-using Xunit;
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
-using Spectre.Console;
-using ETL_SQL.TUI.UI;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
-using ETL_SQL.Connectors.MockDb;
-using System.Linq;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using ETL_SQL.Connectors.MockDb;
+using ETL_SQL.Core;
+using ETL_SQL.Data;
+using ETL_SQL.TUI.UI;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.UI
 {
@@ -130,7 +130,7 @@ namespace ETL_SQL.Tests.UI
             editor._buffer.Load(new[] { "CREATE CONNECTION C AS FLATFILE('./" });
             editor._buffer.CursorLine = 0;
             editor._buffer.CursorColumn = editor._buffer.Lines[0].Length;
-            await editor.HandleKey(new ConsoleKeyInfo('.', ConsoleKey.OemPeriod, false, false, false)); 
+            await editor.HandleKey(new ConsoleKeyInfo('.', ConsoleKey.OemPeriod, false, false, false));
             // Assert something here if needed, currently it just verifies it doesn't crash
         }
 
@@ -171,22 +171,22 @@ namespace ETL_SQL.Tests.UI
             Assert.Contains("[cyan]orders[/]", high2);
             Assert.Contains("[purple]o[/]", high2);
         }
-        
+
         [Fact]
         public async Task TestNavigationWithAutocomplete()
         {
             var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
             editor._buffer.Load(new[] { "SELECT ", "FROM orders" });
-            editor._buffer.CursorLine = 1; 
+            editor._buffer.CursorLine = 1;
             editor._buffer.CursorColumn = 4; // After FROM
             editor._renderer.Headless = true;
-            
+
             // Force autocomplete visible with 2 options
             editor._renderer.AutocompleteVisible = true;
-            editor._renderer.AutocompleteOptions = new List<Suggestion> 
-            { 
-                new Suggestion("orders", SuggestionType.Table), 
-                new Suggestion("customers", SuggestionType.Table) 
+            editor._renderer.AutocompleteOptions = new List<Suggestion>
+            {
+                new Suggestion("orders", SuggestionType.Table),
+                new Suggestion("customers", SuggestionType.Table)
             };
             editor._renderer.AutocompleteIndex = 1; // "customers" selected
 
@@ -212,7 +212,7 @@ namespace ETL_SQL.Tests.UI
             editor._buffer.Load(new[] { "SELECT 1" });
             editor._buffer.CursorLine = 0;
             editor._renderer.Headless = true;
-            
+
             // Focus starts at Editor
             Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
 
@@ -266,14 +266,14 @@ namespace ETL_SQL.Tests.UI
             var lines = Enumerable.Range(1, 100).Select(i => $"Line {i}").ToList();
             editor._buffer.Load(lines);
             editor._renderer.Headless = true;
-            
+
             // Re-render with a specific height (assume editor height is 10)
             editor._renderer.Render(editor, 80, 20); // resultAreaHeight=8, editorAreaHeight=10
-            
+
             // Move cursor to line 50
             editor._buffer.CursorLine = 50;
             editor._renderer.Render(editor, 80, 20);
-            
+
             // ScrollLine should have updated to include line 50
             Assert.InRange(editor._renderer.ScrollLine, 40, 50);
         }
@@ -480,10 +480,10 @@ namespace ETL_SQL.Tests.UI
 
             // Alt+Down to add cursor on line 1
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.DownArrow, false, true, false)); // Alt+Down
-            
+
             // Type 'X'
             await editor.HandleKey(new ConsoleKeyInfo('X', ConsoleKey.X, false, false, false));
-            
+
             var text = editor._buffer.GetText();
             Assert.Contains("AX", text);
             Assert.Contains("BX", text);
@@ -522,7 +522,7 @@ namespace ETL_SQL.Tests.UI
                 "SELECT 33333;"
             });
             editor._renderer.Headless = true;
-            
+
             // Set terminal size (width=80, height=24)
             editor._renderer.Render(editor, 80, 24);
 

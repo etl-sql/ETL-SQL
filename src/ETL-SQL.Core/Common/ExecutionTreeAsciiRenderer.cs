@@ -105,16 +105,16 @@ namespace ETL_SQL.Core.Common
 
         private static string BuildSummary(int count, List<ExecutionNode> nodes)
         {
-            int running   = nodes.Count(n => n.Status == ExecutionStatus.Running);
-            int faulted   = nodes.Count(n => n.Status == ExecutionStatus.Faulted);
+            int running = nodes.Count(n => n.Status == ExecutionStatus.Running);
+            int faulted = nodes.Count(n => n.Status == ExecutionStatus.Faulted);
             int completed = nodes.Count(n => n.Status == ExecutionStatus.Completed);
-            int waiting   = nodes.Count(n => n.Status == ExecutionStatus.Waiting);
+            int waiting = nodes.Count(n => n.Status == ExecutionStatus.Waiting);
 
             var parts = new List<string>();
-            if (running   > 0) parts.Add($"{running} ●");
-            if (faulted   > 0) parts.Add($"{faulted} ✗");
+            if (running > 0) parts.Add($"{running} ●");
+            if (faulted > 0) parts.Add($"{faulted} ✗");
             if (completed > 0) parts.Add($"{completed} ✓");
-            if (waiting   > 0) parts.Add($"{waiting} ·");
+            if (waiting > 0) parts.Add($"{waiting} ·");
 
             string desc = parts.Count > 0 ? string.Join(", ", parts) : "all pending";
             return $"... {count} more  ({desc})";
@@ -129,19 +129,19 @@ namespace ETL_SQL.Core.Common
                 return ms > 0 ? FormatMs(ms) + "…" : "…";
             }
             var elapsed = node.GetElapsedMs();
-            var rows    = node.RowsProcessed;
-            string t    = FormatMs(elapsed);
+            var rows = node.RowsProcessed;
+            string t = FormatMs(elapsed);
             return rows > 0 ? $"{t}  {FormatRows(rows)}" : t;
         }
 
         private static string FormatMs(double ms) =>
             ms >= 60_000 ? $"{ms / 60_000:N1}m" :
-            ms >= 1_000  ? $"{ms / 1_000:N1}s"  :
+            ms >= 1_000 ? $"{ms / 1_000:N1}s" :
                            $"{ms:N0}ms";
 
         private static string FormatRows(long r) =>
             r >= 1_000_000 ? $"{r / 1_000_000.0:N1}M" :
-            r >= 1_000     ? $"{r / 1_000.0:N1}k"     :
+            r >= 1_000 ? $"{r / 1_000.0:N1}k" :
                              $"{r}r";
     }
 }

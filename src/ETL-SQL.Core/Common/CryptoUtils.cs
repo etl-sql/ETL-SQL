@@ -1,10 +1,10 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 using ETL_SQL.Core.Common.Exceptions;
 using PgpCore;
 
@@ -249,7 +249,7 @@ namespace ETL_SQL.Common
         {
             if (string.IsNullOrEmpty(plainText)) return plainText;
             byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
-            
+
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 return "DPAPI:" + Convert.ToBase64String(ProtectWindows(plainBytes, optionalEntropy));
@@ -304,11 +304,11 @@ namespace ETL_SQL.Common
             using var aes = Aes.Create();
             aes.Key = key;
             aes.GenerateIV();
-            
+
             using var encryptor = aes.CreateEncryptor();
             using var ms = new MemoryStream();
             ms.Write(aes.IV, 0, aes.IV.Length); // Prepend IV
-            
+
             using (var cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write))
             {
                 cs.Write(plainBytes, 0, plainBytes.Length);
@@ -321,7 +321,7 @@ namespace ETL_SQL.Common
             byte[] key = GetMachineKey(entropy);
             using var aes = Aes.Create();
             aes.Key = key;
-            
+
             byte[] iv = new byte[aes.BlockSize / 8];
             Buffer.BlockCopy(cipherBytes, 0, iv, 0, iv.Length);
             aes.IV = iv;
@@ -341,7 +341,7 @@ namespace ETL_SQL.Common
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string etlSqlDir = Path.Combine(appData, "etl-sql");
             if (!Directory.Exists(etlSqlDir)) Directory.CreateDirectory(etlSqlDir);
-            
+
             string keyPath = Path.Combine(etlSqlDir, "machine.key");
             byte[] baseKey;
 
@@ -395,7 +395,7 @@ namespace ETL_SQL.Common
             if (!File.Exists(filePath)) return;
 
             // 1. Wait for lock
-            if (options.TryGetValue("WAIT_FOR_LOCK", out var wfl) && 
+            if (options.TryGetValue("WAIT_FOR_LOCK", out var wfl) &&
                 (wfl.Equals("ON", StringComparison.OrdinalIgnoreCase) || wfl.Equals("TRUE", StringComparison.OrdinalIgnoreCase)))
             {
                 int timeoutSec = 30;

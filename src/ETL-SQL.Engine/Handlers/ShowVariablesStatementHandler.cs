@@ -20,7 +20,7 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ShowVariablesStatement)statement;
-            
+
             var table = new DataTable();
             table.AddColumn("Name");
             table.AddColumn("Value");
@@ -35,7 +35,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 var row = new Row();
                 row["Name"] = variable.Key;
-                
+
                 bool isSensitive = false;
                 if (metadata.TryGetValue(variable.Key, out var m))
                 {

@@ -57,7 +57,7 @@ namespace ETL_SQL.Engine.Handlers
                     $"EXPORT DATASET '{stmt.DatasetName}': the dataset has not been materialised yet. Ask the owner to refresh it.",
                     null, stmt.Line, stmt.Column);
 
-            var atRest    = new EncryptionOptions(BuildAtRestOptions(
+            var atRest = new EncryptionOptions(BuildAtRestOptions(
                 existing.AtRestDecryptionKey ?? (context as Evaluator)?.DatasetAtRestKey));
             var transport = new EncryptionOptions(BuildTransportOptions(stmt));
             var targetPath = context.ResolvePath(stmt.TargetPath);
@@ -91,7 +91,7 @@ namespace ETL_SQL.Engine.Handlers
 
         private static Dictionary<string, string> BuildTransportOptions(ExportDatasetStatement stmt) =>
             stmt.EncryptionMode == DatasetEncryptionMode.KeyFile
-                ? new Dictionary<string, string> { ["ENCRYPT"] = "KEYFILE",  ["KEYFILE"]  = stmt.KeyFile ?? "" }
+                ? new Dictionary<string, string> { ["ENCRYPT"] = "KEYFILE", ["KEYFILE"] = stmt.KeyFile ?? "" }
                 : new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = stmt.EncryptionPassword ?? "" };
     }
 }

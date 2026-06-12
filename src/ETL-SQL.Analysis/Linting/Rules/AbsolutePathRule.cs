@@ -124,7 +124,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
             if (path.Contains("://")) return; // Skip URLs (http, s3, etc)
 
             bool isAbsolute = false;
-            
+
             // Windows style: C:\ or \\
             if (path.Length >= 3 && char.IsLetter(path[0]) && path[1] == ':' && (path[2] == '\\' || path[2] == '/'))
                 isAbsolute = true;

@@ -1,5 +1,5 @@
-using Microsoft.Extensions.Configuration;
 using ETL_SQL.Common;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Engine.Services
 {
@@ -9,7 +9,7 @@ namespace ETL_SQL.Engine.Services
     /// </summary>
     public static class DefaultThresholds
     {
-        public static int MaxInMemoryBatches(IConfiguration? config) 
+        public static int MaxInMemoryBatches(IConfiguration? config)
             => config?.GetValue<int?>("Engine:MaxInMemoryBatches") ?? LanguageMetadata.DefaultMaxInMemoryBatches;
 
         public static int ForeachPageSize(IConfiguration? config)
@@ -80,7 +80,7 @@ namespace ETL_SQL.Engine.Services
 
         public static bool CaseSensitiveComparison(IConfiguration? config)
             => config?.GetValue<bool?>("Engine:CaseSensitiveComparison") ?? false;
-            
+
         public static bool TelemetryEnabled(IConfiguration? config)
             => config?.GetValue<bool?>("Engine:TelemetryEnabled") ?? true;
 

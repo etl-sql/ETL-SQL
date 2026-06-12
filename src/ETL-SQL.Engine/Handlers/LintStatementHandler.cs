@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
@@ -34,8 +34,8 @@ namespace ETL_SQL.Engine.Handlers
 
             if (lintStmt.ScriptPath != null)
             {
-                var fullPath = Path.IsPathRooted(lintStmt.ScriptPath) 
-                    ? lintStmt.ScriptPath 
+                var fullPath = Path.IsPathRooted(lintStmt.ScriptPath)
+                    ? lintStmt.ScriptPath
                     : Path.Combine(Directory.GetCurrentDirectory(), lintStmt.ScriptPath);
 
                 if (!File.Exists(fullPath))

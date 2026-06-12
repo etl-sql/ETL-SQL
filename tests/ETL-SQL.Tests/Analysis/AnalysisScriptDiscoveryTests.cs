@@ -1,11 +1,11 @@
-﻿using Xunit;
-using ETL_SQL.Core.Parser;
+﻿using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Linq;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
+using Xunit;
 
 namespace ETL_SQL.Tests.Analysis
 {
@@ -31,7 +31,7 @@ namespace ETL_SQL.Tests.Analysis
 
             var linter = new Linter();
             linter.AddRule(new SchemaValidationRule());
-            
+
             // Use a mock provider that has NO tables initially
             var mockMetadata = new MockMetadataProvider();
             var context = new DefaultLintContext { Metadata = mockMetadata };
@@ -66,7 +66,7 @@ namespace ETL_SQL.Tests.Analysis
 
             var linter = new Linter();
             linter.AddRule(new SchemaValidationRule());
-            
+
             var mockMetadata = new MockMetadataProvider();
             var context = new DefaultLintContext { Metadata = mockMetadata };
 

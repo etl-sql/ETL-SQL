@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Common;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Services
@@ -23,7 +23,7 @@ namespace ETL_SQL.Engine.Services
             await foreach (var batch in batches)
             {
                 if (result.ColumnNames.Count == 0) result.SetColumns(batch.ColumnNames);
-                
+
                 bool shouldStop = false;
                 foreach (var r in batch.Rows)
                 {
@@ -42,7 +42,7 @@ namespace ETL_SQL.Engine.Services
                             break;
                         }
                     }
-                    
+
                     totalRows++;
                     if (result.Rows.Count < context.MaxLastResultRows)
                     {
@@ -70,7 +70,7 @@ namespace ETL_SQL.Engine.Services
             result.ExecutionTimeMs = sw.ElapsedMilliseconds;
             result.TotalRowsMatched = (int)Math.Min(totalRows, int.MaxValue);
             context.Telemetry.RowsProcessed += totalRows;
-            
+
             context.LastResult = result;
             context.LastResultSets.Add(result);
             context.OnResultSet?.Invoke(result);

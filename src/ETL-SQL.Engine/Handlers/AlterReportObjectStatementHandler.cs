@@ -5,8 +5,8 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -136,7 +136,7 @@ namespace ETL_SQL.Engine.Handlers
                 string resolvedPath = context.ResolvePath(filePath);
 
                 if (!resolvedPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                     throw new ExecutionException($"Security Violation: Template files must have .json extension. Target: {resolvedPath}", null, stmt.Line, stmt.Column);
+                    throw new ExecutionException($"Security Violation: Template files must have .json extension. Target: {resolvedPath}", null, stmt.Line, stmt.Column);
 
                 context.IncrementOperationCount(OperationType.FileSystem, resolvedPath);
                 var jsonOptions = new JsonSerializerOptions { WriteIndented = true };

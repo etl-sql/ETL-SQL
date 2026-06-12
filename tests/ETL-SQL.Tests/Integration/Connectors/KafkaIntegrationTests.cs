@@ -2,14 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using Moq;
 using Confluent.Kafka;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Connectors.Kafka;
-using ETL_SQL.Services;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+using ETL_SQL.Services;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
@@ -69,7 +69,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
         {
             var ctx = MakeContext();
             var topic = $"topic-{Guid.NewGuid():N}";
-            
+
             var options = new Dictionary<string, string>
             {
                 { "BOOTSTRAP_SERVERS", _fixture.BootstrapServers },
@@ -97,7 +97,7 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
             // 2. Consume (ReadBatches)
             var batches = await ds.ReadBatches().ToListAsync();
-            
+
             Assert.NotEmpty(batches);
             var resultTable = batches[0];
             Assert.Equal(2, resultTable.Rows.Count);

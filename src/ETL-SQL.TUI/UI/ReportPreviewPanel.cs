@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Spectre.Console;
-using Spectre.Console.Rendering;
 using ETL_SQL.Core;
 using ETL_SQL.Reporting;
 using ETL_SQL.Reporting.Renderers;
+using Spectre.Console;
+using Spectre.Console.Rendering;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -55,7 +55,7 @@ namespace ETL_SQL.TUI.UI
             int contentWidth = Math.Max(1, width - 4);
             var renderOptions = new RenderOptions(console.Capabilities, new Size(contentWidth, 5000));
             var segments = reportContent.Render(renderOptions, contentWidth).ToList();
-            
+
             // Group segments into lines
             var lines = new List<List<Segment>>();
             var currentLine = new List<Segment>();
@@ -76,7 +76,7 @@ namespace ETL_SQL.TUI.UI
             // Clamp scroll position
             int maxScroll = Math.Max(0, lines.Count - height + 4);
             _renderer.ReportScrollRow = Math.Clamp(_renderer.ReportScrollRow, 0, maxScroll);
-            
+
             // Take the visible slice
             var visibleLines = lines.Skip(_renderer.ReportScrollRow).Take(height - 2).ToList();
             var visibleContent = new List<IRenderable>();

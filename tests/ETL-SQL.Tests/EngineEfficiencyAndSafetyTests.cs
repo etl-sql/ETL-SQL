@@ -1,22 +1,22 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
-using Moq;
-using ETL_SQL.Common;
-using ETL_SQL.Data;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Services;
-using ETL_SQL.Core.Functions;
 using ETL_SQL.Engine.Services;
-using ETL_SQL.Core.Data;
-using System.IO;
+using ETL_SQL.Services;
 using Microsoft.Extensions.Configuration;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests
 {
@@ -39,10 +39,10 @@ namespace ETL_SQL.Tests
         {
             // Arrange
             var evaluator = CreateEvaluator();
-            
+
             // Act
             await evaluator.Evaluate(Parse("SET MAX_SESSION_SIZE = 104857600")); // 100MB
-            
+
             // Assert
             Assert.Equal(104857600, evaluator.MaxSessionSize);
         }
@@ -53,24 +53,24 @@ namespace ETL_SQL.Tests
             // Arrange
             var logger = new TestLogger();
             var evaluator = CreateEvaluator(logger);
-            
+
             // Set limit to a very small value (1KB)
             await evaluator.Evaluate(Parse("SET MAX_SESSION_SIZE = 1024"));
-            
+
             // Directly declare a large variable to bypass mocked function registry
             evaluator.DeclareVariable("largeVar", new string('A', 2000));
-            
+
             var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
             try
             {
                 var sessions = new SessionStateManager(logger, _security, _config, tempDir);
-                
+
                 // Act & Assert
-                var ex = await Assert.ThrowsAsync<ExecutionException>(() => 
+                var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
                     sessions.SaveSession("test-session", evaluator)
                 );
-                
+
                 Assert.Contains("exceeds the safety limit", ex.Message);
             }
             finally
@@ -87,12 +87,12 @@ namespace ETL_SQL.Tests
         {
             // Arrange
             string invalidValue = "NotADate";
-            
+
             // Act & Assert
-            var ex = Assert.Throws<ExecutionException>(() => 
+            var ex = Assert.Throws<ExecutionException>(() =>
                 TypeConverter.Cast(invalidValue, "DATETIME")
             );
-            
+
             Assert.Contains($"Failed to cast value '{invalidValue}' to type 'DATETIME'", ex.Message);
             Assert.IsType<FormatException>(ex.InnerException);
         }
@@ -102,28 +102,28 @@ namespace ETL_SQL.Tests
         {
             // Arrange
             var evaluator = CreateEvaluator();
-            
+
             // We'll use a script that forces an external sort by setting chunk size very small
             string sql = @"
 SET EXTERNAL_SORT_CHUNK_SIZE = 2;
 CREATE TABLE #data (id INT, val VARCHAR);
 INSERT INTO #data VALUES (1, 'C'), (2, 'A'), (3, 'B');
 SELECT * FROM #data ORDER BY val;";
-            
+
             // Act
             await evaluator.Evaluate(Parse(sql));
-            
+
             // Assert
             Assert.NotNull(evaluator.LastResult);
             // The result should not contain the internal sort key column if it was cleaned up,
             // but we can verify it doesn't collide with a user column named '__SORT_KEYS'
-            
+
             await evaluator.Evaluate(Parse(@"
 SET EXTERNAL_SORT_CHUNK_SIZE = 2;
 CREATE TABLE #collision (id INT, _SYS_SORT_KEYS_ VARCHAR);
 INSERT INTO #collision VALUES (1, 'UserValue');
 SELECT * FROM #collision ORDER BY id;"));
-            
+
             Assert.Equal("UserValue", evaluator.LastResult.Rows[0]["_SYS_SORT_KEYS_"]);
         }
 
@@ -139,11 +139,11 @@ SELECT * FROM #collision ORDER BY id;"));
             var registry = new Mock<IFunctionRegistry>();
             var tracker = new Mock<ILineageTracker>();
             tracker.Setup(t => t.GlobalMetadata).Returns(new Dictionary<string, string>());
-            
+
             var docker = new Mock<IDockerManager>();
             var sessions = new Mock<SessionStateManager>(l, _security, _config, null);
             var pushdown = new Mock<ExecutePushdownStatementHandler>(l);
-            
+
             var handlers = new List<IStatementHandler>
             {
                 new SelectStatementHandler(l),
@@ -185,7 +185,7 @@ SELECT * FROM #collision ORDER BY id;"));
             public void Warning(string message) => Log(LogLevel.Warning, message);
             public void Error(string message, Exception? ex = null) => Log(LogLevel.Error, message, ex);
             public void WriteLine(string message, ConsoleColor color = ConsoleColor.White) => Log(LogLevel.Info, message);
-            
+
             public void Debug(string template, params object?[] args) => Log(LogLevel.Debug, template);
             public void Info(string template, params object?[] args) => Log(LogLevel.Info, template);
             public void Warning(string template, params object?[] args) => Log(LogLevel.Warning, template);

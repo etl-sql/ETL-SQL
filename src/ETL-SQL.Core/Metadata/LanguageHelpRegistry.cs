@@ -115,13 +115,13 @@ namespace ETL_SQL.Core.Metadata
             if (string.IsNullOrEmpty(subTopic))
             {
                 if (_topLevelHelp.TryGetValue(topic, out var help)) return help;
-                
+
                 // Fallback: if user asked for a subtopic directly (e.g. HELP SELECT)
                 foreach (var subDict in _subTopicHelp.Values)
                 {
                     if (subDict.TryGetValue(topic, out var subHelp)) return subHelp;
                 }
-                
+
                 return null;
             }
 

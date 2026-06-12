@@ -1,16 +1,16 @@
 using System;
-using System.IO;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
-using ETL_SQL.Data;
-using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
-using System.IO.Compression;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Xml
 {
@@ -32,7 +32,7 @@ namespace ETL_SQL.Connectors.Xml
 
         public string Path => _filePath;
         public Dictionary<string, string>? Options => _options;
-        
+
         public IDataSource WithTable(string tableName) => this;
         public string ConnectorType => "XML";
 
@@ -63,7 +63,7 @@ namespace ETL_SQL.Connectors.Xml
                 }
                 if (options.TryGetValue("TRIM", out var tr)) _trim = tr.ToUpperInvariant() == "ON" || tr.ToUpperInvariant() == "TRUE";
             }
-            
+
             _encryption = new EncryptionOptions(options);
         }
 
@@ -132,7 +132,7 @@ namespace ETL_SQL.Connectors.Xml
             await foreach (var record in StreamRecordsAsync(path))
             {
                 foreach (var (name, _) in record.Attributes) columns.Add(name);
-                foreach (var (name, _) in record.Children)   columns.Add(name);
+                foreach (var (name, _) in record.Children) columns.Add(name);
             }
             return columns.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList();
         }
@@ -301,7 +301,7 @@ namespace ETL_SQL.Connectors.Xml
             }
         }
 
-public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             bool alreadyXml = false;
             string? singleXml = null;
@@ -316,7 +316,7 @@ public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append 
                 }
                 else
                 {
-                    break; 
+                    break;
                 }
             }
 

@@ -3,15 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Lineage;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Core;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
-using ETL_SQL.Analysis.Lineage;
-using ETL_SQL.Core;
-using ETL_SQL.Analysis.Linting;
 using LSPRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using TextDocumentSelector = OmniSharp.Extensions.LanguageServer.Protocol.Models.TextDocumentSelector;
 
@@ -46,7 +46,7 @@ namespace ETL_SQL.LSP
                 return Task.FromResult<Hover?>(null);
 
             int line = (int)request.Position.Line + 1;
-            int col  = (int)request.Position.Character + 1;
+            int col = (int)request.Position.Character + 1;
 
             var entries = state.Lineage.GetFullLineage().ToList();
             var entry = entries.FirstOrDefault(e =>
@@ -70,7 +70,7 @@ namespace ETL_SQL.LSP
             }
 
             string? functionHelp = word != null ? _functionRegistry.GetHelp(word) : null;
-            string? keywordHelp  = (word != null && functionHelp == null) ? _languageHelp.GetHelp(word) : null;
+            string? keywordHelp = (word != null && functionHelp == null) ? _languageHelp.GetHelp(word) : null;
 
             // Dataset hover: word starts with & — look up in portal registry
             DatasetStore.DatasetEntry? datasetEntry = null;
@@ -150,7 +150,7 @@ namespace ETL_SQL.LSP
         private string ScaleDownHeaders(string markdown)
         {
             if (string.IsNullOrEmpty(markdown)) return markdown;
-            
+
             var lines = markdown.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             for (int i = 0; i < lines.Length; i++)
             {
@@ -162,7 +162,7 @@ namespace ETL_SQL.LSP
                     {
                         hashCount++;
                     }
-                    
+
                     if (hashCount > 0 && hashCount < line.Length && line[hashCount] == ' ')
                     {
                         int newHashCount = Math.Min(6, hashCount + 3);

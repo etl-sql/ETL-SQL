@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 using Google.Apis.Auth.OAuth2;
 using Google.Cloud.BigQuery.V2;
-using ETL_SQL.Data;
-using ETL_SQL.Common;
-using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors.BigQuery
 {
@@ -263,8 +263,8 @@ namespace ETL_SQL.Connectors.BigQuery
         public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
         {
             var (proj, ds, table) = ParseTableName(tableName);
-            var projectId  = proj ?? _projectId;
-            var datasetId  = ds   ?? _dataset
+            var projectId = proj ?? _projectId;
+            var datasetId = ds ?? _dataset
                 ?? throw new ExecutionException("BigQuery: DATASET required for column introspection.");
 
             var client = await CreateClientAsync();
@@ -302,9 +302,9 @@ namespace ETL_SQL.Connectors.BigQuery
                         : $"http://{emulatorHost}/";
                     var builder = new BigQueryClientBuilder
                     {
-                        ProjectId   = _projectId,
-                        BaseUri     = baseUri,
-                        Credential  = GoogleCredential.FromAccessToken("emulator-token"),
+                        ProjectId = _projectId,
+                        BaseUri = baseUri,
+                        Credential = GoogleCredential.FromAccessToken("emulator-token"),
                     };
                     return await builder.BuildAsync();
                 }
@@ -331,7 +331,7 @@ namespace ETL_SQL.Connectors.BigQuery
             var opts = new QueryOptions();
             if (_dataset != null)
                 opts.DefaultDataset = new Google.Apis.Bigquery.v2.Data.DatasetReference
-                    { ProjectId = _projectId, DatasetId = _dataset };
+                { ProjectId = _projectId, DatasetId = _dataset };
             if (_location != null)
                 opts.JobLocation = _location;
             return opts;
@@ -386,8 +386,8 @@ namespace ETL_SQL.Connectors.BigQuery
             return parts.Length switch
             {
                 3 => (parts[0], parts[1], parts[2]),
-                2 => (null,     parts[0], parts[1]),
-                _ => (null,     null,     parts[0])
+                2 => (null, parts[0], parts[1]),
+                _ => (null, null, parts[0])
             };
         }
 

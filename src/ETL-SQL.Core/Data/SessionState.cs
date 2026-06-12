@@ -9,18 +9,18 @@ namespace ETL_SQL.Core.Data
         public string SessionId { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public DateTime LastModifiedAt { get; set; }
-        
+
         // Variables
         public Dictionary<string, object?> GlobalVariables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, VariableMetadata> GlobalMetadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-        
+
         // Connections
         public List<ConnectionInfo> Connections { get; set; } = new();
-        
+
         // Docker State
         public string? LastDockerConnectionString { get; set; }
         public Dictionary<string, string> DockerConnectionStrings { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-        
+
         // Temp Tables
         public List<TempTableInfo> TempTables { get; set; } = new();
 

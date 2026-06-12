@@ -1,19 +1,19 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
+using ETL_SQL.Analysis.Lineage;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Reporting;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Models;
+using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Parser;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
-using ETL_SQL.Analysis.Lineage;
-using ETL_SQL.ReportPortal.Data;
-using ETL_SQL.ReportPortal.Models;
-using ETL_SQL.ReportPortal.Services;
-using ETL_SQL.Reporting;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -275,23 +275,23 @@ public class ReportsController : ControllerBase
 
         var report = new Report
         {
-            FolderId            = req.FolderId,
-            Name                = req.Name,
-            Description         = FirstNonBlank(req.Description, GetMetadata(scriptMetadata, "description", "d")),
-            Owner               = FirstNonBlank(req.Owner, GetMetadata(scriptMetadata, "owner")),
-            Contact             = FirstNonBlank(req.Contact, GetMetadata(scriptMetadata, "contact")),
-            Tags                = FirstNonBlank(req.Tags, GetMetadata(scriptMetadata, "tags")),
-            Category            = FirstNonBlank(req.Category, GetMetadata(scriptMetadata, "category")),
-            Domain              = FirstNonBlank(req.Domain, GetMetadata(scriptMetadata, "domain")),
-            Steward             = FirstNonBlank(req.Steward, GetMetadata(scriptMetadata, "steward")),
-            Certification       = FirstNonBlank(req.Certification, GetMetadata(scriptMetadata, "certification", "trusted")),
-            MetadataJson        = SerializeMetadata(scriptMetadata),
-            ScriptPath          = resolved,
-            ScriptLastModified  = validation.LastModified ?? DateTime.UtcNow,
+            FolderId = req.FolderId,
+            Name = req.Name,
+            Description = FirstNonBlank(req.Description, GetMetadata(scriptMetadata, "description", "d")),
+            Owner = FirstNonBlank(req.Owner, GetMetadata(scriptMetadata, "owner")),
+            Contact = FirstNonBlank(req.Contact, GetMetadata(scriptMetadata, "contact")),
+            Tags = FirstNonBlank(req.Tags, GetMetadata(scriptMetadata, "tags")),
+            Category = FirstNonBlank(req.Category, GetMetadata(scriptMetadata, "category")),
+            Domain = FirstNonBlank(req.Domain, GetMetadata(scriptMetadata, "domain")),
+            Steward = FirstNonBlank(req.Steward, GetMetadata(scriptMetadata, "steward")),
+            Certification = FirstNonBlank(req.Certification, GetMetadata(scriptMetadata, "certification", "trusted")),
+            MetadataJson = SerializeMetadata(scriptMetadata),
+            ScriptPath = resolved,
+            ScriptLastModified = validation.LastModified ?? DateTime.UtcNow,
             PublishedScriptHash = validation.Hash,
-            CreatedBy           = CurrentUserId,
-            CreatedAt           = DateTime.UtcNow,
-            UpdatedAt           = DateTime.UtcNow
+            CreatedBy = CurrentUserId,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
         db.Reports.Add(report);
         await db.SaveChangesAsync();
@@ -611,11 +611,11 @@ public class ReportsController : ControllerBase
                         return (object)new
                         {
                             sources,
-                            transform   = e.TransformationExpression,
-                            functions   = e.FunctionsApplied,
-                            kind        = e.TransformationKind == TransformationKind.Unknown ? null : e.TransformationKind.ToString(),
+                            transform = e.TransformationExpression,
+                            functions = e.FunctionsApplied,
+                            kind = e.TransformationKind == TransformationKind.Unknown ? null : e.TransformationKind.ToString(),
                             description = e.DerivedFromDescriptions ?? e.Description,
-                            tags        = tags.Count > 0 ? tags : null,
+                            tags = tags.Count > 0 ? tags : null,
                         };
                     }, StringComparer.OrdinalIgnoreCase);
 
@@ -715,7 +715,7 @@ public class ReportsController : ControllerBase
             persisted.TryGetValue(col, out var h);
 
             var srcTables = (p?.SourceTables ?? (IReadOnlyList<string>?)h?.SourceTables) ?? new List<string>();
-            var srcCols   = (p?.SourceColumns ?? (IReadOnlyList<string>?)h?.SourceColumns) ?? new List<string>();
+            var srcCols = (p?.SourceColumns ?? (IReadOnlyList<string>?)h?.SourceColumns) ?? new List<string>();
             var sources = srcTables
                 .Select((t, k) => new { table = t, column = k < srcCols.Count ? srcCols[k] : null })
                 .ToList();
@@ -737,11 +737,11 @@ public class ReportsController : ControllerBase
             lineage[col] = new
             {
                 sources,
-                transform   = p?.TransformationExpression ?? h?.TransformationExpression,
-                functions   = (object?)p?.FunctionsApplied ?? h?.FunctionsApplied,
-                kind        = (p != null && p.TransformationKind != TransformationKind.Unknown) ? p.TransformationKind.ToString() : h?.TransformationKind,
+                transform = p?.TransformationExpression ?? h?.TransformationExpression,
+                functions = (object?)p?.FunctionsApplied ?? h?.FunctionsApplied,
+                kind = (p != null && p.TransformationKind != TransformationKind.Unknown) ? p.TransformationKind.ToString() : h?.TransformationKind,
                 description,
-                tags        = tags.Count > 0 ? tags : null,
+                tags = tags.Count > 0 ? tags : null,
             };
         }
 
@@ -971,14 +971,14 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
 
-        if (req.Name is not null)        report.Name        = req.Name;
+        if (req.Name is not null) report.Name = req.Name;
         if (req.Description is not null) report.Description = req.Description;
-        if (req.Owner is not null)         report.Owner         = req.Owner;
-        if (req.Contact is not null)       report.Contact       = req.Contact;
-        if (req.Tags is not null)          report.Tags          = req.Tags;
-        if (req.Category is not null)      report.Category      = req.Category;
-        if (req.Domain is not null)        report.Domain        = req.Domain;
-        if (req.Steward is not null)       report.Steward       = req.Steward;
+        if (req.Owner is not null) report.Owner = req.Owner;
+        if (req.Contact is not null) report.Contact = req.Contact;
+        if (req.Tags is not null) report.Tags = req.Tags;
+        if (req.Category is not null) report.Category = req.Category;
+        if (req.Domain is not null) report.Domain = req.Domain;
+        if (req.Steward is not null) report.Steward = req.Steward;
         if (req.Certification is not null) report.Certification = req.Certification;
         if (req.FolderId.HasValue)
         {
@@ -1006,16 +1006,16 @@ public class ReportsController : ControllerBase
 
             report.ScriptPath = resolved;
             report.PublishedScriptHash = validation.Hash;
-            report.ScriptLastModified  = validation.LastModified ?? DateTime.UtcNow;
+            report.ScriptLastModified = validation.LastModified ?? DateTime.UtcNow;
             var scriptMetadata = new Dictionary<string, string>(validation.Metadata, StringComparer.OrdinalIgnoreCase);
             report.MetadataJson = SerializeMetadata(scriptMetadata);
-            report.Description   = FirstNonBlank(req.Description, GetMetadata(scriptMetadata, "description", "d"), report.Description);
-            report.Owner         = FirstNonBlank(req.Owner, GetMetadata(scriptMetadata, "owner"), report.Owner);
-            report.Contact       = FirstNonBlank(req.Contact, GetMetadata(scriptMetadata, "contact"), report.Contact);
-            report.Tags          = FirstNonBlank(req.Tags, GetMetadata(scriptMetadata, "tags"), report.Tags);
-            report.Category      = FirstNonBlank(req.Category, GetMetadata(scriptMetadata, "category"), report.Category);
-            report.Domain        = FirstNonBlank(req.Domain, GetMetadata(scriptMetadata, "domain"), report.Domain);
-            report.Steward       = FirstNonBlank(req.Steward, GetMetadata(scriptMetadata, "steward"), report.Steward);
+            report.Description = FirstNonBlank(req.Description, GetMetadata(scriptMetadata, "description", "d"), report.Description);
+            report.Owner = FirstNonBlank(req.Owner, GetMetadata(scriptMetadata, "owner"), report.Owner);
+            report.Contact = FirstNonBlank(req.Contact, GetMetadata(scriptMetadata, "contact"), report.Contact);
+            report.Tags = FirstNonBlank(req.Tags, GetMetadata(scriptMetadata, "tags"), report.Tags);
+            report.Category = FirstNonBlank(req.Category, GetMetadata(scriptMetadata, "category"), report.Category);
+            report.Domain = FirstNonBlank(req.Domain, GetMetadata(scriptMetadata, "domain"), report.Domain);
+            report.Steward = FirstNonBlank(req.Steward, GetMetadata(scriptMetadata, "steward"), report.Steward);
             report.Certification = FirstNonBlank(req.Certification, GetMetadata(scriptMetadata, "certification", "trusted"), report.Certification);
         }
 
@@ -1464,9 +1464,9 @@ public class ReportsController : ControllerBase
             return Ok(Array.Empty<ReportParameterDto>());
 
         var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);
-        var tokens     = new Lexer(scriptText).Tokenize();
-        var parser     = new CoreParser(tokens, scriptText);
-        var script     = parser.Parse();
+        var tokens = new Lexer(scriptText).Tokenize();
+        var parser = new CoreParser(tokens, scriptText);
+        var script = parser.Parse();
 
         var parameters = script.Statements
             .OfType<DeclareStatement>()
@@ -1606,8 +1606,8 @@ public class ReportsController : ControllerBase
         var hash = "sha256:" + Convert.ToHexString(
             SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(req.ScriptText))).ToLowerInvariant();
         report.PublishedScriptHash = hash;
-        report.ScriptLastModified  = DateTime.UtcNow;
-        report.UpdatedAt           = DateTime.UtcNow;
+        report.ScriptLastModified = DateTime.UtcNow;
+        report.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "DESIGNER_SAVE", "Report", id.ToString(), report.Name);
         return NoContent();
@@ -1654,7 +1654,7 @@ public class ReportsController : ControllerBase
     public IActionResult GetAvailableScripts()
     {
         var root = portalConfig.ScriptRootPath;
-        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) 
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             return Ok(Array.Empty<string>());
 
         var files = Directory.GetFiles(root, "*.rptsql", SearchOption.AllDirectories)

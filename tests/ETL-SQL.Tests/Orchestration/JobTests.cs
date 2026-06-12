@@ -1,21 +1,20 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
-using Xunit;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Functions;
+using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using ETL_SQL.Engine.Functions;
+using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Storage;
-using ETL_SQL.Data;
-
-using ETL_SQL.Engine.Handlers;
-using ETL_SQL.Core.Functions;
-using ETL_SQL.Engine.Functions;
 using ETL_SQL.Services;
-using ETL_SQL.Orchestrator.Execution;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {
@@ -25,7 +24,7 @@ namespace ETL_SQL.Tests.Orchestration
         {
             var services = new ServiceCollection();
             services.AddLogging();
-            
+
             var configuration = new ConfigurationBuilder().Build();
             services.AddSingleton<IConfiguration>(configuration);
 
@@ -36,37 +35,37 @@ namespace ETL_SQL.Tests.Orchestration
             services.AddSingleton<IBundleStore>(store);
             services.AddSingleton<ILineageCatalogStore>(store);
             services.AddSingleton<SchedulerService>();
-            
+
             var registry = new FunctionRegistry();
             FileFunctions.Register(registry);
             StandardFunctions.Register(registry);
             services.AddSingleton<IFunctionRegistry>(registry);
-            
+
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
             services.AddSingleton<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
             services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager, ETL_SQL.Engine.Services.SessionStateManager>();
             services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>(sp => (ETL_SQL.Engine.Services.SessionStateManager)sp.GetRequiredService<ETL_SQL.Core.Execution.ISessionStateManager>());
-            
+
             services.AddSingleton(new CliContext());
             services.AddSingleton<SecurityService>();
             services.AddSingleton<IScriptExecutor, ScriptExecutorAdapter>();
             services.AddSingleton(new ETL_SQL.Orchestrator.Execution.JobThrottleOptions());
             services.AddSingleton<ETL_SQL.Orchestrator.Execution.JobThrottle>();
-            
+
             services.AddSingleton<ETL_SQL.Core.Execution.ISystemResources, ETL_SQL.Core.Execution.DefaultSystemResources>();
             services.AddSingleton<ETL_SQL.Core.Execution.IBufferManager, ETL_SQL.Orchestrator.Execution.BufferManager>();
             services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new ETL_SQL.Core.Execution.BufferManagerOptions()));
             services.AddSingleton<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry>(new ETL_SQL.Core.Metadata.LanguageHelpRegistry());
 
             services.AddTransient<Evaluator>();
-            
+
             // Register Handlers using reflection
             var handlerAssembly = typeof(DeclareStatementHandler).Assembly;
             var handlerTypes = handlerAssembly.GetTypes()
                 .Where(t => typeof(IStatementHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-            
+
             foreach (var type in handlerTypes)
             {
                 services.AddTransient(typeof(IStatementHandler), type);
@@ -121,7 +120,7 @@ namespace ETL_SQL.Tests.Orchestration
             var scheduler = provider.GetRequiredService<SchedulerService>();
             // Since we can't easily wait for background tasks in a unit test without more plumbing,
             // we'll use a manual execution logic similar to what scheduler does but synchronously.
-            
+
             long historyId = await store.LogJobStartAsync("TestJob");
             await store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: 1, peakMemoryBytes: 1024, cpuTimeSeconds: 0.5);
 

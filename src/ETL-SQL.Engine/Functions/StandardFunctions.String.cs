@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Functions;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Functions
@@ -20,13 +20,14 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("LTRIM", (args, ctx) => args[0] == null ? null : args[0]!.ToString()?.TrimStart(), "LTRIM(str): Removes leading whitespaces.");
             registry.RegisterWithHelp("RTRIM", (args, ctx) => args[0] == null ? null : args[0]!.ToString()?.TrimEnd(), "RTRIM(str): Removes trailing whitespaces.");
             registry.RegisterWithHelp("REVERSE", (args, ctx) => args[0] == null ? null : new string((args[0]!.ToString() ?? "").Reverse().ToArray()), "REVERSE(str): Reverses the characters in the string.");
-            
-            registry.RegisterWithHelp("CONCAT", (args, ctx) => {
+
+            registry.RegisterWithHelp("CONCAT", (args, ctx) =>
+            {
                 long totalLength = args.Sum(a => (long)(a?.ToString()?.Length ?? 0));
                 ctx.SecurityService.ValidateStringSize(totalLength, ctx.MaxStringResultSize, ctx.AllowLargeStringResults, ctx.CurrentScriptPath);
                 return string.Join("", args.Select(a => a?.ToString() ?? ""));
             }, "CONCAT(str1, str2, ...): Concatenates multiple strings into one.");
-            
+
             registry.RegisterWithHelp("SUBSTRING", Substring, "SUBSTRING(str, start, length): Extracts a substring using 1-based indexing.");
             registry.RegisterWithHelp("SUBSTR", Substring, "SUBSTR(str, start[, length]): Extracts a substring (Oracle-style).");
             registry.RegisterWithHelp("LEFT", Left, "LEFT(str, n): Extracts n characters from the left side of the string.");
@@ -35,7 +36,7 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("INSTR", InStr, "INSTR(str, sub): Returns the 1-based index of a substring within a string.");
             registry.RegisterWithHelp("REPLACE", (args, ctx) => args.Count >= 3 ? args[0]?.ToString()?.Replace(args[1]?.ToString() ?? "", args[2]?.ToString() ?? "") : args[0], "REPLACE(str, old, new): Replaces occurrences of a substring.");
             registry.RegisterWithHelp("INITCAP", (args, ctx) => args[0]?.ToString() == null ? null : System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(args[0]!.ToString()!.ToLower()), "INITCAP(str): Capitalizes the first letter of each word.");
-            
+
             registry.RegisterWithHelp("STUFF", Stuff, "STUFF(str, start, len, new_str): Replaces a portion of a string with another string.");
             registry.RegisterWithHelp("STRING_ESCAPE", StringEscape, "STRING_ESCAPE(text, type): Escapes special characters (e.g. 'json').");
             registry.RegisterWithHelp("STRING_SPLIT", StringSplit, "STRING_SPLIT(str, sep): Splits a string into a list of substrings.");
@@ -49,8 +50,9 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("UNICODE", (args, ctx) => args[0]?.ToString() == null || args[0]!.ToString()!.Length == 0 ? null : (decimal)args[0]!.ToString()![0], "UNICODE(str): Returns the Unicode point of the first character.");
             registry.RegisterWithHelp("DATALENGTH", DataLength, "DATALENGTH(val): Returns the number of bytes used to represent any expression.");
             registry.RegisterWithHelp("TO_STR", (args, ctx) => args[0]?.ToString(), "TO_STR(val): Converts a value to a string.");
-            
-            registry.RegisterWithHelp("REPLICATE", (args, ctx) => {
+
+            registry.RegisterWithHelp("REPLICATE", (args, ctx) =>
+            {
                 if (args.Count < 2 || args[0] == null) return null;
                 string s = args[0]!.ToString()!;
                 int n = Math.Max(0, Convert.ToInt32(args[1]));
@@ -69,7 +71,8 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("REGEXP_COUNT", RegexpCount, "REGEXP_COUNT(str, pattern): Returns the number of times a pattern occurs in the string.");
             registry.RegisterWithHelp("LPAD", Lpad, "LPAD(str, length [, pad_str]): Left-pads str to length using pad_str (defaults to space). Truncates if str exceeds length.");
             registry.RegisterWithHelp("RPAD", Rpad, "RPAD(str, length [, pad_str]): Right-pads str to length using pad_str (defaults to space). Truncates if str exceeds length.");
-            registry.RegisterWithHelp("REPEAT", (args, ctx) => {
+            registry.RegisterWithHelp("REPEAT", (args, ctx) =>
+            {
                 if (args.Count < 2 || args[0] == null) return null;
                 string s = args[0]!.ToString()!;
                 int n = Math.Max(0, Convert.ToInt32(args[1]));
@@ -85,7 +88,7 @@ namespace ETL_SQL.Engine.Functions
             string str = args[0]!.ToString()!;
             if (!int.TryParse(args[1]?.ToString(), out int length)) return null;
             if (length <= 0) return "";
-            
+
             ctx.SecurityService.ValidateStringSize(length, ctx.MaxStringResultSize, ctx.AllowLargeStringResults, ctx.CurrentScriptPath);
 
             if (str.Length >= length)
@@ -95,7 +98,7 @@ namespace ETL_SQL.Engine.Functions
 
             string padStr = args.Count >= 3 && args[2] != null ? args[2]!.ToString()! : " ";
             if (string.IsNullOrEmpty(padStr)) return str;
-            
+
             int padLength = length - str.Length;
             var sb = new System.Text.StringBuilder(length);
             while (sb.Length < padLength)
@@ -194,10 +197,10 @@ namespace ETL_SQL.Engine.Functions
             int start = Convert.ToInt32(args[1]);
             int length = Convert.ToInt32(args[2]);
             string newS = args[3]?.ToString() ?? "";
-            
+
             if (start < 1) start = 1;
             if (start > s.Length + 1) return s + newS;
-            
+
             var sb = new System.Text.StringBuilder(s);
             if (start <= s.Length)
             {
@@ -213,7 +216,7 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 2) return args.FirstOrDefault();
             string s = args[0]?.ToString() ?? "";
             string type = args[1]?.ToString()?.ToLowerInvariant() ?? "";
-            
+
             if (type == "json") return System.Text.Json.JsonSerializer.Serialize(s).Trim('"');
             return s;
         }
@@ -223,16 +226,16 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 2 || args[0] == null) return new DataTable();
             string s = args[0]!.ToString()!;
             string sep = args[1]?.ToString() ?? ",";
-            
+
             var dt = new DataTable();
             dt.SetColumns(new[] { "Value" });
-            
+
             var parts = s.Split(new[] { sep }, StringSplitOptions.None);
             foreach (var part in parts)
             {
                 await dt.AddRowAsync(new Row { ["Value"] = part.Trim() });
             }
-            
+
             return dt;
         }
 
@@ -241,7 +244,7 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 2) return args.FirstOrDefault();
             object? val = args[0];
             string fmt = args[1]?.ToString() ?? "";
-            
+
             if (val is IFormattable formattable) return formattable.ToString(fmt, System.Globalization.CultureInfo.InvariantCulture);
             return val?.ToString();
         }
@@ -251,7 +254,7 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 2) return 0m;
             string pat = args[0]?.ToString() ?? "";
             string s = args[1]?.ToString() ?? "";
-            
+
             string regexPat = "^" + System.Text.RegularExpressions.Regex.Escape(pat).Replace("%", ".*").Replace("_", ".") + "$";
             var match = System.Text.RegularExpressions.Regex.Match(s, regexPat, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             return match.Success ? (decimal)(match.Index + 1) : 0m;
@@ -263,7 +266,7 @@ namespace ETL_SQL.Engine.Functions
             double val = Convert.ToDouble(args[0]);
             int length = args.Count >= 2 ? Convert.ToInt32(args[1]) : 10;
             int decimals = args.Count >= 3 ? Convert.ToInt32(args[2]) : 0;
-            
+
             string fmt = "F" + decimals;
             string s = val.ToString(fmt, System.Globalization.CultureInfo.InvariantCulture);
             return s.Length > length ? new string('*', length) : s.PadLeft(length);
@@ -274,8 +277,9 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 1) return null;
             string s = args[0]?.ToString() ?? "";
             char quote = args.Count >= 2 ? (args[1]?.ToString()?.FirstOrDefault() ?? '[') : '[';
-            
-            return quote switch {
+
+            return quote switch
+            {
                 '[' => "[" + s.Replace("]", "]]") + "]",
                 '\'' => "'" + s.Replace("'", "''") + "'",
                 '"' => "\"" + s.Replace("\"", "\"\"") + "\"",
@@ -289,10 +293,10 @@ namespace ETL_SQL.Engine.Functions
             string s = args[0]?.ToString() ?? "";
             string from = args[1]?.ToString() ?? "";
             string to = args[2]?.ToString() ?? "";
-            
+
             var map = new Dictionary<char, char>();
             for (int i = 0; i < Math.Min(from.Length, to.Length); i++) map[from[i]] = to[i];
-            
+
             var sb = new System.Text.StringBuilder();
             foreach (char c in s) sb.Append(map.TryGetValue(c, out var r) ? r : c);
             return sb.ToString();

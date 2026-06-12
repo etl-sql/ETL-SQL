@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using Oracle.ManagedDataAccess.Client;
-using ETL_SQL.Data;
-using ETL_SQL.Common;
-using System.Threading.Tasks;
 using System.Linq;
+using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Data;
+using Oracle.ManagedDataAccess.Client;
 
 namespace ETL_SQL.Connectors.Oracle
 {
@@ -15,7 +15,7 @@ namespace ETL_SQL.Connectors.Oracle
     {
         public string Name => "ORACLE";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
-        
+
         public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
             // Security constraint: validate host before connecting
@@ -28,12 +28,12 @@ namespace ETL_SQL.Connectors.Oracle
             var result = await cmd.ExecuteScalarAsync();
             return result?.ToString() ?? "Unknown Oracle Version";
         }
-        
+
         public HashSet<string> GetSupportedFunctions() => OracleSyntax.GetSupportedFunctions();
         public HashSet<string> GetSupportedKeywords() => OracleSyntax.GetSupportedKeywords();
         public HashSet<string> GetExcludedKeywords() => OracleSyntax.Exclusions;
-        
-        public string GetHelp() => 
+
+        public string GetHelp() =>
             "ORACLE Connector: Connects to Oracle Database instances.\n" +
             "Options:\n" +
             "  HOST/PORT/SERVICE_NAME: Connection via Easy Connect.\n" +
@@ -62,7 +62,7 @@ namespace ETL_SQL.Connectors.Oracle
 
         public Dictionary<string, string[]> GetOptionValues() => new();
 
-        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) 
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
             string? table = null;
             options?.TryGetValue("TABLE", out table);
@@ -88,7 +88,7 @@ namespace ETL_SQL.Connectors.Oracle
             return procs;
         }
 
-        public string BuildConnectionString(Dictionary<string, string> properties) => 
+        public string BuildConnectionString(Dictionary<string, string> properties) =>
             ConnectionStringBuilder.Build(Name, properties);
 
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null) => GetHostStatic(connectionString, options);
@@ -97,7 +97,7 @@ namespace ETL_SQL.Connectors.Oracle
         {
             if (options != null && options.TryGetValue("HOST", out var host)) return host;
             if (options != null && options.TryGetValue("TNS_NAME", out var tns)) return tns;
-            
+
             try
             {
                 var builder = new OracleConnectionStringBuilder(connectionString);

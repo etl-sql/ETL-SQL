@@ -1,15 +1,15 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.IO;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Data;
-using Spectre.Console;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console;
+using Xunit;
 
 namespace ETL_SQL.Tests.Integration
 {
@@ -26,10 +26,10 @@ namespace ETL_SQL.Tests.Integration
 
         private async Task<Evaluator> GetEvaluator()
         {
-             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-             await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION ms AS MSSQL('{_fixture.SqlConnectionString}');").Tokenize()).Parse());
-             await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION pg AS POSTGRES('{_fixture.PostgresConnectionString}');").Tokenize()).Parse());
-             return eval;
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION ms AS MSSQL('{_fixture.SqlConnectionString}');").Tokenize()).Parse());
+            await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION pg AS POSTGRES('{_fixture.PostgresConnectionString}');").Tokenize()).Parse());
+            return eval;
         }
 
         [Fact]
@@ -52,9 +52,9 @@ namespace ETL_SQL.Tests.Integration
         public async Task TestMultiDbJoin()
         {
             AnsiConsole.MarkupLine("  - Scenario: MSSQL + Postgres JOIN -> Postgres...");
-            
+
             var eval = await GetEvaluator();
-            
+
             await eval.Evaluate(new Parser(new Lexer("CREATE TABLE ms.customers_ext (id INT, name VARCHAR(50));").Tokenize()).Parse());
             await eval.Evaluate(new Parser(new Lexer("INSERT INTO ms.customers_ext VALUES (1, 'Alice'), (2, 'Bob');").Tokenize()).Parse());
 
@@ -69,7 +69,7 @@ namespace ETL_SQL.Tests.Integration
                 FROM ms.customers_ext c
                 JOIN pg.orders_ext o ON c.id = o.cid
                 GROUP BY c.name;";
-            
+
             await eval.Evaluate(new Parser(new Lexer(etl).Tokenize(), etl).Parse());
 
             // Verify
@@ -82,10 +82,10 @@ namespace ETL_SQL.Tests.Integration
         public async Task TestComplexJoinAndTransfer()
         {
             AnsiConsole.MarkupLine("  - Scenario: Complex Join (Oracle + FlatFile) -> MSSQL...");
-            
+
             var eval = await GetEvaluator();
             await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION ora AS ORACLE('{_fixture.OracleConnectionString}');").Tokenize()).Parse());
-            
+
             string csvPath = Path.Combine(AppContext.BaseDirectory, "regions_final.csv");
             await File.WriteAllTextAsync(csvPath, "RegionID,RegionName\n1,North\n2,South");
             await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION csv AS FLATFILE('{csvPath.Replace("\\", "/")}');").Tokenize()).Parse());

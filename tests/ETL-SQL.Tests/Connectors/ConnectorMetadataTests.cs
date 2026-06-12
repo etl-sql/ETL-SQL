@@ -3,24 +3,24 @@ using System.Collections.Generic;
 using System.Data.Odbc;
 using System.Reflection;
 using System.Threading.Tasks;
+using ETL_SQL.Connectors;
+using ETL_SQL.Connectors.Avro;
+using ETL_SQL.Connectors.BigQuery;
+using ETL_SQL.Connectors.Directory;
+using ETL_SQL.Connectors.Excel;
+using ETL_SQL.Connectors.MockDb;
+using ETL_SQL.Connectors.Odbc;
+using ETL_SQL.Connectors.Oracle;
+using ETL_SQL.Connectors.Parquet;
+using ETL_SQL.Connectors.Postgres;
+using ETL_SQL.Connectors.Rest;
+using ETL_SQL.Connectors.Snowflake;
+using ETL_SQL.Core.Common;
+using MySqlConnector;
 using Npgsql;
 using Oracle.ManagedDataAccess.Client;
 using Xunit;
-using ETL_SQL.Connectors;
-using ETL_SQL.Connectors.Odbc;
-using ETL_SQL.Connectors.Oracle;
-using ETL_SQL.Connectors.Postgres;
 using MySqlConnectorObj = ETL_SQL.Connectors.MySql.MySqlConnector;
-using MySqlConnector;
-using ETL_SQL.Connectors.Rest;
-using ETL_SQL.Connectors.Excel;
-using ETL_SQL.Connectors.Directory;
-using ETL_SQL.Connectors.Avro;
-using ETL_SQL.Connectors.Parquet;
-using ETL_SQL.Connectors.MockDb;
-using ETL_SQL.Connectors.Snowflake;
-using ETL_SQL.Connectors.BigQuery;
-using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests.Connectors
 {

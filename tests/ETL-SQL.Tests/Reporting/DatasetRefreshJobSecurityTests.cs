@@ -88,9 +88,9 @@ namespace ETL_SQL.Tests.Reporting
             {
                 var eval = provider.GetRequiredService<Evaluator>();
                 var registry = new TempRegistry(root);
-                eval.DatasetRegistry      = registry;
+                eval.DatasetRegistry = registry;
                 eval.DatasetCallerContext = "IsAdmin=true";
-                eval.DatasetAtRestKey     = atRestKey;
+                eval.DatasetAtRestKey = atRestKey;
                 eval.DatasetOwningReportId = 42;
 
                 await eval.Evaluate(Parse($@"

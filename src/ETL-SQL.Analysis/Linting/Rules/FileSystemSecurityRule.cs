@@ -116,7 +116,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
         {
             if (string.IsNullOrWhiteSpace(path)) return;
             if (path.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return;
-            if (path.Contains("://")) return; 
+            if (path.Contains("://")) return;
 
             string upperPath = path.ToUpperInvariant().Replace('/', '\\');
 

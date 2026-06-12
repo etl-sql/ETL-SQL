@@ -1,13 +1,13 @@
-﻿using Xunit;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using ETL_SQL.App;
-using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
@@ -28,7 +28,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
         {
             var sp = DependencyInjectionSetup.BuildServiceProvider();
             var eval = sp.GetRequiredService<Evaluator>();
-            
+
             // Set threshold very low to force external aggregation
             eval.JoinSpillThreshold = 10;
             eval.ExternalHashPartitions = 4;
@@ -49,7 +49,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
 
             var result = eval.LastResult;
             Assert.NotNull(result);
-            
+
             // 250 input rows expanded into 4 sets each = 1000 intermediate rows spilled.
             // After aggregation, unique groups will vary based on data.
             Assert.True(eval.Telemetry.TotalSpilledBytes > 0);
@@ -66,7 +66,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             // Verify totals
             decimal? grandTotal = (decimal?)allResults.First(r => r["Region"] == null && r["ProductID"] == null)["total_amount"];
             decimal? sumOfSums = allResults.Where(r => r["Region"] != null && r["ProductID"] != null).Sum(r => (decimal?)r["total_amount"]);
-            
+
             Assert.Equal(grandTotal, sumOfSums);
         }
 
@@ -75,7 +75,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
         {
             var sp = DependencyInjectionSetup.BuildServiceProvider();
             var eval = sp.GetRequiredService<Evaluator>();
-            
+
             eval.JoinSpillThreshold = 1;
 
             await Execute(eval, "CREATE CONNECTION src AS MOCKDB();");

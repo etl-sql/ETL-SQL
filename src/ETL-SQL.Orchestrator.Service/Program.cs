@@ -1,5 +1,30 @@
 using System;
 using System.Runtime.InteropServices;
+using ETL_SQL.Common;
+using ETL_SQL.Connectors;
+using ETL_SQL.Connectors.Avro;
+using ETL_SQL.Connectors.Directory;
+using ETL_SQL.Connectors.Email;
+using ETL_SQL.Connectors.Excel;
+using ETL_SQL.Connectors.FlatFile;
+using ETL_SQL.Connectors.Json;
+using ETL_SQL.Connectors.MockDb;
+using ETL_SQL.Connectors.Oracle;
+using ETL_SQL.Connectors.Parquet;
+using ETL_SQL.Connectors.Postgres;
+using ETL_SQL.Connectors.SqlServer;
+using ETL_SQL.Connectors.Xml;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
+using ETL_SQL.Engine;
+using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Engine.Services;
+using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Orchestrator.Service;
+using ETL_SQL.Orchestrator.Storage;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,31 +32,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Data;
-using ETL_SQL.Engine;
-using ETL_SQL.Engine.Handlers;
-using ETL_SQL.Engine.Services;
-using ETL_SQL.Connectors.MockDb;
-using ETL_SQL.Connectors.SqlServer;
-using ETL_SQL.Connectors.Oracle;
-using ETL_SQL.Connectors.Postgres;
-using ETL_SQL.Connectors.FlatFile;
-using ETL_SQL.Connectors.Json;
-using ETL_SQL.Connectors.Xml;
-using ETL_SQL.Connectors.Excel;
-using ETL_SQL.Connectors.Directory;
-using ETL_SQL.Connectors.Parquet;
-using ETL_SQL.Connectors.Avro;
-using ETL_SQL.Connectors.Email;
-using ETL_SQL.Connectors;
-using ETL_SQL.Common;
-using ETL_SQL.Orchestrator.Channels;
-using ETL_SQL.Orchestrator.Execution;
-using ETL_SQL.Orchestrator.Scheduling;
-using ETL_SQL.Orchestrator.Service;
-using ETL_SQL.Orchestrator.Storage;
 
 #if WINDOWS
 // Running as a Windows Service, the working directory defaults to System32, which sends relative
@@ -47,7 +47,7 @@ if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindows
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Debug()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-    .MinimumLevel.Override("System",    LogEventLevel.Warning)
+    .MinimumLevel.Override("System", LogEventLevel.Warning)
     .Enrich.FromLogContext()
     .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
     .WriteTo.File("logs/orchestrator-.log",
@@ -90,7 +90,7 @@ try
     var loggerService = new LoggerService();
     loggerService.InitializeAppLogger(
         cfg["Logging:AppLog:Directory"] ?? "logs/orchestrator",
-        int.TryParse(cfg["Logging:AppLog:RetentionDays"],   out var rd) ? rd : 30,
+        int.TryParse(cfg["Logging:AppLog:RetentionDays"], out var rd) ? rd : 30,
         int.TryParse(cfg["Logging:AppLog:FileSizeLimitMb"], out var sl) ? sl : 10);
 
     builder.Services.AddSingleton<LoggerService>(loggerService);
