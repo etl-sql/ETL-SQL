@@ -105,6 +105,9 @@ public class OrchestratorConfig
     public string? DatabasePath { get; set; }
     public string? ApiKey { get; set; }
     public bool SameHost { get; set; } = false;
+
+    /// <summary>Seconds between Orchestrator job-history polls. Minimum effective value is 1.</summary>
+    public int PollIntervalSeconds { get; set; } = 60;
 }
 
 public class ResourcesConfig
@@ -126,6 +129,9 @@ public class JwtConfig
     public string[] PreviousSecrets { get; set; } = [];
     public int ExpiryMinutes { get; set; } = 60;
     public int RefreshExpiryDays { get; set; } = 7;
+
+    /// <summary>Seconds between expired-refresh-token purges. Minimum effective value is 1.</summary>
+    public int RefreshTokenPurgeIntervalSeconds { get; set; } = 3600;
 }
 
 public class FirstRunConfig

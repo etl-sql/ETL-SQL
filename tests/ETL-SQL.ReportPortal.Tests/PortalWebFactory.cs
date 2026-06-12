@@ -61,7 +61,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
 
         builder.ConfigureAppConfiguration((_, cfg) =>
         {
-            cfg.AddInMemoryCollection(new Dictionary<string, string?>
+            var settings = new Dictionary<string, string?>
             {
                 ["Portal:DatabasePath"] = dbPath,
                 ["Portal:ScriptRootPath"] = scriptRoot,
@@ -80,7 +80,9 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 ["Portal:Resources:SessionCacheMaxSize"] = "10",
                 ["Portal:Resources:SessionCacheTtlMinutes"] = "5",
                 ["Portal:Orchestrator:DatabasePath"] = orchDbPath,
-            });
+            };
+            CustomizeConfiguration(settings);
+            cfg.AddInMemoryCollection(settings);
         });
 
         builder.ConfigureServices(services =>
@@ -109,6 +111,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 FirstRun = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
                 Orchestrator = new OrchestratorConfig { DatabasePath = orchDbPath },
             };
+            CustomizePortalConfig(cfg);
             services.AddSingleton(cfg);
             services.AddDataProtection()
                 .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(TempDir, "keys")))
@@ -133,10 +136,27 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
             services.AddSingleton<ETL_SQL.Core.Data.IBundleStore>(testStore);
             services.AddSingleton<ETL_SQL.Core.Data.ILineageCatalogStore>(testStore);
 
-            // Disable the JWT validation hosted service (no longer needed — config is injected)
-            services.RemoveAll<IHostedService>();
+            ConfigureHostedServices(services);
         });
     }
+
+    /// <summary>Last-chance hook over the in-memory configuration before it is added.</summary>
+    protected virtual void CustomizeConfiguration(Dictionary<string, string?> settings)
+    {
+    }
+
+    /// <summary>Last-chance hook over the <see cref="PortalConfig"/> singleton before registration.</summary>
+    protected virtual void CustomizePortalConfig(PortalConfig config)
+    {
+    }
+
+    /// <summary>
+    /// Ordinary API tests strip every hosted service so requests run without background loops or
+    /// startup validators. The hosted-service lane (<see cref="HostedPortalFactory"/>) overrides
+    /// this to keep the full pipeline running against the same isolated databases.
+    /// </summary>
+    protected virtual void ConfigureHostedServices(IServiceCollection services)
+        => services.RemoveAll<IHostedService>();
 
     protected override void Dispose(bool disposing)
     {

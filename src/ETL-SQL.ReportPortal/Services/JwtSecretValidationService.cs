@@ -5,7 +5,8 @@ namespace ETL_SQL.ReportPortal.Services;
 /// <summary>
 /// Validates the JWT secret at startup. Runs after WebApplicationFactory can inject test config,
 /// avoiding the "early return 1" problem that prevents WebApplicationFactory from capturing the host.
-/// Note: PortalWebFactory removes all IHostedService registrations, so this never runs in tests.
+/// Note: PortalWebFactory removes all IHostedService registrations for ordinary API tests; the
+/// hosted-service lane (HostedPortalFactory) keeps this service and asserts both outcomes.
 /// </summary>
 public class JwtSecretValidationService(PortalConfig config, IHostApplicationLifetime lifetime)
     : IHostedService

@@ -64,10 +64,22 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 
 ### Priority 2 — Verification and operational hardening
 
-- [ ] **P2.1 Add a hosted-service integration lane.**
+- [x] **P2.1 Add a hosted-service integration lane.**
   `PortalWebFactory` removes every `IHostedService`, so normal portal API tests do not exercise startup
   validation, polling, reconciliation, cleanup, and their interactions. Add a separate fixture that runs
   selected hosted services against isolated databases and controlled clocks.
+  *(done — v0.11.0)* `HostedPortalFactory` keeps the full hosted-service pipeline (session cache,
+  execution job service, Orchestrator poller, JWT/dataset-key validators, refresh-token maintenance)
+  over the standard isolated temp-DB fixture, with an injectable `TimeProvider` (now registered in DI)
+  and new config knobs `Portal:Orchestrator:PollIntervalSeconds` and
+  `Portal:Jwt:RefreshTokenPurgeIntervalSeconds` so loops are observable in tests.
+  `HostedServiceLaneTests` proves: full startup + instance-lock acquisition + loop survival, both
+  fatal startup validators stopping the host, the machine-fallback opt-in, and the in-host token
+  purge honoring a pinned clock. The lane immediately caught and fixed a real shutdown race:
+  `ExecutionJobService.ReleaseInstanceLocks` mutated the lock list unsynchronized, throwing when a
+  self-initiated fatal-validator shutdown overlapped host disposal. Startup *reconciliation*
+  (`DatasetStorageMaintenance`/`SubscriptionScriptMaintenance`) runs inline in `Program.cs` and is
+  already exercised by every portal test; multi-process coordination remains P2.2.
 - [ ] **P2.2 Add genuine multi-process tests.**
   Start two portal and/or Orchestrator processes against the supported shared state and test simultaneous
   refresh, due-job claims, job cancellation, permission changes, subscription delivery, restart recovery,

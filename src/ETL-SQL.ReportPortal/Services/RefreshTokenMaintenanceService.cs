@@ -12,19 +12,20 @@ namespace ETL_SQL.ReportPortal.Services;
 /// </summary>
 public sealed class RefreshTokenMaintenanceService(
     IServiceScopeFactory scopeFactory,
+    PortalConfig config,
+    TimeProvider clock,
     ILogger<RefreshTokenMaintenanceService> log) : BackgroundService
 {
-    internal static readonly TimeSpan Interval = TimeSpan.FromHours(1);
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var interval = TimeSpan.FromSeconds(Math.Max(1, config.Jwt.RefreshTokenPurgeIntervalSeconds));
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 using var scope = scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-                var removed = await PurgeExpiredAsync(db, DateTime.UtcNow, stoppingToken);
+                var removed = await PurgeExpiredAsync(db, clock.GetUtcNow().UtcDateTime, stoppingToken);
                 if (removed > 0)
                     log.LogInformation("Purged {Count} expired refresh tokens", removed);
             }
@@ -39,7 +40,7 @@ public sealed class RefreshTokenMaintenanceService(
 
             try
             {
-                await Task.Delay(Interval, stoppingToken);
+                await Task.Delay(interval, stoppingToken);
             }
             catch (OperationCanceledException)
             {

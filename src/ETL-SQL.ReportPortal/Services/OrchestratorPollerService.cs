@@ -6,7 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace ETL_SQL.ReportPortal.Services;
 
 /// <summary>
-/// Background service that polls the Orchestrator's JobHistory SQLite table every 60 seconds.
+/// Background service that polls the Orchestrator's JobHistory SQLite table every
+/// Portal:Orchestrator:PollIntervalSeconds (default 60).
 /// Dataset-refresh completions invalidate the snapshot and queue a re-execution. Subscription
 /// trigger completions are routed through the trusted delivery executor.
 /// If the Orchestrator DB is unreachable the portal continues in degraded mode (cached snapshots only).
@@ -15,15 +16,17 @@ public class OrchestratorPollerService(
     OrchestratorDbLocator dbLocator,
     IServiceScopeFactory scopes,
     ExecutionJobService jobs,
+    PortalConfig config,
     ILogger<OrchestratorPollerService> log) : BackgroundService
 {
     private DateTime _lastPollTime = DateTime.UtcNow.AddSeconds(-70); // poll covers first 70s on startup
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
+        var interval = TimeSpan.FromSeconds(Math.Max(1, config.Orchestrator.PollIntervalSeconds));
         while (!ct.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromSeconds(60), ct);
+            await Task.Delay(interval, ct);
             await PollAsync(ct);
         }
     }

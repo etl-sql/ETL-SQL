@@ -397,11 +397,15 @@ public class ExecutionJobService : IHostedService, IDisposable
             foreach (var lockPath in lockPaths)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(lockPath)!);
-                _instanceLocks.Add(new FileStream(
+                var instanceLock = new FileStream(
                     lockPath,
                     FileMode.OpenOrCreate,
                     FileAccess.ReadWrite,
-                    FileShare.None));
+                    FileShare.None);
+                lock (_instanceLocks)
+                {
+                    _instanceLocks.Add(instanceLock);
+                }
             }
         }
         catch (IOException ex)
@@ -462,9 +466,17 @@ public class ExecutionJobService : IHostedService, IDisposable
 
     private void ReleaseInstanceLocks()
     {
-        foreach (var instanceLock in _instanceLocks)
+        // StopAsync can run twice concurrently when the host disposes while a fatal startup
+        // validator's StopApplication() shutdown is in flight: take the locks atomically so
+        // each FileStream is disposed exactly once and no enumeration races the Clear().
+        FileStream[] taken;
+        lock (_instanceLocks)
+        {
+            taken = [.. _instanceLocks];
+            _instanceLocks.Clear();
+        }
+        foreach (var instanceLock in taken)
             instanceLock.Dispose();
-        _instanceLocks.Clear();
     }
 
     private async Task PersistNewJobAsync(ExecutionJob job, string kind)

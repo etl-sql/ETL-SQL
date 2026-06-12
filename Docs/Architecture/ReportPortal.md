@@ -215,6 +215,18 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker> { ... }
 2. **`ConfigureServices`** — replaces `PortalDbContext` with the temp-path SQLite, replaces the `PortalConfig` singleton, and calls `PostConfigure<JwtBearerOptions>` to replace the signing key with the test secret.
 3. **`RemoveAll<IHostedService>`** — removes `JwtSecretValidationService` (and all other hosted services) so the validation guard does not fire against the unset production secret.
 
+### Hosted-Service Lane
+
+Because ordinary API tests strip every hosted service, a separate lane exercises the real
+`IHostedService` pipeline: `HostedPortalFactory` (subclass of `PortalWebFactory`) keeps all
+hosted services against the same isolated temp-directory databases, defaults to a valid dataset
+at-rest key and one-second poll/purge intervals (`Portal:Orchestrator:PollIntervalSeconds`,
+`Portal:Jwt:RefreshTokenPurgeIntervalSeconds`), and accepts an injectable `TimeProvider`
+(registered in `Program.cs`, default `TimeProvider.System`) so time-based maintenance decisions
+are deterministic. `HostedServiceLaneTests` covers: full-pipeline startup health plus
+instance-lock acquisition, the fatal JWT/dataset-key startup validators actually stopping the
+host, the machine-fallback opt-in, and the in-host refresh-token purge honoring a pinned clock.
+
 ### Test Isolation
 
 The SQLite database is shared across all tests in a single `IClassFixture<PortalWebFactory>` run. Key decisions to prevent cross-test interference:

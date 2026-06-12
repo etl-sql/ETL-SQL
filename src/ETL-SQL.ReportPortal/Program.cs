@@ -265,6 +265,9 @@ else
     builder.Services.AddSingleton<IJobChannel, InProcessJobChannel>();
 }
 
+// Clock abstraction for background maintenance loops; the hosted-service test lane overrides it.
+builder.Services.AddSingleton(TimeProvider.System);
+
 // Phase 2 — execution, session cache, Orchestrator poller
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SessionCache>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.SessionCache>());

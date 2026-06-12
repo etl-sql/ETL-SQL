@@ -6,8 +6,8 @@ namespace ETL_SQL.ReportPortal.Services;
 /// <summary>
 /// Enforces the portal at-rest key configuration at startup (mirrors <see cref="JwtSecretValidationService"/>):
 /// a missing/weak key shuts the app down before serving requests, unless Portal:Dataset:AllowMachineFallback
-/// is explicitly set for dev/standalone. PortalWebFactory removes all IHostedService registrations, so this
-/// never runs in tests — the rules live in the pure <see cref="DatasetAtRestKeyValidator"/>.
+/// is explicitly set for dev/standalone. The rules live in the pure <see cref="DatasetAtRestKeyValidator"/>;
+/// the hosted-service lane (HostedPortalFactory) runs this service in-host and asserts both outcomes.
 /// </summary>
 public class DatasetAtRestKeyValidationService(
     PortalConfig config,
