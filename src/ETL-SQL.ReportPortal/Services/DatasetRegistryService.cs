@@ -47,14 +47,12 @@ namespace ETL_SQL.ReportPortal.Services
             }
 
             existing.ParquetFilePath = ResolveDatasetPathOrThrow(metadata.ParquetFilePath);
-            if (!string.IsNullOrWhiteSpace(metadata.ParquetFilePath))
+            var portalKeyConfigured = !string.IsNullOrWhiteSpace(_config.Dataset.AtRestKey);
+            var hasCacheFile = !string.IsNullOrWhiteSpace(metadata.ParquetFilePath);
+            if (hasCacheFile)
             {
                 existing.AtRestKeyVersion = metadata.AtRestKeyVersion
-                    ?? (!string.IsNullOrWhiteSpace(_config.Dataset.AtRestKey)
-                        ? _config.Dataset.AtRestKeyVersion
-                        : null);
-                if (!string.IsNullOrWhiteSpace(_config.Dataset.AtRestKey))
-                    existing.EncryptionMode = ETL_SQL.Core.DatasetEncryptionMode.MachineBound;
+                    ?? (portalKeyConfigured ? _config.Dataset.AtRestKeyVersion : null);
             }
             existing.OwningReportId = metadata.OwningReportId;
             existing.CreatedBy = metadata.CreatedBy;
@@ -65,7 +63,12 @@ namespace ETL_SQL.ReportPortal.Services
                 : await _db.Folders.Where(f => f.Path == metadata.FolderPath).Select(f => (int?)f.Id).FirstOrDefaultAsync();
             existing.SourceQuery = metadata.SourceQuery;
             existing.AccessLevel = metadata.AccessLevel;
-            existing.EncryptionMode = metadata.EncryptionMode;
+            // The stored mode describes the cache at rest: with a portal key configured the file
+            // is always portal-managed (MachineBound), matching the rotation normalization —
+            // the statement's transport ENCRYPT clause must not overwrite it.
+            existing.EncryptionMode = portalKeyConfigured && hasCacheFile
+                ? ETL_SQL.Core.DatasetEncryptionMode.MachineBound
+                : metadata.EncryptionMode;
             existing.LastRefresh = metadata.LastRefresh;
             existing.Ttl = metadata.Ttl;
             existing.RefreshInterval = metadata.RefreshInterval;

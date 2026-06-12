@@ -525,7 +525,8 @@ public class DatasetController(
         d.AccessLevel.ToString(),
         d.RowCount, IsStale(d),
         d.LastRefresh, d.Ttl, d.RefreshInterval,
-        IsEncrypted: !string.IsNullOrWhiteSpace(d.ParquetFilePath),
+        IsEncrypted: !string.IsNullOrWhiteSpace(d.ParquetFilePath)
+            && d.EncryptionMode != ETL_SQL.Core.DatasetEncryptionMode.None,
         d.CreatedAt, d.UpdatedAt,
         d.OwningReport?.Name,
         d.OwningReportId);
