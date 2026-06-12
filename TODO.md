@@ -231,10 +231,17 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   executions, queue depth, job/SMTP failure rates, and disk usage of dataset/snapshot storage — via
   expanded health checks or a metrics endpoint (OpenTelemetry if warranted). Extend the
   no-credentials-in-logs guarantee from a dataset-test-only scan to a portal-wide log-hygiene rule.
-- [ ] **P2.9 Gate CI on dependency vulnerability scanning.**
+- [x] **P2.9 Gate CI on dependency vulnerability scanning.**
   THIRD-PARTY-INVENTORY covers license compliance but nothing scans for known-vulnerable packages. Add
   `dotnet list package --vulnerable --include-transitive` (or equivalent) as a CI gate and define the
   response procedure when a hit blocks the build.
+  *(done — v0.11.0)* New `scripts/Test-VulnerablePackages.ps1` reuses the pre-release dependency-audit
+  helpers (`scripts/lib/DependencyAudit.ps1`) to run the vulnerable-only NuGet audit — direct +
+  transitive, per-project fallback, hard failure when no authoritative audit can run — and `ci.yml`
+  now gates every run on it after restore. The VS Code job additionally gates on `npm audit` in both
+  extension roots, mirroring the pre-release npm phase. The response procedure (advisory triage,
+  CPM/version-pin fixes, inventory regeneration, explicit no-suppression risk-acceptance path) is
+  documented in `SECURITY.md` §13 and referenced from the gate's failure output.
 
 ### Priority 3 — Enterprise capability decisions
 

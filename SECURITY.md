@@ -334,7 +334,29 @@ AI agents working in this repository or generating ETL-SQL scripts must follow t
 
 ---
 
-## 13. Security Contact
+## 13. Dependency Vulnerability Management
+
+Every CI run gates on known-vulnerable third-party packages; a finding fails the build.
+
+- **NuGet:** `scripts/Test-VulnerablePackages.ps1` runs `dotnet list package --vulnerable --include-transitive` across the solution via the shared helpers in `scripts/lib/DependencyAudit.ps1` (solution-level audit with a per-project fallback for the .NET 10.0.300 SDK + CPM bug). It fails on any vulnerable package — direct or transitive — and also fails when no authoritative audit could run, so an unknown dependency posture is never certified silently.
+- **npm (VS Code extension):** `npm audit` runs in `src/etl-sql-vscode` and `src/etl-sql-vscode/ui` and fails on any reported vulnerability.
+- The pre-release gate (`scripts/Test-PreRelease.ps1`) additionally blocks on non-Legacy deprecated packages and reports outdated ones.
+
+Reproduce locally with `dotnet restore ETL-SQL.slnx` followed by `./scripts/Test-VulnerablePackages.ps1`, and `npm audit` in the two extension roots.
+
+### 13.1 Response Procedure When the Gate Blocks a Build
+
+1. Read the advisory URL printed in the failure. Identify the affected package, the fixed version, and whether the reference is direct or transitive (the finding is labeled `top-level` or `transitive`).
+2. **Direct NuGet package:** update its version in `Directory.Packages.props` (central package management) to a fixed release.
+3. **Transitive NuGet package:** prefer updating the direct parent to a release that no longer pulls the vulnerable version; otherwise pin the transitive package centrally with a `PackageVersion` entry in `Directory.Packages.props` at a fixed version.
+4. **npm package:** run `npm audit fix` in the affected root, or update the offending dependency in `package.json`; commit the updated `package-lock.json`.
+5. After any dependency change, regenerate the inventory (`node scripts/generate-third-party-inventory.js`) and review `THIRD-PARTY-NOTICES.md` so license compliance moves with the version change.
+6. Re-run the gates locally and commit the dependency, lockfile, and inventory updates together.
+7. **No fixed release exists:** the gate has no suppression list by design. Either replace or remove the dependency, or make an explicit, reviewed risk-acceptance decision — record the advisory ID, affected component, exploitability assessment, and a re-check date in `TODO.md`, and adjust the gate deliberately in that same change. Never leave the gate red or bypass it silently.
+
+---
+
+## 14. Security Contact
 
 To report a security vulnerability in ETL-SQL, open a confidential issue or contact the project maintainer directly. Do not post vulnerability details in public issues.
 

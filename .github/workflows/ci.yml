@@ -30,6 +30,10 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore ETL-SQL.slnx
 
+      - name: Audit NuGet packages for known vulnerabilities
+        shell: pwsh
+        run: .\scripts\Test-VulnerablePackages.ps1
+
       - name: Verify formatting
         run: dotnet format ETL-SQL.slnx --verify-no-changes --no-restore
 
@@ -99,6 +103,14 @@ jobs:
       - name: Install dependencies
         working-directory: src/etl-sql-vscode
         run: npm ci
+
+      - name: Audit npm packages for known vulnerabilities
+        working-directory: src/etl-sql-vscode
+        run: npm audit
+
+      - name: Audit UI npm packages for known vulnerabilities
+        working-directory: src/etl-sql-vscode/ui
+        run: npm audit
 
       - name: Compile extension
         working-directory: src/etl-sql-vscode
