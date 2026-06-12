@@ -90,6 +90,14 @@ namespace ETL_SQL.Core.Data
         Task DeleteJobAsync(string name);
         Task UpdateJobLastRunAsync(string name, DateTime lastRun, DateTime? nextRun);
 
+        // Execution lease (P1.1). A scheduler instance must claim a job before running it so that
+        // concurrent scheduler processes sharing one store produce exactly one execution per due
+        // occurrence. A lease that is not renewed before it expires may be reclaimed by another
+        // owner (crash recovery — the occurrence reruns, i.e. at-least-once semantics).
+        Task<bool> TryAcquireJobLeaseAsync(string jobName, string owner, TimeSpan duration);
+        Task<bool> TryRenewJobLeaseAsync(string jobName, string owner, TimeSpan duration);
+        Task ReleaseJobLeaseAsync(string jobName, string owner);
+
         // History Management
         Task<long> LogJobStartAsync(string jobName);
         Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null);

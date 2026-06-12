@@ -2,19 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Execution;
+using ETL_SQL.Engine.Services;
+using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
-using Microsoft.Extensions.Configuration;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Orchestrator.Execution;
-using ETL_SQL.Orchestrator.Scheduling;
-using ETL_SQL.Engine.Services;
-using ETL_SQL.Services;
-using ETL_SQL.Core.Execution;
 
 namespace ETL_SQL.Tests.Orchestration
 {
@@ -31,6 +31,9 @@ namespace ETL_SQL.Tests.Orchestration
             mockStore.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.GetActiveJobsAsync()).ReturnsAsync(jobs);
             mockStore.Setup(s => s.LogJobStartAsync(It.IsAny<string>())).ReturnsAsync(1L);
+            mockStore.Setup(s => s.TryAcquireJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
+            mockStore.Setup(s => s.TryRenewJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
+            mockStore.Setup(s => s.ReleaseJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.LogJobEndAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>())).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.UpdateJobLastRunAsync(It.IsAny<string>(), It.IsAny<DateTime>(),
                 It.IsAny<DateTime?>())).Returns(Task.CompletedTask);
@@ -156,6 +159,9 @@ namespace ETL_SQL.Tests.Orchestration
             mockStore.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.GetActiveJobsAsync()).ReturnsAsync(jobs);
             mockStore.Setup(s => s.LogJobStartAsync(It.IsAny<string>())).ReturnsAsync(1L);
+            mockStore.Setup(s => s.TryAcquireJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
+            mockStore.Setup(s => s.TryRenewJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
+            mockStore.Setup(s => s.ReleaseJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.LogJobEndAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>())).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.UpdateJobLastRunAsync(It.IsAny<string>(), It.IsAny<DateTime>(),
                 It.IsAny<DateTime?>())).Returns(Task.CompletedTask);

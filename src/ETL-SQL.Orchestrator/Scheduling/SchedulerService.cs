@@ -5,13 +5,13 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Configuration;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Orchestrator.Execution;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace ETL_SQL.Orchestrator.Scheduling
 {
@@ -31,16 +31,21 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private CancellationTokenSource? _cts;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, CancellationTokenSource> _runningJobs = new();
 
+        /// <summary>Identifies this scheduler instance as a lease owner (P1.1). Unique per process
+        /// start so a restarted instance never silently inherits its previous leases.</summary>
+        private readonly string _leaseOwnerId =
+            $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
+
         public SchedulerService(IServiceProvider serviceProvider, IJobHistoryStore store,
             ILogger<SchedulerService> logger, JobThrottle throttle, IConfiguration configuration,
             ETL_SQL.Core.Execution.ISessionStateManager sessionManager)
         {
             _serviceProvider = serviceProvider;
-            _store           = store;
-            _logger          = logger;
-            _throttle        = throttle;
-            _configuration   = configuration;
-            _sessionManager  = sessionManager;
+            _store = store;
+            _logger = logger;
+            _throttle = throttle;
+            _configuration = configuration;
+            _sessionManager = sessionManager;
         }
 
         /// <summary>Returns a snapshot of current concurrency metrics.</summary>
@@ -54,7 +59,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         public void Start()
         {
             _cts = new CancellationTokenSource();
-            _lastMetricsLog  = DateTime.Now;
+            _lastMetricsLog = DateTime.Now;
             _lastSessionReap = DateTime.Now;
             _runTask = Task.Run(() => RunAsync(_cts.Token));
             _ = _runTask.ContinueWith(t =>
@@ -98,13 +103,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
                     // Resolve intervals from configuration with safe defaults
                     int metricsIntervalSeconds = _configuration.GetValue<int>("Scheduler:MetricsIntervalSeconds", 60);
-                    int sleepIntervalSeconds   = _configuration.GetValue<int>("Scheduler:SleepIntervalSeconds", 30);
+                    int sleepIntervalSeconds = _configuration.GetValue<int>("Scheduler:SleepIntervalSeconds", 30);
 
                     // 8B-1: Periodic metrics emission
                     if (now - _lastMetricsLog >= TimeSpan.FromSeconds(metricsIntervalSeconds))
                     {
                         var metrics = GetMetrics();
-                        _logger.LogInformation("Orchestrator Metrics: ActiveJobs={Active}, QueuedJobs={Queued}, MaxConcurrent={Max}, AvailableSlots={Slots}", 
+                        _logger.LogInformation("Orchestrator Metrics: ActiveJobs={Active}, QueuedJobs={Queued}, MaxConcurrent={Max}, AvailableSlots={Slots}",
                             metrics.ActiveJobs, metrics.QueuedJobs, metrics.MaxJobs, metrics.AvailableSlots);
                         _lastMetricsLog = now;
                     }
@@ -160,6 +165,49 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
         private async Task ExecuteJobAsync(JobDefinition job)
         {
+            // P1.1: claim the per-job execution lease before doing anything observable. This is the
+            // single choke point for both scheduled and manually triggered runs — another scheduler
+            // instance holding the lease means this occurrence is already being executed elsewhere.
+            var leaseDuration = TimeSpan.FromSeconds(
+                Math.Max(30, _configuration.GetValue<int>("Scheduler:JobLeaseSeconds", 600)));
+
+            bool leased;
+            try
+            {
+                leased = await _store.TryAcquireJobLeaseAsync(job.Name, _leaseOwnerId, leaseDuration);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Job {JobName}: could not acquire the execution lease.", job.Name);
+                return;
+            }
+
+            if (!leased)
+            {
+                _logger.LogDebug("Job {JobName} is leased by another scheduler instance — skipping.", job.Name);
+                return;
+            }
+
+            try
+            {
+                await ExecuteLeasedJobAsync(job, leaseDuration);
+            }
+            finally
+            {
+                try
+                {
+                    await _store.ReleaseJobLeaseAsync(job.Name, _leaseOwnerId);
+                }
+                catch (Exception ex)
+                {
+                    // An unreleased lease self-heals at expiry; never let release failure surface.
+                    _logger.LogWarning(ex, "Job {JobName}: failed to release the execution lease.", job.Name);
+                }
+            }
+        }
+
+        private async Task ExecuteLeasedJobAsync(JobDefinition job, TimeSpan leaseDuration)
+        {
             _logger.LogInformation("Job runner: {JobName} starting execution cycle (MaxRetries={Max}).", job.Name, job.MaxRetries);
 
             var currentHash = "sha256:" + Convert.ToHexString(
@@ -193,6 +241,10 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
             using var cycleCts = CancellationTokenSource.CreateLinkedTokenSource(_cts?.Token ?? default);
             long lastHistoryId = 0;
+
+            // Renew the lease while the job runs (retries with backoff can far outlive the lease
+            // duration). Losing the lease cancels the run: another instance may now own the job.
+            var leaseHeartbeat = StartLeaseHeartbeat(job.Name, leaseDuration, cycleCts);
 
             try
             {
@@ -263,9 +315,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         int backoffSeconds = (int)Math.Pow(2, attempt - 1) * job.RetryDelaySeconds;
                         backoffSeconds = Math.Min(backoffSeconds, 3600); // Cap at 1 hour
 
-                        _logger.LogInformation("Job {JobName} failed. Retrying in {Delay}s (Backoff). Session: {SessionId}", 
+                        _logger.LogInformation("Job {JobName} failed. Retrying in {Delay}s (Backoff). Session: {SessionId}",
                             job.Name, backoffSeconds, sessionId);
-                        
+
                         try
                         {
                             await Task.Delay(TimeSpan.FromSeconds(backoffSeconds), cycleCts.Token);
@@ -280,6 +332,10 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 {
                     _runningJobs.TryRemove(lastHistoryId, out _);
                 }
+
+                if (!cycleCts.IsCancellationRequested)
+                    cycleCts.Cancel();
+                await leaseHeartbeat;
             }
 
             var nextRun = CalculateNextRun(job);
@@ -293,6 +349,43 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
         }
 
+        private Task StartLeaseHeartbeat(string jobName, TimeSpan leaseDuration, CancellationTokenSource cycleCts)
+        {
+            var interval = TimeSpan.FromSeconds(Math.Max(5, leaseDuration.TotalSeconds / 3));
+            return Task.Run(async () =>
+            {
+                while (!cycleCts.IsCancellationRequested)
+                {
+                    try
+                    {
+                        await Task.Delay(interval, cycleCts.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        if (!await _store.TryRenewJobLeaseAsync(jobName, _leaseOwnerId, leaseDuration))
+                        {
+                            _logger.LogWarning(
+                                "Job {JobName}: execution lease was lost (expired and reclaimed) — cancelling this run to avoid a duplicate execution.",
+                                jobName);
+                            cycleCts.Cancel();
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // A transient store failure must not kill a healthy run; at worst the lease
+                        // lapses, which degrades to the pre-lease at-least-once behavior.
+                        _logger.LogWarning(ex, "Job {JobName}: lease renewal failed transiently.", jobName);
+                    }
+                }
+            }, CancellationToken.None);
+        }
+
         private DateTime CalculateNextRun(JobDefinition job)
         {
             var now = DateTime.Now;
@@ -304,11 +397,11 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 case "SECOND": next = now.AddSeconds(interval); break;
                 case "MINUTE": next = now.AddMinutes(interval); break;
-                case "HOUR":   next = now.AddHours(interval); break;
-                case "DAY":    next = now.AddDays(interval); break;
-                case "WEEK":   next = now.AddDays(interval * 7); break;
-                case "MONTH":  next = now.AddMonths(interval); break;
-                default:       next = now.AddHours(1); break;
+                case "HOUR": next = now.AddHours(interval); break;
+                case "DAY": next = now.AddDays(interval); break;
+                case "WEEK": next = now.AddDays(interval * 7); break;
+                case "MONTH": next = now.AddMonths(interval); break;
+                default: next = now.AddHours(1); break;
             }
 
             if (!string.IsNullOrEmpty(job.AtTime) && TimeSpan.TryParse(job.AtTime, out var atTime))

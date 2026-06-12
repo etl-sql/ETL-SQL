@@ -4,12 +4,12 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
 using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
+using Microsoft.Data.Sqlite;
 
 namespace ETL_SQL.Orchestrator.Storage
 {
@@ -57,7 +57,7 @@ namespace ETL_SQL.Orchestrator.Storage
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
-            var createJobsTable = @"
+                var createJobsTable = @"
                 CREATE TABLE IF NOT EXISTS Jobs (
                     Name TEXT PRIMARY KEY,
                     Script TEXT NOT NULL,
@@ -71,7 +71,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     RetryDelaySeconds INTEGER NOT NULL DEFAULT 30
                 );";
 
-            var createHistoryTable = @"
+                var createHistoryTable = @"
                 CREATE TABLE IF NOT EXISTS JobHistory (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     JobName TEXT NOT NULL,
@@ -82,7 +82,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     RowsProcessed INTEGER DEFAULT 0
                 );";
 
-            var createBundleTables = @"
+                var createBundleTables = @"
                 CREATE TABLE IF NOT EXISTS BundleVersions (
                     BundleName TEXT NOT NULL,
                     Version INTEGER NOT NULL,
@@ -117,7 +117,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     FOREIGN KEY (BundleName, Version) REFERENCES BundleVersions(BundleName, Version)
                 );";
 
-            var createLineageHistoryTable = @"
+                var createLineageHistoryTable = @"
                 CREATE TABLE IF NOT EXISTS LineageHistory (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     RunAt TEXT NOT NULL,
@@ -139,16 +139,16 @@ namespace ETL_SQL.Orchestrator.Storage
                 CREATE INDEX IF NOT EXISTS idx_lh_target ON LineageHistory(TargetTable COLLATE NOCASE);
                 CREATE INDEX IF NOT EXISTS idx_lh_runAt ON LineageHistory(RunAt);";
 
-            using var command = connection.CreateCommand();
-            command.CommandText = createJobsTable + createHistoryTable + createBundleTables + createLineageHistoryTable;
-            await command.ExecuteNonQueryAsync();
+                using var command = connection.CreateCommand();
+                command.CommandText = createJobsTable + createHistoryTable + createBundleTables + createLineageHistoryTable;
+                await command.ExecuteNonQueryAsync();
 
-            // 8B-2: Schema migration — add resource tracking columns if missing
-            await EnsureHistoryColumnsExist(connection);
-            await EnsureJobColumnsExist(connection);
-            await EnsureLineageHistoryColumnsExist(connection);
+                // 8B-2: Schema migration — add resource tracking columns if missing
+                await EnsureHistoryColumnsExist(connection);
+                await EnsureJobColumnsExist(connection);
+                await EnsureLineageHistoryColumnsExist(connection);
 
-            _initialized = true;
+                _initialized = true;
             }
             finally
             {
@@ -191,6 +191,20 @@ namespace ETL_SQL.Orchestrator.Storage
             {
                 using var cmd = connection.CreateCommand();
                 cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN HashPolicy TEXT NOT NULL DEFAULT 'Warn';";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            if (!columns.Contains("LeaseOwner"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN LeaseOwner TEXT;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            if (!columns.Contains("LeaseExpiresAt"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN LeaseExpiresAt TEXT;";
                 await cmd.ExecuteNonQueryAsync();
             }
         }
@@ -254,11 +268,11 @@ namespace ETL_SQL.Orchestrator.Storage
 
             // SourceColumns predates this migration on new installs but may be
             // missing on databases created before it was added to the schema.
-            await AddColumn("SourceColumns",            "SourceColumns TEXT NOT NULL DEFAULT '[]'");
-            await AddColumn("TransformationKind",       "TransformationKind TEXT");
+            await AddColumn("SourceColumns", "SourceColumns TEXT NOT NULL DEFAULT '[]'");
+            await AddColumn("TransformationKind", "TransformationKind TEXT");
             await AddColumn("TransformationExpression", "TransformationExpression TEXT");
-            await AddColumn("FunctionsApplied",         "FunctionsApplied TEXT NOT NULL DEFAULT '[]'");
-            await AddColumn("DerivedFromDescriptions",  "DerivedFromDescriptions TEXT");
+            await AddColumn("FunctionsApplied", "FunctionsApplied TEXT NOT NULL DEFAULT '[]'");
+            await AddColumn("DerivedFromDescriptions", "DerivedFromDescriptions TEXT");
         }
 
         public async Task SaveJobAsync(JobDefinition job)
@@ -267,9 +281,23 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 
+            // Upsert (not INSERT OR REPLACE): REPLACE deletes and reinserts the row, which would
+            // silently clear an active execution lease whenever a job definition is re-saved.
             var sql = @"
-                INSERT OR REPLACE INTO Jobs (Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds, ScriptHash, HashPolicy)
-                VALUES ($name, $script, $interval, $unit, $atTime, $lastRun, $nextRun, $isEnabled, $maxRetries, $retryDelay, $scriptHash, $hashPolicy);";
+                INSERT INTO Jobs (Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds, ScriptHash, HashPolicy)
+                VALUES ($name, $script, $interval, $unit, $atTime, $lastRun, $nextRun, $isEnabled, $maxRetries, $retryDelay, $scriptHash, $hashPolicy)
+                ON CONFLICT(Name) DO UPDATE SET
+                    Script            = excluded.Script,
+                    Interval          = excluded.Interval,
+                    Unit              = excluded.Unit,
+                    AtTime            = excluded.AtTime,
+                    LastRun           = excluded.LastRun,
+                    NextRun           = excluded.NextRun,
+                    IsEnabled         = excluded.IsEnabled,
+                    MaxRetries        = excluded.MaxRetries,
+                    RetryDelaySeconds = excluded.RetryDelaySeconds,
+                    ScriptHash        = excluded.ScriptHash,
+                    HashPolicy        = excluded.HashPolicy;";
 
             using var command = connection.CreateCommand();
             command.CommandText = sql;
@@ -285,6 +313,66 @@ namespace ETL_SQL.Orchestrator.Storage
             command.Parameters.AddWithValue("$retryDelay", job.RetryDelaySeconds);
             command.Parameters.AddWithValue("$scriptHash", (object?)job.ScriptHash ?? DBNull.Value);
             command.Parameters.AddWithValue("$hashPolicy", job.HashPolicy);
+
+            await command.ExecuteNonQueryAsync();
+        }
+
+        // ── Execution lease (P1.1) ────────────────────────────────────────────────
+        // Lease times are UTC ISO-8601 ("O") strings: they compare correctly both lexically
+        // and via SQLite's date functions, and stay unambiguous across hosts in different
+        // time zones. SQLite's single-writer model makes each UPDATE atomic, which is the
+        // entire claim mechanism — but it also means the lease only coordinates processes
+        // that share this database file (see the P3.1 topology decision).
+
+        public async Task<bool> TryAcquireJobLeaseAsync(string jobName, string owner, TimeSpan duration)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            var now = DateTime.UtcNow;
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                UPDATE Jobs SET LeaseOwner = $owner, LeaseExpiresAt = $expires
+                WHERE Name = $name
+                  AND (LeaseOwner IS NULL OR LeaseExpiresAt IS NULL OR LeaseExpiresAt <= $now);";
+            command.Parameters.AddWithValue("$owner", owner);
+            command.Parameters.AddWithValue("$expires", now.Add(duration).ToString("O"));
+            command.Parameters.AddWithValue("$name", jobName);
+            command.Parameters.AddWithValue("$now", now.ToString("O"));
+
+            return await command.ExecuteNonQueryAsync() == 1;
+        }
+
+        public async Task<bool> TryRenewJobLeaseAsync(string jobName, string owner, TimeSpan duration)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                UPDATE Jobs SET LeaseExpiresAt = $expires
+                WHERE Name = $name AND LeaseOwner = $owner;";
+            command.Parameters.AddWithValue("$expires", DateTime.UtcNow.Add(duration).ToString("O"));
+            command.Parameters.AddWithValue("$name", jobName);
+            command.Parameters.AddWithValue("$owner", owner);
+
+            return await command.ExecuteNonQueryAsync() == 1;
+        }
+
+        public async Task ReleaseJobLeaseAsync(string jobName, string owner)
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                UPDATE Jobs SET LeaseOwner = NULL, LeaseExpiresAt = NULL
+                WHERE Name = $name AND LeaseOwner = $owner;";
+            command.Parameters.AddWithValue("$name", jobName);
+            command.Parameters.AddWithValue("$owner", owner);
 
             await command.ExecuteNonQueryAsync();
         }
@@ -796,20 +884,20 @@ namespace ETL_SQL.Orchestrator.Storage
                         VALUES
                             ($runAt, $job, $script, $target, $col, $sources, $srcCols, $op, $tags, $file, $line,
                              $tkind, $texpr, $fns, $derived);";
-                    cmd.Parameters.AddWithValue("$runAt",   runAtStr);
-                    cmd.Parameters.AddWithValue("$job",     (object?)jobName    ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("$script",  (object?)scriptPath ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("$target",  entry.TargetTable);
-                    cmd.Parameters.AddWithValue("$col",     (object?)entry.TargetColumn ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$runAt", runAtStr);
+                    cmd.Parameters.AddWithValue("$job", (object?)jobName ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$script", (object?)scriptPath ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$target", entry.TargetTable);
+                    cmd.Parameters.AddWithValue("$col", (object?)entry.TargetColumn ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("$sources", JsonSerializer.Serialize(entry.SourceTables));
                     cmd.Parameters.AddWithValue("$srcCols", JsonSerializer.Serialize(entry.SourceColumns));
-                    cmd.Parameters.AddWithValue("$op",      entry.Operation);
-                    cmd.Parameters.AddWithValue("$tags",    JsonSerializer.Serialize(entry.Metadata));
-                    cmd.Parameters.AddWithValue("$file",    (object?)entry.SourceFile ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("$line",    entry.Line);
-                    cmd.Parameters.AddWithValue("$tkind",   entry.TransformationKind == ETL_SQL.Core.TransformationKind.Unknown ? (object)DBNull.Value : entry.TransformationKind.ToString());
-                    cmd.Parameters.AddWithValue("$texpr",   (object?)entry.TransformationExpression ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("$fns",     JsonSerializer.Serialize(entry.FunctionsApplied ?? (IReadOnlyList<string>)System.Array.Empty<string>()));
+                    cmd.Parameters.AddWithValue("$op", entry.Operation);
+                    cmd.Parameters.AddWithValue("$tags", JsonSerializer.Serialize(entry.Metadata));
+                    cmd.Parameters.AddWithValue("$file", (object?)entry.SourceFile ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$line", entry.Line);
+                    cmd.Parameters.AddWithValue("$tkind", entry.TransformationKind == ETL_SQL.Core.TransformationKind.Unknown ? (object)DBNull.Value : entry.TransformationKind.ToString());
+                    cmd.Parameters.AddWithValue("$texpr", (object?)entry.TransformationExpression ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$fns", JsonSerializer.Serialize(entry.FunctionsApplied ?? (IReadOnlyList<string>)System.Array.Empty<string>()));
                     cmd.Parameters.AddWithValue("$derived", (object?)entry.DerivedFromDescriptions ?? DBNull.Value);
                     await cmd.ExecuteNonQueryAsync();
                 }
@@ -983,8 +1071,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     sourceTables,
                     reader.GetString(7),
                     tags,
-                    reader.IsDBNull(9)  ? null : reader.GetString(9),
-                    reader.IsDBNull(10) ? 0    : reader.GetInt32(10),
+                    reader.IsDBNull(9) ? null : reader.GetString(9),
+                    reader.IsDBNull(10) ? 0 : reader.GetInt32(10),
                     sourceColumns,
                     reader.IsDBNull(12) ? null : reader.GetString(12),
                     reader.IsDBNull(13) ? null : reader.GetString(13),

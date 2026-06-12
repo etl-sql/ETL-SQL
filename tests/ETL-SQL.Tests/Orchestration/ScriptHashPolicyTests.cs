@@ -1,5 +1,3 @@
-using Xunit;
-using Moq;
 using System;
 using System.Security.Cryptography;
 using System.Text;
@@ -14,6 +12,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Moq;
+using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
 {
@@ -28,14 +28,17 @@ namespace ETL_SQL.Tests.Orchestration
             Build()
         {
             var mockExecutor = new Mock<IScriptExecutor>();
-            var mockStore    = new Mock<IJobHistoryStore>();
-            var mockConfig   = new Mock<IConfiguration>();
+            var mockStore = new Mock<IJobHistoryStore>();
+            var mockConfig = new Mock<IConfiguration>();
             var mockSessions = new Mock<ISessionStateManager>();
 
             var throttleOptions = Options.Create(new JobThrottleOptions { MaxConcurrentJobs = 1 });
             var throttle = new JobThrottle(throttleOptions, new Mock<ILogger<JobThrottle>>().Object);
 
             mockStore.Setup(s => s.LogJobStartAsync(It.IsAny<string>())).ReturnsAsync(1L);
+            mockStore.Setup(s => s.TryAcquireJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
+            mockStore.Setup(s => s.TryRenewJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
+            mockStore.Setup(s => s.ReleaseJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>())).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.LogJobEndAsync(
                 It.IsAny<long>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(),
@@ -73,7 +76,7 @@ namespace ETL_SQL.Tests.Orchestration
         public async Task HashMatch_JobRuns_HistoryRecordsHashMatchedTrue()
         {
             var hash = ComputeHash(Script);
-            var job  = new JobDefinition("HashMatchJob", Script, 1, "HOUR", null, null, null,
+            var job = new JobDefinition("HashMatchJob", Script, 1, "HOUR", null, null, null,
                 ScriptHash: hash, HashPolicy: "Warn");
             var (service, store, executor) = Build();
 

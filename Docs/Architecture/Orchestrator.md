@@ -185,6 +185,12 @@ SchedulerService.Stop()
 
 ```
 ExecuteJobAsync(job):
+  0. store.TryAcquireJobLeaseAsync(job.Name, ownerId, leaseDuration)
+       → single atomic UPDATE: claim succeeds only if the lease is free or expired
+       → not acquired = another scheduler instance owns this occurrence → skip
+       → a heartbeat task renews the lease at leaseDuration/3 for the whole run;
+         losing the lease cancels the run; the lease is released after step 7
+
   1. store.LogJobStartAsync(job.Name)
        → INSERT INTO JobHistory (JobName, StartTime, Status='RUNNING')
        → returns historyId (autoincrement primary key)
@@ -222,6 +228,10 @@ ExecuteJobAsync(job):
 | *(unrecognized)* | `now + 1 hour` (safe fallback) |
 
 When `AtTime` is set (e.g., `'22:00'`) and `Unit = DAY`, the next run is calculated as midnight of the next day + the AtTime offset, ensuring daily jobs always fire at the correct wall-clock time even if the previous run ended late.
+
+### 3.4 Execution lease (duplicate-run prevention)
+
+Every run — scheduled or manually triggered — first claims a per-job lease stored in the `Jobs` row (`LeaseOwner`, `LeaseExpiresAt`, UTC ISO-8601). The claim is one atomic `UPDATE ... WHERE` lease-free-or-expired, riding SQLite's single-writer guarantee, so **two scheduler processes sharing one job DB produce exactly one execution per due occurrence**. The owner id is `machine:pid:guid`, unique per process start. A heartbeat renews the lease at one-third of `Scheduler:JobLeaseSeconds` (default 600s; floor 30s); if renewal fails because the lease expired and was reclaimed, the run cancels itself rather than risk a duplicate. A lease abandoned by a crash self-heals at expiry and the occurrence reruns — at-least-once semantics. Note the lease coordinates only processes sharing the same SQLite file; it is not a cross-host distributed lock (see the P3.1 topology decision in TODO.md).
 
 ### 3.4 Concurrency metrics
 
@@ -349,7 +359,9 @@ CREATE TABLE IF NOT EXISTS Jobs (
     MaxRetries         INTEGER NOT NULL DEFAULT 0,
     RetryDelaySeconds  INTEGER NOT NULL DEFAULT 30,
     ScriptHash         TEXT,                -- 'sha256:<hex>' of Script bytes at CREATE JOB time
-    HashPolicy         TEXT NOT NULL DEFAULT 'Warn'  -- 'Warn'|'Block'
+    HashPolicy         TEXT NOT NULL DEFAULT 'Warn',  -- 'Warn'|'Block'
+    LeaseOwner         TEXT,                -- execution lease holder ('machine:pid:guid') or NULL
+    LeaseExpiresAt     TEXT                 -- UTC ISO-8601 lease expiry; reclaimable when past
 );
 
 CREATE TABLE IF NOT EXISTS JobHistory (
@@ -374,9 +386,14 @@ public interface IJobHistoryStore
 {
     Task InitializeAsync();
     Task SaveJobAsync(JobDefinition job);
+    Task<JobDefinition?> GetJobAsync(string name);
     Task<IEnumerable<JobDefinition>> GetActiveJobsAsync();
+    Task<IEnumerable<JobDefinition>> GetAllJobsAsync();
     Task DeleteJobAsync(string name);
     Task UpdateJobLastRunAsync(string name, DateTime lastRun, DateTime? nextRun);
+    Task<bool> TryAcquireJobLeaseAsync(string jobName, string owner, TimeSpan duration);
+    Task<bool> TryRenewJobLeaseAsync(string jobName, string owner, TimeSpan duration);
+    Task ReleaseJobLeaseAsync(string jobName, string owner);
     Task<long> LogJobStartAsync(string jobName);
     Task LogJobEndAsync(long entryId, string status, string? errorMessage = null,
         long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0,
