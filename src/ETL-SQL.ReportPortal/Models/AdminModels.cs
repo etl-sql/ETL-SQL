@@ -66,7 +66,8 @@ public record AuditLogDto(
     string? ResourceType,
     string? ResourceId,
     DateTime Timestamp,
-    string? Detail);
+    string? Detail,
+    string? CorrelationId = null);
 
 public record PagedResult<T>(IList<T> Items, int Total, int Page, int PageSize);
 

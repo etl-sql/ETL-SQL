@@ -1166,7 +1166,13 @@ Every significant action is written to the audit log. Open **Admin → Audit Log
 
 ### 10.2 Exporting the Audit Log
 
-Click **Export CSV** to download up to 10,000 most-recent entries as a UTF-8 CSV file. You can also filter by action type and user before exporting.
+Click **Export CSV** to download up to 10,000 most-recent entries as a UTF-8 CSV file. You can also filter by action type and user before exporting. The export includes each row's **correlation id** — the HTTP request trace identifier or the background operation id (e.g. `delivery-<id>` for subscription deliveries) — so every event can be tied back to the operation that produced it.
+
+### 10.3 Audit Guarantees, Retention, and the Tamper-Evidence Boundary
+
+- **Mutations and their audit rows commit together.** Security-sensitive changes (user role/active/password/token changes, user deletion and ownership transfer, group membership, folder and dataset ACLs, dataset metadata/move/delete, SMTP definitions, share-link/embed-token revocation, subscription delivery outcomes) write their audit row in the same database transaction as the change itself: the operation cannot succeed without its durable audit event, and a rejected or conflicted operation leaves no audit row behind. Informational events (views, exports, logins, denials) remain independent best-effort records.
+- **Retention is opt-in.** By default every audit row is kept forever. Set `Portal:Audit:RetentionDays` to enable a daily sweep that deletes rows older than the window (`Portal:Audit:PurgeIntervalSeconds` tunes the cadence). Export or forward rows you must keep **before** enabling retention.
+- **The audit table is not tamper-proof — by design.** It lives in the writable portal SQLite database, so an attacker (or administrator) with file access can alter it. The supported enterprise posture is to **export or forward audit data to external append-only storage on a schedule** (the CSV endpoint, or log forwarding per the security guide) and treat the in-portal table as the operational view. Tamper-evident hash chaining inside the portal database is a deliberate non-goal for this release (see `ROADMAP.md`).
 
 ---
 

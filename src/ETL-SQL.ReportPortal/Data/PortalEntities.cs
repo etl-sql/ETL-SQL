@@ -290,6 +290,10 @@ public class AuditLog
     public string? ResourceId { get; set; }
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     public string? Detail { get; set; }
+
+    /// <summary>Request trace identifier (HTTP) or operation id (background work) so every
+    /// audit row can be tied back to the operation that produced it.</summary>
+    public string? CorrelationId { get; set; }
 }
 
 // ── Dataset Refresh Jobs ──────────────────────────────────────────────────────

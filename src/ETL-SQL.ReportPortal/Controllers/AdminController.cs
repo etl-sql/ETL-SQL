@@ -235,6 +235,8 @@ public class AdminController(
             }
         }
 
+        // Staged before the final save so the mutation and its audit row share the transaction.
+        audit.Stage(CurrentUserId, "UPDATE_USER", "User", id.ToString());
         var result = await userManager.UpdateAsync(user);
         if (!result.Succeeded)
         {
@@ -253,7 +255,6 @@ public class AdminController(
             if (roleChanged || req.IsActive == false)
                 await securitySessions.RevokeAnonymousCapabilitiesAsync([id]);
         }
-        await audit.LogAsync(CurrentUserId, "UPDATE_USER", "User", id.ToString());
         OptimisticConcurrency.SetETag(Response, user.Version);
         return Ok(await ToUserDtoAsync(user));
     }
@@ -320,6 +321,11 @@ public class AdminController(
         if (user.Subscriptions.Any() && !cascade)
             return Conflict(new { error = "User has active subscriptions. Use ?cascade=true." });
 
+        // Everything below — ownership transfer, token revocation, membership removal, the
+        // Identity delete, and the staged audit rows — commits or fails as one transaction, so
+        // the delete cannot succeed without its durable audit events (P1.6).
+        await using var transaction = await db.Database.BeginTransactionAsync();
+
         // Durable shared resources (folders, reports, datasets) must be explicitly reassigned
         // before their owner disappears — otherwise ownership dangles and PRIVATE datasets
         // become reachable only by administrators.
@@ -351,18 +357,41 @@ public class AdminController(
             await db.Datasets.Where(d => d.CreatedBy == id).ExecuteUpdateAsync(s => s
                 .SetProperty(d => d.CreatedBy, (int?)target.Id)
                 .SetProperty(d => d.Version, d => d.Version + 1));
-            await audit.LogAsync(CurrentUserId, "TRANSFER_OWNERSHIP", "User", id.ToString(),
+            audit.Stage(CurrentUserId, "TRANSFER_OWNERSHIP", "User", id.ToString(),
                 $"{ownedFolders} folder(s), {ownedReports} report(s), {ownedDatasets} dataset(s) → {target.UserName}");
         }
 
         // Personal artifacts (subscriptions, alerts, saved views, favorites, share/embed
-        // capabilities, refresh tokens) die with the user. Subscription rows cascade with the
-        // user row; remove their Orchestrator jobs and generated trigger scripts now so nothing
-        // keeps firing until the next startup reconciliation (which remains the recovery path).
+        // capabilities, refresh tokens) die with the user. Their Orchestrator jobs and generated
+        // trigger scripts are cleaned up after the commit (below); startup reconciliation
+        // remains the recovery path if that cleanup is interrupted.
         var subscriptions = await db.Subscriptions
             .Include(s => s.Report)
             .Where(s => s.UserId == id)
+            .Select(s => new { s.Id, ReportName = (string?)s.Report!.Name, s.ScriptPath })
             .ToListAsync();
+
+        // Revoke all tokens and remove group memberships
+        var tokens = await db.RefreshTokens.Where(t => t.UserId == id && t.RevokedAt == null).ToListAsync();
+        foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
+
+        var memberships = await db.UserGroups.Where(ug => ug.UserId == id).ToListAsync();
+        db.UserGroups.RemoveRange(memberships);
+
+        audit.Stage(CurrentUserId, "DELETE_USER", "User", id.ToString(), user.UserName);
+        await db.SaveChangesAsync();
+        var deleteResult = await userManager.DeleteAsync(user);
+        if (!deleteResult.Succeeded)
+        {
+            await transaction.RollbackAsync();
+            if (deleteResult.Errors.Any(error => error.Code == "ConcurrencyFailure"))
+                return Conflict(new { error = "The user changed after it was read." });
+            return BadRequest(new { errors = deleteResult.Errors.Select(error => error.Description) });
+        }
+        await transaction.CommitAsync();
+
+        // Post-commit cleanup of external artifacts (other SQLite DB + files): never performed
+        // for a rolled-back delete, and healed by startup reconciliation if interrupted.
         if (subscriptions.Count > 0)
         {
             var orchDbPath = orchestratorDb.Resolve();
@@ -376,7 +405,7 @@ public class AdminController(
             foreach (var sub in subscriptions)
             {
                 if (jobStore is not null)
-                    await jobStore.DeleteJobAsync(SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name));
+                    await jobStore.DeleteJobAsync(SubscriptionOrchestration.JobName(sub.Id, sub.ReportName));
                 if (!string.IsNullOrWhiteSpace(sub.ScriptPath)
                     && PortalPathGuard.TryResolveScript(config, sub.ScriptPath, out var script)
                     && System.IO.File.Exists(script))
@@ -384,22 +413,6 @@ public class AdminController(
             }
         }
 
-        // Revoke all tokens and remove group memberships
-        var tokens = await db.RefreshTokens.Where(t => t.UserId == id && t.RevokedAt == null).ToListAsync();
-        foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
-
-        var memberships = await db.UserGroups.Where(ug => ug.UserId == id).ToListAsync();
-        db.UserGroups.RemoveRange(memberships);
-
-        await db.SaveChangesAsync();
-        var deleteResult = await userManager.DeleteAsync(user);
-        if (!deleteResult.Succeeded)
-        {
-            if (deleteResult.Errors.Any(error => error.Code == "ConcurrencyFailure"))
-                return Conflict(new { error = "The user changed after it was read." });
-            return BadRequest(new { errors = deleteResult.Errors.Select(error => error.Description) });
-        }
-        await audit.LogAsync(CurrentUserId, "DELETE_USER", "User", id.ToString(), user.UserName);
         return NoContent();
     }
 
@@ -430,9 +443,10 @@ public class AdminController(
         }
 
         user.MustChangePassword = true;
+        // Staged so the flag write and the audit row share the Identity update's commit.
+        audit.Stage(CurrentUserId, "RESET_PASSWORD", "User", id.ToString());
         await userManager.UpdateAsync(user);
         await securitySessions.InvalidateUserAsync(id);
-        await audit.LogAsync(CurrentUserId, "RESET_PASSWORD", "User", id.ToString());
         OptimisticConcurrency.SetETag(Response, user.Version);
         return NoContent();
     }
@@ -447,6 +461,7 @@ public class AdminController(
             return OptimisticConcurrency.MissingVersion(this);
         if (!OptimisticConcurrency.Prepare(db, user, expectedVersion.Value))
             return OptimisticConcurrency.Conflict(this, await ToUserDtoAsync(user));
+        audit.Stage(CurrentUserId, "REVOKE_TOKENS", "User", id.ToString());
         try { await db.SaveChangesAsync(); }
         catch (DbUpdateConcurrencyException)
         {
@@ -455,7 +470,6 @@ public class AdminController(
                 this, await ToUserDtoAsync((await db.Users.FindAsync(id))!));
         }
         await securitySessions.InvalidateUserAsync(id);
-        await audit.LogAsync(CurrentUserId, "REVOKE_TOKENS", "User", id.ToString());
         OptimisticConcurrency.SetETag(Response, user.Version);
         return NoContent();
     }
@@ -658,6 +672,7 @@ public class AdminController(
         if (req.AdGroup is not null)
             group.AdGroup = req.AdGroup;
 
+        audit.Stage(CurrentUserId, "UPDATE_GROUP", "Group", id.ToString());
         try
         {
             await db.SaveChangesAsync();
@@ -668,7 +683,6 @@ public class AdminController(
             return OptimisticConcurrency.Conflict(
                 this, ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
         }
-        await audit.LogAsync(CurrentUserId, "UPDATE_GROUP", "Group", id.ToString());
         OptimisticConcurrency.SetETag(Response, group.Version);
         return Ok(ToGroupDto(group, await db.UserGroups.CountAsync(value => value.GroupId == id)));
     }
@@ -695,9 +709,9 @@ public class AdminController(
         db.UserGroups.RemoveRange(group.UserGroups);
         db.FolderAcls.RemoveRange(group.FolderAcls);
         db.Groups.Remove(group);
+        audit.Stage(CurrentUserId, "DELETE_GROUP", "Group", id.ToString(), group.Name);
         await db.SaveChangesAsync();
         await securitySessions.InvalidateUsersAsync(affectedUserIds);
-        await audit.LogAsync(CurrentUserId, "DELETE_GROUP", "Group", id.ToString(), group.Name);
         return NoContent();
     }
 
@@ -823,6 +837,7 @@ public class AdminController(
             return Conflict(new { error = "User is already a member" });
 
         db.UserGroups.Add(new UserGroup { UserId = user.Id, GroupId = id });
+        audit.Stage(CurrentUserId, "ADD_USER_TO_GROUP", "Group", id.ToString(), user.UserName);
         try { await db.SaveChangesAsync(); }
         catch (DbUpdateConcurrencyException)
         {
@@ -832,7 +847,6 @@ public class AdminController(
                     await db.UserGroups.CountAsync(value => value.GroupId == id)));
         }
         await securitySessions.InvalidateUserAsync(user.Id);
-        await audit.LogAsync(CurrentUserId, "ADD_USER_TO_GROUP", "Group", id.ToString(), user.UserName);
         OptimisticConcurrency.SetETag(Response, group.Version);
         return Ok(new { group.Version });
     }
@@ -859,6 +873,8 @@ public class AdminController(
             .Select(u => u.Id)
             .ToListAsync();
         db.UserGroups.AddRange(validIds.Select(userId => new UserGroup { GroupId = id, UserId = userId }));
+        audit.Stage(CurrentUserId, "BULK_ADD_USERS_TO_GROUP", "Group", id.ToString(),
+            $"{validIds.Count} users added");
         try { await db.SaveChangesAsync(); }
         catch (DbUpdateConcurrencyException)
         {
@@ -868,8 +884,6 @@ public class AdminController(
                     await db.UserGroups.CountAsync(value => value.GroupId == id)));
         }
         await securitySessions.InvalidateUsersAsync(validIds);
-        await audit.LogAsync(CurrentUserId, "BULK_ADD_USERS_TO_GROUP", "Group", id.ToString(),
-            $"{validIds.Count} users added");
         OptimisticConcurrency.SetETag(Response, group.Version);
         return Ok(new { Added = validIds.Count, group.Version });
     }
@@ -891,6 +905,8 @@ public class AdminController(
             .Where(ug => ug.GroupId == id && ids.Contains(ug.UserId))
             .ToListAsync();
         db.UserGroups.RemoveRange(memberships);
+        audit.Stage(CurrentUserId, "BULK_REMOVE_USERS_FROM_GROUP", "Group", id.ToString(),
+            $"{memberships.Count} users removed");
         try { await db.SaveChangesAsync(); }
         catch (DbUpdateConcurrencyException)
         {
@@ -900,8 +916,6 @@ public class AdminController(
                     await db.UserGroups.CountAsync(value => value.GroupId == id)));
         }
         await securitySessions.InvalidateUsersAsync(memberships.Select(membership => membership.UserId));
-        await audit.LogAsync(CurrentUserId, "BULK_REMOVE_USERS_FROM_GROUP", "Group", id.ToString(),
-            $"{memberships.Count} users removed");
         OptimisticConcurrency.SetETag(Response, group.Version);
         return Ok(new { Removed = memberships.Count, group.Version });
     }
@@ -920,6 +934,7 @@ public class AdminController(
         if (ug is null) return NotFound();
 
         db.UserGroups.Remove(ug);
+        audit.Stage(CurrentUserId, "REMOVE_USER_FROM_GROUP", "Group", id.ToString());
         try { await db.SaveChangesAsync(); }
         catch (DbUpdateConcurrencyException)
         {
@@ -929,7 +944,6 @@ public class AdminController(
                     await db.UserGroups.CountAsync(value => value.GroupId == id)));
         }
         await securitySessions.InvalidateUserAsync(userId);
-        await audit.LogAsync(CurrentUserId, "REMOVE_USER_FROM_GROUP", "Group", id.ToString());
         OptimisticConcurrency.SetETag(Response, group.Version);
         return Ok(new { group.Version });
     }
@@ -1154,7 +1168,7 @@ public class AdminController(
                   a => a.UserId,
                   u => (int?)u.Id,
                   (a, u) => new AuditLogDto(a.Id, a.UserId, u != null ? u.UserName! : null,
-                      a.Action, a.ResourceType, a.ResourceId, a.Timestamp, a.Detail))
+                      a.Action, a.ResourceType, a.ResourceId, a.Timestamp, a.Detail, a.CorrelationId))
 #pragma warning restore CS8602
             .ToListAsync();
 
@@ -1186,7 +1200,7 @@ public class AdminController(
             .ToListAsync();
 
         var sb = new StringBuilder();
-        sb.AppendLine("Id,Timestamp,UserId,Username,Action,ResourceType,ResourceId,Detail");
+        sb.AppendLine("Id,Timestamp,UserId,Username,Action,ResourceType,ResourceId,Detail,CorrelationId");
         foreach (var row in items)
         {
             sb.AppendLine(string.Join(",",
@@ -1197,7 +1211,8 @@ public class AdminController(
                 CsvField(row.a.Action),
                 CsvField(row.a.ResourceType),
                 CsvField(row.a.ResourceId),
-                CsvField(row.a.Detail)));
+                CsvField(row.a.Detail),
+                CsvField(row.a.CorrelationId)));
         }
 
         var filename = $"audit_log_{DateTime.UtcNow:yyyyMMdd_HHmm}.csv";

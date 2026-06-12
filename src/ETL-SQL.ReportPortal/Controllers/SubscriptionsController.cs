@@ -354,8 +354,8 @@ public class SubscriptionsController(
             System.IO.File.Delete(resolvedScriptPath);
 
         db.Subscriptions.Remove(sub);
+        audit.Stage(CurrentUserId, "DELETE_SUBSCRIPTION", "Subscription", id.ToString());
         await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "DELETE_SUBSCRIPTION", "Subscription", id.ToString());
         return NoContent();
     }
 
@@ -435,6 +435,10 @@ public class SubscriptionsController(
         if (req.FromAddress is not null) conn.FromAddress = req.FromAddress;
         if (req.UseSsl.HasValue) conn.UseSsl = req.UseSsl.Value;
 
+        // SMTP definitions are credential-bearing: the change and its audit row share one
+        // commit (P1.6). The detail never includes the password.
+        audit.Stage(CurrentUserId, "UPDATE_SMTP", "SmtpConnection", id.ToString(),
+            $"{conn.Alias}{(req.Password is not null ? " (password rotated)" : "")}");
         try
         {
             await db.SaveChangesAsync();
@@ -460,6 +464,7 @@ public class SubscriptionsController(
         if (!OptimisticConcurrency.Prepare(db, conn, expectedVersion.Value))
             return OptimisticConcurrency.Conflict(this, ToSmtpDto(conn));
         db.SmtpConnections.Remove(conn);
+        audit.Stage(CurrentUserId, "DELETE_SMTP", "SmtpConnection", id.ToString());
         try
         {
             await db.SaveChangesAsync();
@@ -470,7 +475,6 @@ public class SubscriptionsController(
             var current = await db.SmtpConnections.FindAsync(id);
             return current is null ? NotFound() : OptimisticConcurrency.Conflict(this, ToSmtpDto(current));
         }
-        await audit.LogAsync(CurrentUserId, "DELETE_SMTP", "SmtpConnection", id.ToString());
         return NoContent();
     }
 

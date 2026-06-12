@@ -268,6 +268,12 @@ else
 // Clock abstraction for background maintenance loops; the hosted-service test lane overrides it.
 builder.Services.AddSingleton(TimeProvider.System);
 
+// AuditService stamps each row with the request trace identifier as its correlation id.
+builder.Services.AddHttpContextAccessor();
+
+// Optional audit retention (Portal:Audit:RetentionDays; disabled by default).
+builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.AuditRetentionService>();
+
 // Phase 2 — execution, session cache, Orchestrator poller
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SessionCache>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.SessionCache>());

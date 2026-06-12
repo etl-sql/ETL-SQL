@@ -110,7 +110,7 @@ public class SubscriptionDeliverySecurityTests
             config,
             protector,
             new FolderPermissionService(db),
-            new AuditService(db),
+            new AuditService(db, new Microsoft.AspNetCore.Http.HttpContextAccessor()),
             runner,
             NullLogger<SubscriptionDeliveryService>.Instance);
 

@@ -53,6 +53,9 @@ public class SubscriptionDeliveryService(
 {
     public async Task<SubscriptionDeliveryResult> DeliverAsync(int subscriptionId, CancellationToken ct = default)
     {
+        // One operation id correlates every audit event this delivery attempt produces.
+        var correlationId = $"delivery-{Guid.NewGuid():N}";
+
         var sub = await db.Subscriptions
             .Include(s => s.Report)
             .Include(s => s.User)
@@ -65,16 +68,16 @@ public class SubscriptionDeliveryService(
         if (denial is not null)
         {
             await audit.LogAsync(sub.UserId, "SUBSCRIPTION_DELIVERY_DENIED", "Subscription",
-                sub.Id.ToString(), denial);
+                sub.Id.ToString(), denial, correlationId);
             log.LogWarning("Subscription {SubscriptionId} delivery denied: {Reason}", sub.Id, denial);
             return SubscriptionDeliveryResult.Denied(denial);
         }
 
         if (!PortalPathGuard.TryResolveScript(config, sub.Report.ScriptPath, out var reportScriptPath))
             return await RecordFailureAsync(sub,
-                "Report script path is outside the configured script root.", ct);
+                "Report script path is outside the configured script root.", correlationId, ct);
         if (!File.Exists(reportScriptPath))
-            return await RecordFailureAsync(sub, "Report script file no longer exists.", ct);
+            return await RecordFailureAsync(sub, "Report script file no longer exists.", correlationId, ct);
 
         SmtpConnection? smtp = null;
         if (!string.IsNullOrEmpty(sub.SmtpAlias))
@@ -82,12 +85,12 @@ public class SubscriptionDeliveryService(
             smtp = await db.SmtpConnections.FirstOrDefaultAsync(c => c.Alias == sub.SmtpAlias, ct);
             if (smtp is null)
                 return await RecordFailureAsync(sub,
-                    $"SMTP connection '{sub.SmtpAlias}' no longer exists.", ct);
+                    $"SMTP connection '{sub.SmtpAlias}' no longer exists.", correlationId, ct);
         }
         else if (sub.Format != SubscriptionFormat.Link)
         {
             return await RecordFailureAsync(sub,
-                "Subscription has no SMTP alias for attachment delivery.", ct);
+                "Subscription has no SMTP alias for attachment delivery.", correlationId, ct);
         }
         else
         {
@@ -97,7 +100,7 @@ public class SubscriptionDeliveryService(
 
         var smtpPassword = pwdProtector.Unprotect(smtp.EncryptedPassword);
         if (!string.IsNullOrEmpty(smtp.EncryptedPassword) && smtpPassword is null)
-            return await RecordFailureAsync(sub, "SMTP credential could not be resolved.", ct);
+            return await RecordFailureAsync(sub, "SMTP credential could not be resolved.", correlationId, ct);
 
         string? exportPath = null;
         try
@@ -123,13 +126,15 @@ public class SubscriptionDeliveryService(
             }
 
             if (!success)
-                return await RecordFailureAsync(sub, Sanitize(error, smtpPassword), ct);
+                return await RecordFailureAsync(sub, Sanitize(error, smtpPassword), correlationId, ct);
 
             sub.LastSentAt = DateTime.UtcNow;
             sub.FailCount = 0;
+            // Staged so the delivery bookkeeping and its audit record share one commit.
+            audit.Stage(sub.UserId, "SUBSCRIPTION_DELIVERED", "Subscription",
+                sub.Id.ToString(), $"Report {sub.ReportId} ({sub.Format}) to {sub.Recipients}",
+                correlationId);
             await db.SaveChangesAsync(ct);
-            await audit.LogAsync(sub.UserId, "SUBSCRIPTION_DELIVERED", "Subscription",
-                sub.Id.ToString(), $"Report {sub.ReportId} ({sub.Format}) to {sub.Recipients}");
             log.LogInformation("Subscription {SubscriptionId} delivered to {Recipients}",
                 sub.Id, sub.Recipients);
             return SubscriptionDeliveryResult.Delivered();
@@ -258,12 +263,13 @@ public class SubscriptionDeliveryService(
     // ── Outcome recording ─────────────────────────────────────────────────────
 
     private async Task<SubscriptionDeliveryResult> RecordFailureAsync(
-        Subscription sub, string reason, CancellationToken ct)
+        Subscription sub, string reason, string correlationId, CancellationToken ct)
     {
         sub.FailCount++;
+        // Staged so the failure bookkeeping and its audit record share one commit.
+        audit.Stage(sub.UserId, "SUBSCRIPTION_DELIVERY_FAILED", "Subscription",
+            sub.Id.ToString(), reason, correlationId);
         await db.SaveChangesAsync(ct);
-        await audit.LogAsync(sub.UserId, "SUBSCRIPTION_DELIVERY_FAILED", "Subscription",
-            sub.Id.ToString(), reason);
         log.LogWarning("Subscription {SubscriptionId} delivery failed: {Reason}", sub.Id, reason);
         return SubscriptionDeliveryResult.Failed(reason);
     }

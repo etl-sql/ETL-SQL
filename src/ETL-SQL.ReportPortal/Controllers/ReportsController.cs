@@ -1150,8 +1150,9 @@ public class ReportsController : ControllerBase
         if (link.RevokedAt is null)
         {
             link.RevokedAt = DateTime.UtcNow;
+            // Staged so the revocation and its audit row share one commit (P1.6).
+            audit.Stage(CurrentUserId, "REVOKE_REPORT_SHARE_LINK", "Report", id.ToString(), token);
             await db.SaveChangesAsync();
-            await audit.LogAsync(CurrentUserId, "REVOKE_REPORT_SHARE_LINK", "Report", id.ToString(), token);
         }
 
         return NoContent();
@@ -1239,8 +1240,8 @@ public class ReportsController : ControllerBase
         if (embed.RevokedAt is null)
         {
             embed.RevokedAt = DateTime.UtcNow;
+            audit.Stage(CurrentUserId, "REVOKE_REPORT_EMBED_TOKEN", "Report", id.ToString(), token);
             await db.SaveChangesAsync();
-            await audit.LogAsync(CurrentUserId, "REVOKE_REPORT_EMBED_TOKEN", "Report", id.ToString(), token);
         }
         return NoContent();
     }

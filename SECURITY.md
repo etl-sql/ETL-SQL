@@ -286,7 +286,13 @@ Engine-level visibility includes:
 Portal-level visibility includes:
 
 - Database-backed audit records for admin, report, folder, dataset, subscription, sharing, embedding, saved view, and alert actions.
-- CSV export for portal audit review.
+- CSV export for portal audit review, including per-row correlation ids (HTTP request trace identifier or background operation id).
+
+Portal audit guarantees and boundaries:
+
+- Security-sensitive portal mutations (user/role/password/token lifecycle, ownership transfer, group membership, folder and dataset ACLs, SMTP definitions, capability revocations, subscription delivery outcomes) commit their audit row in the same database transaction as the mutation — the change cannot succeed without its durable audit event.
+- Audit retention is opt-in (`Portal:Audit:RetentionDays`; default keeps rows forever).
+- The audit table itself is mutable SQLite and is **not** tamper-proof. The supported enterprise posture is scheduled export/forwarding to external append-only storage; in-database tamper-evident hash chaining is an explicit non-goal for this release.
 
 Recommended production posture: forward engine and portal logs to an external log sink with retention, access controls, and tamper-resistant storage.
 

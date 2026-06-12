@@ -346,6 +346,8 @@ public class DatasetController(
             dataset.Ttl = string.IsNullOrWhiteSpace(req.Ttl) ? null : req.Ttl;
 
         dataset.UpdatedAt = DateTime.UtcNow;
+        // Staged so the mutation and its audit row share one commit (P1.6).
+        audit.Stage(CurrentUserId, "UPDATE_DATASET", "Dataset", id.ToString(), dataset.Name);
         try
         {
             await db.SaveChangesAsync();
@@ -355,7 +357,6 @@ public class DatasetController(
             await db.Entry(dataset).ReloadAsync();
             return OptimisticConcurrency.Conflict(this, ToDto(dataset));
         }
-        await audit.LogAsync(CurrentUserId, "UPDATE_DATASET", "Dataset", id.ToString(), dataset.Name);
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(ToDto(dataset));
@@ -409,6 +410,12 @@ public class DatasetController(
         dataset.FolderId = destination.Id;
         dataset.FolderPath = destination.Path;
         dataset.UpdatedAt = DateTime.UtcNow;
+        audit.Stage(
+            CurrentUserId,
+            "MOVE_DATASET",
+            "Dataset",
+            id.ToString(),
+            $"{dataset.Name}: {sourcePath} -> {destination.Path}");
         try
         {
             await db.SaveChangesAsync();
@@ -421,13 +428,6 @@ public class DatasetController(
 
         if (dataset.OwningReportId is int reportId)
             await sessions.InvalidateReportAsync(reportId);
-
-        await audit.LogAsync(
-            CurrentUserId,
-            "MOVE_DATASET",
-            "Dataset",
-            id.ToString(),
-            $"{dataset.Name}: {sourcePath} -> {destination.Path}");
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(ToDto(dataset));
@@ -450,6 +450,8 @@ public class DatasetController(
         if (!OptimisticConcurrency.Prepare(db, dataset, expectedVersion.Value))
             return OptimisticConcurrency.Conflict(this, ToDto(dataset));
 
+        // Staged on the shared scoped context, so it commits inside the registry's delete save.
+        audit.Stage(CurrentUserId, "DELETE_DATASET", "Dataset", id.ToString(), dataset.Name);
         try
         {
             await registry.Delete(dataset.Name);
@@ -460,7 +462,6 @@ public class DatasetController(
             var current = await LoadDataset(id);
             return current is null ? NotFound() : OptimisticConcurrency.Conflict(this, ToDto(current));
         }
-        await audit.LogAsync(CurrentUserId, "DELETE_DATASET", "Dataset", id.ToString(), dataset.Name);
 
         return NoContent();
     }
@@ -514,6 +515,8 @@ public class DatasetController(
         else
             existing.Permission = granted;
 
+        audit.Stage(CurrentUserId, "GRANT_DATASET_PERMISSION", "Dataset", id.ToString(),
+            $"{dataset.Name} → group {req.GroupId} as {granted}");
         try
         {
             await db.SaveChangesAsync();
@@ -524,8 +527,6 @@ public class DatasetController(
             return OptimisticConcurrency.Conflict(this, ToDto(dataset));
         }
         await securitySessions.InvalidateGroupMembersAsync(req.GroupId);
-        await audit.LogAsync(CurrentUserId, "GRANT_DATASET_PERMISSION", "Dataset", id.ToString(),
-            $"{dataset.Name} → group {req.GroupId} as {granted}");
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(new { dataset.Version });
@@ -552,6 +553,8 @@ public class DatasetController(
         if (acl is null) return NotFound(new { error = "ACL entry not found." });
 
         db.DatasetAcls.Remove(acl);
+        audit.Stage(CurrentUserId, "REVOKE_DATASET_PERMISSION", "Dataset", id.ToString(),
+            $"{dataset.Name} → group {groupId}");
         try
         {
             await db.SaveChangesAsync();
@@ -562,8 +565,6 @@ public class DatasetController(
             return OptimisticConcurrency.Conflict(this, ToDto(dataset));
         }
         await securitySessions.InvalidateGroupMembersAsync(groupId);
-        await audit.LogAsync(CurrentUserId, "REVOKE_DATASET_PERMISSION", "Dataset", id.ToString(),
-            $"{dataset.Name} → group {groupId}");
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(new { dataset.Version });

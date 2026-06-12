@@ -283,6 +283,9 @@ public class FoldersController(
         else
             db.FolderAcls.Add(new FolderAcl { FolderId = id, GroupId = req.GroupId, Permission = req.Permission });
 
+        // Staged so the grant and its audit row share one commit (P1.6).
+        audit.Stage(CurrentUserId, "GRANT_PERMISSION", "Folder", id.ToString(),
+            $"group={req.GroupId} perm={req.Permission}");
         try
         {
             await db.SaveChangesAsync();
@@ -297,8 +300,6 @@ public class FoldersController(
                     this, new FolderDto(current.Id, current.ParentId, current.Name, current.Path, [], current.Version));
         }
         await securitySessions.InvalidateGroupMembersAsync(req.GroupId);
-        await audit.LogAsync(CurrentUserId, "GRANT_PERMISSION", "Folder", id.ToString(),
-            $"group={req.GroupId} perm={req.Permission}");
         OptimisticConcurrency.SetETag(Response, folder.Version);
         return Ok(new { folder.Version });
     }
@@ -321,6 +322,8 @@ public class FoldersController(
         if (acl is null) return NotFound();
 
         db.FolderAcls.Remove(acl);
+        audit.Stage(CurrentUserId, "REVOKE_PERMISSION", "Folder", id.ToString(),
+            $"group={groupId}");
         try
         {
             await db.SaveChangesAsync();
@@ -332,8 +335,6 @@ public class FoldersController(
                 this, new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
         }
         await securitySessions.InvalidateGroupMembersAsync(groupId);
-        await audit.LogAsync(CurrentUserId, "REVOKE_PERMISSION", "Folder", id.ToString(),
-            $"group={groupId}");
         OptimisticConcurrency.SetETag(Response, folder.Version);
         return Ok(new { folder.Version });
     }

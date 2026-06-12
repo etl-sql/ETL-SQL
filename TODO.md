@@ -39,11 +39,28 @@ release begins.
   job/script/capability cleanup); the delivery-security fixture now separates folder owner from
   subscription owner since owners can no longer lose access via ACL revocation. Docs: admin guide
   §4.7/§4.8/§5.2 + architecture ownership-semantics note.
-- [ ] **P1.6 Make audit recording part of the operation contract.**
+- [x] **P1.6 Make audit recording part of the operation contract.**
   Mutations and their audit rows are generally separate commits. Ensure security-sensitive changes cannot
   succeed without a durable audit event, add operation/correlation IDs for background work, and define
   retention/export. Decide whether enterprise mode requires append-only external export or tamper-evident
   hash chaining rather than relying only on the mutable portal database.
+  *(done — v0.11.0)* `AuditService.Stage` adds the audit row to the operation's own unit of work, and
+  the security-sensitive mutation set now stages before its final save so the change and its audit
+  event share one commit: user update/reset-password/revoke-tokens, user delete (whole flow now one
+  explicit transaction with external job/script cleanup moved post-commit), group update/delete/
+  membership (single + bulk), folder ACL grant/revoke, dataset update/move/delete/ACL, SMTP
+  update (which previously didn't audit at all)/delete, subscription delete, share-link/embed-token
+  revocation, and subscription delivery success/failure bookkeeping. Conflicted/rejected operations
+  leave no audit row. New `AuditLog.CorrelationId` (migration `AuditLogCorrelationId`) carries the
+  HTTP trace identifier automatically and an explicit operation id for background work (per-delivery
+  `delivery-<id>`); exposed in the DTO and CSV export. Retention is opt-in via
+  `Portal:Audit:RetentionDays` (default keep-forever), enforced by the clock-injectable
+  `AuditRetentionService` and proven in the hosted lane under a pinned clock. **Decision recorded:**
+  the in-portal table is deliberately not tamper-proof; the supported enterprise posture is scheduled
+  CSV export/forwarding to external append-only storage, with in-database hash chaining an explicit
+  roadmap non-goal. Creates and bulk-summary events remain best-effort `LogAsync` records (universal
+  contract tracked in ROADMAP §8). Tests: `AuditContractTests` (atomic success with correlation id,
+  conflict leaves no row) + hosted-lane retention sweep.
 
 ### Priority 1 — Script-first clean-server reconstruction
 

@@ -48,8 +48,9 @@ These are the main gaps future releases must address:
 6. Backup, restore, migration, upgrade, and deployment diagnostics are primarily runbooks rather than
    application-owned commands.
 7. JWT, dataset, SMTP, Orchestrator, connector, and script secrets use separate handling models.
-8. Audit creation is not yet a universal transactional operation contract and remote delivery has no
-   durable outbox.
+8. Audit creation is transactional for security-sensitive mutations (P1.6) but not yet a universal
+   operation contract; in-database tamper-evident hash chaining and a durable remote-delivery
+   outbox remain open.
 9. OIDC configuration and documentation exist, but the runtime capability must be reconciled and
    certified before it is claimed as supported.
 10. Mixed-version compatibility, schema readiness, migration leadership, and rollback boundaries are

@@ -17,6 +17,17 @@ public class PortalConfig
     public DatasetConfig Dataset { get; set; } = new();
     public PortalSecurityConfig Security { get; set; } = new();
     public PortalRateLimitConfig RateLimit { get; set; } = new();
+    public AuditConfig Audit { get; set; } = new();
+}
+
+public class AuditConfig
+{
+    /// <summary>Days to retain audit rows; 0 (default) keeps them forever. Export rows you
+    /// need to keep (CSV endpoint or external forwarding) before enabling retention.</summary>
+    public int RetentionDays { get; set; }
+
+    /// <summary>Seconds between retention sweeps. Minimum effective value is 1.</summary>
+    public int PurgeIntervalSeconds { get; set; } = 86400;
 }
 
 public class PortalRateLimitConfig

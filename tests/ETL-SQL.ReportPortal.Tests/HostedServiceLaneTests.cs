@@ -89,6 +89,59 @@ public sealed class HostedServiceLaneTests
     }
 
     /// <summary>
+    /// The audit retention sweep (opt-in via Portal:Audit:RetentionDays) runs in-host and honors
+    /// the injected clock: with "now" pinned to 2030 and 30-day retention, a 2029-06 row is
+    /// purged while a row within the window survives.
+    /// </summary>
+    [Fact]
+    public async Task AuditRetention_PurgesOldRows_UnderControlledClock()
+    {
+        var pinnedNow = new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        using var factory = new HostedPortalFactory(
+            portalConfig: cfg =>
+            {
+                cfg.Audit.RetentionDays = 30;
+                cfg.Audit.PurgeIntervalSeconds = 1;
+            },
+            clock: new FixedClock(pinnedNow));
+        _ = factory.CreateClient(); // start host
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.AuditLogs.AddRange(
+                new AuditLog
+                {
+                    Action = "OLD_EVENT",
+                    Timestamp = new DateTime(2029, 6, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new AuditLog
+                {
+                    Action = "RECENT_EVENT",
+                    Timestamp = new DateTime(2029, 12, 20, 0, 0, 0, DateTimeKind.Utc)
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var purged = false;
+        for (var attempt = 0; attempt < 60 && !purged; attempt++)
+        {
+            await Task.Delay(250);
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            purged = !await db.AuditLogs.AnyAsync(a => a.Action == "OLD_EVENT");
+        }
+
+        Assert.True(purged, "expected the retention sweep to delete the out-of-window audit row");
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            Assert.True(await db.AuditLogs.AnyAsync(a => a.Action == "RECENT_EVENT"),
+                "expected the in-window audit row to survive");
+        }
+    }
+
+    /// <summary>
     /// The refresh-token purge loop runs in-host on the lane's 1s cadence and uses the injected
     /// clock for its expiry cutoff: with "now" pinned to 2030, a token expiring in 2028 (which the
     /// real wall clock would still consider live) is purged, while a 2031 token is kept.
