@@ -1,7 +1,18 @@
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-using System.Security.Claims;
 using System.Threading.RateLimiting;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Engine.Services;
+using ETL_SQL.Orchestrator;
+using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.ReportPortal;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Middleware;
+using ETL_SQL.ReportPortal.Services;
+using ETL_SQL.ReportPortal.Services.HealthChecks;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -10,17 +21,6 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
-using ETL_SQL.ReportPortal;
-using ETL_SQL.ReportPortal.Data;
-using ETL_SQL.ReportPortal.Middleware;
-using ETL_SQL.ReportPortal.Services;
-using ETL_SQL.ReportPortal.Services.HealthChecks;
-using ETL_SQL.Orchestrator.Channels;
-using ETL_SQL.Orchestrator;
-using ETL_SQL.Common;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Engine.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 #if WINDOWS
@@ -52,7 +52,7 @@ if (!string.IsNullOrWhiteSpace(portalConfig.Dataset.AtRestKey))
 var loggerService = new LoggerService();
 loggerService.InitializeAppLogger(
     builder.Configuration["Logging:AppLog:Directory"] ?? "logs/portal",
-    int.TryParse(builder.Configuration["Logging:AppLog:RetentionDays"],   out var rd) ? rd : 30,
+    int.TryParse(builder.Configuration["Logging:AppLog:RetentionDays"], out var rd) ? rd : 30,
     int.TryParse(builder.Configuration["Logging:AppLog:FileSizeLimitMb"], out var sl) ? sl : 10);
 
 builder.Services.AddSingleton<LoggerService>(loggerService);
@@ -82,12 +82,12 @@ builder.Services.AddDbContext<PortalDbContext>(opt =>
 // ── Identity ──────────────────────────────────────────────────────────────────
 builder.Services.AddIdentity<PortalUser, PortalRole>(opt =>
 {
-    opt.Password.RequireDigit           = true;
-    opt.Password.RequiredLength         = 8;
+    opt.Password.RequireDigit = true;
+    opt.Password.RequiredLength = 8;
     opt.Password.RequireNonAlphanumeric = false;
-    opt.Lockout.DefaultLockoutTimeSpan  = TimeSpan.FromMinutes(15);
+    opt.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     opt.Lockout.MaxFailedAccessAttempts = 5;
-    opt.Lockout.AllowedForNewUsers      = true;
+    opt.Lockout.AllowedForNewUsers = true;
 })
 .AddEntityFrameworkStores<PortalDbContext>()
 .AddDefaultTokenProviders();
@@ -111,18 +111,18 @@ var validationKeys = string.IsNullOrEmpty(portalConfig.Jwt.Secret)
 builder.Services.AddAuthentication(opt =>
 {
     opt.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    opt.DefaultChallengeScheme    = JwtBearerDefaults.AuthenticationScheme;
+    opt.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(opt =>
 {
     opt.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer           = false,
-        ValidateAudience         = false,
-        ValidateLifetime         = true,
+        ValidateIssuer = false,
+        ValidateAudience = false,
+        ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        IssuerSigningKeys        = validationKeys,
-        ClockSkew                = TimeSpan.FromSeconds(30)
+        IssuerSigningKeys = validationKeys,
+        ClockSkew = TimeSpan.FromSeconds(30)
     };
     opt.Events = new JwtBearerEvents
     {
@@ -194,11 +194,11 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "ETL-SQL Report Portal", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.OpenApiSecurityScheme
     {
-        Name   = "Authorization",
-        Type   = Microsoft.OpenApi.SecuritySchemeType.Http,
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT",
-        In     = Microsoft.OpenApi.ParameterLocation.Header
+        In = Microsoft.OpenApi.ParameterLocation.Header
     });
     c.AddSecurityRequirement(_ => new Microsoft.OpenApi.OpenApiSecurityRequirement
     {
@@ -282,9 +282,9 @@ builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.DatasetAtRestKey
 
 // Phase 6 — health checks
 builder.Services.AddHealthChecks()
-    .AddCheck<PortalDbHealthCheck>     ("db",          HealthStatus.Unhealthy, ["ready"])
-    .AddCheck<OrchestratorHealthCheck> ("orchestrator", HealthStatus.Degraded,  ["live"])
-    .AddCheck<ExecutionCapacityHealthCheck>("execution", HealthStatus.Degraded,  ["live"]);
+    .AddCheck<PortalDbHealthCheck>("db", HealthStatus.Unhealthy, ["ready"])
+    .AddCheck<OrchestratorHealthCheck>("orchestrator", HealthStatus.Degraded, ["live"])
+    .AddCheck<ExecutionCapacityHealthCheck>("execution", HealthStatus.Degraded, ["live"]);
 
 builder.Services.AddControllers();
 
@@ -319,6 +319,15 @@ using (var scope = app.Services.CreateScope())
         portalConfig,
         scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
             .CreateLogger("DatasetStorageMaintenance"));
+    // P0.1/P1.2: rewrite any pre-upgrade subscription script (which embedded decrypted SMTP
+    // credentials) to the credential-free trigger form, drop orphaned scripts and temp files,
+    // and converge Orchestrator jobs to subscription row state (the source of truth).
+    await SubscriptionScriptMaintenance.ReconcileAsync(
+        db,
+        scope.ServiceProvider.GetRequiredService<PortalConfig>(),
+        scope.ServiceProvider.GetRequiredService<OrchestratorDbLocator>().Resolve(),
+        scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("SubscriptionScriptMaintenance"));
 
     // Resolve PortalConfig from DI (not the locally parsed copy) so test hosts that override the
     // singleton — e.g. to pin FirstRun.AdminPassword — seed with the effective configuration.
@@ -364,9 +373,9 @@ app.MapHealthChecks("/health", new HealthCheckOptions
         ctx.Response.ContentType = "application/json";
         var overall = report.Status switch
         {
-            HealthStatus.Healthy  => "Healthy",
+            HealthStatus.Healthy => "Healthy",
             HealthStatus.Degraded => "Degraded",
-            _                     => "Unhealthy"
+            _ => "Unhealthy"
         };
         var result = new
         {
@@ -375,10 +384,10 @@ app.MapHealthChecks("/health", new HealthCheckOptions
                 kv => kv.Key,
                 kv => new
                 {
-                    status      = kv.Value.Status.ToString(),
+                    status = kv.Value.Status.ToString(),
                     description = kv.Value.Description,
-                    data        = kv.Value.Data.Count > 0 ? kv.Value.Data : null,
-                    error       = kv.Value.Exception?.Message
+                    data = kv.Value.Data.Count > 0 ? kv.Value.Data : null,
+                    error = kv.Value.Exception?.Message
                 })
         };
         await ctx.Response.WriteAsync(JsonSerializer.Serialize(result,
@@ -418,14 +427,14 @@ static async Task SeedFirstRunAsync(IServiceProvider services, PortalConfig conf
     {
         var admin = new PortalUser
         {
-            UserName            = adminUsername,
-            Email               = $"{adminUsername}@localhost",
-            IsActive            = true,
-            MustChangePassword  = true
+            UserName = adminUsername,
+            Email = $"{adminUsername}@localhost",
+            IsActive = true,
+            MustChangePassword = true
         };
         // Temporary password — must be changed on first login. No hardcoded default: either the
         // operator supplies Portal:FirstRun:AdminPassword or a random one is generated and logged once.
-        var password  = config.FirstRun.AdminPassword;
+        var password = config.FirstRun.AdminPassword;
         var generated = string.IsNullOrWhiteSpace(password);
         if (generated)
             password = GenerateInitialAdminPassword();

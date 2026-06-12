@@ -21,4 +21,16 @@ public static class SubscriptionTriggerScript
         sb.AppendLine($"PRINT 'Portal subscription delivery trigger for subscription {subscriptionId}';");
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Atomically writes the trigger script (P1.2): the content lands in a unique temp file in
+    /// the same directory and is moved over the destination, so a crash mid-write can never
+    /// leave a truncated script and concurrent readers always see a complete file.
+    /// </summary>
+    public static void Write(string path, int subscriptionId)
+    {
+        var tmp = path + $".tmp-{Guid.NewGuid():N}";
+        File.WriteAllText(tmp, Compose(subscriptionId));
+        File.Move(tmp, path, overwrite: true);
+    }
 }

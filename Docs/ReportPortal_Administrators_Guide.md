@@ -785,9 +785,13 @@ Subscriptions are owned by individual users but visible and manageable by Admins
 
 Subscription jobs are handed to the **ETL-SQL Orchestrator** for scheduling. If the Orchestrator is not reachable, subscriptions are created in the database but jobs will not fire until the Orchestrator comes online.
 
+The scheduled job itself is a **credential-free trigger**: the generated `.etlsql` script contains only the subscription ID — no SMTP credentials, recipients, or report parameters. When the trigger completes, the portal's trusted delivery executor re-checks the subscription owner's active state and current report permission, exports the report, and sends the email in-process. The SMTP credential is decrypted only for the duration of that delivery and is never written to disk. On startup the portal also rewrites any pre-upgrade subscription script that embedded credentials to the trigger form and removes generated scripts whose subscription no longer exists.
+
+Because delivery happens in the portal, the **portal process must be running** for subscription email to be sent — the Orchestrator alone only fires the trigger.
+
 ### 8.3 Delivery Failures
 
-Each subscription tracks a `FailCount`. After repeated failures the Orchestrator will stop retrying. Investigate via **Admin → Subscriptions → History** and correct the SMTP configuration or report script before re-enabling.
+Each subscription tracks a `FailCount`, incremented by the portal's delivery executor when an export or send fails (with sanitized error detail in the audit log). A delivery that is **denied** — the owner was disabled or lost read permission on the report's folder — is recorded as `SUBSCRIPTION_DELIVERY_DENIED` in the audit log and is *not* counted or retried as a transient failure. Investigate via **Admin → Subscriptions → History** and correct the SMTP configuration, permissions, or report script before re-enabling.
 
 The Admin subscription table shows active/paused state, the last successful delivery time or failure count, and provides:
 

@@ -20,7 +20,7 @@ public class SubscriptionDeliveryStatusService(
         {
             var store = new SQLiteJobHistoryStore(orchDbPath);
             await store.InitializeAsync();
-            var jobName = $"SUB:{subscription.Id}:{subscription.Report?.Name}";
+            var jobName = SubscriptionOrchestration.JobName(subscription.Id, subscription.Report?.Name);
             history = (await store.GetHistoryAsync(jobName, int.MaxValue)).ToList();
         }
         catch (Exception ex)

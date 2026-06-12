@@ -1,7 +1,7 @@
 using System.Globalization;
+using ETL_SQL.ReportPortal.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using ETL_SQL.ReportPortal.Data;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -13,8 +13,8 @@ namespace ETL_SQL.ReportPortal.Services;
 /// </summary>
 public class OrchestratorPollerService(
     OrchestratorDbLocator dbLocator,
-    IServiceScopeFactory  scopes,
-    ExecutionJobService   jobs,
+    IServiceScopeFactory scopes,
+    ExecutionJobService jobs,
     ILogger<OrchestratorPollerService> log) : BackgroundService
 {
     private DateTime _lastPollTime = DateTime.UtcNow.AddSeconds(-70); // poll covers first 70s on startup
@@ -66,7 +66,7 @@ public class OrchestratorPollerService(
                 using var scope = scopes.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
 
-                if (TryParseSubscriptionId(jobName, out var subscriptionId))
+                if (SubscriptionOrchestration.TryParseSubscriptionId(jobName, out var subscriptionId))
                 {
                     await ProcessSubscriptionCompletionAsync(
                         scope.ServiceProvider, db, subscriptionId, endTime, ct);
@@ -136,18 +136,6 @@ public class OrchestratorPollerService(
             subscriptionId, result.Outcome);
     }
 
-    private static bool TryParseSubscriptionId(string jobName, out int subscriptionId)
-    {
-        subscriptionId = 0;
-        if (!jobName.StartsWith("SUB:", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        var separator = jobName.IndexOf(':', 4);
-        var idText = separator < 0 ? jobName.AsSpan(4) : jobName.AsSpan(4, separator - 4);
-        return int.TryParse(idText, NumberStyles.None, CultureInfo.InvariantCulture, out subscriptionId)
-            && subscriptionId > 0;
-    }
-
     private static async Task<List<(string JobName, DateTime EndTime)>> QueryCompletionsAsync(
         string dbPath, DateTime since, DateTime through, CancellationToken ct)
     {
@@ -171,8 +159,8 @@ public class OrchestratorPollerService(
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
-            var name    = reader.GetString(0);
-            var endRaw  = reader.GetString(1);
+            var name = reader.GetString(0);
+            var endRaw = reader.GetString(1);
             if (DateTime.TryParse(
                     endRaw,
                     CultureInfo.InvariantCulture,

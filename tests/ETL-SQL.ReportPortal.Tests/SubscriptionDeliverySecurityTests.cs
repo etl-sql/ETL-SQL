@@ -133,6 +133,90 @@ public class SubscriptionDeliverySecurityTests
         Assert.DoesNotContain(smtp.Alias, persistedTrigger, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Reconcile_RewritesLegacySecretScriptsAndRemovesOrphans()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
+        var suffix = Guid.NewGuid().ToString("N");
+        const string secretMarker = "LEGACY_SMTP_PASSWORD_MARKER";
+
+        var owner = new PortalUser
+        {
+            UserName = $"reconcile-owner-{suffix}",
+            Email = $"reconcile-owner-{suffix}@test.local",
+            IsActive = true
+        };
+        db.Users.Add(owner);
+        await db.SaveChangesAsync();
+
+        var folder = new Folder
+        {
+            Name = $"Reconcile Folder {suffix}",
+            Path = $"/reconcile-{suffix}",
+            OwnerId = owner.Id
+        };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+
+        var report = new Report
+        {
+            FolderId = folder.Id,
+            Name = $"Reconcile Report {suffix}",
+            ScriptPath = Path.Combine(config.ScriptRootPath, $"reconcile-{suffix}.rptsql"),
+            CreatedBy = owner.Id
+        };
+        db.Reports.Add(report);
+        await db.SaveChangesAsync();
+
+        var subscription = new Subscription
+        {
+            ReportId = report.Id,
+            UserId = owner.Id,
+            Format = SubscriptionFormat.CSV,
+            SmtpAlias = "legacy",
+            Recipients = "legacy@test.local",
+            IsActive = true
+        };
+        db.Subscriptions.Add(subscription);
+        await db.SaveChangesAsync();
+
+        var subscriptionDir = Path.Combine(config.ScriptRootPath, "subscriptions");
+        Directory.CreateDirectory(subscriptionDir);
+
+        // A pre-upgrade script that embedded the decrypted SMTP credential.
+        var legacyPath = Path.Combine(subscriptionDir, $"sub_{subscription.Id}_Legacy.etlsql");
+        await File.WriteAllTextAsync(legacyPath,
+            $"CREATE CONNECTION __sub_smtp AS SMTP(HOST = 'smtp', PASSWORD = '{secretMarker}');");
+        subscription.ScriptPath = legacyPath;
+        await db.SaveChangesAsync();
+
+        // A generated script whose subscription no longer exists, and an unrelated file.
+        var orphanPath = Path.Combine(subscriptionDir, "sub_999999_Deleted.etlsql");
+        await File.WriteAllTextAsync(orphanPath, $"PASSWORD = '{secretMarker}';");
+        var unrelatedPath = Path.Combine(subscriptionDir, "notes.etlsql");
+        await File.WriteAllTextAsync(unrelatedPath, "PRINT 'operator-authored file';");
+
+        await SubscriptionScriptMaintenance.ReconcileAsync(
+            db, config, orchestratorDbPath: null, NullLogger.Instance);
+
+        var rewritten = await File.ReadAllTextAsync(legacyPath);
+        Assert.Equal(SubscriptionTriggerScript.Compose(subscription.Id), rewritten);
+        Assert.DoesNotContain(secretMarker, rewritten, StringComparison.Ordinal);
+        Assert.False(File.Exists(orphanPath));
+        Assert.True(File.Exists(unrelatedPath));
+
+        // Idempotent on a clean tree: a second pass leaves the trigger untouched.
+        var beforeSecondPass = File.GetLastWriteTimeUtc(legacyPath);
+        await SubscriptionScriptMaintenance.ReconcileAsync(
+            db, config, orchestratorDbPath: null, NullLogger.Instance);
+        Assert.Equal(beforeSecondPass, File.GetLastWriteTimeUtc(legacyPath));
+    }
+
     private sealed class RecordingSubscriptionRunner : ISubscriptionScriptRunner
     {
         public int CallCount { get; private set; }

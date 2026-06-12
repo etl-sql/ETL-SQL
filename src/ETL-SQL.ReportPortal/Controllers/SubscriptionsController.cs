@@ -1,31 +1,29 @@
 using System.Security.Claims;
 using System.Text.Json;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
 [ApiController]
 [Authorize]
 public class SubscriptionsController(
-    PortalDbContext        db,
-    PortalConfig           config,
-    OrchestratorDbLocator  dbLocator,
-    AuditService           audit,
+    PortalDbContext db,
+    PortalConfig config,
+    OrchestratorDbLocator dbLocator,
+    AuditService audit,
     SubscriptionDeliveryStatusService deliveryStatus,
     FolderPermissionService folderPermissions,
-    SmtpPasswordProtector  pwdProtector) : ControllerBase
+    SmtpPasswordProtector pwdProtector) : ControllerBase
 {
-    private const string SubPrefix = "SUB:";
-
-    private int  CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-    private bool IsAdmin       => User.IsInRole("Admin");
+    private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private bool IsAdmin => User.IsInRole("Admin");
 
     // ── Subscription CRUD ──────────────────────────────────────────────────────
 
@@ -105,7 +103,7 @@ public class SubscriptionsController(
         if (!Enum.TryParse<SubscriptionFormat>(req.Format, true, out var format))
             return BadRequest(new { error = "Format must be PDF, CSV, Markdown, or Link" });
 
-        var (interval, unit) = ParseSchedule(req.Schedule);
+        var (interval, _) = SubscriptionOrchestration.ParseSchedule(req.Schedule);
         if (interval == 0) return BadRequest(new { error = "Invalid schedule. Use Daily, Weekly, Monthly, or Hourly." });
 
         var recipientEmail = req.RecipientEmail?.Trim();
@@ -130,36 +128,29 @@ public class SubscriptionsController(
 
         var sub = new Subscription
         {
-            ReportId         = req.ReportId,
-            UserId           = CurrentUserId,
-            Name             = req.Name,
-            Schedule         = req.Schedule,
+            ReportId = req.ReportId,
+            UserId = CurrentUserId,
+            Name = req.Name,
+            Schedule = req.Schedule,
+            AtTime = req.AtTime,
             DeliverOnRefresh = false,
-            Format           = format,
-            SmtpAlias        = req.SmtpAlias ?? string.Empty,
-            Recipients       = recipientEmail,
-            ParametersJson   = SerializeParams(req.Parameters),
-            IsActive         = true
+            Format = format,
+            SmtpAlias = req.SmtpAlias ?? string.Empty,
+            Recipients = recipientEmail,
+            ParametersJson = SerializeParams(req.Parameters),
+            IsActive = true
         };
         db.Subscriptions.Add(sub);
         await db.SaveChangesAsync();
 
+        // Row first (it is the source of truth and carries everything needed to rebuild the
+        // rest), then script, then ScriptPath, then the Orchestrator job. A crash anywhere in
+        // between is healed by SubscriptionScriptMaintenance at the next startup.
         var scriptPath = GenerateJobScript(sub, report);
         sub.ScriptPath = scriptPath;
+        await db.SaveChangesAsync();
 
-        var jobName = $"{SubPrefix}{sub.Id}:{report.Name}";
-        var jobDef  = new JobDefinition(
-            Name:               jobName,
-            Script:             $"RUN SCRIPT '{scriptPath.Replace("\\", "\\\\")}';",
-            Interval:           interval,
-            Unit:               unit,
-            AtTime:             req.AtTime,
-            LastRun:            null,
-            NextRun:            null,
-            IsEnabled:          true,
-            MaxRetries:         3,
-            RetryDelaySeconds:  60);
-
+        var jobDef = SubscriptionOrchestration.BuildJobDefinition(sub, report.Name, scriptPath);
         var orchDbPath = dbLocator.Resolve();
         if (orchDbPath is not null)
         {
@@ -168,8 +159,7 @@ public class SubscriptionsController(
             await store.SaveJobAsync(jobDef);
         }
 
-        await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "CREATE_SUBSCRIPTION", "Subscription", sub.Id.ToString(), jobName);
+        await audit.LogAsync(CurrentUserId, "CREATE_SUBSCRIPTION", "Subscription", sub.Id.ToString(), jobDef.Name);
         return CreatedAtAction(nameof(Get), new { id = sub.Id }, ToDto(sub));
     }
 
@@ -185,24 +175,24 @@ public class SubscriptionsController(
         if (sub is null) return NotFound();
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
 
-        var scheduleChanged    = req.Schedule  is not null && req.Schedule  != sub.Schedule;
-        var newFormat          = sub.Format;
-        var formatChanged      = req.Format is not null &&
+        var scheduleChanged = req.Schedule is not null && req.Schedule != sub.Schedule;
+        var newFormat = sub.Format;
+        var formatChanged = req.Format is not null &&
                                  Enum.TryParse<SubscriptionFormat>(req.Format, true, out newFormat) &&
                                  newFormat != sub.Format;
-        var parametersChanged  = req.Parameters is not null;
-        var smtpAliasChanged   = req.SmtpAlias is not null && req.SmtpAlias != sub.SmtpAlias;
-        var recipientsChanged  = req.Recipients is not null && req.Recipients != sub.Recipients;
+        var parametersChanged = req.Parameters is not null;
+        var smtpAliasChanged = req.SmtpAlias is not null && req.SmtpAlias != sub.SmtpAlias;
+        var recipientsChanged = req.Recipients is not null && req.Recipients != sub.Recipients;
         var scriptNeedsRewrite = formatChanged || parametersChanged || smtpAliasChanged || recipientsChanged;
 
-        if (req.Name             is not null) sub.Name             = req.Name;
-        if (req.Schedule         is not null) sub.Schedule         = req.Schedule;
-        if (req.DeliverOnRefresh.HasValue)    sub.DeliverOnRefresh = req.DeliverOnRefresh.Value;
-        if (formatChanged)                    sub.Format           = newFormat;
-        if (req.SmtpAlias        is not null) sub.SmtpAlias        = req.SmtpAlias;
-        if (req.Recipients       is not null) sub.Recipients       = req.Recipients;
-        if (req.IsActive.HasValue)            sub.IsActive         = req.IsActive.Value;
-        if (parametersChanged)               sub.ParametersJson    = SerializeParams(req.Parameters);
+        if (req.Name is not null) sub.Name = req.Name;
+        if (req.Schedule is not null) sub.Schedule = req.Schedule;
+        if (req.DeliverOnRefresh.HasValue) sub.DeliverOnRefresh = req.DeliverOnRefresh.Value;
+        if (formatChanged) sub.Format = newFormat;
+        if (req.SmtpAlias is not null) sub.SmtpAlias = req.SmtpAlias;
+        if (req.Recipients is not null) sub.Recipients = req.Recipients;
+        if (req.IsActive.HasValue) sub.IsActive = req.IsActive.Value;
+        if (parametersChanged) sub.ParametersJson = SerializeParams(req.Parameters);
 
         if (scriptNeedsRewrite && !string.IsNullOrEmpty(sub.ScriptPath))
         {
@@ -218,21 +208,27 @@ public class SubscriptionsController(
         var orchDbPath = dbLocator.Resolve();
         if (orchDbPath is not null && (scheduleChanged || req.IsActive.HasValue))
         {
-            var store   = new SQLiteJobHistoryStore(orchDbPath);
+            var store = new SQLiteJobHistoryStore(orchDbPath);
             await store.InitializeAsync();
-            var jobName = $"{SubPrefix}{sub.Id}:{sub.Report?.Name}";
-            var jobs    = (await store.GetAllJobsAsync()).ToList();
-            var job     = jobs.FirstOrDefault(j => j.Name == jobName);
+            var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name);
+            var job = await store.GetJobAsync(jobName);
             if (job is not null)
             {
-                var (interval, unit) = ParseSchedule(sub.Schedule);
+                var (interval, unit) = SubscriptionOrchestration.ParseSchedule(sub.Schedule);
                 var updated = job with
                 {
-                    Interval  = interval > 0 ? interval : job.Interval,
-                    Unit      = interval > 0 ? unit     : job.Unit,
+                    Interval = interval > 0 ? interval : job.Interval,
+                    Unit = interval > 0 ? unit : job.Unit,
                     IsEnabled = sub.IsActive
                 };
                 await store.SaveJobAsync(updated);
+            }
+            else if (sub.Report is not null && !string.IsNullOrEmpty(sub.ScriptPath))
+            {
+                // Heal a missing job from row state (e.g. a crash between the portal row and
+                // the job DB during create) instead of leaving the subscription dormant.
+                await store.SaveJobAsync(
+                    SubscriptionOrchestration.BuildJobDefinition(sub, sub.Report.Name, sub.ScriptPath));
             }
         }
 
@@ -262,7 +258,7 @@ public class SubscriptionsController(
             await store.InitializeAsync();
             foreach (var sub in subs)
             {
-                var jobName = $"{SubPrefix}{sub.Id}:{sub.Report.Name}";
+                var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report.Name);
                 var job = await store.GetJobAsync(jobName);
                 if (job is not null)
                     await store.SaveJobAsync(job with { IsEnabled = req.IsActive });
@@ -282,7 +278,7 @@ public class SubscriptionsController(
         if (sub is null) return NotFound();
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
 
-        var jobName = $"{SubPrefix}{sub.Id}:{sub.Report?.Name}";
+        var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name);
         string? resolvedScriptPath = null;
         if (!string.IsNullOrEmpty(sub.ScriptPath)
             && !TryResolveSubscriptionScript(sub.ScriptPath, out resolvedScriptPath))
@@ -348,13 +344,13 @@ public class SubscriptionsController(
 
         var conn = new SmtpConnection
         {
-            Alias             = req.Alias,
-            Host              = req.Host,
-            Port              = req.Port,
-            Username          = req.Username,
+            Alias = req.Alias,
+            Host = req.Host,
+            Port = req.Port,
+            Username = req.Username,
             EncryptedPassword = req.Password is not null ? pwdProtector.Protect(req.Password) : null,
-            FromAddress       = req.FromAddress,
-            UseSsl            = req.UseSsl
+            FromAddress = req.FromAddress,
+            UseSsl = req.UseSsl
         };
         db.SmtpConnections.Add(conn);
         await db.SaveChangesAsync();
@@ -369,12 +365,12 @@ public class SubscriptionsController(
         var conn = await db.SmtpConnections.FirstOrDefaultAsync(c => c.Id == id);
         if (conn is null) return NotFound();
 
-        if (req.Host        is not null) conn.Host        = req.Host;
-        if (req.Port.HasValue)           conn.Port        = req.Port.Value;
-        if (req.Username    is not null) conn.Username    = req.Username;
-        if (req.Password    is not null) conn.EncryptedPassword = pwdProtector.Protect(req.Password);
+        if (req.Host is not null) conn.Host = req.Host;
+        if (req.Port.HasValue) conn.Port = req.Port.Value;
+        if (req.Username is not null) conn.Username = req.Username;
+        if (req.Password is not null) conn.EncryptedPassword = pwdProtector.Protect(req.Password);
         if (req.FromAddress is not null) conn.FromAddress = req.FromAddress;
-        if (req.UseSsl.HasValue)         conn.UseSsl      = req.UseSsl.Value;
+        if (req.UseSsl.HasValue) conn.UseSsl = req.UseSsl.Value;
 
         await db.SaveChangesAsync();
         return Ok(new SmtpConnectionDto(conn.Id, conn.Alias, conn.Host, conn.Port, conn.Username, conn.FromAddress, conn.UseSsl));
@@ -403,12 +399,12 @@ public class SubscriptionsController(
     private string GenerateJobScript(Subscription sub, Report report)
     {
         // COMPAT_BREAK: 0.11
-        var scriptName = $"sub_{sub.Id}_{SanitizeName(report.Name)}.etlsql";
+        var scriptName = SubscriptionOrchestration.ScriptFileName(sub.Id, report.Name);
         if (!PortalPathGuard.TryResolveScript(config, System.IO.Path.Combine("subscriptions", scriptName), out var scriptPath))
             throw new InvalidOperationException("Subscription script path must be within the configured script root.");
 
         System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(scriptPath)!);
-        System.IO.File.WriteAllText(scriptPath, SubscriptionTriggerScript.Compose(sub.Id));
+        SubscriptionTriggerScript.Write(scriptPath, sub.Id);
         return scriptPath;
     }
 
@@ -421,20 +417,10 @@ public class SubscriptionsController(
             && PortalPathGuard.TryResolveScript(config, scriptPath, out resolved);
     }
 
-    private static (int interval, string unit) ParseSchedule(string? schedule) =>
-        schedule?.ToUpperInvariant() switch
-        {
-            "HOURLY"  => (1,  "HOUR"),
-            "DAILY"   => (1,  "DAY"),
-            "WEEKLY"  => (1,  "WEEK"),
-            "MONTHLY" => (1,  "MONTH"),
-            _         => (0,  "DAY")
-        };
-
     private static SubscriptionDto ToDto(Subscription s)
     {
         var parameters = DeserializeParams(s.ParametersJson);
-        var summary    = BuildParameterSummary(parameters);
+        var summary = BuildParameterSummary(parameters);
         return new SubscriptionDto(
             s.Id, s.ReportId, s.Report?.Name ?? "",
             s.Name, s.Schedule, s.DeliverOnRefresh, s.Format.ToString(),
@@ -456,7 +442,4 @@ public class SubscriptionsController(
         p is { Count: > 0 }
             ? string.Join(", ", p.Select(kv => $"{kv.Key}={kv.Value}"))
             : null;
-
-    private static string SanitizeName(string name) =>
-        new string(name.Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
 }

@@ -26,6 +26,9 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   *(done — v0.11.0)* Generated Orchestrator scripts are credential-free triggers containing only the
   subscription ID. SMTP credentials are decrypted only inside the portal delivery scope, composed into
   an in-memory script, sanitized from failures, and covered by trigger/history/audit secret-marker tests.
+  Startup reconciliation (`SubscriptionScriptMaintenance`) rewrites pre-upgrade scripts that embedded
+  decrypted credentials to the trigger form and deletes orphaned generated subscription scripts, so an
+  upgraded deployment sheds persisted secrets without waiting for each subscription to be edited.
 - [x] **P0.2 Reauthorize every subscription at delivery time.**
   A subscription is permission-checked when created, but its scheduled script can continue after its user
   is disabled, removed from a group, or loses report/folder permission. Route delivery through a trusted
@@ -73,17 +76,39 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 
 ### Priority 1 — Multi-user correctness and recoverability
 
-- [ ] **P1.1 Add a durable per-job execution lease.**
+- [x] **P1.1 Add a durable per-job execution lease.**
   Multiple Orchestrator instances can observe the same due job and execute it. Acquire a database-backed
   lease/claim before starting a scheduled run, include owner/expiry/heartbeat fields, and safely reclaim
   abandoned leases. Prove two scheduler processes produce one execution, including crash and clock-skew
   cases. The existing global throttle is capacity control, not duplicate-execution prevention. Note:
   SQLite's single-writer model constrains what a database-backed lease can promise across processes —
   design the lease against that limit and keep it consistent with the P3.1 topology decision.
-- [ ] **P1.2 Make subscription create/update/delete recoverable across portal DB, job DB, and files.**
+  *(done — v0.11.0)* `Jobs` gained `LeaseOwner`/`LeaseExpiresAt` (UTC ISO-8601); the claim is a single
+  atomic `UPDATE ... WHERE lease free or expired` riding SQLite's single-writer guarantee, so the lease
+  coordinates exactly the processes that share one job DB (consistent with P3.1). `ExecuteJobAsync` is
+  the single choke point for scheduled and manually triggered runs: claim → heartbeat at lease/3 (losing
+  the lease cancels the run) → release after the NextRun update. An expired lease is reclaimable, giving
+  at-least-once recovery after a crash; generous lease + heartbeat absorb modest clock skew.
+  `SaveJobAsync` became a real upsert — `INSERT OR REPLACE` was deleting and reinserting the row, which
+  silently cleared an active lease whenever a definition was re-saved mid-run. `JobExecutionLeaseTests`
+  proves: 32 parallel claims → one winner; owner-checked renew/release; expiry reclaim; lease survival
+  across a definition re-save; and two scheduler instances over one store executing a due job exactly once.
+- [x] **P1.2 Make subscription create/update/delete recoverable across portal DB, job DB, and files.**
   These operations currently commit independent resources in sequence. Introduce an operation record or
   transactional outbox plus idempotent reconciliation so crashes cannot leave orphan rows, plaintext or
   stale scripts, or active jobs for deleted subscriptions. Updates must use atomic file replacement.
+  *(done — v0.11.0)* The subscription row is the declared source of truth and now persists `AtTime`
+  (migration `SubscriptionAddAtTime`) so a lost job can be rebuilt without losing its delivery time.
+  `SubscriptionOrchestration` centralizes job naming/schedule/definition rules for the controller,
+  poller, status service, and reconciliation. Create commits row → script → ScriptPath → job in that
+  order; update heals a missing job inline; delete removes job → file → row. Script writes are atomic
+  (unique same-directory temp + move). `SubscriptionScriptMaintenance` now also converges Orchestrator
+  jobs to row state at startup: removes jobs for deleted subscriptions and stale-named duplicates,
+  recreates missing jobs from the row (at-least-once recovery), realigns schedule/enablement/script
+  drift while preserving run bookkeeping, regenerates missing ScriptPaths, and cleans abandoned
+  atomic-write temp files. `SubscriptionLifecycleRecoveryTests` covers each crash artifact plus
+  idempotency. (A full transactional outbox was deliberately not introduced: startup reconciliation
+  toward row state covers the crash windows with far less machinery.)
 - [ ] **P1.3 Add optimistic concurrency to administrator-managed resources.**
   Add row versions/ETags to users, groups, folders, ACLs, reports, datasets, jobs, subscriptions, and SMTP
   definitions. Simultaneous edits must return a conflict with current state rather than silently applying
@@ -213,10 +238,17 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 
 ### Priority 3 — Enterprise capability decisions
 
-- [ ] **P3.1 Decide the HA/cluster roadmap.**
+- [ ] **P3.1 Decide the HA/cluster roadmap (Multi-Path Practical HA).**
   SQLite and local/process state are suitable for a single-node deployment but not an unqualified HA
-  claim. Define whether clustered portal/orchestrator operation will use a server database, distributed
-  cache/queue/lease provider, shared key ring, and shared or object-backed report/dataset storage.
+  claim. Provide three supported topologies to satisfy different enterprise deployment sizes:
+  - **Path A (Relational DB):** Switch EF Core providers to support PostgreSQL or Microsoft SQL Server (easily supported in domain-managed SMB infrastructures).
+  - **Path B (Zero-DBA Distributed SQLite):** Integrate `rqlite` (SQLite replicated via Raft) running as a local sidecar process, allowing nodes to cluster directly via command-line flags without external DBMS administration.
+  - **Path C (Shared Storage Abstraction):** Abstract disk-writes behind `IStorageProvider` and support:
+    - On-Premise SMB: Windows UNC Shares (`\\fileserver\etl-sql\storage`) running under Domain Service Accounts.
+    - Cloud-Native: S3-compatible object storage (MinIO, AWS S3, or Backblaze B2).
+  - **Path D (Infrastructure-Free Coordination):** Replace process-local semaphores and memory caches:
+    - Use database-backed leases (`ExpiresAt` and `LockedByNode` records) for scheduled run claims (no Redis).
+    - Use a database-driven invalidation table (`SystemEvents` polling) to synchronize cache evictions across nodes.
 - [ ] **P3.2 Add or explicitly defer OIDC/SAML and MFA.**
   Local Identity and LDAP do not cover common enterprise SSO, conditional-access, and MFA requirements.
   Document the supported identity boundary until federated authentication is implemented.
@@ -224,19 +256,30 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
   Current group-based highest-permission-wins ACLs may be sufficient, but enterprise deployments often
   require inherited folder permissions, explicit deny, direct user/service-account grants, nested groups,
   and a permission-change impact preview. Decide intentionally and add effective-permission tests.
-- [ ] **P3.4 Decide departmental/tenant isolation and naming boundaries.**
-  Dataset names are globally unique and portal state is shared. Determine whether one portal is one trust
-  boundary or whether departments/tenants need isolated namespaces, administration, quotas, encryption
-  keys, audit views, and export scope.
-- [ ] **P3.5 Add change approval where production governance requires it.**
+- [ ] **P3.4 Decide departmental/tenant isolation and naming boundaries (Multi-Tenancy Options).**
+  Dataset names are globally unique and portal state is shared. Provide isolated namespaces, storage, encryption keys, and scheduler coordination:
+  - **Path A (Soft Multi-Tenancy):** Add `TenantId` columns to all tables (users, groups, reports, datasets, audit logs) and apply EF Core Global Query Filters. Change unique database constraints from `Name` to `(TenantId, Name)`.
+  - **Path B (Hard Multi-Tenancy - Recommended for SQLite):** Deploy a database-per-tenant model. Since SQLite databases are simple local files, the portal dynamically resolves and connects to a separate `<tenant>.db` file based on subdomain/URL prefix/header context (zero DBMS administration overhead).
+  - **Path C (Storage Directory Isolation):** Partition the filesystem storage roots to include the tenant ID (`ScriptRootPath/tenant_A/`, `DatasetRootPath/tenant_A/`) and update `PortalPathGuard` to enforce tenant boundary checks.
+  - **Path D (Scheduler Tenant Context):** Ensure the background Orchestrator scheduler propagates tenant contexts (loading the correct DB connection, storage path, and keys) during scheduled job runs.
+- [ ] **P3.5 Add change approval where production governance requires it (Four-Eyes Approval).**
   Consider optional four-eyes approval for report publication, job changes, subscription recipient
   changes, SMTP/secret changes, and high-impact ACL grants. Preserve script-first operation by making
-  approval state and promotion scriptable and auditable.
+  approval state and promotion scriptable and auditable:
+  - **Path A (Propose-Review-Promote Schema):** Store proposed alterations in an `ApprovalRequest` outbox table containing the serialized target states (`PendingStateJson`) rather than modifying active tables immediately.
+  - **Path B (Scriptable Approvals):** Add new declarative ETL-SQL syntax to configuration scripts (`PROPOSE UPDATE...` and `APPROVE PROPOSAL... BY '<reviewer>' WITH SIGNATURE = '...'`) so that approval histories and promotions remain reproducible and auditable in reconstruction bootstraps.
+  - **Path C (API Interception & Validation):** Configure ASP.NET Core controllers to intercept mutations on gated resources, return a `202 Accepted` with a proposal ID, and enforce the dual-control constraint **`ProposerId != ReviewerId`** upon approval.
 - [ ] **P3.6 Decide the self-service password recovery boundary.**
   Only administrator password reset exists today. That may be the right answer for an LDAP-centric
   deployment, but document it as an explicit boundary alongside the P3.2 SSO/MFA decision (and note
   that email-based self-service reset would depend on the P0.1/P0.2 trusted SMTP path) so it reads as
   a choice rather than an omission.
+- [ ] **P3.7 Centralized Policy Enforcement & Remote Auditing.**
+  Workstation local executions can bypass config policies, override guards via `SET` commands, and alter
+  local logs. Enable enterprise-locked parameters and remote audit telemetry:
+  - **Path A (Immutable Central Config):** Allow the CLI to resolve configuration via environment variables, a secured network mount path, or a cryptographically signed HTTPS policy endpoint, failing closed if the server is unreachable or the signature validation fails.
+  - **Path B (Locked Guardrails & Blocked SET Commands):** Reject compilation/linting of scripts containing explicitly blacklisted `SET` commands (e.g. `DisabledSetCommands`), and block runtime execution if a `SET` command attempts to modify a `LockedSettings` parameter.
+  - **Path C (Tamper-Proof Audit Sinks):** Stream telemetry events (invocations, rule bypasses, failures) in real time over HTTPS/Syslog using cross-platform Serilog remote sinks to write-only SIEM/centralized loggers (e.g., Elasticsearch, Splunk).
 
 ### Recommended execution order
 
@@ -704,19 +747,27 @@ Use this list to track and prioritize outstanding roadmap items, architecture mo
 
 ### Tooling / standards / docs
 
-- [ ] **R16 (P2). No `.editorconfig`, analyzer config, or format gate.**
+- [x] **R16 (P2). No `.editorconfig`, analyzer config, or format gate.**
   User config claims "standard EditorConfig settings" but the repo has none at root, no
   `TreatWarningsAsErrors`/`AnalysisLevel` in `Directory.Build.props`, and CI has no
   `dotnet format --verify-no-changes` step. The build is currently 0-warning — cheap to lock that in
   now (warnings-as-errors + an `.editorconfig`) before drift accumulates.
-- [ ] **R17 (P3). `SharpCompress` is referenced globally.**
+  *(done — v0.11.0)* Added a root `.editorconfig` setting standard C# layout/naming rules, enabled
+  `TreatWarningsAsErrors` and `AnalysisLevel=latest` in `Directory.Build.props`, formatted the entire
+  codebase, and added a `dotnet format --verify-no-changes` step to the Github Actions CI workflow.
+- [x] **R17 (P3). `SharpCompress` is referenced globally.**
   `Directory.Build.props` injects `<PackageReference Include="SharpCompress" />` into **every**
   project, including Core and shells that don't compress anything. Scope it to the projects that use
   it (transitive surface, audit noise, P2.9 scan scope).
-- [ ] **R18 (P2). AGENTS.md connector list is stale.**
+  *(done — v0.11.0)* Removed the global `SharpCompress` package reference. The package was completely
+  unused in C# files and has been removed from all projects, resulting in a cleaner dependency surface.
+- [x] **R18 (P2). AGENTS.md connector list is stale.**
   §2 lists ~20 connector tokens; the code ships 29 (missing from the list: `MYSQL`, `SQLITE`,
   `MONGODB`, `KAFKA`, `NEO4J`, `S3`, `SHAREPOINT`, `ACTIVE_DIRECTORY` — all of which
   `Data_Connectors.md` documents). CLAUDE.md's "14 connector types" is also stale. Agents writing
   scripts from AGENTS.md will wrongly avoid supported connectors. Sync both files (and note
   CLAUDE.md says `sync-assets.ps1` while AGENTS.md/CI use `node scripts/sync-assets.js` — pick one
   as canonical).
+  *(done — v0.11.0)* Updated the connector list in `AGENTS.md` and the architecture overview table in
+  `CLAUDE.md` to reflect all 29 supported connector types, and standardized the asset synchronization
+  instructions on `node .\scripts\sync-assets.js` across both files.

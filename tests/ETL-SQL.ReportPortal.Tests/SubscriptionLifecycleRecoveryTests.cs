@@ -1,0 +1,164 @@
+using ETL_SQL.Core.Data;
+using ETL_SQL.Orchestrator.Storage;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace ETL_SQL.ReportPortal.Tests;
+
+/// <summary>
+/// P1.2 — the subscription row is the source of truth; startup reconciliation converges the
+/// generated script and the Orchestrator job to it, so a crash anywhere in the
+/// create/update/delete sequence heals at the next startup.
+/// </summary>
+[Trait("Category", "Portal")]
+public class SubscriptionLifecycleRecoveryTests
+{
+    [Fact]
+    public async Task Reconcile_ConvergesScriptsAndOrchestratorJobsToRowState()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        using var scope = factory.Services.CreateScope();
+
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var owner = new PortalUser
+        {
+            UserName = $"recovery-owner-{suffix}",
+            Email = $"recovery-owner-{suffix}@test.local",
+            IsActive = true
+        };
+        db.Users.Add(owner);
+        await db.SaveChangesAsync();
+
+        var folder = new Folder
+        {
+            Name = $"Recovery Folder {suffix}",
+            Path = $"/recovery-{suffix}",
+            OwnerId = owner.Id
+        };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+
+        var report = new Report
+        {
+            FolderId = folder.Id,
+            Name = $"RecoveryReport{suffix}",
+            ScriptPath = Path.Combine(config.ScriptRootPath, $"recovery-{suffix}.rptsql"),
+            CreatedBy = owner.Id
+        };
+        db.Reports.Add(report);
+        await db.SaveChangesAsync();
+
+        Subscription NewSub(string schedule, bool isActive, string? atTime = null) => new()
+        {
+            ReportId = report.Id,
+            UserId = owner.Id,
+            Schedule = schedule,
+            AtTime = atTime,
+            Format = SubscriptionFormat.CSV,
+            SmtpAlias = "alias",
+            Recipients = "r@test.local",
+            IsActive = isActive
+        };
+
+        // Crash artifact 1: row exists but the script write and job registration never happened.
+        var missingEverything = NewSub("Daily", isActive: true, atTime: "08:30");
+        // Crash artifact 2: row updated (Weekly, paused) but the job kept the old schedule and
+        // stayed enabled; the job also carries run bookkeeping that must survive realignment.
+        var drifted = NewSub("Weekly", isActive: false);
+        db.Subscriptions.AddRange(missingEverything, drifted);
+        await db.SaveChangesAsync();
+
+        var subscriptionDir = Path.Combine(config.ScriptRootPath, "subscriptions");
+        Directory.CreateDirectory(subscriptionDir);
+
+        var driftedScript = Path.Combine(
+            subscriptionDir, SubscriptionOrchestration.ScriptFileName(drifted.Id, report.Name));
+        SubscriptionTriggerScript.Write(driftedScript, drifted.Id);
+        drifted.ScriptPath = driftedScript;
+        await db.SaveChangesAsync();
+
+        // Crash artifact 3: an abandoned atomic-write temp file.
+        var abandonedTmp = driftedScript + ".tmp-deadbeef";
+        await File.WriteAllTextAsync(abandonedTmp, "partial write");
+
+        // Orchestrator job DB with: a job for a deleted subscription, a stale-named duplicate
+        // for the drifted subscription, and the drifted job itself with wrong schedule/enable.
+        var orchDbPath = Path.Combine(factory.TempDir, $"recovery-orch-{suffix}.db");
+        var store = new SQLiteJobHistoryStore(orchDbPath);
+        await store.InitializeAsync();
+
+        var orphanName = SubscriptionOrchestration.JobName(999_999, "DeletedReport");
+        await store.SaveJobAsync(new JobDefinition(
+            orphanName, "RUN SCRIPT 'ghost';", 1, "DAY", null, null, null, true));
+
+        var staleName = SubscriptionOrchestration.JobName(drifted.Id, "OldReportName");
+        await store.SaveJobAsync(new JobDefinition(
+            staleName, "RUN SCRIPT 'stale';", 1, "DAY", null, null, null, true));
+
+        var lastRun = DateTime.Now.AddHours(-2);
+        await store.SaveJobAsync(new JobDefinition(
+            SubscriptionOrchestration.JobName(drifted.Id, report.Name),
+            $"RUN SCRIPT '{driftedScript.Replace("\\", "\\\\")}';",
+            1, "DAY", "07:00", lastRun, null, IsEnabled: true));
+
+        await SubscriptionScriptMaintenance.ReconcileAsync(db, config, orchDbPath, NullLogger.Instance);
+
+        // Healed: ScriptPath regenerated and the trigger script written.
+        await db.Entry(missingEverything).ReloadAsync();
+        Assert.False(string.IsNullOrWhiteSpace(missingEverything.ScriptPath));
+        Assert.Equal(
+            SubscriptionTriggerScript.Compose(missingEverything.Id),
+            await File.ReadAllTextAsync(missingEverything.ScriptPath!));
+
+        var jobs = (await store.GetAllJobsAsync()).ToList();
+
+        // Healed: a job recreated from row state, including the persisted delivery time.
+        var recreated = Assert.Single(jobs, j =>
+            j.Name == SubscriptionOrchestration.JobName(missingEverything.Id, report.Name));
+        Assert.Equal(1, recreated.Interval);
+        Assert.Equal("DAY", recreated.Unit);
+        Assert.Equal("08:30", recreated.AtTime);
+        Assert.True(recreated.IsEnabled);
+        Assert.Contains(missingEverything.ScriptPath!.Replace("\\", "\\\\"), recreated.Script);
+
+        // Converged: schedule and enablement follow the row; run bookkeeping survives.
+        var realigned = Assert.Single(jobs, j =>
+            j.Name == SubscriptionOrchestration.JobName(drifted.Id, report.Name));
+        Assert.Equal(1, realigned.Interval);
+        Assert.Equal("WEEK", realigned.Unit);
+        Assert.False(realigned.IsEnabled);
+        Assert.Equal(lastRun, realigned.LastRun);
+
+        // Removed: the orphaned job, the stale-named duplicate, and the abandoned temp file.
+        Assert.DoesNotContain(jobs, j => j.Name == orphanName);
+        Assert.DoesNotContain(jobs, j => j.Name == staleName);
+        Assert.False(File.Exists(abandonedTmp));
+
+        // Idempotent: a second pass changes nothing.
+        var scriptWriteTime = File.GetLastWriteTimeUtc(missingEverything.ScriptPath!);
+        await SubscriptionScriptMaintenance.ReconcileAsync(db, config, orchDbPath, NullLogger.Instance);
+        Assert.Equal(scriptWriteTime, File.GetLastWriteTimeUtc(missingEverything.ScriptPath!));
+        Assert.Equal(jobs.Count, (await store.GetAllJobsAsync()).Count());
+    }
+
+    [Fact]
+    public async Task Create_PersistsAtTime_SoAHealedJobKeepsItsDeliveryTime()
+    {
+        using var factory = new PortalWebFactory();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+
+        // The entity carries AtTime so reconciliation can rebuild a lost job without losing
+        // the configured wall-clock delivery time (it is not recoverable from anywhere else).
+        var entity = db.Model.FindEntityType(typeof(Subscription));
+        Assert.NotNull(entity);
+        Assert.NotNull(entity!.FindProperty(nameof(Subscription.AtTime)));
+    }
+}
