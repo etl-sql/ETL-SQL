@@ -144,7 +144,11 @@ namespace ETL_SQL.Engine.Handlers
             {
                 if (context.IsWhatIf)
                 {
-                    _logger.WriteLine($"WHAT IF: Would execute portal admin statement {innerStmt.GetType().Name} on {connectionName}", ConsoleColor.Yellow);
+                    // Read-only validating dry-run (see ExecuteRemoteBlockStatementHandler).
+                    var plan = await adminConn.PlanAdminStatementAsync(innerStmt, context);
+                    _logger.WriteLine(
+                        plan ?? $"WHAT IF: Would execute portal admin statement {innerStmt.GetType().Name} on {connectionName}",
+                        ConsoleColor.Yellow);
                     continue;
                 }
                 await adminConn.ExecuteAdminStatementAsync(innerStmt, context);

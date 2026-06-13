@@ -96,11 +96,26 @@ release begins.
   `${INITIAL_ADMIN_PASSWORD}`, `${SMTP_CORPORATE_PASSWORD}`, and `${ORCHESTRATOR_API_KEY}` with a generated
   requirements header. Prefer environment/secret-provider references so an administrator does not have
   to place plaintext directly in the bootstrap script.
-- [ ] **P1.9 Add deterministic import, validation, and dry-run behavior.**
+- [x] **P1.9 Add deterministic import, validation, and dry-run behavior.**
   The exported script must support `SET WHAT_IF ON`, report missing secrets and conflicting objects before
   mutation, and be safe to rerun. Define create/update/skip behavior explicitly; do not depend on source
   integer IDs. Validate referential order and fail closed when a named folder, group, report, SMTP alias,
   or dataset source is unavailable.
+  *(done — v0.11.0)* The bootstrap replays through the `REPORTPORTAL` connector (a normal script run,
+  so `SET WHAT_IF ON` is honored). The identity/permission graph is now **idempotent create-or-skip**
+  (USER, GROUP, ADD-USER-TO-GROUP, FOLDER, SMTP, PUBLISH REPORT all check existence first via new
+  `Try*` lookup helpers; folder/dataset GRANT were already server-side upserts) — safe to rerun
+  without `409`s, by logical name only. **Fail-closed before mutation:** `ResolveRequiredSecretAsync`
+  rejects an unsubstituted `${...}` placeholder before it is sent, and missing folder/group/user/report
+  references throw a clear error instead of a generic portal failure. **Validating dry-run:** new
+  read-only `IPortalAdminConnection.PlanAdminStatementAsync` (default-interface method, overridden by
+  the portal connector) reports a create/skip plan and runs the same reference/secret validation
+  without mutating; the two engine remote-block handlers now route WHAT_IF through it instead of the
+  old type-name-only message. Tests: `ScriptedPortalImportTests` drives the connector against the
+  in-memory portal via a new injectable-`HttpClient` ctor (idempotent double-replay, dry-run plan with
+  no mutation, missing-secret fail-closed, missing-reference fail-closed). Residual: subscriptions and
+  alerts are id-keyed (not yet name-deduped) so they re-create on rerun — documented in the admin guide
+  import section; name-keyed subscription/alert upsert and the round-trip proof remain with P1.11.
 - [ ] **P1.10 Separate configuration reconstruction from data/content backup.**
   A bootstrap script reconstructs configuration, not encrypted datasets or generated report output.
   Produce a companion manifest/runbook identifying report scripts/bundles and portable dataset exports

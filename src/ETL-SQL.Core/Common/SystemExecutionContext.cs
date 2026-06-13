@@ -259,7 +259,7 @@ namespace ETL_SQL.Core.Common
             Messages.Add(new LogEntry(message, color, DateTime.UtcNow));
         }
 
-        public ValueTask<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false) => new ValueTask<object?>(null as object);
+        public virtual ValueTask<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false) => new ValueTask<object?>(null as object);
         public IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context) => AsyncEnumerable.Empty<Row>();
         public ValueTask<bool> EvaluateCondition(Expression? expr, Row context) => new ValueTask<bool>(false);
         public ValueTask<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context) => new ValueTask<object?>(null as object);

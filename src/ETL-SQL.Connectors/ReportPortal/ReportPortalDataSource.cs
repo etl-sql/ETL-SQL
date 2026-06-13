@@ -56,6 +56,26 @@ namespace ETL_SQL.Connectors.ReportPortal
             };
         }
 
+        /// <summary>
+        /// Test/DI constructor: drives the connector over a caller-supplied <see cref="HttpClient"/>
+        /// (for example one built over an in-memory test-server handler). The client's
+        /// <see cref="HttpClient.BaseAddress"/> must point at the portal root.
+        /// </summary>
+        public ReportPortalDataSource(HttpClient http, string username, string password, ILogger logger)
+        {
+            _http = http ?? throw new ArgumentNullException(nameof(http));
+            _baseUrl = http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+            _username = username;
+            _password = password;
+            _logger = logger;
+            Options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["HOST"] = _baseUrl,
+                ["USER"] = username,
+                ["PASSWORD"] = "********"
+            };
+        }
+
         // ── IDataSource (stub — portal connections don't support read/write) ───────
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
@@ -181,11 +201,19 @@ namespace ETL_SQL.Connectors.ReportPortal
 
         private async Task CreateUserAsync(CreatePortalUserStatement stmt, IExecutionContext context)
         {
+            var isLdap = stmt.Provider is not null
+                && stmt.Provider.Equals("LDAP", StringComparison.OrdinalIgnoreCase);
             var password = stmt.Password is not null
-                ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() ?? ""
-                : (stmt.Provider != null && stmt.Provider.Equals("LDAP", StringComparison.OrdinalIgnoreCase))
-                    ? null
-                    : throw new ExecutionException("CREATE USER requires PASSWORD");
+                ? await ResolveRequiredSecretAsync(stmt.Password, context, $"user '{stmt.Username}'")
+                : isLdap ? null : throw new ExecutionException("CREATE USER requires PASSWORD");
+
+            // Idempotent provisioning: a user that already exists is left untouched so the
+            // bootstrap script is safe to rerun.
+            if (await TryLookupUserIdAsync(stmt.Username) is not null)
+            {
+                _logger.WriteLine($"User '{stmt.Username}' already exists — skipped.", ConsoleColor.DarkGray);
+                return;
+            }
 
             var req = new
             {
@@ -274,6 +302,11 @@ namespace ETL_SQL.Connectors.ReportPortal
 
         private async Task CreateGroupAsync(CreatePortalGroupStatement stmt, IExecutionContext context)
         {
+            if (await TryLookupGroupIdAsync(stmt.Name) is not null)
+            {
+                _logger.WriteLine($"Group '{stmt.Name}' already exists — skipped.", ConsoleColor.DarkGray);
+                return;
+            }
             var req = new
             {
                 Name = stmt.Name,
@@ -295,11 +328,38 @@ namespace ETL_SQL.Connectors.ReportPortal
 
         private async Task AddUserToGroupAsync(AddUserToPortalGroupStatement stmt, IExecutionContext context)
         {
+            // Fail closed on a missing reference rather than passing a generic portal 404 upward.
             var groupId = await LookupGroupIdAsync(stmt.GroupName);
+            if (await TryLookupUserIdAsync(stmt.Username) is null)
+                throw new ExecutionException(
+                    $"Cannot add '{stmt.Username}' to group '{stmt.GroupName}': user does not exist.");
+
+            if (await IsGroupMemberAsync(groupId, stmt.Username))
+            {
+                _logger.WriteLine(
+                    $"User '{stmt.Username}' is already in group '{stmt.GroupName}' — skipped.", ConsoleColor.DarkGray);
+                return;
+            }
+
             var req = new { Username = stmt.Username };
             await CallAsync(HttpMethod.Post, $"api/admin/groups/{groupId}/members", req,
                 $"User '{stmt.Username}' added to group '{stmt.GroupName}'.");
         }
+
+        private async Task<bool> IsGroupMemberAsync(int groupId, string username)
+        {
+            var resp = await _http.GetAsync($"api/admin/groups/{groupId}/members");
+            if (!resp.IsSuccessStatusCode) return false;
+            var members = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
+            // The members endpoint serializes Identity's UserName ("userName"); the users endpoint
+            // serializes the DTO's Username ("username") — accept either casing.
+            return members.Any(m =>
+                (TryGetString(m, "userName") ?? TryGetString(m, "username"))
+                    ?.Equals(username, StringComparison.OrdinalIgnoreCase) == true);
+        }
+
+        private static string? TryGetString(JsonElement element, string property) =>
+            element.TryGetProperty(property, out var v) ? v.GetString() : null;
 
         // ── SMTP connections ──────────────────────────────────────────────────────
 
@@ -308,8 +368,14 @@ namespace ETL_SQL.Connectors.ReportPortal
             // The password expression is evaluated once and sent over the authenticated channel;
             // the portal stores it encrypted (SmtpPasswordProtector) and never returns it.
             var password = stmt.Password is not null
-                ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString()
+                ? await ResolveRequiredSecretAsync(stmt.Password, context, $"SMTP connection '{stmt.Alias}'")
                 : null;
+
+            if (await TryLookupSmtpConnectionIdAsync(stmt.Alias) is not null)
+            {
+                _logger.WriteLine($"SMTP connection '{stmt.Alias}' already exists — skipped.", ConsoleColor.DarkGray);
+                return;
+            }
 
             var req = new
             {
@@ -335,7 +401,11 @@ namespace ETL_SQL.Connectors.ReportPortal
         private async Task ShowSmtpConnectionsAsync(ShowPortalSmtpConnectionsStatement stmt, IExecutionContext context) =>
             await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, "api/admin/smtp", null), stmt.IntoTable, context);
 
-        private async Task<int> LookupSmtpConnectionIdAsync(string alias)
+        private async Task<int> LookupSmtpConnectionIdAsync(string alias) =>
+            await TryLookupSmtpConnectionIdAsync(alias)
+            ?? throw new ExecutionException($"Portal SMTP connection '{alias}' not found.");
+
+        private async Task<int?> TryLookupSmtpConnectionIdAsync(string alias)
         {
             var resp = await _http.GetAsync("api/admin/smtp");
             resp.EnsureSuccessStatusCode();
@@ -343,9 +413,7 @@ namespace ETL_SQL.Connectors.ReportPortal
             var match = connections.FirstOrDefault(c =>
                 c.TryGetProperty("alias", out var v) &&
                 v.GetString()?.Equals(alias, StringComparison.OrdinalIgnoreCase) == true);
-            if (match.ValueKind == JsonValueKind.Undefined)
-                throw new ExecutionException($"Portal SMTP connection '{alias}' not found.");
-            return match.GetProperty("id").GetInt32();
+            return match.ValueKind == JsonValueKind.Undefined ? null : match.GetProperty("id").GetInt32();
         }
 
         // ── Folders ───────────────────────────────────────────────────────────────
@@ -358,6 +426,12 @@ namespace ETL_SQL.Connectors.ReportPortal
             string name, parentPath;
             if (slash < 0) { name = path; parentPath = ""; }
             else { name = path[(slash + 1)..]; parentPath = "/" + path[..slash]; }
+
+            if (await TryLookupFolderIdAsync(stmt.Path) is not null)
+            {
+                _logger.WriteLine($"Folder '{stmt.Path}' already exists — skipped.", ConsoleColor.DarkGray);
+                return;
+            }
 
             int? parentId = null;
             if (!string.IsNullOrEmpty(parentPath))
@@ -410,6 +484,16 @@ namespace ETL_SQL.Connectors.ReportPortal
         private async Task PublishReportAsync(PublishPortalReportStatement stmt, IExecutionContext context)
         {
             var folderId = await LookupFolderIdAsync(stmt.FolderPath);
+
+            // Idempotent: a report already published under this folder/name is left as-is.
+            if (await TryLookupReportIdAsync($"{stmt.FolderPath.TrimEnd('/')}/{stmt.ReportName}") is not null
+                || await TryLookupReportIdAsync(stmt.ReportName) is not null)
+            {
+                _logger.WriteLine(
+                    $"Report '{stmt.ReportName}' already published in '{stmt.FolderPath}' — skipped.", ConsoleColor.DarkGray);
+                return;
+            }
+
             var req = new
             {
                 FolderId = folderId,
@@ -833,9 +917,114 @@ namespace ETL_SQL.Connectors.ReportPortal
                 ConsoleColor.Green);
         }
 
+        // ── Deterministic import: dry-run plan + secret guard (P1.9) ──────────────
+
+        /// <summary>
+        /// Read-only dry-run for <c>SET WHAT_IF ON</c>: validates references and required secrets
+        /// (throwing to fail closed when one is missing) and reports a create/skip plan, all without
+        /// mutating the portal. Returns null for statements outside the bootstrap set so the engine
+        /// logs a generic message.
+        /// </summary>
+        public async Task<string?> PlanAdminStatementAsync(Statement statement, IExecutionContext context)
+        {
+            await EnsureAuthenticatedAsync();
+            switch (statement)
+            {
+                case CreatePortalGroupStatement s:
+                    return await TryLookupGroupIdAsync(s.Name) is not null
+                        ? $"WHAT IF: group '{s.Name}' already exists — would skip."
+                        : $"WHAT IF: would create group '{s.Name}'.";
+
+                case CreatePortalUserStatement s:
+                    if (s.Password is not null)
+                        await ResolveRequiredSecretAsync(s.Password, context, $"user '{s.Username}'");
+                    return await TryLookupUserIdAsync(s.Username) is not null
+                        ? $"WHAT IF: user '{s.Username}' already exists — would skip."
+                        : $"WHAT IF: would create user '{s.Username}' (role {s.Role ?? "Viewer"}).";
+
+                case AddUserToPortalGroupStatement s:
+                    {
+                        if (await TryLookupGroupIdAsync(s.GroupName) is not { } gid)
+                            throw new ExecutionException(
+                                $"Cannot add '{s.Username}' to group '{s.GroupName}': group does not exist.");
+                        if (await TryLookupUserIdAsync(s.Username) is null)
+                            throw new ExecutionException(
+                                $"Cannot add '{s.Username}' to group '{s.GroupName}': user does not exist.");
+                        return await IsGroupMemberAsync(gid, s.Username)
+                            ? $"WHAT IF: '{s.Username}' already in group '{s.GroupName}' — would skip."
+                            : $"WHAT IF: would add '{s.Username}' to group '{s.GroupName}'.";
+                    }
+
+                case CreatePortalFolderStatement s:
+                    return await TryLookupFolderIdAsync(s.Path) is not null
+                        ? $"WHAT IF: folder '{s.Path}' already exists — would skip."
+                        : $"WHAT IF: would create folder '{s.Path}'.";
+
+                case GrantPortalPermissionStatement s:
+                    if (await TryLookupFolderIdAsync(s.FolderPath) is null)
+                        throw new ExecutionException(
+                            $"Cannot grant on folder '{s.FolderPath}': folder does not exist.");
+                    if (await TryLookupGroupIdAsync(s.GroupName) is null)
+                        throw new ExecutionException(
+                            $"Cannot grant on folder '{s.FolderPath}': group '{s.GroupName}' does not exist.");
+                    return $"WHAT IF: would grant {s.Permission} on folder '{s.FolderPath}' to group '{s.GroupName}'.";
+
+                case CreatePortalSmtpConnectionStatement s:
+                    if (s.Password is not null)
+                        await ResolveRequiredSecretAsync(s.Password, context, $"SMTP connection '{s.Alias}'");
+                    return await TryLookupSmtpConnectionIdAsync(s.Alias) is not null
+                        ? $"WHAT IF: SMTP connection '{s.Alias}' already exists — would skip."
+                        : $"WHAT IF: would create SMTP connection '{s.Alias}'.";
+
+                case PublishPortalReportStatement s:
+                    {
+                        if (await TryLookupFolderIdAsync(s.FolderPath) is null)
+                            throw new ExecutionException(
+                                $"Cannot publish '{s.ReportName}': folder '{s.FolderPath}' does not exist.");
+                        var exists = await TryLookupReportIdAsync($"{s.FolderPath.TrimEnd('/')}/{s.ReportName}") is not null
+                            || await TryLookupReportIdAsync(s.ReportName) is not null;
+                        return exists
+                            ? $"WHAT IF: report '{s.ReportName}' already published in '{s.FolderPath}' — would skip."
+                            : $"WHAT IF: would publish report '{s.ReportName}' to '{s.FolderPath}'.";
+                    }
+
+                case AlterPortalUserStatement s:
+                    return await TryLookupUserIdAsync(s.Username) is not null
+                        ? $"WHAT IF: would update user '{s.Username}'."
+                        : throw new ExecutionException($"Cannot alter user '{s.Username}': user does not exist.");
+
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>True when a value is still an unsubstituted <c>${PLACEHOLDER}</c> from an
+        /// exported bootstrap script.</summary>
+        private static bool IsUnresolvedSecretPlaceholder(string? value) =>
+            value is not null
+            && value.StartsWith("${", StringComparison.Ordinal)
+            && value.EndsWith("}", StringComparison.Ordinal);
+
+        /// <summary>Evaluates a secret expression and fails closed if it is still an
+        /// unsubstituted <c>${...}</c> placeholder — the placeholder is never sent to the portal.</summary>
+        private static async Task<string?> ResolveRequiredSecretAsync(
+            Expression expr, IExecutionContext context, string label)
+        {
+            var value = (await context.EvaluateValue(expr, new Row()))?.ToString();
+            if (IsUnresolvedSecretPlaceholder(value))
+                throw new ExecutionException(
+                    $"Required secret for {label} was not provided — replace the {value} placeholder " +
+                    "with the real secret (or an environment/secret reference) before importing.");
+            return value;
+        }
+
         // ── Lookup helpers ────────────────────────────────────────────────────────
 
-        private async Task<int> LookupUserIdAsync(string username)
+        private async Task<int> LookupUserIdAsync(string username) =>
+            await TryLookupUserIdAsync(username)
+            ?? throw new ExecutionException($"Portal user '{username}' not found.");
+
+        private async Task<int?> TryLookupUserIdAsync(string username)
         {
             var resp = await _http.GetAsync("api/admin/users");
             resp.EnsureSuccessStatusCode();
@@ -843,12 +1032,14 @@ namespace ETL_SQL.Connectors.ReportPortal
             var user = users.FirstOrDefault(u =>
                 u.TryGetProperty("username", out var v) &&
                 v.GetString()?.Equals(username, StringComparison.OrdinalIgnoreCase) == true);
-            if (user.ValueKind == JsonValueKind.Undefined)
-                throw new ExecutionException($"Portal user '{username}' not found.");
-            return user.GetProperty("id").GetInt32();
+            return user.ValueKind == JsonValueKind.Undefined ? null : user.GetProperty("id").GetInt32();
         }
 
-        private async Task<int> LookupGroupIdAsync(string name)
+        private async Task<int> LookupGroupIdAsync(string name) =>
+            await TryLookupGroupIdAsync(name)
+            ?? throw new ExecutionException($"Portal group '{name}' not found.");
+
+        private async Task<int?> TryLookupGroupIdAsync(string name)
         {
             var resp = await _http.GetAsync("api/admin/groups");
             resp.EnsureSuccessStatusCode();
@@ -856,21 +1047,21 @@ namespace ETL_SQL.Connectors.ReportPortal
             var group = groups.FirstOrDefault(g =>
                 g.TryGetProperty("name", out var v) &&
                 v.GetString()?.Equals(name, StringComparison.OrdinalIgnoreCase) == true);
-            if (group.ValueKind == JsonValueKind.Undefined)
-                throw new ExecutionException($"Portal group '{name}' not found.");
-            return group.GetProperty("id").GetInt32();
+            return group.ValueKind == JsonValueKind.Undefined ? null : group.GetProperty("id").GetInt32();
         }
 
-        private async Task<int> LookupFolderIdAsync(string path)
+        private async Task<int> LookupFolderIdAsync(string path) =>
+            await TryLookupFolderIdAsync(path)
+            ?? throw new ExecutionException($"Portal folder '{path}' not found.");
+
+        private async Task<int?> TryLookupFolderIdAsync(string path)
         {
             var resp = await _http.GetAsync("api/folders");
             resp.EnsureSuccessStatusCode();
             // Flatten the tree by traversing it
             var tree = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
             var match = FindFolderByPath(tree, path.TrimEnd('/'));
-            if (match is null)
-                throw new ExecutionException($"Portal folder '{path}' not found.");
-            return match.Value.GetProperty("id").GetInt32();
+            return match?.GetProperty("id").GetInt32();
         }
 
         private static JsonElement? FindFolderByPath(IEnumerable<JsonElement> nodes, string targetPath)
@@ -889,7 +1080,13 @@ namespace ETL_SQL.Connectors.ReportPortal
             return null;
         }
 
-        private async Task<int> LookupReportIdAsync(string name)
+        private async Task<int> LookupReportIdAsync(string name) =>
+            await TryLookupReportIdAsync(name)
+            ?? throw new ExecutionException($"Portal report '{name}' not found.");
+
+        /// <summary>Resolves a report id by name or folder/name, returning null when none match.
+        /// An ambiguous name still throws — that is a configuration error, not an absence.</summary>
+        private async Task<int?> TryLookupReportIdAsync(string name)
         {
             var resp = await _http.GetAsync("api/admin/reports");
             resp.EnsureSuccessStatusCode();
@@ -908,7 +1105,7 @@ namespace ETL_SQL.Connectors.ReportPortal
                     || combined?.Equals(target, StringComparison.OrdinalIgnoreCase) == true;
             }).ToList();
             if (matches.Count == 0)
-                throw new ExecutionException($"Portal report '{name}' not found.");
+                return null;
             if (matches.Count > 1)
                 throw new ExecutionException($"Portal report name '{name}' is ambiguous. Rename one report or use a unique name.");
             return matches[0].GetProperty("id").GetInt32();

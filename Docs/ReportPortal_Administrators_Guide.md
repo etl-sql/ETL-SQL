@@ -1038,6 +1038,34 @@ Notes:
   refresh jobs are listed in the summary for manual re-creation because they need an Orchestrator
   connection alias.
 
+#### Importing (replaying the bootstrap)
+
+The bootstrap is replayed by running it as a normal script through an admin `REPORTPORTAL`
+connection — substitute the `${...}` placeholders, then:
+
+```sql
+CREATE CONNECTION portal AS REPORTPORTAL (HOST = '...', USERNAME = 'admin', PASSWORD = ENC:...);
+-- Preview first — no mutations, validates references and secrets:
+SET WHAT_IF ON;
+-- run the EXECUTE portal BEGIN … END block; the portal reports a create/skip plan per statement
+SET WHAT_IF OFF;
+-- run it again to apply
+```
+
+Import behavior:
+
+- **Idempotent (safe to rerun).** Provisioning the identity/permission graph — users, groups,
+  group memberships, folders, folder grants, SMTP connections, report publications — is
+  create-or-skip: an object that already exists is left untouched and logged as skipped, so the
+  same bootstrap can be replayed without `409 Conflict` errors. (Subscriptions and alerts are not
+  yet name-keyed and would be re-created on a rerun — drop them first or run them once.)
+- **Fail-closed before mutation.** A missing referenced folder, group, user, or report stops the
+  statement with a clear error instead of a generic portal failure, and an unsubstituted `${...}`
+  secret placeholder is rejected before it is ever sent to the portal.
+- **`SET WHAT_IF ON` is a validating dry-run.** Each statement reports what it *would* do
+  (create / skip) and performs the same reference and secret validation as a real apply — without
+  writing anything — so you can confirm a clean import before committing to it.
+
 ### 9.1 Report Operations
 
 ```sql

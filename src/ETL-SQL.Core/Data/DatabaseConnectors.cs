@@ -140,6 +140,17 @@ namespace ETL_SQL.Data
     public interface IPortalAdminConnection : IDataSource
     {
         Task ExecuteAdminStatementAsync(Statement statement, IExecutionContext context);
+
+        /// <summary>
+        /// Read-only dry-run for <c>SET WHAT_IF ON</c>: returns a human-readable plan line
+        /// describing what <see cref="ExecuteAdminStatementAsync"/> would do (create / skip /
+        /// update / conflict), or <c>null</c> when the statement is not plannable (the caller then
+        /// falls back to a generic message). Implementations MUST NOT mutate portal state. They MAY
+        /// throw to fail closed when a required reference or secret is missing, so a dry-run surfaces
+        /// the same blocking problems an apply would — before any mutation.
+        /// </summary>
+        Task<string?> PlanAdminStatementAsync(Statement statement, IExecutionContext context) =>
+            Task.FromResult<string?>(null);
     }
 
     public class ConnectorRegistry : IConnectorRegistry

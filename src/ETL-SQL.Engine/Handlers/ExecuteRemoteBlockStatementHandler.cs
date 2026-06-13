@@ -44,7 +44,13 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     if (context.IsWhatIf)
                     {
-                        _logger.WriteLine($"WHAT IF: Would execute portal admin statement {innerStmt.GetType().Name} on {connName}", ConsoleColor.Yellow);
+                        // Read-only validating dry-run: the connector reports a create/skip/conflict
+                        // plan and may throw to fail closed on a missing reference or secret, without
+                        // mutating. Falls back to a generic message when the statement is not plannable.
+                        var plan = await adminConn.PlanAdminStatementAsync(innerStmt, context);
+                        _logger.WriteLine(
+                            plan ?? $"WHAT IF: Would execute portal admin statement {innerStmt.GetType().Name} on {connName}",
+                            ConsoleColor.Yellow);
                         continue;
                     }
                     await adminConn.ExecuteAdminStatementAsync(innerStmt, context);
