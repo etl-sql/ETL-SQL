@@ -197,10 +197,25 @@ release begins.
   failure, runner-throws unknown outcome (recorded + not reclaimed), missing/disabled SMTP alias, and
   denial isolated from a healthy delivery. **Residual:** delivery is whole-subscription (one message to
   all recipients); per-recipient split/isolation is a documented follow-up.
-- [ ] **P2.4 Add fault-injection and recovery tests.**
+- [x] **P2.4 Add fault-injection and recovery tests.**
   Kill processes between every cross-resource step; simulate SQLite busy/locked, disk full, corrupt files,
   unavailable Orchestrator/SMTP, network partition, and clock skew. Verify reconciliation is idempotent and
   preserves the last known-good report/dataset/subscription state.
+  *(done — v0.11.0)* New `FaultInjectionRecoveryTests` (fast lane) adds the deterministic gaps on top of
+  existing recovery coverage: dataset reconciliation is **idempotent** (a second pass is a no-op) and
+  **preserves last known-good** (the referenced cache + row survive while crash artifacts — orphan rows,
+  orphan files, abandoned `.tmp-` staging — are removed); reconciliation **tolerates a held-open
+  (busy/locked) file** without aborting the sweep; and the Orchestrator poller **degrades to cached-only
+  mode** (no throw) when its database is corrupt/unreadable. These complement already-covered scenarios:
+  `SubscriptionLifecycleRecoveryTests` (kill-between-row/script/job → reconcile heals orphan/stale/drifted
+  state, idempotent second pass) and `DatasetStorageMaintenanceTests` (managed-orphan + staging/backup
+  cleanup, referenced/unmanaged preservation), plus the P2.3 delivery-ledger failure modes (timeout,
+  attachment failure, unknown-outcome-not-reclaimed, missing SMTP, denial isolation) and the P2h dataset
+  atomic-write rollback. **Out of fast-lane scope:** disk-full, network-partition, and clock-skew faults
+  are non-deterministic and belong to a separate chaos/integration harness (noted in the test summary);
+  live unavailable-Orchestrator/SMTP outages are exercised by the Docker integration lane
+  (`JobSchedulingIntegrationTests.Verify_Dependency_Outage_And_Fault_Tolerance`,
+  `SubscriptionIntegrationTests.Verify_Subscription_History_When_Orchestrator_Db_Is_Unavailable`).
 - [ ] **P2.5 Automate a complete backup/restore drill.**
   Restore portal DB, Orchestrator DB, report scripts/bundles, subscription definitions, snapshots,
   datasets, Data Protection/key material, and configuration into a clean location. Verify permissions,
