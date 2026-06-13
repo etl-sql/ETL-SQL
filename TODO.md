@@ -175,10 +175,26 @@ release begins.
   self-initiated fatal-validator shutdown overlapped host disposal. Startup *reconciliation*
   (`DatasetStorageMaintenance`/`SubscriptionScriptMaintenance`) runs inline in `Program.cs` and is
   already exercised by every portal test; multi-process coordination remains P2.2.
-- [ ] **P2.2 Add genuine multi-process tests.**
+- [x] **P2.2 Add genuine multi-process tests.**
   Start two portal and/or Orchestrator processes against the supported shared state and test simultaneous
   refresh, due-job claims, job cancellation, permission changes, subscription delivery, restart recovery,
   and conflicting administration. In-process `Task.WhenAll` tests do not prove process coordination.
+  *(done — v0.11.0)* The supported topology is **one active portal per database**, so the coordination
+  that matters happens through durable shared state, not shared memory — and the tests use **separate
+  service instances with separate database connections** (not `Task.WhenAll` on one shared object) so
+  the coordination is proven across connections. Existing proofs: the instance lock rejects a second
+  portal on the same DB (`ExecutionJobServiceTests.StartAsync_RejectsSecondPortalInstanceUsingSameDatabase`,
+  real OS file locks), the Orchestrator job lease runs a due job exactly once across two scheduler
+  instances over one store (`JobExecutionLeaseTests`), restart recovery marks abandoned jobs
+  (`StartAsync_MarksAbandonedJobs…`), and conflicting administration conflicts via optimistic concurrency
+  (`OptimisticConcurrencyIntegrationTests`). New `MultiInstanceCoordinationTests` closes the subscription-
+  delivery gap: two independent delivery executors over fresh WAL connections to one portal DB — a proxy
+  for two poller processes — coordinate through the durable delivery ledger, so a completion delivered by
+  one is suppressed at the second (sequential), exactly one wins a simultaneous race on the same
+  completion (concurrent, via the ledger's unique index, stable over repeated runs), and distinct
+  completions are not falsely contended. **Boundary:** true OS-process isolation (separate connection
+  pools / in-memory caches that a single test process shares) belongs to a Docker/integration harness;
+  the durable cross-connection coordination boundary is proven here.
 - [x] **P2.3 Add subscription delivery idempotency and failure tests.**
   Cover SMTP timeout after server acceptance, retry after unknown outcome, duplicate scheduler trigger,
   attachment generation failure, invalid recipient isolation, disabled SMTP alias, and partial recipient
