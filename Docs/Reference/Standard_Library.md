@@ -221,7 +221,7 @@ FROM #comments;
 
 | Function | Signature | Returns |
 | :--- | :--- | :--- |
-| `GETDATE` / `NOW` | `GETDATE()` | Current system date and time |
+| `GETDATE` / `NOW` / `SYSDATE` | `GETDATE()`, `NOW()`, `SYSDATE()` | Current system date and time (bare identifiers or function calls) |
 | `DATEADD` | `DATEADD(part, n, date)` | Date with N intervals added. Parts: `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND` |
 | `DATEDIFF` | `DATEDIFF(part, start, end)` | Count of part boundaries crossed between two dates |
 | `DATEPART` | `DATEPART(part, date)` | Integer value of the date part (e.g. month → 4) |
@@ -234,8 +234,11 @@ FROM #comments;
 | `EOMONTH` | `EOMONTH(date [, months])` | Last day of the month; optionally offset by N months |
 | `ISDATE` | `ISDATE(expr)` | `1` if parseable as date, `0` otherwise |
 | `DATETIMEFROMPARTS` | `DATETIMEFROMPARTS(y, m, d, h, mi, s, ms)` | Constructs `DATETIME` from component parts |
+| `DATETIMEOFFSETSFROMPARTS` | `DATETIMEOFFSETSFROMPARTS(y, m, d, h, mi, s, frac, h_off, m_off, prec)` | Constructs `DATETIMEOFFSET` from components |
 | `TIMEFROMPARTS` | `TIMEFROMPARTS(h, mi, s, frac, prec)` | Constructs `TIME` from parts |
-| `TRUNC` / `TO_DATE` | `TRUNC(datetime)` | Truncates the time portion; returns date |
+| `TRUNC` | `TRUNC(datetime)` | Truncates the time portion; returns date |
+| `TO_DATE` | `TO_DATE(string [, format])` | Converts string representation of date/time to a `DATETIME` |
+| `RELDATE` | `RELDATE(expression)` | Resolves a relative date expression string (e.g. `'D-1'`, `'M-1'`) |
 | `DATE_TRUNC` | `DATE_TRUNC(part, date)` | Truncates date to specified boundary (Postgres-compatible parameter order) |
 | `TO_TIMESTAMP` | `TO_TIMESTAMP(seconds)` | Converts Unix epoch seconds (with fractional seconds) to a `DATETIME` |
 | `AT TIME ZONE` | `expr AT TIME ZONE 'tz_id'` | Converts expression to the specified timezone |
@@ -252,6 +255,11 @@ SELECT YEAR(OrderDate), MONTH(OrderDate), DAY(OrderDate) FROM #orders;
 
 -- Build a date from parts
 SELECT DATETIMEFROMPARTS(2026, 4, 1, 8, 0, 0, 0) AS StartOfMonth;
+SELECT DATETIMEOFFSETSFROMPARTS(2026, 6, 12, 14, 30, 0, 0, -5, 0, 7) AS EasternTimeOffset;
+
+-- Convert string and relative dates
+SELECT TO_DATE('2026-06-12') AS ExactDate;
+SELECT RELDATE('D-1') AS YesterdayMidnight;
 
 -- Timezone conversion
 DECLARE @nyTime = GETDATE() AT TIME ZONE 'Eastern Standard Time';
@@ -342,7 +350,7 @@ For paired functions (`CORR`, `COVAR_*`), rows where either input is `NULL` are 
 | `MIN(col)` / `MAX(col)` | Minimum / maximum value |
 | `VAR(col)` / `VAR_SAMP(col)` | Sample variance |
 | `VARP(col)` / `VAR_POP(col)` | Population variance |
-| `STDEV(col)` / `STDDEV_SAMP(col)` | Sample standard deviation |
+| `STDEV(col)` / `STDDEV` / `STDDEV_SAMP` | Sample standard deviation (aliases: `STDDEV`, `STDDEV_SAMP`) |
 | `STDEVP(col)` / `STDDEV_POP(col)` | Population standard deviation |
 | `COVAR_SAMP(x, y)` | Sample covariance |
 | `COVAR_POP(x, y)` | Population covariance |
@@ -482,7 +490,7 @@ END
 
 | Function | Signature | Returns |
 | :--- | :--- | :--- |
-| `JSON_VALUE` | `JSON_VALUE(json, path)` | Scalar extracted value |
+| `JSON_VALUE` / `JSON_EXTRACT` | `JSON_VALUE(json, path)` | Scalar extracted value (alias: `JSON_EXTRACT`) |
 | `JSON_QUERY` | `JSON_QUERY(json, path)` | JSON object/array fragment |
 | `JSON_MODIFY` | `JSON_MODIFY(json, path, val)` | Updated JSON string |
 | `ISJSON` | `ISJSON(str)` | `1` if valid JSON |
@@ -711,6 +719,7 @@ FROM REMOTE_FILE_LIST(sftp_conn, '/var/ftp/incoming/');
 | :--- | :--- | :--- |
 | `GET_TAGS` | `GET_TAGS(table [, column])` | `LIST` of all custom tag names on the table or column |
 | `GET_TAG_VALUE` | `GET_TAG_VALUE(table, column, tag_name)` | String value of a specific tag |
+| `HAS_TAG` | `HAS_TAG(table, column, tag_name [, expected_value])` | `1` if tag exists (and matches expected_value if provided), `0` otherwise |
 
 *Example:*
 ```sql
@@ -724,6 +733,12 @@ FROM m.Users /* @sensitivity: high; */;
 -- Interrogate tags programmatically
 DECLARE @tags LIST = GET_TAGS('#TaggedUsers', 'UserId');
 IF 'PII' IN @tags
+BEGIN
+    PRINT 'Warning: UserId is tagged as PII.';
+END
+
+-- Check tag presence directly
+IF HAS_TAG('#TaggedUsers', 'UserId', 'PII') = 1
 BEGIN
     PRINT 'Warning: UserId is tagged as PII.';
 END
