@@ -20,6 +20,9 @@ Traditional ELT (Extract-Load-Transform) dumps raw, dirty data directly into tar
 
 By providing a rich, unified, in-memory SQL layer (incorporating PostgreSQL, T-SQL, Oracle SQL, and ANSI SQL) combined with programmatic control flow (loops, `RELDATE` math, variables), you can stage, cleanse, validate, and enrich data in-flight before it ever touches your target production tables.
 
+### 🔀 Blended SQL Dialect (The Best of All Worlds)
+Stop switching mindsets between SQL dialects. ETL-SQL blends the best features of PostgreSQL (regex matching `~`/`~*`, `LIMIT`/`OFFSET`), T-SQL (`ISNULL`, `HASHBYTES`, `@@ROWCOUNT`), Oracle (`DECODE`, `NVL2`), and Snowflake (`QUALIFY` to filter window aggregates directly). You get full modern ANSI-SQL analytical support—including advanced window frames, CTEs, and inline JSON/XML manipulation—natively supported on every single data connection.
+
 ### 🤖 From Spec Sheets to SQL Boilerplate in Seconds
 Stop wasting hours transcribing vendor schemas. Trim a specification PDF with `etl-sql extract-spec`, feed it to your favorite LLM or AI agent using our prompt instructions, and use `etl-sql gen-script` to compile the resulting contract into a type-safe, validated ETL-SQL starter script with regex validations, lineage tags, and quarantine blocks.
 
