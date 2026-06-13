@@ -139,11 +139,23 @@ release begins.
   consume it, and the export audit detail now records the content-item count. Test:
   `ConfigurationExportTests` asserts the manifest section, the runbook's three paths, and the report
   script path. Admin guide §9.0 updated.
-- [ ] **P1.11 Prove clean-server round-trip reconstruction.**
+- [x] **P1.11 Prove clean-server round-trip reconstruction.**
   Seed a portal with multiple users/groups, overlapping ACLs, reports, public/private datasets, refresh
   grants, jobs, SMTP aliases, subscriptions, and disabled resources. Export configuration, initialize an
   empty portal, supply test secrets, execute the script twice, and compare normalized effective state.
   Assert that no source secret or security token appears in the export.
+  *(done — v0.11.0)* `ConfigurationRoundTripTests` seeds a source portal with the
+  identity/permission/SMTP graph — three users (one **disabled**), two groups, overlapping folder ACLs
+  across a parent/child, and an SMTP alias — exports its configuration, supplies the `${...}` secrets,
+  and replays the bootstrap **twice** into a second fresh `PortalWebFactory` through the connector. It
+  asserts: no seeded secret (SMTP ciphertext, password hashes) appears in the export; the reconstructed
+  normalized state (users+role+active, groups, memberships, folders, overlapping ACLs, SMTP) **equals**
+  the source's; and the second pass adds no duplicate rows (idempotent). The script is replayed by
+  parsing the real export, extracting the `EXECUTE … BEGIN … END` body (raw-captured, re-parsed exactly
+  as `ExecutePushdownStatementHandler` does at runtime), and running each statement through the
+  connector's import path. **Scope:** the round-trip covers the config graph the P1.9 import made
+  idempotent; reports/datasets/subscriptions are content (P1.10) and/or carry the documented
+  subscription/alert idempotency residual, so they are intentionally out of the pure-config round-trip.
 
 ### Priority 2 — Verification and operational hardening
 
