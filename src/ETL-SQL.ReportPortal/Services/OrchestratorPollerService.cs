@@ -126,11 +126,11 @@ public class OrchestratorPollerService(
         log.LogInformation(
             "OrchestratorPoller: delivering subscription {SubscriptionId}", subscriptionId);
 
+        // The completion's EndTime is the durable trigger key: the delivery ledger guarantees
+        // at-most-once delivery per completion even if this completion is observed twice.
         var delivery = services.GetRequiredService<SubscriptionDeliveryService>();
-        var result = await delivery.DeliverAsync(subscriptionId, ct);
+        var result = await delivery.DeliverAsync(subscriptionId, endTime.ToString("o"), ct);
 
-        // Every terminal delivery decision consumes this scheduler completion. Transient retry and
-        // unknown-outcome semantics require a durable delivery ledger and are tracked separately.
         sub.LastTriggeredAt = endTime;
         await db.SaveChangesAsync(ct);
 

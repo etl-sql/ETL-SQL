@@ -41,6 +41,15 @@ public sealed class EngineSubscriptionScriptRunner(IScriptExecutor executor) : I
 /// immediately before delivery, composes the export/SMTP script in memory only (the SMTP
 /// credential is decrypted per delivery and never written to disk), and records the outcome.
 /// A denied delivery is recorded without report data and is not treated as a transient failure.
+///
+/// <para><b>Delivery semantics (P2.3): at-most-once per scheduler trigger.</b> Every delivery is
+/// claimed in the durable <see cref="SubscriptionDelivery"/> ledger keyed on
+/// <c>(SubscriptionId, TriggerKey)</c>; a duplicate trigger (poller re-observation, scheduler
+/// double-fire) is suppressed without re-sending. The portal never records <c>Delivered</c> unless
+/// the in-process runner reports success, so it errs toward recording a failure rather than a false
+/// success. The one caveat is SMTP itself: a timeout after the SMTP server has already accepted a
+/// message can leave the recipient with a copy the portal records as <c>Failed</c> — at the wire
+/// that is at-least-once. The ledger makes every attempt and its outcome observable.</para>
 /// </summary>
 public class SubscriptionDeliveryService(
     PortalDbContext db,
@@ -51,11 +60,79 @@ public class SubscriptionDeliveryService(
     ISubscriptionScriptRunner runner,
     ILogger<SubscriptionDeliveryService> log)
 {
-    public async Task<SubscriptionDeliveryResult> DeliverAsync(int subscriptionId, CancellationToken ct = default)
-    {
-        // One operation id correlates every audit event this delivery attempt produces.
-        var correlationId = $"delivery-{Guid.NewGuid():N}";
+    /// <summary>Ad-hoc (manual) delivery — each call is a distinct trigger and is never deduped
+    /// against another. Scheduled deliveries pass the completion's identity as the trigger key.</summary>
+    public Task<SubscriptionDeliveryResult> DeliverAsync(int subscriptionId, CancellationToken ct = default)
+        => DeliverAsync(subscriptionId, $"manual:{Guid.NewGuid():N}", ct);
 
+    public async Task<SubscriptionDeliveryResult> DeliverAsync(
+        int subscriptionId, string triggerKey, CancellationToken ct = default)
+    {
+        var recipients = await db.Subscriptions
+            .Where(s => s.Id == subscriptionId)
+            .Select(s => new { s.Recipients })
+            .FirstOrDefaultAsync(ct);
+        if (recipients is null)
+            return SubscriptionDeliveryResult.Skipped("Subscription no longer exists.");
+
+        // Claim this (subscription, trigger). At-most-once: a duplicate trigger is suppressed.
+        var (ledger, claimed) = await TryClaimAsync(subscriptionId, triggerKey, recipients.Recipients, ct);
+        if (!claimed)
+            return SubscriptionDeliveryResult.Skipped(
+                "Duplicate trigger — a delivery is already recorded for this completion.");
+
+        SubscriptionDeliveryResult result;
+        try
+        {
+            result = await ExecuteDeliveryAsync(subscriptionId, ledger.DeliveryId, ct);
+        }
+        catch (Exception ex)
+        {
+            // Unknown outcome (e.g. an unexpected crash mid-delivery): record it, never re-claim.
+            result = SubscriptionDeliveryResult.Failed(Sanitize(ex.Message, null));
+        }
+
+        ledger.Outcome = result.Outcome.ToString();
+        ledger.Detail = result.Reason;
+        ledger.CompletedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return result;
+    }
+
+    /// <summary>Inserts the InProgress ledger row, or reports the claim lost when the trigger is a
+    /// duplicate (unique-index race included).</summary>
+    private async Task<(SubscriptionDelivery Ledger, bool Claimed)> TryClaimAsync(
+        int subscriptionId, string triggerKey, string recipients, CancellationToken ct)
+    {
+        if (await db.SubscriptionDeliveries
+                .AnyAsync(d => d.SubscriptionId == subscriptionId && d.TriggerKey == triggerKey, ct))
+            return (null!, false);
+
+        var ledger = new SubscriptionDelivery
+        {
+            DeliveryId = $"delivery-{Guid.NewGuid():N}",
+            SubscriptionId = subscriptionId,
+            TriggerKey = triggerKey,
+            Outcome = "InProgress",
+            Recipients = recipients,
+            StartedAt = DateTime.UtcNow
+        };
+        db.SubscriptionDeliveries.Add(ledger);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return (ledger, true);
+        }
+        catch (DbUpdateException)
+        {
+            db.Entry(ledger).State = EntityState.Detached;
+            return (null!, false);
+        }
+    }
+
+    private async Task<SubscriptionDeliveryResult> ExecuteDeliveryAsync(
+        int subscriptionId, string correlationId, CancellationToken ct)
+    {
         var sub = await db.Subscriptions
             .Include(s => s.Report)
             .Include(s => s.User)

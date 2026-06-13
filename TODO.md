@@ -179,11 +179,24 @@ release begins.
   Start two portal and/or Orchestrator processes against the supported shared state and test simultaneous
   refresh, due-job claims, job cancellation, permission changes, subscription delivery, restart recovery,
   and conflicting administration. In-process `Task.WhenAll` tests do not prove process coordination.
-- [ ] **P2.3 Add subscription delivery idempotency and failure tests.**
+- [x] **P2.3 Add subscription delivery idempotency and failure tests.**
   Cover SMTP timeout after server acceptance, retry after unknown outcome, duplicate scheduler trigger,
   attachment generation failure, invalid recipient isolation, disabled SMTP alias, and partial recipient
   failure. Choose and document at-most-once or at-least-once semantics; use delivery IDs and a durable
   ledger/outbox to make duplicates observable and controllable.
+  *(done — v0.11.0)* **Semantics: at-most-once per scheduler trigger**, documented in admin guide §8.3
+  and the `SubscriptionDeliveryService` doc. New durable `SubscriptionDelivery` ledger (entity +
+  migration `SubscriptionDeliveryLedger`) records each attempt with a `delivery-<id>` (== the audit
+  correlation id) and is unique on `(SubscriptionId, TriggerKey)`. `DeliverAsync` now claims a ledger
+  row before sending (duplicate trigger → suppressed without re-running), executes, then finalizes the
+  row with the terminal outcome; a manual call uses a `manual:<guid>` key, and the poller passes the
+  Orchestrator completion's `EndTime` ("o") as the key so a re-observed completion is never delivered
+  twice. The portal never records `Delivered` unless the runner reports success (no false success);
+  the SMTP timeout-after-acceptance at-least-once caveat is documented. `SubscriptionDeliveryLedgerTests`
+  covers duplicate-trigger suppression, distinct triggers, timeout-after-acceptance, attachment-generation
+  failure, runner-throws unknown outcome (recorded + not reclaimed), missing/disabled SMTP alias, and
+  denial isolated from a healthy delivery. **Residual:** delivery is whole-subscription (one message to
+  all recipients); per-recipient split/isolation is a documented follow-up.
 - [ ] **P2.4 Add fault-injection and recovery tests.**
   Kill processes between every cross-resource step; simulate SQLite busy/locked, disk full, corrupt files,
   unavailable Orchestrator/SMTP, network partition, and clock skew. Verify reconciliation is idempotent and

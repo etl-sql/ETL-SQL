@@ -839,9 +839,17 @@ The scheduled job itself is a **credential-free trigger**: the generated `.etlsq
 
 Because delivery happens in the portal, the **portal process must be running** for subscription email to be sent — the Orchestrator alone only fires the trigger.
 
-### 8.3 Delivery Failures
+### 8.3 Delivery Semantics
 
-Each subscription tracks a `FailCount`, incremented by the portal's delivery executor when an export or send fails (with sanitized error detail in the audit log). A delivery that is **denied** — the owner was disabled or lost read permission on the report's folder — is recorded as `SUBSCRIPTION_DELIVERY_DENIED` in the audit log and is *not* counted or retried as a transient failure. Investigate via **Admin → Subscriptions → History** and correct the SMTP configuration, permissions, or report script before re-enabling.
+Subscription delivery is **at-most-once per scheduler trigger**. Every delivery is claimed in a durable delivery ledger keyed on `(subscription, trigger)` — the trigger being the Orchestrator completion's timestamp — so a completion observed twice (a poller re-read or a scheduler double-fire) is suppressed without re-sending. Each attempt carries a `delivery-<id>` that matches its audit correlation id, and the ledger records the terminal outcome (`Delivered`, `Failed`, `Denied`, `Skipped`).
+
+The portal never records `Delivered` unless the in-process delivery run reports success, so it errs toward recording a failure rather than a false success. The one boundary it cannot control is SMTP itself: if the SMTP server accepts a message but the connection then times out, the recipient may receive a copy that the portal records as `Failed` — at the wire that single case is at-least-once. The ledger makes every attempt and outcome observable so such cases are visible rather than silent.
+
+> Per-recipient delivery is currently whole-subscription: one message is composed for all recipients and the outcome applies to the subscription. Splitting delivery per recipient (so one bad address does not fail the rest) is a planned refinement.
+
+### 8.4 Delivery Failures
+
+Each subscription tracks a `FailCount`, incremented by the portal's delivery executor when an export or send fails (with sanitized error detail in the audit log and the delivery ledger). A delivery that is **denied** — the owner was disabled or lost read permission on the report's folder — is recorded as `SUBSCRIPTION_DELIVERY_DENIED` in the audit log and is *not* counted or retried as a transient failure. Investigate via **Admin → Subscriptions → History** and correct the SMTP configuration, permissions, or report script before re-enabling.
 
 The Admin subscription table shows active/paused state, the last successful delivery time or failure count, and provides:
 
@@ -851,7 +859,7 @@ The Admin subscription table shows active/paused state, the last successful deli
 
 Use the search box and status filter to isolate subscriptions by report, name, recipient, active/paused state, or delivery failure. Select rows on the current page to pause or resume multiple subscriptions together. Selection is page-local and is cleared when the filter or page changes.
 
-### 8.4 Scripted Subscription Management
+### 8.5 Scripted Subscription Management
 
 Administrators can create and modify subscriptions using ETL-SQL script syntax. This is useful for bulk setup, deployment automation, or version-controlling subscription configuration alongside report scripts.
 

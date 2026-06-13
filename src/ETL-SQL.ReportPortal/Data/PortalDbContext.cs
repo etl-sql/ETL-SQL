@@ -17,6 +17,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<ReportSnapshot> ReportSnapshots => Set<ReportSnapshot>();
     public DbSet<PortalExecutionJob> PortalExecutionJobs => Set<PortalExecutionJob>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
+    public DbSet<SubscriptionDelivery> SubscriptionDeliveries => Set<SubscriptionDelivery>();
     public DbSet<SmtpConnection> SmtpConnections => Set<SmtpConnection>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<DatasetJob> DatasetJobs => Set<DatasetJob>();
@@ -117,6 +118,13 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         {
             e.Property(x => x.Version).IsConcurrencyToken();
             e.HasIndex(x => x.Alias).IsUnique();
+        });
+
+        builder.Entity<SubscriptionDelivery>(e =>
+        {
+            // At-most-once per scheduler completion: one delivery row per (subscription, trigger).
+            e.HasIndex(x => new { x.SubscriptionId, x.TriggerKey }).IsUnique();
+            e.HasIndex(x => x.DeliveryId);
         });
 
         builder.Entity<Group>(e =>

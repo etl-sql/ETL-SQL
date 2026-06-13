@@ -279,6 +279,38 @@ public class SmtpConnection : IVersionedEntity
     public long Version { get; set; } = 1;
 }
 
+// ── Subscription delivery ledger ────────────────────────────────────────────────
+
+/// <summary>
+/// Durable record of one subscription delivery attempt (P2.3). The unique
+/// <c>(SubscriptionId, TriggerKey)</c> index gives <b>at-most-once-per-trigger</b> delivery: a
+/// duplicate scheduler completion — poller re-observation or a scheduler double-fire — is
+/// suppressed because its trigger is already claimed. Every attempt and its terminal outcome is
+/// observable here, and <see cref="DeliveryId"/> equals the audit correlation id so delivery rows
+/// and audit events join.
+/// </summary>
+public class SubscriptionDelivery
+{
+    public int Id { get; set; }
+
+    /// <summary>The <c>delivery-&lt;guid&gt;</c> id, shared with this attempt's audit correlation id.</summary>
+    public string DeliveryId { get; set; } = "";
+
+    public int SubscriptionId { get; set; }
+
+    /// <summary>Identity of the triggering scheduler completion (its <c>EndTime</c>, round-trip
+    /// "o" format), or <c>manual:&lt;guid&gt;</c> for an ad-hoc delivery. Unique per subscription.</summary>
+    public string TriggerKey { get; set; } = "";
+
+    /// <summary>InProgress | Delivered | Failed | Denied | Skipped.</summary>
+    public string Outcome { get; set; } = "InProgress";
+
+    public string? Detail { get; set; }
+    public string Recipients { get; set; } = "";
+    public DateTime StartedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? CompletedAt { get; set; }
+}
+
 // ── Audit Log ─────────────────────────────────────────────────────────────────
 
 public class AuditLog
