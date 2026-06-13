@@ -456,6 +456,7 @@ namespace ETL_SQL.Engine
             Functions.RegexFunctions.Register(functionRegistry);
             Functions.JsonFunctions.Register(functionRegistry);
             Functions.XmlFunctions.Register(functionRegistry);
+            Functions.FuzzyFunctions.Register(functionRegistry);
             LanguageHelpService.Initialize(languageHelp);
 
             foreach (var h in handlers)

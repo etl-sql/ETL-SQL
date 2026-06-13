@@ -68,8 +68,8 @@ Statements are the top-level actions in an ETL-SQL script.
 | `MOVE FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/FILE.md) |
 | `DELETE FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DELETE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
 | `ENCRYPT FILE` | File IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [ENCRYPT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ENCRYPT.md) |
-| `SEND FILE` | File IO / Conn | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [SEND/FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/SEND/FILE.md) |
-| `RECEIVE FILE` | File IO / Conn | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [RECEIVE/FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/RECEIVE/FILE.md) |
+| `SEND FILE` | File IO / Conn | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) (see also [TRANSFER.md](../src/ETL-SQL.Core/Resources/Help/Operations/TRANSFER.md)) | [SEND/FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/SEND/FILE.md) |
+| `RECEIVE FILE` | File IO / Conn | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) (see also [TRANSFER.md](../src/ETL-SQL.Core/Resources/Help/Operations/TRANSFER.md)) | [RECEIVE/FILE.md](../src/ETL-SQL.Core/Resources/Help/Operations/RECEIVE/FILE.md) |
 | `SEND EMAIL` | Notifications | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [SEND/EMAIL.md](../src/ETL-SQL.Core/Resources/Help/Operations/SEND/EMAIL.md) |
 | `DOCKER` | Containers | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DOCKER.md](../src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
 | `CREATE JOB` | Orchestration | [Grammar.md](../Docs/Reference/Grammar.md) | [SCHEDULE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SCHEDULE.md) |
@@ -103,7 +103,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `MOVE DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Operations/DIRECTORY.md) |
 | `RENAME DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Operations/DIRECTORY.md) |
 | `DELETE DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DELETE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
-| `DELETE DIRECTORY_CONTENTS`| Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | - |
+| `DELETE DIRECTORY_CONTENTS`| Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Operations/DIRECTORY.md) |
 | `COMPRESS DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [COMPRESS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/COMPRESS.md) |
 | `DECOMPRESS DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Operations/DIRECTORY.md) |
 | `ENCRYPT DIRECTORY` | Dir IO | [Specialized_Operations.md](../Docs/Reference/Specialized_Operations.md) | [ENCRYPT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ENCRYPT.md) |
@@ -125,7 +125,9 @@ Statements are the top-level actions in an ETL-SQL script.
 | `CREATE FOLDER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_FOLDER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_FOLDER.md) |
 | `DROP FOLDER` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_FOLDER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_FOLDER.md) |
 | `GRANT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_PERMISSIONS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_PERMISSIONS.md) |
-| `REVOKE` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_PERMISSIONS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_PERMISSIONS.md) |
+| `REVOKE` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [REVOKE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/REVOKE.md) |
+| `FAVORITE REPORT` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [FAVORITE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/FAVORITE.md) |
+| `UNFAVORITE REPORT` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [FAVORITE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/FAVORITE.md) |
 | `PUBLISH REPORT` | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_REPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_REPORT.md) |
 | `ALTER REPORT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_REPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_REPORT.md) |
 | `DROP REPORT` (portal) | Portal Admin | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md#81-report-portal-reportportal) | [PORTAL_REPORT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PORTAL_REPORT.md) |
@@ -165,6 +167,7 @@ Connectors define how to communicate with external data sources.
 | `POSTGRES` | SQL | [POSTGRES.md](../src/ETL-SQL.Core/Resources/Help/Connectors/POSTGRES.md) | HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, ... |
 | `ORACLE` | SQL | [ORACLE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ORACLE.md) | HOST, PORT, SERVICE_NAME, USER, PASSWORD, ... |
 | `SQLITE` | SQL | [SQLITE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SQLITE.md) | DATABASE, PATH, PASSWORD, TIMEOUT_SECONDS, TABLE |
+| `MYSQL` | SQL | [MYSQL.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MYSQL.md) | HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, ALLOW_PUBLIC_KEY_RETRIEVAL, ALLOW_USER_VARIABLES, ... |
 | `ODBC` | SQL | [ODBC.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ODBC.md) | DSN, DRIVER, SERVER, DATABASE, UID, PASSWORD, ... |
 | `SNOWFLAKE` | SQL | [SNOWFLAKE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SNOWFLAKE.md) | HOST, DATABASE, SCHEMA, WAREHOUSE, USERNAME, PASSWORD, PRIVATE_KEY_FILE, ... |
 | `BIGQUERY` | SQL | [BIGQUERY.md](../src/ETL-SQL.Core/Resources/Help/Connectors/BIGQUERY.md) | PROJECT_ID, DATASET_ID, KEY_FILE, ... |
@@ -212,19 +215,22 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `TRIM(string)` | String | [TRIM.md](../src/ETL-SQL.Core/Resources/Help/Functions/TRIM.md) | Removes leading/trailing whitespace |
 | `REPLACE(string, find, replacement)` | String | [REPLACE.md](../src/ETL-SQL.Core/Resources/Help/Functions/REPLACE.md) | Replaces occurrences of a substring |
 | `CHARINDEX(find, string)` | String | [CHARINDEX.md](../src/ETL-SQL.Core/Resources/Help/Functions/CHARINDEX.md) | Returns index of first occurrence |
-| `INITCAP(string)` | String | [INITCAP.md](../Docs/Reference/Standard_Library.md#31-case--whitespace) | Capitalizes first letter of each word |
+| `INITCAP(string)` | String | [INITCAP.md](../src/ETL-SQL.Core/Resources/Help/Functions/INITCAP.md) | Capitalizes first letter of each word |
 | `LTRIM(string)` | String | [LTRIM.md](../src/ETL-SQL.Core/Resources/Help/Functions/LTRIM.md) | Removes leading whitespace |
 | `RTRIM(string)` | String | [RTRIM.md](../src/ETL-SQL.Core/Resources/Help/Functions/RTRIM.md) | Removes trailing whitespace |
 | `REVERSE(string)` | String | [REVERSE.md](../src/ETL-SQL.Core/Resources/Help/Functions/REVERSE.md) | Reverses string characters |
 | `LEFT(string, count)` | String | [LEFT.md](../src/ETL-SQL.Core/Resources/Help/Functions/LEFT.md) | Returns leftmost N characters |
 | `RIGHT(string, count)` | String | [RIGHT.md](../src/ETL-SQL.Core/Resources/Help/Functions/RIGHT.md) | Returns rightmost N characters |
+| `LPAD(string, length, [pad_string])` | String | [LPAD.md](../src/ETL-SQL.Core/Resources/Help/Functions/LPAD.md) | Left-pads a string to length |
+| `RPAD(string, length, [pad_string])` | String | [RPAD.md](../src/ETL-SQL.Core/Resources/Help/Functions/RPAD.md) | Right-pads a string to length |
 | `INSTR(string, find)` | String | [INSTR.md](../src/ETL-SQL.Core/Resources/Help/Functions/INSTR.md) | Alias for POSITION |
 | `CONCAT_WS(separator, string1, ...)` | String | [CONCAT_WS.md](../src/ETL-SQL.Core/Resources/Help/Functions/CONCAT_WS.md) | Join with separator; skips nulls |
-| `SPLIT_PART(string, delimiter, part)` | String | [SPLIT_PART.md](../Docs/Reference/Standard_Library.md#33-concatenation--splitting) | Returns Nth segment after split |
+| `SPLIT_PART(string, delimiter, part)` | String | [SPLIT_PART.md](../src/ETL-SQL.Core/Resources/Help/Functions/SPLIT_PART.md) | Returns Nth segment after split |
 | `SPACE(count)` | String | [SPACE.md](../src/ETL-SQL.Core/Resources/Help/Functions/SPACE.md) | Returns N space characters |
 | `TO_STR(value)` | String | [TO_STR.md](../src/ETL-SQL.Core/Resources/Help/Functions/TO_STR.md) | Converts any value to string |
 | `PATINDEX(pattern, string)` | String | [PATINDEX.md](../src/ETL-SQL.Core/Resources/Help/Functions/PATINDEX.md) | Position of wildcard pattern |
 | `REPLICATE(string, count)` | String | [REPLICATE.md](../src/ETL-SQL.Core/Resources/Help/Functions/REPLICATE.md) | Repeats string N times |
+| `REPEAT(string, count)` | String | [REPEAT.md](../src/ETL-SQL.Core/Resources/Help/Functions/REPEAT.md) | Alias for REPLICATE |
 | `QUOTENAME(string, [delimiter])` | String | [QUOTENAME.md](../src/ETL-SQL.Core/Resources/Help/Functions/QUOTENAME.md) | Returns delimited identifier |
 | `ASCII(string)` | String | [ASCII.md](../src/ETL-SQL.Core/Resources/Help/Functions/ASCII.md) | Numeric code of first character |
 | `UNICODE(string)` | String | [UNICODE.md](../src/ETL-SQL.Core/Resources/Help/Functions/UNICODE.md) | Unicode code of first character |
@@ -240,14 +246,21 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `STUFF(string, start, length, replacement)` | String | [STUFF.md](../src/ETL-SQL.Core/Resources/Help/Functions/STUFF.md) | Deletes part of string and inserts replacement |
 | `STR(number, [length], [decimals])` | String | [STR.md](../src/ETL-SQL.Core/Resources/Help/Functions/STR.md) | Formats number as string |
 | `GETDATE()` | Date | [GETDATE.md](../src/ETL-SQL.Core/Resources/Help/Functions/GETDATE.md) | Current local datetime |
+| `SYSDATE()` | Date | [SYSDATE.md](../src/ETL-SQL.Core/Resources/Help/Functions/SYSDATE.md) | Current system datetime (Oracle style) |
 | `NOW()` | Date | [NOW.md](../src/ETL-SQL.Core/Resources/Help/Functions/NOW.md) | Current UTC datetime |
 | `DATEADD(datepart, number, date)` | Date | [DATEADD.md](../src/ETL-SQL.Core/Resources/Help/Functions/DATEADD.md) | Adds units to a date |
 | `DATEDIFF(datepart, start_date, end_date)` | Date | [DATEDIFF.md](../src/ETL-SQL.Core/Resources/Help/Functions/DATEDIFF.md) | Difference between dates |
 | `DATENAME(datepart, date)` | Date | [DATENAME.md](../src/ETL-SQL.Core/Resources/Help/Functions/DATENAME.md) | Returns name of date part |
 | `DATEPART(datepart, date)` | Date | [DATEPART.md](../src/ETL-SQL.Core/Resources/Help/Functions/DATEPART.md) | Returns integer date part |
+| `DATE_PART(datepart, date)` | Date | [DATE_PART.md](../src/ETL-SQL.Core/Resources/Help/Functions/DATE_PART.md) | Postgres-style datepart extractor |
+| `EXTRACT(datepart FROM date)` | Date | [EXTRACT.md](../src/ETL-SQL.Core/Resources/Help/Functions/EXTRACT.md) | SQL-standard datepart extractor |
 | `EOMONTH(date)` | Date | [EOMONTH.md](../src/ETL-SQL.Core/Resources/Help/Functions/EOMONTH.md) | Last day of the month |
 | `ISDATE(string)` | Date | [ISDATE.md](../src/ETL-SQL.Core/Resources/Help/Functions/ISDATE.md) | 1 if parseable as date |
+| `TO_TIMESTAMP(string, [format])` | Date | [TO_TIMESTAMP.md](../src/ETL-SQL.Core/Resources/Help/Functions/TO_TIMESTAMP.md) | Parses string to a timestamp |
+| `TO_DATE(string, [format])` | Date | [TO_DATE.md](../src/ETL-SQL.Core/Resources/Help/Functions/TO_DATE.md) | Converts a string to a date |
+| `RELDATE(expression)` | Date | [RELDATE.md](../src/ETL-SQL.Core/Resources/Help/Functions/RELDATE.md) | Resolves relative date expression (e.g. 'D-7', 'M-1') |
 | `DATETIMEFROMPARTS(year, month, day, hour, minute, second, ms)` | Date | [DATETIMEFROMPARTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/DATETIMEFROMPARTS.md) | Build DATETIME from components |
+| `DATETIMEOFFSETSFROMPARTS(year, month, day, hour, minute, second, fractions, hour_offset, minute_offset, precision)` | Date | [DATETIMEOFFSETSFROMPARTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/DATETIMEOFFSETSFROMPARTS.md) | Build DATETIMEOFFSET from components |
 | `TIMEFROMPARTS(hour, minute, second, fractions, precision)` | Date | [TIMEFROMPARTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/TIMEFROMPARTS.md) | Build TIME from components |
 | `TRUNC(date)` | Date | [TRUNC.md](../src/ETL-SQL.Core/Resources/Help/Functions/TRUNC.md) | Truncates time portion |
 | `AT TIME ZONE(date, timezone)` | Date | [AT_TIME_ZONE.md](../Docs/Reference/Standard_Library.md#4-date--time-functions) | Converts to specified timezone |
@@ -255,6 +268,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `CURRENT_TIME()` | Date | [CURRENT_TIME.md](../src/ETL-SQL.Core/Resources/Help/Functions/CURRENT_TIME.md) | Current time |
 | `CURRENT_TIMESTAMP()` | Date | [CURRENT_TIMESTAMP.md](../src/ETL-SQL.Core/Resources/Help/Functions/CURRENT_TIMESTAMP.md) | Current datetime (UTC) |
 | `DATETRUNC(datepart, date)` | Date | [DATETRUNC.md](../src/ETL-SQL.Core/Resources/Help/Functions/DATETRUNC.md) | Truncates date to unit boundary |
+| `DATE_TRUNC(datepart, date)` | Date | [DATE_TRUNC.md](../src/ETL-SQL.Core/Resources/Help/Functions/DATE_TRUNC.md) | Postgres-style datetrunc function |
 | `DAY(date)` | Date | [DAY.md](../src/ETL-SQL.Core/Resources/Help/Functions/DAY.md) | Day-of-month component |
 | `MONTH(date)` | Date | [MONTH.md](../src/ETL-SQL.Core/Resources/Help/Functions/MONTH.md) | Month component |
 | `YEAR(date)` | Date | [YEAR.md](../src/ETL-SQL.Core/Resources/Help/Functions/YEAR.md) | Year component |
@@ -282,6 +296,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `SIN(radians)` | Math | [SIN.md](../src/ETL-SQL.Core/Resources/Help/Functions/SIN.md) | Sine |
 | `COS(radians)` | Math | [COS.md](../src/ETL-SQL.Core/Resources/Help/Functions/COS.md) | Cosine |
 | `TAN(radians)` | Math | [TAN.md](../src/ETL-SQL.Core/Resources/Help/Functions/TAN.md) | Tangent |
+| `COT(radians)` | Math | [COT.md](../src/ETL-SQL.Core/Resources/Help/Functions/COT.md) | Cotangent |
 | `ASIN(number)` | Math | [ASIN.md](../src/ETL-SQL.Core/Resources/Help/Functions/ASIN.md) | Arcsine |
 | `ACOS(number)` | Math | [ACOS.md](../src/ETL-SQL.Core/Resources/Help/Functions/ACOS.md) | Arccosine |
 | `ATAN(number)` | Math | [ATAN.md](../src/ETL-SQL.Core/Resources/Help/Functions/ATAN.md) | Arctangent |
@@ -292,6 +307,13 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `PI()` | Math | [PI.md](../src/ETL-SQL.Core/Resources/Help/Functions/PI.md) | Mathematical constant Ï€ |
 | `QUOTIENT(number, divisor)` | Math | [QUOTIENT.md](../src/ETL-SQL.Core/Resources/Help/Functions/QUOTIENT.md) | Integer quotient of division |
 | `TRUNCATE(number, decimals)` | Math | [TRUNCATE.md](../src/ETL-SQL.Core/Resources/Help/Functions/TRUNCATE.md) | Truncates number to N decimal places |
+| `BITAND(a, b)` | Math | [BITAND.md](../src/ETL-SQL.Core/Resources/Help/Functions/BITAND.md) | Bitwise AND |
+| `BITOR(a, b)` | Math | [BITOR.md](../src/ETL-SQL.Core/Resources/Help/Functions/BITOR.md) | Bitwise OR |
+| `BITXOR(a, b)` | Math | [BITXOR.md](../src/ETL-SQL.Core/Resources/Help/Functions/BITXOR.md) | Bitwise XOR |
+| `BITNOT(a)` | Math | [BITNOT.md](../src/ETL-SQL.Core/Resources/Help/Functions/BITNOT.md) | Bitwise NOT (negation) |
+| `BITSHIFTLEFT(a, shift)` | Math | [BITSHIFTLEFT.md](../src/ETL-SQL.Core/Resources/Help/Functions/BITSHIFTLEFT.md) | Bitwise left shift |
+| `BITSHIFTRIGHT(a, shift)` | Math | [BITSHIFTRIGHT.md](../src/ETL-SQL.Core/Resources/Help/Functions/BITSHIFTRIGHT.md) | Bitwise right shift |
+| `BIT_COUNT(a)` | Math | [BIT_COUNT.md](../src/ETL-SQL.Core/Resources/Help/Functions/BIT_COUNT.md) | Number of set bits (popcount) |
 | `COALESCE(value1, value2, ...)` | Logic | [COALESCE.md](../src/ETL-SQL.Core/Resources/Help/Functions/COALESCE.md) | First non-null value |
 | `ISNULL(value, default)` | Logic | [ISNULL.md](../src/ETL-SQL.Core/Resources/Help/Functions/ISNULL.md) | Returns default if value is null |
 | `IIF(condition, true_value, false_value)` | Logic | [IIF.md](../src/ETL-SQL.Core/Resources/Help/Functions/IIF.md) | Inline IF |
@@ -315,13 +337,14 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `CHECKSUM(value1, ...)` | System | [CHECKSUM.md](../src/ETL-SQL.Core/Resources/Help/Functions/CHECKSUM.md) | 64-bit integer hash |
 | `BINARY_CHECKSUM(value1, ...)` | System | [BINARY_CHECKSUM.md](../src/ETL-SQL.Core/Resources/Help/Functions/BINARY_CHECKSUM.md) | Binary-compatible hash |
 | `ENV(variable_name)` | System | [ENV.md](../src/ETL-SQL.Core/Resources/Help/Functions/ENV.md) | Host environment variable value |
+| `CONNECTION_PROPERTY(connection, property)` | System | [CONNECTION_PROPERTY.md](../src/ETL-SQL.Core/Resources/Help/Functions/CONNECTION_PROPERTY.md) | Resolves properties of configured connections |
 | `GENERATE_SERIES(start, stop, [step])` | System | [GENERATE_SERIES.md](../src/ETL-SQL.Core/Resources/Help/Functions/GENERATE_SERIES.md) | Returns table of numbers/dates |
 | `ERROR_MESSAGE()` | System | [ERROR_MESSAGE.md](../src/ETL-SQL.Core/Resources/Help/Functions/ERROR_MESSAGE.md) | Error string in CATCH block |
 | `ERROR_NUMBER()` | System | [ERROR_NUMBER.md](../src/ETL-SQL.Core/Resources/Help/Functions/ERROR_NUMBER.md) | Error code in CATCH block |
 | `ERROR_SEVERITY()` | System | [ERROR_SEVERITY.md](../src/ETL-SQL.Core/Resources/Help/Functions/ERROR_SEVERITY.md) | Error severity in CATCH block |
 | `ERROR_STATE()` | System | [ERROR_STATE.md](../src/ETL-SQL.Core/Resources/Help/Functions/ERROR_STATE.md) | Error state in CATCH block |
 | `ERROR_LINE()` | System | [ERROR_LINE.md](../src/ETL-SQL.Core/Resources/Help/Functions/ERROR_LINE.md) | Error line in CATCH block |
-| `JSON_VALUE(json, path)` | JSON | [JSON_VALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_VALUE.md) | Extracts scalar from JSON |
+| `JSON_VALUE(json, path)` / `JSON_EXTRACT` | JSON | [JSON_VALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_VALUE.md) | Extracts scalar from JSON (alias: JSON_EXTRACT) |
 | `JSON_QUERY(json, path)` | JSON | [JSON_QUERY.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_QUERY.md) | Extracts object/array from JSON |
 | `JSON_MODIFY(json, path, new_value)` | JSON | [JSON_MODIFY.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_MODIFY.md) | Updates JSON string |
 | `ISJSON(string)` | JSON | [ISJSON.md](../src/ETL-SQL.Core/Resources/Help/Functions/ISJSON.md) | 1 if valid JSON |
@@ -330,7 +353,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `JSON_ARRAY(value1, ...)` | JSON | [JSON_ARRAY.md](../Docs/Reference/Standard_Library.md#11-json-functions) | Builds JSON array |
 | `JSON_TABLE(json, path COLUMNS (...))` | JSON | [JSON_TABLE.md](../Docs/Reference/Standard_Library.md#11-json-functions) | Table projected from JSON rows |
 | `OPENJSON(json, [path])` | JSON | [OPENJSON.md](../Docs/Reference/Standard_Library.md#11-json-functions) | SQL Server-style JSON expansion |
-| `XMLVALUE(xml, xpath)` | XML | [XMLVALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLVALUE.md) | Extracts scalar from XML |
+| `XMLVALUE(xml, xpath)` / `EXTRACTVALUE` | XML | [XMLVALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLVALUE.md) | Extracts scalar from XML (alias: EXTRACTVALUE) |
 | `XMLEXISTS(xml, xpath)` | XML | [XMLEXISTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLEXISTS.md) | 1 if XPath exists |
 | `XMLQUERY(xml, xpath)` | XML | [XMLQUERY.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLQUERY.md) | XML fragment |
 | `XMLTABLE(xml, xpath)` | XML | [XMLTABLE.md](../Docs/Reference/Standard_Library.md#12-xml-functions) | Table from XML |
@@ -338,10 +361,18 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `XMLATTRIBUTES(name, value, ...)` | XML | [XMLATTRIBUTES.md](../Docs/Reference/Standard_Library.md#12-xml-functions) | XML attributes |
 | `XMLFOREST(value1, ...)` | XML | [XMLFOREST.md](../Docs/Reference/Standard_Library.md#12-xml-functions) | Forest of XML elements |
 | `FILE_EXISTS(path)` | File | [FILE_EXISTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/FILE_EXISTS.md) | 1 if file exists, 0 otherwise |
+| `FILE_SIZE(path)` | File | [FILE_SIZE.md](../src/ETL-SQL.Core/Resources/Help/Functions/FILE_SIZE.md) | Returns local file size in bytes |
+| `FILE_MODIFIED(path)` | File | [FILE_MODIFIED.md](../src/ETL-SQL.Core/Resources/Help/Functions/FILE_MODIFIED.md) | Returns local file last modified timestamp |
+| `FILE_HASH(path, [algorithm])` | File | [FILE_HASH.md](../src/ETL-SQL.Core/Resources/Help/Functions/FILE_HASH.md) | Computes cryptographic hash of a file |
 | `DIRECTORY_EXISTS(path)` | File | [DIRECTORY_EXISTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/DIRECTORY_EXISTS.md) | 1 if directory exists, 0 otherwise |
 | `FILE_LIST(path, [mask])` | File | [FILE_LIST.md](../src/ETL-SQL.Core/Resources/Help/Functions/FILE_LIST.md) | Returns table of files in path |
 | `REMOTE_FILE_LIST(connection, path)` | File | [REMOTE_FILE_LIST.md](../src/ETL-SQL.Core/Resources/Help/Functions/REMOTE_FILE_LIST.md) | Table of files on remote connection |
-| `DIRECTORY(path)` | File | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Connectors/DIRECTORY.md) | Returns directory metadata |
+| `REMOTE_FILE_EXISTS(connection, path)` | File | [REMOTE_FILE_EXISTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/REMOTE_FILE_EXISTS.md) | 1 if remote file exists, 0 otherwise |
+| `DIRECTORY(path)` | File | [DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Functions/DIRECTORY.md) | Returns directory metadata |
+| `PATH_COMBINE(path1, path2, ...)` | File | [PATH_COMBINE.md](../src/ETL-SQL.Core/Resources/Help/Functions/PATH_COMBINE.md) | Combines multiple path segments |
+| `PATH_DIRECTORY(path)` | File | [PATH_DIRECTORY.md](../src/ETL-SQL.Core/Resources/Help/Functions/PATH_DIRECTORY.md) | Extracts directory path from a full path |
+| `PATH_EXTENSION(path)` | File | [PATH_EXTENSION.md](../src/ETL-SQL.Core/Resources/Help/Functions/PATH_EXTENSION.md) | Extracts file extension from a path |
+| `PATH_FILENAME(path)` | File | [PATH_FILENAME.md](../src/ETL-SQL.Core/Resources/Help/Functions/PATH_FILENAME.md) | Extracts filename from a full path |
 | `SUM(expression)` | Aggregate | [SUM.md](../src/ETL-SQL.Core/Resources/Help/Functions/SUM.md) | Sum of values |
 | `COUNT(expression)` | Aggregate | [COUNT.md](../src/ETL-SQL.Core/Resources/Help/Functions/COUNT.md) | Count of non-null values |
 | `AVG(expression)` | Aggregate | [AVG.md](../src/ETL-SQL.Core/Resources/Help/Functions/AVG.md) | Average of values |
@@ -378,15 +409,16 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `REGEXP_INSTR(string, pattern)` | Regex | [REGEXP_INSTR.md](../src/ETL-SQL.Core/Resources/Help/Functions/REGEXP_INSTR.md) | Position of match |
 | `REGEXP_COUNT(string, pattern)` | Regex | [REGEXP_COUNT.md](../Docs/Reference/Standard_Library.md#37-regex-pcre) | Count of matches |
 | `REGEXP_MATCHES(string, pattern)` | Regex | [REGEXP_MATCHES.md](../Docs/Reference/Standard_Library.md#37-regex-pcre) | Table of all matches |
-| `REGEXP_SPLIT(string, pattern)` | Regex | [REGEXP_SPLIT.md](../Docs/Reference/Standard_Library.md#37-regex-pcre) | Table of split segments |
+| `REGEXP_SPLIT_TO_TABLE(string, pattern)` | Regex | [REGEXP_SPLIT_TO_TABLE.md](../src/ETL-SQL.Core/Resources/Help/Functions/REGEXP_SPLIT_TO_TABLE.md) | Splits a string into a table using regex |
 | `ADD_TO_LIST(list, value)` | List | [ADD_TO_LIST.md](../src/ETL-SQL.Core/Resources/Help/Functions/ADD_TO_LIST.md) | Appends value to a LIST |
 | `SORT_LIST(list)` | List | [SORT_LIST.md](../src/ETL-SQL.Core/Resources/Help/Functions/SORT_LIST.md) | Returns sorted copy of list |
 | `APPEND_TO_LIST(list, value)` | List | [APPEND_TO_LIST.md](../src/ETL-SQL.Core/Resources/Help/Functions/APPEND_TO_LIST.md) | Alias for ADD_TO_LIST |
 | `REMOVE_FROM_LIST(list, value)` | List | [REMOVE_FROM_LIST.md](../src/ETL-SQL.Core/Resources/Help/Functions/REMOVE_FROM_LIST.md) | Removes occurrences from list |
-| `GET_TAGS(table, [column])` | Lineage | [GET_TAGS.md](../Docs/Reference/Standard_Library.md#15-lineage--metadata-tag-functions) | Returns list of tag names |
-| `GET_TAG_VALUE(table, column, tag_name)` | Lineage | [GET_TAG_VALUE.md](../Docs/Reference/Standard_Library.md#15-lineage--metadata-tag-functions) | Returns value of specific tag |
-| `NORMALIZE(string, [mode])` | Fuzzy | [NORMALIZE.md](../Docs/Reference/Standard_Library.md#161-normalize--domain-aware-preprocessing) | Domain-aware preprocessing |
-| `SIMILARITY(string1, string2, [mode])` | Fuzzy | [SIMILARITY.md](../Docs/Reference/Standard_Library.md#162-similarity--normalized-similarity-score) | Normalized similarity score (0-1) |
+| `GET_TAGS(table, [column])` | Lineage | [GET_TAGS.md](../src/ETL-SQL.Core/Resources/Help/Functions/GET_TAGS.md) | Returns list of tag names |
+| `GET_TAG_VALUE(table, column, tag_name)` | Lineage | [GET_TAG_VALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/GET_TAG_VALUE.md) | Returns value of specific tag |
+| `HAS_TAG(table, column, tag_name, [expected_value])` | Lineage | [HAS_TAG.md](../src/ETL-SQL.Core/Resources/Help/Functions/HAS_TAG.md) | Returns 1 if tag exists (optionally matching expected value) |
+| `NORMALIZE(string, [mode])` | Fuzzy | [NORMALIZE.md](../src/ETL-SQL.Core/Resources/Help/Functions/NORMALIZE.md) | Domain-aware preprocessing |
+| `SIMILARITY(string1, string2, [mode])` | Fuzzy | [SIMILARITY.md](../src/ETL-SQL.Core/Resources/Help/Functions/SIMILARITY.md) | Normalized similarity score (0-1) |
 | `LEVENSHTEIN(string1, string2)` | Fuzzy | [LEVENSHTEIN.md](../Docs/Reference/Standard_Library.md#163-levenshtein--raw-edit-distance) | Raw edit distance |
 | `SOUNDEX(string)` | Fuzzy | [SOUNDEX.md](../src/ETL-SQL.Core/Resources/Help/Functions/SOUNDEX.md) | 4-char phonetic code |
 | `METAPHONE(string)` | Fuzzy | [METAPHONE.md](../Docs/Reference/Standard_Library.md#164-phonetic-encoding-functions) | English phonetic code |

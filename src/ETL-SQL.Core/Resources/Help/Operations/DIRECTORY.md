@@ -4,6 +4,7 @@ File-system directory management commands. These operate on the local or UNC fil
 Syntax:
   CREATE   DIRECTORY 'path';
   DELETE   DIRECTORY 'path';
+  DELETE   DIRECTORY_CONTENTS 'path' [WITH (RECURSIVE = ON|OFF)];
   RENAME   DIRECTORY 'old_path' TO 'new_name';
   MOVE     DIRECTORY 'src_path' TO 'dest_path';
   COPY     DIRECTORY 'src_path' TO 'dest_path';
@@ -14,6 +15,9 @@ Syntax:
 ```sql
 -- Ensure an output folder exists
 CREATE DIRECTORY 'C:\exports\2024\q4';
+
+-- Clean out temporary processing files without removing the directory itself
+DELETE DIRECTORY_CONTENTS 'C:\exports\temp' WITH (RECURSIVE = ON);
 
 -- Archive last quarter's exports
 COMPRESS DIRECTORY 'C:\exports\2024\q3' TO 'C:\archives\2024_q3.zip';
