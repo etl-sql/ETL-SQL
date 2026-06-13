@@ -41,6 +41,12 @@ Spin up disposable databases for sandbox staging or integration testing without 
 ### 🔄 Resumable Sessions (Skip Redundant Re-runs)
 Long-running ETL processes shouldn't have to restart from scratch when a network timeout occurs at step 4 of 5. By defining labels in your script, ETL-SQL establishes checkpoints. Run scripts with `--session` and `--resume` flags to skip completed steps and restart failed runs exactly where they left off.
 
+### 🧩 Native Fuzzy Joins & Phonetic Search
+Cleanse and align customer, product, or address records across different systems without writing complex external matching functions. ETL-SQL supports native `FUZZY JOIN` clauses and includes a suite of fuzzy string algorithms (`SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `METAPHONE`, `DMETAPHONE`, `NGRAMS`) directly in its SQL engine.
+
+### 📅 Database-Agnostic Relative Date Math (`RELDATE`)
+Stop rewriting complex date math (`DATEADD`, `INTERVAL`, `SYSDATE`) for different database types. ETL-SQL introduces the `RELDATE` data type (e.g., `'D-7'` for 7 days ago, `'-1M'` for one month offset). Write your relative date filters once, and the engine evaluates them consistently across any connected flat file or relational database.
+
 ---
 
 ## See It In Action
