@@ -216,10 +216,25 @@ release begins.
   live unavailable-Orchestrator/SMTP outages are exercised by the Docker integration lane
   (`JobSchedulingIntegrationTests.Verify_Dependency_Outage_And_Fault_Tolerance`,
   `SubscriptionIntegrationTests.Verify_Subscription_History_When_Orchestrator_Db_Is_Unavailable`).
-- [ ] **P2.5 Automate a complete backup/restore drill.**
+- [x] **P2.5 Automate a complete backup/restore drill.**
   Restore portal DB, Orchestrator DB, report scripts/bundles, subscription definitions, snapshots,
   datasets, Data Protection/key material, and configuration into a clean location. Verify permissions,
   key-version reads, jobs, subscriptions, and audit continuity after restore.
+  *(done — v0.11.0)* `BackupRestoreDrillTests` (fast lane). `RestorablePortalFactory` overlays a backup
+  directory onto a fresh host before startup (reusing the fixture's fixed JWT secret), so a restored
+  portal authenticates exactly as the source. `CleanServerRestore_…` seeds a source portal (user,
+  group, folder + ACL, report, subscription, dataset metadata with a versioned at-rest key, an audit
+  row, and an Orchestrator job), WAL-checkpoints, copies the whole state tree to a backup, then brings
+  up a **second** portal on the backup and asserts continuity: admin login works (identity + JWT config),
+  the ACL/membership survive and resolve via `FolderPermissionService`, the subscription and (canonically
+  named, reconciliation-preserved) Orchestrator job survive, the audit row survives, and the dataset
+  metadata + `AtRestKeyVersion` survive. `DatasetCacheKeyVersionRead_SurvivesBackupRestore` proves the
+  key-version read end to end: a parquet encrypted with key v1 is backed up, restored, and decrypted by
+  `DatasetViewerService` under the restored key configuration. **Finding surfaced + documented:** dataset
+  cache files are referenced by absolute path in the catalog, so `DatasetRootPath` must be restored to its
+  original absolute path (or catalog paths rewritten) — a moved cache is not found and startup
+  reconciliation treats it as an orphan; everything else restores to a clean location (admin guide §6.5).
+  The production `etl-sql admin backup/restore` CLI remains a separate ROADMAP item.
 - [ ] **P2.6 Add workload fairness and abuse tests.**
   Global concurrency caps allow one user or group to consume all capacity. Define per-user/group limits,
   queue fairness, cancellation, timeouts, export quotas, and administrative overrides; test mixed short,

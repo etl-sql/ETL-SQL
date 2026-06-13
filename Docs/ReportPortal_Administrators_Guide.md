@@ -523,6 +523,19 @@ For backup and restore:
 5. A restore with the wrong key must fail cleanly; restore the matching secret rather than changing
    metadata or attempting to regenerate the key.
 
+A **complete** portal backup is one coordinated set: `portal.db`, the Orchestrator database
+(`etlsql.db`), `Portal:ScriptRootPath`, `Portal:SnapshotDirectory`, `Portal:DatasetRootPath`, the
+Data Protection key ring, and the configuration (JWT secret, dataset at-rest key/versions,
+Orchestrator API key). Restored together with the matching secrets, a clean-location restore
+preserves authentication, folder permissions, Orchestrator jobs, subscriptions, audit history, and
+dataset metadata — verified by the automated backup/restore drill.
+
+> **Dataset cache files are referenced by absolute path in the catalog.** Restore
+> `Portal:DatasetRootPath` to its **original absolute path** (or rewrite the catalog paths) — a
+> dataset whose cache moves to a different directory will not be found, and the portal's startup
+> storage reconciliation will treat the moved file as an orphan. Everything else restores to a clean
+> location without path constraints.
+
 To stamp existing unversioned datasets without changing the key:
 
 1. Configure the existing key and `AtRestKeyVersion`.
