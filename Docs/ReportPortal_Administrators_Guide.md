@@ -100,6 +100,7 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
     "SnapshotDirectory": "./Snapshots",
     "Resources": {
       "MaxConcurrentReportExecutions": 4,
+      "MaxConcurrentExecutionsPerUser": 2,
       "ExecutionTimeoutSeconds":       300,
       "SessionCacheMaxSize":           50,
       "SessionCacheTtlMinutes":        30,
@@ -146,6 +147,7 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `ScriptRootPath` | `./Reports` | Root directory for `.rptsql` script files. All script paths are validated to stay within this directory. |
 | `SnapshotDirectory` | `./Snapshots` | Where report snapshot files are stored. |
 | `Resources.MaxConcurrentReportExecutions` | `4` | How many report execution jobs can run simultaneously. |
+| `Resources.MaxConcurrentExecutionsPerUser` | `2` | Workload fairness: the most of the shared execution slots a single non-administrator may hold at once, so one user flooding the queue cannot starve everyone else. Keep it below `MaxConcurrentReportExecutions`; administrators are exempt. |
 | `Resources.ExecutionTimeoutSeconds` | `300` | Per-execution timeout. Jobs exceeding this are cancelled. |
 | `Resources.SessionCacheMaxSize` | `50` | Maximum number of in-memory execution sessions cached for result streaming. |
 | `Resources.SessionCacheTtlMinutes` | `30` | How long an idle session is kept before eviction. |

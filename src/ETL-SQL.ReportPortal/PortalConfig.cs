@@ -124,6 +124,13 @@ public class OrchestratorConfig
 public class ResourcesConfig
 {
     public int MaxConcurrentReportExecutions { get; set; } = 4;
+
+    /// <summary>Workload fairness (P2.6): the most of the shared execution slots a single
+    /// non-administrator may hold at once, so one user cannot starve the rest. Effective only
+    /// when below <see cref="MaxConcurrentReportExecutions"/>; administrators are exempt.
+    /// Minimum effective value is 1.</summary>
+    public int MaxConcurrentExecutionsPerUser { get; set; } = 2;
+
     public int ExecutionTimeoutSeconds { get; set; } = 300;
     public int SessionCacheMaxSize { get; set; } = 50;
     public int SessionCacheTtlMinutes { get; set; } = 30;

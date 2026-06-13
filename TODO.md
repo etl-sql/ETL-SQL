@@ -235,10 +235,22 @@ release begins.
   original absolute path (or catalog paths rewritten) — a moved cache is not found and startup
   reconciliation treats it as an orphan; everything else restores to a clean location (admin guide §6.5).
   The production `etl-sql admin backup/restore` CLI remains a separate ROADMAP item.
-- [ ] **P2.6 Add workload fairness and abuse tests.**
+- [x] **P2.6 Add workload fairness and abuse tests.**
   Global concurrency caps allow one user or group to consume all capacity. Define per-user/group limits,
   queue fairness, cancellation, timeouts, export quotas, and administrative overrides; test mixed short,
   long, interactive, scheduled, refresh, and subscription workloads.
+  *(done — v0.11.0)* New `Resources.MaxConcurrentExecutionsPerUser` (default 2) caps how many of the
+  shared execution slots a single non-admin may hold at once, so one user flooding the queue cannot
+  starve others. `ExecutionJobService.RunJobAsync` acquires a per-user `SemaphoreSlim` **before** the
+  global gate (and without holding a global permit), so a capped user queues without blocking the
+  shared pool; administrators are exempt (the administrative override). The existing per-execution
+  timeout + cancellation (queued-timeout already frees the slot) and the PDF-export rate-limit bucket
+  cover the timeout/quota dimensions. Tests (in `ExecutionJobServiceTests`, using the
+  never-responding channel so a slotted job hangs Running): per-user limit lets user B run while user A
+  is capped at one slot; the contrast (cap == global) shows one user saturating the whole pool;
+  administrator bypass runs two admin jobs past a per-user cap of 1. Admin guide config table updated.
+  **Residual:** per-*group* limits and cross-workload queue-fairness weighting (interactive vs scheduled
+  vs subscription priority) are not implemented — per-user fairness + admin override is the shipped slice.
 - [ ] **P2.7 Test the versioned upgrade path, not just backup/restore.**
   P2.5 drills restore into a clean location; nothing proves an N→N+1 upgrade: EF migrations applying
   over a live catalog, Orchestrator SQLite schema changes, parquet/key-version compatibility, and what

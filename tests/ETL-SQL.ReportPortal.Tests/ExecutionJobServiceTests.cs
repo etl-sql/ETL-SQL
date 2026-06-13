@@ -301,6 +301,130 @@ public class ExecutionJobServiceTests : IDisposable
         return (config, services);
     }
 
+    // ── Workload fairness (P2.6) ──────────────────────────────────────────────────
+    // The NeverRespondingHandler channel makes any job that gets past the gates hang (Running)
+    // until its timeout, so the gate states are directly observable.
+
+    /// <summary>With a per-user cap below the global cap, a user who floods the queue cannot take
+    /// every slot — another user still gets one.</summary>
+    [Fact]
+    public async Task PerUserLimit_OneUserCannotStarveAnother()
+    {
+        var scriptPath = await HangScriptAsync();
+        using var service = HangingService(FairnessConfig(globalCap: 2, perUserCap: 1));
+
+        var a1 = await service.EnqueueExecutionAsync(reportId: 1, userId: 7, scriptPath);
+        var a2 = await service.EnqueueExecutionAsync(reportId: 2, userId: 7, scriptPath);
+        var b1 = await service.EnqueueExecutionAsync(reportId: 3, userId: 8, scriptPath);
+
+        await WaitForRunningCountAsync(service, 2, a1, a2, b1);
+
+        // User B runs; user A holds exactly one of the two slots, never both.
+        Assert.Equal(JobStatus.Running, (await service.GetAsync(b1))!.Status);
+        var a1Running = (await service.GetAsync(a1))!.Status == JobStatus.Running;
+        var a2Running = (await service.GetAsync(a2))!.Status == JobStatus.Running;
+        Assert.True(a1Running ^ a2Running, "user A should hold exactly one execution slot");
+
+        await WaitForTerminalAsync(service, a1);
+        await WaitForTerminalAsync(service, a2);
+        await WaitForTerminalAsync(service, b1);
+    }
+
+    /// <summary>Contrast: with the per-user cap at the global cap (no fairness), one user's two
+    /// jobs take the whole pool and the other user is starved — what the limit prevents.</summary>
+    [Fact]
+    public async Task WithoutPerUserLimit_OneUserSaturatesTheWholePool()
+    {
+        var scriptPath = await HangScriptAsync();
+        using var service = HangingService(FairnessConfig(globalCap: 2, perUserCap: 2));
+
+        var a1 = await service.EnqueueExecutionAsync(reportId: 1, userId: 7, scriptPath);
+        var a2 = await service.EnqueueExecutionAsync(reportId: 2, userId: 7, scriptPath);
+        var b1 = await service.EnqueueExecutionAsync(reportId: 3, userId: 8, scriptPath);
+
+        await WaitForRunningCountAsync(service, 2, a1, a2, b1);
+
+        Assert.Equal(JobStatus.Running, (await service.GetAsync(a1))!.Status);
+        Assert.Equal(JobStatus.Running, (await service.GetAsync(a2))!.Status);
+        Assert.NotEqual(JobStatus.Running, (await service.GetAsync(b1))!.Status); // queued, starved
+
+        await WaitForTerminalAsync(service, a1);
+        await WaitForTerminalAsync(service, a2);
+        await WaitForTerminalAsync(service, b1);
+    }
+
+    /// <summary>Administrators are exempt from the per-user cap (the administrative override).</summary>
+    [Fact]
+    public async Task Administrator_BypassesPerUserLimit()
+    {
+        var scriptPath = await HangScriptAsync();
+        using var service = HangingService(FairnessConfig(globalCap: 2, perUserCap: 1));
+
+        var j1 = await service.EnqueueExecutionAsync(reportId: 1, userId: 9, scriptPath, isAdministrator: true);
+        var j2 = await service.EnqueueExecutionAsync(reportId: 2, userId: 9, scriptPath, isAdministrator: true);
+
+        await WaitForRunningCountAsync(service, 2, j1, j2);
+        Assert.Equal(JobStatus.Running, (await service.GetAsync(j1))!.Status);
+        Assert.Equal(JobStatus.Running, (await service.GetAsync(j2))!.Status);
+
+        await WaitForTerminalAsync(service, j1);
+        await WaitForTerminalAsync(service, j2);
+    }
+
+    private async Task<string> HangScriptAsync()
+    {
+        var scriptPath = Path.Combine(_tempDir, "scripts", "report.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "PRINT 'hangs in the channel';");
+        return scriptPath;
+    }
+
+    private PortalConfig FairnessConfig(int globalCap, int perUserCap, int timeoutSeconds = 2) => new()
+    {
+        DatabasePath = Path.Combine(_tempDir, "portal.db"),
+        ScriptRootPath = Path.Combine(_tempDir, "scripts"),
+        SnapshotDirectory = Path.Combine(_tempDir, "snapshots"),
+        DatasetRootPath = Path.Combine(_tempDir, "datasets"),
+        Resources = new ResourcesConfig
+        {
+            MaxConcurrentReportExecutions = globalCap,
+            MaxConcurrentExecutionsPerUser = perUserCap,
+            ExecutionTimeoutSeconds = timeoutSeconds
+        }
+    };
+
+    private static ExecutionJobService HangingService(PortalConfig config)
+    {
+        var scopeFactory = new ServiceCollection().BuildServiceProvider()
+            .GetRequiredService<IServiceScopeFactory>();
+        var sessions = new SessionCache(config, scopeFactory, NullLogger<SessionCache>.Instance);
+        var channel = new HttpJobChannelClient(
+            new HttpClient(new NeverRespondingHandler()) { BaseAddress = new Uri("http://localhost:9") },
+            NullLogger<HttpJobChannelClient>.Instance);
+        return new ExecutionJobService(
+            config, scopeFactory, NullLogger<ExecutionJobService>.Instance, sessions, channel);
+    }
+
+    private static async Task<int> RunningCountAsync(ExecutionJobService service, params string[] jobIds)
+    {
+        var count = 0;
+        foreach (var id in jobIds)
+            if ((await service.GetAsync(id))!.Status == JobStatus.Running)
+                count++;
+        return count;
+    }
+
+    private static async Task WaitForRunningCountAsync(
+        ExecutionJobService service, int expected, params string[] jobIds)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(1500);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (await RunningCountAsync(service, jobIds) == expected) return;
+            await Task.Delay(25);
+        }
+        Assert.Fail($"Expected {expected} running job(s) within the observation window.");
+    }
+
     private static async Task WaitForTerminalAsync(ExecutionJobService service, string jobId)
     {
         var deadline = DateTime.UtcNow.AddSeconds(15);

@@ -42,6 +42,10 @@ public class ExecutionJobService : IHostedService, IDisposable
     private readonly ConcurrentDictionary<string, ExecutionJob> _jobs = new();
     private readonly ConcurrentDictionary<int, string> _activeRefreshes = new();
     private readonly SemaphoreSlim _gate;
+
+    /// <summary>Per-user concurrency limiters (workload fairness, P2.6). Keyed by user id; one
+    /// gate per user with <c>MaxConcurrentExecutionsPerUser</c> permits.</summary>
+    private readonly ConcurrentDictionary<int, SemaphoreSlim> _userGates = new();
     private readonly PortalConfig _config;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ExecutionJobService> _log;
@@ -178,14 +182,28 @@ public class ExecutionJobService : IHostedService, IDisposable
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeout);
 
+        // Workload fairness (P2.6): a non-admin holds at most MaxConcurrentExecutionsPerUser of the
+        // shared slots. Acquire the per-user slot FIRST and without holding a global permit, so a
+        // capped user queues without blocking the shared pool. Administrators are exempt.
+        var userGate = job.IsAdministrator ? null : GetUserGate(job.UserId);
         try
         {
-            await _gate.WaitAsync(cts.Token).ConfigureAwait(false);
+            if (userGate is not null)
+                await userGate.WaitAsync(cts.Token).ConfigureAwait(false);
+            try
+            {
+                await _gate.WaitAsync(cts.Token).ConfigureAwait(false);
+            }
+            catch
+            {
+                userGate?.Release();
+                throw;
+            }
         }
         catch (OperationCanceledException)
         {
-            // Timed out while queued — the gate was never acquired, so only the job
-            // bookkeeping needs unwinding (no Release, but the refresh debounce must clear).
+            // Timed out while queued — no global permit was retained, so only the job
+            // bookkeeping needs unwinding (the refresh debounce must clear).
             job.Status = JobStatus.Cancelled;
             job.CompletedAt = DateTime.UtcNow;
             job.Error = "Execution timed out while waiting for an execution slot";
@@ -377,8 +395,15 @@ public class ExecutionJobService : IHostedService, IDisposable
         finally
         {
             _gate.Release();
+            userGate?.Release();
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
         }
+    }
+
+    private SemaphoreSlim GetUserGate(int userId)
+    {
+        var limit = Math.Max(1, _config.Resources.MaxConcurrentExecutionsPerUser);
+        return _userGates.GetOrAdd(userId, _ => new SemaphoreSlim(limit, limit));
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -652,5 +677,7 @@ public class ExecutionJobService : IHostedService, IDisposable
     {
         ReleaseInstanceLocks();
         _gate.Dispose();
+        foreach (var gate in _userGates.Values)
+            gate.Dispose();
     }
 }
