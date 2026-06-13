@@ -22,6 +22,7 @@ namespace ETL_SQL.Connectors.Excel
 
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
+            { "PATH", Array.Empty<string>() },
             { "SHEET", Array.Empty<string>() },
             { "HEADER", new[] { "ON", "OFF" } },
             { "RANGE", Array.Empty<string>() },

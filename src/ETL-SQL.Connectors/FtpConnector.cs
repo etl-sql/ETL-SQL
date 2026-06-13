@@ -76,6 +76,7 @@ namespace ETL_SQL.Connectors
         public HashSet<string> GetSupportedKeywords() => new();
         public Dictionary<string, string[]> GetSupportedOptions() => new()
         {
+            ["HOST"] = Array.Empty<string>(),
             ["USER"] = Array.Empty<string>(),
             ["PASSWORD"] = Array.Empty<string>(),
             ["PORT"] = Array.Empty<string>(),

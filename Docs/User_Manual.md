@@ -480,7 +480,7 @@ DROP TABLE IF EXISTS #staging;
 While `FILE_LIST()` is a function that returns a table, you can also mount a directory as a permanent connection. This is useful when you need to join file metadata against other databases:
 
 ```sql
-CREATE CONNECTION raw_files AS DIRECTORY('C:\Incoming\', RECURSIVE=TRUE);
+CREATE CONNECTION raw_files AS DIRECTORY('C:\Incoming\');
 
 -- Query it like a table
 SELECT FileName, Size, LastModified
@@ -786,11 +786,7 @@ CREATE CONNECTION dest AS FLATFILE('C:\Exports\data.txt', FORMAT = 'FIXED', TRUN
 - **Enabled (`ON`):** Mismatched data types are converted to `NULL` (or default values), allowing the rest of the row to be inserted. Duplicate keys/primary key violations cause the entire row to be skipped.
 
 ```sql
--- Script Level
 SET SKIP_ERROR = ON;
-
--- Connection Level
-CREATE CONNECTION db AS MYSQL(HOST='...', SKIP_ERROR = ON);
 ```
 
 #### Aggregated Diagnostic Error Messages
@@ -962,7 +958,7 @@ WHEN NOT MATCHED THEN
 File delivery example:
 
 ```sql
-CREATE CONNECTION out_csv AS FLATFILE('C:\Exports\customer_summary.csv', FORMAT='CSV', HEADER=TRUE);
+CREATE CONNECTION out_csv AS FLATFILE('C:\Exports\customer_summary.csv', FORMAT='DELIMITED', HEADER=TRUE);
 
 INSERT INTO out_csv
 SELECT CustomerId, Revenue, LastSeen

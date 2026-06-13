@@ -8,6 +8,12 @@ namespace ETL_SQL.Tests.Docs
         private static readonly string RepoRoot =
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
+        private static readonly Dictionary<(string Connector, string Option), string[]> StrictConnectorOptionValues =
+            new()
+            {
+                [("FLATFILE", "FORMAT")] = new[] { "DELIMITED", "FIXED" },
+            };
+
         private static string RepoFile(string relativePath) =>
             Path.Combine(RepoRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
 
@@ -88,6 +94,50 @@ namespace ETL_SQL.Tests.Docs
             Assert.True(failures.Count == 0,
                 $"General documentation SQL blocks that failed to parse ({failures.Count}):\n" +
                 string.Join("\n\n", failures));
+        }
+
+        [Fact]
+        public void GeneralDocs_CreateConnectionOptions_AreSupportedByConnector()
+        {
+            var docsDir = RepoFile("Docs");
+            var helpDir = RepoFile("src/ETL-SQL.Core/Resources/Help");
+            var markdownFiles = Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories)
+                .Concat(Directory.GetFiles(RepoRoot, "*.md", SearchOption.TopDirectoryOnly))
+                .Concat(Directory.GetFiles(helpDir, "*.md", SearchOption.AllDirectories))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            var failures = FindUnsupportedConnectionOptions(markdownFiles);
+
+            Assert.True(failures.Count == 0,
+                $"Documentation CREATE CONNECTION blocks use unsupported connector options ({failures.Count}):\n" +
+                string.Join("\n", failures));
+        }
+
+        [Fact]
+        public void ConnectorAwareDocValidation_RejectsUnsupportedOptionName()
+        {
+            const string sql = "CREATE CONNECTION db AS MSSQL(HOST='sql01', DATABASE='Sales');";
+            var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+
+            var failures = FindUnsupportedConnectionOptions("inline regression example", 1, script);
+
+            Assert.Contains(failures, failure =>
+                failure.Contains("MSSQL", StringComparison.OrdinalIgnoreCase) &&
+                failure.Contains("HOST", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void ConnectorAwareDocValidation_RejectsUnsupportedOptionValue()
+        {
+            const string sql = "CREATE CONNECTION file AS FLATFILE(PATH='data.csv', FORMAT='CSV');";
+            var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+
+            var failures = FindUnsupportedConnectionOptions("inline regression example", 1, script);
+
+            Assert.Contains(failures, failure =>
+                failure.Contains("FORMAT", StringComparison.OrdinalIgnoreCase) &&
+                failure.Contains("CSV", StringComparison.OrdinalIgnoreCase));
         }
 
         // ── Help files in Resources/Help exist and are non-empty ─────────────────
@@ -224,7 +274,7 @@ namespace ETL_SQL.Tests.Docs
         private static IReadOnlyList<string> ExtractSqlBlocks(string markdown)
         {
             var results = new List<string>();
-            var fencePattern = new Regex(@"```sql\r?\n(.*?)```", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            var fencePattern = new Regex(@"```(?:sql|etlsql|rptsql)\r?\n(.*?)```", RegexOptions.Singleline | RegexOptions.IgnoreCase);
             foreach (Match m in fencePattern.Matches(markdown))
                 results.Add(m.Groups[1].Value);
             return results;
@@ -259,13 +309,129 @@ namespace ETL_SQL.Tests.Docs
             return failures;
         }
 
+        private static List<string> FindUnsupportedConnectionOptions(IEnumerable<string> markdownFiles)
+        {
+            var failures = new List<string>();
+
+            foreach (var path in markdownFiles)
+            {
+                var relativePath = Path.GetRelativePath(RepoRoot, path);
+                var blocks = ExtractSqlBlocks(File.ReadAllText(path));
+                foreach (var (block, index) in blocks.Select((b, i) => (b, i)))
+                {
+                    var trimmed = block.Trim();
+                    if (ShouldSkipSqlBlock(trimmed))
+                        continue;
+
+                    try
+                    {
+                        var script = new Parser(new Lexer(trimmed).Tokenize(), trimmed).Parse();
+                        failures.AddRange(FindUnsupportedConnectionOptions(relativePath, index + 1, script));
+                    }
+                    catch
+                    {
+                        // Parse failures are reported by the syntax-focused documentation tests.
+                    }
+                }
+            }
+
+            return failures;
+        }
+
+        private static IEnumerable<string> FindUnsupportedConnectionOptions(string source, int blockNumber, Script script)
+        {
+            var registry = ConnectorRegistry.Instance
+                ?? throw new InvalidOperationException("Connector registry was not initialized for documentation tests.");
+
+            foreach (var statement in EnumerateStatements(script.Statements))
+            {
+                if (statement is not CreateConnectionStatement create ||
+                    string.IsNullOrWhiteSpace(create.ConnectionType) ||
+                    create.Options == null)
+                {
+                    continue;
+                }
+
+                var connector = registry.GetConnector(create.ConnectionType);
+                if (connector == null)
+                {
+                    yield return $"{source} block #{blockNumber}: unknown connector '{create.ConnectionType}'.";
+                    continue;
+                }
+
+                var supported = connector.GetSupportedOptions().Keys
+                    .Append("TEMPLATE")
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var option in create.Options.Keys.Where(option => !supported.Contains(option)))
+                {
+                    yield return $"{source} block #{blockNumber}: {create.ConnectionType} does not support option '{option}'.";
+                }
+
+                foreach (var (option, expression) in create.Options)
+                {
+                    if (!StrictConnectorOptionValues.TryGetValue(
+                            (connector.Name.ToUpperInvariant(), option.ToUpperInvariant()),
+                            out var allowedValues) ||
+                        !TryGetStaticOptionValue(expression, out var actualValue) ||
+                        allowedValues.Contains(actualValue, StringComparer.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    yield return $"{source} block #{blockNumber}: {create.ConnectionType} option '{option}' " +
+                        $"does not support value '{actualValue}'. Expected one of: {string.Join(", ", allowedValues)}.";
+                }
+            }
+        }
+
+        private static bool TryGetStaticOptionValue(Expression expression, out string value)
+        {
+            switch (expression)
+            {
+                case LiteralExpression literal when literal.Value != null:
+                    value = Convert.ToString(literal.Value, System.Globalization.CultureInfo.InvariantCulture) ?? "";
+                    return true;
+                case IdentifierExpression identifier:
+                    value = identifier.Name;
+                    return true;
+                default:
+                    value = "";
+                    return false;
+            }
+        }
+
+        private static IEnumerable<Statement> EnumerateStatements(IEnumerable<Statement> statements)
+        {
+            foreach (var statement in statements)
+            {
+                yield return statement;
+
+                if (statement is BlockStatement block)
+                {
+                    foreach (var nested in EnumerateStatements(block.Statements))
+                        yield return nested;
+                }
+                else if (statement is TryCatchStatement tryCatch)
+                {
+                    foreach (var nested in EnumerateStatements(new[] { tryCatch.TryBody, tryCatch.CatchBody }))
+                        yield return nested;
+                }
+            }
+        }
+
         private static bool ShouldSkipSqlBlock(string trimmed)
         {
             if (string.IsNullOrWhiteSpace(trimmed))
                 return true;
 
-            // Skip template/placeholder snippets and ellipses
-            if (trimmed.Contains("...") || Regex.IsMatch(trimmed, @"<[a-zA-Z_][a-zA-Z0-9_\-\s]*>") || trimmed.Contains('{') || trimmed.Contains('}'))
+            // Skip template/placeholder snippets and unquoted ellipses. Quoted values
+            // such as PASSWORD='...' remain valid examples and should still be checked.
+            var withoutQuotedStrings = Regex.Replace(trimmed, @"'(?:''|[^'])*'", "''");
+            if (withoutQuotedStrings.Contains("...") ||
+                Regex.IsMatch(trimmed, @"<[a-zA-Z_][a-zA-Z0-9_\-\s]*>") ||
+                trimmed.Contains('{') ||
+                trimmed.Contains('}'))
                 return true;
 
             // Skip HTML block structures (e.g. text visuals with raw HTML snippets)

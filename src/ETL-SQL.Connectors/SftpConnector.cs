@@ -142,6 +142,7 @@ namespace ETL_SQL.Connectors
         public HashSet<string> GetSupportedKeywords() => new();
         public Dictionary<string, string[]> GetSupportedOptions() => new()
         {
+            ["HOST"] = Array.Empty<string>(),
             ["USER"] = new[] { "Username for SSH" },
             ["PASSWORD"] = new[] { "Password for SSH" },
             ["KEYFILE"] = new[] { "Path to the private key file" },

@@ -4,29 +4,25 @@ Connects to a local or UNC file-system folder. SELECT returns a listing of files
 Syntax:
   CREATE CONNECTION <name> AS DIRECTORY(
     PATH    = 'C:\data\exports',
-    CREATE  = ON | OFF,
-    FILTER  = '*.csv',
-    RECURSE = ON | OFF
+    CREATE  = ON | OFF
   );
 
 Options:
   PATH    — folder path (required)
   CREATE  — create the directory if it does not exist (default OFF)
-  FILTER  — file name glob pattern (e.g. '*.csv', '*.txt')
-  RECURSE — include subdirectory contents in SELECT output (default OFF)
 
 ```sql
 CREATE CONNECTION Exports AS DIRECTORY(
   PATH    = 'C:\data\exports',
-  CREATE  = ON,
-  FILTER  = '*.csv'
+  CREATE  = ON
 );
 
 -- List CSV files modified in the last day
-SELECT name, size, modified_at
+SELECT FileName, Size, LastModified
   INTO #files
   FROM Exports
-  WHERE modified_at >= DATEADD(DAY, -1, GETDATE());
+  WHERE Extension = '.csv'
+    AND LastModified >= DATEADD(DAY, -1, GETDATE());
 
 PRINT 'Files found: ' + @@ROWCOUNT;
 ```

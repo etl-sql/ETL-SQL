@@ -24,6 +24,7 @@ namespace ETL_SQL.Connectors.Avro
 
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
+            { "PATH", Array.Empty<string>() },
             { "SCHEMA_FILE", Array.Empty<string>() },
             { "ENCRYPT", new[] { "ON", "OFF" } },
             { "PASSWORD", Array.Empty<string>() }

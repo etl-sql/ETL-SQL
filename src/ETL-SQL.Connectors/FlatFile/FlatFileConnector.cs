@@ -27,6 +27,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
+            { "PATH", Array.Empty<string>() },
             { "HEADER", new[] { "ON", "OFF" } },
             { "DELIMITER", new[] { "COMMA", "PIPE", "TAB", "SEMICOLON", "COLON", "TILDE" } },
             { "ROW_DELIMITER", new[] { "LF", "CR", "CRLF", "TILDE", "SEMICOLON", "COLON", "COMMA", "TAB", "PIPE" } },
@@ -47,7 +48,8 @@ namespace ETL_SQL.Connectors.FlatFile
             { "FORMAT", new[] { "DELIMITED", "FIXED" } },
             { "EXPECTED_HASH", Array.Empty<string>() },
             { "WAIT_FOR_LOCK", new[] { "ON", "OFF", "TRUE", "FALSE" } },
-            { "LOCK_TIMEOUT_SEC", Array.Empty<string>() }
+            { "LOCK_TIMEOUT_SEC", Array.Empty<string>() },
+            { "TRUNCATE_STRING", new[] { "ON", "OFF" } }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase)
@@ -59,7 +61,9 @@ namespace ETL_SQL.Connectors.FlatFile
             { "TEXT_QUALIFIER", new[] { "DOUBLEQUOTE", "SINGLEQUOTE", "DOUBLEQUOTES", "SINGLEQUOTES" } },
             { "NULL_AS", new[] { "NULL", "EMPTY", "BACKSLASH_N" } },
             { "STRICT_SCHEMA", new[] { "ON", "OFF" } },
-            { "TRIM", new[] { "ON", "OFF" } }
+            { "TRIM", new[] { "ON", "OFF" } },
+            { "FORMAT", new[] { "DELIMITED", "FIXED" } },
+            { "TRUNCATE_STRING", new[] { "ON", "OFF" } }
         };
 
         public string GetHelp() =>

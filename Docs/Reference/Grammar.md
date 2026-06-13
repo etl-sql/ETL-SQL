@@ -474,7 +474,11 @@ When `ON`, save helpers remove plaintext sensitive values from saved source. Thi
 SET NO_SAVE_SENSITIVE = ON;
 USE PASSWORD = 'dev-only';
 DECLARE @apiToken SENSITIVE = 'local-token';
-CREATE CONNECTION api AS REST(API_KEY = 'local-key');
+CREATE CONNECTION api AS REST(
+    AUTH_TYPE = 'APIKEY',
+    HEADER_NAME = 'X-API-Key',
+    TOKEN = 'local-key'
+);
 
 -- Saved source uses placeholders/prompt form instead of those values.
 ```
@@ -488,7 +492,7 @@ When `ON`, save helpers replace `CREATE CONNECTION` targets and quoted connectio
 
 ```sql
 SET NO_SAVE_CONNECTION = ON;
-CREATE CONNECTION prod AS POSTGRES('Host=db01;Username=etl;Password=pw;', HOST = 'db01', DATABASE = 'warehouse', USERNAME = 'etl', PASSWORD = 'pw');
+CREATE CONNECTION prod AS POSTGRES('Host=db01;Username=etl;Password=pw;', HOST = 'db01', DATABASE = 'warehouse', USER = 'etl', PASSWORD = 'pw');
 ```
 
 ### 2.7 `SET CONNECTION_ENCRYPTION`
@@ -501,7 +505,7 @@ When `ON`, save helpers encrypt the `CREATE CONNECTION` target and connection op
 ```sql
 SET CONNECTION_ENCRYPTION = ON;
 USE PASSWORD = 'dev-only';
-CREATE CONNECTION prod AS POSTGRES('Host=db01;Username=etl;Password=pw;', HOST = 'db01', DATABASE = 'warehouse', USERNAME = 'etl', PASSWORD = 'pw');
+CREATE CONNECTION prod AS POSTGRES('Host=db01;Username=etl;Password=pw;', HOST = 'db01', DATABASE = 'warehouse', USER = 'etl', PASSWORD = 'pw');
 ```
 
 `NO_SAVE_CONNECTION` takes precedence over `CONNECTION_ENCRYPTION` because it removes connection details instead of preserving them encrypted.
@@ -663,7 +667,7 @@ CREATE CONNECTION legacy AS ODBC(DSN = 'MyLegacyDSN');
 -- Flat file (Common: PATH, FORMAT, DELIMITER, HEADER, ENCODING, SKIP, COMPRESS, ENCRYPT)
 CREATE CONNECTION sales_csv AS FLATFILE(
     PATH = 'C:\Data\sales.csv',
-    FORMAT = 'CSV',
+    FORMAT = 'DELIMITED',
     DELIMITER = ',',
     HEADER = ON,
     ENCODING = 'UTF8'
@@ -725,7 +729,7 @@ CREATE CONNECTION mailer AS SMTP(
 CREATE CONNECTION testdb AS MOCKDB();
 
 -- Local directory connector â€” treats a folder as a queryable table
-CREATE CONNECTION logs_dir AS DIRECTORY('C:\Logs\', RECURSIVE=TRUE);
+CREATE CONNECTION logs_dir AS DIRECTORY('C:\Logs\');
 ```
 
 **Service Connectors**

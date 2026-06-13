@@ -13,42 +13,37 @@ ETL-SQL is a SQL-first automation engine for moving, transforming, validating, s
 
 Use ETL-SQL when you want SQL to be the orchestration language, not just the query language.
 
-## The Pitch: Why ETL-SQL?
+## Why ETL-SQL?
 
-### 🔄 True ETL: Put the "T" Back Before the "L"
-Traditional ELT (Extract-Load-Transform) dumps raw, dirty data directly into target databases because old-school GUI ETL tools were too slow and inflexible to write complex transformations. **ETL-SQL shifts the paradigm back to true ETL.** 
+### SQL Is the Orchestration Language
 
-By providing a rich, unified, in-memory SQL layer (incorporating PostgreSQL, T-SQL, Oracle SQL, and ANSI SQL) combined with programmatic control flow (loops, `RELDATE` math, variables), you can stage, cleanse, validate, and enrich data in-flight before it ever touches your target production tables.
+ETL-SQL uses a SQL-like language to coordinate databases, APIs, files, transfers, validation, scheduling, and reports. Data from different systems can be staged in engine-managed `#temp` tables, where portable transformations and control flow run before rows are written to a destination.
 
-### 🔀 Blended SQL Dialect (The Best of All Worlds)
-Stop switching mindsets between SQL dialects. ETL-SQL blends the best features of PostgreSQL (regex matching `~`/`~*`, `LIMIT`/`OFFSET`), T-SQL (`ISNULL`, `HASHBYTES`, `@@ROWCOUNT`), Oracle (`DECODE`, `NVL2`), and Snowflake (`QUALIFY` to filter window aggregates directly). You get full modern ANSI-SQL analytical support—including advanced window frames, CTEs, and inline JSON/XML manipulation—natively supported on every single data connection.
+Remote SQL remains dialect-aware. Queries pushed to SQL Server, PostgreSQL, Oracle, and other databases use the target system's native rules; cross-source work runs in the ETL-SQL engine.
 
-### 🤖 From Spec Sheets to SQL Boilerplate in Seconds
-Stop wasting hours transcribing vendor schemas. Trim a specification PDF with `etl-sql extract-spec`, feed it to your favorite LLM or AI agent using our prompt instructions, and use `etl-sql gen-script` to compile the resulting contract into a type-safe, validated ETL-SQL starter script with regex validations, lineage tags, and quarantine blocks.
+### One Script from Source to Dashboard
 
-### 📊 SQL-to-BI in a Single File (`.rptsql`)
-Forget setting up complex BI tools or reporting servers. Append `CREATE VISUAL` and `CREATE PAGE` blocks directly to your SQL data prep scripts, and ETL-SQL instantly serves a responsive web dashboard on the **Report Portal** with interactive charts, drill-downs, filters, saved views, and automated PDF delivery.
+A pipeline can extract, transform, validate, load, and then declare its report in the same plain-text workflow. Report-SQL (`.rptsql`) adds visuals, filters, pages, and navigation to normal data-preparation scripts. Reports can be previewed locally, built as static outputs, or published to Report Portal.
 
-### 🛡️ Sandboxed Zero-Trust Security
-Security is built into the parser. ETL-SQL features native encryption for credentials (`ENC:`), memory-purged `SECRET` variables, path traversal guardrails, script immutability, and transactional outboxes. Validate side-effecting operations safely with `SET WHAT_IF ON` before deploying.
+### Script-First and Source-Control Native
 
-### 🌿 Git-Friendly & Dev-First (Plain Text Code)
-Traditional BI and ETL tools lock you into proprietary binary formats, database-stored procedures, or messy auto-generated XML/JSON that make version control a nightmare. ETL-SQL pipelines and dashboards are 100% plain text. Run a standard `git diff`, review code changes in Pull Requests, and track history cleanly while keeping passwords securely encrypted via native `ENC:` tags.
+Pipelines and dashboards are reviewable text instead of opaque designer files. The same script can run headlessly, in the terminal IDE, in VS Code or notebooks, through Orchestrator, or as part of CI/CD.
 
-### 🏷️ End-to-End Lineage: From Source to Visual
-Build absolute trust in your reports. By attaching lineage tags (`/*@tag: val */`) at the column or row level, metadata cascades automatically from the source extract, through the transformations, all the way to the final dashboard visual. If a business stakeholder asks, *"Where did this metric come from?"*, the Report Portal displays its exact provenance, source table, and transformations in a live lineage diagram.
+### Security and Lineage in the Execution Model
 
-### 🐳 Docker Lifecycle Control directly in SQL
-Spin up disposable databases for sandbox staging or integration testing without writing separate orchestration bash scripts. Declare `USE DOCKER('postgres:15-alpine') AS temp_pg;` in your script, fetch its dynamically configured connection string, run migrations and tests, and call `CLOSE DOCKER temp_pg;` when done. 
+Runtime controls enforce path boundaries, protected-script immutability, encrypted credential handling, and limits on file operations. `SECRET` variables reduce credential lifetime, while `SET WHAT_IF ON` provides a dry-run path for side-effecting operations. Lineage metadata can follow data from source operations through transformations and into report assets.
 
-### 🔄 Resumable Sessions (Skip Redundant Re-runs)
-Long-running ETL processes shouldn't have to restart from scratch when a network timeout occurs at step 4 of 5. By defining labels in your script, ETL-SQL establishes checkpoints. Run scripts with `--session` and `--resume` flags to skip completed steps and restart failed runs exactly where they left off.
+### Standout Capabilities
 
-### 🧩 Native Fuzzy Joins & Phonetic Search
-Cleanse and align customer, product, or address records across different systems without writing complex external matching functions. ETL-SQL supports native `FUZZY JOIN` clauses and includes a suite of fuzzy string algorithms (`SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `METAPHONE`, `DMETAPHONE`, `NGRAMS`) directly in its SQL engine.
-
-### 📅 Database-Agnostic Relative Date Math (`RELDATE`)
-Stop rewriting complex date math (`DATEADD`, `INTERVAL`, `SYSDATE`) for different database types. ETL-SQL introduces the `RELDATE` data type (e.g., `'D-7'` for 7 days ago, `'-1M'` for one month offset). Write your relative date filters once, and the engine evaluates them consistently across any connected flat file or relational database.
+| Capability | What it adds |
+| :--- | :--- |
+| Cross-source staging | Join, cleanse, validate, and enrich data from unrelated systems in engine-managed `#temp` tables. |
+| Report-SQL | Define data preparation and interactive dashboards together in a `.rptsql` file. |
+| Resumable sessions | Use labels, `--session`, and `--resume` to continue checkpointed workflows after a failure. |
+| Fuzzy matching | Use `FUZZY JOIN`, `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `METAPHONE`, and related engine functions. |
+| Relative dates | Express engine-side date parameters such as `D-7` and `M-1` without embedding a database-specific date function. |
+| Docker lifecycle commands | Start disposable services for development or testing with `USE DOCKER`, then release them with `CLOSE DOCKER`. |
+| Specification-driven scaffolding | Convert a reviewed JSON specification contract into a schema-validated starter script with lineage, validation, and quarantine scaffolding. This workflow is experimental and still requires developer review. |
 
 ---
 
@@ -121,14 +116,14 @@ This script extracts from SQL Server, stages rows inside the ETL-SQL engine, wri
 
 ```sql
 CREATE CONNECTION prod_db AS MSSQL(
-    HOST = 'prod',
+    SERVER = 'prod',
     DATABASE = 'Sales',
     TRUSTED_CONNECTION = TRUE
 );
 
 CREATE CONNECTION archive AS FLATFILE(
     PATH = 'C:\Exports\sales_2026.csv',
-    FORMAT = 'CSV',
+    FORMAT = 'DELIMITED',
     DELIMITER = ',',
     HEADER = ON
 );
@@ -136,8 +131,8 @@ CREATE CONNECTION archive AS FLATFILE(
 CREATE CONNECTION my_smtp AS SMTP(
     HOST = 'smtp.company.com',
     PORT = 587,
-    USER = 'admin',
-    PASSWORD = 'secret',
+    USERNAME = 'etl-service',
+    PASSWORD = 'ENC:replace-with-encrypted-value',
     USE_SSL = TRUE
 );
 
@@ -173,7 +168,7 @@ SET REPORT TITLE       = 'Sales Dashboard';
 SET REPORT DESCRIPTION = 'Regional revenue by quarter';
 
 CREATE CONNECTION prod AS MSSQL(
-    HOST = 'prod',
+    SERVER = 'prod',
     DATABASE = 'Sales',
     TRUSTED_CONNECTION = TRUE
 );

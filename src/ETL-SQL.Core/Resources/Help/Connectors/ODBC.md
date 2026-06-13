@@ -9,7 +9,7 @@ Syntax:
     SERVER   = 'hostname',
     DATABASE = 'dbname',
     UID      = 'username',
-    PWD      = '<password>'
+    PASSWORD = '<password>'
   );
 
 Options:
@@ -18,7 +18,7 @@ Options:
   SERVER    — server hostname
   DATABASE  — database name
   UID             — username
-  PWD             — password
+  PASSWORD        — password
   TIMEOUT_SECONDS — command/query execution timeout in seconds (default 30)
 
 ```sql
@@ -26,7 +26,7 @@ Options:
 CREATE CONNECTION LegacyDB AS ODBC(
   DSN = 'LegacyERP',
   UID = @user,
-  PWD = @password
+  PASSWORD = @password
 );
 
 SELECT part_no, description, quantity

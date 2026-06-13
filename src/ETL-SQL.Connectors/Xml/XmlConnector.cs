@@ -25,6 +25,7 @@ namespace ETL_SQL.Connectors.Xml
 
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
+            { "PATH", Array.Empty<string>() },
             { "ROOT_PATH", Array.Empty<string>() },
             { "COMPRESS", new[] { "ON", "OFF" } },
             { "ENCRYPT", new[] { "ON", "OFF" } },
