@@ -13,14 +13,21 @@ ETL-SQL is a SQL-first automation engine for moving, transforming, validating, s
 
 Use ETL-SQL when you want SQL to be the orchestration language, not just the query language.
 
-## Why ETL-SQL
+## The Pitch: Why ETL-SQL?
 
-- **One language for the whole workflow**: extraction, staging, transformation, validation, file operations, email, scheduling, lineage, and reporting.
-- **Portable across sources**: MSSQL, Postgres, Oracle, MySQL/MariaDB, ODBC, Snowflake, BigQuery, flat files, Parquet, JSON, XML, Excel, Avro, REST, SFTP, FTP, Azure Blob, and SMTP.
-- **Engine-side control**: data flows through the ETL-SQL engine, where variables, `#temp` tables, lineage, linting, security checks, and cross-source transforms live.
-- **Checkpoint and resume**: top-level labels can act as resumable checkpoints, with `GOTO`, `--session`, and `--resume` supporting controlled restarts.
-- **Zero-trust by default**: scripts run inside a sandbox with path guardrails, script immutability, resource caps, encrypted credentials, and dry-run support.
-- **Reports are scripts too**: `.rptsql` files use the same engine and add dashboards, filters, pages, containers, navigation, exports, and portal publishing.
+### 🔄 True ETL: Put the "T" Back Before the "L"
+Traditional ELT (Extract-Load-Transform) dumps raw, dirty data directly into target databases because old-school GUI ETL tools were too slow and inflexible to write complex transformations. **ETL-SQL shifts the paradigm back to true ETL.** 
+
+By providing a rich, unified, in-memory SQL layer (incorporating PostgreSQL, T-SQL, Oracle SQL, and ANSI SQL) combined with programmatic control flow (loops, `RELDATE` math, variables), you can stage, cleanse, validate, and enrich data in-flight before it ever touches your target production tables.
+
+### 🤖 From Spec Sheets to SQL Boilerplate in Seconds
+Stop wasting hours transcribing vendor schemas. Trim a specification PDF with `etl-sql extract-spec`, feed it to your favorite LLM or AI agent using our prompt instructions, and use `etl-sql gen-script` to compile the resulting contract into a type-safe, validated ETL-SQL starter script with regex validations, lineage tags, and quarantine blocks.
+
+### 📊 SQL-to-BI in a Single File (`.rptsql`)
+Forget setting up complex BI tools or reporting servers. Append `CREATE VISUAL` and `CREATE PAGE` blocks directly to your SQL data prep scripts, and ETL-SQL instantly serves a responsive web dashboard on the **Report Portal** with interactive charts, drill-downs, filters, saved views, and automated PDF delivery.
+
+### 🛡️ Sandboxed Zero-Trust Security
+Security is built into the parser. ETL-SQL features native encryption for credentials (`ENC:`), memory-purged `SECRET` variables, path traversal guardrails, script immutability, and transactional outboxes. Validate side-effecting operations safely with `SET WHAT_IF ON` before deploying.
 
 ---
 
