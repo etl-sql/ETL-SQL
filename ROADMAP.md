@@ -65,7 +65,8 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
   - Implement `etl-sql admin doctor` for local environment configuration and smoke verification.
   - Implement `etl-sql admin support-bundle` to redact credentials and export system config, health, logs, and database metrics.
 - [ ] **Phase 2: Backup and Disaster Recovery**
-  - Implement `etl-sql admin backup` to package configuration, database state, files, and encryption keys.
+  - Implement `etl-sql admin backup` to package configuration, database state, and files.
+  - Enforce split-custody recovery by ensuring decryption and Data Protection keys are backed up separately from database state.
   - Implement `etl-sql admin restore --validate` to verify catalog and key versions before restoring.
 - [ ] **Phase 3: Database Migrations**
   - Implement automatic database schema migrations for SQLite upon engine/portal startup or upgrade.
@@ -93,6 +94,7 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
   - Support load-balancer session affinity for interactive IDE sessions.
   - Ensure a node partition immediately cancels local running jobs if it loses its database lease.
   - Implement a lightweight `/healthz` HTTP endpoint on Portal nodes to check database, storage, and lease connectivity for load-balancer health checks.
+  - Heart-beat node capacity (CPU/memory utilization) to prevent overloaded nodes from claiming new leases, and implement a quarantine policy for failing jobs to prevent cascade failures across the cluster.
 - [ ] **Phase 5: Rolling Deployment Certification**
   - Verify "expand/migrate/contract" database migrations for rolling upgrades.
   - Run automated dual-node tests to prove failover recovery and task reclamation.
@@ -172,10 +174,12 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 - [ ] **Phase 3: Distribution Trust**
   - Automate build workflows to generate SHA-256 checksums and an SBOM (Software Bill of Materials).
   - Retain test and certification reports in public release assets.
+  - Implement cache-busting asset fingerprinting (inject hashes into JS/CSS URLs) in the Report Portal to prevent outdated client-side assets after upgrades.
 - [ ] **Phase 4: Release Gates**
   - Verify that a clean script-to-scheduled-production workflow completes successfully without manual intervention.
   - Ensure zero credentials leak in logs, bundles, or debug dumps.
   - Reconcile OIDC/LDAP configurations with standard documentation libraries.
+  - Implement automatic diagnostic redaction in `etl-sql admin support-bundle` to automatically strip query parameters, private table data, and personal data (PII) before export.
 
 ---
 
