@@ -1232,7 +1232,8 @@ public class AdminController(
     {
         var export = await exporter.GenerateAsync(HttpContext.RequestAborted);
         await audit.LogAsync(CurrentUserId, "EXPORT_PORTAL_CONFIGURATION", "System", null,
-            $"{export.RequiredSecrets.Count} secret placeholder(s), {export.Skipped.Count} skipped item(s)");
+            $"{export.RequiredSecrets.Count} secret placeholder(s), {export.Skipped.Count} skipped item(s), " +
+            $"{export.ContentManifest.Count} content item(s)");
         return File(
             Encoding.UTF8.GetBytes(export.Script),
             "text/plain; charset=utf-8",

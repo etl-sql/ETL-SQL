@@ -17,7 +17,12 @@ namespace ETL_SQL.ReportPortal.Services;
 public sealed class ConfigurationExportService(PortalDbContext db)
 {
     public sealed record ExportResult(string Script, IReadOnlyList<string> RequiredSecrets,
-        IReadOnlyList<string> Skipped, IReadOnlyList<string> Emitted);
+        IReadOnlyList<string> Skipped, IReadOnlyList<string> Emitted,
+        IReadOnlyList<ContentManifestItem> ContentManifest);
+
+    /// <summary>A content artifact the bootstrap does NOT reconstruct (report script files,
+    /// datasets) that must be copied or re-published separately — see P1.10.</summary>
+    public sealed record ContentManifestItem(string Kind, string Logical, string? Source, string Action);
 
     private static readonly string[] RuntimeOnly =
     [
@@ -32,6 +37,7 @@ public sealed class ConfigurationExportService(PortalDbContext db)
         var emitted = new List<string>();
         var skipped = new List<string>();
         var secrets = new List<string>();
+        var manifest = new List<ContentManifestItem>();
         var body = new StringBuilder();
 
         // ── Groups ────────────────────────────────────────────────────────────
@@ -140,6 +146,10 @@ public sealed class ConfigurationExportService(PortalDbContext db)
                 ? ""
                 : $" WITH (DESCRIPTION = {Q(r.Description)})";
             body.AppendLine($"    PUBLISH REPORT {Q(r.Name)} FROM {Q(r.ScriptPath)} IN FOLDER {Q(r.Folder!.Path)}{withClause};");
+            // The PUBLISH statement references a .rptsql path that must already exist at the target.
+            manifest.Add(new ContentManifestItem(
+                "ReportScript", $"{r.Folder.Path}/{r.Name}", r.ScriptPath,
+                "Copy this .rptsql file into the target portal's script root before replay."));
         }
         emitted.Add($"{reports.Count} report publication(s)");
 
@@ -151,6 +161,13 @@ public sealed class ConfigurationExportService(PortalDbContext db)
         AppendSection(body, "Dataset metadata and grants (apply after each dataset first materializes)");
         foreach (var d in datasets)
         {
+            // A dataset's cached parquet is content (and at-rest-encrypted), never configuration:
+            // it must be re-materialized by running its producing report, or re-published from a
+            // portable EXPORT DATASET file.
+            manifest.Add(new ContentManifestItem(
+                "Dataset", d.Name, null,
+                "Re-materialize by running its producing report, or PUBLISH DATASET from a portable export; this script only restores its metadata/grants."));
+
             if (string.IsNullOrWhiteSpace(d.FolderPath))
             {
                 skipped.Add($"dataset '{d.Name}': no folder path — published datasets must be re-published from a portable export (PUBLISH DATASET)");
@@ -232,11 +249,13 @@ public sealed class ConfigurationExportService(PortalDbContext db)
 
         skipped.Add("portal settings (JWT/dataset keys, Orchestrator API key/URL, branding): provisioned via configuration files, not script — see the administrators guide");
 
-        return new ExportResult(ComposeScript(body, secrets, emitted, skipped), secrets, skipped, emitted);
+        return new ExportResult(
+            ComposeScript(body, secrets, emitted, skipped, manifest), secrets, skipped, emitted, manifest);
     }
 
     private static string ComposeScript(
-        StringBuilder body, List<string> secrets, List<string> emitted, List<string> skipped)
+        StringBuilder body, List<string> secrets, List<string> emitted, List<string> skipped,
+        List<ContentManifestItem> manifest)
     {
         var sb = new StringBuilder();
         sb.AppendLine("-- ============================================================================");
@@ -276,7 +295,38 @@ public sealed class ConfigurationExportService(PortalDbContext db)
             sb.AppendLine($"--   {line}");
         sb.AppendLine("-- Runtime-only (never exported as configuration):");
         foreach (var line in RuntimeOnly) sb.AppendLine($"--   {line}");
+
+        AppendContentManifest(sb, manifest);
         return sb.ToString();
+    }
+
+    /// <summary>Companion content manifest + recovery runbook (P1.10): this bootstrap reconstructs
+    /// configuration only — the report scripts and datasets it references are content that must be
+    /// copied or re-published separately, and exact-state recovery still uses the database/file
+    /// backups.</summary>
+    private static void AppendContentManifest(StringBuilder sb, List<ContentManifestItem> manifest)
+    {
+        sb.AppendLine();
+        sb.AppendLine("-- ── Companion content manifest & recovery runbook ───────────────────────────");
+        sb.AppendLine("-- This script reconstructs CONFIGURATION only. There are three recovery paths:");
+        sb.AppendLine("--   1. Configuration (this script): the auditable clean-start path — replay against a");
+        sb.AppendLine("--      fresh portal, supplying secrets, after the content below is in place.");
+        sb.AppendLine("--   2. Content (this manifest): report .rptsql scripts and datasets — copy or");
+        sb.AppendLine("--      re-publish them separately; the bootstrap only references and grants them.");
+        sb.AppendLine("--   3. Exact-state disaster recovery: restore the portal and Orchestrator");
+        sb.AppendLine("--      database/file backups — that path is unaffected by this export.");
+
+        var scripts = manifest.Where(m => m.Kind == "ReportScript").ToList();
+        sb.AppendLine($"-- Report scripts to copy into the target script root ({scripts.Count}):");
+        foreach (var item in scripts.OrderBy(m => m.Logical))
+            sb.AppendLine($"--   {item.Logical}  <=  {item.Source}");
+
+        var contentDatasets = manifest.Where(m => m.Kind == "Dataset").ToList();
+        sb.AppendLine($"-- Datasets to re-materialize or re-publish ({contentDatasets.Count}):");
+        foreach (var item in contentDatasets.OrderBy(m => m.Logical))
+            sb.AppendLine($"--   {item.Logical}");
+        if (scripts.Count == 0 && contentDatasets.Count == 0)
+            sb.AppendLine("--   (no report scripts or datasets — configuration-only portal)");
     }
 
     private static void AppendSection(StringBuilder body, string title)

@@ -78,6 +78,13 @@ public sealed class ConfigurationExportTests
         Assert.Contains("Export summary", script);
         Assert.Contains("Runtime-only (never exported as configuration):", script);
 
+        // Companion content manifest + runbook (P1.10): the report's .rptsql is content to copy
+        // separately, not reconstructed by the bootstrap.
+        Assert.Contains("Companion content manifest", script);
+        Assert.Contains("Report scripts to copy into the target script root", script);
+        Assert.Contains(scriptPath, script);
+        Assert.Contains("Exact-state disaster recovery", script);
+
         // No real secret material leaves the portal.
         Assert.DoesNotContain("smtp-secret-marker", script);
         Assert.DoesNotContain("Initial@Test1!", script);

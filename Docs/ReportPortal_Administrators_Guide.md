@@ -1045,7 +1045,12 @@ Notes:
 - The engine write-blocks script extensions (`.etlsql`, `.sql`) as control-plane protection, so
   export to a data extension such as `.txt` and rename after review when committing to source control.
 - The script reconstructs **configuration only** — report `.rptsql` files, dataset caches, and
-  snapshots are content and travel separately (see the export summary and §10.3 of the security model).
+  snapshots are content and travel separately. The export ends with a **companion content manifest
+  and recovery runbook** naming the three recovery paths and listing every report script to copy
+  into the target script root and every dataset to re-materialize or re-publish. The three paths:
+  (1) configuration — this script, the auditable clean-start path; (2) content — the manifest's
+  report scripts and datasets, copied/published separately; (3) exact-state disaster recovery —
+  restoring the portal and Orchestrator database/file backups, which this export does not replace.
 - Replay against a fresh portal requires substituting every `${...}` placeholder first; scheduled
   refresh jobs are listed in the summary for manual re-creation because they need an Orchestrator
   connection alias.

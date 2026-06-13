@@ -125,11 +125,20 @@ release begins.
   no mutation, missing-secret fail-closed, missing-reference fail-closed). Residual: subscriptions and
   alerts are id-keyed (not yet name-deduped) so they re-create on rerun — documented in the admin guide
   import section; name-keyed subscription/alert upsert and the round-trip proof remain with P1.11.
-- [ ] **P1.10 Separate configuration reconstruction from data/content backup.**
+- [x] **P1.10 Separate configuration reconstruction from data/content backup.**
   A bootstrap script reconstructs configuration, not encrypted datasets or generated report output.
   Produce a companion manifest/runbook identifying report scripts/bundles and portable dataset exports
   that must be copied or published separately. Existing portal and Orchestrator database/file backups
   remain the exact-state disaster-recovery path; configuration export is the auditable clean-start path.
+  *(done — v0.11.0)* The export now ends with a **companion content manifest and recovery runbook**
+  that names the three recovery paths (configuration = this script; content = report scripts +
+  datasets copied/published separately; exact-state = portal/Orchestrator DB+file backups) and lists
+  every report `.rptsql` to copy into the target script root (`<logical> <= <source path>`) and every
+  dataset to re-materialize or re-publish. `ExportResult` gained a structured
+  `ContentManifest` (`ContentManifestItem` Kind/Logical/Source/Action) so callers and tests can
+  consume it, and the export audit detail now records the content-item count. Test:
+  `ConfigurationExportTests` asserts the manifest section, the runbook's three paths, and the report
+  script path. Admin guide §9.0 updated.
 - [ ] **P1.11 Prove clean-server round-trip reconstruction.**
   Seed a portal with multiple users/groups, overlapping ACLs, reports, public/private datasets, refresh
   grants, jobs, SMTP aliases, subscriptions, and disabled resources. Export configuration, initialize an
