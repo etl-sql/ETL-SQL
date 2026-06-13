@@ -235,7 +235,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `ASCII(string)` | String | [ASCII.md](../src/ETL-SQL.Core/Resources/Help/Functions/ASCII.md) | Numeric code of first character |
 | `UNICODE(string)` | String | [UNICODE.md](../src/ETL-SQL.Core/Resources/Help/Functions/UNICODE.md) | Unicode code of first character |
 | `CHAR(code)` | String | [CHAR.md](../src/ETL-SQL.Core/Resources/Help/Functions/CHAR.md) | Character for given code |
-| `DATALENGTH(value)` | String | [DATALENGTH.md](../Docs/Reference/Standard_Library.md#35-character-encoding) | Byte count of value |
+| `DATALENGTH(value)` | String | [DATALENGTH.md](../src/ETL-SQL.Core/Resources/Help/Functions/DATALENGTH.md) | Byte count of value |
 | `TRANSLATE(string, find_chars, replace_chars)` | String | [TRANSLATE.md](../src/ETL-SQL.Core/Resources/Help/Functions/TRANSLATE.md) | Replaces chars 1-to-1 |
 | `STRING_ESCAPE(text, type)` | String | [STRING_ESCAPE.md](../src/ETL-SQL.Core/Resources/Help/Functions/STRING_ESCAPE.md) | Escapes special characters |
 | `STRING_SPLIT(string, delimiter)` | String | [STRING_SPLIT.md](../src/ETL-SQL.Core/Resources/Help/Functions/STRING_SPLIT.md) | Table-valued split |
@@ -344,22 +344,22 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `ERROR_SEVERITY()` | System | [ERROR_SEVERITY.md](../src/ETL-SQL.Core/Resources/Help/Functions/ERROR_SEVERITY.md) | Error severity in CATCH block |
 | `ERROR_STATE()` | System | [ERROR_STATE.md](../src/ETL-SQL.Core/Resources/Help/Functions/ERROR_STATE.md) | Error state in CATCH block |
 | `ERROR_LINE()` | System | [ERROR_LINE.md](../src/ETL-SQL.Core/Resources/Help/Functions/ERROR_LINE.md) | Error line in CATCH block |
-| `JSON_VALUE(json, path)` / `JSON_EXTRACT` | JSON | [JSON_VALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_VALUE.md) | Extracts scalar from JSON (alias: JSON_EXTRACT) |
+| `JSON_VALUE(json, path)` / `JSON_EXTRACT` | JSON | [JSON_VALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_VALUE.md) / [JSON_EXTRACT.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_EXTRACT.md) | Extracts scalar from JSON (alias: JSON_EXTRACT) |
 | `JSON_QUERY(json, path)` | JSON | [JSON_QUERY.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_QUERY.md) | Extracts object/array from JSON |
 | `JSON_MODIFY(json, path, new_value)` | JSON | [JSON_MODIFY.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_MODIFY.md) | Updates JSON string |
 | `ISJSON(string)` | JSON | [ISJSON.md](../src/ETL-SQL.Core/Resources/Help/Functions/ISJSON.md) | 1 if valid JSON |
-| `JSON_EXISTS(json, path)` | JSON | [JSON_EXISTS.md](../Docs/Reference/Standard_Library.md#11-json-functions) | 1 if path exists |
-| `JSON_OBJECT(key, value, ...)` | JSON | [JSON_OBJECT.md](../Docs/Reference/Standard_Library.md#11-json-functions) | Builds JSON object |
-| `JSON_ARRAY(value1, ...)` | JSON | [JSON_ARRAY.md](../Docs/Reference/Standard_Library.md#11-json-functions) | Builds JSON array |
-| `JSON_TABLE(json, path COLUMNS (...))` | JSON | [JSON_TABLE.md](../Docs/Reference/Standard_Library.md#11-json-functions) | Table projected from JSON rows |
-| `OPENJSON(json, [path])` | JSON | [OPENJSON.md](../Docs/Reference/Standard_Library.md#11-json-functions) | SQL Server-style JSON expansion |
-| `XMLVALUE(xml, xpath)` / `EXTRACTVALUE` | XML | [XMLVALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLVALUE.md) | Extracts scalar from XML (alias: EXTRACTVALUE) |
+| `JSON_EXISTS(json, path)` | JSON | [JSON_EXISTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_EXISTS.md) | 1 if path exists |
+| `JSON_OBJECT(key, value, ...)` | JSON | [JSON_OBJECT.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_OBJECT.md) | Builds JSON object |
+| `JSON_ARRAY(value1, ...)` | JSON | [JSON_ARRAY.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_ARRAY.md) | Builds JSON array |
+| `JSON_TABLE(json, path COLUMNS (...))` | JSON | [JSON_TABLE.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_TABLE.md) | Table projected from JSON rows |
+| `OPENJSON(json, [path])` | JSON | [OPENJSON.md](../src/ETL-SQL.Core/Resources/Help/Functions/OPENJSON.md) | SQL Server-style JSON expansion |
+| `XMLVALUE(xml, xpath)` / `EXTRACTVALUE` | XML | [XMLVALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLVALUE.md) / [EXTRACTVALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/EXTRACTVALUE.md) | Extracts scalar from XML (alias: EXTRACTVALUE) |
 | `XMLEXISTS(xml, xpath)` | XML | [XMLEXISTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLEXISTS.md) | 1 if XPath exists |
 | `XMLQUERY(xml, xpath)` | XML | [XMLQUERY.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLQUERY.md) | XML fragment |
-| `XMLTABLE(xml, xpath)` | XML | [XMLTABLE.md](../Docs/Reference/Standard_Library.md#12-xml-functions) | Table from XML |
-| `XMLELEMENT(name, content)` | XML | [XMLELEMENT.md](../Docs/Reference/Standard_Library.md#12-xml-functions) | Builds XML element |
-| `XMLATTRIBUTES(name, value, ...)` | XML | [XMLATTRIBUTES.md](../Docs/Reference/Standard_Library.md#12-xml-functions) | XML attributes |
-| `XMLFOREST(value1, ...)` | XML | [XMLFOREST.md](../Docs/Reference/Standard_Library.md#12-xml-functions) | Forest of XML elements |
+| `XMLTABLE(xml, xpath)` | XML | [XMLTABLE.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLTABLE.md) | Table from XML |
+| `XMLELEMENT(name, content)` | XML | [XMLELEMENT.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLELEMENT.md) | Builds XML element |
+| `XMLATTRIBUTES(name, value, ...)` | XML | [XMLATTRIBUTES.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLATTRIBUTES.md) | XML attributes |
+| `XMLFOREST(value1, ...)` | XML | [XMLFOREST.md](../src/ETL-SQL.Core/Resources/Help/Functions/XMLFOREST.md) | Forest of XML elements |
 | `FILE_EXISTS(path)` | File | [FILE_EXISTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/FILE_EXISTS.md) | 1 if file exists, 0 otherwise |
 | `FILE_SIZE(path)` | File | [FILE_SIZE.md](../src/ETL-SQL.Core/Resources/Help/Functions/FILE_SIZE.md) | Returns local file size in bytes |
 | `FILE_MODIFIED(path)` | File | [FILE_MODIFIED.md](../src/ETL-SQL.Core/Resources/Help/Functions/FILE_MODIFIED.md) | Returns local file last modified timestamp |
@@ -383,7 +383,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `MEDIAN(expression)` | Aggregate | [MEDIAN.md](../src/ETL-SQL.Core/Resources/Help/Functions/MEDIAN.md) | Median (50th percentile) |
 | `VAR(expression)` / `VAR_SAMP` | Aggregate | [VAR.md](../src/ETL-SQL.Core/Resources/Help/Functions/VAR.md) | Sample variance |
 | `VARP(expression)` / `VAR_POP` | Aggregate | [VARP.md](../src/ETL-SQL.Core/Resources/Help/Functions/VARP.md) | Population variance |
-| `STDEV(expression)` / `STDDEV` | Aggregate | [STDEV.md](../src/ETL-SQL.Core/Resources/Help/Functions/STDEV.md) | Sample standard deviation |
+| `STDEV(expression)` / `STDDEV` | Aggregate | [STDEV.md](../src/ETL-SQL.Core/Resources/Help/Functions/STDEV.md) / [STDDEV.md](../src/ETL-SQL.Core/Resources/Help/Functions/STDDEV.md) | Sample standard deviation |
 | `STDEVP(expression)` | Aggregate | [STDEVP.md](../src/ETL-SQL.Core/Resources/Help/Functions/STDEVP.md) | Population standard deviation |
 | `COVAR_SAMP(expr1, expr2)` | Aggregate | [COVAR_SAMP.md](../Docs/Reference/Standard_Library.md#6-statistical-aggregates) | Sample covariance |
 | `COVAR_POP(expr1, expr2)` | Aggregate | [COVAR_POP.md](../Docs/Reference/Standard_Library.md#6-statistical-aggregates) | Population covariance |
@@ -407,8 +407,8 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `REGEXP_REPLACE(string, pattern, replacement)` | Regex | [REGEXP_REPLACE.md](../src/ETL-SQL.Core/Resources/Help/Functions/REGEXP_REPLACE.md) | Replace matches in string |
 | `REGEXP_SUBSTR(string, pattern)` | Regex | [REGEXP_SUBSTR.md](../src/ETL-SQL.Core/Resources/Help/Functions/REGEXP_SUBSTR.md) | Matched substring |
 | `REGEXP_INSTR(string, pattern)` | Regex | [REGEXP_INSTR.md](../src/ETL-SQL.Core/Resources/Help/Functions/REGEXP_INSTR.md) | Position of match |
-| `REGEXP_COUNT(string, pattern)` | Regex | [REGEXP_COUNT.md](../Docs/Reference/Standard_Library.md#37-regex-pcre) | Count of matches |
-| `REGEXP_MATCHES(string, pattern)` | Regex | [REGEXP_MATCHES.md](../Docs/Reference/Standard_Library.md#37-regex-pcre) | Table of all matches |
+| `REGEXP_COUNT(string, pattern)` | Regex | [REGEXP_COUNT.md](../src/ETL-SQL.Core/Resources/Help/Functions/REGEXP_COUNT.md) | Count of matches |
+| `REGEXP_MATCHES(string, pattern)` | Regex | [REGEXP_MATCHES.md](../src/ETL-SQL.Core/Resources/Help/Functions/REGEXP_MATCHES.md) | Table of all matches |
 | `REGEXP_SPLIT_TO_TABLE(string, pattern)` | Regex | [REGEXP_SPLIT_TO_TABLE.md](../src/ETL-SQL.Core/Resources/Help/Functions/REGEXP_SPLIT_TO_TABLE.md) | Splits a string into a table using regex |
 | `ADD_TO_LIST(list, value)` | List | [ADD_TO_LIST.md](../src/ETL-SQL.Core/Resources/Help/Functions/ADD_TO_LIST.md) | Appends value to a LIST |
 | `SORT_LIST(list)` | List | [SORT_LIST.md](../src/ETL-SQL.Core/Resources/Help/Functions/SORT_LIST.md) | Returns sorted copy of list |
@@ -419,13 +419,13 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `HAS_TAG(table, column, tag_name, [expected_value])` | Lineage | [HAS_TAG.md](../src/ETL-SQL.Core/Resources/Help/Functions/HAS_TAG.md) | Returns 1 if tag exists (optionally matching expected value) |
 | `NORMALIZE(string, [mode])` | Fuzzy | [NORMALIZE.md](../src/ETL-SQL.Core/Resources/Help/Functions/NORMALIZE.md) | Domain-aware preprocessing |
 | `SIMILARITY(string1, string2, [mode])` | Fuzzy | [SIMILARITY.md](../src/ETL-SQL.Core/Resources/Help/Functions/SIMILARITY.md) | Normalized similarity score (0-1) |
-| `LEVENSHTEIN(string1, string2)` | Fuzzy | [LEVENSHTEIN.md](../Docs/Reference/Standard_Library.md#163-levenshtein--raw-edit-distance) | Raw edit distance |
+| `LEVENSHTEIN(string1, string2)` | Fuzzy | [LEVENSHTEIN.md](../src/ETL-SQL.Core/Resources/Help/Functions/LEVENSHTEIN.md) | Raw edit distance |
 | `SOUNDEX(string)` | Fuzzy | [SOUNDEX.md](../src/ETL-SQL.Core/Resources/Help/Functions/SOUNDEX.md) | 4-char phonetic code |
-| `METAPHONE(string)` | Fuzzy | [METAPHONE.md](../Docs/Reference/Standard_Library.md#164-phonetic-encoding-functions) | English phonetic code |
-| `DMETAPHONE(string)` | Fuzzy | [DMETAPHONE.md](../Docs/Reference/Standard_Library.md#164-phonetic-encoding-functions) | Double Metaphone primary code |
-| `DMETAPHONE_ALT(string)` | Fuzzy | [DMETAPHONE_ALT.md](../Docs/Reference/Standard_Library.md#164-phonetic-encoding-functions) | Double Metaphone alternate code |
-| `NGRAMS(string, size)` | Fuzzy | [NGRAMS.md](../Docs/Reference/Standard_Library.md#165-ngrams--ngram_tokens--blocking-utilities) | Table of N-character grams |
-| `NGRAM_TOKENS(string)` | Fuzzy | [NGRAM_TOKENS.md](../Docs/Reference/Standard_Library.md#165-ngrams--ngram_tokens--blocking-utilities) | Table of 3-grams (blocking) |
+| `METAPHONE(string)` | Fuzzy | [METAPHONE.md](../src/ETL-SQL.Core/Resources/Help/Functions/METAPHONE.md) | English phonetic code |
+| `DMETAPHONE(string)` | Fuzzy | [DMETAPHONE.md](../src/ETL-SQL.Core/Resources/Help/Functions/DMETAPHONE.md) | Double Metaphone primary code |
+| `DMETAPHONE_ALT(string)` | Fuzzy | [DMETAPHONE_ALT.md](../src/ETL-SQL.Core/Resources/Help/Functions/DMETAPHONE_ALT.md) | Double Metaphone alternate code |
+| `NGRAMS(string, size)` | Fuzzy | [NGRAMS.md](../src/ETL-SQL.Core/Resources/Help/Functions/NGRAMS.md) | Table of N-character grams |
+| `NGRAM_TOKENS(string)` | Fuzzy | [NGRAM_TOKENS.md](../src/ETL-SQL.Core/Resources/Help/Functions/NGRAM_TOKENS.md) | Table of 3-grams (blocking) |
 | `DIFFERENCE(string1, string2)` | Fuzzy | [DIFFERENCE.md](../src/ETL-SQL.Core/Resources/Help/Functions/DIFFERENCE.md) | SOUNDEX difference score (0-4) |
 
 *Note: Over 190 functions are registered. See [Standard_Library.md](../Docs/Reference/Standard_Library.md) for full signatures and examples.*
